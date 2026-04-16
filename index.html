@@ -2,12 +2,11 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0e0e0e; overflow: hidden; font-family: 'Inter','Helvetica Neue',sans-serif; touch-action: none; }
+  body { background: #0e0e0e; overflow: hidden; font-family: 'Inter','Helvetica Neue',sans-serif; }
   #stage { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
   canvas { position: absolute; inset: 0; }
   #node-labels { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
@@ -30,16 +29,6 @@
     font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: #FCB867; opacity: 0;
     z-index: 10; white-space: nowrap; pointer-events: none;
     transition: opacity 0.6s ease;
-  }
-  /* Mobile responsive typography */
-  @media (max-width: 600px) {
-    #wordmark { font-size: 28px; top: 18px; letter-spacing: -0.04em; }
-    #wordmark-desc { top: 56px; font-size: 9px; letter-spacing: 0.12em; }
-    .node-label { font-size: 11px; }
-    #hint { font-size: 8px !important; }
-  }
-  @media (max-width: 390px) {
-    #wordmark { font-size: 22px; top: 14px; }
   }
   /* Node description layer — Times New Roman italic, appears on hover */
   #node-descs { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
@@ -90,13 +79,11 @@ const nodeLabelsDiv = document.getElementById('node-labels');
 const hint = document.getElementById('hint');
 const wordmarkDesc = document.getElementById('wordmark-desc');
 
-let W, H, cx, cy, scale;
+let W, H, cx, cy;
 function resize() {
   W = canvas.width  = stage.offsetWidth;
   H = canvas.height = stage.offsetHeight;
   cx = W / 2; cy = H / 2;
-  // Scale all distances relative to a 500px reference — caps at 1 on desktop
-  scale = Math.min(1, Math.min(W, H) / 500);
 }
 resize();
 window.addEventListener('resize', () => { resize(); });
@@ -142,14 +129,14 @@ function drawEyes(t) {
   const driftFactor = 0.06;
   let idx = 0;
   EYE_RINGS.forEach(ring => {
-    const breathDist = ring.dist * scale * (1 + driftFactor * (breath - 0.5));
+    const breathDist = ring.dist * (1 + driftFactor * (breath - 0.5));
     for (let i = 0; i < ring.count; i++) {
       const angle = (i / ring.count) * Math.PI * 2;
       const ex = cx + Math.cos(angle) * breathDist;
       const ey = cy + Math.sin(angle) * breathDist;
       const tint = idx % 2 === 0 ? eyeTint1 : eyeTint2;
       const aspect = tint.height / tint.width;
-      const iw = ring.w * scale, ih = iw * aspect;
+      const iw = ring.w, ih = iw * aspect;
       ctx.save();
       ctx.globalAlpha = ring.alpha * opacityMult;
       ctx.globalCompositeOperation = 'screen';
@@ -242,13 +229,13 @@ function lerp(a,b,t){return a+(b-a)*t;}
 function clamp01(t){return Math.max(0,Math.min(1,t));}
 function driftOpenFactor(i,prog){if(prog<ARRIVE_AT[i])return 0;return easeOutSoft(Math.min((prog-ARRIVE_AT[i])/DRIFT_OPEN_DURATION,1));}
 function getDrift(i,t,of){const d=DRIFTS[i];return{x:d.ax*of*Math.sin((t/d.px)*Math.PI*2+d.ox),y:d.ay*of*Math.sin((t/d.py)*Math.PI*2+d.oy)};}
-function getNodeAnchor(v){const a=toRad(v.angle)+slowOrbit*0.00004;return{x:cx+Math.cos(a)*v.dist*scale,y:cy+Math.sin(a)*v.dist*scale};}
-function getRingEdgeForNode(v){const a=toRad(v.angle)+slowOrbit*0.00004;return{x:cx+Math.cos(a)*RING_OUTER*scale,y:cy+Math.sin(a)*RING_OUTER*scale};}
+function getNodeAnchor(v){const a=toRad(v.angle)+slowOrbit*0.00004;return{x:cx+Math.cos(a)*v.dist,y:cy+Math.sin(a)*v.dist};}
+function getRingEdgeForNode(v){const a=toRad(v.angle)+slowOrbit*0.00004;return{x:cx+Math.cos(a)*RING_OUTER,y:cy+Math.sin(a)*RING_OUTER};}
 function getDotCurrentPos(i){const d=DOT_POSITIONS[i];const angle=Math.atan2(d[1],d[0])+time*0.003;return{x:cx+Math.cos(angle)*Math.hypot(d[0],d[1]),y:cy+Math.sin(angle)*Math.hypot(d[0],d[1])};}
 function getDotTargetPos(i){const d=DOT_POSITIONS[i];const angle=Math.atan2(d[1],d[0])+time*0.003;return{x:cx+Math.cos(angle)*Math.hypot(d[0],d[1]),y:cy+Math.sin(angle)*Math.hypot(d[0],d[1])};}
-function isOverCenter(mx,my){return Math.hypot(mx-cx,my-cy)<65*scale;}
-function isOverLogo(mx,my){if(state==='expanded'||state==='collapsing')return false;if(expandProgress>0.35)return false;return Math.hypot(mx-cx,my-cy)<RING_OUTER*scale+4;}
-function getHoveredNode(mx,my){if(expandProgress<0.8||state==='collapsing')return -1;for(let i=0;i<VENTURES.length;i++)if(Math.hypot(mx-nodeX[i],my-nodeY[i])<30*scale)return i;return -1;}
+function isOverCenter(mx,my){return Math.hypot(mx-cx,my-cy)<65;}
+function isOverLogo(mx,my){if(state==='expanded'||state==='collapsing')return false;if(expandProgress>0.35)return false;return Math.hypot(mx-cx,my-cy)<RING_OUTER+4;}
+function getHoveredNode(mx,my){if(expandProgress<0.8||state==='collapsing')return -1;for(let i=0;i<VENTURES.length;i++)if(Math.hypot(mx-nodeX[i],my-nodeY[i])<30)return i;return -1;}
 function triggerCollapse(){
   // Instantly clear any open sub-nodes — parent is about to move
   if(subNodeState!=='idle'){
@@ -292,7 +279,7 @@ stage.addEventListener('click',e=>{
   if(isOverLogo(mx,my)&&expandProgress<0.05&&state!=='collapsing'){
     VENTURES.forEach((v,i)=>{
       if(v.fromDot>=0){const p=getDotCurrentPos(v.fromDot);dotStartX[i]=p.x;dotStartY[i]=p.y;}
-      else{const a=toRad(v.angle)+slowOrbit*0.00004;dotStartX[i]=cx+Math.cos(a)*RING_OUTER*scale;dotStartY[i]=cy+Math.sin(a)*RING_OUTER*scale;}
+      else{const a=toRad(v.angle)+slowOrbit*0.00004;dotStartX[i]=cx+Math.cos(a)*RING_OUTER;dotStartY[i]=cy+Math.sin(a)*RING_OUTER;}
     });
     state='expanding';hint.style.opacity='0';return;
   }
@@ -334,77 +321,14 @@ stage.addEventListener('click',e=>{
 });
 stage.addEventListener('mouseleave',()=>{logoHover=false;hoveredNode=-1;mouseX=cx;mouseY=cy;if(state==='hover-logo'){state='idle';hint.style.opacity='1';}});
 
-// ── Touch support ────────────────────────────────────────────────────────────
-function getTouchPos(e){
-  const r=stage.getBoundingClientRect();
-  const t=e.changedTouches[0];
-  return{x:t.clientX-r.left,y:t.clientY-r.top};
-}
-stage.addEventListener('touchstart',e=>{
-  e.preventDefault();
-  const {x,y}=getTouchPos(e);
-  mouseX=x;mouseY=y;
-  // Mirror hover state for visual feedback
-  const over=isOverLogo(x,y);
-  if(over&&state==='idle'){state='hover-logo';hint.style.opacity='0';}
-},{passive:false});
-
-stage.addEventListener('touchmove',e=>{
-  e.preventDefault();
-  const {x,y}=getTouchPos(e);
-  mouseX=x;mouseY=y;
-  hoveredSubNode=getHoveredSubNode(x,y);
-  hoveredNode=getHoveredNode(x,y);
-},{passive:false});
-
-stage.addEventListener('touchend',e=>{
-  e.preventDefault();
-  const {x,y}=getTouchPos(e);
-
-  // ① Main logo expand
-  if(isOverLogo(x,y)&&expandProgress<0.05&&state!=='collapsing'){
-    VENTURES.forEach((v,i)=>{
-      if(v.fromDot>=0){const p=getDotCurrentPos(v.fromDot);dotStartX[i]=p.x;dotStartY[i]=p.y;}
-      else{const a=toRad(v.angle)+slowOrbit*0.00004;dotStartX[i]=cx+Math.cos(a)*RING_OUTER*scale;dotStartY[i]=cy+Math.sin(a)*RING_OUTER*scale;}
-    });
-    state='expanding';hint.style.opacity='0';return;
-  }
-
-  // ② Center collapse
-  if(state==='expanded'&&isOverCenter(x,y)){triggerCollapse();return;}
-
-  // ③ Sub-node tap → navigate
-  if(state==='expanded'&&subNodeState==='expanded'){
-    const hsn=getHoveredSubNode(x,y);
-    if(hsn>=0){window.location.href=SUB_NODE_DATA[VENTURES[activeVentureIdx].name][hsn].url;return;}
-  }
-
-  // ④ Venture node tap
-  const hn=getHoveredNode(x,y);
-  if(hn>=0){
-    if(hn===activeVentureIdx&&subNodeState!=='idle'){
-      for(let i=0;i<MAX_SUBNODES;i++){subNodeCollapseStartX[i]=subNodeX[i];subNodeCollapseStartY[i]=subNodeY[i];}
-      subNodeCollapseProgress=0;subNodeState='collapsing';subNodeHP.fill(0);
-    }else{
-      activeVentureIdx=hn;
-      subNodeProgress=0;subNodeState='expanding';subNodeHP.fill(0);
-      subNodeLabelEls.forEach(el=>el.style.opacity='0');
-      for(let i=0;i<MAX_SUBNODES;i++){subNodeX[i]=nodeX[hn];subNodeY[i]=nodeY[hn];}
-    }
-    hint.textContent='→ '+VENTURES[hn].name.toLowerCase();
-    hint.style.color=VENTURES[hn].color;hint.style.opacity='0.7';
-  }
-},{passive:false});
-
 function drawRing(){
   ctx.save();ctx.translate(cx,cy);
-  const ro=RING_OUTER*scale, ri=RING_INNER*scale;
-  if(logoHover&&expandProgress<0.08){ctx.beginPath();ctx.arc(0,0,ro+14*scale,0,Math.PI*2);ctx.arc(0,0,ro+3*scale,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();}
-  ctx.beginPath();ctx.arc(0,0,ro,0,Math.PI*2);ctx.arc(0,0,ri,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();ctx.restore();
+  if(logoHover&&expandProgress<0.08){ctx.beginPath();ctx.arc(0,0,RING_OUTER+14,0,Math.PI*2);ctx.arc(0,0,RING_OUTER+3,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();}
+  ctx.beginPath();ctx.arc(0,0,RING_OUTER,0,Math.PI*2);ctx.arc(0,0,RING_INNER,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();ctx.restore();
 }
 function drawDots(alpha){
   if(alpha<=0)return;const orbitT=time*0.003;
-  DOT_POSITIONS.forEach((d,i)=>{const angle=Math.atan2(d[1],d[0])+orbitT;const dist=(Math.hypot(d[0],d[1])+Math.sin(time*0.025+i*1.1)*1.5)*scale;ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(cx+Math.cos(angle)*dist,cy+Math.sin(angle)*dist,DOT_RADIUS*scale,0,Math.PI*2);ctx.fillStyle=DOT_COLOR;ctx.fill();});ctx.globalAlpha=1;
+  DOT_POSITIONS.forEach((d,i)=>{const angle=Math.atan2(d[1],d[0])+orbitT;const dist=Math.hypot(d[0],d[1])+Math.sin(time*0.025+i*1.1)*1.5;ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(cx+Math.cos(angle)*dist,cy+Math.sin(angle)*dist,DOT_RADIUS,0,Math.PI*2);ctx.fillStyle=DOT_COLOR;ctx.fill();});ctx.globalAlpha=1;
 }
 function drawTravelingDots(prog){
   const tp=easeOut(clamp01(prog/TRAVEL_END));
@@ -416,10 +340,10 @@ function drawTravelingDots(prog){
     const py=lerp(dotStartY[i],anc.y,tp);
     const hex=v.color.replace('#','');
     const r2=parseInt(hex.slice(0,2),16),g2=parseInt(hex.slice(2,4),16),b2=parseInt(hex.slice(4,6),16);
-    const startSize=v.fromDot>=0?DOT_RADIUS*scale:3*scale;
+    const startSize=v.fromDot>=0?DOT_RADIUS:3;
     const nodeAlpha=v.fromDot>=0?ta*0.92:easeOutSoft(tp)*ta*0.88;
     ctx.globalAlpha=nodeAlpha;ctx.beginPath();
-    ctx.arc(px,py,lerp(startSize,NODE_SIZE*scale,tp),0,Math.PI*2);
+    ctx.arc(px,py,lerp(startSize,NODE_SIZE,tp),0,Math.PI*2);
     ctx.fillStyle=`rgb(${Math.round(lerp(DOT_R,r2,tp))},${Math.round(lerp(DOT_G,g2,tp))},${Math.round(lerp(DOT_B,b2,tp))})`;
     ctx.fill();
     if(v.fromDot<0){nodeX[i]=px;nodeY[i]=py;}
@@ -440,27 +364,27 @@ function drawSettledNodes(prog){
     if(isActive){
       ctx.globalAlpha=ba;
       ctx.beginPath();
-      ctx.arc(px,py,NODE_SIZE*scale+4*scale,0,Math.PI*2);
-      ctx.arc(px,py,NODE_SIZE*scale-3*scale,0,Math.PI*2,true);
+      ctx.arc(px,py,NODE_SIZE+4,0,Math.PI*2);
+      ctx.arc(px,py,NODE_SIZE-3,0,Math.PI*2,true);
       ctx.fillStyle=v.color;ctx.fill();
     }else{
       ctx.globalAlpha=ba*(1-eHp*0.35);
-      ctx.beginPath();ctx.arc(px,py,NODE_SIZE*scale,0,Math.PI*2);
+      ctx.beginPath();ctx.arc(px,py,NODE_SIZE,0,Math.PI*2);
       ctx.fillStyle=v.color;ctx.fill();
       if(nodeHP[i]>0){
         ctx.globalAlpha=ba*eHp*0.92;
-        ctx.beginPath();ctx.arc(px,py,lerp(NODE_SIZE*scale,NODE_SIZE*scale+14*scale,eHp),0,Math.PI*2);
-        ctx.arc(px,py,lerp(NODE_SIZE*scale,NODE_SIZE*scale+9*scale,eHp),0,Math.PI*2,true);
+        ctx.beginPath();ctx.arc(px,py,lerp(NODE_SIZE,NODE_SIZE+14,eHp),0,Math.PI*2);
+        ctx.arc(px,py,lerp(NODE_SIZE,NODE_SIZE+9,eHp),0,Math.PI*2,true);
         ctx.fillStyle=v.color;ctx.fill();
       }
     }
     const el=nodeLabelEls[i];
-    if(ba>0.25){el.style.opacity=String(lerp(ba*0.4,ba,eHp));el.style.left=px+'px';el.style.top=(py+NODE_SIZE*scale+18)+'px';}
+    if(ba>0.25){el.style.opacity=String(lerp(ba*0.4,ba,eHp));el.style.left=px+'px';el.style.top=(py+NODE_SIZE+18)+'px';}
     else el.style.opacity='0';
     // Description — italic serif, fades in on hover, hides when sub-nodes are open
     const descEl=nodeDescEls[i];
     const isActiveWithSubs=(i===activeVentureIdx&&subNodeState!=='idle');
-    if(ba>0.25&&eHp>0.02&&!isActiveWithSubs){descEl.style.opacity=String(ba*eHp*0.7);descEl.style.left=px+'px';descEl.style.top=(py+NODE_SIZE*scale+34)+'px';}
+    if(ba>0.25&&eHp>0.02&&!isActiveWithSubs){descEl.style.opacity=String(ba*eHp*0.7);descEl.style.left=px+'px';descEl.style.top=(py+NODE_SIZE+34)+'px';}
     else descEl.style.opacity='0';
     ctx.restore();
   });
@@ -471,14 +395,14 @@ function drawCollapsingNodes(cp){
     if(v.fromDot<0){
       const edge=getRingEdgeForNode(v);
       ctx.globalAlpha=(1-prog)*0.88;ctx.beginPath();
-      ctx.arc(lerp(collapseStartX[i],edge.x,prog),lerp(collapseStartY[i],edge.y,prog),lerp(NODE_SIZE*scale,3*scale,prog),0,Math.PI*2);
+      ctx.arc(lerp(collapseStartX[i],edge.x,prog),lerp(collapseStartY[i],edge.y,prog),lerp(NODE_SIZE,3,prog),0,Math.PI*2);
       ctx.fillStyle=v.color;ctx.fill();
     }else{
       const dt2=getDotTargetPos(v.fromDot);
       const hex=v.color.replace('#','');
       const r2=parseInt(hex.slice(0,2),16),g2=parseInt(hex.slice(2,4),16),b2=parseInt(hex.slice(4,6),16);
       ctx.globalAlpha=0.92;ctx.beginPath();
-      ctx.arc(lerp(collapseStartX[i],dt2.x,prog),lerp(collapseStartY[i],dt2.y,prog),lerp(NODE_SIZE*scale,DOT_RADIUS*scale,prog),0,Math.PI*2);
+      ctx.arc(lerp(collapseStartX[i],dt2.x,prog),lerp(collapseStartY[i],dt2.y,prog),lerp(NODE_SIZE,DOT_RADIUS,prog),0,Math.PI*2);
       ctx.fillStyle=`rgb(${Math.round(lerp(r2,DOT_R,prog))},${Math.round(lerp(g2,DOT_G,prog))},${Math.round(lerp(b2,DOT_B,prog))})`;
       ctx.fill();
     }
@@ -555,12 +479,13 @@ for(let i = 0; i < MAX_SUBNODES; i++){
 // First node is aligned outward (away from center) so the cluster feels grounded.
 function getSubNodeTargetPos(ventureIdx, subIdx){
   const px = nodeX[ventureIdx], py = nodeY[ventureIdx];
-  const outAngle = Math.atan2(py - cy, px - cx);
+  const outAngle = Math.atan2(py - cy, px - cx); // direction: center → parent
   const subs = SUB_NODE_DATA[VENTURES[ventureIdx].name];
   const n = subs.length;
+  // Distribute evenly around parent, first node points away from ring center
   const angle = outAngle + (subIdx / n) * Math.PI * 2;
-  return { x: px + Math.cos(angle) * SUB_NODE_DIST * scale,
-           y: py + Math.sin(angle) * SUB_NODE_DIST * scale };
+  return { x: px + Math.cos(angle) * SUB_NODE_DIST,
+           y: py + Math.sin(angle) * SUB_NODE_DIST };
 }
 
 // ── Helper: staggered arrival factor for sub-node i during expansion ─────────
@@ -700,7 +625,7 @@ function drawSubNodes(){
     subs.forEach((sub, i) => {
       const ep = getSubEp(i, n);        // 0→1 arrival factor
       const sx = subNodeX[i], sy = subNodeY[i];
-      const drawR = lerp(3*scale, SUB_NODE_RADIUS*scale, ep);
+      const drawR = lerp(3, SUB_NODE_RADIUS, ep);
       const alpha = ep * 0.88;
 
       ctx.save();
@@ -715,8 +640,8 @@ function drawSubNodes(){
       if(subNodeHP[i] > 0 && ep > 0.7){
         ctx.globalAlpha = alpha * subNodeHP[i] * 0.78;
         ctx.beginPath();
-        ctx.arc(sx, sy, SUB_NODE_RADIUS*scale + 8*scale, 0, Math.PI * 2);
-        ctx.arc(sx, sy, SUB_NODE_RADIUS*scale + 3*scale, 0, Math.PI * 2, true);
+        ctx.arc(sx, sy, SUB_NODE_RADIUS + 8, 0, Math.PI * 2);
+        ctx.arc(sx, sy, SUB_NODE_RADIUS + 3, 0, Math.PI * 2, true);
         ctx.fillStyle = v.color;
         ctx.fill();
       }
@@ -729,7 +654,7 @@ function drawSubNodes(){
         el.style.color = v.color;
         el.style.opacity = String(ep * (0.65 + subNodeHP[i] * 0.25));
         el.style.left = sx + 'px';
-        el.style.top  = (sy + SUB_NODE_RADIUS*scale + 14) + 'px';
+        el.style.top  = (sy + SUB_NODE_RADIUS + 14) + 'px';
       } else if(el){
         el.style.opacity = '0';
       }
@@ -745,7 +670,7 @@ function drawSubNodes(){
       const sx = lerp(subNodeCollapseStartX[i], destX, cp);
       const sy = lerp(subNodeCollapseStartY[i], destY, cp);
       const alpha = (1 - cp) * 0.88;
-      const drawR = lerp(SUB_NODE_RADIUS*scale, 3*scale, cp);
+      const drawR = lerp(SUB_NODE_RADIUS, 3, cp);
 
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -757,7 +682,7 @@ function drawSubNodes(){
       if(subNodeLabelEls[i]){
         subNodeLabelEls[i].style.opacity = String((1 - cp) * 0.65);
         subNodeLabelEls[i].style.left = sx + 'px';
-        subNodeLabelEls[i].style.top  = (sy + SUB_NODE_RADIUS*scale + 14) + 'px';
+        subNodeLabelEls[i].style.top  = (sy + SUB_NODE_RADIUS + 14) + 'px';
       }
     });
   }
