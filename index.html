@@ -17,26 +17,27 @@
   }
   /* Wordmark — top center, always visible */
   #wordmark {
-    position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
     font-family: 'Inter', 'Helvetica Neue', sans-serif; font-weight: 900;
-    font-size: 52px; letter-spacing: -0.05em; color: #FCB867; opacity: 0.82;
+    font-size: 38px; letter-spacing: -0.05em; color: #FCB867; opacity: 0.82;
     z-index: 10; white-space: nowrap; pointer-events: none; line-height: 1;
   }
   /* Descriptor — appears under wordmark when ring is clicked */
   #wordmark-desc {
-    position: absolute; top: 94px; left: 50%; transform: translateX(-50%);
+    position: absolute; top: 62px; left: 50%; transform: translateX(-50%);
     font-family: 'Times New Roman', Times, serif;
-    font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: #FCB867; opacity: 0;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #FCB867; opacity: 0;
     z-index: 10; white-space: nowrap; pointer-events: none;
     transition: opacity 0.6s ease;
   }
-  /* Node description layer — Times New Roman italic, appears on hover */
+  /* Node description layer — Times New Roman, appears on hover */
   #node-descs { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
   .node-desc {
     position: absolute; font-family: 'Times New Roman', Times, serif;
     font-size: 11px; letter-spacing: 0.03em;
     text-transform: lowercase; opacity: 0; transition: opacity 0.25s ease;
-    transform: translate(-50%,-50%); pointer-events: none; white-space: nowrap;
+    transform: translate(-50%, 0); pointer-events: none;
+    white-space: normal; max-width: 110px; text-align: center; line-height: 1.35;
   }
   #hint {
     position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -49,15 +50,18 @@
   .sub-node-label {
     position: absolute;
     font-family: 'Times New Roman', Times, serif;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: bold;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
     text-transform: lowercase;
     opacity: 0;
     transition: opacity 0.25s ease;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, 0);
     pointer-events: none;
-    white-space: nowrap;
+    white-space: normal;
+    max-width: 72px;
+    text-align: center;
+    line-height: 1.35;
   }
 </style>
 </head>
@@ -153,15 +157,15 @@ const NODE_SIZE=15;
 const DOT_POSITIONS=[[-18,-28],[18,-28],[-18,0],[18,0],[-18,28],[18,28]];
 
 const VENTURES=[
-  {name:'TATTOO',        color:'#8F231D',angle:0,   dist:220, fromDot:0},
-  {name:'ART',           color:'#0581C1',angle:40,  dist:220, fromDot:1},
-  {name:'MERCH',         color:'#F7A226',angle:80,  dist:220, fromDot:2},
-  {name:'ABOUT',         color:'#FCB867',angle:120, dist:220, fromDot:-1},
-  {name:'EVENTS',        color:'#55BA5A',angle:160, dist:220, fromDot:3},
-  {name:'MUSIC',         color:'#A856A1',angle:200, dist:220, fromDot:4},
-  {name:'WRITINGS',      color:'#328C84',angle:240, dist:220, fromDot:-1},
-  {name:'ARCHIVE',       color:'#EC5E26',angle:280, dist:220, fromDot:5},
-  {name:'FILM',          color:'#FFE7CA',angle:320, dist:220, fromDot:-1},
+  {name:'TATTOOING',     color:'#8F231D',angle:0,   dist:250, fromDot:0},
+  {name:'ART MAKING',   color:'#0581C1',angle:40,  dist:250, fromDot:1},
+  {name:'MERCH',         color:'#F7A226',angle:80,  dist:250, fromDot:2},
+  {name:'ABOUT',         color:'#FCB867',angle:120, dist:250, fromDot:-1},
+  {name:'EVENTS',        color:'#55BA5A',angle:160, dist:250, fromDot:3},
+  {name:'MUSIC',         color:'#A856A1',angle:200, dist:250, fromDot:4},
+  {name:'WRITINGS',      color:'#328C84',angle:240, dist:250, fromDot:-1},
+  {name:'ARCHIVE',       color:'#EC5E26',angle:280, dist:250, fromDot:5},
+  {name:'FILM',          color:'#FFE7CA',angle:320, dist:250, fromDot:-1},
 ];
 
 const TRAVEL_END=0.85,XFADE_START=0.75,DRIFT_OPEN_DURATION=0.22;
@@ -206,15 +210,15 @@ VENTURES.forEach(v=>{const el=document.createElement('div');el.className='node-l
 
 // One-line italic descriptions — Times New Roman, fade in on node hover
 const VENTURE_DESCS = {
-  'TATTOO':   'ink & custom tattooing',
-  'ART':      'painting & fine art',
-  'MERCH':    'objects, goods & wearables',
-  'ABOUT':    'the construct & its people',
-  'EVENTS':   'gatherings & live experience',
-  'MUSIC':    'sound, releases & sessions',
-  'WRITINGS': 'essays, fiction & notes',
-  'ARCHIVE':  'collected works & ephemera',
-  'FILM':     'moving image & production',
+  'TATTOOING':  'booking, flash & custom work',
+  'ART MAKING': 'painting & fine art',
+  'MERCH':      'objects, goods & wearables',
+  'ABOUT':      'the construct & its people',
+  'EVENTS':     'gatherings & live experience',
+  'MUSIC':      'sound, releases & sessions',
+  'WRITINGS':   'essays, fiction & notes',
+  'ARCHIVE':    'collected works & ephemera',
+  'FILM':       'moving image & production',
 };
 const nodeDescsDiv = document.getElementById('node-descs');
 let nodeDescEls = [];
@@ -384,7 +388,7 @@ function drawSettledNodes(prog){
     // Description — italic serif, fades in on hover, hides when sub-nodes are open
     const descEl=nodeDescEls[i];
     const isActiveWithSubs=(i===activeVentureIdx&&subNodeState!=='idle');
-    if(ba>0.25&&eHp>0.02&&!isActiveWithSubs){descEl.style.opacity=String(ba*eHp*0.7);descEl.style.left=px+'px';descEl.style.top=(py+NODE_SIZE+34)+'px';}
+    if(ba>0.25&&eHp>0.02&&!isActiveWithSubs){descEl.style.opacity=String(ba*eHp*0.7);descEl.style.left=px+'px';descEl.style.top=(py+NODE_SIZE+32)+'px';}
     else descEl.style.opacity='0';
     ctx.restore();
   });
@@ -415,33 +419,33 @@ function drawCollapsingNodes(cp){
 
 // Placeholder sub-pages per venture. Replace names/URLs as each venture is built.
 const SUB_NODE_DATA = {
-  'TATTOO':   [{name:'portfolio',url:'/tattoo'},{name:'inquiry',url:'/tattoo/inquiry'},{name:'flash',url:'/tattoo/flash'},{name:'process',url:'/tattoo/process'},{name:'rates',url:'/tattoo/rates'}],
-  'ART':      [{name:'paintings',url:'/art'},{name:'prints',url:'/art/prints'},{name:'commissions',url:'/art/commissions'},{name:'archive',url:'/art/archive'},{name:'about',url:'/art/about'}],
-  'MERCH':    [{name:'shop',url:'/merch'},{name:'lookbook',url:'/merch/lookbook'},{name:'limited',url:'/merch/limited'},{name:'collabs',url:'/merch/collabs'},{name:'sizing',url:'/merch/sizing'}],
-  'ABOUT':    [{name:'manifesto',url:'/about'},{name:'contact',url:'/about/contact'},{name:'press',url:'/about/press'},{name:'network',url:'/about/network'},{name:'support',url:'/about/support'}],
-  'EVENTS':   [{name:'upcoming',url:'/events'},{name:'past',url:'/events/past'},{name:'tickets',url:'/events/tickets'},{name:'hosting',url:'/events/hosting'},{name:'gallery',url:'/events/gallery'}],
-  'MUSIC':    [{name:'releases',url:'/music'},{name:'videos',url:'/music/videos'},{name:'live',url:'/music/live'},{name:'licensing',url:'/music/licensing'},{name:'sessions',url:'/music/sessions'}],
-  'WRITINGS': [{name:'essays',url:'/writings'},{name:'fiction',url:'/writings/fiction'},{name:'notes',url:'/writings/notes'},{name:'letters',url:'/writings/letters'},{name:'archive',url:'/writings/archive'}],
-  'ARCHIVE':  [{name:'editorial',url:'/archive'},{name:'ephemera',url:'/archive/ephemera'},{name:'objects',url:'/archive/objects'},{name:'research',url:'/archive/research'},{name:'vault',url:'/archive/vault'}],
-  'FILM':     [{name:'shorts',url:'/film'},{name:'features',url:'/film/features'},{name:'production',url:'/film/production'},{name:'stills',url:'/film/stills'},{name:'process',url:'/film/process'}],
+  'TATTOOING':  [{name:'booking & inquiry',url:'/tattooing/booking'},{name:'process',url:'/tattooing/process'},{name:'art.pill tattoo house',url:'/tattooing/about'},{name:'flash',url:'/tattooing/flash'},{name:'portfolio',url:'/tattooing'}],
+  'ART MAKING': [{name:'statements',url:'/art/statements'},{name:'artist bio',url:'/art/artist-bio'},{name:'portfolio',url:'/art'},{name:'meridian in conflux',url:'/art/meridian-conflux'},{name:'studio visit',url:'/art/studio-visit'}],
+  'MERCH':      [{name:'six.well clothing',url:'/merch/six-well-clothing'},{name:'art.pill tattoo supply',url:'/merch/art-pill-tattoo-supply'},{name:'prints',url:'/merch/prints'},{name:'thoughtpuppet artifacts',url:'/merch/thoughtpuppet-artifacts'}],
+  'ABOUT':      [{name:'the construct',url:'/about'},{name:'who is sai solehman?',url:'/about/sai-solehman'},{name:'contact',url:'/about/contact'},{name:'press',url:'/about/press'},{name:'streaming',url:'/about/streaming'}],
+  'EVENTS':     [{name:'cult[iv]',url:'/events/cultiv'},{name:'the gathering',url:'/events/the-gathering'},{name:"solehman's new year",url:'/events/solehmans-new-year'},{name:'movie nights',url:'/events/movie-nights'},{name:'hosting',url:'/events/hosting'},{name:'calendar',url:'/events/calendar'},{name:'open studios',url:'/events/open-studios'}],
+  'MUSIC':      [{name:'ringtones',url:'/music/ringtones'},{name:'milowalksonwater',url:'/music/milowalksonwater'},{name:'scores',url:'/music/scores'}],
+  'WRITINGS':   [{name:'substack',url:'/writings/substack'},{name:'the solehman letters',url:'/writings/solehman-letters'},{name:'mindful darkness',url:'/writings/mindful-darkness'}],
+  'ARCHIVE':    [{name:'sketches',url:'/archive/sketches'},{name:'abandoned concepts',url:'/archive/abandoned-concepts'},{name:'process',url:'/archive/process'},{name:'ephemera',url:'/archive/ephemera'},{name:'raw audio',url:'/archive/raw-audio'}],
+  'FILM':       [{name:'isolated.take',url:'/film/isolated-take'},{name:'&friends',url:'/film/and-friends'},{name:'animations',url:'/film/animations'},{name:'sloth99',url:'/film/sloth99'}],
 };
 
 // Sacred geometry shape assigned to each venture's sub-nodes
 const SUB_SHAPES = {
-  'TATTOO':   'triangle-up',   // fire / upward
-  'ART':      'hexagon',       // honeycomb / crystalline
-  'MERCH':    'pentagon',      // golden ratio / 5-fold
-  'ABOUT':    'vesica',        // vesica piscis / lens / eye
-  'EVENTS':   'pentagram',     // 5-pointed star
-  'MUSIC':    'star6',         // Star of David / 6-pointed
-  'WRITINGS': 'octagon',       // 8-fold symmetry
-  'ARCHIVE':  'square',        // foundation / solid
-  'FILM':     'triangle-down', // water / downward / receptive
+  'TATTOOING':  'triangle-up',
+  'ART MAKING': 'hexagon',
+  'MERCH':      'pentagon',
+  'ABOUT':      'vesica',
+  'EVENTS':     'pentagram',
+  'MUSIC':      'star6',
+  'WRITINGS':   'octagon',
+  'ARCHIVE':    'square',
+  'FILM':       'triangle-down',
 };
 
 // Sub-node animation + sizing constants
 const SUB_NODE_RADIUS   = 9;     // circumradius of shapes in px
-const SUB_NODE_DIST     = 62;    // distance from parent node center to sub-node center (tight orbit)
+const SUB_NODE_DIST     = 75;    // distance from parent node center to sub-node center
 const SUB_SPREAD_DEG    = 26;    // (unused in orbit mode — kept for reference)
 const SUB_EXPAND_SPEED  = 0.0012;
 const SUB_COLLAPSE_SPEED= 0.0018;
@@ -449,7 +453,7 @@ const SUB_HOVER_IN      = 0.003;
 const SUB_HOVER_OUT     = 0.002;
 const SUB_CURSOR_FOLLOW = 0.08;
 const SUB_MAX_PULL      = 20;
-const MAX_SUBNODES      = 5;
+const MAX_SUBNODES      = 7;
 
 // Sub-node runtime state
 let activeVentureIdx        = -1;     // which venture has sub-nodes open; -1 = none
@@ -647,14 +651,15 @@ function drawSubNodes(){
       }
       ctx.restore();
 
-      // Label — Times New Roman, lowercase, fades in with shape
+      // Label — always below shape, top-anchored so multi-line grows downward only
       const el = subNodeLabelEls[i];
       if(el && ep > 0.35){
+        el.style.transform = 'translate(-50%, 0)';
         el.textContent = sub.name;
         el.style.color = v.color;
         el.style.opacity = String(ep * (0.65 + subNodeHP[i] * 0.25));
         el.style.left = sx + 'px';
-        el.style.top  = (sy + SUB_NODE_RADIUS + 14) + 'px';
+        el.style.top  = (sy + SUB_NODE_RADIUS + 5) + 'px';
       } else if(el){
         el.style.opacity = '0';
       }
@@ -680,9 +685,10 @@ function drawSubNodes(){
       ctx.restore();
 
       if(subNodeLabelEls[i]){
+        subNodeLabelEls[i].style.transform = 'translate(-50%, 0)';
         subNodeLabelEls[i].style.opacity = String((1 - cp) * 0.65);
         subNodeLabelEls[i].style.left = sx + 'px';
-        subNodeLabelEls[i].style.top  = (sy + SUB_NODE_RADIUS + 14) + 'px';
+        subNodeLabelEls[i].style.top  = (sy + SUB_NODE_RADIUS + 5) + 'px';
       }
     });
   }
