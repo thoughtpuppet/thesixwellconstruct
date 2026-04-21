@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>merch · the six.well construct</title>
+
+<!-- 
+  ============================================================
+  the six.well construct / merch  —  v6 (AGGREGATOR)
+  ============================================================
+  
+  ARCHITECTURE:
+    MERCH is the commerce engine for the whole construct.
+    Products are organized by SOURCE VENTURE, not by sub-brand.
+    Each source venture's color is carried through the UI:
+      - filter chip active state
+      - product card border on hover
+      - category dot + label on each card
+      - cart drawer item category tag
+      - add-to-cart button hover
+    
+    Current sources:
+      six.well      #F7A226   garments, construct-originating
+      thoughtpuppet #0581C1   artifacts, ART-originating
+    
+    Adding a new source (e.g. tattooing flash):
+      1. add entry to SOURCES constant
+      2. add products to PRODUCTS array with matching category key
+      3. a filter chip auto-generates from SOURCES
+
+  TYPE:
+    Inter 900 (display, UI) — matches landing wordmark
+    Times New Roman (descriptors, category labels, metadata)
+
+  SHOPIFY INTEGRATION:
+    per-product Shopify Buy Button mount points marked inside .card-frame.
+    SDK init block at bottom of <body>, commented out.
+    Local cart prototype stays active during migration.
+
+  REWRITE MARKERS:
+    intro descriptor — one short line in your voice
+  ============================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     DESIGN TOKENS
+  ============================================================ */
+  :root {
+    --bg:        #0e0e0e;
+    --bg-raised: #111111;
+    --bg-drawer: #0a0a0a;
+
+    --accent:    #FCB867;            /* wordmark amber */
+    --accent-hot:#F7A226;            /* MERCH node color — title + six.well source */
+
+    --ring:      #6D3D15;
+    --ring-soft: rgba(109,61,21,0.4);
+    --ring-faint:rgba(109,61,21,0.18);
+
+    /* all text keyed to amber at descending opacity */
+    --text:      #FCB867;
+    --text-mute: rgba(252,184,103,0.55);
+    --text-dim:  rgba(252,184,103,0.30);
+    --text-ghost:rgba(252,184,103,0.13);
+
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px;
+    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+
+    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif:'Times New Roman',Times,serif;
+
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
+
+    /* driven by JS — switches to the active filter's venture color.
+       defaults to MERCH hot orange for the "all" state. */
+    --title-color: #F7A226;
+  }
+
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body {
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh; overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+  a { color:inherit; text-decoration:none; }
+  button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
+
+  /* ============================================================
+     AMBIENT
+  ============================================================ */
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* ============================================================
+     HEADER
+  ============================================================ */
+  header.top {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s5) var(--s6);
+    background:rgba(14,14,14,0.85);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--ring-faint);
+  }
+  .wordmark {
+    font-family:var(--sans); font-weight:900;
+    font-size:18px; letter-spacing:-0.05em;
+    color:var(--accent); opacity:0.82;
+    transition:opacity var(--t-fast);
+  }
+  .wordmark:hover { opacity:1; }
+  .cart-toggle {
+    display:flex; align-items:center; gap:var(--s3);
+    padding:var(--s2) var(--s4);
+    border:1px solid var(--ring-soft);
+    transition:border-color var(--t-fast), background var(--t-fast);
+  }
+  .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
+  .cart-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute);
+  }
+  .cart-count {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    color:var(--accent); min-width:14px; text-align:right;
+  }
+  .cart-count.pulse { animation:pulse 0.4s ease-out; }
+  @keyframes pulse {
+    0%   { transform:scale(1);   }
+    40%  { transform:scale(1.45); }
+    100% { transform:scale(1);   }
+  }
+
+  /* ============================================================
+     MAIN
+  ============================================================ */
+  main {
+    position:relative; z-index:2;
+    max-width:1440px; margin:0 auto;
+    padding:var(--s8) var(--s6) var(--s7);
+  }
+
+  /* ============================================================
+     INTRO — title in MERCH hot orange, descriptor muted serif
+  ============================================================ */
+  .intro {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:var(--s6); margin-bottom:var(--s8);
+  }
+  .intro h1 {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(80px,14vw,220px);
+    letter-spacing:-0.05em; line-height:0.88;
+    color:var(--title-color);
+    transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
+  }
+  .intro p {
+    font-family:var(--serif); font-size:12px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-mute); padding-bottom:var(--s4);
+    max-width:260px; text-align:right; line-height:1.6;
+    transition: opacity 0.2s ease, color 0.3s ease;
+  }
+
+  /* ============================================================
+     FILTER ROW
+     active chip: underline + dot use SOURCE VENTURE color
+     (set via CSS custom property --src-color on each chip
+      — applied by JS when rendering from SOURCES constant)
+  ============================================================ */
+  .filters {
+    display:flex; align-items:center; gap:var(--s6);
+    padding-bottom:var(--s5); margin-bottom:var(--s6);
+    border-bottom:1px solid var(--ring-faint);
+    flex-wrap:wrap;
+  }
+
+  .filter {
+    position:relative;
+    font-family:var(--sans); font-weight:500;
+    font-size:13px; letter-spacing:0.04em;
+    text-transform:lowercase; color:var(--text-mute);
+    padding:var(--s2) 0;
+    transition:color var(--t-fast);
+  }
+  .filter:hover { color:var(--text); }
+
+  /* active underline uses --src-color set inline by JS */
+  .filter.active { color:var(--text); }
+  .filter.active::after {
+    content:"";
+    position:absolute; left:0; bottom:-1px;
+    width:100%; height:1px;
+    background:var(--src-color, var(--accent));
+  }
+  /* small colored dot left of active chip label */
+  .filter.active::before {
+    content:"";
+    position:absolute; left:-10px; top:50%;
+    width:4px; height:4px; border-radius:50%;
+    background:var(--src-color, var(--accent));
+    transform:translateY(-50%);
+  }
+
+  .filter-count {
+    font-family:var(--serif); font-size:10px;
+    color:var(--text-dim); margin-left:2px;
+    vertical-align:super;
+  }
+
+  /* ============================================================
+     GRID
+  ============================================================ */
+  .grid {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:var(--s7) var(--s6);
+  }
+
+  /* ============================================================
+     PRODUCT CARD
+     border-color on hover = source venture color via --src-color
+     set inline on each card by JS
+  ============================================================ */
+  .card { display:flex; flex-direction:column; }
+
+  .card-frame {
+    position:relative;
+    aspect-ratio:4/5;
+    background:var(--bg-raised);
+    border:1px solid var(--ring-soft);
+    overflow:hidden;
+    transition:border-color var(--t-med);
+  }
+  /* hover border uses venture color */
+  .card:hover .card-frame {
+    border-color:var(--src-color, var(--accent));
+  }
+
+  /* catalog-number placeholder — delete when real images arrive */
+  .card-plaque {
+    position:absolute; top:var(--s4); left:var(--s4);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; color:var(--text-dim);
+    text-transform:uppercase;
+  }
+  .card-number {
+    position:absolute; top:50%; right:var(--s5);
+    transform:translateY(-50%);
+    font-family:var(--serif);
+    font-size:clamp(72px,9vw,112px); line-height:1;
+    color:var(--text-ghost); font-weight:400; letter-spacing:-0.02em;
+  }
+
+  /* SHOPIFY BUY BUTTON MOUNT
+     paste Shopify embed <div> inside .card-frame.
+     delete .card-plaque + .card-number when real product art goes in. */
+
+  /* category row — colored dot + label in venture color */
+  .card-cat {
+    display:flex; align-items:center; gap:var(--s2);
+    padding:var(--s4) 0 var(--s2);
+  }
+  .cat-dot {
+    width:5px; height:5px; border-radius:50%; flex-shrink:0;
+    background:var(--src-color, var(--accent));
+  }
+  .cat-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    /* color set inline by JS in venture color */
+  }
+
+  .card-meta {
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding-bottom:var(--s3); gap:var(--s4);
+  }
+  .card-name {
+    font-family:var(--sans); font-weight:700;
+    font-size:14px; letter-spacing:0.02em;
+    color:var(--text); text-transform:uppercase;
+  }
+  .card-price {
+    font-family:var(--serif); font-size:13px;
+    letter-spacing:0.04em; color:var(--text-mute);
+    white-space:nowrap;
+  }
+
+  /* add-to-cart: hover uses venture color */
+  .card-add {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s3) 0;
+    border-top:1px solid var(--ring-faint);
+    font-family:var(--sans); font-weight:500;
+    font-size:11px; letter-spacing:0.18em;
+    color:var(--text-mute); text-transform:uppercase;
+    transition:color var(--t-fast), border-color var(--t-fast);
+    width:100%;
+  }
+  .card-add:hover {
+    color:var(--src-color, var(--accent));
+    border-top-color:var(--src-color, var(--accent));
+  }
+  .card-add .arrow {
+    font-family:var(--serif); font-size:14px;
+    transition:transform var(--t-fast);
+  }
+  .card-add:hover .arrow { transform:translateX(4px); }
+
+  /* ============================================================
+     FOOTER
+  ============================================================ */
+  footer.bottom {
+    position:relative; z-index:2;
+    padding:var(--s7) var(--s6);
+    border-top:1px solid var(--ring-faint);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  footer.bottom p, footer.bottom a {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
+  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
+  footer.bottom a:hover { color:var(--accent); }
+
+  /* ============================================================
+     CART DRAWER
+  ============================================================ */
+  .cart-overlay {
+    position:fixed; inset:0; z-index:90;
+    background:rgba(0,0,0,0.6); opacity:0; pointer-events:none;
+    transition:opacity var(--t-med);
+  }
+  .cart-overlay.open { opacity:1; pointer-events:auto; }
+  .cart-drawer {
+    position:fixed; top:0; right:0; bottom:0;
+    width:min(440px,100vw); z-index:100;
+    background:var(--bg-drawer);
+    border-left:1px solid var(--ring-soft);
+    display:flex; flex-direction:column;
+    transform:translateX(100%); transition:transform var(--t-med);
+  }
+  .cart-drawer.open { transform:translateX(0); }
+
+  .drawer-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s5); border-bottom:1px solid var(--ring-faint);
+  }
+  .drawer-header .title {
+    font-family:var(--sans); font-weight:900;
+    font-size:14px; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--accent);
+  }
+  .drawer-close {
+    font-family:var(--sans); font-weight:300; font-size:28px; line-height:1;
+    color:var(--text-mute); padding:var(--s1) var(--s3);
+    transition:color var(--t-fast);
+  }
+  .drawer-close:hover { color:var(--accent); }
+
+  .drawer-items { flex:1; overflow-y:auto; padding:var(--s4) var(--s5); }
+  .drawer-empty {
+    padding:var(--s7) 0; text-align:center;
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
+
+  .drawer-item {
+    display:grid; grid-template-columns:56px 1fr auto;
+    gap:var(--s4); padding:var(--s4) 0;
+    border-bottom:1px solid var(--ring-faint);
+    align-items:flex-start;
+  }
+  .drawer-item-thumb {
+    width:56px; height:70px;
+    background:var(--bg-raised);
+    border:1px solid var(--ring-soft);
+    font-family:var(--serif); font-size:13px;
+    color:var(--text-ghost);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .drawer-item-info { display:flex; flex-direction:column; gap:var(--s1); }
+  .drawer-item-name {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.04em; text-transform:uppercase; color:var(--text);
+  }
+  /* category tag in drawer: inline dot + label in venture color */
+  .drawer-item-cat {
+    display:flex; align-items:center; gap:var(--s1);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+  }
+  .drawer-cat-dot {
+    width:5px; height:5px; border-radius:50%; flex-shrink:0;
+  }
+  .drawer-item-qty {
+    display:flex; align-items:center; gap:var(--s2); margin-top:var(--s2);
+  }
+  .qty-btn {
+    width:20px; height:20px;
+    border:1px solid var(--ring-soft);
+    font-family:var(--sans); font-size:12px; color:var(--text-mute);
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color var(--t-fast), color var(--t-fast);
+  }
+  .qty-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .qty-num {
+    font-family:var(--sans); font-size:12px;
+    color:var(--text); min-width:16px; text-align:center;
+  }
+  .drawer-item-right {
+    display:flex; flex-direction:column; align-items:flex-end; gap:var(--s2);
+  }
+  .drawer-item-price { font-family:var(--serif); font-size:12px; color:var(--text); }
+  .drawer-item-remove {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; color:var(--text-dim); text-transform:uppercase;
+    transition:color var(--t-fast);
+  }
+  .drawer-item-remove:hover { color:var(--accent); }
+
+  .drawer-footer { padding:var(--s5); border-top:1px solid var(--ring-soft); }
+  .subtotal {
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:var(--s5);
+  }
+  .subtotal-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; color:var(--text-mute); text-transform:uppercase;
+  }
+  .subtotal-val {
+    font-family:var(--sans); font-weight:700;
+    font-size:20px; color:var(--accent); letter-spacing:-0.02em;
+  }
+  .checkout-btn {
+    display:block; width:100%; padding:var(--s4);
+    border:1px solid var(--accent); background:var(--accent);
+    color:var(--bg);
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.2em; text-transform:uppercase;
+    transition:opacity var(--t-fast);
+  }
+  .checkout-btn:hover { opacity:0.85; }
+  .checkout-btn:disabled {
+    background:transparent; color:var(--text-dim);
+    border-color:var(--ring-soft); cursor:not-allowed; opacity:1;
+  }
+  .drawer-note {
+    margin-top:var(--s3);
+    font-family:var(--serif); font-size:9px;
+    letter-spacing:0.24em; color:var(--text-dim);
+    text-transform:uppercase; text-align:center;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+  ============================================================ */
+  @media (max-width:1024px) {
+    .grid { grid-template-columns:repeat(2,1fr); gap:var(--s6); }
+    main { padding:var(--s7) var(--s5) var(--s6); }
+  }
+  @media (max-width:640px) {
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s6) var(--s5); }
+    .intro { flex-direction:column; align-items:flex-start; gap:var(--s4); margin-bottom:var(--s7); }
+    .intro p { text-align:left; padding-bottom:0; max-width:none; }
+    .filters { gap:var(--s4); }
+    .grid { grid-template-columns:1fr; gap:var(--s6); }
+    footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s5); }
+  }
+</style>
+</head>
+<body>
+
+  <div class="grain"></div>
+
+  <!-- HEADER -->
+  <header class="top">
+    <a class="wordmark" href="/">the six.well construct</a>
+    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+      <span class="cart-label">cart</span>
+      <span class="cart-count" id="cartCount">0</span>
+    </button>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+    <section class="intro">
+      <h1>MERCH.</h1>
+      <!-- REWRITE: default descriptor shown when "all" is selected -->
+      <p id="introDesc">everything sellable from the construct</p>
+    </section>
+
+    <!-- filter chips — generated by JS from SOURCES -->
+    <nav class="filters" id="filters" role="tablist"></nav>
+
+    <!-- product grid — rendered by JS -->
+    <section class="grid" id="productGrid"></section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="bottom">
+    <p>&copy; the six.well construct</p>
+    <a href="/">return to construct</a>
+  </footer>
+
+  <!-- CART DRAWER -->
+  <div class="cart-overlay" id="cartOverlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <span class="title">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart">×</button>
+    </div>
+    <div class="drawer-items" id="drawerItems">
+      <p class="drawer-empty">cart is empty</p>
+    </div>
+    <div class="drawer-footer">
+      <div class="subtotal">
+        <span class="subtotal-label">subtotal</span>
+        <span class="subtotal-val" id="subtotal">$0</span>
+      </div>
+      <!-- CHECKOUT INTEGRATION POINT
+           replace click handler with Shopify SDK checkout.create()
+           or hosted-checkout redirect built from cart line items -->
+      <button class="checkout-btn" id="checkoutBtn" disabled>proceed to checkout</button>
+      <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
+    </div>
+  </aside>
+
+  <script>
+  /* ============================================================
+     SOURCE VENTURES
+     ============================================================
+     Each entry defines a source venture that feeds products
+     into MERCH. To add a new source (e.g. tattooing flash):
+       1. Add an entry here
+       2. Add products below with matching key
+       A filter chip auto-generates from this list.
+     
+     key:    used to match products (.category field)
+     label:  displayed in filter chip and on product cards
+     color:  source venture's brand color (from landing system)
+     origin: where this comes from conceptually
+  ============================================================ */
+  const SOURCES = {
+    "six.well": {
+      label:  "six.well clothing",
+      color:  "#F7A226",
+      origin: "the construct",
+      /* REWRITE — short, uppercase-friendly, your voice */
+      statement: "garments from the construct's own hand"
+    },
+    "thoughtpuppet": {
+      label:  "thoughtpuppet",
+      color:  "#0581C1",
+      origin: "art",
+      /* REWRITE — short, uppercase-friendly, your voice */
+      statement: "objects that carry the paintings outward"
+    },
+    "art.pill": {
+      label:  "art.pill Tattoo Supply",
+      color:  "#8F231D",
+      origin: "tattooing",
+      /* REWRITE — short, uppercase-friendly, your voice */
+      statement: "materials behind the marks"
+    }
+  };
+
+  /* ============================================================
+     PLACEHOLDER PRODUCT DATA
+     ============================================================
+     Replace with real Shopify product data when wiring up.
+     category key must match a key in SOURCES above.
+     
+     SHOPIFY: each product will get a `shopifyId` field and the
+     card-frame will hold a Buy Button embed <div>.
+  ============================================================ */
+  const PRODUCTS = [
+    /* six.well clothing — garments, construct-originating */
+    { id:"01", name:"HEAVY TEE",      price: 65,  category:"six.well"      },
+    { id:"02", name:"RAW HOODIE",     price: 145, category:"six.well"      },
+    { id:"03", name:"CORE CAP",       price: 45,  category:"six.well"      },
+    { id:"04", name:"WORK SHIRT",     price: 110, category:"six.well"      },
+
+    /* thoughtpuppet — artifacts, ART-originating */
+    { id:"05", name:"VESSEL I",       price: 120, category:"thoughtpuppet" },
+    { id:"06", name:"OBELISK",        price: 240, category:"thoughtpuppet" },
+    { id:"07", name:"INTERIOR 003",   price: 180, category:"thoughtpuppet" },
+    { id:"08", name:"SMALL EARTH",    price: 95,  category:"thoughtpuppet" },
+    { id:"09", name:"FILAMENT",       price: 60,  category:"thoughtpuppet" },
+
+    /* art.pill Tattoo Supply — TATTOOING-originating */
+    { id:"10", name:"HAND POKE KIT",  price: 55,  category:"art.pill"      },
+    { id:"11", name:"TRANSFER PAPER", price: 18,  category:"art.pill"      },
+    { id:"12", name:"GRIP WRAP SET",  price: 22,  category:"art.pill"      }
+  ];
+
+  /* ============================================================
+     STATE
+  ============================================================ */
+  let cart          = [];
+  let activeFilter  = "all";
+
+  /* DOM refs */
+  const filtersEl  = document.getElementById("filters");
+  const grid       = document.getElementById("productGrid");
+  const introDesc  = document.getElementById("introDesc");
+  const drawer     = document.getElementById("cartDrawer");
+  const overlay     = document.getElementById("cartOverlay");
+  const drawerItems = document.getElementById("drawerItems");
+  const cartCount   = document.getElementById("cartCount");
+  const subtotalEl  = document.getElementById("subtotal");
+  const checkoutBtn = document.getElementById("checkoutBtn");
+
+  /* ============================================================
+     RENDER: FILTER CHIPS
+     "all" chip first (amber), then one per source venture
+     active chip gets --src-color set to its venture color
+  ============================================================ */
+  function renderFilters() {
+    const allCount = PRODUCTS.length;
+
+    /* build "all" chip */
+    const allBtn = document.createElement("button");
+    allBtn.className = "filter" + (activeFilter === "all" ? " active" : "");
+    allBtn.dataset.filter = "all";
+    allBtn.role = "tab";
+    /* "all" active color = wordmark amber */
+    allBtn.style.setProperty("--src-color", "var(--accent)");
+    allBtn.innerHTML = `all<span class="filter-count">${allCount}</span>`;
+    allBtn.addEventListener("click", () => setFilter("all"));
+    filtersEl.appendChild(allBtn);
+
+    /* one chip per source */
+    Object.entries(SOURCES).forEach(([key, src]) => {
+      const count = PRODUCTS.filter(p => p.category === key).length;
+      const btn = document.createElement("button");
+      btn.className = "filter" + (activeFilter === key ? " active" : "");
+      btn.dataset.filter = key;
+      btn.role = "tab";
+      btn.style.setProperty("--src-color", src.color);
+      btn.innerHTML = `${src.label}<span class="filter-count">${count}</span>`;
+      btn.addEventListener("click", () => setFilter(key));
+      filtersEl.appendChild(btn);
+    });
+  }
+
+  /* default intro descriptor — shown when "all" is active.
+     REWRITE in your voice. */
+  const DEFAULT_DESC = "everything sellable from the construct";
+
+  function setFilter(key) {
+    activeFilter = key;
+
+    /* update MERCH. title color */
+    const titleColor = key === "all" ? "#F7A226" : SOURCES[key].color;
+    document.documentElement.style.setProperty("--title-color", titleColor);
+
+    /* fade intro descriptor out, swap text + color, fade back in */
+    introDesc.style.opacity = "0";
+    setTimeout(() => {
+      if (key === "all") {
+        introDesc.textContent = DEFAULT_DESC;
+        introDesc.style.color = "";
+      } else {
+        const src = SOURCES[key];
+        introDesc.textContent = src.statement;
+        introDesc.style.color = src.color;
+      }
+      introDesc.style.opacity = "1";
+    }, 200); /* wait for fade-out before swapping content */
+
+    filtersEl.innerHTML = "";
+    renderFilters();
+    renderGrid();
+  }
+
+  /* ============================================================
+     RENDER: PRODUCT GRID
+     each card gets --src-color = its venture color, inline.
+     this drives hover border, cat dot color, add-btn hover.
+  ============================================================ */
+  function renderGrid() {
+    const visible = activeFilter === "all"
+      ? PRODUCTS
+      : PRODUCTS.filter(p => p.category === activeFilter);
+
+    grid.innerHTML = visible.map(p => {
+      const src = SOURCES[p.category];
+      return `
+        <article class="card"
+                 style="--src-color:${src.color}"
+                 data-id="${p.id}"
+                 data-category="${p.category}">
+
+          <!-- image frame — replace plaque + number with real photography -->
+          <div class="card-frame">
+            <span class="card-plaque">N&deg; ${p.id}</span>
+            <span class="card-number">${p.id}</span>
+            <!-- SHOPIFY BUY BUTTON mount point:
+                 paste <div id="product-component-XXXXX"></div> here,
+                 then delete .card-plaque + .card-number above -->
+          </div>
+
+          <!-- category: colored dot + label in venture color -->
+          <div class="card-cat">
+            <span class="cat-dot"></span>
+            <span class="cat-label"
+                  style="color:${src.color}; opacity:0.7">${src.label}</span>
+          </div>
+
+          <div class="card-meta">
+            <h3 class="card-name">${p.name}</h3>
+            <span class="card-price">$${p.price}</span>
+          </div>
+
+          <button class="card-add" data-add="${p.id}">
+            <span>add to cart</span>
+            <span class="arrow">&rarr;</span>
+          </button>
+        </article>
+      `;
+    }).join("");
+
+    /* wire add-to-cart buttons */
+    grid.querySelectorAll("[data-add]").forEach(btn => {
+      btn.addEventListener("click", () => addToCart(btn.dataset.add));
+    });
+  }
+
+  /* ============================================================
+     CART OPERATIONS
+  ============================================================ */
+  function addToCart(productId) {
+    const existing = cart.find(i => i.productId === productId);
+    if (existing) existing.qty += 1;
+    else cart.push({ productId, qty:1 });
+    renderCart();
+    openDrawer();
+    pulseCount();
+  }
+
+  function removeFromCart(productId) {
+    cart = cart.filter(i => i.productId !== productId);
+    renderCart();
+  }
+
+  function updateQty(productId, delta) {
+    const item = cart.find(i => i.productId === productId);
+    if (!item) return;
+    item.qty += delta;
+    if (item.qty <= 0) removeFromCart(productId);
+    else renderCart();
+  }
+
+  /* ============================================================
+     RENDER: CART DRAWER
+     category tag shows colored dot in venture color
+  ============================================================ */
+  function renderCart() {
+    const totalQty = cart.reduce((sum, i) => sum + i.qty, 0);
+    cartCount.textContent = totalQty;
+
+    if (cart.length === 0) {
+      drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
+      subtotalEl.textContent = "$0";
+      checkoutBtn.disabled = true;
+      return;
+    }
+    checkoutBtn.disabled = false;
+
+    drawerItems.innerHTML = cart.map(item => {
+      const p   = PRODUCTS.find(x => x.id === item.productId);
+      const src = SOURCES[p.category];
+      const lineTotal = p.price * item.qty;
+      return `
+        <div class="drawer-item">
+          <div class="drawer-item-thumb">${p.id}</div>
+          <div class="drawer-item-info">
+            <span class="drawer-item-name">${p.name}</span>
+            <span class="drawer-item-cat">
+              <span class="drawer-cat-dot" style="background:${src.color}"></span>
+              <span style="color:${src.color}; opacity:0.75">${src.label}</span>
+            </span>
+            <div class="drawer-item-qty">
+              <button class="qty-btn" data-minus="${p.id}" aria-label="decrease">&minus;</button>
+              <span class="qty-num">${item.qty}</span>
+              <button class="qty-btn" data-plus="${p.id}" aria-label="increase">+</button>
+            </div>
+          </div>
+          <div class="drawer-item-right">
+            <span class="drawer-item-price">$${lineTotal}</span>
+            <button class="drawer-item-remove" data-remove="${p.id}">remove</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    /* wire qty + remove */
+    drawerItems.querySelectorAll("[data-plus]").forEach(b =>
+      b.addEventListener("click", () => updateQty(b.dataset.plus, +1)));
+    drawerItems.querySelectorAll("[data-minus]").forEach(b =>
+      b.addEventListener("click", () => updateQty(b.dataset.minus, -1)));
+    drawerItems.querySelectorAll("[data-remove]").forEach(b =>
+      b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
+
+    const total = cart.reduce((sum, item) => {
+      const p = PRODUCTS.find(x => x.id === item.productId);
+      return sum + (p.price * item.qty);
+    }, 0);
+    subtotalEl.textContent = "$" + total;
+  }
+
+  function pulseCount() {
+    cartCount.classList.remove("pulse");
+    void cartCount.offsetWidth;
+    cartCount.classList.add("pulse");
+  }
+
+  /* ============================================================
+     DRAWER OPEN / CLOSE
+  ============================================================ */
+  function openDrawer() {
+    drawer.classList.add("open"); overlay.classList.add("open");
+    drawer.setAttribute("aria-hidden","false");
+  }
+  function closeDrawer() {
+    drawer.classList.remove("open"); overlay.classList.remove("open");
+    drawer.setAttribute("aria-hidden","true");
+  }
+  document.getElementById("cartToggle").addEventListener("click", openDrawer);
+  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+  overlay.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+  /* ============================================================
+     CHECKOUT (placeholder)
+     replace with Shopify hosted-checkout redirect when ready
+  ============================================================ */
+  checkoutBtn.addEventListener("click", () => {
+    console.log("CHECKOUT — cart:", cart);
+    alert("Shopify checkout integration plugs in here.\n\n" +
+      cart.map(i => {
+        const p = PRODUCTS.find(x => x.id === i.productId);
+        return `${p.name} \u00d7 ${i.qty} \u2014 $${p.price * i.qty}`;
+      }).join("\n")
+    );
+  });
+
+  /* ============================================================
+     INIT
+  ============================================================ */
+  renderFilters();
+  renderGrid();
+  renderCart();
+
+  /* read ?filter= URL param on load — lets sub-nodes on the landing
+     page deep-link directly into a filtered view.
+     e.g. merch/index.html?filter=six.well activates six.well clothing.
+     if no param or unrecognised key, defaults to "all". */
+  const urlParams = new URLSearchParams(window.location.search);
+  const initFilter = urlParams.get("filter");
+  if (initFilter && SOURCES[initFilter]) {
+    setFilter(initFilter);
+  }
+
+  /*
+    SHOPIFY BUY BUTTON SDK — uncomment when ready
+    =============================================
+    (function(){
+      var s='https://sdks.shopifycdn.com/buy-button/latest/buy-button-storefront.min.js';
+      if(window.ShopifyBuy){if(window.ShopifyBuy.UI){ShopifyBuyInit();}else{load();}}
+      else{load();}
+      function load(){var sc=document.createElement('script');sc.async=true;sc.src=s;
+        (document.head||document.body).appendChild(sc);sc.onload=ShopifyBuyInit;}
+      function ShopifyBuyInit(){
+        var client=ShopifyBuy.buildClient({
+          domain:'YOUR-STORE.myshopify.com',
+          storefrontAccessToken:'YOUR_STOREFRONT_ACCESS_TOKEN'
+        });
+        ShopifyBuy.UI.onReady(client).then(function(ui){
+          // per-product component configs go here
+        });
+      }
+    })();
+  */
+  </script>
+
+</body>
+</html>

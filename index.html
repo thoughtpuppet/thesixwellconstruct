@@ -2,8 +2,6 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0e0e0e; overflow: hidden; font-family: 'Inter','Helvetica Neue',sans-serif; }
@@ -26,7 +24,7 @@
   #wordmark-desc {
     position: absolute; top: 62px; left: 50%; transform: translateX(-50%);
     font-family: 'Times New Roman', Times, serif;
-    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #FCB867; opacity: 0;
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #FCB867; opacity: 0;
     z-index: 10; white-space: nowrap; pointer-events: none;
     transition: opacity 0.6s ease;
   }
@@ -50,7 +48,7 @@
   .sub-node-label {
     position: absolute;
     font-family: 'Times New Roman', Times, serif;
-    font-size: 11px;
+    font-size: 13px;
     font-weight: bold;
     letter-spacing: 0.03em;
     text-transform: lowercase;
@@ -206,7 +204,7 @@ let nodePosInit=false;
 const collapseStartX=new Array(VENTURES.length).fill(0);
 const collapseStartY=new Array(VENTURES.length).fill(0);
 let nodeLabelEls=[];
-VENTURES.forEach(v=>{const el=document.createElement('div');el.className='node-label';el.textContent=v.name;el.style.color=v.color;nodeLabelsDiv.appendChild(el);nodeLabelEls.push(el);});
+VENTURES.forEach(v=>{const el=document.createElement('div');el.className='node-label';el.textContent=v.name+' .';el.style.color=v.color;nodeLabelsDiv.appendChild(el);nodeLabelEls.push(el);});
 
 // One-line italic descriptions — Times New Roman, fade in on node hover
 const VENTURE_DESCS = {
@@ -421,7 +419,7 @@ function drawCollapsingNodes(cp){
 const SUB_NODE_DATA = {
   'TATTOOING':  [{name:'booking & inquiry',url:'/tattooing/booking'},{name:'process',url:'/tattooing/process'},{name:'art.pill tattoo house',url:'/tattooing/about'},{name:'flash',url:'/tattooing/flash'},{name:'portfolio',url:'/tattooing'}],
   'ART MAKING': [{name:'statements',url:'/art/statements'},{name:'artist bio',url:'/art/artist-bio'},{name:'portfolio',url:'/art'},{name:'meridian in conflux',url:'/art/meridian-conflux'},{name:'studio visit',url:'/art/studio-visit'}],
-  'MERCH':      [{name:'six.well clothing',url:'/merch/six-well-clothing'},{name:'art.pill tattoo supply',url:'/merch/art-pill-tattoo-supply'},{name:'prints',url:'/merch/prints'},{name:'thoughtpuppet artifacts',url:'/merch/thoughtpuppet-artifacts'}],
+  'MERCH':      [{name:'six.well clothing',url:'merch/index.html?filter=six.well',color:'#F7A226'},{name:'art.pill tattoo supply',url:'merch/index.html?filter=art.pill',color:'#8F231D'},{name:'thoughtpuppet artifacts',url:'merch/index.html?filter=thoughtpuppet',color:'#0581C1'},{name:'cult[iv] merch',url:'merch/index.html?filter=cultiv',color:'#55BA5A'},{name:'all merch',url:'merch/index.html',color:'#FCB867'}],
   'ABOUT':      [{name:'the construct',url:'/about'},{name:'who is sai solehman?',url:'/about/sai-solehman'},{name:'contact',url:'/about/contact'},{name:'press',url:'/about/press'},{name:'streaming',url:'/about/streaming'}],
   'EVENTS':     [{name:'cult[iv]',url:'/events/cultiv'},{name:'the gathering',url:'/events/the-gathering'},{name:"solehman's new year",url:'/events/solehmans-new-year'},{name:'movie nights',url:'/events/movie-nights'},{name:'hosting',url:'/events/hosting'},{name:'calendar',url:'/events/calendar'},{name:'open studios',url:'/events/open-studios'}],
   'MUSIC':      [{name:'ringtones',url:'/music/ringtones'},{name:'milowalksonwater',url:'/music/milowalksonwater'},{name:'scores',url:'/music/scores'}],
@@ -432,15 +430,15 @@ const SUB_NODE_DATA = {
 
 // Sacred geometry shape assigned to each venture's sub-nodes
 const SUB_SHAPES = {
-  'TATTOOING':  'triangle-up',
-  'ART MAKING': 'hexagon',
-  'MERCH':      'pentagon',
-  'ABOUT':      'vesica',
-  'EVENTS':     'pentagram',
-  'MUSIC':      'star6',
-  'WRITINGS':   'octagon',
-  'ARCHIVE':    'square',
-  'FILM':       'triangle-down',
+  'TATTOOING':  'circle',
+  'ART MAKING': 'circle',
+  'MERCH':      'circle',
+  'ABOUT':      'circle',
+  'EVENTS':     'circle',
+  'MUSIC':      'circle',
+  'WRITINGS':   'circle',
+  'ARCHIVE':    'circle',
+  'FILM':       'circle',
 };
 
 // Sub-node animation + sizing constants
@@ -631,22 +629,24 @@ function drawSubNodes(){
       const sx = subNodeX[i], sy = subNodeY[i];
       const drawR = lerp(3, SUB_NODE_RADIUS, ep);
       const alpha = ep * 0.88;
+      // use sub-node's own color if defined, else fall back to parent venture color
+      const subColor = sub.color || v.color;
 
       ctx.save();
 
       // Shape — dims slightly on hover to make halo pop
       ctx.globalAlpha = alpha * (1 - subNodeHP[i] * 0.22);
-      ctx.fillStyle = v.color;
+      ctx.fillStyle = subColor;
       drawSubShape(sx, sy, drawR, shape);
       ctx.fill();
 
-      // Hover halo — open ring, same color as venture
+      // Hover halo — open ring, same color as sub-node
       if(subNodeHP[i] > 0 && ep > 0.7){
         ctx.globalAlpha = alpha * subNodeHP[i] * 0.78;
         ctx.beginPath();
         ctx.arc(sx, sy, SUB_NODE_RADIUS + 8, 0, Math.PI * 2);
         ctx.arc(sx, sy, SUB_NODE_RADIUS + 3, 0, Math.PI * 2, true);
-        ctx.fillStyle = v.color;
+        ctx.fillStyle = subColor;
         ctx.fill();
       }
       ctx.restore();
@@ -656,7 +656,7 @@ function drawSubNodes(){
       if(el && ep > 0.35){
         el.style.transform = 'translate(-50%, 0)';
         el.textContent = sub.name;
-        el.style.color = v.color;
+        el.style.color = subColor;
         el.style.opacity = String(ep * (0.65 + subNodeHP[i] * 0.25));
         el.style.left = sx + 'px';
         el.style.top  = (sy + SUB_NODE_RADIUS + 5) + 'px';
@@ -671,15 +671,16 @@ function drawSubNodes(){
     const destX = nodeX[activeVentureIdx]; // target: live parent position
     const destY = nodeY[activeVentureIdx];
 
-    subs.forEach((_, i) => {
+    subs.forEach((sub, i) => {
       const sx = lerp(subNodeCollapseStartX[i], destX, cp);
       const sy = lerp(subNodeCollapseStartY[i], destY, cp);
       const alpha = (1 - cp) * 0.88;
       const drawR = lerp(SUB_NODE_RADIUS, 3, cp);
+      const subColor = sub.color || v.color;
 
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = v.color;
+      ctx.fillStyle = subColor;
       drawSubShape(sx, sy, drawR, shape);
       ctx.fill();
       ctx.restore();
