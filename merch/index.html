@@ -153,11 +153,34 @@
   }
 
   /* ============================================================
+     INTRO BREADCRUMB
+     "everything sellable from the construct" floats above MERCH.
+     when a category is active — faded, same type as the descriptor.
+     hidden on "all".
+  ============================================================ */
+  .intro-above {
+    font-family: var(--serif);
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-mute);
+    opacity: 0;
+    margin-bottom: -10px;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .intro-above.visible { opacity: 0.45; }
+
+  /* ============================================================
      INTRO — title in MERCH hot orange, descriptor muted serif
   ============================================================ */
   .intro {
     display:flex; align-items:flex-end; justify-content:space-between;
     gap:var(--s6); margin-bottom:var(--s8);
+  }
+  .intro-left {
+    display:flex; flex-direction:column; align-items:flex-start;
   }
   .intro h1 {
     font-family:var(--sans); font-weight:900;
@@ -230,6 +253,61 @@
   }
 
   /* ============================================================
+     SIZE + COLOR SELECTORS
+  ============================================================ */
+  .card-sizes {
+    display:flex; flex-wrap:wrap; gap:var(--s1);
+    margin-bottom:var(--s3);
+  }
+  .size-pill {
+    font-family:var(--sans); font-weight:500;
+    font-size:10px; letter-spacing:0.08em;
+    color:var(--text-mute); text-transform:uppercase;
+    border:1px solid var(--ring-soft);
+    padding:3px 8px;
+    cursor:pointer; background:none;
+    transition:color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  }
+  .size-pill:hover {
+    color:var(--src-color, var(--accent));
+    border-color:var(--src-color, var(--accent));
+  }
+  .size-pill.selected {
+    color:var(--bg);
+    background:var(--src-color, var(--accent));
+    border-color:var(--src-color, var(--accent));
+  }
+  .card-colors {
+    display:flex; gap:var(--s2); align-items:center;
+    margin-bottom:var(--s3);
+  }
+  .color-swatch {
+    width:16px; height:16px; border-radius:50%;
+    cursor:pointer; flex-shrink:0;
+    border:1px solid rgba(255,255,255,0.08);
+    transition:transform var(--t-fast), box-shadow var(--t-fast);
+  }
+  .color-swatch:hover { transform:scale(1.2); }
+  .color-swatch.selected {
+    box-shadow:0 0 0 2px var(--bg), 0 0 0 3.5px var(--src-color, var(--accent));
+  }
+  .color-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-dim); margin-left:var(--s1);
+  }
+  /* flashes when user tries to add without selecting a size */
+  .size-required {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--src-color, var(--accent));
+    opacity:0; min-height:14px;
+    transition:opacity var(--t-fast);
+    margin-bottom:var(--s2);
+  }
+  .size-required.visible { opacity:0.8; }
+
+  /* ============================================================
      PRODUCT CARD
      border-color on hover = source venture color via --src-color
      set inline on each card by JS
@@ -264,7 +342,13 @@
     color:var(--text-ghost); font-weight:400; letter-spacing:-0.02em;
   }
 
-  /* SHOPIFY BUY BUTTON MOUNT
+  /* edition badge — bottom-left of frame, Times Roman, dim */
+  .card-edition {
+    position: absolute; bottom: var(--s4); left: var(--s4);
+    font-family: var(--serif); font-size: 10px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-dim);
+  }
      paste Shopify embed <div> inside .card-frame.
      delete .card-plaque + .card-number when real product art goes in. */
 
@@ -405,6 +489,11 @@
   .drawer-cat-dot {
     width:5px; height:5px; border-radius:50%; flex-shrink:0;
   }
+  .drawer-item-variant {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-dim); margin-top:1px;
+  }
   .drawer-item-qty {
     display:flex; align-items:center; gap:var(--s2); margin-top:var(--s2);
   }
@@ -498,7 +587,10 @@
   <!-- MAIN -->
   <main>
     <section class="intro">
-      <h1>MERCH.</h1>
+      <div class="intro-left">
+        <p class="intro-above" id="introAbove">everything sellable from the construct</p>
+        <h1><span id="merchWord">MERCH</span><span class="merch-dot">.</span></h1>
+      </div>
       <!-- REWRITE: default descriptor shown when "all" is selected -->
       <p id="introDesc">everything sellable from the construct</p>
     </section>
@@ -589,22 +681,62 @@
   ============================================================ */
   const PRODUCTS = [
     /* six.well clothing — garments, construct-originating */
-    { id:"01", name:"HEAVY TEE",      price: 65,  category:"six.well"      },
-    { id:"02", name:"RAW HOODIE",     price: 145, category:"six.well"      },
-    { id:"03", name:"CORE CAP",       price: 45,  category:"six.well"      },
-    { id:"04", name:"WORK SHIRT",     price: 110, category:"six.well"      },
+    {
+      id:"01", name:"HEAVY TEE", price:65, category:"six.well",
+      /* REPLACE with actual available sizes */
+      sizes: ["XS","S","M","L","XL","XXL"],
+      /* REPLACE with actual colorways — name shown in UI, hex shown as swatch */
+      colors: [
+        { name:"black",  hex:"#1a1a1a" },
+        { name:"slate",  hex:"#4a4a5a" },
+        { name:"bone",   hex:"#e8e4d8" }
+      ]
+    },
+    {
+      id:"02", name:"RAW HOODIE", price:145, category:"six.well",
+      sizes: ["XS","S","M","L","XL","XXL"],
+      colors: [
+        { name:"black",  hex:"#1a1a1a" },
+        { name:"ash",    hex:"#6b6b6b" }
+      ]
+    },
+    {
+      id:"03", name:"CORE CAP", price:45, category:"six.well",
+      /* caps use fitted sizing */
+      sizes: ["S/M","L/XL"],
+      colors: [
+        { name:"black",  hex:"#1a1a1a" },
+        { name:"bone",   hex:"#e8e4d8" }
+      ]
+    },
+    {
+      id:"04", name:"WORK SHIRT", price:110, category:"six.well",
+      sizes: ["XS","S","M","L","XL","XXL"],
+      colors: [
+        { name:"black",  hex:"#1a1a1a" },
+        { name:"ecru",   hex:"#c8c0a8" }
+      ]
+    },
 
     /* thoughtpuppet — artifacts, ART-originating */
-    { id:"05", name:"VESSEL I",       price: 120, category:"thoughtpuppet" },
-    { id:"06", name:"OBELISK",        price: 240, category:"thoughtpuppet" },
-    { id:"07", name:"INTERIOR 003",   price: 180, category:"thoughtpuppet" },
-    { id:"08", name:"SMALL EARTH",    price: 95,  category:"thoughtpuppet" },
-    { id:"09", name:"FILAMENT",       price: 60,  category:"thoughtpuppet" },
+    {
+      id:"05", name:"MARBLES HOODIE", price: 130, category:"thoughtpuppet",
+      url: "marbles-hoodie.html",
+      sizes: ["XS","S","M","L","XL","XXL"],
+      colors: [
+        { name:"marbles", hex:"#2a2a2a" }
+      ],
+      edition: 30
+    },
+    { id:"06", name:"ARTIFACT 002",   price: 240, category:"thoughtpuppet" },
+    { id:"07", name:"ARTIFACT 003",   price: 180, category:"thoughtpuppet" },
+    { id:"08", name:"ARTIFACT 004",   price: 95,  category:"thoughtpuppet" },
+    { id:"09", name:"ARTIFACT 005",   price: 60,  category:"thoughtpuppet" },
 
-    /* art.pill Tattoo Supply — TATTOOING-originating */
-    { id:"10", name:"HAND POKE KIT",  price: 55,  category:"art.pill"      },
-    { id:"11", name:"TRANSFER PAPER", price: 18,  category:"art.pill"      },
-    { id:"12", name:"GRIP WRAP SET",  price: 22,  category:"art.pill"      }
+    /* art.pill Tattoo Supply (no sizes/colors) */
+    { id:"10", name:"HAND POKE KIT",  price:55, category:"art.pill" },
+    { id:"11", name:"TRANSFER PAPER", price:18, category:"art.pill" },
+    { id:"12", name:"GRIP WRAP SET",  price:22, category:"art.pill" }
   ];
 
   /* ============================================================
@@ -617,6 +749,7 @@
   const filtersEl  = document.getElementById("filters");
   const grid       = document.getElementById("productGrid");
   const introDesc  = document.getElementById("introDesc");
+  const introAbove = document.getElementById("introAbove");
   const drawer     = document.getElementById("cartDrawer");
   const overlay     = document.getElementById("cartOverlay");
   const drawerItems = document.getElementById("drawerItems");
@@ -668,7 +801,14 @@
     const titleColor = key === "all" ? "#F7A226" : SOURCES[key].color;
     document.documentElement.style.setProperty("--title-color", titleColor);
 
-    /* fade intro descriptor out, swap text + color, fade back in */
+    /* breadcrumb above MERCH. — fades in when a category is active */
+    if (key === "all") {
+      introAbove.classList.remove("visible");
+    } else {
+      introAbove.classList.add("visible");
+    }
+
+    /* fade descriptor out, swap text + color, fade back in */
     introDesc.style.opacity = "0";
     setTimeout(() => {
       if (key === "all") {
@@ -680,7 +820,7 @@
         introDesc.style.color = src.color;
       }
       introDesc.style.opacity = "1";
-    }, 200); /* wait for fade-out before swapping content */
+    }, 200);
 
     filtersEl.innerHTML = "";
     renderFilters();
@@ -692,39 +832,78 @@
      each card gets --src-color = its venture color, inline.
      this drives hover border, cat dot color, add-btn hover.
   ============================================================ */
+  /* per-card selection state — keyed by product id */
+  const selections = {}; /* { [productId]: { size: null, color: null } } */
+
   function renderGrid() {
     const visible = activeFilter === "all"
       ? PRODUCTS
       : PRODUCTS.filter(p => p.category === activeFilter);
 
     grid.innerHTML = visible.map(p => {
-      const src = SOURCES[p.category];
+      const src  = SOURCES[p.category];
+      const sel  = selections[p.id] || { size: null, color: null };
+
+      /* size pills — only rendered if product has sizes */
+      const sizesHtml = p.sizes ? `
+        <div class="card-sizes" id="sizes-${p.id}">
+          ${p.sizes.map(s => `
+            <button class="size-pill${sel.size === s ? ' selected' : ''}"
+                    data-size="${s}" data-pid="${p.id}">${s}</button>
+          `).join("")}
+        </div>
+        <p class="size-required${!sel.size ? '' : ''}" id="req-${p.id}">select a size</p>
+      ` : "";
+
+      /* color swatches — only rendered if product has colors */
+      const colorsHtml = p.colors ? `
+        <div class="card-colors" id="colors-${p.id}">
+          ${p.colors.map(c => `
+            <button class="color-swatch${sel.color === c.name ? ' selected' : ''}"
+                    style="background:${c.hex}"
+                    data-color="${c.name}" data-pid="${p.id}"
+                    title="${c.name}"></button>
+          `).join("")}
+          <span class="color-label" id="clabel-${p.id}">${sel.color || ''}</span>
+        </div>
+      ` : "";
+
       return `
         <article class="card"
                  style="--src-color:${src.color}"
                  data-id="${p.id}"
                  data-category="${p.category}">
 
-          <!-- image frame — replace plaque + number with real photography -->
-          <div class="card-frame">
-            <span class="card-plaque">N&deg; ${p.id}</span>
-            <span class="card-number">${p.id}</span>
-            <!-- SHOPIFY BUY BUTTON mount point:
-                 paste <div id="product-component-XXXXX"></div> here,
-                 then delete .card-plaque + .card-number above -->
-          </div>
+          ${p.url
+            ? `<a class="card-frame" href="${p.url}" aria-label="view ${p.name}">
+                <span class="card-plaque">N&deg; ${p.id}</span>
+                <span class="card-number">${p.id}</span>
+                ${p.edition ? `<span class="card-edition">ed. / ${p.edition}</span>` : ""}
+               </a>`
+            : `<div class="card-frame">
+                <span class="card-plaque">N&deg; ${p.id}</span>
+                <span class="card-number">${p.id}</span>
+                ${p.edition ? `<span class="card-edition">ed. / ${p.edition}</span>` : ""}
+               </div>`
+          }
 
-          <!-- category: colored dot + label in venture color -->
           <div class="card-cat">
             <span class="cat-dot"></span>
-            <span class="cat-label"
-                  style="color:${src.color}; opacity:0.7">${src.label}</span>
+            <span class="cat-label" style="color:${src.color}; opacity:0.7">${src.label}</span>
           </div>
 
           <div class="card-meta">
-            <h3 class="card-name">${p.name}</h3>
+            <h3 class="card-name">
+              ${p.url
+                ? `<a href="${p.url}" style="color:inherit">${p.name}</a>`
+                : p.name
+              }
+            </h3>
             <span class="card-price">$${p.price}</span>
           </div>
+
+          ${colorsHtml}
+          ${sizesHtml}
 
           <button class="card-add" data-add="${p.id}">
             <span>add to cart</span>
@@ -734,7 +913,47 @@
       `;
     }).join("");
 
-    /* wire add-to-cart buttons */
+    /* wire size pill clicks */
+    grid.querySelectorAll(".size-pill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const pid  = btn.dataset.pid;
+        const size = btn.dataset.size;
+        if (!selections[pid]) selections[pid] = { size: null, color: null };
+        selections[pid].size = size;
+        /* update pill UI without full re-render */
+        document.querySelectorAll(`#sizes-${pid} .size-pill`).forEach(b => {
+          b.classList.toggle("selected", b.dataset.size === size);
+        });
+        /* hide size-required notice */
+        const req = document.getElementById(`req-${pid}`);
+        if (req) req.classList.remove("visible");
+      });
+    });
+
+    /* wire color swatch clicks */
+    grid.querySelectorAll(".color-swatch").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const pid   = btn.dataset.pid;
+        const color = btn.dataset.color;
+        if (!selections[pid]) selections[pid] = { size: null, color: null };
+        /* toggle off if already selected */
+        if (selections[pid].color === color) {
+          selections[pid].color = null;
+          btn.classList.remove("selected");
+          const lbl = document.getElementById(`clabel-${pid}`);
+          if (lbl) lbl.textContent = "";
+        } else {
+          selections[pid].color = color;
+          document.querySelectorAll(`#colors-${pid} .color-swatch`).forEach(b => {
+            b.classList.toggle("selected", b.dataset.color === color);
+          });
+          const lbl = document.getElementById(`clabel-${pid}`);
+          if (lbl) lbl.textContent = color;
+        }
+      });
+    });
+
+    /* wire add-to-cart */
     grid.querySelectorAll("[data-add]").forEach(btn => {
       btn.addEventListener("click", () => addToCart(btn.dataset.add));
     });
@@ -744,24 +963,43 @@
      CART OPERATIONS
   ============================================================ */
   function addToCart(productId) {
-    const existing = cart.find(i => i.productId === productId);
+    const p   = PRODUCTS.find(x => x.id === productId);
+    const sel = selections[productId] || { size: null, color: null };
+
+    /* block add if product has sizes but none selected */
+    if (p.sizes && !sel.size) {
+      const req = document.getElementById(`req-${productId}`);
+      if (req) {
+        req.classList.add("visible");
+        /* flash the size row for emphasis */
+        const sizesEl = document.getElementById(`sizes-${productId}`);
+        if (sizesEl) {
+          sizesEl.style.opacity = "0.4";
+          setTimeout(() => { sizesEl.style.opacity = "1"; }, 300);
+        }
+      }
+      return;
+    }
+
+    const key = `${productId}|${sel.size || ''}|${sel.color || ''}`;
+    const existing = cart.find(i => i.key === key);
     if (existing) existing.qty += 1;
-    else cart.push({ productId, qty:1 });
+    else cart.push({ key, productId, size: sel.size, color: sel.color, qty: 1 });
     renderCart();
     openDrawer();
     pulseCount();
   }
 
-  function removeFromCart(productId) {
-    cart = cart.filter(i => i.productId !== productId);
+  function removeFromCart(key) {
+    cart = cart.filter(i => i.key !== key);
     renderCart();
   }
 
-  function updateQty(productId, delta) {
-    const item = cart.find(i => i.productId === productId);
+  function updateQty(key, delta) {
+    const item = cart.find(i => i.key === key);
     if (!item) return;
     item.qty += delta;
-    if (item.qty <= 0) removeFromCart(productId);
+    if (item.qty <= 0) removeFromCart(key);
     else renderCart();
   }
 
@@ -782,9 +1020,10 @@
     checkoutBtn.disabled = false;
 
     drawerItems.innerHTML = cart.map(item => {
-      const p   = PRODUCTS.find(x => x.id === item.productId);
-      const src = SOURCES[p.category];
+      const p         = PRODUCTS.find(x => x.id === item.productId);
+      const src       = SOURCES[p.category];
       const lineTotal = p.price * item.qty;
+      const variant   = [item.size, item.color].filter(Boolean).join(" · ");
       return `
         <div class="drawer-item">
           <div class="drawer-item-thumb">${p.id}</div>
@@ -794,15 +1033,16 @@
               <span class="drawer-cat-dot" style="background:${src.color}"></span>
               <span style="color:${src.color}; opacity:0.75">${src.label}</span>
             </span>
+            ${variant ? `<span class="drawer-item-variant">${variant}</span>` : ""}
             <div class="drawer-item-qty">
-              <button class="qty-btn" data-minus="${p.id}" aria-label="decrease">&minus;</button>
+              <button class="qty-btn" data-minus="${item.key}" aria-label="decrease">&minus;</button>
               <span class="qty-num">${item.qty}</span>
-              <button class="qty-btn" data-plus="${p.id}" aria-label="increase">+</button>
+              <button class="qty-btn" data-plus="${item.key}" aria-label="increase">+</button>
             </div>
           </div>
           <div class="drawer-item-right">
             <span class="drawer-item-price">$${lineTotal}</span>
-            <button class="drawer-item-remove" data-remove="${p.id}">remove</button>
+            <button class="drawer-item-remove" data-remove="${item.key}">remove</button>
           </div>
         </div>
       `;
@@ -865,6 +1105,16 @@
   renderFilters();
   renderGrid();
   renderCart();
+
+  /* center breadcrumb over "MERCH" word only (not the dot).
+     resets marginLeft before measuring so previous offset doesn't skew it.
+     uses getBoundingClientRect for accurate cross-context positioning. */
+  function syncBreadcrumb() {
+    const above = document.getElementById("introAbove");
+    if (above) above.style.marginLeft = "10px";
+  }
+  document.fonts.ready.then(() => { syncBreadcrumb(); });
+  window.addEventListener("resize", syncBreadcrumb);
 
   /* read ?filter= URL param on load — lets sub-nodes on the landing
      page deep-link directly into a filtered view.

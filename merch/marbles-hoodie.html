@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marbles Hoodie · thoughtpuppet · merch · the six.well construct</title>
+
+<!--
+  ============================================================
+  the six.well construct / merch / thoughtpuppet / marbles hoodie
+  ============================================================
+
+  PRODUCT: Marbles Hoodie
+  SOURCE:  thoughtpuppet (ART-originating, painting-derived)
+  EDITION: 30
+
+  PAGE STRUCTURE:
+    1. header (wordmark + cart)
+    2. breadcrumb nav: merch → thoughtpuppet → marbles hoodie
+    3. product hero: image left, details right
+       — edition marker
+       — color swatch (one colorway)
+       — size selector (XS–XXL)
+       — add to cart
+    4. origin section: "this piece comes from" → the Marbles painting
+    5. related thoughtpuppet pieces (3 cards)
+    6. footer
+
+  PLACEHOLDERS TO REPLACE:
+    — product image (currently a dark frame with edition marker)
+    — painting image in origin section
+    — colorway hex (#2a2a2a) → actual garment color
+    — price ($130) → final price
+    — painting description → your words
+    — related pieces → real thoughtpuppet products
+
+  SHOPIFY INTEGRATION:
+    add to cart button wired to local cart prototype for now.
+    swap for Storefront API checkout when token is ready.
+
+  TYPE:
+    Inter 900 (display, UI) — matches landing + merch
+    Times New Roman (descriptors, labels, body copy)
+  ============================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     DESIGN TOKENS — exact match to merch page
+  ============================================================ */
+  :root {
+    --bg:         #0e0e0e;
+    --bg-raised:  #111111;
+    --bg-drawer:  #0a0a0a;
+
+    --accent:     #FCB867;       /* wordmark amber */
+    --src-color:  #0581C1;       /* thoughtpuppet = ART blue */
+
+    --ring:       #6D3D15;
+    --ring-soft:  rgba(109,61,21,0.4);
+    --ring-faint: rgba(109,61,21,0.18);
+
+    --text:       #FCB867;
+    --text-mute:  rgba(252,184,103,0.55);
+    --text-dim:   rgba(252,184,103,0.30);
+    --text-ghost: rgba(252,184,103,0.13);
+
+    /* body copy color — off-white per brief */
+    --body:       #E8E4DC;
+    --body-mute:  rgba(232,228,220,0.6);
+
+    --s1:4px;  --s2:8px;  --s3:12px; --s4:16px;
+    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+
+    --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: 'Times New Roman',Times,serif;
+
+    --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
+  }
+
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body {
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh; overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+  a { color:inherit; text-decoration:none; }
+  button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
+
+  /* ============================================================
+     GRAIN
+  ============================================================ */
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* ============================================================
+     HEADER
+  ============================================================ */
+  header.top {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s5) var(--s6);
+    background:rgba(14,14,14,0.85);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--ring-faint);
+  }
+  .wordmark {
+    font-family:var(--sans); font-weight:900;
+    font-size:18px; letter-spacing:-0.05em;
+    color:var(--accent); opacity:0.82;
+    transition:opacity var(--t-fast);
+  }
+  .wordmark:hover { opacity:1; }
+  .cart-toggle {
+    display:flex; align-items:center; gap:var(--s3);
+    padding:var(--s2) var(--s4);
+    border:1px solid var(--ring-soft);
+    transition:border-color var(--t-fast), background var(--t-fast);
+  }
+  .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
+  .cart-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute);
+  }
+  .cart-count {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    color:var(--accent); min-width:14px; text-align:right;
+  }
+  .cart-count.pulse { animation:pulse 0.4s ease-out; }
+  @keyframes pulse {
+    0%   { transform:scale(1); }
+    40%  { transform:scale(1.45); }
+    100% { transform:scale(1); }
+  }
+
+  /* ============================================================
+     MAIN
+  ============================================================ */
+  main {
+    position:relative; z-index:2;
+    max-width:1440px; margin:0 auto;
+    padding:var(--s7) var(--s6) var(--s8);
+  }
+
+  /* ============================================================
+     BREADCRUMB
+  ============================================================ */
+  .breadcrumb {
+    display:flex; align-items:center; gap:var(--s3);
+    margin-bottom:var(--s7);
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+  }
+  .breadcrumb a { color:var(--text-dim); transition:color var(--t-fast); }
+  .breadcrumb a:hover { color:var(--text-mute); }
+  .breadcrumb-sep { color:var(--text-ghost); }
+  .breadcrumb-current { color:var(--src-color); opacity:0.8; }
+
+  /* ============================================================
+     PRODUCT HERO — two column: image left, details right
+  ============================================================ */
+  .product-hero {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:var(--s7);
+    margin-bottom:var(--s8);
+    align-items:start;
+  }
+
+  /* ── IMAGE SIDE ── */
+  .product-image {
+    position:relative;
+    aspect-ratio:4/5;
+    background:var(--bg-raised);
+    border:1px solid var(--ring-soft);
+    overflow:hidden;
+    /* hover border in thoughtpuppet blue */
+    transition:border-color var(--t-med);
+  }
+  .product-image:hover { border-color:var(--src-color); }
+
+  /* REPLACE: drop real product photography here.
+     delete .img-placeholder when real image arrives.
+     add <img src="..." alt="Marbles Hoodie"> inside .product-image */
+  .img-placeholder {
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-ghost);
+  }
+  .img-edition {
+    position:absolute; bottom:var(--s5); left:var(--s5);
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .img-plaque {
+    position:absolute; top:var(--s5); left:var(--s5);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-ghost);
+  }
+
+  /* ── DETAILS SIDE ── */
+  .product-details {
+    display:flex; flex-direction:column;
+    padding-top:var(--s3);
+  }
+
+  /* source tag — thoughtpuppet in ART blue */
+  .product-source {
+    display:flex; align-items:center; gap:var(--s2);
+    margin-bottom:var(--s5);
+  }
+  .source-dot {
+    width:6px; height:6px; border-radius:50%;
+    background:var(--src-color); flex-shrink:0;
+  }
+  .source-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--src-color); opacity:0.8;
+  }
+
+  .product-name {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(32px,4vw,56px);
+    letter-spacing:-0.04em; line-height:0.92;
+    color:var(--text);
+    margin-bottom:var(--s4);
+  }
+
+  .product-price {
+    font-family:var(--serif); font-size:20px;
+    letter-spacing:0.04em; color:var(--text-mute);
+    margin-bottom:var(--s6);
+  }
+
+  /* edition line */
+  .product-edition {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--src-color); opacity:0.7;
+    margin-bottom:var(--s6);
+    padding-bottom:var(--s6);
+    border-bottom:1px solid var(--ring-faint);
+  }
+
+  /* ── COLOR SELECTOR ── */
+  .selector-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.28em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:var(--s3);
+  }
+  .color-row {
+    display:flex; align-items:center; gap:var(--s3);
+    margin-bottom:var(--s6);
+  }
+  .color-swatch {
+    width:20px; height:20px; border-radius:50%;
+    cursor:pointer; flex-shrink:0;
+    border:1px solid rgba(255,255,255,0.08);
+    transition:transform var(--t-fast), box-shadow var(--t-fast);
+  }
+  .color-swatch:hover { transform:scale(1.15); }
+  .color-swatch.selected {
+    box-shadow:0 0 0 2px var(--bg), 0 0 0 3.5px var(--src-color);
+  }
+  .color-name {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute);
+  }
+
+  /* ── SIZE SELECTOR ── */
+  .size-grid {
+    display:flex; flex-wrap:wrap; gap:var(--s2);
+    margin-bottom:var(--s3);
+  }
+  .size-pill {
+    font-family:var(--sans); font-weight:500;
+    font-size:11px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-mute);
+    border:1px solid var(--ring-soft);
+    padding:var(--s2) var(--s4);
+    cursor:pointer; background:none;
+    transition:color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+    min-width:52px; text-align:center;
+  }
+  .size-pill:hover {
+    color:var(--src-color); border-color:var(--src-color);
+  }
+  .size-pill.selected {
+    color:var(--bg);
+    background:var(--src-color); border-color:var(--src-color);
+  }
+  .size-required {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--src-color); opacity:0;
+    min-height:14px; margin-bottom:var(--s5);
+    transition:opacity var(--t-fast);
+  }
+  .size-required.visible { opacity:0.8; }
+
+  /* size guide link */
+  .size-guide {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-dim);
+    margin-bottom:var(--s6);
+    display:inline-block;
+    border-bottom:1px solid var(--ring-faint);
+    padding-bottom:1px;
+    transition:color var(--t-fast), border-color var(--t-fast);
+  }
+  .size-guide:hover { color:var(--text-mute); border-color:var(--ring-soft); }
+
+  /* ── ADD TO CART ── */
+  .add-btn {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s4) var(--s5);
+    border:1px solid var(--src-color);
+    background:var(--src-color);
+    color:var(--bg);
+    font-family:var(--sans); font-weight:700;
+    font-size:12px; letter-spacing:0.2em; text-transform:uppercase;
+    width:100%;
+    transition:opacity var(--t-fast);
+    margin-bottom:var(--s5);
+  }
+  .add-btn:hover { opacity:0.85; }
+  .add-btn .arrow {
+    font-family:var(--serif); font-size:18px;
+    transition:transform var(--t-fast);
+  }
+  .add-btn:hover .arrow { transform:translateX(4px); }
+
+  /* product note — short detail line below add button */
+  .product-note {
+    font-family:var(--serif); font-size:12px;
+    letter-spacing:0.04em; line-height:1.6;
+    color:var(--text-dim);
+    text-align:center;
+  }
+
+  /* ============================================================
+     ORIGIN SECTION — "this piece comes from"
+     links the artifact back to the painting
+  ============================================================ */
+  .origin {
+    padding:var(--s8) 0;
+    border-top:1px solid var(--ring-faint);
+    margin-bottom:var(--s8);
+  }
+
+  .origin-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.35em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:var(--s6);
+  }
+
+  .origin-inner {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:var(--s7);
+    align-items:center;
+  }
+
+  /* painting image frame */
+  .painting-frame {
+    position:relative;
+    aspect-ratio:4/5;
+    background:var(--bg-raised);
+    border:1px solid var(--ring-soft);
+    overflow:hidden;
+    transition:border-color var(--t-med);
+  }
+  .painting-frame:hover { border-color:var(--src-color); }
+
+  /* REPLACE: drop painting photography/scan here.
+     delete .painting-placeholder when real image arrives. */
+  .painting-placeholder {
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-ghost);
+  }
+
+  .painting-info { display:flex; flex-direction:column; gap:var(--s5); }
+
+  .painting-name {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(32px,4vw,56px);
+    letter-spacing:-0.04em; line-height:0.92;
+    color:var(--text);
+  }
+
+  .painting-meta {
+    font-family:var(--serif); font-size:12px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+
+  /* REPLACE: write your own description of the Marbles painting */
+  .painting-desc {
+    font-family:var(--serif); font-size:16px;
+    line-height:1.7; color:var(--body-mute);
+    max-width:480px;
+  }
+
+  .painting-link {
+    display:inline-flex; align-items:center; gap:var(--s3);
+    font-family:var(--sans); font-weight:700;
+    font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--src-color);
+    padding-bottom:var(--s5);
+    border-bottom:1px solid rgba(5,129,193,0.3);
+    transition:border-color var(--t-fast), opacity var(--t-fast);
+    width:fit-content;
+  }
+  .painting-link:hover { opacity:0.75; border-bottom-color:var(--src-color); }
+  .painting-link .arrow {
+    font-family:var(--serif); font-size:16px;
+    transition:transform var(--t-fast);
+  }
+  .painting-link:hover .arrow { transform:translateX(4px); }
+
+  /* ============================================================
+     RELATED PIECES
+  ============================================================ */
+  .related {
+    padding-top:var(--s7);
+    border-top:1px solid var(--ring-faint);
+  }
+  .related-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.35em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:var(--s6);
+  }
+  .related-grid {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:var(--s6);
+  }
+
+  /* related card — same structure as merch grid card */
+  .rcard { display:flex; flex-direction:column; }
+  .rcard-frame {
+    position:relative; aspect-ratio:4/5;
+    background:var(--bg-raised);
+    border:1px solid var(--ring-soft);
+    overflow:hidden;
+    transition:border-color var(--t-med);
+    margin-bottom:var(--s3);
+  }
+  .rcard:hover .rcard-frame { border-color:var(--src-color); }
+  .rcard-num {
+    position:absolute; top:50%; right:var(--s4);
+    transform:translateY(-50%);
+    font-family:var(--serif);
+    font-size:clamp(60px,8vw,90px); line-height:1;
+    color:var(--text-ghost); font-weight:400;
+    letter-spacing:-0.02em;
+  }
+  .rcard-plaque {
+    position:absolute; top:var(--s3); left:var(--s3);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-ghost);
+  }
+  .rcard-name {
+    font-family:var(--sans); font-weight:700;
+    font-size:13px; letter-spacing:0.02em;
+    text-transform:uppercase; color:var(--text);
+    margin-bottom:var(--s1);
+  }
+  .rcard-price {
+    font-family:var(--serif); font-size:12px;
+    color:var(--text-mute);
+  }
+
+  /* ============================================================
+     FOOTER
+  ============================================================ */
+  footer.bottom {
+    position:relative; z-index:2;
+    padding:var(--s7) var(--s6);
+    border-top:1px solid var(--ring-faint);
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:var(--s8);
+  }
+  footer.bottom p, footer.bottom a {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
+  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
+  footer.bottom a:hover { color:var(--accent); }
+
+  /* ============================================================
+     CART DRAWER — identical to merch page
+  ============================================================ */
+  .cart-overlay {
+    position:fixed; inset:0; z-index:90;
+    background:rgba(0,0,0,0.6); opacity:0; pointer-events:none;
+    transition:opacity var(--t-med);
+  }
+  .cart-overlay.open { opacity:1; pointer-events:auto; }
+  .cart-drawer {
+    position:fixed; top:0; right:0; bottom:0;
+    width:min(440px,100vw); z-index:100;
+    background:var(--bg-drawer);
+    border-left:1px solid var(--ring-soft);
+    display:flex; flex-direction:column;
+    transform:translateX(100%); transition:transform var(--t-med);
+  }
+  .cart-drawer.open { transform:translateX(0); }
+  .drawer-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s5); border-bottom:1px solid var(--ring-faint);
+  }
+  .drawer-header .title {
+    font-family:var(--sans); font-weight:900; font-size:14px;
+    letter-spacing:0.08em; text-transform:uppercase; color:var(--accent);
+  }
+  .drawer-close {
+    font-family:var(--sans); font-weight:300; font-size:28px; line-height:1;
+    color:var(--text-mute); padding:var(--s1) var(--s3);
+    transition:color var(--t-fast);
+  }
+  .drawer-close:hover { color:var(--accent); }
+  .drawer-items { flex:1; overflow-y:auto; padding:var(--s4) var(--s5); }
+  .drawer-empty {
+    padding:var(--s7) 0; text-align:center;
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
+  .drawer-item {
+    display:grid; grid-template-columns:56px 1fr auto;
+    gap:var(--s4); padding:var(--s4) 0;
+    border-bottom:1px solid var(--ring-faint); align-items:flex-start;
+  }
+  .drawer-item-thumb {
+    width:56px; height:70px; background:var(--bg-raised);
+    border:1px solid var(--ring-soft); font-family:var(--serif);
+    font-size:13px; color:var(--text-ghost);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .drawer-item-info { display:flex; flex-direction:column; gap:var(--s1); }
+  .drawer-item-name {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.04em; text-transform:uppercase; color:var(--text);
+  }
+  .drawer-item-variant {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase; color:var(--text-dim);
+  }
+  .drawer-item-qty { display:flex; align-items:center; gap:var(--s2); margin-top:var(--s2); }
+  .qty-btn {
+    width:20px; height:20px; border:1px solid var(--ring-soft);
+    font-family:var(--sans); font-size:12px; color:var(--text-mute);
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color var(--t-fast), color var(--t-fast);
+  }
+  .qty-btn:hover { border-color:var(--src-color); color:var(--src-color); }
+  .qty-num { font-family:var(--sans); font-size:12px; color:var(--text); min-width:16px; text-align:center; }
+  .drawer-item-right { display:flex; flex-direction:column; align-items:flex-end; gap:var(--s2); }
+  .drawer-item-price { font-family:var(--serif); font-size:12px; color:var(--text); }
+  .drawer-item-remove {
+    font-family:var(--serif); font-size:10px; letter-spacing:0.18em;
+    color:var(--text-dim); text-transform:uppercase; transition:color var(--t-fast);
+  }
+  .drawer-item-remove:hover { color:var(--accent); }
+  .drawer-footer { padding:var(--s5); border-top:1px solid var(--ring-soft); }
+  .subtotal { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:var(--s5); }
+  .subtotal-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; color:var(--text-mute); text-transform:uppercase;
+  }
+  .subtotal-val {
+    font-family:var(--sans); font-weight:700;
+    font-size:20px; color:var(--accent); letter-spacing:-0.02em;
+  }
+  .checkout-btn {
+    display:block; width:100%; padding:var(--s4);
+    border:1px solid var(--accent); background:var(--accent); color:var(--bg);
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.2em; text-transform:uppercase;
+    transition:opacity var(--t-fast);
+  }
+  .checkout-btn:hover { opacity:0.85; }
+  .checkout-btn:disabled {
+    background:transparent; color:var(--text-dim);
+    border-color:var(--ring-soft); cursor:not-allowed; opacity:1;
+  }
+  .drawer-note {
+    margin-top:var(--s3); font-family:var(--serif); font-size:9px;
+    letter-spacing:0.24em; color:var(--text-dim);
+    text-transform:uppercase; text-align:center;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+  ============================================================ */
+  @media (max-width:1024px) {
+    main { padding:var(--s6) var(--s5) var(--s7); }
+    .product-hero { grid-template-columns:1fr; gap:var(--s6); }
+    .origin-inner { grid-template-columns:1fr; gap:var(--s6); }
+    .related-grid { grid-template-columns:repeat(2,1fr); }
+  }
+  @media (max-width:640px) {
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s5) var(--s4) var(--s6); }
+    .related-grid { grid-template-columns:1fr; }
+    footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s5); }
+  }
+</style>
+</head>
+<body>
+
+  <div class="grain"></div>
+
+  <!-- HEADER -->
+  <header class="top">
+    <a class="wordmark" href="../index.html">the six.well construct</a>
+    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+      <span class="cart-label">cart</span>
+      <span class="cart-count" id="cartCount">0</span>
+    </button>
+  </header>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- BREADCRUMB -->
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <a href="../../index.html">construct</a>
+      <span class="breadcrumb-sep">/</span>
+      <a href="../index.html">merch</a>
+      <span class="breadcrumb-sep">/</span>
+      <a href="../index.html?filter=thoughtpuppet">thoughtpuppet</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">marbles hoodie</span>
+    </nav>
+
+    <!-- PRODUCT HERO -->
+    <section class="product-hero">
+
+      <!-- LEFT: image -->
+      <div class="product-image">
+        <span class="img-plaque">N&deg; 05</span>
+        <!-- REPLACE: add <img src="marbles-hoodie.jpg" alt="Marbles Hoodie"> here
+             and delete .img-placeholder below -->
+        <span class="img-placeholder">product image</span>
+        <span class="img-edition">ed. / 30</span>
+      </div>
+
+      <!-- RIGHT: details -->
+      <div class="product-details">
+
+        <!-- source tag -->
+        <div class="product-source">
+          <span class="source-dot"></span>
+          <span class="source-label">thoughtpuppet</span>
+        </div>
+
+        <h1 class="product-name">MARBLES. HOODIE</h1>
+        <p class="product-price">$130</p>
+        <p class="product-edition">limited edition &mdash; 30 pieces</p>
+
+        <!-- color selector -->
+        <p class="selector-label">colorway</p>
+        <div class="color-row">
+          <!-- REPLACE hex and name with actual colorway -->
+          <button class="color-swatch selected"
+                  style="background:#2a2a2a"
+                  data-color="marbles"
+                  id="swatchMarbles"
+                  title="marbles"></button>
+          <span class="color-name" id="colorLabel">marbles</span>
+        </div>
+
+        <!-- size selector -->
+        <p class="selector-label">size</p>
+        <div class="size-grid" id="sizeGrid">
+          <button class="size-pill" data-size="XS">XS</button>
+          <button class="size-pill" data-size="S">S</button>
+          <button class="size-pill" data-size="M">M</button>
+          <button class="size-pill" data-size="L">L</button>
+          <button class="size-pill" data-size="XL">XL</button>
+          <button class="size-pill" data-size="XXL">XXL</button>
+        </div>
+        <p class="size-required" id="sizeRequired">select a size</p>
+
+        <a class="size-guide" href="#">size guide</a>
+
+        <!-- add to cart -->
+        <button class="add-btn" id="addBtn">
+          <span>add to cart</span>
+          <span class="arrow">&rarr;</span>
+        </button>
+
+        <p class="product-note">
+          hand-numbered &middot; ships within 2&ndash;3 weeks
+        </p>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ORIGIN SECTION — the painting this came from
+         REPLACE painting description with your own words.
+         REPLACE painting-placeholder with real painting image.
+         Update painting link href when /art page is built.
+    ============================================================ -->
+    <section class="origin">
+      <p class="origin-label">this piece comes from</p>
+      <div class="origin-inner">
+
+        <div class="painting-frame">
+          <!-- REPLACE: add <img src="marbles-painting.jpg" alt="Marbles"> here -->
+          <span class="painting-placeholder">marbles · painting</span>
+        </div>
+
+        <div class="painting-info">
+          <h2 class="painting-name">MARBLES</h2>
+          <p class="painting-meta">2024 &middot; acrylic on canvas</p>
+
+          <!-- REWRITE: this is your description of the Marbles painting -->
+          <p class="painting-desc">
+            Placeholder — write your description of the Marbles painting here.
+            What it is, what it came from, what it means to you.
+            This is where the artifact and the work meet.
+          </p>
+
+          <!-- links to painting's page on /art when built -->
+          <a class="painting-link" href="../../art/index.html">
+            <span>view the painting</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         RELATED PIECES
+         REPLACE with real thoughtpuppet products as they're added.
+    ============================================================ -->
+    <section class="related">
+      <p class="related-label">more from thoughtpuppet</p>
+      <div class="related-grid">
+
+        <a class="rcard" href="#">
+          <div class="rcard-frame">
+            <span class="rcard-plaque">N&deg; 06</span>
+            <span class="rcard-num">06</span>
+          </div>
+          <p class="rcard-name">ARTIFACT 002</p>
+          <p class="rcard-price">$240</p>
+        </a>
+
+        <a class="rcard" href="#">
+          <div class="rcard-frame">
+            <span class="rcard-plaque">N&deg; 07</span>
+            <span class="rcard-num">07</span>
+          </div>
+          <p class="rcard-name">ARTIFACT 003</p>
+          <p class="rcard-price">$180</p>
+        </a>
+
+        <a class="rcard" href="#">
+          <div class="rcard-frame">
+            <span class="rcard-plaque">N&deg; 08</span>
+            <span class="rcard-num">08</span>
+          </div>
+          <p class="rcard-name">ARTIFACT 004</p>
+          <p class="rcard-price">$95</p>
+        </a>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="bottom">
+    <p>&copy; the six.well construct</p>
+    <a href="../../index.html">return to construct</a>
+  </footer>
+
+  <!-- CART DRAWER -->
+  <div class="cart-overlay" id="cartOverlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <span class="title">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart">×</button>
+    </div>
+    <div class="drawer-items" id="drawerItems">
+      <p class="drawer-empty">cart is empty</p>
+    </div>
+    <div class="drawer-footer">
+      <div class="subtotal">
+        <span class="subtotal-label">subtotal</span>
+        <span class="subtotal-val" id="subtotal">$0</span>
+      </div>
+      <!-- CHECKOUT INTEGRATION POINT
+           replace with Shopify Storefront API checkout when ready -->
+      <button class="checkout-btn" id="checkoutBtn" disabled>proceed to checkout</button>
+      <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
+    </div>
+  </aside>
+
+  <script>
+  /* ============================================================
+     PRODUCT DATA — this page's specific product
+  ============================================================ */
+  const PRODUCT = {
+    id:      "05",
+    name:    "MARBLES HOODIE",
+    price:   130,
+    edition: 30,
+    color:   "marbles"   /* single colorway — pre-selected */
+  };
+
+  /* ============================================================
+     STATE
+  ============================================================ */
+  let selectedSize  = null;
+  let selectedColor = PRODUCT.color;   /* pre-selected since one colorway */
+  let cart          = [];
+
+  /* DOM refs */
+  const drawer      = document.getElementById("cartDrawer");
+  const overlay     = document.getElementById("cartOverlay");
+  const drawerItems = document.getElementById("drawerItems");
+  const cartCount   = document.getElementById("cartCount");
+  const subtotalEl  = document.getElementById("subtotal");
+  const checkoutBtn = document.getElementById("checkoutBtn");
+  const sizeReq     = document.getElementById("sizeRequired");
+
+  /* ============================================================
+     SIZE PILLS
+  ============================================================ */
+  document.querySelectorAll(".size-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".size-pill").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      selectedSize = btn.dataset.size;
+      sizeReq.classList.remove("visible");
+    });
+  });
+
+  /* ============================================================
+     COLOR SWATCHES (one colorway — mostly for future expansion)
+  ============================================================ */
+  document.querySelectorAll(".color-swatch").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".color-swatch").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      selectedColor = btn.dataset.color;
+      document.getElementById("colorLabel").textContent = selectedColor;
+    });
+  });
+
+  /* ============================================================
+     ADD TO CART
+  ============================================================ */
+  document.getElementById("addBtn").addEventListener("click", () => {
+    if (!selectedSize) {
+      sizeReq.classList.add("visible");
+      /* flash size grid */
+      const grid = document.getElementById("sizeGrid");
+      grid.style.opacity = "0.4";
+      setTimeout(() => { grid.style.opacity = "1"; }, 300);
+      return;
+    }
+
+    const key = `${PRODUCT.id}|${selectedSize}|${selectedColor}`;
+    const existing = cart.find(i => i.key === key);
+    if (existing) existing.qty += 1;
+    else cart.push({
+      key,
+      id:    PRODUCT.id,
+      name:  PRODUCT.name,
+      price: PRODUCT.price,
+      size:  selectedSize,
+      color: selectedColor,
+      qty:   1
+    });
+
+    renderCart();
+    openDrawer();
+    pulseCount();
+  });
+
+  /* ============================================================
+     CART
+  ============================================================ */
+  function renderCart() {
+    const totalQty = cart.reduce((sum, i) => sum + i.qty, 0);
+    cartCount.textContent = totalQty;
+
+    if (cart.length === 0) {
+      drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
+      subtotalEl.textContent = "$0";
+      checkoutBtn.disabled = true;
+      return;
+    }
+    checkoutBtn.disabled = false;
+
+    drawerItems.innerHTML = cart.map(item => {
+      const variant   = [item.size, item.color].filter(Boolean).join(" · ");
+      const lineTotal = item.price * item.qty;
+      return `
+        <div class="drawer-item">
+          <div class="drawer-item-thumb">${item.id}</div>
+          <div class="drawer-item-info">
+            <span class="drawer-item-name">${item.name}</span>
+            ${variant ? `<span class="drawer-item-variant">${variant}</span>` : ""}
+            <div class="drawer-item-qty">
+              <button class="qty-btn" data-minus="${item.key}">&minus;</button>
+              <span class="qty-num">${item.qty}</span>
+              <button class="qty-btn" data-plus="${item.key}">+</button>
+            </div>
+          </div>
+          <div class="drawer-item-right">
+            <span class="drawer-item-price">$${lineTotal}</span>
+            <button class="drawer-item-remove" data-remove="${item.key}">remove</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    drawerItems.querySelectorAll("[data-plus]").forEach(b =>
+      b.addEventListener("click", () => updateQty(b.dataset.plus, +1)));
+    drawerItems.querySelectorAll("[data-minus]").forEach(b =>
+      b.addEventListener("click", () => updateQty(b.dataset.minus, -1)));
+    drawerItems.querySelectorAll("[data-remove]").forEach(b =>
+      b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
+
+    const total = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+    subtotalEl.textContent = "$" + total;
+  }
+
+  function removeFromCart(key) {
+    cart = cart.filter(i => i.key !== key);
+    renderCart();
+  }
+
+  function updateQty(key, delta) {
+    const item = cart.find(i => i.key === key);
+    if (!item) return;
+    item.qty += delta;
+    if (item.qty <= 0) removeFromCart(key);
+    else renderCart();
+  }
+
+  function pulseCount() {
+    cartCount.classList.remove("pulse");
+    void cartCount.offsetWidth;
+    cartCount.classList.add("pulse");
+  }
+
+  /* ============================================================
+     DRAWER
+  ============================================================ */
+  function openDrawer() {
+    drawer.classList.add("open"); overlay.classList.add("open");
+    drawer.setAttribute("aria-hidden","false");
+  }
+  function closeDrawer() {
+    drawer.classList.remove("open"); overlay.classList.remove("open");
+    drawer.setAttribute("aria-hidden","true");
+  }
+  document.getElementById("cartToggle").addEventListener("click", openDrawer);
+  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+  overlay.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+  /* ============================================================
+     CHECKOUT (placeholder)
+     replace with Shopify Storefront API checkout URL when ready
+  ============================================================ */
+  checkoutBtn.addEventListener("click", () => {
+    console.log("CHECKOUT:", cart);
+    alert("Shopify checkout integration plugs in here.\n\n" +
+      cart.map(i => `${i.name} ${i.size} · ${i.color} × ${i.qty} — $${i.price * i.qty}`).join("\n")
+    );
+  });
+
+  /* init */
+  renderCart();
+  </script>
+
+</body>
+</html>
