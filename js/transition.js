@@ -31,35 +31,47 @@
 
 
   /* ── OVERLAY SETUP ────────────────────────────────────────
-     Inject the #construct-fade overlay div into <body>.
-     Starts visible (opaque) so the page is hidden on load,
-     then immediately schedules a fade-out.
+     The overlay may already exist — venture pages include a
+     tiny inline script right after <body> opens that creates
+     it immediately (before any content renders) to prevent
+     the blink on page entry.
+
+     If it exists: grab it and ensure it's visible.
+     If not: create it now (fallback — shouldn't happen in
+     production but safe to handle).
   ────────────────────────────────────────────────────────── */
 
-  const overlay = document.createElement('div');
-  overlay.id = 'construct-fade';
-  overlay.classList.add('is-visible'); // opaque on inject
-  document.body.appendChild(overlay);
+  var overlay = document.getElementById('construct-fade');
+
+  if (!overlay) {
+    /* Fallback: create if the inline script didn't run */
+    overlay = document.createElement('div');
+    overlay.id = 'construct-fade';
+    document.body.appendChild(overlay);
+  }
+
+  /* Ensure the overlay is fully covering while page loads */
+  overlay.classList.remove('is-hidden');
+  overlay.classList.add('is-visible');
 
 
   /* ── PAGE ENTRANCE ────────────────────────────────────────
-     On load: fade out the overlay to reveal the page.
-     Small requestAnimationFrame delay ensures the browser
-     has painted the overlay before we start the transition —
-     without this, the fade can be skipped entirely.
+     DOMContentLoaded fires as soon as the HTML is parsed —
+     much earlier than window.load (which waits for images).
+     Starting the fade-out here means the page is revealed
+     sooner and with less chance of a blink.
   ────────────────────────────────────────────────────────── */
 
-  window.addEventListener('load', function() {
-    // Two rAF frames ensures paint has occurred
+  document.addEventListener('DOMContentLoaded', function() {
+    /* Two rAF frames ensures the browser has committed a
+       paint with the overlay visible before we start fading */
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
 
-        // Swap class: CSS transition handles the fade-out
         overlay.classList.remove('is-visible');
         overlay.classList.add('is-hidden');
 
-        // After fade completes, trigger entrance animations
-        // on any elements using the .entrance-fade class
+        /* After fade completes, trigger entrance animations */
         setTimeout(function() {
           document.body.classList.add('entrance-active');
         }, FADE_DURATION_MS);

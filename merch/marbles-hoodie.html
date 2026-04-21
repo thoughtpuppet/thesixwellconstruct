@@ -90,7 +90,7 @@
   html,body {
     background:var(--bg); color:var(--text);
     font-family:var(--sans);
-    min-height:100vh; overflow-x:hidden;
+    min-height:100vh; overflow-x:clip; /* clip not hidden — hidden breaks position:fixed */
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
   }
@@ -608,6 +608,20 @@
 </style>
 </head>
 <body>
+
+  <!-- BLINK PREVENTION: creates the fade overlay before any content renders.
+       Runs immediately as the first thing in <body>, before the browser
+       paints anything — so there is never a frame where the new page is
+       visible without the overlay covering it.
+       transition.js (at end of body) handles the fade-out. -->
+  <script>
+  (function(){
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;pointer-events:auto;';
+    document.body.appendChild(o);
+  })();
+  </script>
 
   <div class="grain"></div>
 
