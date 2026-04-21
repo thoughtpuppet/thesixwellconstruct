@@ -1,255 +1,279 @@
 /* ============================================================
    construct-corner.js — the six.well construct
    ============================================================
-   Renders a live miniature version of the landing's breathing
-   ring + orbiting dots in the top-left corner of every inner
-   venture page. Clicking it fades back to the landing (/).
+   Renders the construct return lockup in the top-left corner
+   of every inner venture page:
+
+     [ring + 6 dots] [the six.well construct]
+
+   The ring exactly matches the landing page's ring:
+   - Filled annulus (not a stroked circle), color #6D3D15
+   - 6 amber dots using the same position + orbit math as
+     the landing, scaled proportionally
+   - No breathing animation — the ring is static, dots orbit
+
+   The wordmark sits inline to the right, vertically centered
+   on the ring's centerline via flexbox.
+
+   Clicking anywhere on the lockup fades to / via transition.js.
 
    HOW TO USE:
-   Add this script to the bottom of every venture page's
-   <body>, after transition.js:
+   Add after transition.js, before </body> on every venture page:
+     <script src="/js/transition.js"></script>
      <script src="/js/construct-corner.js"></script>
 
-   That's it. The canvas is injected and positioned
-   automatically. No HTML needed.
-
-   WHAT IT RENDERS:
-   - A small breathing ring (same amber tint as landing)
-   - 6 orbiting amber dots around the ring
-   - Gentle sine-wave pulse on a 9-second cycle
-   - Fades in 800ms after page entrance (so the page gets
-     its own opening moment before the corner appears)
-
-   CLICKING:
-   - Triggers the fade-to-black transition (from transition.js)
-     then navigates to /
-   - Requires transition.js to be loaded first
+   REQUIRES: transition.js loaded first (sets window._constructFade)
+   REQUIRES: Inter font available on the page for wordmark rendering
    ============================================================ */
 
 (function() {
 
-  /* ── CONFIGURATION ────────────────────────────────────────
-     Tweak these values to adjust the corner element's
-     appearance without touching the animation logic below.
+  /* ── SCALE ────────────────────────────────────────────────
+     Landing ring: RING_OUTER = 56px, RING_INNER = 40px
+     Corner ring:  RING_OUTER = 18px
+     Scale factor: 18/56 = 0.3214
+
+     All landing values are multiplied by this factor so the
+     corner ring is a true geometric reduction of the original.
   ────────────────────────────────────────────────────────── */
+  var SCALE = 18 / 56;
 
-  const CONFIG = {
+  /* ── CONFIGURATION ────────────────────────────────────────
+     All geometry derived from landing values × SCALE.
+     Edit SCALE above to resize everything proportionally.
+  ────────────────────────────────────────────────────────── */
+  var CONFIG = {
 
-    /* Canvas dimensions — the element's footprint on the page */
-    size:         64,       // px — square canvas (width = height)
+    /* Canvas — square, large enough to contain ring + dots */
+    canvasSize: 44,           /* px — ring outer (18) + 4px padding each side */
 
-    /* Position — inset from top-left corner of viewport */
-    insetX:       24,       // px from left edge
-    insetY:       24,       // px from top edge
+    /* Ring — filled annulus, matches landing's drawRing() */
+    ringOuter:  18,           /* px — landing: 56 × 0.3214 = 18 */
+    ringInner:  13,           /* px — landing: 40 × 0.3214 = 12.86 ≈ 13 */
+    ringColor:  '#6D3D15',    /* matches landing RING_COLOR exactly */
 
-    /* Ring geometry */
-    ringRadius:   18,       // px — outer radius of the ring
-    ringThickness: 1.2,     // px — stroke width of the ring
-    ringOpacity:  0.55,     // 0–1 — how prominent the ring is
+    /* Dots — matches landing's DOT_POSITIONS + drawDots() math
+       Landing positions: [[-18,-28],[18,-28],[-18,0],[18,0],[-18,28],[18,28]]
+       Scaled × 0.3214:   [[-5.79,-9],[5.79,-9],[-5.79,0],[5.79,0],[-5.79,9],[5.79,9]]
+       Orbit distance from center: hypot(5.79,9) ≈ 10.7px — sits just
+       inside RING_INNER (13px), matching how the landing dots nestle
+       inside the ring's inner edge. */
+    dotPositions: [
+      [-5.79, -9],
+      [ 5.79, -9],
+      [-5.79,  0],
+      [ 5.79,  0],
+      [-5.79,  9],
+      [ 5.79,  9],
+    ],
+    dotRadius:     2.4,       /* px — landing: 7.5 × 0.3214 = 2.41 */
+    dotColor:      '#FCB867', /* matches landing DOT_COLOR exactly */
+    /* Landing orbit: time * 0.003. Slowed slightly at small scale
+       so the motion reads clearly without feeling frantic. */
+    dotOrbitSpeed: 0.0018,    /* radians/ms */
 
-    /* Breathing animation — matches the landing's 9s cycle */
-    breathPeriod: 9000,     // ms — full breath cycle duration
-    breathAmp:    1.8,      // px — how much the ring radius pulses
+    /* Wordmark */
+    wordmark:        'the six.well construct',
+    fontSize:        15,      /* px — matches header usage on merch pages */
+    fontFamily:      "'Inter','Helvetica Neue',Arial,sans-serif",
+    fontWeight:      900,
+    letterSpacing:   '-0.05em',
+    wordmarkColor:   '#FCB867',
+    wordmarkOpacity: 0.82,    /* matches landing wordmark opacity */
 
-    /* Orbiting dots */
-    dotCount:     6,        // number of dots (matches landing)
-    dotRadius:    1.8,      // px — size of each dot
-    dotOrbit:     22,       // px — orbit radius from center
-    dotOrbitSpeed:0.00028,  // radians per ms — orbit speed
-    dotOpacity:   0.7,      // 0–1
+    /* Layout */
+    insetX: 24,               /* px from left edge of viewport */
+    insetY: 24,               /* px from top edge of viewport */
+    gap:    12,               /* px between canvas and wordmark text */
 
-    /* Color — amber accent, same as landing */
-    color:        '#FCB867',
-
-    /* Fade-in delay after page entrance */
-    fadeInDelay:  800,      // ms — wait after page loads before appearing
-    fadeInDuration:600,     // ms — how long the fade-in takes
-
-    /* Hover state — ring brightens slightly on hover */
-    hoverOpacity: 0.9,
-
-    /* Z-index — sits above venture content */
-    zIndex:       1000,
+    /* Timing */
+    fadeInDelay:    800,      /* ms — page gets its own entrance first */
+    fadeInDuration: 600,      /* ms */
+    zIndex:         1000,
 
   };
 
+  /* Canvas center point in CSS pixel space */
+  var CX = CONFIG.canvasSize / 2;
+  var CY = CONFIG.canvasSize / 2;
 
-  /* ── CANVAS SETUP ─────────────────────────────────────────
-     Create and position the canvas element.
-     Uses devicePixelRatio for crisp rendering on retina
-     screens — the canvas is larger internally but scaled
-     down via CSS to the configured size.
+
+  /* ── WRAPPER ──────────────────────────────────────────────
+     Fixed div containing canvas + wordmark.
+     Flexbox with align-items:center puts both elements on
+     the same centerline — the ring center and the text
+     optical center are vertically aligned.
   ────────────────────────────────────────────────────────── */
+  var wrapper = document.createElement('div');
+  wrapper.id = 'construct-corner';
+  wrapper.style.cssText = [
+    'position:fixed',
+    'top:' + CONFIG.insetY + 'px',
+    'left:' + CONFIG.insetX + 'px',
+    'display:flex',
+    'align-items:center',
+    'gap:' + CONFIG.gap + 'px',
+    'z-index:' + CONFIG.zIndex,
+    'cursor:pointer',
+    'opacity:0',
+    'transition:opacity ' + CONFIG.fadeInDuration + 'ms ease',
+    'user-select:none',
+    '-webkit-user-select:none',
+  ].join(';');
 
-  const dpr    = window.devicePixelRatio || 1;
-  const canvas = document.createElement('canvas');
-  const ctx    = canvas.getContext('2d');
 
-  /* Physical pixel dimensions (sharp on retina) */
-  canvas.width  = CONFIG.size * dpr;
-  canvas.height = CONFIG.size * dpr;
+  /* ── CANVAS ───────────────────────────────────────────────
+     Retina-sharp via devicePixelRatio scaling.
+     Physical pixel size = canvasSize × dpr.
+     CSS display size = canvasSize (CSS pixels).
+     All drawing coordinates stay in CSS pixels.
+  ────────────────────────────────────────────────────────── */
+  var dpr    = window.devicePixelRatio || 1;
+  var canvas = document.createElement('canvas');
+  var ctx    = canvas.getContext('2d');
 
-  /* CSS display size (what the user sees) */
-  canvas.style.width  = CONFIG.size + 'px';
-  canvas.style.height = CONFIG.size + 'px';
+  canvas.width  = CONFIG.canvasSize * dpr;
+  canvas.height = CONFIG.canvasSize * dpr;
+  canvas.style.width     = CONFIG.canvasSize + 'px';
+  canvas.style.height    = CONFIG.canvasSize + 'px';
+  canvas.style.flexShrink = '0';  /* prevent canvas from squishing in flex row */
 
-  /* Position fixed in the top-left corner */
-  canvas.style.position   = 'fixed';
-  canvas.style.top        = CONFIG.insetY + 'px';
-  canvas.style.left       = CONFIG.insetX + 'px';
-  canvas.style.zIndex     = CONFIG.zIndex;
-  canvas.style.cursor     = 'pointer';
-  canvas.style.opacity    = '0';           // starts invisible, fades in
-  canvas.style.transition = 'opacity ' + CONFIG.fadeInDuration + 'ms ease';
-
-  /* Scale context for retina — all drawing coordinates stay
-     in CSS pixels; the dpr scale handles the crispness */
   ctx.scale(dpr, dpr);
 
-  /* Center point in CSS pixel space */
-  const cx = CONFIG.size / 2;
-  const cy = CONFIG.size / 2;
 
-  document.body.appendChild(canvas);
+  /* ── WORDMARK ─────────────────────────────────────────────
+     Span sits inline in the flex row. Flex align-items:center
+     centers it vertically to the canvas — putting it on the
+     ring's centerline without any manual offset math.
+  ────────────────────────────────────────────────────────── */
+  var wm = document.createElement('span');
+  wm.textContent = CONFIG.wordmark;
+  wm.style.cssText = [
+    'font-family:' + CONFIG.fontFamily,
+    'font-weight:' + CONFIG.fontWeight,
+    'font-size:' + CONFIG.fontSize + 'px',
+    'letter-spacing:' + CONFIG.letterSpacing,
+    'color:' + CONFIG.wordmarkColor,
+    'opacity:' + CONFIG.wordmarkOpacity,
+    'white-space:nowrap',
+    'line-height:1',
+  ].join(';');
+
+
+  /* ── ASSEMBLE + INJECT ────────────────────────────────────*/
+  wrapper.appendChild(canvas);
+  wrapper.appendChild(wm);
+  document.body.appendChild(wrapper);
 
 
   /* ── FADE IN ──────────────────────────────────────────────
-     Wait for the page entrance to complete, then fade in.
-     The 800ms delay gives the page its own opening moment.
+     Delay lets the venture page's own entrance animation
+     complete before the corner element appears.
   ────────────────────────────────────────────────────────── */
-
   setTimeout(function() {
-    canvas.style.opacity = '1';
+    wrapper.style.opacity = '1';
   }, CONFIG.fadeInDelay);
 
 
-  /* ── HOVER STATE ──────────────────────────────────────────
-     Brighten slightly on hover to signal it's clickable.
+  /* ── HOVER ────────────────────────────────────────────────
+     Wordmark opacity bumps up on hover to signal interactivity.
   ────────────────────────────────────────────────────────── */
+  var isHovered = false;
 
-  let isHovered = false;
-
-  canvas.addEventListener('mouseenter', function() {
+  wrapper.addEventListener('mouseenter', function() {
     isHovered = true;
+    wm.style.opacity = '1';
   });
 
-  canvas.addEventListener('mouseleave', function() {
+  wrapper.addEventListener('mouseleave', function() {
     isHovered = false;
+    wm.style.opacity = String(CONFIG.wordmarkOpacity);
   });
 
 
   /* ── CLICK — NAVIGATE TO LANDING ─────────────────────────
-     Uses the same fade-to-black transition as all other
-     internal navigation. Calls fadeOutThenNavigate from
-     transition.js if available, otherwise falls back to
-     direct navigation (shouldn't happen in production but
-     safe to handle).
+     Uses the shared fade transition from transition.js.
   ────────────────────────────────────────────────────────── */
-
-  canvas.addEventListener('click', function() {
-
-    // transition.js exposes fadeOutThenNavigate on window
-    // if it's loaded before this script
+  wrapper.addEventListener('click', function() {
     if (typeof window._constructFade === 'function') {
       window._constructFade('/');
     } else {
-      // Fallback: direct navigation
       window.location.href = '/';
     }
-
   });
 
 
   /* ── ANIMATION LOOP ───────────────────────────────────────
-     Uses requestAnimationFrame for smooth 60fps rendering.
-     All animation is driven by elapsed time (not frame count)
-     so it stays consistent regardless of frame rate.
-  ────────────────────────────────────────────────────────── */
+     Draws on every animation frame. Time-driven (not frame-
+     count-driven) so speed is consistent at any frame rate.
 
-  let startTime = null;
+     drawRing() — matches landing's drawRing() exactly:
+       filled annulus via two arcs (outer CW, inner CCW) + fill
+
+     drawDots() — matches landing's drawDots() exactly:
+       for each dot position d:
+         angle = atan2(d[1], d[0]) + orbitT
+         dist  = hypot(d[0], d[1])
+         draw dot at (cx + cos(angle)*dist, cy + sin(angle)*dist)
+  ────────────────────────────────────────────────────────── */
+  var startTime = null;
 
   function draw(timestamp) {
 
-    /* Initialize start time on first frame */
     if (!startTime) startTime = timestamp;
-    const t = timestamp - startTime; // ms elapsed since start
+    var t = timestamp - startTime;
 
-    /* Clear canvas */
-    ctx.clearRect(0, 0, CONFIG.size, CONFIG.size);
+    ctx.clearRect(0, 0, CONFIG.canvasSize, CONFIG.canvasSize);
 
-    /* ── Breathing pulse ──────────────────────────────────
-       Sine wave on the ring radius creates the same slow
-       breath as the landing's eye animation.
+    /* ── Ring ─────────────────────────────────────────────
+       Filled annulus: outer arc clockwise, inner arc
+       counter-clockwise, then fill. Identical to landing's
+       drawRing() minus the hover halo (not needed at this size).
     ────────────────────────────────────────────────────── */
-    const breathPhase  = (t / CONFIG.breathPeriod) * Math.PI * 2;
-    const breathOffset = Math.sin(breathPhase) * CONFIG.breathAmp;
-    const currentRadius = CONFIG.ringRadius + breathOffset;
-
-    /* ── Ring opacity ─────────────────────────────────────
-       Slightly brighter on hover.
-    ────────────────────────────────────────────────────── */
-    const ringOpacity = isHovered ? CONFIG.hoverOpacity : CONFIG.ringOpacity;
-
-    /* ── Draw ring ────────────────────────────────────────*/
     ctx.beginPath();
-    ctx.arc(cx, cy, currentRadius, 0, Math.PI * 2);
-    ctx.strokeStyle = CONFIG.color;
-    ctx.lineWidth   = CONFIG.ringThickness;
-    ctx.globalAlpha = ringOpacity;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.arc(CX, CY, CONFIG.ringOuter, 0, Math.PI * 2);        /* outer CW */
+    ctx.arc(CX, CY, CONFIG.ringInner, 0, Math.PI * 2, true);  /* inner CCW = cut hole */
+    ctx.fillStyle = CONFIG.ringColor;
+    ctx.fill();
 
-    /* ── Draw orbiting dots ───────────────────────────────
-       Evenly spaced around the orbit, all moving at the
-       same speed. Phase offset distributes them evenly.
+    /* ── Dots ─────────────────────────────────────────────
+       Each dot uses Math.atan2 to get its base angle from
+       its position offset, then adds orbitT for rotation.
+       hypot gives its orbit radius from center.
+       This exactly mirrors the landing's drawDots() logic.
     ────────────────────────────────────────────────────── */
-    for (let i = 0; i < CONFIG.dotCount; i++) {
+    var orbitT = t * CONFIG.dotOrbitSpeed;
 
-      /* Evenly distribute dots around the circle */
-      const baseAngle    = (i / CONFIG.dotCount) * Math.PI * 2;
-      /* Add time-based orbit rotation */
-      const angle        = baseAngle + t * CONFIG.dotOrbitSpeed;
-
-      const dotX = cx + Math.cos(angle) * CONFIG.dotOrbit;
-      const dotY = cy + Math.sin(angle) * CONFIG.dotOrbit;
+    CONFIG.dotPositions.forEach(function(d) {
+      var angle = Math.atan2(d[1], d[0]) + orbitT;
+      var dist  = Math.hypot(d[0], d[1]);
 
       ctx.beginPath();
-      ctx.arc(dotX, dotY, CONFIG.dotRadius, 0, Math.PI * 2);
-      ctx.fillStyle   = CONFIG.color;
-      ctx.globalAlpha = CONFIG.dotOpacity;
+      ctx.arc(
+        CX + Math.cos(angle) * dist,
+        CY + Math.sin(angle) * dist,
+        CONFIG.dotRadius,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle   = CONFIG.dotColor;
+      ctx.globalAlpha = isHovered ? 1 : 0.9;
       ctx.fill();
       ctx.globalAlpha = 1;
+    });
 
-    }
-
-    /* Request next frame */
     requestAnimationFrame(draw);
-
   }
 
-  /* Start the loop */
   requestAnimationFrame(draw);
 
 
-  /* ── EXPOSE NAVIGATION FOR EXTERNAL USE ──────────────────
-     transition.js sets window._constructFade so the corner
-     can trigger the shared fade transition.
-     We also expose the corner's own API in case other
-     scripts need to show/hide it.
+  /* ── EXPOSE API ───────────────────────────────────────────
+     Allows external scripts to show/hide the corner element.
   ────────────────────────────────────────────────────────── */
   window._constructCorner = {
-
-    /* Manually show the corner (in case you need to trigger
-       it outside of the automatic fade-in) */
-    show: function() {
-      canvas.style.opacity = '1';
-    },
-
-    /* Manually hide */
-    hide: function() {
-      canvas.style.opacity = '0';
-    },
-
+    show: function() { wrapper.style.opacity = '1'; },
+    hide: function() { wrapper.style.opacity = '0'; },
   };
 
-})(); // end IIFE
+})();
