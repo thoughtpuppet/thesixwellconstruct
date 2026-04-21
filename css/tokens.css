@@ -1,0 +1,214 @@
+/* ============================================================
+   tokens.css — the six.well construct
+   ============================================================
+   Single source of truth for all brand values.
+   Import this at the top of every venture page's CSS:
+     @import url('/css/tokens.css');
+
+   Then reference variables like:
+     color: var(--color-body);
+     font-family: var(--font-display);
+     padding: var(--space-md);
+   ============================================================ */
+
+:root {
+
+  /* ──────────────────────────────────────────────────────────
+     COLORS — BASE
+     The foundation every venture page is built on.
+  ────────────────────────────────────────────────────────── */
+
+  --color-bg:         #0e0e0e;   /* site background — near black */
+  --color-body:       #E8E4DC;   /* all body text — warm off-white */
+  --color-accent:     #FCB867;   /* global amber — wordmark, landing accents */
+  --color-accent-dim: rgba(252, 184, 103, 0.25); /* amber at low opacity — borders, dividers */
+
+
+  /* ──────────────────────────────────────────────────────────
+     COLORS — VENTURE NODES
+     Each venture has a full-strength signal color and a
+     dimmed variant for subtle UI use (borders, hover states,
+     section dividers, background washes).
+
+     Signal  → use for: dots, active states, highlighted UI
+     Dim     → use for: borders, dividers, bg washes, inactive
+  ────────────────────────────────────────────────────────── */
+
+  /* TATTOOING */
+  --color-tattooing:        #8F231D;
+  --color-tattooing-dim:    rgba(143, 35, 29, 0.25);
+
+  /* ART MAKING */
+  --color-art:              #0581C1;
+  --color-art-dim:          rgba(5, 129, 193, 0.25);
+
+  /* MERCH */
+  --color-merch:            #F7A226;
+  --color-merch-dim:        rgba(247, 162, 38, 0.25);
+
+  /* ABOUT */
+  --color-about:            #FCB867;
+  --color-about-dim:        rgba(252, 184, 103, 0.25);
+
+  /* EVENTS */
+  --color-events:           #55BA5A;
+  --color-events-dim:       rgba(85, 186, 90, 0.25);
+
+  /* MUSIC */
+  --color-music:            #A856A1;
+  --color-music-dim:        rgba(168, 86, 161, 0.25);
+
+  /* WRITINGS */
+  --color-writings:         #328C84;
+  --color-writings-dim:     rgba(50, 140, 132, 0.25);
+
+  /* ARCHIVE */
+  --color-archive:          #EC5E26;
+  --color-archive-dim:      rgba(236, 94, 38, 0.25);
+
+  /* FILM */
+  --color-film:             #FFE7CA;
+  --color-film-dim:         rgba(255, 231, 202, 0.25);
+
+
+  /* ──────────────────────────────────────────────────────────
+     TYPOGRAPHY — STACKS
+     Two stacks only. No web font loading — zero dependency.
+
+     Display  → Inter 900 — titles, wordmarks, anything declarative
+     Serif    → Times New Roman — body copy, labels, descriptors,
+                metadata, captions. All serif roles.
+  ────────────────────────────────────────────────────────── */
+
+  --font-display: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --font-serif:   'Times New Roman', Times, serif;
+
+
+  /* ──────────────────────────────────────────────────────────
+     TYPOGRAPHY — SIZES
+     Scale is intentional. Don't freestyle between these —
+     pick the closest one that fits the context.
+  ────────────────────────────────────────────────────────── */
+
+  --text-2xs:  9px;    /* hint text, tiny labels */
+  --text-xs:   11px;   /* sub-node labels, metadata */
+  --text-sm:   13px;   /* small body, captions */
+  --text-base: 16px;   /* primary body copy */
+  --text-md:   20px;   /* lead text, short descriptors */
+  --text-lg:   28px;   /* section headings */
+  --text-xl:   38px;   /* page titles */
+  --text-2xl:  56px;   /* hero display text */
+  --text-3xl:  80px;   /* large wordmark scale */
+
+
+  /* ──────────────────────────────────────────────────────────
+     TYPOGRAPHY — TRACKING (letter-spacing)
+     Tracking scales with size and role — not flattened.
+
+     Display text (Inter 900) gets tighter as it gets bigger.
+     Serif labels (TNR uppercase) get wider — creates contrast
+     between the two voices.
+  ────────────────────────────────────────────────────────── */
+
+  --tracking-display-tight:  -0.05em;   /* wordmark scale, 32px+ */
+  --tracking-display-tighter:-0.06em;   /* hero display, 56px+ */
+  --tracking-body:            0em;      /* body copy — default, no adjustment */
+  --tracking-label:           0.14em;   /* small serif labels */
+  --tracking-label-wide:      0.18em;   /* small caps, hint text, metadata */
+
+
+  /* ──────────────────────────────────────────────────────────
+     TYPOGRAPHY — LINE HEIGHT
+  ────────────────────────────────────────────────────────── */
+
+  --leading-tight:   1.1;    /* display text, titles */
+  --leading-snug:    1.3;    /* sub-headings */
+  --leading-normal:  1.6;    /* body copy — main reading line-height */
+  --leading-relaxed: 1.8;    /* long-form body, /writings */
+
+
+  /* ──────────────────────────────────────────────────────────
+     SPACING SCALE
+     Use these for padding, margin, gap.
+     Named by relative size — not px values — so they can
+     be understood in context without looking them up.
+  ────────────────────────────────────────────────────────── */
+
+  --space-2xs:  4px;
+  --space-xs:   8px;
+  --space-sm:   16px;
+  --space-md:   32px;
+  --space-lg:   56px;
+  --space-xl:   80px;
+  --space-2xl:  120px;
+  --space-3xl:  180px;
+
+
+  /* ──────────────────────────────────────────────────────────
+     TRANSITION TIMING
+     Shared easing values for hover states, reveals, etc.
+     The fade-to-black page transition lives in transitions.css
+     and transition.js — these are for smaller UI interactions.
+  ────────────────────────────────────────────────────────── */
+
+  --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);     /* snappy exit */
+  --ease-in-out:     cubic-bezier(0.45, 0, 0.55, 1);    /* balanced */
+  --ease-gentle:     cubic-bezier(0.25, 0.46, 0.45, 0.94); /* soft */
+
+  --duration-fast:   150ms;   /* micro interactions, icon swaps */
+  --duration-base:   300ms;   /* hover states, label fades */
+  --duration-slow:   600ms;   /* reveals, section entrances */
+  --duration-crawl:  900ms;   /* ambient, atmospheric */
+
+
+  /* ──────────────────────────────────────────────────────────
+     LAYOUT
+     Max content width and horizontal padding.
+     Keeps body text readable and pages from stretching
+     to full viewport width on large screens.
+  ────────────────────────────────────────────────────────── */
+
+  --max-width:       1080px;  /* max content column width */
+  --page-padding-x:  40px;    /* horizontal padding on the page shell */
+  --page-padding-y:  80px;    /* vertical padding top/bottom */
+
+}
+
+
+/* ──────────────────────────────────────────────────────────
+   BASE RESETS
+   Minimal resets applied globally when tokens.css is loaded.
+   Venture pages don't need to repeat these.
+────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  /* Prevent font-size inflation on mobile */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-body);
+  font-family: var(--font-serif);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  /* Smoother font rendering on dark backgrounds */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img, video {
+  display: block;
+  max-width: 100%;
+}
