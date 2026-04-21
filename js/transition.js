@@ -50,7 +50,11 @@
     document.body.appendChild(overlay);
   }
 
-  /* Ensure the overlay is fully covering while page loads */
+  /* Ensure the overlay is fully covering while page loads.
+     Also clear any inline pointer-events set by the early
+     script so CSS classes can control it without being
+     overridden by inline style specificity. */
+  overlay.style.pointerEvents = '';
   overlay.classList.remove('is-hidden');
   overlay.classList.add('is-visible');
 
