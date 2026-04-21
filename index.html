@@ -73,6 +73,10 @@
   <div id="sub-node-labels"></div>
   <div id="hint">HOVER THE CONSTRUCT</div>
 </div>
+
+<!-- shared construct transition layer — enables fade-to-black on sub-node navigation -->
+<script src="/js/transition.js"></script>
+
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -293,7 +297,11 @@ stage.addEventListener('click',e=>{
   if(state==='expanded'&&subNodeState==='expanded'){
     const hsn=getHoveredSubNode(mx,my);
     if(hsn>=0){
-      window.location.href=SUB_NODE_DATA[VENTURES[activeVentureIdx].name][hsn].url;
+      // use fade transition if available, fall back to direct navigation
+      if(typeof window._constructFade==='function')
+        window._constructFade(SUB_NODE_DATA[VENTURES[activeVentureIdx].name][hsn].url);
+      else
+        window.location.href=SUB_NODE_DATA[VENTURES[activeVentureIdx].name][hsn].url;
       return;
     }
   }

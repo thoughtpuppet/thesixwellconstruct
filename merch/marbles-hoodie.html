@@ -48,6 +48,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 
+<!-- shared construct transition layer -->
+<link rel="stylesheet" href="/css/transitions.css">
+
 <style>
   /* ============================================================
      DESIGN TOKENS — exact match to merch page
@@ -184,14 +187,10 @@
     background:var(--bg-raised);
     border:1px solid var(--ring-soft);
     overflow:hidden;
-    /* hover border in thoughtpuppet blue */
     transition:border-color var(--t-med);
   }
   .product-image:hover { border-color:var(--src-color); }
 
-  /* REPLACE: drop real product photography here.
-     delete .img-placeholder when real image arrives.
-     add <img src="..." alt="Marbles Hoodie"> inside .product-image */
   .img-placeholder {
     position:absolute; inset:0;
     display:flex; align-items:center; justify-content:center;
@@ -218,7 +217,6 @@
     padding-top:var(--s3);
   }
 
-  /* source tag — thoughtpuppet in ART blue */
   .product-source {
     display:flex; align-items:center; gap:var(--s2);
     margin-bottom:var(--s5);
@@ -247,7 +245,6 @@
     margin-bottom:var(--s6);
   }
 
-  /* edition line */
   .product-edition {
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.22em; text-transform:uppercase;
@@ -314,7 +311,6 @@
   }
   .size-required.visible { opacity:0.8; }
 
-  /* size guide link */
   .size-guide {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.18em; text-transform:uppercase;
@@ -347,7 +343,6 @@
   }
   .add-btn:hover .arrow { transform:translateX(4px); }
 
-  /* product note — short detail line below add button */
   .product-note {
     font-family:var(--serif); font-size:12px;
     letter-spacing:0.04em; line-height:1.6;
@@ -356,29 +351,24 @@
   }
 
   /* ============================================================
-     ORIGIN SECTION — "this piece comes from"
-     links the artifact back to the painting
+     ORIGIN SECTION
   ============================================================ */
   .origin {
     padding:var(--s8) 0;
     border-top:1px solid var(--ring-faint);
     margin-bottom:var(--s8);
   }
-
   .origin-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.35em; text-transform:uppercase;
     color:var(--text-dim); margin-bottom:var(--s6);
   }
-
   .origin-inner {
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:var(--s7);
     align-items:center;
   }
-
-  /* painting image frame */
   .painting-frame {
     position:relative;
     aspect-ratio:4/5;
@@ -388,9 +378,6 @@
     transition:border-color var(--t-med);
   }
   .painting-frame:hover { border-color:var(--src-color); }
-
-  /* REPLACE: drop painting photography/scan here.
-     delete .painting-placeholder when real image arrives. */
   .painting-placeholder {
     position:absolute; inset:0;
     display:flex; align-items:center; justify-content:center;
@@ -398,29 +385,23 @@
     letter-spacing:0.22em; text-transform:uppercase;
     color:var(--text-ghost);
   }
-
   .painting-info { display:flex; flex-direction:column; gap:var(--s5); }
-
   .painting-name {
     font-family:var(--sans); font-weight:900;
     font-size:clamp(32px,4vw,56px);
     letter-spacing:-0.04em; line-height:0.92;
     color:var(--text);
   }
-
   .painting-meta {
     font-family:var(--serif); font-size:12px;
     letter-spacing:0.18em; text-transform:uppercase;
     color:var(--text-dim);
   }
-
-  /* REPLACE: write your own description of the Marbles painting */
   .painting-desc {
     font-family:var(--serif); font-size:16px;
     line-height:1.7; color:var(--body-mute);
     max-width:480px;
   }
-
   .painting-link {
     display:inline-flex; align-items:center; gap:var(--s3);
     font-family:var(--sans); font-weight:700;
@@ -455,8 +436,6 @@
     grid-template-columns:repeat(3,1fr);
     gap:var(--s6);
   }
-
-  /* related card — same structure as merch grid card */
   .rcard { display:flex; flex-direction:column; }
   .rcard-frame {
     position:relative; aspect-ratio:4/5;
@@ -510,7 +489,7 @@
   footer.bottom a:hover { color:var(--accent); }
 
   /* ============================================================
-     CART DRAWER — identical to merch page
+     CART DRAWER
   ============================================================ */
   .cart-overlay {
     position:fixed; inset:0; z-index:90;
@@ -632,9 +611,9 @@
 
   <div class="grain"></div>
 
-  <!-- HEADER -->
+  <!-- HEADER — wordmark links to / (absolute path) -->
   <header class="top">
-    <a class="wordmark" href="../index.html">the six.well construct</a>
+    <a class="wordmark" href="/">the six.well construct</a>
     <button class="cart-toggle" id="cartToggle" aria-label="open cart">
       <span class="cart-label">cart</span>
       <span class="cart-count" id="cartCount">0</span>
@@ -644,13 +623,13 @@
   <!-- MAIN -->
   <main>
 
-    <!-- BREADCRUMB -->
+    <!-- BREADCRUMB — all paths absolute -->
     <nav class="breadcrumb" aria-label="breadcrumb">
-      <a href="../../index.html">construct</a>
+      <a href="/">construct</a>
       <span class="breadcrumb-sep">/</span>
-      <a href="../index.html">merch</a>
+      <a href="/merch/">merch</a>
       <span class="breadcrumb-sep">/</span>
-      <a href="../index.html?filter=thoughtpuppet">thoughtpuppet</a>
+      <a href="/merch/?filter=thoughtpuppet">thoughtpuppet</a>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">marbles hoodie</span>
     </nav>
@@ -670,7 +649,6 @@
       <!-- RIGHT: details -->
       <div class="product-details">
 
-        <!-- source tag -->
         <div class="product-source">
           <span class="source-dot"></span>
           <span class="source-label">thoughtpuppet</span>
@@ -706,7 +684,6 @@
 
         <a class="size-guide" href="#">size guide</a>
 
-        <!-- add to cart -->
         <button class="add-btn" id="addBtn">
           <span>add to cart</span>
           <span class="arrow">&rarr;</span>
@@ -719,34 +696,32 @@
       </div>
     </section>
 
-    <!-- ============================================================
-         ORIGIN SECTION — the painting this came from
-         REPLACE painting description with your own words.
-         REPLACE painting-placeholder with real painting image.
-         Update painting link href when /art page is built.
-    ============================================================ -->
+    <!-- ORIGIN SECTION
+         REPLACE painting description + image when ready.
+         Painting link points to /art/ — will 404 until that page is built. -->
     <section class="origin">
       <p class="origin-label">this piece comes from</p>
       <div class="origin-inner">
 
         <div class="painting-frame">
-          <!-- REPLACE: add <img src="marbles-painting.jpg" alt="Marbles"> here -->
-          <span class="painting-placeholder">marbles · painting</span>
+          <img src="/assets/paintings/AM I LOSING MY MARBLES OR HIDING THEM.jpg"
+               alt="AM I LOSING MY MARBLES OR HIDING THEM — acrylic on canvas, 2024"
+               style="width:100%;height:100%;object-fit:cover;display:block;">
         </div>
 
         <div class="painting-info">
           <h2 class="painting-name">MARBLES</h2>
           <p class="painting-meta">2024 &middot; acrylic on canvas</p>
 
-          <!-- REWRITE: this is your description of the Marbles painting -->
+          <!-- REWRITE: your description of the Marbles painting -->
           <p class="painting-desc">
             Placeholder — write your description of the Marbles painting here.
             What it is, what it came from, what it means to you.
             This is where the artifact and the work meet.
           </p>
 
-          <!-- links to painting's page on /art when built -->
-          <a class="painting-link" href="../../art/index.html">
+          <!-- absolute path — will 404 until /art is built -->
+          <a class="painting-link" href="/art/">
             <span>view the painting</span>
             <span class="arrow">&rarr;</span>
           </a>
@@ -755,10 +730,7 @@
       </div>
     </section>
 
-    <!-- ============================================================
-         RELATED PIECES
-         REPLACE with real thoughtpuppet products as they're added.
-    ============================================================ -->
+    <!-- RELATED PIECES -->
     <section class="related">
       <p class="related-label">more from thoughtpuppet</p>
       <div class="related-grid">
@@ -795,10 +767,10 @@
 
   </main>
 
-  <!-- FOOTER -->
+  <!-- FOOTER — absolute path -->
   <footer class="bottom">
     <p>&copy; the six.well construct</p>
-    <a href="../../index.html">return to construct</a>
+    <a href="/">return to construct</a>
   </footer>
 
   <!-- CART DRAWER -->
@@ -816,8 +788,6 @@
         <span class="subtotal-label">subtotal</span>
         <span class="subtotal-val" id="subtotal">$0</span>
       </div>
-      <!-- CHECKOUT INTEGRATION POINT
-           replace with Shopify Storefront API checkout when ready -->
       <button class="checkout-btn" id="checkoutBtn" disabled>proceed to checkout</button>
       <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
     </div>
@@ -825,24 +795,20 @@
 
   <script>
   /* ============================================================
-     PRODUCT DATA — this page's specific product
+     PRODUCT DATA
   ============================================================ */
   const PRODUCT = {
     id:      "05",
     name:    "MARBLES HOODIE",
     price:   130,
     edition: 30,
-    color:   "marbles"   /* single colorway — pre-selected */
+    color:   "marbles"
   };
 
-  /* ============================================================
-     STATE
-  ============================================================ */
   let selectedSize  = null;
-  let selectedColor = PRODUCT.color;   /* pre-selected since one colorway */
+  let selectedColor = PRODUCT.color;
   let cart          = [];
 
-  /* DOM refs */
   const drawer      = document.getElementById("cartDrawer");
   const overlay     = document.getElementById("cartOverlay");
   const drawerItems = document.getElementById("drawerItems");
@@ -851,9 +817,7 @@
   const checkoutBtn = document.getElementById("checkoutBtn");
   const sizeReq     = document.getElementById("sizeRequired");
 
-  /* ============================================================
-     SIZE PILLS
-  ============================================================ */
+  /* size pills */
   document.querySelectorAll(".size-pill").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".size-pill").forEach(b => b.classList.remove("selected"));
@@ -863,9 +827,7 @@
     });
   });
 
-  /* ============================================================
-     COLOR SWATCHES (one colorway — mostly for future expansion)
-  ============================================================ */
+  /* color swatches */
   document.querySelectorAll(".color-swatch").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".color-swatch").forEach(b => b.classList.remove("selected"));
@@ -875,44 +837,27 @@
     });
   });
 
-  /* ============================================================
-     ADD TO CART
-  ============================================================ */
+  /* add to cart */
   document.getElementById("addBtn").addEventListener("click", () => {
     if (!selectedSize) {
       sizeReq.classList.add("visible");
-      /* flash size grid */
       const grid = document.getElementById("sizeGrid");
       grid.style.opacity = "0.4";
       setTimeout(() => { grid.style.opacity = "1"; }, 300);
       return;
     }
-
     const key = `${PRODUCT.id}|${selectedSize}|${selectedColor}`;
     const existing = cart.find(i => i.key === key);
     if (existing) existing.qty += 1;
-    else cart.push({
-      key,
-      id:    PRODUCT.id,
-      name:  PRODUCT.name,
-      price: PRODUCT.price,
-      size:  selectedSize,
-      color: selectedColor,
-      qty:   1
-    });
-
+    else cart.push({ key, id: PRODUCT.id, name: PRODUCT.name, price: PRODUCT.price, size: selectedSize, color: selectedColor, qty: 1 });
     renderCart();
     openDrawer();
     pulseCount();
   });
 
-  /* ============================================================
-     CART
-  ============================================================ */
   function renderCart() {
     const totalQty = cart.reduce((sum, i) => sum + i.qty, 0);
     cartCount.textContent = totalQty;
-
     if (cart.length === 0) {
       drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
       subtotalEl.textContent = "$0";
@@ -920,7 +865,6 @@
       return;
     }
     checkoutBtn.disabled = false;
-
     drawerItems.innerHTML = cart.map(item => {
       const variant   = [item.size, item.color].filter(Boolean).join(" · ");
       const lineTotal = item.price * item.qty;
@@ -940,70 +884,37 @@
             <span class="drawer-item-price">$${lineTotal}</span>
             <button class="drawer-item-remove" data-remove="${item.key}">remove</button>
           </div>
-        </div>
-      `;
+        </div>`;
     }).join("");
-
-    drawerItems.querySelectorAll("[data-plus]").forEach(b =>
-      b.addEventListener("click", () => updateQty(b.dataset.plus, +1)));
-    drawerItems.querySelectorAll("[data-minus]").forEach(b =>
-      b.addEventListener("click", () => updateQty(b.dataset.minus, -1)));
-    drawerItems.querySelectorAll("[data-remove]").forEach(b =>
-      b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
-
-    const total = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
-    subtotalEl.textContent = "$" + total;
+    drawerItems.querySelectorAll("[data-plus]").forEach(b => b.addEventListener("click", () => updateQty(b.dataset.plus, +1)));
+    drawerItems.querySelectorAll("[data-minus]").forEach(b => b.addEventListener("click", () => updateQty(b.dataset.minus, -1)));
+    drawerItems.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
+    subtotalEl.textContent = "$" + cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
   }
 
-  function removeFromCart(key) {
-    cart = cart.filter(i => i.key !== key);
-    renderCart();
-  }
+  function removeFromCart(key) { cart = cart.filter(i => i.key !== key); renderCart(); }
+  function updateQty(key, delta) { const item = cart.find(i => i.key === key); if (!item) return; item.qty += delta; if (item.qty <= 0) removeFromCart(key); else renderCart(); }
+  function pulseCount() { cartCount.classList.remove("pulse"); void cartCount.offsetWidth; cartCount.classList.add("pulse"); }
+  function openDrawer() { drawer.classList.add("open"); overlay.classList.add("open"); drawer.setAttribute("aria-hidden","false"); }
+  function closeDrawer() { drawer.classList.remove("open"); overlay.classList.remove("open"); drawer.setAttribute("aria-hidden","true"); }
 
-  function updateQty(key, delta) {
-    const item = cart.find(i => i.key === key);
-    if (!item) return;
-    item.qty += delta;
-    if (item.qty <= 0) removeFromCart(key);
-    else renderCart();
-  }
-
-  function pulseCount() {
-    cartCount.classList.remove("pulse");
-    void cartCount.offsetWidth;
-    cartCount.classList.add("pulse");
-  }
-
-  /* ============================================================
-     DRAWER
-  ============================================================ */
-  function openDrawer() {
-    drawer.classList.add("open"); overlay.classList.add("open");
-    drawer.setAttribute("aria-hidden","false");
-  }
-  function closeDrawer() {
-    drawer.classList.remove("open"); overlay.classList.remove("open");
-    drawer.setAttribute("aria-hidden","true");
-  }
   document.getElementById("cartToggle").addEventListener("click", openDrawer);
   document.getElementById("drawerClose").addEventListener("click", closeDrawer);
   overlay.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
 
-  /* ============================================================
-     CHECKOUT (placeholder)
-     replace with Shopify Storefront API checkout URL when ready
-  ============================================================ */
   checkoutBtn.addEventListener("click", () => {
     console.log("CHECKOUT:", cart);
     alert("Shopify checkout integration plugs in here.\n\n" +
-      cart.map(i => `${i.name} ${i.size} · ${i.color} × ${i.qty} — $${i.price * i.qty}`).join("\n")
-    );
+      cart.map(i => `${i.name} ${i.size} · ${i.color} × ${i.qty} — $${i.price * i.qty}`).join("\n"));
   });
 
-  /* init */
   renderCart();
   </script>
+
+  <!-- shared construct scripts — transition layer + corner element -->
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
 
 </body>
 </html>
