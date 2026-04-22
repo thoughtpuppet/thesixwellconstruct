@@ -98,3 +98,33 @@ body.entrance-active .entrance-delay-2 { transition-delay: 160ms; }
 body.entrance-active .entrance-delay-3 { transition-delay: 240ms; }
 body.entrance-active .entrance-delay-4 { transition-delay: 320ms; }
 body.entrance-active .entrance-delay-5 { transition-delay: 400ms; }
+
+
+/* ──────────────────────────────────────────────────────────
+   VENTURE DOT NAV
+   Injected by construct-nav.js. Styles live here so they
+   load before the script runs and there's no flash of
+   unstyled dots on slower connections.
+────────────────────────────────────────────────────────── */
+
+/* Expand the dot hit target beyond its visual size so small
+   dots are easier to click — invisible padding around each item */
+.cnav-item {
+  padding: 8px 4px;      /* vertical padding catches near-misses */
+  margin: -8px -4px;     /* negative margin cancels the padding's
+                            effect on layout so dot spacing is exact */
+}
+
+/* Ensure the label tooltip never causes horizontal scrollbars
+   on pages where it might overflow near a screen edge */
+#construct-nav {
+  overflow: visible;
+}
+
+/* On small screens, shift the nav down slightly so it clears
+   the corner lockup which wraps to a second line */
+@media (max-width: 640px) {
+  #construct-nav {
+    top: 72px;
+  }
+}
