@@ -60,13 +60,18 @@
 
 
   /* ── PAGE ENTRANCE ────────────────────────────────────────
-     DOMContentLoaded fires as soon as the HTML is parsed —
-     much earlier than window.load (which waits for images).
-     Starting the fade-out here means the page is revealed
-     sooner and with less chance of a blink.
+     transition.js loads at the bottom of <body>, which means
+     DOMContentLoaded has almost certainly already fired by the
+     time this code runs. Listening for it would register an
+     event that never fires — keeping the overlay opaque forever.
+
+     Fix: check readyState first. If the document is already
+     parsed ('interactive') or fully loaded ('complete'), run
+     the fade immediately. Only fall back to the event listener
+     if somehow the script runs very early ('loading').
   ────────────────────────────────────────────────────────── */
 
-  document.addEventListener('DOMContentLoaded', function() {
+  function runEntrance() {
     /* Two rAF frames ensures the browser has committed a
        paint with the overlay visible before we start fading */
     requestAnimationFrame(function() {
@@ -82,7 +87,15 @@
 
       });
     });
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    /* Script ran early — wait for DOM to be ready */
+    document.addEventListener('DOMContentLoaded', runEntrance);
+  } else {
+    /* DOM already parsed — run immediately */
+    runEntrance();
+  }
 
 
   /* ── LINK INTERCEPTION ────────────────────────────────────

@@ -43,11 +43,15 @@
     { key: 'film',      label: 'FILM',       color: '#FFE7CA', url: '/film/'      },
   ];
 
-  /* ── CONFIGURATION ────────────────────────────────────────*/
+  /* ── CONFIGURATION ────────────────────────────────────────
+     All visual values live here. Adjust freely.
+  ────────────────────────────────────────────────────────── */
   var CONFIG = {
-    dotSize:         8,      /* px — diameter of each dot */
-    dotGap:          20,     /* px — space between dot centers */
-    topInset:        28,     /* px — distance from top of viewport */
+    dotSize:         10,     /* px — diameter of each dot. was 8 */
+    dotGap:          22,     /* px — space between dot centers */
+    topInset:        60,     /* px — distance from top of viewport.
+                                increased so nav sits clearly below
+                                the corner lockup (which is at 24px) */
 
     /* Dot opacity states */
     opacityActive:   1.0,    /* current venture */
@@ -55,16 +59,17 @@
     opacityHover:    1.0,    /* any dot on hover */
 
     /* Label (tooltip above dot) */
-    labelFont:       "'Times New Roman', Times, serif",
-    labelSize:       10,     /* px */
-    labelTracking:   '0.22em',
-    labelOffset:     10,     /* px — gap between top of dot and bottom of label */
+    labelFont:       "'Inter','Helvetica Neue',Arial,sans-serif",
+    labelWeight:     700,    /* Inter 700 — bold but not 900 at this size */
+    labelSize:       9,      /* px */
+    labelTracking:   '0.14em',
+    labelOffset:     8,      /* px — gap between top of dot and bottom of label */
 
-    /* Fade-in delay — same as corner element so both appear together */
+    /* Fade-in delay — matches corner element so both appear together */
     fadeInDelay:     800,    /* ms */
     fadeInDuration:  600,    /* ms */
 
-    zIndex:          999,    /* just below the corner element (1000) */
+    zIndex:          999,    /* just below corner element (1000) */
   };
 
   /* ── READ CURRENT VENTURE ─────────────────────────────────
@@ -124,12 +129,12 @@
     label.textContent = v.label;
     label.style.cssText = [
       'position:absolute',
-      /* sit above the dot: bottom of label = top of dot - labelOffset */
       'bottom:calc(100% + ' + CONFIG.labelOffset + 'px)',
       'left:50%',
       'transform:translateX(-50%)',
       'font-family:' + CONFIG.labelFont,
       'font-size:' + CONFIG.labelSize + 'px',
+      'font-weight:' + CONFIG.labelWeight,
       'letter-spacing:' + CONFIG.labelTracking,
       'text-transform:uppercase',
       'color:' + v.color,
@@ -137,7 +142,7 @@
       'line-height:1',
       'opacity:0',
       'transition:opacity 180ms ease',
-      'pointer-events:none',   /* tooltip never captures clicks */
+      'pointer-events:none',
     ].join(';');
 
 

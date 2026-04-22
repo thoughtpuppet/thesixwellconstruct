@@ -483,13 +483,26 @@
 
 <body data-venture="art">
 
-  <!-- early overlay — prevents flash on navigation -->
+  <!-- early overlay — prevents flash on navigation.
+       self-contained: fades out even if transition.js fails to load
+       (e.g. in local preview or the Claude viewer) -->
   <script>
   (function(){
-    var o=document.createElement('div');
-    o.id='construct-fade';
-    o.style.cssText='position:fixed;inset:0;background:#0e0e0e;z-index:9999;';
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
     document.body.appendChild(o);
+    function fadeOut() {
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        o.style.opacity = '0';
+        o.style.pointerEvents = 'none';
+      });});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fadeOut);
+    } else {
+      fadeOut();
+    }
   })();
   </script>
 
