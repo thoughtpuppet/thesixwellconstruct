@@ -3,73 +3,91 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>art · the six.well construct</title>
+<title>art making · the six.well construct</title>
 
 <!--
   ============================================================
-  the six.well construct / art  —  v1
+  the six.well construct / art  —  portfolio index
   ============================================================
 
   ARCHITECTURE:
-    ART is the painting vault for the construct.
-    Works are organized by type (painting / wood) and medium.
-    Clicking any card opens an expand-in-place overlay showing:
-      title · year · medium · fragment · statement link
+    /art is the portfolio index for ART MAKING venture.
+    Works are browseable by medium and type.
+    Clicking a work expands it in-place (overlay).
+    Individual work pages and statement pages live at
+    /art/[slug] and /art/statements/[slug] respectively.
 
-    Venture color: #0581C1 (thoughtpuppet blue)
-    Text: amber-keyed, matching construct identity
+  MEDIUMS:
+    paintings  — narrative, non-narrative, series, standalone
+    wood       — placeholder, coming later
+
+  TOKENS:
+    Accent color: #0581C1 (ART MAKING node color)
+    All other tokens match the shared construct system.
 
   TYPE:
-    Inter 900 (display, UI) — matches landing wordmark
-    Times New Roman (descriptors, metadata, fragments)
+    Inter 900 — display, titles, UI labels
+    Times New Roman — all serif roles (descriptors, metadata, labels)
 
-  SECTIONS:
-    Paintings  — 8 placeholders (P001–P008)
-    Wood works — 1 section placeholder (W001)
+  SHARED SCRIPTS:
+    /css/transitions.css  — fade-to-black page transitions
+    /js/transition.js     — link interception + fade logic
+    /js/construct-corner.js — top-left ring + wordmark lockup
 
-  REWRITE MARKERS:
-    intro descriptor — one short line in your voice
-    fragment — pull quote from painting's statement
-    statement — link to individual work page
+  TO ADD A REAL WORK:
+    Find the card with the matching data-id.
+    Set the <img> src to the real image path.
+    Update all data-* attributes.
+    Remove class="placeholder" if it's a wood placeholder.
   ============================================================
 -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap" rel="stylesheet">
+
+<!-- shared construct transition layer -->
 <link rel="stylesheet" href="/css/transitions.css">
 
 <style>
   /* ============================================================
-     DESIGN TOKENS
+     DESIGN TOKENS — mirrors merch/index.html token system
+     ART accent replaces MERCH hot orange throughout
   ============================================================ */
   :root {
     --bg:        #0e0e0e;
     --bg-raised: #111111;
 
-    --accent:    #0581C1;            /* thoughtpuppet blue — ART node */
+    --accent:    #FCB867;             /* construct amber — wordmark, corner */
+    --accent-hot:#0581C1;             /* ART MAKING node color — title + active states */
 
-    --ring:      rgba(5,129,193,0.6);
-    --ring-soft: rgba(5,129,193,0.28);
-    --ring-faint:rgba(5,129,193,0.12);
+    --ring:      #6D3D15;
+    --ring-soft: rgba(109,61,21,0.4);
+    --ring-faint:rgba(109,61,21,0.18);
 
-    /* text keyed to amber at descending opacity — construct identity */
+    /* text scale — keyed to amber at descending opacity, same as merch */
     --text:      #FCB867;
     --text-mute: rgba(252,184,103,0.55);
     --text-dim:  rgba(252,184,103,0.30);
-    --text-ghost:rgba(252,184,103,0.09);
+    --text-ghost:rgba(252,184,103,0.13);
+
+    /* body copy color on venture pages */
+    --body-text: #E8E4DC;
 
     --s1:4px; --s2:8px; --s3:12px; --s4:16px;
     --s5:24px; --s6:40px; --s7:64px; --s8:96px;
 
-    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif:'Times New Roman',Times,serif;
+    --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: 'Times New Roman',Times,serif;
 
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
-    --t-slow:0.55s cubic-bezier(0.2,0,0.2,1);
+    --t-slow:0.5s  cubic-bezier(0.22,1,0.36,1);
   }
 
+  /* ============================================================
+     RESET — matches merch exactly
+  ============================================================ */
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body {
     background:var(--bg); color:var(--text);
@@ -82,7 +100,7 @@
   button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
 
   /* ============================================================
-     AMBIENT
+     GRAIN — same data URI as merch
   ============================================================ */
   .grain {
     position:fixed; inset:0; z-index:1; pointer-events:none;
@@ -91,7 +109,8 @@
   }
 
   /* ============================================================
-     HEADER
+     HEADER — matches merch header.top exactly
+     construct-corner.js injects the ring lockup top-left
   ============================================================ */
   header.top {
     position:sticky; top:0; z-index:50;
@@ -112,291 +131,324 @@
   }
 
   /* ============================================================
-     INTRO
+     INTRO — mirrors merch .intro section structure
   ============================================================ */
   .intro {
-    display:flex; align-items:flex-end; justify-content:space-between;
-    gap:var(--s6); margin-bottom:var(--s8);
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:var(--s6);
+    margin-bottom:var(--s5);
+    flex-wrap:wrap;
   }
+  .intro-left { display:flex; flex-direction:column; gap:var(--s2); }
+
+  /* "painting & fine art" — Times, small uppercase, above the title */
+  .intro-above {
+    font-family:var(--serif);
+    font-size:10px; letter-spacing:0.35em;
+    text-transform:uppercase; color:var(--text-dim);
+  }
+
+  /* ART MAKING — Inter 900, large, accent-hot color */
   .intro h1 {
     font-family:var(--sans); font-weight:900;
-    font-size:clamp(80px,14vw,220px);
-    letter-spacing:-0.05em; line-height:0.88;
-    color:var(--accent);
+    font-size:clamp(48px,7vw,96px);
+    letter-spacing:-0.04em; line-height:0.9;
+    color:var(--accent-hot);
   }
+
+  /* dot after title — same pattern as merch MERCH. */
+  .art-dot { color:var(--text-dim); }
+
+  /* descriptor — Times italic, right-aligned */
   .intro-desc {
-    font-family:var(--serif); font-size:12px;
-    letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-mute); max-width:260px;
-    text-align:right; line-height:1.6;
-    padding-bottom:var(--s4);
-  }
-
-  /* ============================================================
-     FILTER BAR — two rows: type + medium
-  ============================================================ */
-  .filters-wrap {
-    margin-bottom:var(--s6);
-    border-bottom:1px solid var(--ring-faint);
-  }
-  .filter-row {
-    display:flex; align-items:center; gap:var(--s5);
-    padding-bottom:var(--s4); flex-wrap:wrap;
-  }
-  .filter-row + .filter-row { padding-bottom:var(--s5); }
-
-  .filter-row-label {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-dim); min-width:48px; flex-shrink:0;
-  }
-
-  .filter {
-    position:relative;
-    font-family:var(--sans); font-weight:500;
-    font-size:13px; letter-spacing:0.04em;
-    text-transform:lowercase; color:var(--text-mute);
-    padding:var(--s2) 0;
-    transition:color var(--t-fast);
-  }
-  .filter:hover { color:var(--text); }
-  .filter.active { color:var(--text); }
-  .filter.active::after {
-    content:"";
-    position:absolute; left:0; bottom:-1px;
-    width:100%; height:1px;
-    background:var(--accent);
-  }
-  .filter.active::before {
-    content:"";
-    position:absolute; left:-10px; top:50%;
-    width:4px; height:4px; border-radius:50%;
-    background:var(--accent);
-    transform:translateY(-50%);
-  }
-  .filter-count {
-    font-family:var(--serif); font-size:10px;
-    color:var(--text-dim); margin-left:2px;
-    vertical-align:super;
-  }
-
-  /* ============================================================
-     VAULT GRID
-  ============================================================ */
-  .grid {
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:var(--s7) var(--s5);
-  }
-
-  /* ============================================================
-     PAINTING CARD
-  ============================================================ */
-  .card {
-    display:flex; flex-direction:column;
-    cursor:pointer;
-  }
-  .card:focus-visible { outline:1px solid var(--accent); outline-offset:4px; }
-
-  .card-frame {
-    position:relative;
-    aspect-ratio:3/4;
-    background:var(--bg-raised);
-    border:1px solid var(--ring-soft);
-    overflow:hidden;
-    transition:border-color var(--t-med), transform var(--t-med);
-  }
-  .card:hover .card-frame {
-    border-color:var(--accent);
-    transform:translateY(-3px);
-  }
-
-  .card-num {
-    position:absolute; top:var(--s4); left:var(--s4);
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.22em; color:var(--text-dim);
-    text-transform:uppercase;
-  }
-  .card-ghost {
-    position:absolute; top:50%; right:var(--s4);
-    transform:translateY(-50%);
     font-family:var(--serif);
-    font-size:clamp(56px,7vw,88px); line-height:1;
-    color:var(--text-ghost); font-weight:400;
-    letter-spacing:-0.02em; user-select:none;
-  }
-  .card-hint {
-    position:absolute; bottom:var(--s4); right:var(--s4);
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-dim);
-    opacity:0; transition:opacity var(--t-fast);
-  }
-  .card:hover .card-hint { opacity:1; }
-
-  .card-meta {
-    padding:var(--s3) 0 var(--s1);
-  }
-  .card-title {
-    font-family:var(--sans); font-weight:700;
-    font-size:13px; letter-spacing:0.02em;
-    color:var(--text); text-transform:uppercase;
-    margin-bottom:3px;
-  }
-  .card-sub {
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.14em; color:var(--text-mute);
-    text-transform:uppercase;
+    font-size:13px; font-style:italic;
+    color:var(--text-mute);
+    text-align:right;
+    max-width:320px;
+    align-self:flex-end;
   }
 
   /* ============================================================
-     SECTION DIVIDER — wood works
+     FILTER BAR — matches merch nav.filters pattern
   ============================================================ */
-  .section-divider {
-    grid-column:1 / -1;
-    display:flex; align-items:center; gap:var(--s5);
-    padding:var(--s6) 0 var(--s5);
-  }
-  .section-line {
-    flex:1; height:1px; background:var(--ring-faint);
-  }
-  .section-label {
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.28em; text-transform:uppercase;
-    color:var(--text-dim);
+  nav.filters {
+    display:flex; flex-wrap:wrap;
+    gap:var(--s2);
+    margin-bottom:var(--s7);
+    padding-top:var(--s5);
+    border-top:1px solid var(--ring-faint);
   }
 
-  /* ============================================================
-     OVERLAY — expand-in-place detail panel
-  ============================================================ */
-  .overlay-bg {
-    position:fixed; inset:0; z-index:80;
-    background:rgba(4,4,4,0.9);
-    opacity:0; pointer-events:none;
-    transition:opacity var(--t-med);
-    backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px);
-  }
-  .overlay-bg.open { opacity:1; pointer-events:auto; }
-
-  .overlay-panel {
-    position:fixed; z-index:90;
-    top:50%; left:50%;
-    transform:translate(-50%,-50%) scale(0.95);
-    width:min(760px,94vw);
-    max-height:90vh;
-    background:var(--bg-raised);
-    border:1px solid var(--ring-soft);
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    opacity:0; pointer-events:none;
-    transition:opacity var(--t-med), transform var(--t-med);
-    overflow:hidden;
-  }
-  .overlay-panel.open {
-    opacity:1; pointer-events:auto;
-    transform:translate(-50%,-50%) scale(1);
-  }
-
-  .overlay-image {
-    aspect-ratio:3/4;
-    background:var(--bg);
-    border-right:1px solid var(--ring-faint);
-    position:relative; overflow:hidden;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .overlay-ghost {
+  .filter-group-label {
     font-family:var(--serif);
-    font-size:clamp(72px,10vw,120px); line-height:1;
-    color:var(--text-ghost); font-weight:400;
-    letter-spacing:-0.02em; user-select:none;
+    font-size:10px; letter-spacing:0.22em;
+    text-transform:uppercase; color:var(--text-dim);
+    align-self:center;
+    padding:0 var(--s2);
+    pointer-events:none;
+    user-select:none;
   }
 
-  .overlay-info {
-    padding:var(--s5);
-    display:flex; flex-direction:column;
-    overflow-y:auto;
+  .filter-sep {
+    width:1px; height:18px;
+    background:var(--ring-soft);
+    align-self:center;
+    margin:0 var(--s2);
   }
 
-  .overlay-top {
-    display:flex; justify-content:flex-end;
+  .chip {
+    font-family:var(--serif);
+    font-size:11px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--text-mute);
+    border:1px solid var(--ring-soft);
+    padding:var(--s2) var(--s4);
+    transition:
+      border-color var(--t-fast),
+      color        var(--t-fast),
+      background   var(--t-fast);
+  }
+  .chip:hover {
+    border-color:var(--accent-hot);
+    color:var(--body-text);
+  }
+  .chip.active {
+    border-color:var(--accent-hot);
+    color:var(--accent-hot);
+    background:rgba(5,129,193,0.1);
+  }
+
+  /* ============================================================
+     MEDIUM SECTION HEADING
+  ============================================================ */
+  .medium-heading {
+    font-family:var(--serif);
+    font-size:10px; letter-spacing:0.35em;
+    text-transform:uppercase; color:var(--text-dim);
     margin-bottom:var(--s5);
   }
-  .overlay-close {
-    font-family:var(--sans); font-weight:300;
-    font-size:26px; line-height:1;
+
+  .medium-section + .medium-section {
+    margin-top:var(--s7);
+    padding-top:var(--s6);
+    border-top:1px solid var(--ring-faint);
+  }
+
+  /* ============================================================
+     WORK GRID — vault layout
+  ============================================================ */
+  .work-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(260px,1fr));
+    gap:3px;
+  }
+
+  .work-card {
+    position:relative;
+    aspect-ratio:4/5;
+    overflow:hidden;
+    cursor:pointer;
+    background:var(--bg-raised);
+    border:1px solid var(--ring-faint);
+    transition:border-color var(--t-med);
+  }
+  .work-card:hover { border-color:var(--accent-hot); }
+
+  .work-card img {
+    width:100%; height:100%;
+    object-fit:cover; display:block;
+    transition:
+      transform var(--t-slow),
+      filter    var(--t-slow);
+    transform:scale(1);
+    filter:brightness(0.9);
+  }
+  .work-card:hover img {
+    transform:scale(0.97);
+    filter:brightness(0.45);
+  }
+
+  .work-badge {
+    position:absolute; top:var(--s3); left:var(--s3);
+    font-family:var(--serif);
+    font-size:9px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--accent-hot);
+    opacity:0;
+    transition:opacity var(--t-med);
+    pointer-events:none;
+  }
+  .work-card:hover .work-badge { opacity:0.85; }
+
+  .work-meta {
+    position:absolute; bottom:0; left:0; right:0;
+    padding:var(--s6) var(--s4) var(--s4);
+    background:linear-gradient(to top, rgba(14,14,14,0.92) 0%, transparent 100%);
+    transform:translateY(6px);
+    opacity:0;
+    transition:
+      opacity   var(--t-med),
+      transform var(--t-med);
+    pointer-events:none;
+  }
+  .work-card:hover .work-meta { opacity:1; transform:translateY(0); }
+
+  .work-title {
+    display:block;
+    font-family:var(--sans); font-weight:900;
+    font-size:13px; letter-spacing:-0.01em;
+    color:var(--body-text);
+    margin-bottom:var(--s1);
+  }
+
+  .work-info {
+    display:block;
+    font-family:var(--serif);
+    font-size:11px; font-style:italic;
     color:var(--text-mute);
-    padding:var(--s1) var(--s2);
+    letter-spacing:0.03em;
+  }
+
+  /* placeholder card — wood works coming later */
+  .work-card.placeholder {
+    cursor:default;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .work-card.placeholder:hover { border-color:var(--ring-soft); }
+  .work-card.placeholder img,
+  .work-card.placeholder .work-meta,
+  .work-card.placeholder .work-badge { display:none; }
+
+  .placeholder-label {
+    font-family:var(--serif);
+    font-size:10px; letter-spacing:0.3em;
+    text-transform:uppercase; color:var(--text-ghost);
+    font-style:italic; text-align:center; line-height:2;
+  }
+
+  .work-card.hidden { display:none; }
+
+  /* ============================================================
+     EXPANDED WORK OVERLAY
+  ============================================================ */
+  #work-overlay {
+    position:fixed; inset:0; z-index:200;
+    background:rgba(14,14,14,0.97);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none;
+    transition:opacity var(--t-slow);
+  }
+  #work-overlay.open {
+    opacity:1; pointer-events:all;
+  }
+
+  .overlay-close {
+    position:fixed; top:var(--s6); right:var(--s6);
+    font-family:var(--serif); font-size:20px;
+    color:var(--text-mute); z-index:201;
+    padding:var(--s2);
     transition:color var(--t-fast);
   }
-  .overlay-close:hover { color:var(--accent); }
+  .overlay-close:hover { color:var(--text); }
 
-  .overlay-meta { flex:1; }
-
-  .overlay-num {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.28em; color:var(--text-dim);
-    text-transform:uppercase; margin-bottom:var(--s3);
+  .overlay-inner {
+    display:grid;
+    grid-template-columns:1fr 360px;
+    gap:var(--s7);
+    width:88vw; max-width:1100px;
+    max-height:90vh;
+    align-items:center;
   }
-  .overlay-title {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(20px,3.5vw,34px);
-    letter-spacing:-0.03em; line-height:1.05;
-    color:var(--accent); margin-bottom:var(--s5);
+
+  .overlay-image-wrap {
+    height:78vh; max-height:680px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .overlay-image-wrap img {
+    max-width:100%; max-height:100%;
+    object-fit:contain; display:block;
+    transform:scale(0.97); opacity:0;
+    transition:
+      transform var(--t-slow) 0.1s,
+      opacity   var(--t-slow) 0.1s;
+  }
+  #work-overlay.open .overlay-image-wrap img {
+    transform:scale(1); opacity:1;
   }
 
   .overlay-details {
-    display:flex; flex-direction:column; gap:var(--s2);
+    transform:translateX(10px); opacity:0;
+    transition:
+      transform var(--t-slow) 0.2s,
+      opacity   var(--t-slow) 0.2s;
+  }
+  #work-overlay.open .overlay-details {
+    transform:translateX(0); opacity:1;
+  }
+
+  .overlay-rule {
+    width:24px; height:2px;
+    background:var(--accent-hot);
     margin-bottom:var(--s5);
-    padding-bottom:var(--s5);
-    border-bottom:1px solid var(--ring-faint);
   }
-  .overlay-detail {
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute);
+
+  .overlay-title {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(28px,4vw,48px);
+    letter-spacing:-0.03em; line-height:0.92;
+    color:var(--body-text);
+    margin-bottom:var(--s4);
   }
-  .overlay-detail-key {
-    color:var(--text-dim); margin-right:var(--s3);
+
+  .overlay-subtitle {
+    font-family:var(--serif);
+    font-size:13px; font-style:italic;
+    color:var(--text-mute); letter-spacing:0.04em;
+    margin-bottom:var(--s5);
+  }
+
+  .overlay-tags {
+    display:flex; flex-wrap:wrap; gap:var(--s2);
+    margin-bottom:var(--s5);
+  }
+  .overlay-tag {
+    font-family:var(--serif);
+    font-size:10px; letter-spacing:0.18em;
+    text-transform:uppercase; color:var(--accent-hot);
+    border:1px solid rgba(5,129,193,0.3);
+    padding:var(--s1) var(--s3);
   }
 
   .overlay-fragment {
-    font-family:var(--serif); font-size:13px;
-    line-height:1.75; color:var(--text-mute);
-    font-style:italic;
-    border-left:2px solid var(--accent);
+    font-family:var(--serif);
+    font-size:14px; line-height:1.65; font-style:italic;
+    color:rgba(232,228,220,0.65);
+    border-left:1px solid rgba(5,129,193,0.35);
     padding-left:var(--s4);
     margin-bottom:var(--s6);
-    opacity:0.8;
   }
 
-  .overlay-link {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:var(--s4) 0 0;
-    border-top:1px solid var(--ring-faint);
-    font-family:var(--sans); font-weight:500;
+  .overlay-statement-link {
+    display:inline-flex; align-items:center; gap:var(--s2);
+    font-family:var(--serif);
     font-size:11px; letter-spacing:0.18em;
-    color:var(--text-mute); text-transform:uppercase;
-    transition:color var(--t-fast), border-top-color var(--t-fast);
-    margin-top:auto;
+    text-transform:uppercase; color:var(--accent-hot);
+    opacity:0.75;
+    transition:opacity var(--t-fast);
   }
-  .overlay-link:hover {
-    color:var(--accent);
-    border-top-color:var(--accent);
-  }
-  .overlay-link .arrow {
-    font-family:var(--serif); font-size:14px;
-    transition:transform var(--t-fast);
-  }
-  .overlay-link:hover .arrow { transform:translateX(4px); }
+  .overlay-statement-link::after { content:'→'; }
+  .overlay-statement-link:hover { opacity:1; }
 
   /* ============================================================
-     FOOTER
+     FOOTER — matches merch footer.bottom
   ============================================================ */
   footer.bottom {
     position:relative; z-index:2;
     padding:var(--s7) var(--s6);
     border-top:1px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
+    margin-top:var(--s8);
   }
   footer.bottom p, footer.bottom a {
     font-family:var(--serif); font-size:10px;
@@ -408,35 +460,30 @@
   /* ============================================================
      RESPONSIVE
   ============================================================ */
-  @media (max-width:1200px) {
-    .grid { grid-template-columns:repeat(3,1fr); }
-  }
   @media (max-width:900px) {
-    .overlay-panel { grid-template-columns:1fr; width:min(480px,94vw); }
-    .overlay-image {
-      aspect-ratio:16/9;
-      border-right:none;
-      border-bottom:1px solid var(--ring-faint);
-    }
-  }
-  @media (max-width:768px) {
-    .grid { grid-template-columns:repeat(2,1fr); gap:var(--s6) var(--s4); }
-    main { padding:var(--s7) var(--s5) var(--s6); }
-  }
-  @media (max-width:640px) {
+    main { padding:var(--s7) var(--s5); }
     header.top { padding:var(--s4) var(--s5); }
-    main { padding:var(--s6) var(--s5); }
-    .intro { flex-direction:column; align-items:flex-start; gap:var(--s4); margin-bottom:var(--s7); }
-    .intro-desc { text-align:left; padding-bottom:0; max-width:none; }
-    .filters-wrap { overflow-x:auto; }
-    .filter-row { flex-wrap:nowrap; }
-    footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s5); }
+    .overlay-inner {
+      grid-template-columns:1fr;
+      overflow-y:auto;
+      gap:var(--s5);
+      padding:var(--s7) var(--s5) var(--s6);
+      align-items:flex-start;
+    }
+    .overlay-image-wrap {
+      height:55vw; min-height:200px; max-height:340px;
+    }
+    .work-grid {
+      grid-template-columns:repeat(auto-fill, minmax(160px,1fr));
+      gap:2px;
+    }
   }
 </style>
 </head>
+
 <body>
 
-  <!-- blink prevention -->
+  <!-- early overlay — prevents flash on navigation -->
   <script>
   (function(){
     var o=document.createElement('div');
@@ -448,23 +495,199 @@
 
   <div class="grain"></div>
 
-  <header class="top">
-    <!-- construct-corner.js injects wordmark -->
-  </header>
+  <!-- HEADER — construct-corner.js injects ring lockup top-left -->
+  <header class="top"></header>
 
+  <!-- EXPANDED WORK OVERLAY -->
+  <div id="work-overlay" role="dialog" aria-modal="true" aria-label="Work detail">
+    <button class="overlay-close" id="overlayCloseBtn" aria-label="Close">✕</button>
+    <div class="overlay-inner">
+      <div class="overlay-image-wrap">
+        <img id="overlayImg" src="" alt="" />
+      </div>
+      <div class="overlay-details">
+        <div class="overlay-rule"></div>
+        <h2 class="overlay-title"    id="overlayTitle"></h2>
+        <p  class="overlay-subtitle" id="overlaySubtitle"></p>
+        <div class="overlay-tags"    id="overlayTags"></div>
+        <p  class="overlay-fragment" id="overlayFragment"></p>
+        <a  href="#" class="overlay-statement-link" id="overlayStLink">artist statement</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
   <main>
+
     <section class="intro">
-      <h1>ART.</h1>
-      <!-- REWRITE: one line, your voice -->
-      <p class="intro-desc">paintings and wood from the thoughtpuppet hand</p>
+      <div class="intro-left">
+        <p class="intro-above">painting &amp; fine art</p>
+        <h1>ART<br>MAKING<span class="art-dot">.</span></h1>
+      </div>
+      <!-- REWRITE: one line in your voice -->
+      <p class="intro-desc">works made by Saiel Dauhn Solehman</p>
     </section>
 
-    <nav class="filters-wrap" aria-label="filter works">
-      <div class="filter-row" id="typeFilters"></div>
-      <div class="filter-row" id="mediumFilters"></div>
-    </nav>
+    <!-- filter chips — generated by JS -->
+    <nav class="filters" id="filters" role="tablist"></nav>
 
-    <section class="grid" id="artGrid"></section>
+    <!-- PAINTINGS -->
+    <section class="medium-section" id="sectionPainting">
+      <p class="medium-heading">Paintings</p>
+      <div class="work-grid" id="gridPainting">
+
+        <!--
+          WORK CARD ANATOMY
+          ─────────────────────────────────────────────────────
+          data-medium:       "painting" | "wood"
+          data-type:         "narrative" | "non-narrative" | "series" | "standalone"
+          data-id:           unique slug → /art/statements/[id]
+          data-title:        display title
+          data-year:         "2024" or "—"
+          data-medium-label: "Acrylic on canvas" etc.
+          data-fragment:     one or two sentences, shown in overlay
+          data-series:       series name or "" if standalone
+
+          TO POPULATE A REAL WORK:
+            Set src on <img> to actual path, e.g. ../assets/paintings/marbles.jpg
+            Update all data-* attributes above.
+        -->
+
+        <!-- Work 01 — Marbles (real) -->
+        <div class="work-card entrance-fade entrance-delay-1"
+             data-medium="painting" data-type="standalone" data-id="marbles"
+             data-title="MARBLES." data-year="2024" data-medium-label="Acrylic on canvas"
+             data-fragment="A figure dissolving into colour. Dot by dot, something that was solid becomes scattered — and maybe freer for it."
+             data-series="">
+          <img src="../assets/paintings/marbles.jpg" alt="Marbles, 2024" loading="lazy" />
+          <span class="work-badge">standalone</span>
+          <div class="work-meta">
+            <span class="work-title">MARBLES.</span>
+            <span class="work-info">2024 · Acrylic on canvas</span>
+          </div>
+        </div>
+
+        <!-- Works 02–08 — placeholders. Replace src + data-* as works are ready. -->
+
+        <div class="work-card entrance-fade entrance-delay-2"
+             data-medium="painting" data-type="narrative" data-id="work-02"
+             data-title="UNTITLED 02" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
+             data-series="">
+          <img src="" alt="" loading="lazy" />
+          <span class="work-badge">narrative</span>
+          <div class="work-meta">
+            <span class="work-title">UNTITLED 02</span>
+            <span class="work-info">— · Painting</span>
+          </div>
+        </div>
+
+        <div class="work-card entrance-fade entrance-delay-2"
+             data-medium="painting" data-type="non-narrative" data-id="work-03"
+             data-title="UNTITLED 03" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
+             data-series="">
+          <img src="" alt="" loading="lazy" />
+          <span class="work-badge">non-narrative</span>
+          <div class="work-meta">
+            <span class="work-title">UNTITLED 03</span>
+            <span class="work-info">— · Painting</span>
+          </div>
+        </div>
+
+        <div class="work-card entrance-fade entrance-delay-3"
+             data-medium="painting" data-type="series" data-id="work-04"
+             data-title="UNTITLED 04" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
+             data-series="Series placeholder">
+          <img src="" alt="" loading="lazy" />
+          <span class="work-badge">series</span>
+          <div class="work-meta">
+            <span class="work-title">UNTITLED 04</span>
+            <span class="work-info">— · Painting</span>
+          </div>
+        </div>
+
+        <div class="work-card entrance-fade entrance-delay-3"
+             data-medium="painting" data-type="series" data-id="work-05"
+             data-title="UNTITLED 05" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
+             data-series="Series placeholder">
+          <img src="" alt="" loading="lazy" />
+          <span class="work-badge">series</span>
+          <div class="work-meta">
+            <span class="work-title">UNTITLED 05</span>
+            <span class="work-info">— · Painting</span>
+          </div>
+        </div>
+
+        <div class="work-card entrance-fade entrance-delay-4"
+             data-medium="painting" data-type="narrative" data-id="work-06"
+             data-title="UNTITLED 06" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
+             data-series="">
+          <img src="" alt="" loading="lazy" />
+          <span class="work-badge">narrative</span>
+          <div class="work-meta">
+            <span class="work-title">UNTITLED 06</span>
+            <span class="work-info">— · Painting</span>
+          </div>
+        </div>
+
+        <div class="work-card entrance-fade entrance-delay-4"
+             data-medium="painting" data-type="standalone" data-id="work-07"
+             data-title="UNTITLED 07" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
+             data-series="">
+          <img src="" alt="" loading="lazy" />
+          <span class="work-badge">standalone</span>
+          <div class="work-meta">
+            <span class="work-title">UNTITLED 07</span>
+            <span class="work-info">— · Painting</span>
+          </div>
+        </div>
+
+        <div class="work-card entrance-fade entrance-delay-5"
+             data-medium="painting" data-type="non-narrative" data-id="work-08"
+             data-title="UNTITLED 08" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
+             data-series="">
+          <img src="" alt="" loading="lazy" />
+          <span class="work-badge">non-narrative</span>
+          <div class="work-meta">
+            <span class="work-title">UNTITLED 08</span>
+            <span class="work-info">— · Painting</span>
+          </div>
+        </div>
+
+      </div><!-- /gridPainting -->
+    </section>
+
+    <!-- WOOD WORKS — placeholder section, populated in future phase -->
+    <section class="medium-section" id="sectionWood">
+      <p class="medium-heading">Wood works</p>
+      <div class="work-grid" id="gridWood">
+
+        <!-- Remove class="placeholder", add real img + data-* when works are ready -->
+
+        <div class="work-card placeholder"
+             data-medium="wood" data-type="standalone" data-id="wood-01">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-medium="wood" data-type="standalone" data-id="wood-02">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-medium="wood" data-type="standalone" data-id="wood-03">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+      </div><!-- /gridWood -->
+    </section>
+
   </main>
 
   <footer class="bottom">
@@ -472,293 +695,171 @@
     <a href="/">return to construct</a>
   </footer>
 
-  <!-- overlay -->
-  <div class="overlay-bg" id="overlayBg"></div>
-  <div class="overlay-panel" id="overlayPanel"
-       role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
-    <div class="overlay-image">
-      <span class="overlay-ghost" id="overlayGhost"></span>
-    </div>
-    <div class="overlay-info">
-      <div class="overlay-top">
-        <button class="overlay-close" id="overlayClose" aria-label="close detail">&#215;</button>
-      </div>
-      <div class="overlay-meta">
-        <p class="overlay-num"   id="overlayNum"></p>
-        <h2 class="overlay-title" id="overlayTitle"></h2>
-        <div class="overlay-details" id="overlayDetails"></div>
-        <p class="overlay-fragment" id="overlayFragment"></p>
-      </div>
-      <a class="overlay-link" id="overlayLink" href="#">
-        <span>read statement</span>
-        <span class="arrow">&rarr;</span>
-      </a>
-    </div>
-  </div>
+  <!-- shared scripts — same load order as merch/index.html -->
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
 
   <script>
   /* ============================================================
-     WORKS DATA
-     Replace placeholders with real work data.
-     fragment — pull quote / excerpt from statement (your voice)
-     statement — path to individual work page, or "#" until built
+     FILTER SYSTEM
+     ============================================================
+     Two groups: medium + type. Chips generated from FILTER_GROUPS.
+     Logic: AND across groups (card must match all active filters),
+            toggle within group (click active chip to deactivate).
   ============================================================ */
-  const WORKS = [
-    /* ── paintings ─────────────────────────────────────────── */
+
+  const FILTER_GROUPS = [
     {
-      id:"P001", num:1, type:"painting", medium:"oil", year:"2024",
-      title:"UNTITLED I",
-      /* REWRITE */
-      fragment:"the weight before the brushstroke — held in the wrist",
-      statement:"#"
+      key: 'medium', label: 'Medium',
+      values: [
+        { value:'painting', label:'Painting'   },
+        { value:'wood',     label:'Wood works' },
+      ]
     },
     {
-      id:"P002", num:2, type:"painting", medium:"acrylic", year:"2024",
-      title:"UNTITLED II",
-      fragment:"pigment over pigment, each layer a different hour",
-      statement:"#"
-    },
-    {
-      id:"P003", num:3, type:"painting", medium:"oil", year:"2023",
-      title:"UNTITLED III",
-      fragment:"what the eye reaches for when the painting goes still",
-      statement:"#"
-    },
-    {
-      id:"P004", num:4, type:"painting", medium:"gouache", year:"2023",
-      title:"UNTITLED IV",
-      fragment:"opaque until it isn't — the moment the surface breaks",
-      statement:"#"
-    },
-    {
-      id:"P005", num:5, type:"painting", medium:"ink", year:"2024",
-      title:"UNTITLED V",
-      fragment:"a mark you cannot correct is the only true mark",
-      statement:"#"
-    },
-    {
-      id:"P006", num:6, type:"painting", medium:"acrylic", year:"2023",
-      title:"UNTITLED VI",
-      fragment:"the canvas held more silence than paint by the end",
-      statement:"#"
-    },
-    {
-      id:"P007", num:7, type:"painting", medium:"mixed media", year:"2024",
-      title:"UNTITLED VII",
-      fragment:"two surfaces arguing over the same edge",
-      statement:"#"
-    },
-    {
-      id:"P008", num:8, type:"painting", medium:"oil", year:"2024",
-      title:"UNTITLED VIII",
-      fragment:"slow pigment — the one that outlasts the intention",
-      statement:"#"
-    },
-    /* ── wood works ─────────────────────────────────────────── */
-    {
-      id:"W001", num:1, type:"wood", medium:"carved wood", year:"2024",
-      title:"WOOD WORK I",
-      fragment:"grain as argument — the material speaking back",
-      statement:"#"
+      key: 'type', label: 'Type',
+      values: [
+        { value:'narrative',     label:'Narrative'     },
+        { value:'non-narrative', label:'Non-narrative' },
+        { value:'series',        label:'Series'        },
+        { value:'standalone',    label:'Standalone'    },
+      ]
     }
   ];
 
-  /* ============================================================
-     FILTER DIMENSIONS
-  ============================================================ */
-  const TYPES = {
-    painting: "paintings",
-    wood:     "wood works"
-  };
+  /* active filter per group — null = no filter */
+  const active = { medium:null, type:null };
 
-  const MEDIUMS = ["oil","acrylic","gouache","ink","mixed media","carved wood"];
+  /* build chips */
+  const filtersEl = document.getElementById('filters');
 
-  /* ============================================================
-     STATE
-  ============================================================ */
-  let activeType   = "all";
-  let activeMedium = "all";
-  let overlayOpen  = false;
+  const allChip = document.createElement('button');
+  allChip.className = 'chip active';
+  allChip.dataset.filter = 'all';
+  allChip.dataset.group  = 'all';
+  allChip.textContent    = 'All';
+  filtersEl.appendChild(allChip);
 
-  /* DOM */
-  const typeFiltersEl   = document.getElementById("typeFilters");
-  const mediumFiltersEl = document.getElementById("mediumFilters");
-  const grid            = document.getElementById("artGrid");
-  const overlayBg       = document.getElementById("overlayBg");
-  const overlayPanel    = document.getElementById("overlayPanel");
+  FILTER_GROUPS.forEach(group => {
+    const sep = document.createElement('span');
+    sep.className = 'filter-sep';
+    filtersEl.appendChild(sep);
 
-  /* ============================================================
-     FILTER RENDERING
-  ============================================================ */
-  function renderTypeFilters() {
-    typeFiltersEl.innerHTML = "";
-    const lbl = document.createElement("span");
-    lbl.className = "filter-row-label";
-    lbl.textContent = "type";
-    typeFiltersEl.appendChild(lbl);
+    const lbl = document.createElement('span');
+    lbl.className   = 'filter-group-label';
+    lbl.textContent = group.label;
+    filtersEl.appendChild(lbl);
 
-    typeFiltersEl.appendChild(
-      makeChip("all works", WORKS.length, activeType === "all", () => setType("all"))
-    );
-    Object.entries(TYPES).forEach(([key, label]) => {
-      const count = WORKS.filter(w => w.type === key).length;
-      typeFiltersEl.appendChild(
-        makeChip(label, count, activeType === key, () => setType(key))
+    group.values.forEach(v => {
+      const chip = document.createElement('button');
+      chip.className      = 'chip';
+      chip.dataset.filter = v.value;
+      chip.dataset.group  = group.key;
+      chip.textContent    = v.label;
+      filtersEl.appendChild(chip);
+    });
+  });
+
+  /* apply active filters to all non-placeholder cards */
+  function applyFilters() {
+    document.querySelectorAll('.work-card:not(.placeholder)').forEach(card => {
+      const ok =
+        (!active.medium || card.dataset.medium === active.medium) &&
+        (!active.type   || card.dataset.type   === active.type);
+      card.classList.toggle('hidden', !ok);
+    });
+
+    /* show/hide sections */
+    ['painting','wood'].forEach(med => {
+      const id = 'section' + med.charAt(0).toUpperCase() + med.slice(1);
+      const section = document.getElementById(id);
+      if (!section) return;
+      const hasReal = section.querySelectorAll('.work-card:not(.placeholder):not(.hidden)').length > 0;
+      const hasPlaceholders = section.querySelectorAll('.work-card.placeholder').length > 0;
+      const show = hasReal || (hasPlaceholders && (!active.medium || active.medium === med));
+      section.style.display = show ? '' : 'none';
+    });
+
+    /* sync chip states */
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.classList.toggle('active',
+        chip.dataset.filter === 'all'
+          ? !active.medium && !active.type
+          : active[chip.dataset.group] === chip.dataset.filter
       );
     });
   }
 
-  function renderMediumFilters() {
-    mediumFiltersEl.innerHTML = "";
-    const lbl = document.createElement("span");
-    lbl.className = "filter-row-label";
-    lbl.textContent = "medium";
-    mediumFiltersEl.appendChild(lbl);
-
-    const pool = activeType === "all" ? WORKS : WORKS.filter(w => w.type === activeType);
-    mediumFiltersEl.appendChild(
-      makeChip("all media", pool.length, activeMedium === "all", () => setMedium("all"))
-    );
-    MEDIUMS.forEach(m => {
-      const count = pool.filter(w => w.medium === m).length;
-      if (!count) return;
-      mediumFiltersEl.appendChild(
-        makeChip(m, count, activeMedium === m, () => setMedium(m))
-      );
-    });
-  }
-
-  function makeChip(label, count, active, onClick) {
-    const btn = document.createElement("button");
-    btn.className = "filter" + (active ? " active" : "");
-    btn.innerHTML = `${label}<span class="filter-count">${count}</span>`;
-    btn.addEventListener("click", onClick);
-    return btn;
-  }
-
-  function setType(key) {
-    activeType   = key;
-    activeMedium = "all";
-    renderTypeFilters();
-    renderMediumFilters();
-    renderGrid();
-  }
-
-  function setMedium(key) {
-    activeMedium = key;
-    renderMediumFilters();
-    renderGrid();
-  }
-
-  /* ============================================================
-     GRID RENDERING
-  ============================================================ */
-  function renderGrid() {
-    let pool = activeType === "all" ? WORKS : WORKS.filter(w => w.type === activeType);
-    if (activeMedium !== "all") pool = pool.filter(w => w.medium === activeMedium);
-
-    const paintings = pool.filter(w => w.type === "painting");
-    const woods     = pool.filter(w => w.type === "wood");
-
-    let html = paintings.map(cardHTML).join("");
-
-    if (woods.length) {
-      html += `
-        <div class="section-divider">
-          <div class="section-line"></div>
-          <span class="section-label">wood works</span>
-          <div class="section-line"></div>
-        </div>
-        ${woods.map(cardHTML).join("")}
-      `;
+  filtersEl.addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const { filter, group } = chip.dataset;
+    if (filter === 'all') {
+      active.medium = null;
+      active.type   = null;
+    } else {
+      active[group] = active[group] === filter ? null : filter;
     }
+    applyFilters();
+  });
 
-    grid.innerHTML = html;
+  applyFilters();
 
-    grid.querySelectorAll(".card[data-id]").forEach(card => {
-      card.addEventListener("click",  () => openOverlay(card.dataset.id));
-      card.addEventListener("keydown", e => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openOverlay(card.dataset.id);
-        }
-      });
-    });
-  }
-
-  function cardHTML(w) {
-    return `
-      <article class="card" data-id="${w.id}" tabindex="0"
-               role="button" aria-label="view ${w.title}">
-        <div class="card-frame">
-          <span class="card-num">N&deg;&thinsp;${w.id}</span>
-          <span class="card-ghost">${w.num}</span>
-          <span class="card-hint">expand</span>
-        </div>
-        <div class="card-meta">
-          <p class="card-title">${w.title}</p>
-          <p class="card-sub">${w.year}&nbsp;&middot;&nbsp;${w.medium}</p>
-        </div>
-      </article>
-    `;
-  }
 
   /* ============================================================
-     OVERLAY
+     EXPANDED OVERLAY SYSTEM
+     ============================================================
+     Click non-placeholder card → overlay opens, content injected
+     from card data-* attributes.
   ============================================================ */
-  function openOverlay(id) {
-    const w = WORKS.find(x => x.id === id);
-    if (!w) return;
 
-    document.getElementById("overlayGhost").textContent   = w.num;
-    document.getElementById("overlayNum").textContent     = `N\u00b0\u2009${w.id}`;
-    document.getElementById("overlayTitle").textContent   = w.title;
-    document.getElementById("overlayFragment").textContent = `\u201c${w.fragment}\u201d`;
-    document.getElementById("overlayDetails").innerHTML   = `
-      <p class="overlay-detail">
-        <span class="overlay-detail-key">year</span>${w.year}
-      </p>
-      <p class="overlay-detail">
-        <span class="overlay-detail-key">medium</span>${w.medium}
-      </p>
-      <p class="overlay-detail">
-        <span class="overlay-detail-key">type</span>${TYPES[w.type] || w.type}
-      </p>
-    `;
-    const link  = document.getElementById("overlayLink");
-    link.href   = w.statement;
-    link.style.pointerEvents = w.statement === "#" ? "none" : "";
-    link.style.opacity       = w.statement === "#" ? "0.35" : "";
+  const overlay      = document.getElementById('work-overlay');
+  const overlayImg   = document.getElementById('overlayImg');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlaySub   = document.getElementById('overlaySubtitle');
+  const overlayTags  = document.getElementById('overlayTags');
+  const overlayFrag  = document.getElementById('overlayFragment');
+  const overlayLink  = document.getElementById('overlayStLink');
+  const closeBtn     = document.getElementById('overlayCloseBtn');
 
-    overlayBg.classList.add("open");
-    overlayPanel.classList.add("open");
-    overlayOpen = true;
-    document.body.style.overflow = "hidden";
-    document.getElementById("overlayClose").focus();
+  function openOverlay(card) {
+    const d = card.dataset;
+    overlayImg.src         = card.querySelector('img').src;
+    overlayImg.alt         = d.title;
+    overlayTitle.textContent = d.title;
+    overlaySub.textContent = [d.year, d.mediumLabel].filter(s => s && s !== '—').join(' · ') || d.year;
+
+    overlayTags.innerHTML = '';
+    [d.type, d.series].filter(Boolean).forEach(val => {
+      const t = document.createElement('span');
+      t.className   = 'overlay-tag';
+      t.textContent = val;
+      overlayTags.appendChild(t);
+    });
+
+    overlayFrag.textContent = d.fragment || '';
+    overlayLink.href        = '/art/statements/' + (d.id || '');
+
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
   }
 
   function closeOverlay() {
-    overlayBg.classList.remove("open");
-    overlayPanel.classList.remove("open");
-    overlayOpen = false;
-    document.body.style.overflow = "";
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
   }
 
-  document.getElementById("overlayClose").addEventListener("click", closeOverlay);
-  overlayBg.addEventListener("click", closeOverlay);
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && overlayOpen) closeOverlay();
+  document.querySelectorAll('.work-card:not(.placeholder)').forEach(card => {
+    card.addEventListener('click', () => openOverlay(card));
   });
 
-  /* ============================================================
-     INIT
-  ============================================================ */
-  renderTypeFilters();
-  renderMediumFilters();
-  renderGrid();
+  closeBtn.addEventListener('click', closeOverlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlay(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay();
+  });
+
   </script>
 
-  <script src="/js/transition.js"></script>
-  <script src="/js/construct-corner.js"></script>
 </body>
 </html>
