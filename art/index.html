@@ -478,6 +478,82 @@
       gap:2px;
     }
   }
+
+  /* ── CART TOGGLE + DRAWER ─────────────────────────────────
+     Matches merch page cart exactly.
+     Drawer opens empty on non-merch pages — wires to
+     Shopify when Storefront API is connected.
+  ────────────────────────────────────────────────────────── */
+  .cart-toggle {
+    display:flex; align-items:center; gap:var(--s3);
+    padding:var(--s2) var(--s4);
+    border:1px solid var(--ring-soft);
+    background:none; cursor:pointer; color:inherit;
+    font:inherit;
+    transition:border-color var(--t-fast), background var(--t-fast);
+  }
+  .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
+  .cart-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute);
+  }
+  .cart-count {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    color:var(--accent); min-width:14px; text-align:right;
+  }
+  /* overlay behind drawer */
+  .cart-overlay {
+    position:fixed; inset:0; z-index:90;
+    background:rgba(0,0,0,0.6); opacity:0; pointer-events:none;
+    transition:opacity 0.35s cubic-bezier(0.2,0,0.2,1);
+  }
+  .cart-overlay.open { opacity:1; pointer-events:auto; }
+  /* drawer panel */
+  .cart-drawer {
+    position:fixed; top:0; right:0; bottom:0;
+    width:min(440px,100vw); z-index:100;
+    background:#0a0a0a;
+    border-left:1px solid rgba(109,61,21,0.4);
+    display:flex; flex-direction:column;
+    transform:translateX(100%);
+    transition:transform 0.35s cubic-bezier(0.2,0,0.2,1);
+  }
+  .cart-drawer.open { transform:translateX(0); }
+  .drawer-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:24px; border-bottom:1px solid rgba(109,61,21,0.18);
+  }
+  .drawer-title {
+    font-family:var(--sans); font-weight:900; font-size:14px;
+    letter-spacing:0.08em; text-transform:uppercase; color:var(--accent);
+  }
+  .drawer-close {
+    font-family:var(--sans); font-weight:300; font-size:28px; line-height:1;
+    color:rgba(252,184,103,0.55); padding:4px 12px;
+    background:none; border:none; cursor:pointer; font:inherit;
+    transition:color 0.18s ease;
+  }
+  .drawer-close:hover { color:var(--accent); }
+  .drawer-body { flex:1; display:flex; align-items:center; justify-content:center; }
+  .drawer-empty {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:rgba(252,184,103,0.30);
+  }
+  .drawer-footer { padding:24px; border-top:1px solid rgba(109,61,21,0.4); }
+  .checkout-btn {
+    display:block; width:100%; padding:16px;
+    border:1px solid rgba(109,61,21,0.4); background:transparent;
+    color:rgba(252,184,103,0.30);
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.2em; text-transform:uppercase;
+    cursor:not-allowed;
+  }
+  .drawer-note {
+    margin-top:12px; font-family:var(--serif); font-size:9px;
+    letter-spacing:0.24em; color:rgba(252,184,103,0.30);
+    text-transform:uppercase; text-align:center;
+  }
 </style>
 </head>
 
@@ -508,8 +584,30 @@
 
   <div class="grain"></div>
 
-  <!-- HEADER — construct-corner.js injects ring lockup top-left -->
-  <header class="top"></header>
+  <!-- HEADER — construct-corner.js injects ring lockup top-left.
+       cart toggle is visual-only until Shopify Storefront API is connected. -->
+  <header class="top">
+    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+      <span class="cart-label">cart</span>
+      <span class="cart-count">0</span>
+    </button>
+  </header>
+
+  <!-- CART OVERLAY + DRAWER -->
+  <div class="cart-overlay" id="cartOverlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <span class="drawer-title">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <p class="drawer-empty">cart is empty</p>
+    </div>
+    <div class="drawer-footer">
+      <button class="checkout-btn" disabled>proceed to checkout</button>
+      <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
+    </div>
+  </aside>
 
   <!-- EXPANDED WORK OVERLAY -->
   <div id="work-overlay" role="dialog" aria-modal="true" aria-label="Work detail">
@@ -872,6 +970,22 @@
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay();
   });
+
+
+  /* ── CART DRAWER — open/close only ───────────────────────
+     Visual-only until Shopify Storefront API is connected.
+     Cart state and product logic lives on /merch pages.
+  ────────────────────────────────────────────────────────── */
+  (function() {
+    var drawer  = document.getElementById('cartDrawer');
+    var overlay = document.getElementById('cartOverlay');
+    function openCart()  { drawer.classList.add('open'); overlay.classList.add('open'); drawer.setAttribute('aria-hidden','false'); }
+    function closeCart() { drawer.classList.remove('open'); overlay.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
+    document.getElementById('cartToggle').addEventListener('click', openCart);
+    document.getElementById('drawerClose').addEventListener('click', closeCart);
+    overlay.addEventListener('click', closeCart);
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeCart(); });
+  })();
 
   </script>
 
