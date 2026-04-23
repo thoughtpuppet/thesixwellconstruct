@@ -42,6 +42,32 @@
   ============================================================
 -->
 
+<!--
+OBJECT METADATA
+===============
+id:           art-index
+title:        Art Making
+type:         index                     (index | painting | product | writing | music | film | event | archive)
+venture:      art                       (art | merch | tattooing | music | writings | film | events | archive | about)
+year:         —
+
+tags:         []                        (Saiel's language — add freely, stay consistent)
+
+status:
+  original:   —
+  prints:     —
+  inquiry:    false
+
+related:      []
+
+media:
+  primary:    —
+  alt:        —
+
+description:  "Portfolio index for ART MAKING — paintings and wood works by Saiel Dauhn Solehman."
+statement:    —
+-->
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap" rel="stylesheet">
@@ -83,6 +109,10 @@
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
     --t-slow:0.5s  cubic-bezier(0.22,1,0.36,1);
+
+    /* driven by JS — switches to active filter's color on chip click.
+       defaults to ART node blue for the "all" state. */
+    --title-color: #0581C1;
   }
 
   /* ============================================================
@@ -131,93 +161,95 @@
   }
 
   /* ============================================================
-     INTRO — mirrors merch .intro section structure
+     INTRO — matches merch .intro exactly
+     Same scale, alignment, spacing. --accent-hot replaces
+     --title-color from merch (no JS color-swap needed here).
   ============================================================ */
   .intro {
-    display:flex;
-    align-items:baseline;
-    justify-content:space-between;
-    gap:var(--s6);
-    margin-bottom:var(--s5);
-    flex-wrap:wrap;
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:var(--s6); margin-bottom:var(--s8);
   }
-  .intro-left { display:flex; flex-direction:column; gap:var(--s2); }
-
-  /* "painting & fine art" — Times, small uppercase, above the title */
-  .intro-above {
-    font-family:var(--serif);
-    font-size:10px; letter-spacing:0.35em;
-    text-transform:uppercase; color:var(--text-dim);
+  .intro-left {
+    display:flex; flex-direction:column; align-items:flex-start;
   }
 
-  /* ART MAKING — Inter 900, large, accent-hot color */
+  /* ART MAKING. — same scale as MERCH. on the merch page
+     color driven by --title-color, set by JS on filter change */
   .intro h1 {
     font-family:var(--sans); font-weight:900;
-    font-size:clamp(48px,7vw,96px);
-    letter-spacing:-0.04em; line-height:0.9;
-    color:var(--accent-hot);
+    font-size:clamp(80px,14vw,220px);
+    letter-spacing:-0.05em; line-height:0.88;
+    color:var(--title-color);              /* JS-driven, defaults to #0581C1 */
+    transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
   }
 
-  /* dot after title — same pattern as merch MERCH. */
-  .art-dot { color:var(--text-dim); }
+  /* dot inherits h1 color — same venture color as title */
+  .art-dot { /* inherits color from h1 — no override needed */ }
 
-  /* descriptor — Times italic, right-aligned */
+  /* descriptor — Times, uppercase, right-aligned — matches merch .intro p */
   .intro-desc {
-    font-family:var(--serif);
-    font-size:13px; font-style:italic;
-    color:var(--text-mute);
-    text-align:right;
-    max-width:320px;
-    align-self:flex-end;
+    font-family:var(--serif); font-size:12px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-mute); max-width:260px;
+    text-align:right; line-height:1.6;
+    padding-bottom:var(--s4);
+    transition:opacity 0.2s ease, color 0.3s ease;
   }
 
   /* ============================================================
-     FILTER BAR — matches merch nav.filters pattern
+     FILTER BAR — two rows: medium then type
+     No group label text. Underline+dot style on active chips.
+     Row 2 scopes to types present in the active medium.
   ============================================================ */
   nav.filters {
-    display:flex; flex-wrap:wrap;
-    gap:var(--s2);
-    margin-bottom:var(--s7);
-    padding-top:var(--s5);
-    border-top:1px solid var(--ring-faint);
+    margin-bottom:var(--s6);
+    border-bottom:1px solid var(--ring-faint);
   }
 
-  .filter-group-label {
-    font-family:var(--serif);
-    font-size:10px; letter-spacing:0.22em;
-    text-transform:uppercase; color:var(--text-dim);
-    align-self:center;
-    padding:0 var(--s2);
-    pointer-events:none;
-    user-select:none;
+  /* each row */
+  .filter-row {
+    display:flex; align-items:center;
+    gap:var(--s5); flex-wrap:wrap;
+    padding-bottom:var(--s4);
   }
+  .filter-row + .filter-row { padding-top:var(--s2); padding-bottom:var(--s5); }
 
-  .filter-sep {
-    width:1px; height:18px;
-    background:var(--ring-soft);
-    align-self:center;
-    margin:0 var(--s2);
-  }
-
+  /* individual filter chip */
   .chip {
-    font-family:var(--serif);
-    font-size:11px; letter-spacing:0.14em;
-    text-transform:uppercase; color:var(--text-mute);
-    border:1px solid var(--ring-soft);
-    padding:var(--s2) var(--s4);
-    transition:
-      border-color var(--t-fast),
-      color        var(--t-fast),
-      background   var(--t-fast);
+    position:relative;
+    font-family:var(--sans); font-weight:500;
+    font-size:13px; letter-spacing:0.04em;
+    text-transform:lowercase; color:var(--text-mute);
+    padding:var(--s2) 0;
+    transition:color var(--t-fast);
   }
-  .chip:hover {
-    border-color:var(--accent-hot);
-    color:var(--body-text);
+  .chip:hover { color:var(--text); }
+  .chip.active { color:var(--text); }
+
+  /* underline scoped to label span only, not count */
+  .chip.active .chip-label::after {
+    content:"";
+    position:absolute; left:0; bottom:-1px;
+    width:100%; height:2px;
+    background:var(--accent-hot);
   }
-  .chip.active {
-    border-color:var(--accent-hot);
-    color:var(--accent-hot);
-    background:rgba(5,129,193,0.1);
+
+  /* dot to the left */
+  .chip.active::before {
+    content:"";
+    position:absolute; left:-10px; top:50%;
+    width:4px; height:4px; border-radius:50%;
+    background:var(--accent-hot);
+    transform:translateY(-50%);
+  }
+
+  .chip-label { position:relative; }
+
+  /* small superscript count — Times, dimmer */
+  .chip-count {
+    font-family:var(--serif); font-size:10px;
+    color:var(--text-dim); margin-left:2px;
+    vertical-align:super;
   }
 
   /* ============================================================
@@ -632,15 +664,17 @@
 
     <section class="intro">
       <div class="intro-left">
-        <p class="intro-above">painting &amp; fine art</p>
-        <h1>ART<br>MAKING<span class="art-dot">.</span></h1>
+        <h1>ART MAKING<span class="art-dot">.</span></h1>
       </div>
-      <!-- REWRITE: one line in your voice -->
-      <p class="intro-desc">works made by Saiel Dauhn Solehman</p>
+      <!-- REWRITE: one line in your voice — swapped by JS on filter change -->
+      <p class="intro-desc" id="introDesc">works made by Saiel Dauhn Solehman</p>
     </section>
 
-    <!-- filter chips — generated by JS -->
-    <nav class="filters" id="filters" role="tablist"></nav>
+    <!-- filter rows — row 1: medium, row 2: type (scoped to active medium) -->
+    <nav class="filters" id="filters" role="tablist">
+      <div class="filter-row" id="mediumRow"></div>
+      <div class="filter-row" id="typeRow"></div>
+    </nav>
 
     <!-- PAINTINGS -->
     <section class="medium-section" id="sectionPainting">
@@ -681,7 +715,7 @@
         <!-- Works 02–08 — placeholders. Replace src + data-* as works are ready. -->
 
         <div class="work-card entrance-fade entrance-delay-2"
-             data-medium="painting" data-type="narrative" data-id="work-02"
+             data-medium="painting" data-type="standalone" data-id="work-02"
              data-title="UNTITLED 02" data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
@@ -694,7 +728,7 @@
         </div>
 
         <div class="work-card entrance-fade entrance-delay-2"
-             data-medium="painting" data-type="non-narrative" data-id="work-03"
+             data-medium="painting" data-type="standalone" data-id="work-03"
              data-title="UNTITLED 03" data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
@@ -710,7 +744,7 @@
              data-medium="painting" data-type="series" data-id="work-04"
              data-title="UNTITLED 04" data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
-             data-series="Series placeholder">
+             data-series="series-01">
           <img src="" alt="" loading="lazy" />
           <span class="work-badge">series</span>
           <div class="work-meta">
@@ -723,7 +757,7 @@
              data-medium="painting" data-type="series" data-id="work-05"
              data-title="UNTITLED 05" data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
-             data-series="Series placeholder">
+             data-series="series-02">
           <img src="" alt="" loading="lazy" />
           <span class="work-badge">series</span>
           <div class="work-meta">
@@ -733,7 +767,7 @@
         </div>
 
         <div class="work-card entrance-fade entrance-delay-4"
-             data-medium="painting" data-type="narrative" data-id="work-06"
+             data-medium="painting" data-type="standalone" data-id="work-06"
              data-title="UNTITLED 06" data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
@@ -759,7 +793,7 @@
         </div>
 
         <div class="work-card entrance-fade entrance-delay-5"
-             data-medium="painting" data-type="non-narrative" data-id="work-08"
+             data-medium="painting" data-type="standalone" data-id="work-08"
              data-title="UNTITLED 08" data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
@@ -820,101 +854,222 @@
             toggle within group (click active chip to deactivate).
   ============================================================ */
 
-  const FILTER_GROUPS = [
-    {
-      key: 'medium', label: 'Medium',
-      values: [
-        { value:'painting', label:'Painting'   },
-        { value:'wood',     label:'Wood works' },
-      ]
-    },
-    {
-      key: 'type', label: 'Type',
-      values: [
-        { value:'narrative',     label:'Narrative'     },
-        { value:'non-narrative', label:'Non-narrative' },
-        { value:'series',        label:'Series'        },
-        { value:'standalone',    label:'Standalone'    },
-      ]
-    }
+  /* ============================================================
+     FILTER DATA
+     ============================================================
+     MEDIUMS: top-level medium filters
+     SERIES:  sub-options shown when "by series" is active
+              replace placeholder names with real series names as they exist
+     Each entry has a descriptor string — REWRITE in your voice.
+  ============================================================ */
+
+  const MEDIUMS = [
+    { value:'painting', label:'paintings',   descriptor:'paintings — works on canvas and panel' },
+    { value:'wood',     label:'wood works',  descriptor:'wood works — objects made from material' },
   ];
 
-  /* active filter per group — null = no filter */
-  const active = { medium:null, type:null };
+  /* series placeholder names — replace values + labels with real series */
+  const SERIES = [
+    { value:'series-01', label:'series 01', descriptor:'series 01 — placeholder' },
+    { value:'series-02', label:'series 02', descriptor:'series 02 — placeholder' },
+    { value:'series-03', label:'series 03', descriptor:'series 03 — placeholder' },
+  ];
 
-  /* build chips */
-  const filtersEl = document.getElementById('filters');
+  const DEFAULT_DESC = 'works made by Saiel Dauhn Solehman';
 
-  const allChip = document.createElement('button');
-  allChip.className = 'chip active';
-  allChip.dataset.filter = 'all';
-  allChip.dataset.group  = 'all';
-  allChip.textContent    = 'All';
-  filtersEl.appendChild(allChip);
+  /* ── state ───────────────────────────────────────────────── */
+  const active = {
+    medium: null,   /* "painting" | "wood" | null */
+    mode:   null,   /* "series" | "standalone" | null */
+    series: null,   /* series value or null */
+  };
 
-  FILTER_GROUPS.forEach(group => {
-    const sep = document.createElement('span');
-    sep.className = 'filter-sep';
-    filtersEl.appendChild(sep);
+  /* DOM refs */
+  const introDesc = document.getElementById('introDesc');
+  const row1      = document.getElementById('mediumRow');
+  const row2      = document.getElementById('typeRow');
 
-    const lbl = document.createElement('span');
-    lbl.className   = 'filter-group-label';
-    lbl.textContent = group.label;
-    filtersEl.appendChild(lbl);
+  /* ── chip factory ────────────────────────────────────────── */
+  function makeChip(label, count, isActive) {
+    const btn = document.createElement('button');
+    btn.className = 'chip' + (isActive ? ' active' : '');
+    /* count is optional — omit for series sub-chips if no count logic needed */
+    const countHtml = count !== null
+      ? `<span class="chip-count">${count}</span>`
+      : '';
+    btn.innerHTML = `<span class="chip-label">${label}</span>${countHtml}`;
+    return btn;
+  }
 
-    group.values.forEach(v => {
-      const chip = document.createElement('button');
-      chip.className      = 'chip';
-      chip.dataset.filter = v.value;
-      chip.dataset.group  = group.key;
-      chip.textContent    = v.label;
-      filtersEl.appendChild(chip);
+  /* ── count helpers ───────────────────────────────────────── */
+
+  /* cards matching medium scope (includes placeholders for wood) */
+  function countMedium(value) {
+    return document.querySelectorAll(`.work-card[data-medium="${value}"]`).length;
+  }
+
+  /* non-placeholder cards matching current medium + a given mode/series */
+  function countInScope(filterFn) {
+    const mediumSelector = active.medium
+      ? `.work-card:not(.placeholder)[data-medium="${active.medium}"]`
+      : '.work-card:not(.placeholder)';
+    return [...document.querySelectorAll(mediumSelector)].filter(filterFn).length;
+  }
+
+  /* ── render row 1: all · paintings · wood works · by series · standalone ── */
+  function renderRow1() {
+    row1.innerHTML = '';
+
+    /* all */
+    const totalAll = document.querySelectorAll('.work-card').length;
+    const allBtn = makeChip('all', totalAll, !active.medium && !active.mode);
+    allBtn.addEventListener('click', () => setFilter('all', null));
+    row1.appendChild(allBtn);
+
+    /* paintings · wood works */
+    MEDIUMS.forEach(m => {
+      const count = countMedium(m.value);
+      if (!count) return;
+      const btn = makeChip(m.label, count, active.medium === m.value && !active.mode);
+      btn.addEventListener('click', () => setFilter('medium', m.value));
+      row1.appendChild(btn);
     });
-  });
 
-  /* apply active filters to all non-placeholder cards */
+    /* by series */
+    const seriesCount = countInScope(c => c.dataset.type === 'series');
+    const seriesBtn = makeChip('by series', seriesCount, active.mode === 'series');
+    seriesBtn.addEventListener('click', () => setFilter('mode', 'series'));
+    row1.appendChild(seriesBtn);
+
+    /* standalone */
+    const standaloneCount = countInScope(c => c.dataset.type === 'standalone');
+    const standaloneBtn = makeChip('standalone', standaloneCount, active.mode === 'standalone');
+    standaloneBtn.addEventListener('click', () => setFilter('mode', 'standalone'));
+    row1.appendChild(standaloneBtn);
+  }
+
+  /* ── render row 2: series sub-options (only when "by series" active) ── */
+  function renderRow2() {
+    row2.innerHTML = '';
+
+    if (active.mode !== 'series') return;  /* row 2 only appears for "by series" */
+
+    /* "all series" chip */
+    const allSeriesBtn = makeChip('all series', null, !active.series);
+    allSeriesBtn.addEventListener('click', () => setSeries(null));
+    row2.appendChild(allSeriesBtn);
+
+    /* one chip per series — filtered by active medium if set */
+    SERIES.forEach(s => {
+      /* count cards belonging to this series, respecting medium scope */
+      const count = countInScope(c => c.dataset.series === s.value);
+      if (!count) return;           /* hide series with no cards in current scope */
+      const btn = makeChip(s.label, count, active.series === s.value);
+      btn.addEventListener('click', () => setSeries(s.value));
+      row2.appendChild(btn);
+    });
+  }
+
+  /* ── apply card visibility ───────────────────────────────── */
   function applyFilters() {
     document.querySelectorAll('.work-card:not(.placeholder)').forEach(card => {
-      const ok =
-        (!active.medium || card.dataset.medium === active.medium) &&
-        (!active.type   || card.dataset.type   === active.type);
-      card.classList.toggle('hidden', !ok);
+      let show = true;
+
+      /* medium filter */
+      if (active.medium && card.dataset.medium !== active.medium) show = false;
+
+      /* mode filter */
+      if (active.mode === 'standalone' && card.dataset.type !== 'standalone') show = false;
+      if (active.mode === 'series') {
+        if (card.dataset.type !== 'series') show = false;
+        /* series sub-filter */
+        if (active.series && card.dataset.series !== active.series) show = false;
+      }
+
+      card.classList.toggle('hidden', !show);
     });
 
-    /* show/hide sections */
-    ['painting','wood'].forEach(med => {
-      const id = 'section' + med.charAt(0).toUpperCase() + med.slice(1);
-      const section = document.getElementById(id);
+    /* show/hide medium sections */
+    ['painting', 'wood'].forEach(med => {
+      const section = document.getElementById(
+        'section' + med.charAt(0).toUpperCase() + med.slice(1)
+      );
       if (!section) return;
       const hasReal = section.querySelectorAll('.work-card:not(.placeholder):not(.hidden)').length > 0;
       const hasPlaceholders = section.querySelectorAll('.work-card.placeholder').length > 0;
       const show = hasReal || (hasPlaceholders && (!active.medium || active.medium === med));
       section.style.display = show ? '' : 'none';
     });
-
-    /* sync chip states */
-    document.querySelectorAll('.chip').forEach(chip => {
-      chip.classList.toggle('active',
-        chip.dataset.filter === 'all'
-          ? !active.medium && !active.type
-          : active[chip.dataset.group] === chip.dataset.filter
-      );
-    });
   }
 
-  filtersEl.addEventListener('click', e => {
-    const chip = e.target.closest('.chip');
-    if (!chip) return;
-    const { filter, group } = chip.dataset;
-    if (filter === 'all') {
-      active.medium = null;
-      active.type   = null;
-    } else {
-      active[group] = active[group] === filter ? null : filter;
-    }
-    applyFilters();
-  });
+  /* ── descriptor swap ─────────────────────────────────────── */
+  function updateIntro() {
+    /* priority: series > mode > medium > default */
+    let desc = DEFAULT_DESC;
+    let color = '';
 
+    if (active.series) {
+      const s = SERIES.find(x => x.value === active.series);
+      if (s) { desc = s.descriptor; color = '#0581C1'; }
+    } else if (active.mode === 'standalone') {
+      desc = 'standalone — singular works'; color = '#0581C1';
+    } else if (active.mode === 'series') {
+      desc = 'series — works made in relation to each other'; color = '#0581C1';
+    } else if (active.medium) {
+      const m = MEDIUMS.find(x => x.value === active.medium);
+      if (m) { desc = m.descriptor; color = '#0581C1'; }
+    }
+
+    introDesc.style.opacity = '0';
+    setTimeout(() => {
+      introDesc.textContent = desc;
+      introDesc.style.color = color;
+      introDesc.style.opacity = '1';
+    }, 200);
+  }
+
+  /* ── state setters ───────────────────────────────────────── */
+
+  /* setFilter handles row 1 clicks */
+  function setFilter(type, value) {
+    if (type === 'all') {
+      active.medium = null;
+      active.mode   = null;
+      active.series = null;
+    } else if (type === 'medium') {
+      /* toggle medium — clicking active medium resets to all */
+      active.medium = active.medium === value ? null : value;
+      active.series = null;        /* reset series when medium changes */
+      /* keep mode if set — medium + mode both active is valid */
+    } else if (type === 'mode') {
+      /* toggle mode — clicking active mode resets it */
+      if (active.mode === value) {
+        active.mode   = null;
+        active.series = null;
+      } else {
+        active.mode   = value;
+        active.series = null;      /* reset series when switching mode */
+      }
+    }
+
+    renderRow1();
+    renderRow2();
+    applyFilters();
+    updateIntro();
+  }
+
+  /* setSeries handles row 2 clicks */
+  function setSeries(value) {
+    active.series = value;
+    renderRow1();
+    renderRow2();
+    applyFilters();
+    updateIntro();
+  }
+
+  /* ── init ────────────────────────────────────────────────── */
+  renderRow1();
+  renderRow2();
   applyFilters();
 
 
