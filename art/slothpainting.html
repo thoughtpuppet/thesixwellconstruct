@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLOTH. · art · the six.well construct</title>
+
+<!--
+OBJECT METADATA
+===============
+id:           slothpainting
+title:        SLOTH.
+type:         painting
+venture:      art
+year:         —
+tags:         []
+
+status:
+  original:   available
+  prints:     unavailable
+  inquiry:    true
+
+related:      []
+
+media:
+  primary:    assets/paintings/SLOTH.JPG
+  alt:        "SLOTH., Painting, —"
+
+description:  "placeholder"
+statement:    "placeholder — replace with real statement text"
+-->
+
+<!--
+  ============================================================
+  the six.well construct / art / slothpainting
+  ============================================================
+  LAYOUT: Split scroll — sticky image left, content right.
+  TO UPDATE:
+    - Replace statement placeholder with real text
+    - Wire inquiry link to actual email or form
+    - Add prints Shopify link when available
+    - Add related objects as they exist
+  ============================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+
+<style>
+  :root {
+    --bg:        #0e0e0e;
+    --bg-raised: #111111;
+    --accent:    #FCB867;
+    --accent-hot:#0581C1;
+    --ring:      #6D3D15;
+    --ring-soft: rgba(109,61,21,0.4);
+    --ring-faint:rgba(109,61,21,0.18);
+    --text:      #FCB867;
+    --text-mute: rgba(252,184,103,0.55);
+    --text-dim:  rgba(252,184,103,0.30);
+    --text-ghost:rgba(252,184,103,0.13);
+    --body-text: #E8E4DC;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px;
+    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+    --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: 'Times New Roman',Times,serif;
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
+    --t-slow:0.5s  cubic-bezier(0.22,1,0.36,1);
+  }
+
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html { scroll-behavior:smooth; }
+  html,body {
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans); min-height:100vh; overflow-x:clip;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  }
+  a { color:inherit; text-decoration:none; }
+  button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
+
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  header.top {
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    display:flex; align-items:center; justify-content:flex-end;
+    padding:var(--s5) var(--s6);
+    background:rgba(14,14,14,0.85);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--ring-faint);
+  }
+  .cart-toggle {
+    display:flex; align-items:center; gap:var(--s3);
+    padding:var(--s2) var(--s4); border:1px solid var(--ring-soft);
+    transition:border-color var(--t-fast), background var(--t-fast);
+  }
+  .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
+  .cart-label { font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); }
+  .cart-count { font-family:var(--sans); font-weight:700; font-size:12px; color:var(--accent); min-width:14px; text-align:right; }
+
+  .breadcrumb {
+    position:fixed; top:73px; left:0; right:0; z-index:40;
+    display:flex; align-items:center; gap:var(--s3);
+    padding:var(--s3) var(--s6);
+    background:rgba(14,14,14,0.75);
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--ring-faint);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+  }
+  .breadcrumb a { color:var(--text-dim); transition:color var(--t-fast); }
+  .breadcrumb a:hover { color:var(--text-mute); }
+  .breadcrumb-sep { color:var(--text-ghost); }
+  .breadcrumb-current { color:var(--accent-hot); opacity:0.8; }
+
+  .split {
+    display:grid; grid-template-columns:1fr 1fr;
+    min-height:100vh; padding-top:116px;
+  }
+  .split-image {
+    position:sticky; top:116px; height:calc(100vh - 116px);
+    display:flex; align-items:center; justify-content:center;
+    padding:var(--s6); border-right:1px solid var(--ring-faint);
+  }
+  .painting-frame {
+    position:relative; width:100%; max-width:560px;
+    max-height:calc(100vh - 116px - var(--s7));
+    aspect-ratio:4/5; overflow:hidden; cursor:zoom-in;
+  }
+  .painting-frame img {
+    width:100%; height:100%; object-fit:contain; display:block;
+    animation:paintingReveal 0.8s cubic-bezier(0.22,1,0.36,1) both;
+  }
+  @keyframes paintingReveal {
+    from { opacity:0; transform:scale(0.98); }
+    to   { opacity:1; transform:scale(1); }
+  }
+  .painting-badge {
+    position:absolute; bottom:var(--s4); left:0;
+    font-family:var(--serif); font-size:9px;
+    letter-spacing:0.28em; text-transform:uppercase;
+    color:var(--accent-hot); opacity:0.7;
+  }
+
+  .split-content {
+    padding:var(--s7) var(--s7) var(--s8) var(--s6);
+    display:flex; flex-direction:column; gap:var(--s7);
+  }
+
+  .painting-header { display:flex; flex-direction:column; gap:var(--s3); }
+  .venture-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.28em; text-transform:uppercase;
+    color:var(--accent-hot); opacity:0.75;
+  }
+  .painting-title {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(22px,3.5vw,40px);
+    letter-spacing:-0.03em; line-height:0.95; color:var(--body-text);
+  }
+  .painting-meta {
+    display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap;
+    padding-top:var(--s3); border-top:1px solid var(--ring-faint);
+  }
+  .meta-item { font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-dim); }
+  .meta-sep { color:var(--text-ghost); }
+
+  .statement-block { display:flex; flex-direction:column; gap:var(--s5); }
+  .block-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.28em; text-transform:uppercase;
+    color:var(--text-dim); padding-bottom:var(--s3);
+    border-bottom:1px solid var(--ring-faint);
+  }
+  .statement-body { font-family:var(--serif); font-size:15px; line-height:1.8; color:var(--body-text); }
+  .statement-body p + p { margin-top:var(--s5); }
+  .statement-body.placeholder { font-style:italic; color:var(--text-mute); }
+
+  .availability-block { display:flex; flex-direction:column; gap:var(--s5); }
+  .availability-rows { display:flex; flex-direction:column; gap:var(--s4); }
+  .avail-row {
+    display:flex; align-items:center; justify-content:space-between;
+    gap:var(--s4); padding-bottom:var(--s4); border-bottom:1px solid var(--ring-faint);
+  }
+  .avail-row:last-child { border-bottom:none; padding-bottom:0; }
+  .avail-left { display:flex; flex-direction:column; gap:4px; }
+  .avail-label { font-family:var(--serif); font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:var(--text-dim); }
+  .avail-status { font-family:var(--sans); font-weight:900; font-size:13px; letter-spacing:0.02em; text-transform:uppercase; }
+  .avail-status.available  { color:var(--accent-hot); }
+  .avail-status.sold       { color:var(--text-dim); }
+  .avail-status.unavailable{ color:var(--text-dim); }
+  .avail-action {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--accent-hot); border:1px solid var(--accent-hot);
+    padding:var(--s2) var(--s4);
+    transition:background var(--t-fast), color var(--t-fast);
+    white-space:nowrap;
+  }
+  .avail-action:hover { background:var(--accent-hot); color:var(--bg); }
+  .avail-action.disabled { color:var(--text-dim); border-color:var(--ring-faint); pointer-events:none; }
+
+  .related-block { display:flex; flex-direction:column; gap:var(--s5); }
+  .related-items { display:flex; flex-direction:column; gap:var(--s3); }
+  .related-item {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s4); border:1px solid var(--ring-faint);
+    transition:border-color var(--t-fast), background var(--t-fast);
+  }
+  .related-item:hover { border-color:var(--item-color, var(--ring-soft)); background:rgba(0,0,0,0.12); }
+  .related-item:hover .related-arrow { color:var(--item-color, var(--text-mute)); transform:translateX(3px); }
+  .related-item:hover .related-title { color:var(--item-color, var(--body-text)); }
+  .related-left { display:flex; flex-direction:column; gap:4px; }
+  .related-venture { font-family:var(--serif); font-size:9px; letter-spacing:0.28em; text-transform:uppercase; color:var(--text-dim); }
+  .related-title { font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.02em; text-transform:uppercase; color:var(--body-text); }
+  .related-arrow { font-family:var(--serif); font-size:16px; color:var(--text-dim); transition:color var(--t-fast), transform var(--t-fast); }
+
+  footer.bottom {
+    position:relative; z-index:2; grid-column:1 / -1;
+    padding:var(--s6); border-top:1px solid var(--ring-faint);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  footer.bottom p, footer.bottom a { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
+  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
+  footer.bottom a:hover { color:var(--accent); }
+
+  .cart-overlay { position:fixed; inset:0; z-index:90; background:rgba(0,0,0,0.6); opacity:0; pointer-events:none; transition:opacity var(--t-med); }
+  .cart-overlay.open { opacity:1; pointer-events:auto; }
+  .cart-drawer { position:fixed; top:0; right:0; bottom:0; width:min(440px,100vw); z-index:100; background:#0a0a0a; border-left:1px solid rgba(109,61,21,0.4); display:flex; flex-direction:column; transform:translateX(100%); transition:transform var(--t-med); }
+  .cart-drawer.open { transform:translateX(0); }
+  .drawer-header { display:flex; align-items:center; justify-content:space-between; padding:var(--s5); border-bottom:1px solid var(--ring-faint); }
+  .drawer-title { font-family:var(--sans); font-weight:900; font-size:14px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); }
+  .drawer-close { font-family:var(--sans); font-weight:300; font-size:28px; line-height:1; color:var(--text-mute); padding:4px 12px; transition:color var(--t-fast); }
+  .drawer-close:hover { color:var(--accent); }
+  .drawer-body { flex:1; display:flex; align-items:center; justify-content:center; }
+  .drawer-empty { font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--text-dim); }
+  .drawer-footer { padding:var(--s5); border-top:1px solid var(--ring-faint); }
+  .checkout-btn { display:block; width:100%; padding:var(--s4); border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); font-family:var(--sans); font-weight:700; font-size:12px; letter-spacing:0.2em; text-transform:uppercase; cursor:not-allowed; }
+
+  .lightbox { position:fixed; inset:0; z-index:300; background:rgba(8,8,8,0.97); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity var(--t-med); cursor:zoom-out; }
+  .lightbox.open { opacity:1; pointer-events:all; }
+  .lightbox img { max-width:92vw; max-height:92vh; object-fit:contain; transform:scale(0.97); opacity:0; transition:transform var(--t-slow) 0.05s, opacity var(--t-slow) 0.05s; cursor:zoom-out; }
+  .lightbox.open img { transform:scale(1); opacity:1; }
+  .lightbox-close { position:fixed; top:var(--s5); right:var(--s6); font-family:var(--serif); font-size:20px; color:var(--text-mute); z-index:301; padding:var(--s2); background:none; border:none; cursor:pointer; transition:color var(--t-fast); }
+  .lightbox-close:hover { color:var(--text); }
+
+  @media (max-width:900px) {
+    .split { grid-template-columns:1fr; padding-top:108px; }
+    .split-image { position:relative; top:0; height:auto; min-height:60vw; padding:var(--s5); border-right:none; border-bottom:1px solid var(--ring-faint); }
+    .painting-frame { max-height:70vw; aspect-ratio:unset; }
+    .split-content { padding:var(--s6) var(--s5) var(--s7); }
+    footer.bottom { grid-column:1; }
+    header.top { padding:var(--s4) var(--s5); }
+    .breadcrumb { padding:var(--s3) var(--s5); }
+  }
+</style>
+</head>
+
+<body data-venture="art">
+
+  <script>
+  (function(){
+    var o=document.createElement('div');
+    o.id='construct-fade';
+    o.style.cssText='position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut(){requestAnimationFrame(function(){requestAnimationFrame(function(){o.style.opacity='0';o.style.pointerEvents='none';});});}
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fadeOut);}else{fadeOut();}
+  })();
+  </script>
+
+  <div class="grain"></div>
+
+  <header class="top">
+    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+      <span class="cart-label">cart</span>
+      <span class="cart-count">0</span>
+    </button>
+  </header>
+
+  <nav class="breadcrumb" aria-label="breadcrumb">
+    <a href="/">construct</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="/art/">art making</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">SLOTH.</span>
+  </nav>
+
+  <div class="cart-overlay" id="cartOverlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <span class="drawer-title">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart">&times;</button>
+    </div>
+    <div class="drawer-body"><p class="drawer-empty">cart is empty</p></div>
+    <div class="drawer-footer"><button class="checkout-btn" disabled>proceed to checkout</button></div>
+  </aside>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Full size painting">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">&#10005;</button>
+    <img src="../assets/paintings/SLOTH.JPG" alt="SLOTH., Painting, —" />
+  </div>
+
+  <div class="split">
+
+    <div class="split-image">
+      <div class="painting-frame">
+        <img src="../assets/paintings/SLOTH.JPG" alt="SLOTH., Painting, —" loading="eager" />
+        <span class="painting-badge">available</span>
+      </div>
+    </div>
+
+    <div class="split-content">
+
+      <header class="painting-header">
+        <span class="venture-label">art making</span>
+        <h1 class="painting-title">SLOTH.</h1>
+        <div class="painting-meta">
+          <span class="meta-item">—</span>
+          <span class="meta-sep">·</span>
+          <span class="meta-item">Painting</span>
+          <span class="meta-sep">·</span>
+          <span class="meta-item">standalone</span>
+        </div>
+      </header>
+
+      <section class="statement-block">
+        <p class="block-label">statement</p>
+        <!-- REPLACE: remove class="placeholder" and swap text with real statement -->
+        <div class="statement-body placeholder">
+          <p>Statement placeholder — replace this with the real text. Write as long as it needs to be. This is not a caption.</p>
+        </div>
+      </section>
+
+      <section class="availability-block">
+        <p class="block-label">availability</p>
+        <div class="availability-rows">
+          <div class="avail-row">
+            <div class="avail-left">
+              <span class="avail-label">original</span>
+              <span class="avail-status available">available</span>
+            </div>
+            <a href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry%20%E2%80%94%20SLOTH." class="avail-action">inquire</a>
+          </div>
+          <div class="avail-row">
+            <div class="avail-left">
+              <span class="avail-label">prints</span>
+              <span class="avail-status unavailable">unavailable</span>
+            </div>
+            <span class="avail-action disabled">unavailable</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- RELATED OBJECTS — add as they exist
+      <section class="related-block">
+        <p class="block-label">related</p>
+        <div class="related-items">
+          <a href="/merch/example.html" class="related-item" style="--item-color:#F7A226">
+            <div class="related-left">
+              <span class="related-venture">merch · thoughtpuppet</span>
+              <span class="related-title">EXAMPLE PRODUCT</span>
+            </div>
+            <span class="related-arrow">&#8594;</span>
+          </a>
+        </div>
+      </section>
+      -->
+
+    </div>
+
+    <footer class="bottom">
+      <p>&copy; the six.well construct</p>
+      <a href="/art/">back to art making</a>
+    </footer>
+
+  </div>
+
+  <script>
+  (function(){
+    var lightbox = document.getElementById('lightbox');
+    var closeBtn = document.getElementById('lightboxClose');
+    document.querySelector('.painting-frame').addEventListener('click', function(){
+      lightbox.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+    function closeLightbox(){ lightbox.classList.remove('open'); document.body.style.overflow = ''; }
+    closeBtn.addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', function(e){ if(e.target === lightbox) closeLightbox(); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox(); });
+  })();
+  (function(){
+    var drawer = document.getElementById('cartDrawer');
+    var overlay = document.getElementById('cartOverlay');
+    function openCart()  { drawer.classList.add('open');    overlay.classList.add('open');    drawer.setAttribute('aria-hidden','false'); }
+    function closeCart() { drawer.classList.remove('open'); overlay.classList.remove('open'); drawer.setAttribute('aria-hidden','true');  }
+    document.getElementById('cartToggle').addEventListener('click', openCart);
+    document.getElementById('drawerClose').addEventListener('click', closeCart);
+    overlay.addEventListener('click', closeCart);
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeCart(); });
+  })();
+  </script>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+
+</body>
+</html>

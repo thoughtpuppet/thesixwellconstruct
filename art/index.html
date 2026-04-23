@@ -286,7 +286,7 @@ statement:    —
     border:1px solid var(--ring-faint);
     transition:border-color var(--t-med);
   }
-  .work-card:hover { border-color:var(--accent-hot); }
+  .work-card:hover { border-color:var(--text); }    /* amber — same as filter font color */
 
   .work-card img {
     width:100%; height:100%;
@@ -701,7 +701,8 @@ statement:    —
         <!-- Work 01 — Marbles (real) -->
         <div class="work-card entrance-fade entrance-delay-1"
              data-medium="painting" data-type="standalone" data-id="marbles"
-             data-title="AM I LOSING MY MARBLES OR HIDING THEM?" data-year="2024" data-medium-label="Acrylic on canvas"
+             data-slug="lostmarblespainting"
+             data-title="AM I LOSING MY MARBLES OR HIDING THEM?" data-year="2023" data-medium-label="Acrylic on wood panel"
              data-fragment="A figure dissolving into colour. Dot by dot, something that was solid becomes scattered — and maybe freer for it."
              data-series="">
           <img src="../assets/paintings/AM I LOSING MY MARBLES OR HIDING THEM.jpg" alt="AM I LOSING MY MARBLES OR HIDING THEM?, 2024" loading="lazy" />
@@ -715,8 +716,9 @@ statement:    —
         <!-- Works 02–08 — placeholders. Replace src + data-* as works are ready. -->
 
         <div class="work-card entrance-fade entrance-delay-2"
-             data-medium="painting" data-type="standalone" data-id="work-02"
-             data-title="UNTITLED 02" data-year="—" data-medium-label="Painting"
+             data-medium="painting" data-type="standalone" data-id="lust"
+             data-slug="lustpainting"
+             data-title="LUST." data-year="2023" data-medium-label="Acrylic on wood panel"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/LUST.JPG" alt="" loading="lazy" />
@@ -728,8 +730,9 @@ statement:    —
         </div>
 
         <div class="work-card entrance-fade entrance-delay-2"
-             data-medium="painting" data-type="standalone" data-id="work-03"
-             data-title="UNTITLED 03" data-year="—" data-medium-label="Painting"
+             data-medium="painting" data-type="standalone" data-id="sloth"
+             data-slug="slothpainting"
+             data-title="SLOTH." data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/SLOTH.JPG" alt="" loading="lazy" />
@@ -741,8 +744,9 @@ statement:    —
         </div>
 
         <div class="work-card entrance-fade entrance-delay-3"
-             data-medium="painting" data-type="series" data-id="work-04"
-             data-title="UNTITLED 04" data-year="—" data-medium-label="Painting"
+             data-medium="painting" data-type="series" data-id="homelandsecurity"
+             data-slug="homelandsecuritypainting"
+             data-title="HOMELAND SECURITY." data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="series-01">
           <img src="../assets/paintings/HOMELAND SECURITY.jpg" alt="" loading="lazy" />
@@ -754,8 +758,9 @@ statement:    —
         </div>
 
         <div class="work-card entrance-fade entrance-delay-3"
-             data-medium="painting" data-type="series" data-id="work-05"
-             data-title="UNTITLED 05" data-year="—" data-medium-label="Painting"
+             data-medium="painting" data-type="series" data-id="thefrustrationsofinnercharos"
+             data-slug="thefrustrationsofinnercharospainting"
+             data-title="THE FRUSTRATIONS OF INNER CHAOS." data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="series-02">
           <img src="../assets/paintings/THE FRUSTRATIONS OF INNER CHAOS.jpg" alt="" loading="lazy" />
@@ -767,8 +772,9 @@ statement:    —
         </div>
 
         <div class="work-card entrance-fade entrance-delay-4"
-             data-medium="painting" data-type="standalone" data-id="work-06"
-             data-title="UNTITLED 06" data-year="—" data-medium-label="Painting"
+             data-medium="painting" data-type="standalone" data-id="paranoiafosteredtrauma"
+             data-slug="paranoiafosteredtraumapainting"
+             data-title="PARANOIA & FOSTERED TRAUMA." data-year="—" data-medium-label="Painting"
              data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/PARANOIA & FOSTERED TRAUMA.jpg" alt="" loading="lazy" />
@@ -1116,8 +1122,17 @@ statement:    —
     document.body.style.overflow = '';
   }
 
+  /* Cards with a real slug (data-slug set) navigate to the painting page.
+     Cards without a slug (placeholders / work not yet built) open the overlay. */
   document.querySelectorAll('.work-card:not(.placeholder)').forEach(card => {
-    card.addEventListener('click', () => openOverlay(card));
+    card.addEventListener('click', () => {
+      const slug = card.dataset.slug;
+      if (slug) {
+        window.location.href = '/art/' + slug;
+      } else {
+        openOverlay(card);
+      }
+    });
   });
 
   closeBtn.addEventListener('click', closeOverlay);

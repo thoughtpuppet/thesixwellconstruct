@@ -152,22 +152,39 @@ statement:    "placeholder — replace with real statement text"
   }
 
   /* ============================================================
-     SPLIT LAYOUT
-     Left: sticky painting. Right: content scrolls.
-     Padding-top clears fixed header (≈73px).
+     BREADCRUMB — fixed below header
+  ============================================================ */
+  .breadcrumb {
+    position:fixed; top:73px; left:0; right:0; z-index:40;
+    display:flex; align-items:center; gap:var(--s3);
+    padding:var(--s3) var(--s6);
+    background:rgba(14,14,14,0.75);
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--ring-faint);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+  }
+  .breadcrumb a { color:var(--text-dim); transition:color var(--t-fast); }
+  .breadcrumb a:hover { color:var(--text-mute); }
+  .breadcrumb-sep { color:var(--text-ghost); }
+  /* current page label in ART node color */
+  .breadcrumb-current { color:var(--accent-hot); opacity:0.8; }
+
+  /* ============================================================
+     SPLIT LAYOUT — clears header + breadcrumb (≈116px)
   ============================================================ */
   .split {
     display:grid;
     grid-template-columns:1fr 1fr;
     min-height:100vh;
-    padding-top:73px;            /* clears fixed header only */
+    padding-top:116px;
   }
 
   /* ── LEFT: sticky painting ─────────────────────────────── */
   .split-image {
     position:sticky;
-    top:73px;                    /* sticks below header */
-    height:calc(100vh - 73px);
+    top:116px;
+    height:calc(100vh - 116px);
     display:flex;
     align-items:center;
     justify-content:center;
@@ -175,8 +192,43 @@ statement:    "placeholder — replace with real statement text"
     border-right:1px solid var(--ring-faint);
   }
 
-  /* painting frame — proportional, never overflows viewport */
-  .painting-frame {
+  /* ============================================================
+     LIGHTBOX — full-screen image view on painting click
+  ============================================================ */
+  .lightbox {
+    position:fixed; inset:0; z-index:300;
+    background:rgba(8,8,8,0.97);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none;
+    transition:opacity var(--t-med);
+    cursor:zoom-out;
+  }
+  .lightbox.open {
+    opacity:1; pointer-events:all;
+  }
+  .lightbox img {
+    max-width:92vw; max-height:92vh;
+    object-fit:contain;
+    transform:scale(0.97); opacity:0;
+    transition:transform var(--t-slow) 0.05s, opacity var(--t-slow) 0.05s;
+    cursor:zoom-out;
+  }
+  .lightbox.open img {
+    transform:scale(1); opacity:1;
+  }
+  /* close button */
+  .lightbox-close {
+    position:fixed; top:var(--s5); right:var(--s6);
+    font-family:var(--serif); font-size:20px;
+    color:var(--text-mute); z-index:301;
+    padding:var(--s2); background:none; border:none;
+    cursor:pointer;
+    transition:color var(--t-fast);
+  }
+  .lightbox-close:hover { color:var(--text); }
+
+  /* cursor hint on painting frame */
+  .painting-frame { cursor:zoom-in; }
     position:relative;
     width:100%;
     max-width:560px;
@@ -311,22 +363,21 @@ statement:    "placeholder — replace with real statement text"
   .avail-status.sold       { color:var(--text-dim); }
   .avail-status.unavailable{ color:var(--text-dim); }
 
-  /* inquiry / purchase button */
+  /* inquiry / purchase button — solid border always, fills on hover */
   .avail-action {
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
     color:var(--accent-hot);
-    border:1px solid rgba(5,129,193,0.35);
+    border:1px solid var(--accent-hot);    /* solid always, not faded */
     padding:var(--s2) var(--s4);
     transition:
-      border-color var(--t-fast),
       background   var(--t-fast),
       color        var(--t-fast);
     white-space:nowrap;
   }
   .avail-action:hover {
-    border-color:var(--accent-hot);
-    background:rgba(5,129,193,0.08);
+    background:var(--accent-hot);
+    color:var(--bg);                       /* dark text on filled blue */
   }
   .avail-action.disabled {
     color:var(--text-dim);
@@ -348,9 +399,18 @@ statement:    "placeholder — replace with real statement text"
     border:1px solid var(--ring-faint);
     transition:border-color var(--t-fast), background var(--t-fast);
   }
+  /* related item hover — border + arrow + title use --item-color set inline per item.
+     Set --item-color to the venture node color on each <a class="related-item"> */
   .related-item:hover {
-    border-color:var(--ring-soft);
-    background:rgba(109,61,21,0.04);
+    border-color:var(--item-color, var(--ring-soft));
+    background:rgba(0,0,0,0.12);
+  }
+  .related-item:hover .related-arrow {
+    color:var(--item-color, var(--text-mute));
+    transform:translateX(3px);
+  }
+  .related-item:hover .related-title {
+    color:var(--item-color, var(--body-text));
   }
 
   .related-left { display:flex; flex-direction:column; gap:4px; }
@@ -374,10 +434,6 @@ statement:    "placeholder — replace with real statement text"
     font-family:var(--serif); font-size:16px;
     color:var(--text-dim);
     transition:color var(--t-fast), transform var(--t-fast);
-  }
-  .related-item:hover .related-arrow {
-    color:var(--text-mute);
-    transform:translateX(3px);
   }
 
   /* ============================================================
@@ -453,7 +509,7 @@ statement:    "placeholder — replace with real statement text"
   @media (max-width:900px) {
     .split {
       grid-template-columns:1fr;
-      padding-top:65px;
+      padding-top:108px;
     }
 
     /* image unsticks on mobile — becomes a tall block at top */
@@ -477,6 +533,7 @@ statement:    "placeholder — replace with real statement text"
     footer.bottom { grid-column:1; }
 
     header.top  { padding:var(--s4) var(--s5); }
+    .breadcrumb { padding:var(--s3) var(--s5); }
   }
 </style>
 </head>
@@ -506,6 +563,15 @@ statement:    "placeholder — replace with real statement text"
   </header>
 
 
+
+  <!-- BREADCRUMB -->
+  <nav class="breadcrumb" aria-label="breadcrumb">
+    <a href="/">construct</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="/art/">art making</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">AM I LOSING MY MARBLES OR HIDING THEM?</span>
+  </nav>
 
   <!-- CART OVERLAY + DRAWER -->
   <div class="cart-overlay" id="cartOverlay"></div>
@@ -616,7 +682,9 @@ statement:    "placeholder — replace with real statement text"
             Bidirectional link — merch/marbles-hoodie.html also links back here.
             Add more related items as they exist.
           -->
-          <a href="/merch/lostmarbles-hoodie.html" class="related-item">
+          <a href="/merch/lostmarbles-hoodie.html"
+             class="related-item"
+             style="--item-color:#F7A226">  <!-- MERCH node color -->
             <div class="related-left">
               <span class="related-venture">merch · thoughtpuppet</span>
               <span class="related-title">LOST MARBLES. Hoodie</span>
@@ -637,7 +705,43 @@ statement:    "placeholder — replace with real statement text"
 
   </div><!-- /split -->
 
+  <!-- LIGHTBOX — opens on painting click -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Full size painting">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">✕</button>
+    <img id="lightboxImg"
+         src="../assets/paintings/AM I LOSING MY MARBLES OR HIDING THEM.jpg"
+         alt="AM I LOSING MY MARBLES OR HIDING THEM?, acrylic on wood panel, 2023" />
+  </div>
+
   <!-- cart drawer open/close — visual only -->
+  <script>
+  /* ── LIGHTBOX ─────────────────────────────────────────────── */
+  (function(){
+    var lightbox = document.getElementById('lightbox');
+    var closeBtn = document.getElementById('lightboxClose');
+
+    /* open on painting frame click */
+    document.querySelector('.painting-frame').addEventListener('click', function(){
+      lightbox.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+
+    function closeLightbox(){
+      lightbox.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    /* close on button, background click, or Escape */
+    closeBtn.addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', function(e){
+      if(e.target === lightbox) closeLightbox();
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox();
+    });
+  })();
+  </script>
+
   <script>
   (function(){
     var drawer  = document.getElementById('cartDrawer');
