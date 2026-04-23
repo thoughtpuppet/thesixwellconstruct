@@ -198,19 +198,25 @@
   }
 
   /* ============================================================
-     FILTER ROW
-     active chip: underline + dot use SOURCE VENTURE color
-     (set via CSS custom property --src-color on each chip
-      — applied by JS when rendering from SOURCES constant)
+     FILTER BAR — two rows: source venture then type.
+     Copied exactly from art/index.html chip system.
+     Row 1: source. Row 2: type (only when source active).
+     Row 2 collapses naturally when empty.
   ============================================================ */
-  .filters {
-    display:flex; align-items:center; gap:var(--s6);
-    padding-bottom:var(--s5); margin-bottom:var(--s6);
+  nav.filters {
+    margin-bottom:var(--s6);
     border-bottom:1px solid var(--ring-faint);
-    flex-wrap:wrap;
   }
 
-  .filter {
+  .filter-row {
+    display:flex; align-items:center;
+    gap:var(--s5); flex-wrap:wrap;
+    padding-bottom:var(--s4);
+  }
+  .filter-row + .filter-row { padding-top:var(--s2); padding-bottom:var(--s5); }
+
+  /* individual chip */
+  .chip {
     position:relative;
     font-family:var(--sans); font-weight:500;
     font-size:13px; letter-spacing:0.04em;
@@ -218,18 +224,19 @@
     padding:var(--s2) 0;
     transition:color var(--t-fast);
   }
-  .filter:hover { color:var(--text); }
+  .chip:hover { color:var(--text); }
+  .chip.active { color:var(--text); }
 
-  /* active underline uses --src-color set inline by JS */
-  .filter.active { color:var(--text); }
-  .filter.active::after {
+  /* underline on label span only, not count — uses --src-color */
+  .chip.active .chip-label::after {
     content:"";
     position:absolute; left:0; bottom:-1px;
-    width:100%; height:1px;
+    width:100%; height:2px;
     background:var(--src-color, var(--accent));
   }
-  /* small colored dot left of active chip label */
-  .filter.active::before {
+
+  /* dot to the left — uses --src-color */
+  .chip.active::before {
     content:"";
     position:absolute; left:-10px; top:50%;
     width:4px; height:4px; border-radius:50%;
@@ -237,33 +244,13 @@
     transform:translateY(-50%);
   }
 
-  .filter-count {
+  .chip-label { position:relative; }
+
+  .chip-count {
     font-family:var(--serif); font-size:10px;
     color:var(--text-dim); margin-left:2px;
     vertical-align:super;
   }
-
-  /* ============================================================
-     FILTER ROWS — two rows inside one nav
-     Row 1: source venture. Row 2: type (only when source active).
-     Row 2 is always rendered — collapses naturally when empty.
-  ============================================================ */
-  .filter-row {
-    display:flex; align-items:center; gap:var(--s6);
-    flex-wrap:wrap;
-  }
-  /* row 2 sits slightly closer, dimmer chips */
-  .filter-row + .filter-row {
-    padding-top:var(--s2);
-    padding-bottom:var(--s5);
-  }
-  .filter-row + .filter-row .filter {
-    font-size:11px;
-    color:var(--text-dim);
-    letter-spacing:0.06em;
-  }
-  .filter-row + .filter-row .filter:hover { color:var(--text-mute); }
-  .filter-row + .filter-row .filter.active { color:var(--text-mute); }
 
   /* ============================================================
      GRID
@@ -851,64 +838,55 @@
      "all" chip first (amber), then one per source venture.
      active chip gets --src-color set to its venture color.
   ============================================================ */
-  function renderFilters() {
-    const allCount = PRODUCTS.length;
+  /* ============================================================
+     CHIP FACTORY — copied from art/index.html
+     Builds a button with .chip class, chip-label span, chip-count.
+     --src-color set inline to drive underline + dot color.
+  ============================================================ */
+  function makeChip(label, count, isActive, srcColor) {
+    const btn = document.createElement("button");
+    btn.className = "chip" + (isActive ? " active" : "");
+    btn.style.setProperty("--src-color", srcColor || "var(--accent)");
+    const countHtml = count !== null && count !== undefined
+      ? `<span class="chip-count">${count}</span>`
+      : "";
+    btn.innerHTML = `<span class="chip-label">${label}</span>${countHtml}`;
+    return btn;
+  }
 
-    const allBtn = document.createElement("button");
-    allBtn.className = "filter" + (activeFilter === "all" ? " active" : "");
-    allBtn.dataset.filter = "all";
-    allBtn.role = "tab";
-    allBtn.style.setProperty("--src-color", "var(--accent)");
-    allBtn.innerHTML = `all<span class="filter-count">${allCount}</span>`;
+  function renderFilters() {
+    sourceRowEl.innerHTML = "";
+
+    const allBtn = makeChip("all", PRODUCTS.length, activeFilter === "all", "var(--accent)");
     allBtn.addEventListener("click", () => setFilter("all"));
     sourceRowEl.appendChild(allBtn);
 
     Object.entries(SOURCES).forEach(([key, src]) => {
       const count = PRODUCTS.filter(p => p.category === key).length;
-      const btn = document.createElement("button");
-      btn.className = "filter" + (activeFilter === key ? " active" : "");
-      btn.dataset.filter = key;
-      btn.role = "tab";
-      btn.style.setProperty("--src-color", src.color);
-      btn.innerHTML = `${src.label}<span class="filter-count">${count}</span>`;
+      const btn = makeChip(src.label, count, activeFilter === key, src.color);
       btn.addEventListener("click", () => setFilter(key));
       sourceRowEl.appendChild(btn);
     });
   }
 
-  /* ============================================================
-     RENDER: TYPE FILTER CHIPS (row 2)
-     Matches art index pattern exactly — row 2 is always in the DOM,
-     just emptied when not applicable. Empty div = no height = invisible.
-     Only populates when a source is active (activeFilter !== "all").
-  ============================================================ */
   function renderTypeFilters() {
     typeRowEl.innerHTML = "";
 
-    /* row 2 only appears when a source venture is selected */
     if (activeFilter === "all") return;
 
     const sourceFiltered = PRODUCTS.filter(p => p.category === activeFilter);
 
-    /* only show if source has more than one distinct type — otherwise nothing to filter */
     const distinctTypes = [...new Set(sourceFiltered.map(p => p.type))];
     if (distinctTypes.length <= 1) return;
 
-    const allBtn = document.createElement("button");
-    allBtn.className = "filter" + (activeTypeFilter === "all" ? " active" : "");
-    allBtn.style.setProperty("--src-color", "var(--accent)");
-    allBtn.innerHTML = `all<span class="filter-count">${sourceFiltered.length}</span>`;
+    const allBtn = makeChip("all", sourceFiltered.length, activeTypeFilter === "all", "var(--accent)");
     allBtn.addEventListener("click", () => setTypeFilter("all"));
     typeRowEl.appendChild(allBtn);
 
     Object.entries(TYPES).forEach(([key, t]) => {
       const count = sourceFiltered.filter(p => p.type === key).length;
       if (count === 0) return;
-
-      const btn = document.createElement("button");
-      btn.className = "filter" + (activeTypeFilter === key ? " active" : "");
-      btn.style.setProperty("--src-color", "var(--accent)");
-      btn.innerHTML = `${t.label}<span class="filter-count">${count}</span>`;
+      const btn = makeChip(t.label, count, activeTypeFilter === key, "var(--accent)");
       btn.addEventListener("click", () => setTypeFilter(key));
       typeRowEl.appendChild(btn);
     });
