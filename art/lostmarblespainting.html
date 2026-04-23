@@ -228,18 +228,24 @@ statement:    "placeholder — replace with real statement text"
   .lightbox-close:hover { color:var(--text); }
 
   /* cursor hint on painting frame */
-  .painting-frame { cursor:zoom-in; }
+  .painting-frame {
+    cursor:zoom-in;
     position:relative;
+    /* 
+      Sizing: constrain width AND height so the image never overflows
+      the sticky column. Let the image scale down naturally within.
+      max-height uses the viewport minus header (116px) minus some breathing room.
+    */
     width:100%;
-    max-width:560px;
-    max-height:calc(100vh - 116px - var(--s7));
-    aspect-ratio:4/5;            /* adjust if actual painting ratio differs */
+    max-width:480px;
+    height:calc(100vh - 116px - 80px);   /* fills sticky column with breathing room */
+    max-height:680px;                      /* hard cap — prevents giant on tall screens */
     overflow:hidden;
   }
 
   .painting-frame img {
     width:100%; height:100%;
-    object-fit:contain;          /* contain so full painting is always visible */
+    object-fit:contain;          /* contain = full painting always visible, no crop */
     display:block;
     /* subtle entrance */
     animation:paintingReveal 0.8s cubic-bezier(0.22,1,0.36,1) both;
@@ -524,8 +530,8 @@ statement:    "placeholder — replace with real statement text"
     }
 
     .painting-frame {
-      max-height:70vw;
-      aspect-ratio:unset;
+      max-height:65vw;    /* responsive to viewport width on mobile */
+      height:65vw;
     }
 
     .split-content { padding:var(--s6) var(--s5) var(--s7); }
