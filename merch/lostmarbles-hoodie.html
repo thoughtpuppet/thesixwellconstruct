@@ -363,17 +363,24 @@
     letter-spacing:0.35em; text-transform:uppercase;
     color:var(--text); margin-bottom:var(--s6);
   }
+  /* two columns: painting left, info right. label sits above both. */
   .origin-inner {
     display:grid;
     grid-template-columns:1fr 1fr;
     gap:var(--s7);
-    align-items:center;
+    align-items:start;
   }
   .painting-frame {
     position:relative;
     background:var(--bg-raised);
     border:1px solid var(--ring-soft);
+    overflow:hidden;
     transition:border-color var(--t-med);
+  }
+  /* image fills the frame naturally — no fixed aspect ratio so it
+     respects the painting's own proportions */
+  .painting-frame img {
+    width:100%; height:auto; display:block;
   }
   .painting-frame:hover { border-color:var(--src-color); }
   .painting-placeholder {
@@ -716,8 +723,7 @@
 
         <div class="painting-frame">
           <img src="/assets/paintings/AM I LOSING MY MARBLES OR HIDING THEM.jpg"
-               alt="AM I LOSING MY MARBLES OR HIDING THEM — acrylic on canvas, 2024"
-               style="width:70%;height:auto;display:block;">
+               alt="AM I LOSING MY MARBLES OR HIDING THEM — acrylic on canvas, 2024">
         </div>
 
         <div class="painting-info">
