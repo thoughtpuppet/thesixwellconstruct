@@ -16,9 +16,9 @@ year:         —
 tags:         []
 
 status:
-  original:   available
-  prints:     unavailable
-  inquiry:    true
+  original:   nfs
+  prints:     available
+  inquiry:    false
 
 related:      []
 
@@ -129,7 +129,7 @@ statement:    "placeholder — replace with real statement text"
     padding:var(--s6); border-right:1px solid var(--ring-faint);
   }
   .painting-frame {
-    position:relative; width:100%; max-width:560px;
+    position:relative; width:100%; max-width:460px;
     max-height:calc(100vh - 116px - var(--s7));
     aspect-ratio:4/5; overflow:hidden; cursor:zoom-in;
   }
@@ -193,7 +193,8 @@ statement:    "placeholder — replace with real statement text"
   .avail-label { font-family:var(--serif); font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:var(--text-dim); }
   .avail-status { font-family:var(--sans); font-weight:900; font-size:13px; letter-spacing:0.02em; text-transform:uppercase; }
   .avail-status.available  { color:var(--accent-hot); }
-  .avail-status.sold       { color:var(--text-dim); }
+  .avail-status.sold       { color:#C0392B; }
+  .avail-status.nfs        { color:var(--text-dim); }
   .avail-status.unavailable{ color:var(--text-dim); }
   .avail-action {
     font-family:var(--serif); font-size:11px;
@@ -312,7 +313,7 @@ statement:    "placeholder — replace with real statement text"
     <div class="split-image">
       <div class="painting-frame">
         <img src="../assets/paintings/SLOTH.JPG" alt="SLOTH., Painting, —" loading="eager" />
-        <span class="painting-badge">available</span>
+        <span class="painting-badge">not for sale</span>
       </div>
     </div>
 
@@ -344,16 +345,20 @@ statement:    "placeholder — replace with real statement text"
           <div class="avail-row">
             <div class="avail-left">
               <span class="avail-label">original</span>
-              <span class="avail-status available">available</span>
+              <span class="avail-status nfs">not for sale</span>
             </div>
-            <a href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry%20%E2%80%94%20SLOTH." class="avail-action">inquire</a>
+            <span class="avail-action disabled">not for sale</span>
           </div>
           <div class="avail-row">
             <div class="avail-left">
               <span class="avail-label">prints</span>
-              <span class="avail-status unavailable">unavailable</span>
+              <span class="avail-status available">available</span>
             </div>
-            <span class="avail-action disabled">unavailable</span>
+            <!--
+              PRINTS LINK — update href to the actual merch product page when live.
+              Currently pointing to merch index filtered to prints.
+            -->
+            <a href="/merch/?filter=prints" class="avail-action">get a print</a>
           </div>
         </div>
       </section>

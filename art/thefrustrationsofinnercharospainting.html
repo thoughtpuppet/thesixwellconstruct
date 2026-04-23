@@ -16,9 +16,9 @@ year:         —
 tags:         []
 
 status:
-  original:   available
+  original:   sold
   prints:     unavailable
-  inquiry:    true
+  inquiry:    false
 
 related:      []
 
@@ -129,7 +129,7 @@ statement:    "placeholder — replace with real statement text"
     padding:var(--s6); border-right:1px solid var(--ring-faint);
   }
   .painting-frame {
-    position:relative; width:100%; max-width:560px;
+    position:relative; width:100%; max-width:460px;
     max-height:calc(100vh - 116px - var(--s7));
     aspect-ratio:4/5; overflow:hidden; cursor:zoom-in;
   }
@@ -193,7 +193,8 @@ statement:    "placeholder — replace with real statement text"
   .avail-label { font-family:var(--serif); font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:var(--text-dim); }
   .avail-status { font-family:var(--sans); font-weight:900; font-size:13px; letter-spacing:0.02em; text-transform:uppercase; }
   .avail-status.available  { color:var(--accent-hot); }
-  .avail-status.sold       { color:var(--text-dim); }
+  .avail-status.sold       { color:#C0392B; }           /* red — sold */
+  .avail-status.nfs        { color:var(--text-dim); }   /* not for sale */
   .avail-status.unavailable{ color:var(--text-dim); }
   .avail-action {
     font-family:var(--serif); font-size:11px;
@@ -205,6 +206,16 @@ statement:    "placeholder — replace with real statement text"
   }
   .avail-action:hover { background:var(--accent-hot); color:var(--bg); }
   .avail-action.disabled { color:var(--text-dim); border-color:var(--ring-faint); pointer-events:none; }
+
+  /* location chip — appears in place of inquire when sold
+     border + text in sold red, no fill on hover (informational only) */
+  .avail-location {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:#C0392B; border:1px solid #C0392B;
+    padding:var(--s2) var(--s4);
+    white-space:nowrap; cursor:default;
+  }
 
   .related-block { display:flex; flex-direction:column; gap:var(--s5); }
   .related-items { display:flex; flex-direction:column; gap:var(--s3); }
@@ -312,7 +323,7 @@ statement:    "placeholder — replace with real statement text"
     <div class="split-image">
       <div class="painting-frame">
         <img src="../assets/paintings/THE FRUSTRATIONS OF INNER CHAOS.jpg" alt="THE FRUSTRATIONS OF INNER CHAOS., Painting, —" loading="eager" />
-        <span class="painting-badge">available</span>
+        <span class="painting-badge">sold</span>
       </div>
     </div>
 
@@ -344,9 +355,13 @@ statement:    "placeholder — replace with real statement text"
           <div class="avail-row">
             <div class="avail-left">
               <span class="avail-label">original</span>
-              <span class="avail-status available">available</span>
+              <span class="avail-status sold">sold</span>
             </div>
-            <a href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry%20%E2%80%94%20THE%20FRUSTRATIONS%20OF%20INNER%20CHAOS." class="avail-action">inquire</a>
+            <!--
+              LOCATION: replace "private collection" with actual location/collector
+              if you want to share it. Otherwise leave as is.
+            -->
+            <span class="avail-location">private collection</span>
           </div>
           <div class="avail-row">
             <div class="avail-left">

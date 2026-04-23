@@ -46,8 +46,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
-<!-- shared construct transition layer -->
-<link rel="stylesheet" href="/css/transitions.css">
 
 <style>
   /* ============================================================
@@ -89,7 +87,7 @@
   html,body {
     background:var(--bg); color:var(--text);
     font-family:var(--sans);
-    min-height:100vh; overflow-x:clip; /* clip not hidden — hidden breaks position:fixed */
+    min-height:100vh; overflow-x:hidden;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
   }
@@ -110,7 +108,7 @@
   ============================================================ */
   header.top {
     position:sticky; top:0; z-index:50;
-    display:flex; align-items:center; justify-content:flex-end;
+    display:flex; align-items:center; justify-content:space-between;
     padding:var(--s5) var(--s6);
     background:rgba(14,14,14,0.85);
     backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
@@ -351,6 +349,53 @@
     letter-spacing: 0.18em; text-transform: uppercase;
     color: var(--text-dim);
   }
+
+  /* painting card — dimensions + medium replace size/color */
+  .card-dims {
+    font-family: var(--serif); font-size: 11px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-dim);
+    padding-bottom: var(--s3);
+    margin-bottom: var(--s3);
+    border-bottom: 1px solid var(--ring-faint);
+  }
+
+  /* acquire button — painting CTA, distinct from add to cart */
+  .card-acquire {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--s3) 0;
+    border-top: 1px solid var(--ring-faint);
+    font-family: var(--sans); font-weight: 500;
+    font-size: 11px; letter-spacing: 0.18em;
+    color: var(--text-mute); text-transform: uppercase;
+    transition: color var(--t-fast), border-color var(--t-fast);
+    width: 100%;
+  }
+  .card-acquire:hover {
+    color: var(--src-color, var(--accent));
+    border-top-color: var(--src-color, var(--accent));
+  }
+  .card-acquire .arrow {
+    font-family: var(--serif); font-size: 14px;
+    transition: transform var(--t-fast);
+  }
+  .card-acquire:hover .arrow { transform: translateX(4px); }
+
+  /* print finish selector */
+  .card-finish {
+    display: flex; flex-wrap: wrap; gap: var(--s1);
+    margin-bottom: var(--s3);
+  }
+  .finish-pill {
+    font-family: var(--sans); font-weight: 500;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-mute);
+    border: 1px solid var(--ring-soft);
+    padding: 3px 8px; cursor: pointer; background: none;
+    transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  }
+  .finish-pill:hover { color: var(--src-color, var(--accent)); border-color: var(--src-color, var(--accent)); }
+  .finish-pill.selected { color: var(--bg); background: var(--src-color, var(--accent)); border-color: var(--src-color, var(--accent)); }
      paste Shopify embed <div> inside .card-frame.
      delete .card-plaque + .card-number when real product art goes in. */
 
@@ -573,26 +618,13 @@
   }
 </style>
 </head>
-<body data-venture="merch">
-
-  <!-- BLINK PREVENTION: creates the fade overlay before any content renders.
-       Runs immediately as the first thing in <body>, before the browser
-       paints anything — so there is never a frame where the new page is
-       visible without the overlay covering it.
-       transition.js (at end of body) handles the fade-out. -->
-  <script>
-  (function(){
-    var o = document.createElement('div');
-    o.id = 'construct-fade';
-    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;';
-    document.body.appendChild(o);
-  })();
-  </script>
+<body>
 
   <div class="grain"></div>
 
-  <!-- HEADER — wordmark removed, lives in corner lockup (construct-corner.js) -->
+  <!-- HEADER -->
   <header class="top">
+    <a class="wordmark" href="/">the six.well construct</a>
     <button class="cart-toggle" id="cartToggle" aria-label="open cart">
       <span class="cart-label">cart</span>
       <span class="cart-count" id="cartCount">0</span>
@@ -695,63 +727,52 @@
      card-frame will hold a Buy Button embed <div>.
   ============================================================ */
   const PRODUCTS = [
-    /* six.well clothing — garments, construct-originating */
-    {
-      id:"01", name:"HEAVY TEE", price:65, category:"six.well",
-      /* REPLACE with actual available sizes */
-      sizes: ["XS","S","M","L","XL","XXL"],
-      /* REPLACE with actual colorways — name shown in UI, hex shown as swatch */
-      colors: [
-        { name:"black",  hex:"#1a1a1a" },
-        { name:"slate",  hex:"#4a4a5a" },
-        { name:"bone",   hex:"#e8e4d8" }
-      ]
-    },
-    {
-      id:"02", name:"RAW HOODIE", price:145, category:"six.well",
-      sizes: ["XS","S","M","L","XL","XXL"],
-      colors: [
-        { name:"black",  hex:"#1a1a1a" },
-        { name:"ash",    hex:"#6b6b6b" }
-      ]
-    },
-    {
-      id:"03", name:"CORE CAP", price:45, category:"six.well",
-      /* caps use fitted sizing */
-      sizes: ["S/M","L/XL"],
-      colors: [
-        { name:"black",  hex:"#1a1a1a" },
-        { name:"bone",   hex:"#e8e4d8" }
-      ]
-    },
-    {
-      id:"04", name:"WORK SHIRT", price:110, category:"six.well",
-      sizes: ["XS","S","M","L","XL","XXL"],
-      colors: [
-        { name:"black",  hex:"#1a1a1a" },
-        { name:"ecru",   hex:"#c8c0a8" }
-      ]
-    },
+    /* ── SIX.WELL CLOTHING ── */
+    { id:"01", name:"HEAVY TEE",   price:65,  category:"six.well", type:"apparel",
+      sizes:["XS","S","M","L","XL","XXL"],
+      colors:[{name:"black",hex:"#1a1a1a"},{name:"slate",hex:"#4a4a5a"},{name:"bone",hex:"#e8e4d8"}] },
+    { id:"02", name:"RAW HOODIE",  price:145, category:"six.well", type:"apparel",
+      sizes:["XS","S","M","L","XL","XXL"],
+      colors:[{name:"black",hex:"#1a1a1a"},{name:"ash",hex:"#6b6b6b"}] },
+    { id:"03", name:"CORE CAP",    price:45,  category:"six.well", type:"apparel",
+      sizes:["S/M","L/XL"],
+      colors:[{name:"black",hex:"#1a1a1a"},{name:"bone",hex:"#e8e4d8"}] },
+    { id:"04", name:"WORK SHIRT",  price:110, category:"six.well", type:"apparel",
+      sizes:["XS","S","M","L","XL","XXL"],
+      colors:[{name:"black",hex:"#1a1a1a"},{name:"ecru",hex:"#c8c0a8"}] },
 
-    /* thoughtpuppet — artifacts, ART-originating */
-    {
-      id:"05", name:"LOST MARBLES. HOODIE", price: 130, category:"thoughtpuppet",
-      url: "lostmarbles-hoodie.html",
-      sizes: ["XS","S","M","L","XL","XXL"],
-      colors: [
-        { name:"marbles", hex:"#2a2a2a" }
-      ],
-      edition: 30
-    },
-    { id:"06", name:"ARTIFACT 002",   price: 240, category:"thoughtpuppet" },
-    { id:"07", name:"ARTIFACT 003",   price: 180, category:"thoughtpuppet" },
-    { id:"08", name:"ARTIFACT 004",   price: 95,  category:"thoughtpuppet" },
-    { id:"09", name:"ARTIFACT 005",   price: 60,  category:"thoughtpuppet" },
+    /* ── THOUGHTPUPPET ── */
 
-    /* art.pill Tattoo Supply (no sizes/colors) */
-    { id:"10", name:"HAND POKE KIT",  price:55, category:"art.pill" },
-    { id:"11", name:"TRANSFER PAPER", price:18, category:"art.pill" },
-    { id:"12", name:"GRIP WRAP SET",  price:22, category:"art.pill" }
+    /* apparel artifact */
+    { id:"05", name:"MARBLES HOODIE", price:130, category:"thoughtpuppet", type:"apparel",
+      url:"marbles-hoodie.html", edition:30,
+      sizes:["XS","S","M","L","XL","XXL"],
+      colors:[{name:"marbles",hex:"#2a2a2a"}] },
+
+    /* prints — set sizes/finish per piece. finish:null = one finish only. */
+    { id:"06", name:"MARBLES. PRINT", price:85, category:"thoughtpuppet", type:"print",
+      edition:50,
+      sizes:["8×10","11×14","18×24"],
+      finish:["matte","archival gloss"],
+      origin:"AM I LOSING MY MARBLES OR HIDING THEM?" },
+    { id:"07", name:"ARTIFACT PRINT 002", price:75, category:"thoughtpuppet", type:"print",
+      sizes:["8×10","11×14"],
+      finish:["matte"],
+      origin:"painting title here" },
+
+    /* original paintings — price:null shows "price on request".
+       no size/color selectors — acquire CTA links to inquiry page. */
+    { id:"08", name:"AM I LOSING MY MARBLES OR HIDING THEM?",
+      price:null, category:"thoughtpuppet", type:"painting",
+      medium:"acrylic on canvas", dimensions:"36 × 48 in", year:"2023" },
+    { id:"09", name:"PAINTING 002",
+      price:2400, category:"thoughtpuppet", type:"painting",
+      medium:"acrylic on wood panel", dimensions:"24 × 24 in", year:"2024" },
+
+    /* ── ART.PILL TATTOO SUPPLY ── */
+    { id:"10", name:"HAND POKE KIT",  price:55, category:"art.pill", type:"supply" },
+    { id:"11", name:"TRANSFER PAPER", price:18, category:"art.pill", type:"supply" },
+    { id:"12", name:"GRIP WRAP SET",  price:22, category:"art.pill", type:"supply" }
   ];
 
   /* ============================================================
@@ -856,51 +877,108 @@
       : PRODUCTS.filter(p => p.category === activeFilter);
 
     grid.innerHTML = visible.map(p => {
-      const src  = SOURCES[p.category];
-      const sel  = selections[p.id] || { size: null, color: null };
+      const src = SOURCES[p.category];
+      const sel = selections[p.id] || { size: null, color: null, finish: null };
+      const type = p.type || "apparel";
 
-      /* size pills — only rendered if product has sizes */
-      const sizesHtml = p.sizes ? `
-        <div class="card-sizes" id="sizes-${p.id}">
-          ${p.sizes.map(s => `
-            <button class="size-pill${sel.size === s ? ' selected' : ''}"
-                    data-size="${s}" data-pid="${p.id}">${s}</button>
-          `).join("")}
-        </div>
-        <p class="size-required${!sel.size ? '' : ''}" id="req-${p.id}">select a size</p>
-      ` : "";
+      /* image frame — link if product has its own page */
+      const frameHtml = p.url
+        ? `<a class="card-frame" href="${p.url}" aria-label="view ${p.name}">
+            <span class="card-plaque">N&deg; ${p.id}</span>
+            <span class="card-number">${p.id}</span>
+            ${p.edition ? `<span class="card-edition">ed. / ${p.edition}</span>` : ""}
+           </a>`
+        : `<div class="card-frame">
+            <span class="card-plaque">N&deg; ${p.id}</span>
+            <span class="card-number">${p.id}</span>
+            ${p.edition ? `<span class="card-edition">ed. / ${p.edition}</span>` : ""}
+           </div>`;
 
-      /* color swatches — only rendered if product has colors */
-      const colorsHtml = p.colors ? `
-        <div class="card-colors" id="colors-${p.id}">
-          ${p.colors.map(c => `
-            <button class="color-swatch${sel.color === c.name ? ' selected' : ''}"
-                    style="background:${c.hex}"
-                    data-color="${c.name}" data-pid="${p.id}"
-                    title="${c.name}"></button>
-          `).join("")}
-          <span class="color-label" id="clabel-${p.id}">${sel.color || ''}</span>
-        </div>
-      ` : "";
+      /* price display — null = price on request */
+      const priceHtml = p.price !== null && p.price !== undefined
+        ? `$${p.price}`
+        : `<span style="font-style:italic;font-size:11px">price on request</span>`;
+
+      /* type-specific selectors + CTA */
+      let selectorsHtml = "";
+      let ctaHtml = "";
+
+      if (type === "painting") {
+        /* paintings: show medium + dimensions, acquire CTA */
+        selectorsHtml = `
+          <p class="card-dims">${p.medium}${p.dimensions ? ` &middot; ${p.dimensions}` : ""}${p.year ? ` &middot; ${p.year}` : ""}</p>
+        `;
+        ctaHtml = `
+          <a class="card-acquire" href="/art/acquisitioninquiry">
+            <span>inquire to acquire</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        `;
+      } else if (type === "print") {
+        /* prints: size pills + optional finish pills, add to cart */
+        const printSizes = p.sizes ? `
+          <div class="card-sizes" id="sizes-${p.id}">
+            ${p.sizes.map(s => `
+              <button class="size-pill${sel.size === s ? ' selected' : ''}"
+                      data-size="${s}" data-pid="${p.id}">${s}</button>
+            `).join("")}
+          </div>
+          <p class="size-required" id="req-${p.id}">select a size</p>
+        ` : "";
+        const printFinish = p.finish && p.finish.length > 1 ? `
+          <div class="card-finish" id="finish-${p.id}">
+            ${p.finish.map(f => `
+              <button class="finish-pill${sel.finish === f ? ' selected' : ''}"
+                      data-finish="${f}" data-pid="${p.id}">${f}</button>
+            `).join("")}
+          </div>
+        ` : "";
+        selectorsHtml = printSizes + printFinish;
+        ctaHtml = `
+          <button class="card-add" data-add="${p.id}">
+            <span>add to cart</span>
+            <span class="arrow">&rarr;</span>
+          </button>
+        `;
+      } else {
+        /* apparel / supply: color swatches + size pills, add to cart */
+        const colorsHtml = p.colors ? `
+          <div class="card-colors" id="colors-${p.id}">
+            ${p.colors.map(c => `
+              <button class="color-swatch${sel.color === c.name ? ' selected' : ''}"
+                      style="background:${c.hex}"
+                      data-color="${c.name}" data-pid="${p.id}"
+                      title="${c.name}"></button>
+            `).join("")}
+            <span class="color-label" id="clabel-${p.id}">${sel.color || ''}</span>
+          </div>
+        ` : "";
+        const sizesHtml = p.sizes ? `
+          <div class="card-sizes" id="sizes-${p.id}">
+            ${p.sizes.map(s => `
+              <button class="size-pill${sel.size === s ? ' selected' : ''}"
+                      data-size="${s}" data-pid="${p.id}">${s}</button>
+            `).join("")}
+          </div>
+          <p class="size-required" id="req-${p.id}">select a size</p>
+        ` : "";
+        selectorsHtml = colorsHtml + sizesHtml;
+        ctaHtml = `
+          <button class="card-add" data-add="${p.id}">
+            <span>add to cart</span>
+            <span class="arrow">&rarr;</span>
+          </button>
+        `;
+      }
 
       return `
         <article class="card"
                  style="--src-color:${src.color}"
                  data-id="${p.id}"
-                 data-category="${p.category}">
+                 data-category="${p.category}"
+                 data-type="${type}">
 
-          ${p.url
-            ? `<a class="card-frame" href="${p.url}" aria-label="view ${p.name}">
-                <span class="card-plaque">N&deg; ${p.id}</span>
-                <span class="card-number">${p.id}</span>
-                ${p.edition ? `<span class="card-edition">ed. / ${p.edition}</span>` : ""}
-               </a>`
-            : `<div class="card-frame">
-                <span class="card-plaque">N&deg; ${p.id}</span>
-                <span class="card-number">${p.id}</span>
-                ${p.edition ? `<span class="card-edition">ed. / ${p.edition}</span>` : ""}
-               </div>`
-          }
+          ${frameHtml}
 
           <div class="card-cat">
             <span class="cat-dot"></span>
@@ -909,21 +987,14 @@
 
           <div class="card-meta">
             <h3 class="card-name">
-              ${p.url
-                ? `<a href="${p.url}" style="color:inherit">${p.name}</a>`
-                : p.name
-              }
+              ${p.url ? `<a href="${p.url}" style="color:inherit">${p.name}</a>` : p.name}
             </h3>
-            <span class="card-price">$${p.price}</span>
+            <span class="card-price">${priceHtml}</span>
           </div>
 
-          ${colorsHtml}
-          ${sizesHtml}
+          ${selectorsHtml}
+          ${ctaHtml}
 
-          <button class="card-add" data-add="${p.id}">
-            <span>add to cart</span>
-            <span class="arrow">&rarr;</span>
-          </button>
         </article>
       `;
     }).join("");
@@ -933,15 +1004,26 @@
       btn.addEventListener("click", () => {
         const pid  = btn.dataset.pid;
         const size = btn.dataset.size;
-        if (!selections[pid]) selections[pid] = { size: null, color: null };
+        if (!selections[pid]) selections[pid] = { size: null, color: null, finish: null };
         selections[pid].size = size;
-        /* update pill UI without full re-render */
         document.querySelectorAll(`#sizes-${pid} .size-pill`).forEach(b => {
           b.classList.toggle("selected", b.dataset.size === size);
         });
-        /* hide size-required notice */
         const req = document.getElementById(`req-${pid}`);
         if (req) req.classList.remove("visible");
+      });
+    });
+
+    /* wire finish pill clicks */
+    grid.querySelectorAll(".finish-pill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const pid    = btn.dataset.pid;
+        const finish = btn.dataset.finish;
+        if (!selections[pid]) selections[pid] = { size: null, color: null, finish: null };
+        selections[pid].finish = finish;
+        document.querySelectorAll(`#finish-${pid} .finish-pill`).forEach(b => {
+          b.classList.toggle("selected", b.dataset.finish === finish);
+        });
       });
     });
 
@@ -950,8 +1032,7 @@
       btn.addEventListener("click", () => {
         const pid   = btn.dataset.pid;
         const color = btn.dataset.color;
-        if (!selections[pid]) selections[pid] = { size: null, color: null };
-        /* toggle off if already selected */
+        if (!selections[pid]) selections[pid] = { size: null, color: null, finish: null };
         if (selections[pid].color === color) {
           selections[pid].color = null;
           btn.classList.remove("selected");
@@ -979,14 +1060,13 @@
   ============================================================ */
   function addToCart(productId) {
     const p   = PRODUCTS.find(x => x.id === productId);
-    const sel = selections[productId] || { size: null, color: null };
+    const sel = selections[productId] || { size: null, color: null, finish: null };
 
     /* block add if product has sizes but none selected */
     if (p.sizes && !sel.size) {
       const req = document.getElementById(`req-${productId}`);
       if (req) {
         req.classList.add("visible");
-        /* flash the size row for emphasis */
         const sizesEl = document.getElementById(`sizes-${productId}`);
         if (sizesEl) {
           sizesEl.style.opacity = "0.4";
@@ -996,10 +1076,10 @@
       return;
     }
 
-    const key = `${productId}|${sel.size || ''}|${sel.color || ''}`;
+    const key = `${productId}|${sel.size || ''}|${sel.color || ''}|${sel.finish || ''}`;
     const existing = cart.find(i => i.key === key);
     if (existing) existing.qty += 1;
-    else cart.push({ key, productId, size: sel.size, color: sel.color, qty: 1 });
+    else cart.push({ key, productId, size: sel.size, color: sel.color, finish: sel.finish, qty: 1 });
     renderCart();
     openDrawer();
     pulseCount();
@@ -1038,7 +1118,7 @@
       const p         = PRODUCTS.find(x => x.id === item.productId);
       const src       = SOURCES[p.category];
       const lineTotal = p.price * item.qty;
-      const variant   = [item.size, item.color].filter(Boolean).join(" · ");
+      const variant = [item.size, item.color, item.finish].filter(Boolean).join(" · ");
       return `
         <div class="drawer-item">
           <div class="drawer-item-thumb">${p.id}</div>
@@ -1162,9 +1242,6 @@
     })();
   */
   </script>
-<!-- shared construct scripts — transition layer + corner element -->
-  <script src="/js/transition.js"></script>
-  <script src="/js/construct-corner.js"></script>
-  <script src="/js/construct-nav.js"></script>
+
 </body>
 </html>

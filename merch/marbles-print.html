@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MARBLES. PRINT · merch · the six.well construct</title>
+
+<!--
+  ============================================================
+  merch/marbles-print.html
+  PRODUCT PAGE — PRINT
+  ============================================================
+
+  TEMPLATE TYPE: print
+  Use this template for any print listed in MERCH.
+  Duplicate + replace PRODUCT DATA block to create new print pages.
+
+  ANATOMY:
+    1. Header (sticky, cart toggle)
+    2. Left col: print image (or painting origin image as preview)
+    3. Right col: title, size selector, finish selector, edition,
+                  add to cart, origin painting link
+    4. Related objects — other derivatives from same painting
+    5. Cart drawer (full add-to-cart implementation)
+    6. Footer
+
+  CART KEY STRUCTURE:
+    `${productId}|${size}|${finish}`
+    e.g. "06|11×14|matte"
+    Consistent with merch/index.html cart key pattern.
+
+  SHOPIFY INTEGRATION POINT:
+    When Shopify is live, replace addToCart() with Buy Button
+    or Storefront API cart mutation. The UI (size/finish selectors)
+    stays as-is — just swap the submit handler.
+
+  REWRITE MARKERS:
+    Search "REWRITE" to find copy placeholders.
+  ============================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     DESIGN TOKENS — mirrors merch/index.html exactly
+  ============================================================ */
+  :root {
+    --bg:        #0e0e0e;
+    --bg-raised: #111111;
+    --bg-drawer: #0a0a0a;
+
+    --accent:    #FCB867;
+    --src-color: #0581C1;            /* thoughtpuppet — drives all accents */
+
+    --ring:      #6D3D15;
+    --ring-soft: rgba(109,61,21,0.4);
+    --ring-faint:rgba(109,61,21,0.18);
+
+    --text-body: #E8E4DC;            /* off-white for body copy */
+    --text:      #FCB867;            /* amber for UI chrome */
+    --text-mute: rgba(252,184,103,0.55);
+    --text-dim:  rgba(252,184,103,0.30);
+    --text-ghost:rgba(252,184,103,0.13);
+
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px;
+    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+
+    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif:'Times New Roman',Times,serif;
+
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
+  }
+
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body {
+    background:var(--bg); color:var(--text-body);
+    font-family:var(--sans);
+    min-height:100vh; overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+  a { color:inherit; text-decoration:none; }
+  button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
+
+  /* ============================================================
+     GRAIN
+  ============================================================ */
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* ============================================================
+     HEADER
+  ============================================================ */
+  header.top {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s5) var(--s6);
+    background:rgba(14,14,14,0.85);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--ring-faint);
+  }
+  .wordmark {
+    font-family:var(--sans); font-weight:900;
+    font-size:18px; letter-spacing:-0.05em;
+    color:var(--accent); opacity:0.82;
+    transition:opacity var(--t-fast);
+  }
+  .wordmark:hover { opacity:1; }
+  .header-right { display:flex; align-items:center; gap:var(--s6); }
+  .breadcrumb {
+    display:flex; align-items:center; gap:var(--s3);
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+  }
+  .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
+  .breadcrumb-link:hover { color:var(--accent); }
+  .breadcrumb-sep { color:var(--text-dim); }
+  .breadcrumb-current { color:var(--text-dim); }
+  .cart-toggle {
+    display:flex; align-items:center; gap:var(--s3);
+    padding:var(--s2) var(--s4);
+    border:1px solid var(--ring-soft);
+    transition:border-color var(--t-fast), background var(--t-fast);
+  }
+  .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
+  .cart-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute);
+  }
+  .cart-count {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    color:var(--accent); min-width:14px; text-align:right;
+  }
+  .cart-count.pulse { animation:pulse 0.4s ease-out; }
+  @keyframes pulse {
+    0%  { transform:scale(1);    }
+    40% { transform:scale(1.45); }
+    100%{ transform:scale(1);    }
+  }
+
+  /* ============================================================
+     MAIN — two-column (same split as painting page)
+  ============================================================ */
+  main {
+    position:relative; z-index:2;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    min-height:calc(100vh - 73px);
+  }
+
+  /* ============================================================
+     LEFT — print preview image
+     Uses the painting source image as the preview.
+     When a dedicated print mock-up exists, swap src.
+  ============================================================ */
+  .print-col {
+    position:sticky; top:73px;
+    height:calc(100vh - 73px);
+    overflow:hidden;
+    border-right:1px solid var(--ring-faint);
+    background:var(--bg-raised);
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  /* print mat effect — simulates paper mat framing */
+  .print-mat {
+    position:relative;
+    width:70%; aspect-ratio:3/4;
+    background:#f4f0e8; /* warm paper white */
+    display:flex; align-items:center; justify-content:center;
+    /* subtle shadow for depth */
+    box-shadow:0 8px 48px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .print-mat-inner {
+    width:80%; aspect-ratio:3/4;
+    overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .print-mat-inner img {
+    width:100%; height:100%; object-fit:cover;
+    display:block;
+  }
+  /* edition mark on mat — bottom right, very small */
+  .print-mat-edition {
+    position:absolute; bottom:8px; right:12px;
+    font-family:var(--serif); font-size:8px;
+    letter-spacing:0.12em; color:#a09880; text-transform:uppercase;
+  }
+
+  /* fallback when image is missing */
+  .print-placeholder {
+    width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--serif); font-size:48px;
+    color:#c8c0a8; font-weight:400;
+  }
+
+  /* catalog number on col background */
+  .print-catalog {
+    position:absolute; bottom:var(--s5); left:var(--s5);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:rgba(252,184,103,0.2);
+    pointer-events:none;
+  }
+
+  /* ============================================================
+     RIGHT — product panel
+  ============================================================ */
+  .product-col {
+    padding:var(--s8) var(--s6) var(--s7);
+    display:flex; flex-direction:column;
+    max-width:680px;
+  }
+
+  /* source venture tag */
+  .source-tag {
+    display:flex; align-items:center; gap:var(--s2);
+    margin-bottom:var(--s5);
+  }
+  .source-dot {
+    width:5px; height:5px; border-radius:50%;
+    background:var(--src-color); flex-shrink:0;
+  }
+  .source-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--src-color); opacity:0.7;
+  }
+
+  /* title */
+  .product-title {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(28px,4vw,52px);
+    letter-spacing:-0.03em; line-height:0.95;
+    color:var(--text);
+    margin-bottom:var(--s5);
+  }
+
+  /* edition badge — "ed. 06 / 50" */
+  .edition-badge {
+    display:inline-flex; align-items:center; gap:var(--s2);
+    padding:var(--s1) var(--s3);
+    border:1px solid var(--ring-soft);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute);
+    margin-bottom:var(--s5);
+  }
+  .edition-dot {
+    width:4px; height:4px; border-radius:50%;
+    background:var(--src-color); opacity:0.7;
+  }
+
+  /* price */
+  .product-price {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(32px,4vw,48px);
+    letter-spacing:-0.04em; line-height:1;
+    color:var(--text);
+    margin-bottom:var(--s2);
+  }
+  .price-note {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute); margin-bottom:var(--s6);
+  }
+
+  /* ============================================================
+     SELECTOR BLOCKS
+     Size pills and finish pills — same component as index.html
+  ============================================================ */
+  .selector-block { margin-bottom:var(--s5); }
+
+  .selector-label {
+    display:flex; align-items:baseline; justify-content:space-between;
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute);
+    margin-bottom:var(--s3);
+  }
+  .selector-label .selected-val {
+    /* shows current selection in src-color */
+    color:var(--src-color); opacity:0.9;
+    transition:opacity var(--t-fast);
+  }
+
+  /* size pills */
+  .size-pills {
+    display:flex; flex-wrap:wrap; gap:var(--s2);
+  }
+  .size-pill {
+    font-family:var(--sans); font-weight:500;
+    font-size:11px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-mute);
+    border:1px solid var(--ring-soft);
+    padding:var(--s2) var(--s4);
+    cursor:pointer; background:none;
+    transition:color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  }
+  .size-pill:hover {
+    color:var(--src-color); border-color:var(--src-color);
+  }
+  .size-pill.selected {
+    color:var(--bg); background:var(--src-color); border-color:var(--src-color);
+  }
+
+  /* finish pills — same as size pills, smaller */
+  .finish-pills { display:flex; flex-wrap:wrap; gap:var(--s2); }
+  .finish-pill {
+    font-family:var(--sans); font-weight:500;
+    font-size:11px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--text-mute);
+    border:1px solid var(--ring-soft);
+    padding:var(--s2) var(--s4);
+    cursor:pointer; background:none;
+    transition:color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  }
+  .finish-pill:hover { color:var(--src-color); border-color:var(--src-color); }
+  .finish-pill.selected { color:var(--bg); background:var(--src-color); border-color:var(--src-color); }
+
+  /* validation message — flashes when add attempted without selection */
+  .select-required {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--src-color); opacity:0; min-height:14px;
+    transition:opacity var(--t-fast);
+    margin-top:var(--s2);
+  }
+  .select-required.visible { opacity:0.8; }
+
+  /* ============================================================
+     ADD TO CART CTA
+  ============================================================ */
+  .cta-add {
+    display:flex; align-items:center; justify-content:space-between;
+    width:100%; padding:var(--s4) var(--s5);
+    border:1px solid var(--src-color);
+    color:var(--src-color);
+    font-family:var(--sans); font-weight:700;
+    font-size:12px; letter-spacing:0.2em; text-transform:uppercase;
+    transition:background var(--t-fast), color var(--t-fast);
+    margin-top:var(--s4);
+    margin-bottom:var(--s3);
+  }
+  .cta-add:hover { background:var(--src-color); color:var(--bg); }
+  .cta-arrow {
+    font-family:var(--serif); font-size:16px;
+    transition:transform var(--t-fast);
+  }
+  .cta-add:hover .cta-arrow { transform:translateX(4px); }
+
+  /* shipping note */
+  .shipping-note {
+    font-family:var(--serif); font-size:9px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim); text-align:center;
+    margin-bottom:var(--s7);
+  }
+
+  /* ============================================================
+     ORIGIN SECTION
+     Links back to the source painting.
+  ============================================================ */
+  .section-divider {
+    border:none; border-top:1px solid var(--ring-faint);
+    margin:var(--s6) 0;
+  }
+  .section-label {
+    font-family:var(--sans); font-weight:900;
+    font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:var(--s5);
+  }
+
+  /* origin block — painting thumbnail + title */
+  .origin-block {
+    display:flex; align-items:center; gap:var(--s5);
+    padding:var(--s4);
+    border:1px solid var(--ring-faint);
+    transition:border-color var(--t-med);
+  }
+  .origin-block:hover { border-color:var(--src-color); }
+  .origin-thumb {
+    width:72px; height:90px; flex-shrink:0;
+    overflow:hidden; background:var(--bg-raised);
+    border:1px solid var(--ring-soft);
+  }
+  .origin-thumb img {
+    width:100%; height:100%; object-fit:cover;
+    filter:brightness(0.85);
+    transition:filter var(--t-med);
+  }
+  .origin-block:hover .origin-thumb img { filter:brightness(1); }
+  .origin-info { flex:1; }
+  .origin-type {
+    font-family:var(--serif); font-size:9px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--src-color); opacity:0.7; margin-bottom:var(--s1);
+  }
+  .origin-title {
+    font-family:var(--sans); font-weight:700;
+    font-size:12px; letter-spacing:0.02em; text-transform:uppercase;
+    color:var(--text); margin-bottom:var(--s1);
+    line-height:1.2;
+  }
+  .origin-meta {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--text-mute);
+  }
+  .origin-arrow {
+    font-family:var(--serif); font-size:16px;
+    color:var(--text-dim);
+    transition:color var(--t-fast), transform var(--t-fast);
+  }
+  .origin-block:hover .origin-arrow {
+    color:var(--src-color); transform:translateX(4px);
+  }
+
+  /* ============================================================
+     RELATED OBJECTS
+  ============================================================ */
+  .related-row {
+    display:flex; gap:var(--s5);
+    overflow-x:auto; padding-bottom:var(--s3);
+    scrollbar-width:none;
+  }
+  .related-row::-webkit-scrollbar { display:none; }
+  .related-card {
+    flex-shrink:0; width:200px;
+    display:flex; flex-direction:column;
+    border:1px solid var(--ring-soft);
+    transition:border-color var(--t-med);
+  }
+  .related-card:hover { border-color:var(--src-color); }
+  .related-frame {
+    aspect-ratio:4/5; background:var(--bg-raised);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; position:relative;
+  }
+  .related-frame-num {
+    font-family:var(--serif); font-size:48px;
+    color:var(--text-ghost); font-weight:400;
+  }
+  .related-frame img {
+    width:100%; height:100%; object-fit:cover;
+    filter:brightness(0.88); transition:filter var(--t-med);
+  }
+  .related-card:hover .related-frame img { filter:brightness(1); }
+  .related-info {
+    padding:var(--s3) var(--s3) var(--s2);
+    border-top:1px solid var(--ring-faint);
+  }
+  .related-type {
+    font-family:var(--serif); font-size:9px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--src-color); opacity:0.7; margin-bottom:var(--s1);
+  }
+  .related-name {
+    font-family:var(--sans); font-weight:700;
+    font-size:11px; letter-spacing:0.04em; text-transform:uppercase;
+    color:var(--text); margin-bottom:var(--s1);
+  }
+  .related-price {
+    font-family:var(--serif); font-size:11px; color:var(--text-mute);
+  }
+
+  /* ============================================================
+     FOOTER
+  ============================================================ */
+  footer.bottom {
+    position:relative; z-index:2;
+    padding:var(--s7) var(--s6);
+    border-top:1px solid var(--ring-faint);
+    display:flex; justify-content:space-between; align-items:center;
+    grid-column:1/-1;
+  }
+  footer.bottom p, footer.bottom a {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
+  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
+  footer.bottom a:hover { color:var(--accent); }
+
+  /* ============================================================
+     CART DRAWER — full implementation (prints are add-to-cart)
+  ============================================================ */
+  .cart-overlay {
+    position:fixed; inset:0; z-index:90;
+    background:rgba(0,0,0,0.6); opacity:0; pointer-events:none;
+    transition:opacity var(--t-med);
+  }
+  .cart-overlay.open { opacity:1; pointer-events:auto; }
+  .cart-drawer {
+    position:fixed; top:0; right:0; bottom:0;
+    width:min(440px,100vw); z-index:100;
+    background:var(--bg-drawer); border-left:1px solid var(--ring-soft);
+    display:flex; flex-direction:column;
+    transform:translateX(100%); transition:transform var(--t-med);
+  }
+  .cart-drawer.open { transform:translateX(0); }
+  .drawer-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s5); border-bottom:1px solid var(--ring-faint);
+  }
+  .drawer-header .title {
+    font-family:var(--sans); font-weight:900; font-size:14px;
+    letter-spacing:0.08em; text-transform:uppercase; color:var(--accent);
+  }
+  .drawer-close {
+    font-family:var(--sans); font-weight:300; font-size:28px; line-height:1;
+    color:var(--text-mute); padding:var(--s1) var(--s3); transition:color var(--t-fast);
+  }
+  .drawer-close:hover { color:var(--accent); }
+  .drawer-items { flex:1; overflow-y:auto; padding:var(--s4) var(--s5); }
+  .drawer-empty {
+    padding:var(--s7) 0; text-align:center;
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
+  .drawer-item {
+    display:grid; grid-template-columns:56px 1fr auto;
+    gap:var(--s4); padding:var(--s4) 0;
+    border-bottom:1px solid var(--ring-faint); align-items:flex-start;
+  }
+  .drawer-item-thumb {
+    width:56px; height:70px; background:var(--bg-raised);
+    border:1px solid var(--ring-soft); font-family:var(--serif); font-size:13px;
+    color:var(--text-ghost); display:flex; align-items:center; justify-content:center;
+  }
+  .drawer-item-info { display:flex; flex-direction:column; gap:var(--s1); }
+  .drawer-item-name {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.04em; text-transform:uppercase; color:var(--text);
+  }
+  .drawer-item-cat {
+    display:flex; align-items:center; gap:var(--s1);
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+  }
+  .drawer-cat-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+  .drawer-item-variant {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-dim); margin-top:1px;
+  }
+  .drawer-item-qty { display:flex; align-items:center; gap:var(--s2); margin-top:var(--s2); }
+  .qty-btn {
+    width:20px; height:20px; border:1px solid var(--ring-soft);
+    font-family:var(--sans); font-size:12px; color:var(--text-mute);
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color var(--t-fast), color var(--t-fast);
+  }
+  .qty-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .qty-num { font-family:var(--sans); font-size:12px; color:var(--text); min-width:16px; text-align:center; }
+  .drawer-item-right { display:flex; flex-direction:column; align-items:flex-end; gap:var(--s2); }
+  .drawer-item-price { font-family:var(--serif); font-size:12px; color:var(--text); }
+  .drawer-item-remove {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.18em; color:var(--text-dim); text-transform:uppercase;
+    transition:color var(--t-fast);
+  }
+  .drawer-item-remove:hover { color:var(--accent); }
+  .drawer-footer { padding:var(--s5); border-top:1px solid var(--ring-soft); }
+  .subtotal {
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:var(--s5);
+  }
+  .subtotal-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; color:var(--text-mute); text-transform:uppercase;
+  }
+  .subtotal-val {
+    font-family:var(--sans); font-weight:700; font-size:20px;
+    color:var(--accent); letter-spacing:-0.02em;
+  }
+  .checkout-btn {
+    display:block; width:100%; padding:var(--s4);
+    border:1px solid var(--accent); background:var(--accent); color:var(--bg);
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.2em; text-transform:uppercase; transition:opacity var(--t-fast);
+  }
+  .checkout-btn:hover { opacity:0.85; }
+  .checkout-btn:disabled {
+    background:transparent; color:var(--text-dim);
+    border-color:var(--ring-soft); cursor:not-allowed; opacity:1;
+  }
+  .drawer-note {
+    margin-top:var(--s3); font-family:var(--serif); font-size:9px;
+    letter-spacing:0.24em; color:var(--text-dim);
+    text-transform:uppercase; text-align:center;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+  ============================================================ */
+  @media (max-width:1024px) {
+    main { grid-template-columns:1fr; }
+    .print-col {
+      position:relative; top:0;
+      height:70vw; max-height:520px;
+      border-right:none; border-bottom:1px solid var(--ring-faint);
+    }
+    .print-mat { width:55%; }
+    .product-col { padding:var(--s6) var(--s5) var(--s7); }
+    footer.bottom { grid-column:1; }
+  }
+  @media (max-width:640px) {
+    header.top { padding:var(--s4) var(--s5); }
+    .header-right { gap:var(--s4); }
+    .breadcrumb { display:none; }
+    .print-col { height:80vw; }
+    .print-mat { width:65%; }
+    .product-col { padding:var(--s5) var(--s4) var(--s6); }
+    footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s4); }
+  }
+</style>
+</head>
+<body>
+
+  <div class="grain"></div>
+
+  <!-- ============================================================
+       HEADER
+  ============================================================ -->
+  <header class="top">
+    <a class="wordmark" href="/">the six.well construct</a>
+    <div class="header-right">
+      <nav class="breadcrumb" aria-label="breadcrumb">
+        <a class="breadcrumb-link" href="/merch">merch</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">print</span>
+      </nav>
+      <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+        <span class="cart-label">cart</span>
+        <span class="cart-count" id="cartCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN
+  ============================================================ -->
+  <main>
+
+    <!-- LEFT: print preview (painting image in mat simulation) -->
+    <div class="print-col">
+      <div class="print-mat">
+        <div class="print-mat-inner">
+          <!--
+            Uses the painting image as print preview.
+            When a dedicated print mock-up exists, swap src.
+            Path: assets/paintings/am i losing my marbles or hiding them.jpg
+            Consider renaming to assets/paintings/marbles.jpg (no spaces).
+          -->
+          <img
+            src="/assets/paintings/am i losing my marbles or hiding them.jpg"
+            alt="MARBLES. print preview"
+            loading="eager"
+          >
+        </div>
+        <!-- edition watermark on mat -->
+        <span class="print-mat-edition" id="matEdition">ed. / 50</span>
+      </div>
+      <span class="print-catalog">N&deg; 06 &mdash; thoughtpuppet</span>
+    </div>
+
+    <!-- RIGHT: product panel -->
+    <div class="product-col">
+
+      <!-- source venture tag -->
+      <div class="source-tag">
+        <span class="source-dot"></span>
+        <span class="source-label">thoughtpuppet</span>
+      </div>
+
+      <!-- ====================================================
+           PRODUCT DATA — edit this block per print
+      ==================================================== -->
+      <h1 class="product-title">MARBLES.<br>PRINT</h1>
+
+      <!-- edition badge -->
+      <div class="edition-badge">
+        <span class="edition-dot"></span>
+        <!-- REWRITE: update edition number as prints sell (or remove if open edition) -->
+        <span>edition of 50</span>
+      </div>
+
+      <!-- price -->
+      <div class="product-price">$85</div>
+      <!-- REWRITE: one line, your voice. what does owning this print mean. -->
+      <p class="price-note">giclée archival print. ships flat.</p>
+
+      <!-- ====================================================
+           SIZE SELECTOR
+           Sizes from PRODUCTS array: ["8×10","11×14","18×24"]
+      ==================================================== -->
+      <div class="selector-block">
+        <div class="selector-label">
+          <span>size</span>
+          <span class="selected-val" id="sizeVal"></span>
+        </div>
+        <div class="size-pills" id="sizePills">
+          <button class="size-pill" data-size="8×10">8&times;10</button>
+          <button class="size-pill" data-size="11×14">11&times;14</button>
+          <button class="size-pill" data-size="18×24">18&times;24</button>
+        </div>
+        <p class="select-required" id="sizeRequired">select a size</p>
+      </div>
+
+      <!-- ====================================================
+           FINISH SELECTOR
+           Finishes: ["matte","archival gloss"]
+      ==================================================== -->
+      <div class="selector-block">
+        <div class="selector-label">
+          <span>finish</span>
+          <span class="selected-val" id="finishVal"></span>
+        </div>
+        <div class="finish-pills" id="finishPills">
+          <button class="finish-pill" data-finish="matte">matte</button>
+          <button class="finish-pill" data-finish="archival gloss">archival gloss</button>
+        </div>
+        <p class="select-required" id="finishRequired">select a finish</p>
+      </div>
+
+      <!-- ====================================================
+           ADD TO CART
+      ==================================================== -->
+      <button class="cta-add" id="addToCartBtn">
+        <span>add to cart</span>
+        <span class="cta-arrow">&rarr;</span>
+      </button>
+      <p class="shipping-note">free shipping on orders over $150</p>
+
+      <!-- ====================================================
+           ORIGIN — links to the source painting
+      ==================================================== -->
+      <hr class="section-divider">
+      <p class="section-label">origin.</p>
+
+      <a class="origin-block" href="/merch/am-i-losing-my-marbles.html">
+        <div class="origin-thumb">
+          <img
+            src="/assets/paintings/am i losing my marbles or hiding them.jpg"
+            alt="AM I LOSING MY MARBLES OR HIDING THEM?"
+          >
+        </div>
+        <div class="origin-info">
+          <p class="origin-type">painting · original</p>
+          <p class="origin-title">AM I LOSING MY MARBLES OR HIDING THEM?</p>
+          <p class="origin-meta">acrylic on canvas &middot; 2023</p>
+        </div>
+        <span class="origin-arrow">&rarr;</span>
+      </a>
+
+      <!-- ====================================================
+           RELATED — other things from this painting
+      ==================================================== -->
+      <hr class="section-divider">
+      <p class="section-label">also from this work.</p>
+
+      <div class="related-row">
+        <!-- Marbles Hoodie -->
+        <a class="related-card" href="/merch/marbles-hoodie.html">
+          <div class="related-frame">
+            <span class="related-frame-num">05</span>
+          </div>
+          <div class="related-info">
+            <p class="related-type">apparel</p>
+            <p class="related-name">Marbles. Hoodie</p>
+            <p class="related-price">$130</p>
+          </div>
+        </a>
+      </div>
+
+    </div><!-- /product-col -->
+
+    <footer class="bottom">
+      <p>&copy; the six.well construct</p>
+      <a href="/merch">&larr; back to merch</a>
+    </footer>
+
+  </main>
+
+  <!-- ============================================================
+       CART DRAWER
+  ============================================================ -->
+  <div class="cart-overlay" id="cartOverlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <span class="title">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart">&times;</button>
+    </div>
+    <div class="drawer-items" id="drawerItems">
+      <p class="drawer-empty">cart is empty</p>
+    </div>
+    <div class="drawer-footer">
+      <div class="subtotal">
+        <span class="subtotal-label">subtotal</span>
+        <span class="subtotal-val" id="subtotal">$0</span>
+      </div>
+      <button class="checkout-btn" id="checkoutBtn" disabled>proceed to checkout</button>
+      <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
+    </div>
+  </aside>
+
+  <script>
+  /* ============================================================
+     PRODUCT DEFINITION
+     ============================================================
+     Single product definition for this page.
+     When duplicating this template: update id, name, price,
+     sizes, finish, edition, and image paths.
+  ============================================================ */
+  const PRODUCT = {
+    id:       "06",
+    name:     "MARBLES. PRINT",
+    price:    85,
+    category: "thoughtpuppet",
+    color:    "#0581C1",       /* src-color for this product */
+    sizes:    ["8×10", "11×14", "18×24"],
+    finish:   ["matte", "archival gloss"],
+    edition:  50
+  };
+
+  /* ============================================================
+     SELECTION STATE
+     Tracks which size + finish the user has chosen.
+  ============================================================ */
+  let selection = { size: null, finish: null };
+
+  /* ============================================================
+     CART STATE
+     Simple local cart — same key structure as merch/index.html:
+       `${productId}|${size}|${finish}`
+     When Shopify goes live, replace with SDK cart mutations.
+  ============================================================ */
+  let cart = [];
+
+  /* DOM refs */
+  const cartCount   = document.getElementById("cartCount");
+  const subtotalEl  = document.getElementById("subtotal");
+  const checkoutBtn = document.getElementById("checkoutBtn");
+  const drawer      = document.getElementById("cartDrawer");
+  const overlay     = document.getElementById("cartOverlay");
+  const drawerItems = document.getElementById("drawerItems");
+  const sizeVal     = document.getElementById("sizeVal");
+  const finishVal   = document.getElementById("finishVal");
+  const sizeReq     = document.getElementById("sizeRequired");
+  const finishReq   = document.getElementById("finishRequired");
+
+  /* ============================================================
+     SIZE PILLS — wire clicks
+  ============================================================ */
+  document.querySelectorAll(".size-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const size = btn.dataset.size;
+
+      /* toggle off if already selected */
+      if (selection.size === size) {
+        selection.size = null;
+        btn.classList.remove("selected");
+        sizeVal.textContent = "";
+        return;
+      }
+
+      /* select this one, deselect others */
+      selection.size = size;
+      sizeVal.textContent = size;
+      document.querySelectorAll(".size-pill").forEach(b =>
+        b.classList.toggle("selected", b.dataset.size === size));
+
+      /* hide validation message */
+      sizeReq.classList.remove("visible");
+    });
+  });
+
+  /* ============================================================
+     FINISH PILLS — wire clicks
+  ============================================================ */
+  document.querySelectorAll(".finish-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const finish = btn.dataset.finish;
+
+      if (selection.finish === finish) {
+        selection.finish = null;
+        btn.classList.remove("selected");
+        finishVal.textContent = "";
+        return;
+      }
+
+      selection.finish = finish;
+      finishVal.textContent = finish;
+      document.querySelectorAll(".finish-pill").forEach(b =>
+        b.classList.toggle("selected", b.dataset.finish === finish));
+
+      finishReq.classList.remove("visible");
+    });
+  });
+
+  /* ============================================================
+     ADD TO CART
+     Validates selection, builds cart key, opens drawer.
+  ============================================================ */
+  document.getElementById("addToCartBtn").addEventListener("click", () => {
+    let valid = true;
+
+    /* must have size selected */
+    if (!selection.size) {
+      sizeReq.classList.add("visible");
+      /* flash the size pills */
+      const pills = document.getElementById("sizePills");
+      pills.style.opacity = "0.4";
+      setTimeout(() => { pills.style.opacity = "1"; }, 300);
+      valid = false;
+    }
+
+    /* must have finish selected */
+    if (!selection.finish) {
+      finishReq.classList.add("visible");
+      const pills = document.getElementById("finishPills");
+      pills.style.opacity = "0.4";
+      setTimeout(() => { pills.style.opacity = "1"; }, 300);
+      valid = false;
+    }
+
+    if (!valid) return;
+
+    /* build cart key — matches index.html pattern */
+    const key = `${PRODUCT.id}|${selection.size}|${selection.finish}`;
+    const existing = cart.find(i => i.key === key);
+
+    if (existing) {
+      existing.qty += 1;
+    } else {
+      cart.push({
+        key,
+        productId: PRODUCT.id,
+        name:      PRODUCT.name,
+        price:     PRODUCT.price,
+        size:      selection.size,
+        finish:    selection.finish,
+        qty:       1
+      });
+    }
+
+    renderCart();
+    openDrawer();
+    pulseCount();
+  });
+
+  /* ============================================================
+     RENDER CART DRAWER
+  ============================================================ */
+  function renderCart() {
+    const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+    cartCount.textContent = totalQty;
+
+    if (cart.length === 0) {
+      drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
+      subtotalEl.textContent = "$0";
+      checkoutBtn.disabled = true;
+      return;
+    }
+
+    checkoutBtn.disabled = false;
+
+    drawerItems.innerHTML = cart.map(item => {
+      const lineTotal = item.price * item.qty;
+      const variant   = [item.size, item.finish].filter(Boolean).join(" · ");
+      return `
+        <div class="drawer-item">
+          <div class="drawer-item-thumb">${item.productId}</div>
+          <div class="drawer-item-info">
+            <span class="drawer-item-name">${item.name}</span>
+            <span class="drawer-item-cat">
+              <span class="drawer-cat-dot" style="background:${PRODUCT.color}"></span>
+              <span style="color:${PRODUCT.color}; opacity:0.75">thoughtpuppet</span>
+            </span>
+            ${variant ? `<span class="drawer-item-variant">${variant}</span>` : ""}
+            <div class="drawer-item-qty">
+              <button class="qty-btn" data-minus="${item.key}" aria-label="decrease">&minus;</button>
+              <span class="qty-num">${item.qty}</span>
+              <button class="qty-btn" data-plus="${item.key}" aria-label="increase">+</button>
+            </div>
+          </div>
+          <div class="drawer-item-right">
+            <span class="drawer-item-price">$${lineTotal}</span>
+            <button class="drawer-item-remove" data-remove="${item.key}">remove</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    /* wire qty + remove buttons */
+    drawerItems.querySelectorAll("[data-plus]").forEach(b =>
+      b.addEventListener("click", () => updateQty(b.dataset.plus, +1)));
+    drawerItems.querySelectorAll("[data-minus]").forEach(b =>
+      b.addEventListener("click", () => updateQty(b.dataset.minus, -1)));
+    drawerItems.querySelectorAll("[data-remove]").forEach(b =>
+      b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
+
+    const total = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+    subtotalEl.textContent = "$" + total;
+  }
+
+  function updateQty(key, delta) {
+    const item = cart.find(i => i.key === key);
+    if (!item) return;
+    item.qty += delta;
+    if (item.qty <= 0) removeFromCart(key);
+    else renderCart();
+  }
+
+  function removeFromCart(key) {
+    cart = cart.filter(i => i.key !== key);
+    renderCart();
+  }
+
+  /* ============================================================
+     CART COUNT PULSE — matches index.html animation
+  ============================================================ */
+  function pulseCount() {
+    cartCount.classList.remove("pulse");
+    void cartCount.offsetWidth; /* reflow forces animation restart */
+    cartCount.classList.add("pulse");
+  }
+
+  /* ============================================================
+     DRAWER OPEN / CLOSE
+  ============================================================ */
+  function openDrawer() {
+    drawer.classList.add("open"); overlay.classList.add("open");
+    drawer.setAttribute("aria-hidden","false");
+  }
+  function closeDrawer() {
+    drawer.classList.remove("open"); overlay.classList.remove("open");
+    drawer.setAttribute("aria-hidden","true");
+  }
+
+  document.getElementById("cartToggle").addEventListener("click", openDrawer);
+  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+  overlay.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+  /* ============================================================
+     CHECKOUT PLACEHOLDER
+     Replace with Shopify hosted-checkout redirect when ready.
+  ============================================================ */
+  checkoutBtn.addEventListener("click", () => {
+    console.log("CHECKOUT — cart:", cart);
+    alert("Shopify checkout integration plugs in here.\n\n" +
+      cart.map(i => `${i.name} × ${i.qty} — $${i.price * i.qty}`).join("\n")
+    );
+  });
+
+  /* init */
+  renderCart();
+  </script>
+
+</body>
+</html>
