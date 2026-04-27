@@ -36,7 +36,7 @@
      All landing values are multiplied by this factor so the
      corner ring is a true geometric reduction of the original.
   ────────────────────────────────────────────────────────── */
-  var SCALE = 18 / 56;
+  var SCALE = 21 / 56;
 
   /* ── CONFIGURATION ────────────────────────────────────────
      All geometry derived from landing values × SCALE.
@@ -45,11 +45,11 @@
   var CONFIG = {
 
     /* Canvas — square, large enough to contain ring + dots */
-    canvasSize: 44,           /* px — ring outer (18) + 4px padding each side */
+    canvasSize: 52,           /* px — larger header footprint for roomier fit */
 
     /* Ring — filled annulus, matches landing's drawRing() */
-    ringOuter:  18,           /* px — landing: 56 × 0.3214 = 18 */
-    ringInner:  13,           /* px — landing: 40 × 0.3214 = 12.86 ≈ 13 */
+    ringOuter:  21,           /* px — slightly larger to support bigger header lockup */
+    ringInner:  15,           /* px — scaled proportionally from landing ring */
     ringColor:  '#6D3D15',    /* matches landing RING_COLOR exactly */
 
     /* Dots — matches landing's DOT_POSITIONS + drawDots() math
@@ -59,14 +59,14 @@
        inside RING_INNER (13px), matching how the landing dots nestle
        inside the ring's inner edge. */
     dotPositions: [
-      [-5.79, -9],
-      [ 5.79, -9],
-      [-5.79,  0],
-      [ 5.79,  0],
-      [-5.79,  9],
-      [ 5.79,  9],
+      [-6.75, -10.5],
+      [ 6.75, -10.5],
+      [-6.75,   0],
+      [ 6.75,   0],
+      [-6.75,  10.5],
+      [ 6.75,  10.5],
     ],
-    dotRadius:     2.4,       /* px — landing: 7.5 × 0.3214 = 2.41 */
+    dotRadius:     2.8,       /* px — slightly larger to match roomier header */
     dotColor:      '#FCB867', /* matches landing DOT_COLOR exactly */
     /* Landing orbit: time * 0.003. Slowed slightly at small scale
        so the motion reads clearly without feeling frantic. */
@@ -74,7 +74,7 @@
 
     /* Wordmark */
     wordmark:        'the six.well construct',
-    fontSize:        15,      /* px — matches header usage on merch pages */
+    fontSize:        19,      /* px — 4px larger global construct wordmark */
     fontFamily:      "'Inter','Helvetica Neue',Arial,sans-serif",
     fontWeight:      900,
     letterSpacing:   '-0.05em',
@@ -83,8 +83,8 @@
 
     /* Layout */
     insetX: 24,               /* px from left edge of viewport */
-    insetY: 24,               /* px from top edge of viewport */
-    gap:    12,               /* px between canvas and wordmark text */
+    insetY: 18,               /* px from top edge of viewport */
+    gap:    14,               /* px between canvas and wordmark text */
 
     /* Timing */
     fadeInDelay:    800,      /* ms — page gets its own entrance first */
@@ -113,6 +113,7 @@
     'display:flex',
     'align-items:center',
     'gap:' + CONFIG.gap + 'px',
+    'min-height:' + CONFIG.canvasSize + 'px',
     'z-index:' + CONFIG.zIndex,
     'cursor:pointer',
     'opacity:0',

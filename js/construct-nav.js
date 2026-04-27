@@ -47,11 +47,9 @@
      All visual values live here. Adjust freely.
   ────────────────────────────────────────────────────────── */
   var CONFIG = {
-    dotSize:         10,     /* px — diameter of each dot. was 8 */
-    dotGap:          22,     /* px — space between dot centers */
-    topInset:        60,     /* px — distance from top of viewport.
-                                increased so nav sits clearly below
-                                the corner lockup (which is at 24px) */
+    dotSize:         14,     /* px — larger navigation dots for readability */
+    dotGap:          24,     /* px — space between dot centers */
+    topInset:        38,     /* px — aligns the dot row closer to header center */
 
     /* Dot opacity states */
     opacityActive:   1.0,    /* current venture */

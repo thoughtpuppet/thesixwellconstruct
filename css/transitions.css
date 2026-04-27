@@ -125,6 +125,6 @@ body.entrance-active .entrance-delay-5 { transition-delay: 400ms; }
    the corner lockup which wraps to a second line */
 @media (max-width: 640px) {
   #construct-nav {
-    top: 72px;
+    top: 92px;
   }
 }
