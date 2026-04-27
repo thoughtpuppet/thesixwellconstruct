@@ -1,0 +1,114 @@
+.venture-placeholder {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-body);
+}
+
+.venture-placeholder .placeholder-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    calc(var(--page-padding-y) + 48px)
+    var(--page-padding-x)
+    var(--page-padding-y);
+}
+
+.venture-placeholder .placeholder-card {
+  width: min(100%, 720px);
+  border: 1px solid var(--venture-accent-dim);
+  background:
+    linear-gradient(180deg, var(--venture-accent-wash), transparent 42%),
+    #111111;
+  padding: clamp(32px, 6vw, 56px);
+}
+
+.venture-placeholder .placeholder-label {
+  display: block;
+  margin-bottom: var(--space-sm);
+  color: var(--venture-accent);
+  font-family: var(--font-serif);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label-wide);
+  text-transform: uppercase;
+}
+
+.venture-placeholder .placeholder-title {
+  margin-bottom: var(--space-sm);
+  color: var(--venture-accent);
+  font-family: var(--font-display);
+  font-size: clamp(36px, 7vw, 64px);
+  font-weight: 900;
+  letter-spacing: var(--tracking-display-tight);
+  line-height: var(--leading-tight);
+  text-transform: uppercase;
+}
+
+.venture-placeholder .placeholder-copy {
+  max-width: 42rem;
+  margin-bottom: var(--space-md);
+  color: var(--color-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+
+.venture-placeholder .placeholder-status {
+  margin-bottom: var(--space-lg);
+  color: var(--venture-accent);
+  font-family: var(--font-serif);
+  font-size: var(--text-sm);
+  letter-spacing: 0.03em;
+  opacity: 0.82;
+}
+
+.venture-placeholder .placeholder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.venture-placeholder .placeholder-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--venture-accent-dim);
+  color: var(--venture-accent);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition:
+    background-color var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out);
+}
+
+.venture-placeholder .placeholder-link:hover,
+.venture-placeholder .placeholder-link:focus-visible {
+  background: var(--venture-accent-wash);
+  border-color: var(--venture-accent);
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .venture-placeholder .placeholder-shell {
+    align-items: flex-start;
+    padding-top: calc(var(--page-padding-y) + 72px);
+  }
+
+  .venture-placeholder .placeholder-card {
+    padding: 28px 24px;
+  }
+
+  .venture-placeholder .placeholder-actions {
+    flex-direction: column;
+  }
+
+  .venture-placeholder .placeholder-link {
+    width: 100%;
+  }
+}
