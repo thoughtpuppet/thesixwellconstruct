@@ -106,6 +106,15 @@
     document.body.appendChild(headerShell);
   }
 
+  function syncHeaderState() {
+    var isActive = window.scrollY > 8;
+    document.body.classList.toggle('construct-header-active', isActive);
+
+    if (headerShell) {
+      headerShell.classList.toggle('is-active', isActive);
+    }
+  }
+
 
   /* ── WRAPPER ──────────────────────────────────────────────
      Fixed div containing canvas + wordmark.
@@ -184,18 +193,8 @@
     wrapper.style.opacity = '1';
   }, CONFIG.fadeInDelay);
 
-  if (headerShell) {
-    function syncHeaderShell() {
-      if (window.scrollY > 8) {
-        headerShell.classList.add('is-active');
-      } else {
-        headerShell.classList.remove('is-active');
-      }
-    }
-
-    syncHeaderShell();
-    window.addEventListener('scroll', syncHeaderShell, { passive: true });
-  }
+  syncHeaderState();
+  window.addEventListener('scroll', syncHeaderState, { passive: true });
 
 
   /* ── HOVER ────────────────────────────────────────────────
