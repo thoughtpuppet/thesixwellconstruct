@@ -97,6 +97,15 @@
   var CX = CONFIG.canvasSize / 2;
   var CY = CONFIG.canvasSize / 2;
 
+  var existingHeader = document.querySelector('header.top');
+  var headerShell = null;
+
+  if (!existingHeader) {
+    headerShell = document.createElement('div');
+    headerShell.id = 'construct-header-shell';
+    document.body.appendChild(headerShell);
+  }
+
 
   /* ── WRAPPER ──────────────────────────────────────────────
      Fixed div containing canvas + wordmark.
@@ -174,6 +183,19 @@
   setTimeout(function() {
     wrapper.style.opacity = '1';
   }, CONFIG.fadeInDelay);
+
+  if (headerShell) {
+    function syncHeaderShell() {
+      if (window.scrollY > 8) {
+        headerShell.classList.add('is-active');
+      } else {
+        headerShell.classList.remove('is-active');
+      }
+    }
+
+    syncHeaderShell();
+    window.addEventListener('scroll', syncHeaderShell, { passive: true });
+  }
 
 
   /* ── HOVER ────────────────────────────────────────────────

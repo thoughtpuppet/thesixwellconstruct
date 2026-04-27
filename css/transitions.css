@@ -65,6 +65,35 @@
 }
 
 
+/* ============================================================
+   SHARED HEADER BACKDROP
+   Injected by construct-corner.js on pages that do not already
+   render a local .top header. This gives the shared construct
+   lockup + dot nav the same frosted, semi-opaque band language
+   used by /art and other sticky-header pages.
+============================================================ */
+
+#construct-header-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 88px;
+  z-index: 920;
+  pointer-events: none;
+  opacity: 0;
+  background: rgba(14, 14, 14, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(109, 61, 21, 0.18);
+  transition: opacity 220ms ease;
+}
+
+#construct-header-shell.is-active {
+  opacity: 1;
+}
+
+
 /* ──────────────────────────────────────────────────────────
    PAGE ENTRANCE ANIMATION
    Optional class you can add to any element that should
@@ -124,6 +153,10 @@ body.entrance-active .entrance-delay-5 { transition-delay: 400ms; }
 /* On small screens, shift the nav down slightly so it clears
    the corner lockup which wraps to a second line */
 @media (max-width: 640px) {
+  #construct-header-shell {
+    height: 110px;
+  }
+
   #construct-nav {
     top: 92px;
   }
