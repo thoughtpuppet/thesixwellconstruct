@@ -88,7 +88,7 @@
   html,body {
     background:var(--bg); color:var(--text);
     font-family:var(--sans);
-    min-height:100vh; overflow-x:hidden;
+    min-height:100vh; overflow-x:clip;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
   }
@@ -402,7 +402,7 @@
   }
   .finish-pill:hover { color: var(--src-color, var(--accent)); border-color: var(--src-color, var(--accent)); }
   .finish-pill.selected { color: var(--bg); background: var(--src-color, var(--accent)); border-color: var(--src-color, var(--accent)); }
-     paste Shopify embed <div> inside .card-frame.
+  /* paste Shopify embed <div> inside .card-frame.
      delete .card-plaque + .card-number when real product art goes in. */
 
   /* category row — colored dot + label in venture color */
