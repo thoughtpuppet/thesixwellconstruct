@@ -285,7 +285,7 @@
     margin-bottom:var(--s3);
   }
   .selector-label .selected-val {
-    color:var(--text); opacity:0.9;
+    color:var(--src-color); opacity:0.9;
     transition:opacity var(--t-fast);
   }
 
@@ -306,7 +306,7 @@
     color:var(--src-color); border-color:var(--src-color); background:rgba(5,129,193,0.04);
   }
   .size-pill.selected {
-    color:var(--text); background:var(--bg-raised); border-color:var(--text-dim);
+    color:var(--bg); background:var(--src-color); border-color:var(--src-color);
   }
 
   /* finish pills — same as size pills, smaller */
@@ -321,7 +321,7 @@
     transition:color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
   }
   .finish-pill:hover { color:var(--src-color); border-color:var(--src-color); background:rgba(5,129,193,0.04); }
-  .finish-pill.selected { color:var(--text); background:var(--bg-raised); border-color:var(--text-dim); }
+  .finish-pill.selected { color:var(--bg); background:var(--src-color); border-color:var(--src-color); }
 
   /* validation message — flashes when add attempted without selection */
   .select-required {

@@ -280,9 +280,9 @@
     background:rgba(252,184,103,0.04);
   }
   .size-pill.selected {
-    color:var(--text);
-    background:var(--bg-raised);
-    border-color:var(--text-dim);
+    color:var(--bg);
+    background:var(--src-color, var(--accent));
+    border-color:var(--src-color, var(--accent));
   }
   .card-colors {
     display:flex; gap:var(--s2); align-items:center;
@@ -402,7 +402,7 @@
     transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
   }
   .finish-pill:hover { color: var(--src-color, var(--accent)); border-color: var(--src-color, var(--accent)); background: rgba(252,184,103,0.04); }
-  .finish-pill.selected { color: var(--text); background: var(--bg-raised); border-color: var(--text-dim); }
+  .finish-pill.selected { color: var(--bg); background: var(--src-color, var(--accent)); border-color: var(--src-color, var(--accent)); }
   /* paste Shopify embed <div> inside .card-frame.
      delete .card-plaque + .card-number when real product art goes in. */
 
