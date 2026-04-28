@@ -159,7 +159,7 @@ const NODE_SIZE=15;
 const DOT_POSITIONS=[[-18,-28],[18,-28],[-18,0],[18,0],[-18,28],[18,28]];
 
 const VENTURES=[
-  {name:'TATTOOING',     color:'#8F231D',angle:0,   dist:250, fromDot:0},
+  {name:'TATTOOS',       color:'#8F231D',angle:0,   dist:250, fromDot:0},
   {name:'ART MAKING',   color:'#0581C1',angle:40,  dist:250, fromDot:1},
   {name:'MERCH',         color:'#F7A226',angle:80,  dist:250, fromDot:2},
   {name:'ABOUT',         color:'#FCB867',angle:120, dist:250, fromDot:-1},
@@ -212,7 +212,7 @@ VENTURES.forEach(v=>{const el=document.createElement('div');el.className='node-l
 
 // One-line italic descriptions — Times New Roman, fade in on node hover
 const VENTURE_DESCS = {
-  'TATTOOING':  'booking, flash & custom work',
+  'TATTOOS':    'symbolic, mythic tattooing',
   'ART MAKING': 'painting & fine art',
   'MERCH':      'objects, goods & wearables',
   'ABOUT':      'the construct & its people',
@@ -425,7 +425,7 @@ function drawCollapsingNodes(cp){
 
 // Placeholder sub-pages per venture. Replace names/URLs as each venture is built.
 const SUB_NODE_DATA = {
-  'TATTOOING':  [{name:'booking & inquiry',url:'/tattooing/booking'},{name:'process',url:'/tattooing/process'},{name:'art.pill tattoo house',url:'/tattooing/about'},{name:'flash',url:'/tattooing/flash'},{name:'portfolio',url:'/tattooing'}],
+  'TATTOOS':    [{name:'booking & inquiry',url:'/tattoos/inquire/'},{name:'process',url:'/tattoos/#booking-process'},{name:'art.pill tattoo house',url:'/tattoos/'},{name:'flash',url:'/tattoos/#ways-to-work'},{name:'portfolio',url:'/tattoos/#the-work'}],
   'ART MAKING': [{name:'statements',url:'/art/statements'},{name:'artist bio',url:'/art/artist-bio'},{name:'portfolio',url:'/art'},{name:'meridian in conflux',url:'/art/meridian-conflux'},{name:'studio visit',url:'/art/studio-visit'}],
   'MERCH':      [{name:'six.well clothing',url:'merch/index.html?filter=six.well',color:'#F7A226'},{name:'art.pill tattoo supply',url:'merch/index.html?filter=art.pill',color:'#8F231D'},{name:'thoughtpuppet artifacts',url:'merch/index.html?filter=thoughtpuppet',color:'#0581C1'},{name:'cult[iv] merch',url:'merch/index.html?filter=cultiv',color:'#55BA5A'},{name:'all merch',url:'merch/index.html',color:'#FCB867'}],
   'ABOUT':      [{name:'the construct',url:'/about'},{name:'who is sai solehman?',url:'/about/sai-solehman'},{name:'contact',url:'/about/contact'},{name:'press',url:'/about/press'},{name:'streaming',url:'/about/streaming'}],
@@ -438,7 +438,7 @@ const SUB_NODE_DATA = {
 
 // Sacred geometry shape assigned to each venture's sub-nodes
 const SUB_SHAPES = {
-  'TATTOOING':  'circle',
+  'TATTOOS':    'circle',
   'ART MAKING': 'circle',
   'MERCH':      'circle',
   'ABOUT':      'circle',
