@@ -94,7 +94,7 @@ statement:    "placeholder — replace with real statement text"
   }
   .cart-toggle {
     display:flex; align-items:center; gap:var(--s3);
-    padding:var(--s2) var(--s4); border:1px solid var(--ring-soft);
+    padding:var(--s2) var(--s4); border:5px solid var(--ring-soft);
     transition:border-color var(--t-fast), background var(--t-fast);
   }
   .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
@@ -122,7 +122,7 @@ statement:    "placeholder — replace with real statement text"
   .split-image {
     position:sticky; top:116px; height:calc(100vh - 116px);
     display:flex; align-items:center; justify-content:center;
-    padding:var(--s6); border-right:1px solid var(--ring-faint);
+    padding:var(--s6); border-right:5px solid var(--ring-faint);
   }
   .painting-frame {
     position:relative; width:100%; max-width:460px;
@@ -162,7 +162,7 @@ statement:    "placeholder — replace with real statement text"
   }
   .painting-meta {
     display:flex; align-items:center; gap:var(--s4); flex-wrap:wrap;
-    padding-top:var(--s3); border-top:1px solid var(--ring-faint);
+    padding-top:var(--s3); border-top:5px solid var(--ring-faint);
   }
   .meta-item { font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-dim); }
   .meta-sep { color:var(--text-ghost); }
@@ -181,7 +181,7 @@ statement:    "placeholder — replace with real statement text"
   .availability-rows { display:flex; flex-direction:column; gap:var(--s4); }
   .avail-row {
     display:flex; align-items:center; justify-content:space-between;
-    gap:var(--s4); padding-bottom:var(--s4); border-bottom:1px solid var(--ring-faint);
+    gap:var(--s4); padding-bottom:var(--s4); border-bottom:5px solid var(--ring-faint);
   }
   .avail-row:last-child { border-bottom:none; padding-bottom:0; }
   .avail-left { display:flex; flex-direction:column; gap:4px; }
@@ -194,7 +194,7 @@ statement:    "placeholder — replace with real statement text"
   .avail-action {
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--accent-hot); border:1px solid var(--accent-hot);
+    color:var(--accent-hot); border:5px solid var(--accent-hot);
     padding:var(--s2) var(--s4);
     transition:background var(--t-fast), color var(--t-fast);
     white-space:nowrap;
@@ -206,7 +206,7 @@ statement:    "placeholder — replace with real statement text"
   .related-items { display:flex; flex-direction:column; gap:var(--s3); }
   .related-item {
     display:flex; align-items:center; justify-content:space-between;
-    padding:var(--s4); border:1px solid var(--ring-faint);
+    padding:var(--s4); border:5px solid var(--ring-faint);
     transition:border-color var(--t-fast), background var(--t-fast);
   }
   .related-item:hover { border-color:var(--item-color, var(--ring-soft)); background:rgba(0,0,0,0.12); }
@@ -219,7 +219,7 @@ statement:    "placeholder — replace with real statement text"
 
   footer.bottom {
     position:relative; z-index:2; grid-column:1 / -1;
-    padding:var(--s6); border-top:1px solid var(--ring-faint);
+    padding:var(--s6); border-top:5px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
   }
   footer.bottom p, footer.bottom a { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
@@ -228,16 +228,16 @@ statement:    "placeholder — replace with real statement text"
 
   .cart-overlay { position:fixed; inset:0; z-index:90; background:rgba(0,0,0,0.6); opacity:0; pointer-events:none; transition:opacity var(--t-med); }
   .cart-overlay.open { opacity:1; pointer-events:auto; }
-  .cart-drawer { position:fixed; top:0; right:0; bottom:0; width:min(440px,100vw); z-index:100; background:#0a0a0a; border-left:1px solid rgba(109,61,21,0.4); display:flex; flex-direction:column; transform:translateX(100%); transition:transform var(--t-med); }
+  .cart-drawer { position:fixed; top:0; right:0; bottom:0; width:min(440px,100vw); z-index:100; background:#0a0a0a; border-left:5px solid rgba(109,61,21,0.4); display:flex; flex-direction:column; transform:translateX(100%); transition:transform var(--t-med); }
   .cart-drawer.open { transform:translateX(0); }
-  .drawer-header { display:flex; align-items:center; justify-content:space-between; padding:var(--s5); border-bottom:1px solid var(--ring-faint); }
+  .drawer-header { display:flex; align-items:center; justify-content:space-between; padding:var(--s5); border-bottom:5px solid var(--ring-faint); }
   .drawer-title { font-family:var(--sans); font-weight:900; font-size:14px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); }
   .drawer-close { font-family:var(--sans); font-weight:300; font-size:28px; line-height:1; color:var(--text-mute); padding:4px 12px; transition:color var(--t-fast); }
   .drawer-close:hover { color:var(--accent); }
   .drawer-body { flex:1; display:flex; align-items:center; justify-content:center; }
   .drawer-empty { font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--text-dim); }
-  .drawer-footer { padding:var(--s5); border-top:1px solid var(--ring-faint); }
-  .checkout-btn { display:block; width:100%; padding:var(--s4); border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); font-family:var(--sans); font-weight:700; font-size:12px; letter-spacing:0.2em; text-transform:uppercase; cursor:not-allowed; }
+  .drawer-footer { padding:var(--s5); border-top:5px solid var(--ring-faint); }
+  .checkout-btn { display:block; width:100%; padding:var(--s4); border:5px solid var(--ring-soft); background:transparent; color:var(--text-dim); font-family:var(--sans); font-weight:700; font-size:12px; letter-spacing:0.2em; text-transform:uppercase; cursor:not-allowed; }
 
   .lightbox { position:fixed; inset:0; z-index:300; background:rgba(8,8,8,0.97); display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity var(--t-med); cursor:zoom-out; }
   .lightbox.open { opacity:1; pointer-events:all; }
@@ -248,7 +248,7 @@ statement:    "placeholder — replace with real statement text"
 
   @media (max-width:900px) {
     .split { grid-template-columns:1fr; padding-top:108px; }
-    .split-image { position:relative; top:0; height:auto; min-height:60vw; padding:var(--s5); border-right:none; border-bottom:1px solid var(--ring-faint); }
+    .split-image { position:relative; top:0; height:auto; min-height:60vw; padding:var(--s5); border-right:none; border-bottom:5px solid var(--ring-faint); }
     .painting-frame { max-height:70vw; aspect-ratio:unset; }
     .split-content { padding:var(--s6) var(--s5) var(--s7); }
     footer.bottom { grid-column:1; }

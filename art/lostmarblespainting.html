@@ -135,7 +135,7 @@ statement:    "placeholder — replace with real statement text"
   .cart-toggle {
     display:flex; align-items:center; gap:var(--s3);
     padding:var(--s2) var(--s4);
-    border:1px solid var(--ring-soft);
+    border:5px solid var(--ring-soft);
     transition:border-color var(--t-fast), background var(--t-fast);
   }
   .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
@@ -185,7 +185,7 @@ statement:    "placeholder — replace with real statement text"
     align-items:center;
     justify-content:center;
     padding:var(--s6);
-    border-right:1px solid var(--ring-faint);
+    border-right:5px solid var(--ring-faint);
   }
 
   /* ============================================================
@@ -293,7 +293,7 @@ statement:    "placeholder — replace with real statement text"
     display:flex; align-items:center; gap:var(--s4);
     flex-wrap:wrap;
     padding-top:var(--s3);
-    border-top:1px solid var(--ring-faint);
+    border-top:5px solid var(--ring-faint);
   }
   .meta-item {
     font-family:var(--serif); font-size:11px;
@@ -368,7 +368,7 @@ statement:    "placeholder — replace with real statement text"
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
     color:var(--accent-hot);
-    border:1px solid var(--accent-hot);    /* solid always, not faded */
+    border:5px solid var(--accent-hot);    /* solid always, not faded */
     padding:var(--s2) var(--s4);
     transition:
       background   var(--t-fast),
@@ -396,7 +396,7 @@ statement:    "placeholder — replace with real statement text"
   .related-item {
     display:flex; align-items:center; justify-content:space-between;
     padding:var(--s4);
-    border:1px solid var(--ring-faint);
+    border:5px solid var(--ring-faint);
     transition:border-color var(--t-fast), background var(--t-fast);
   }
   /* related item hover — border + arrow + title use --item-color set inline per item.
@@ -443,7 +443,7 @@ statement:    "placeholder — replace with real statement text"
     position:relative; z-index:2;
     grid-column:1 / -1;
     padding:var(--s6) var(--s6);
-    border-top:1px solid var(--ring-faint);
+    border-top:5px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
   }
   footer.bottom p, footer.bottom a {
@@ -466,7 +466,7 @@ statement:    "placeholder — replace with real statement text"
     position:fixed; top:0; right:0; bottom:0;
     width:min(440px,100vw); z-index:100;
     background:#0a0a0a;
-    border-left:1px solid rgba(109,61,21,0.4);
+    border-left:5px solid rgba(109,61,21,0.4);
     display:flex; flex-direction:column;
     transform:translateX(100%);
     transition:transform var(--t-med);
@@ -474,7 +474,7 @@ statement:    "placeholder — replace with real statement text"
   .cart-drawer.open { transform:translateX(0); }
   .drawer-header {
     display:flex; align-items:center; justify-content:space-between;
-    padding:var(--s5); border-bottom:1px solid var(--ring-faint);
+    padding:var(--s5); border-bottom:5px solid var(--ring-faint);
   }
   .drawer-title {
     font-family:var(--sans); font-weight:900; font-size:14px;
@@ -493,10 +493,10 @@ statement:    "placeholder — replace with real statement text"
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.22em; text-transform:uppercase; color:var(--text-dim);
   }
-  .drawer-footer { padding:var(--s5); border-top:1px solid var(--ring-faint); }
+  .drawer-footer { padding:var(--s5); border-top:5px solid var(--ring-faint); }
   .checkout-btn {
     display:block; width:100%; padding:var(--s4);
-    border:1px solid var(--ring-soft); background:transparent;
+    border:5px solid var(--ring-soft); background:transparent;
     color:var(--text-dim);
     font-family:var(--sans); font-weight:700; font-size:12px;
     letter-spacing:0.2em; text-transform:uppercase;

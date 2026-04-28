@@ -17,7 +17,7 @@
 
 .venture-placeholder .placeholder-card {
   width: min(100%, 720px);
-  border: 1px solid var(--venture-accent-dim);
+  border: 5px solid var(--venture-accent-dim);
   background:
     linear-gradient(180deg, var(--venture-accent-wash), transparent 42%),
     #111111;
@@ -74,7 +74,7 @@
   justify-content: center;
   min-height: 44px;
   padding: 0 18px;
-  border: 1px solid var(--venture-accent-dim);
+  border: 5px solid var(--venture-accent-dim);
   color: var(--venture-accent);
   font-family: var(--font-display);
   font-size: var(--text-xs);
