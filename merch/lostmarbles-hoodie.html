@@ -287,16 +287,16 @@
     color:var(--text-mute);
     border:5px solid var(--ring-soft);
     padding:var(--s2) var(--s4);
-    cursor:pointer; background:none;
+    cursor:pointer; background:var(--bg-raised);
     transition:color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
     min-width:52px; text-align:center;
   }
   .size-pill:hover {
-    color:var(--src-color); border-color:var(--src-color);
+    color:var(--src-color); border-color:var(--src-color); background:rgba(247,162,38,0.04);
   }
   .size-pill.selected {
-    color:var(--bg);
-    background:var(--src-color); border-color:var(--src-color);
+    color:var(--text);
+    background:var(--bg-raised); border-color:var(--text-dim);
   }
   .size-required {
     font-family:var(--serif); font-size:10px;
@@ -548,11 +548,12 @@
   .drawer-item-qty { display:flex; align-items:center; gap:var(--s2); margin-top:var(--s2); }
   .qty-btn {
     width:20px; height:20px; border:5px solid var(--ring-soft);
+    background:var(--bg-raised);
     font-family:var(--sans); font-size:12px; color:var(--text-mute);
     display:flex; align-items:center; justify-content:center;
-    transition:border-color var(--t-fast), color var(--t-fast);
+    transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
   }
-  .qty-btn:hover { border-color:var(--src-color); color:var(--src-color); }
+  .qty-btn:hover { border-color:var(--src-color); color:var(--src-color); background:rgba(247,162,38,0.04); }
   .qty-num { font-family:var(--sans); font-size:12px; color:var(--text); min-width:16px; text-align:center; }
   .drawer-item-right { display:flex; flex-direction:column; align-items:flex-end; gap:var(--s2); }
   .drawer-item-price { font-family:var(--serif); font-size:12px; color:var(--text); }
