@@ -4,271 +4,584 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Art.Pill Tattoo House · the six.well construct</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/tokens.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
-<link rel="stylesheet" href="/css/tattoos.css">
+
 <style>
+  /* ============================================================
+     DESIGN TOKENS — Art.Pill Tattoo House
+  ============================================================ */
   :root {
-    --venture-accent: var(--color-tattooing);
-    --venture-accent-dim: var(--color-tattooing-dim);
+    --bg:           #0e0e0e;
+    --bg-raised:    #111111;
+
+    --accent:       #FCB867;              /* construct amber */
+    --signal:       #8F231D;              /* Art.Pill signal */
+    --signal-dim:   rgba(143,35,29,0.4);
+    --signal-faint: rgba(143,35,29,0.18);
+    --signal-wash:  rgba(143,35,29,0.06);
+
+    --text:         #E8E4DC;
+    --text-mute:    rgba(232,228,220,0.6);
+    --text-dim:     rgba(232,228,220,0.35);
+    --text-ghost:   rgba(232,228,220,0.12);
+
+    --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: 'Times New Roman',Times,serif;
+
+    --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
+  }
+
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body {
+    background:var(--bg); color:var(--text);
+    font-family:var(--serif);
+    min-height:100vh; overflow-x:clip;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+  a { color:inherit; text-decoration:none; }
+  button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
+
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* ============================================================
+     HEADER
+  ============================================================ */
+  header.top {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:flex-end;
+    padding:24px 40px;
+  }
+  .nav-inquire {
+    font-family:var(--sans); font-weight:700; font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--signal); border:1px solid var(--signal-dim);
+    padding:8px 16px;
+    transition:background var(--t-fast), border-color var(--t-fast);
+  }
+  .nav-inquire:hover { background:var(--signal-wash); border-color:var(--signal); }
+
+  /* ============================================================
+     MAIN
+  ============================================================ */
+  main {
+    position:relative; z-index:2;
+    max-width:1080px; margin:0 auto;
+    padding:96px 40px 80px;
+  }
+
+  /* ============================================================
+     HERO
+  ============================================================ */
+  .hero {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:40px; margin-bottom:80px;
+  }
+  .hero-left { display:flex; flex-direction:column; }
+  .hero-label {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); opacity:0.7; margin-bottom:-10px;
+  }
+  .hero-title {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(80px,14vw,200px);
+    letter-spacing:-0.05em; line-height:0.88;
+    color:var(--signal);
+  }
+  .hero-right {
+    display:flex; flex-direction:column; align-items:flex-end;
+    gap:20px; padding-bottom:14px; max-width:300px;
+  }
+  .hero-desc {
+    font-family:var(--serif); font-size:13px;
+    letter-spacing:0.03em; line-height:1.75;
+    color:var(--text-mute); text-align:right;
+  }
+  .cta-primary {
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--sans); font-weight:700; font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--bg); background:var(--signal);
+    padding:12px 24px;
+    transition:opacity var(--t-fast);
+  }
+  .cta-primary:hover { opacity:0.82; }
+  .hero-note {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--text-ghost); text-align:right;
+  }
+
+  /* ============================================================
+     SECTION BASE
+  ============================================================ */
+  .section {
+    padding:72px 0;
+    border-top:1px solid var(--signal-faint);
+  }
+  .section-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); opacity:0.6; margin-bottom:16px;
+  }
+  .section-title {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(28px,4vw,52px);
+    letter-spacing:-0.03em; line-height:0.94;
+    color:var(--accent); margin-bottom:24px;
+  }
+  .section-body {
+    font-family:var(--serif); font-size:16px;
+    line-height:1.8; color:var(--text); max-width:620px;
+  }
+  .section-body + .section-body { margin-top:16px; }
+
+  /* ============================================================
+     THE WORK — pillars
+  ============================================================ */
+  .pillars {
+    display:grid; grid-template-columns:repeat(3,1fr);
+    gap:1px; background:var(--signal-faint);
+    border:1px solid var(--signal-faint);
+    margin-top:48px;
+  }
+  .pillar { background:var(--bg-raised); padding:32px 28px; }
+  .pillar-title {
+    font-family:var(--sans); font-weight:900; font-size:13px;
+    letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--signal); margin-bottom:14px;
+  }
+  .pillar-body {
+    font-family:var(--serif); font-size:13px;
+    line-height:1.7; color:var(--text-mute);
+  }
+
+  /* ============================================================
+     WAYS TO WORK — two cards
+  ============================================================ */
+  .work-types {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:1px; background:var(--signal-faint);
+    border:1px solid var(--signal-faint);
+    margin-top:48px;
+  }
+  .work-type { background:var(--bg-raised); padding:36px 32px; }
+  .work-type-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); opacity:0.7; margin-bottom:12px;
+  }
+  .work-type-title {
+    font-family:var(--sans); font-weight:900; font-size:22px;
+    letter-spacing:-0.02em; color:var(--accent); margin-bottom:16px;
+  }
+  .work-type-body {
+    font-family:var(--serif); font-size:13px;
+    line-height:1.75; color:var(--text-mute);
+  }
+
+  /* ============================================================
+     PRICING — tiers
+  ============================================================ */
+  .pricing-tiers {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:1px; background:var(--signal-faint);
+    border:1px solid var(--signal-faint);
+    margin-top:48px;
+  }
+  .tier { background:var(--bg-raised); padding:36px 32px; }
+  .tier-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:20px;
+  }
+  .tier-price {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(40px,5vw,64px);
+    letter-spacing:-0.04em; line-height:1;
+    color:var(--signal);
+  }
+  .tier-unit {
+    font-family:var(--serif); font-size:11px;
+    color:var(--text-dim); letter-spacing:0.14em;
+    text-transform:uppercase; margin-bottom:24px; margin-top:4px;
+  }
+  .tier-name {
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.1em; text-transform:uppercase;
+    color:var(--accent); margin-bottom:12px;
+  }
+  .tier-desc {
+    font-family:var(--serif); font-size:13px;
+    line-height:1.7; color:var(--text-mute);
+  }
+  .pricing-note {
+    margin-top:24px;
+    font-family:var(--serif); font-size:12px;
+    letter-spacing:0.04em; color:var(--text-dim); line-height:1.7;
+    max-width:600px;
+  }
+
+  /* ============================================================
+     BOOKING PROCESS — steps
+  ============================================================ */
+  .process-steps {
+    display:grid; grid-template-columns:repeat(5,1fr);
+    gap:1px; background:var(--signal-faint);
+    border:1px solid var(--signal-faint);
+    margin-top:48px;
+  }
+  .step {
+    background:var(--bg-raised); padding:28px 22px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .step-num {
+    font-family:var(--sans); font-weight:900; font-size:36px;
+    letter-spacing:-0.04em; line-height:1;
+    color:var(--signal); opacity:0.22;
+  }
+  .step-title {
+    font-family:var(--sans); font-weight:700; font-size:11px;
+    letter-spacing:0.12em; text-transform:uppercase; color:var(--accent);
+  }
+  .step-desc {
+    font-family:var(--serif); font-size:12px;
+    line-height:1.65; color:var(--text-mute);
+  }
+
+  /* ============================================================
+     PROJECT FIT — two columns
+  ============================================================ */
+  .fit-columns {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:1px; background:var(--signal-faint);
+    border:1px solid var(--signal-faint);
+    margin-top:48px;
+  }
+  .fit-col { background:var(--bg-raised); padding:32px 28px; }
+  .fit-col-title {
+    font-family:var(--sans); font-weight:900; font-size:11px;
+    letter-spacing:0.14em; text-transform:uppercase; margin-bottom:24px;
+  }
+  .fit-col.good .fit-col-title { color:var(--signal); }
+  .fit-col.not  .fit-col-title { color:var(--text-dim); }
+  .fit-list {
+    list-style:none;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .fit-list li {
+    font-family:var(--serif); font-size:13px;
+    line-height:1.5; color:var(--text-mute);
+    padding-left:18px; position:relative;
+  }
+  .fit-list li::before {
+    content:""; position:absolute; left:0; top:7px;
+    width:4px; height:4px; border-radius:50%;
+  }
+  .fit-col.good .fit-list li::before { background:var(--signal); }
+  .fit-col.not  .fit-list li::before { background:var(--text-ghost); }
+
+  /* ============================================================
+     BOOKING CTA
+  ============================================================ */
+  .booking-cta {
+    margin-top:80px;
+    border:1px solid var(--signal-dim);
+    background:var(--signal-wash);
+    padding:64px 48px;
+    display:flex; align-items:center;
+    justify-content:space-between; gap:48px;
+  }
+  .booking-cta-left { max-width:480px; }
+  .booking-cta-label {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); opacity:0.7; margin-bottom:12px;
+  }
+  .booking-cta-title {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(24px,3vw,42px);
+    letter-spacing:-0.03em; line-height:0.94;
+    color:var(--accent); margin-bottom:16px;
+  }
+  .booking-cta-body {
+    font-family:var(--serif); font-size:13px;
+    line-height:1.75; color:var(--text-mute);
+  }
+  .booking-cta-actions {
+    display:flex; flex-direction:column;
+    align-items:flex-end; gap:12px; flex-shrink:0;
+  }
+  .booking-cta-note {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--text-ghost); text-align:right;
+    max-width:200px; line-height:1.6;
+  }
+
+  /* ============================================================
+     FOOTER
+  ============================================================ */
+  footer.bottom {
+    position:relative; z-index:2;
+    max-width:1080px; margin:0 auto;
+    padding:56px 40px;
+    border-top:1px solid var(--signal-faint);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  footer.bottom p, footer.bottom a {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
+  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
+  footer.bottom a:hover { color:var(--accent); }
+
+  /* ============================================================
+     RESPONSIVE
+  ============================================================ */
+  @media (max-width:1024px) {
+    .process-steps { grid-template-columns:repeat(3,1fr); }
+    main { padding:72px 32px 64px; }
+    footer.bottom { padding:48px 32px; }
+  }
+  @media (max-width:768px) {
+    .hero { flex-direction:column; align-items:flex-start; gap:20px; }
+    .hero-right { align-items:flex-start; max-width:none; }
+    .hero-desc { text-align:left; }
+    .hero-note { text-align:left; }
+    .pillars { grid-template-columns:1fr; }
+    .work-types { grid-template-columns:1fr; }
+    .pricing-tiers { grid-template-columns:1fr; }
+    .fit-columns { grid-template-columns:1fr; }
+    .booking-cta { flex-direction:column; align-items:flex-start; padding:40px 32px; }
+    .booking-cta-actions { align-items:flex-start; }
+    .booking-cta-note { text-align:left; }
+  }
+  @media (max-width:640px) {
+    header.top { padding:16px 20px; }
+    main { padding:56px 20px 48px; }
+    .section { padding:48px 0; }
+    .process-steps { grid-template-columns:1fr; }
+    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px 20px; }
   }
 </style>
 </head>
-<body class="tattoos-page" data-venture="tattooing">
-  <main class="tattoos-shell">
+<body data-venture="tattooing">
+
+  <div class="grain"></div>
+
+  <header class="top">
+    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
+  </header>
+
+  <main>
+
+    <!-- ── HERO ───────────────────────────────────────────────── -->
     <section class="hero">
-      <div class="hero-copy entrance-fade">
-        <span class="eyebrow">Tattoos</span>
-        <h1>Art.Pill Tattoo House</h1>
-        <p class="hero-lead">
-          A premium tattoo practice for mythic, surreal, symbolic work built through
-          guided concept development rather than generic tattoo labor.
+      <div class="hero-left">
+        <p class="hero-label">Art.Pill Tattoo House</p>
+        <h1 class="hero-title">TATTOOS.</h1>
+      </div>
+      <div class="hero-right">
+        <p class="hero-desc">
+          Original symbolic, surreal, and mythic tattooing.<br>
+          Guided by meaning. Designed to carry weight.
         </p>
-        <p class="hero-note">
-          Art.Pill centers original flash, custom concept-led pieces, and emotionally
-          charged imagery, while still welcoming strong non-narrative inquiries that fit
-          the visual language of the practice.
-        </p>
-        <div class="action-row">
-          <a class="tattoos-button" href="/tattoos/inquire/">Begin the inquiry</a>
-          <a class="tattoos-button-secondary" href="#booking-process">See the process</a>
+        <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
+        <p class="hero-note">All bookings begin with a project inquiry.</p>
+      </div>
+    </section>
+
+    <!-- ── THE WORK ───────────────────────────────────────────── -->
+    <section class="section" id="the-work">
+      <p class="section-label">The Work</p>
+      <h2 class="section-title">Symbolic. Surreal. Mythic.</h2>
+      <p class="section-body">
+        Every piece begins with a question: what are you carrying, and what do you want on your skin for the rest of your life? The work here is visually original and story-driven — not trend-sourced, not pulled from a reference folder.
+      </p>
+      <p class="section-body">
+        The imagery is drawn from mythology, dream logic, personal symbol systems, and the things people need to externalize. If you know what you need to say and are ready to trust a collaborator in saying it, this is the right place.
+      </p>
+
+      <div class="pillars">
+        <div class="pillar">
+          <p class="pillar-title">Symbolic</p>
+          <p class="pillar-body">Imagery that carries a private or archetypal meaning. Not decorative first — anchored to something real in the person wearing it.</p>
+        </div>
+        <div class="pillar">
+          <p class="pillar-title">Surreal</p>
+          <p class="pillar-body">Dream logic. Incongruous figures. Scenes that don't obey the rules of literal space but communicate something exact and felt.</p>
+        </div>
+        <div class="pillar">
+          <p class="pillar-title">Mythic</p>
+          <p class="pillar-body">Figures, creatures, and archetypes drawn from personal mythology as much as collective ones. The work builds its own visual language over time.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── THE EXPERIENCE ─────────────────────────────────────── -->
+    <section class="section" id="the-experience">
+      <p class="section-label">The Experience</p>
+      <h2 class="section-title">A Guided Creative Process</h2>
+      <p class="section-body">
+        Working here is not placing an order. You bring what you need to say — the image, the feeling, the story, or just the intuition that something needs to be on your body — and together we shape it into something permanent.
+      </p>
+      <p class="section-body">
+        The process is intentional and unhurried. Every session is preceded by real consultation. The design you receive is original, drawn for you and not pulled from a catalog. The work will not be rushed to fit a timeline that doesn't respect the piece.
+      </p>
+    </section>
+
+    <!-- ── WAYS TO WORK ───────────────────────────────────────── -->
+    <section class="section" id="ways-to-work">
+      <p class="section-label">Ways to Work</p>
+      <h2 class="section-title">Flash &amp; Custom</h2>
+      <p class="section-body">Two paths in. Both begin with an inquiry.</p>
+
+      <div class="work-types">
+        <div class="work-type">
+          <p class="work-type-label">Available Now</p>
+          <p class="work-type-title">Original Flash</p>
+          <p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog — symbolic, surreal, and built to place. Flash pieces are sized and refined to the right spot on your body. Designs can be adapted within reason, but the concept stays true to its intent.</p>
+        </div>
+        <div class="work-type">
+          <p class="work-type-label">By Inquiry</p>
+          <p class="work-type-title">Custom Work</p>
+          <p class="work-type-body">Collaboratively designed pieces built around your concept, story, or symbol system. Custom sessions begin with a written inquiry and are accepted on a project-by-project basis. Not every project is the right fit — the inquiry process exists to determine that before either side commits.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PRICING ────────────────────────────────────────────── -->
+    <section class="section" id="pricing">
+      <p class="section-label">Pricing</p>
+      <h2 class="section-title">Transparent Rates</h2>
+      <p class="section-body">All sessions require a deposit, applied toward the total cost of your tattoo.</p>
+
+      <div class="pricing-tiers">
+        <div class="tier">
+          <p class="tier-label">Standard Rate</p>
+          <p class="tier-price">$150</p>
+          <p class="tier-unit">per hour</p>
+          <p class="tier-name">Flash &amp; Standard Sessions</p>
+          <p class="tier-desc">Original flash, smaller custom pieces, and single-session work. Applies to most appointments.</p>
+        </div>
+        <div class="tier">
+          <p class="tier-label">Premium Rate</p>
+          <p class="tier-price">$250</p>
+          <p class="tier-unit">per hour</p>
+          <p class="tier-name">Mythic &amp; Story-Driven Sessions</p>
+          <p class="tier-desc">Extended custom work, complex symbolic compositions, large-scale or multi-session projects, and narrative pieces requiring deep collaboration.</p>
         </div>
       </div>
 
-      <aside class="hero-panel entrance-fade entrance-delay-1">
-        <span class="panel-label">Practice note</span>
-        <h2 class="panel-title">Guided, deliberate, original</h2>
-        <p>
-          The work is built for clients who want a real creative process: concept review,
-          artist interpretation, strong visual composition, and a finished tattoo that
-          feels authored rather than assembled.
-        </p>
-        <p>
-          Public inquiry opens the conversation. Approved projects receive a private
-          booking link and deposit instructions after review.
-        </p>
-      </aside>
+      <p class="pricing-note">
+        Deposits are required to secure all appointments. The deposit amount is determined at booking and goes toward the final tattoo cost. Rates are confirmed at time of booking and subject to change.
+      </p>
     </section>
 
-    <section class="page-section" id="the-work">
-      <div class="section-head entrance-fade">
-        <span class="section-kicker">The Work</span>
-        <h2 class="section-title">Original mythic, surreal, and symbolic tattooing</h2>
-        <p class="section-copy">
-          The practice is built around mythic figures, surreal scenes, symbolic
-          architecture, emotionally loaded objects, abstract visual tension, and original
-          flash that still feels authored and alive.
-        </p>
-      </div>
+    <!-- ── BOOKING PROCESS ────────────────────────────────────── -->
+    <section class="section" id="booking-process">
+      <p class="section-label">How It Works</p>
+      <h2 class="section-title">The Booking Process</h2>
+      <p class="section-body">This is not a walk-in shop. Every client begins with a project inquiry, and not every project is accepted.</p>
 
-      <div class="card-grid three-up">
-        <article class="section-card entrance-fade entrance-delay-1">
-          <span class="mini-label">Mythic figures</span>
-          <h3>Archetypal bodies and presences</h3>
-          <p>
-            Figures that feel ancient, ceremonial, protective, haunted, or transformed.
-          </p>
-        </article>
-        <article class="section-card entrance-fade entrance-delay-2">
-          <span class="mini-label">Surreal imagery</span>
-          <h3>Dream logic over trend logic</h3>
-          <p>
-            Strange compositions, charged symbols, and visual tension that reward a longer look.
-          </p>
-        </article>
-        <article class="section-card entrance-fade entrance-delay-3">
-          <span class="mini-label">Original flash</span>
-          <h3>Ready-made work with real authorship</h3>
-          <p>
-            Flash is treated as a finished creative offering, not filler between custom projects.
-          </p>
-        </article>
+      <div class="process-steps">
+        <div class="step">
+          <span class="step-num">01</span>
+          <p class="step-title">Submit Inquiry</p>
+          <p class="step-desc">Describe your project — concept, placement, size, and anything else that matters. No design required at this stage.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">02</span>
+          <p class="step-title">Project Review</p>
+          <p class="step-desc">Inquiries are reviewed individually. You'll hear back within 1–2 weeks. Not every project is accepted.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">03</span>
+          <p class="step-title">Booking Link</p>
+          <p class="step-desc">Approved clients receive a private booking link. This page is not public and does not appear anywhere on the site.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">04</span>
+          <p class="step-title">Deposit</p>
+          <p class="step-desc">A deposit secures your appointment date and is applied toward the final cost of your tattoo.</p>
+        </div>
+        <div class="step">
+          <span class="step-num">05</span>
+          <p class="step-title">Session</p>
+          <p class="step-desc">Your appointment. Design consultation happens here if not completed prior. The work begins.</p>
+        </div>
       </div>
     </section>
 
-    <section class="page-section" id="the-experience">
-      <div class="section-head entrance-fade">
-        <span class="section-kicker">The Experience</span>
-        <h2 class="section-title">A guided collaboration from concept to session</h2>
-        <p class="section-copy">
-          Working here means entering a paced creative process. The goal is not to
-          rush you into an appointment, but to make sure the image, placement, scale,
-          and emotional weight all land correctly.
-        </p>
-      </div>
+    <!-- ── PROJECT FIT ────────────────────────────────────────── -->
+    <section class="section" id="project-fit">
+      <p class="section-label">Project Fit</p>
+      <h2 class="section-title">Is This the Right Shop?</h2>
+      <p class="section-body">Not every project belongs here — and that's okay. The inquiry process exists to determine whether this is the right collaboration before either side commits.</p>
 
-      <div class="card-grid two-up">
-        <article class="section-card entrance-fade entrance-delay-1">
-          <h3>Interpretation over replication</h3>
-          <p>
-            Strong projects leave room for visual authorship. References can guide the
-            conversation, but the final design should feel like a tattoo with its own life.
-          </p>
-        </article>
-        <article class="section-card entrance-fade entrance-delay-2">
-          <h3>Atmosphere matters</h3>
-          <p>
-            Sessions are treated like focused studio time: intentional pacing, honest
-            communication, and enough space for the work to become what it needs to be.
-          </p>
-        </article>
-      </div>
-    </section>
-
-    <section class="page-section" id="ways-to-work">
-      <div class="section-head entrance-fade">
-        <span class="section-kicker">Ways To Work With Me</span>
-        <h2 class="section-title">Different entry points, same level of care</h2>
-      </div>
-
-      <div class="card-grid four-up">
-        <article class="section-card entrance-fade entrance-delay-1">
-          <h3>Original flash</h3>
-          <p>Pre-drawn work available for collectors who want something immediate but authored.</p>
-        </article>
-        <article class="section-card entrance-fade entrance-delay-2">
-          <h3>Custom symbolic work</h3>
-          <p>Concept-led pieces shaped around personal themes, symbols, and visual atmosphere.</p>
-        </article>
-        <article class="section-card entrance-fade entrance-delay-3">
-          <h3>Mythic / large-form sessions</h3>
-          <p>Larger work for clients who want a stronger ceremonial, surreal, symbolic, or atmospheric frame.</p>
-        </article>
-        <article class="section-card entrance-fade entrance-delay-4">
-          <h3>Ongoing collector work</h3>
-          <p>Repeat sessions for clients building a language across multiple pieces over time.</p>
-        </article>
-      </div>
-    </section>
-
-    <section class="page-section" id="pricing">
-      <div class="section-head entrance-fade">
-        <span class="section-kicker">Pricing</span>
-        <h2 class="section-title">Rates reflect depth, design time, and session focus</h2>
-      </div>
-
-      <div class="price-grid">
-        <article class="price-card entrance-fade entrance-delay-1">
-          <span class="mini-label">Standard sessions</span>
-          <div class="price-figure">$150/hr</div>
-          <p class="price-caption">
-            For straightforward flash and smaller custom work that still fits the practice well.
-          </p>
-        </article>
-        <article class="price-card entrance-fade entrance-delay-2">
-          <span class="mini-label">Premium concept sessions</span>
-          <div class="price-figure">$250/hr</div>
-          <p class="price-caption">
-            For larger symbolic, surreal, atmospheric, or mythic pieces that require deeper concept work.
-          </p>
-        </article>
-      </div>
-
-      <div class="info-panel entrance-fade entrance-delay-3" style="margin-top:16px;">
-        <span class="mini-label">Deposit policy</span>
-        <p>
-          Deposits are required to book and always go toward the final tattoo price.
-          Approved projects receive deposit instructions with the private booking link.
-        </p>
-      </div>
-    </section>
-
-    <section class="page-section" id="booking-process">
-      <div class="section-head entrance-fade">
-        <span class="section-kicker">Booking Process</span>
-        <h2 class="section-title">Review first, booking second</h2>
-      </div>
-
-      <ol class="process-list entrance-fade entrance-delay-1">
-        <li class="process-step">
-          <span class="step-number">01</span>
-          <span class="step-title">Submit inquiry</span>
-          <p>Share the idea, placement, scale, references, and timing through the inquiry route.</p>
-        </li>
-        <li class="process-step">
-          <span class="step-number">02</span>
-          <span class="step-title">Project reviewed</span>
-          <p>Each inquiry is screened for fit, scope, schedule, and alignment with the practice.</p>
-        </li>
-        <li class="process-step">
-          <span class="step-number">03</span>
-          <span class="step-title">Approved clients get a link</span>
-          <p>If the project is a match, you receive a private booking link and next-step notes.</p>
-        </li>
-        <li class="process-step">
-          <span class="step-number">04</span>
-          <span class="step-title">Deposit secures the session</span>
-          <p>The appointment becomes official once the deposit is placed through the booking flow.</p>
-        </li>
-        <li class="process-step">
-          <span class="step-number">05</span>
-          <span class="step-title">Session happens</span>
-          <p>The tattoo session is treated as the final stage of a process that has already been shaped well.</p>
-        </li>
-      </ol>
-    </section>
-
-    <section class="page-section" id="project-fit">
-      <div class="section-head entrance-fade">
-        <span class="section-kicker">Project Fit</span>
-        <h2 class="section-title">Best for the right kind of collector</h2>
-      </div>
-
-      <div class="fit-grid">
-        <article class="fit-card entrance-fade entrance-delay-1">
-          <span class="mini-label">Good fit</span>
-          <h3>Projects that belong here</h3>
-          <ul>
-            <li>Symbolic tattoos</li>
-            <li>Surreal imagery and dream logic</li>
-            <li>Mythic figures, symbolic compositions, and strong non-narrative imagery</li>
-            <li>Original flash and concept-led custom pieces</li>
-            <li>Emotionally or conceptually driven work</li>
+      <div class="fit-columns">
+        <div class="fit-col good">
+          <p class="fit-col-title">Good Fit</p>
+          <ul class="fit-list">
+            <li>Symbolic and conceptually driven work</li>
+            <li>Surreal or dream-logic imagery</li>
+            <li>Mythic figures and archetypal compositions</li>
+            <li>Original flash from the Art.Pill catalog</li>
+            <li>Emotionally or narratively anchored pieces</li>
             <li>Clients who trust artist interpretation</li>
+            <li>Long-term collectors and returning clients</li>
           </ul>
-        </article>
-        <article class="fit-card entrance-fade entrance-delay-2">
-          <span class="mini-label">Not ideal</span>
-          <h3>Projects better suited elsewhere</h3>
-          <ul>
-            <li>Exact copies or replication jobs</li>
-            <li>Trend tattoos with no room for interpretation</li>
-            <li>Micro realism</li>
-            <li>Rushed appointments</li>
-            <li>Price-shopping as the primary driver</li>
-          </ul>
-        </article>
-      </div>
-    </section>
-
-    <section class="page-section" id="booking-cta">
-      <div class="cta-panel entrance-fade">
-        <div>
-          <span class="section-kicker">Booking CTA</span>
-          <h2 class="section-title">Start with inquiry, not instant scheduling</h2>
-          <p>
-            Public booking is intentionally filtered. Use the inquiry route to introduce the
-            project. If the piece is approved, you will receive a private booking link and
-            deposit instructions afterward.
-          </p>
         </div>
-        <div class="action-row" style="margin-top:0;">
-          <a class="tattoos-button" href="/tattoos/inquire/">Go to inquiry</a>
+        <div class="fit-col not">
+          <p class="fit-col-title">Not the Right Fit</p>
+          <ul class="fit-list">
+            <li>Exact copies of another artist's work</li>
+            <li>Trend-based or algorithm-sourced designs</li>
+            <li>Micro realism or hyper-photographic styles</li>
+            <li>Rushed timelines or last-minute appointments</li>
+            <li>Price shopping or rate negotiation</li>
+            <li>Projects without a clear concept or direction</li>
+          </ul>
         </div>
       </div>
     </section>
 
-    <footer class="footer-bottom">
-      <p>Art.Pill Tattoo House / symbolic, surreal, concept-led tattooing</p>
-      <a href="/">Return to the construct</a>
-    </footer>
+    <!-- ── BOOKING CTA ─────────────────────────────────────────── -->
+    <div class="booking-cta">
+      <div class="booking-cta-left">
+        <p class="booking-cta-label">Ready to Begin</p>
+        <h2 class="booking-cta-title">Start With an Inquiry.</h2>
+        <p class="booking-cta-body">
+          Describe your project and we'll determine whether it's the right fit. No commitment required at this stage — just a conversation about what you want to put on your body and why.
+        </p>
+      </div>
+      <div class="booking-cta-actions">
+        <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
+        <p class="booking-cta-note">Not a direct booking. All projects are reviewed before a session is scheduled.</p>
+      </div>
+    </div>
+
   </main>
+
+  <footer class="bottom">
+    <p>&copy; Art.Pill Tattoo House &middot; the six.well construct</p>
+    <a href="/">return to construct</a>
+  </footer>
 
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+
 </body>
 </html>
