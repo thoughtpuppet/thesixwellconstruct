@@ -1,17 +1,5 @@
 import { initMerchProductPage } from "/js/shop-storefront.js";
 
-function initScrollerControls() {
-  document.querySelectorAll("[data-scroll-target]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const target = document.getElementById(button.dataset.scrollTarget);
-      if (!target) return;
-      const direction = button.dataset.scrollDirection === "prev" ? -1 : 1;
-      const step = Math.max(160, Math.floor(target.clientWidth * 0.72));
-      target.scrollBy({ left: direction * step, behavior: "smooth" });
-    });
-  });
-}
-
 initMerchProductPage({
   handle: document.body.dataset.productHandle,
   addButtonEl: document.getElementById("addBtn"),
@@ -35,9 +23,6 @@ initMerchProductPage({
   statusEl: document.getElementById("purchaseStatus"),
   titleEl: document.getElementById("productName"),
 })
-  .then(() => {
-    initScrollerControls();
-  })
   .catch((error) => {
   console.error(error);
   const statusEl = document.getElementById("purchaseStatus");

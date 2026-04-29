@@ -35,12 +35,23 @@
   }
 
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  ::-webkit-scrollbar { width:12px; height:12px; }
+  ::-webkit-scrollbar-track { background:var(--bg-raised); border-radius:10px; }
+  ::-webkit-scrollbar-thumb {
+    background:linear-gradient(180deg, var(--accent), #b8864a);
+    border-radius:10px;
+    border:2px solid var(--bg-raised);
+  }
+  ::-webkit-scrollbar-thumb:hover { background:var(--accent); }
+  ::-webkit-scrollbar-corner { background:var(--bg-raised); }
   html,body {
     background:var(--bg);
     color:var(--body);
     font-family:var(--serif);
     min-height:100vh;
     overflow-x:clip;
+    scrollbar-width:thin;
+    scrollbar-color:var(--accent) var(--bg-raised);
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
   }
@@ -114,37 +125,6 @@
     flex-direction:column;
     gap:var(--s4);
   }
-  .scroller-shell {
-    display:grid;
-    grid-template-columns:auto 1fr auto;
-    gap:var(--s2);
-    align-items:center;
-  }
-  .scroller-arrow {
-    width:38px;
-    height:38px;
-    border:1px solid rgba(252,184,103,0.16);
-    border-radius:10px;
-    background:var(--bg);
-    color:var(--text2);
-    font-family:var(--sans);
-    font-size:16px;
-    line-height:1;
-    transition:all var(--t-fast);
-    flex-shrink:0;
-  }
-  .scroller-arrow:hover {
-    border-color:var(--accent);
-    color:var(--accent);
-    transform:translateY(-1px);
-    box-shadow:0 2px 8px rgba(252,184,103,0.16);
-  }
-  .scroller-arrow:disabled {
-    opacity:0.35;
-    cursor:not-allowed;
-    transform:none;
-    box-shadow:none;
-  }
   .product-image-main {
     position:relative;
     aspect-ratio:4/5;
@@ -165,23 +145,6 @@
     overflow-x:auto;
     padding-bottom:var(--s2);
     scroll-behavior:smooth;
-    scrollbar-width:thin;
-    scrollbar-color:var(--accent) var(--bg-raised);
-  }
-  .product-gallery::-webkit-scrollbar,
-  .related-row::-webkit-scrollbar {
-    height:6px;
-  }
-  .product-gallery::-webkit-scrollbar-track,
-  .related-row::-webkit-scrollbar-track {
-    background:var(--bg-raised);
-    border-radius:10px;
-  }
-  .product-gallery::-webkit-scrollbar-thumb,
-  .related-row::-webkit-scrollbar-thumb {
-    background:linear-gradient(180deg, var(--accent), #b8864a);
-    border-radius:10px;
-    border:1px solid var(--bg-raised);
   }
   .gallery-thumb {
     position:relative;
@@ -412,8 +375,6 @@
     display:flex; gap:var(--s5);
     overflow-x:auto; padding-bottom:var(--s3);
     scroll-behavior:smooth;
-    scrollbar-width:thin;
-    scrollbar-color:var(--accent) var(--bg-raised);
   }
   .related-card {
     flex-shrink:0; width:200px;
@@ -456,8 +417,8 @@
 
   footer.bottom {
     position:relative; z-index:2;
-    margin-top:var(--s6);
-    padding:var(--s7) var(--s6) calc(var(--s7) + var(--s4));
+    margin-top:var(--s7);
+    padding:var(--s7) var(--s6) calc(var(--s7) + var(--s6));
     border-top:5px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
     grid-column:1/-1;
@@ -594,13 +555,6 @@
     .header-right { gap:var(--s4); }
     .breadcrumb { display:none; }
     .product-image { padding:var(--s5) var(--s4) var(--s3); }
-    .scroller-shell { grid-template-columns:32px 1fr 32px; }
-    .scroller-arrow {
-      width:32px;
-      height:32px;
-      border-radius:8px;
-      font-size:14px;
-    }
     .gallery-thumb {
       width:78px;
       height:78px;
@@ -650,11 +604,7 @@
             <span class="img-placeholder">product image</span>
             <span class="img-edition">ed. / 30</span>
           </div>
-          <div class="scroller-shell">
-            <button class="scroller-arrow" type="button" data-scroll-target="productGallery" data-scroll-direction="prev" aria-label="previous product image">&larr;</button>
-            <div class="product-gallery" id="productGallery" aria-label="product gallery"></div>
-            <button class="scroller-arrow" type="button" data-scroll-target="productGallery" data-scroll-direction="next" aria-label="next product image">&rarr;</button>
-          </div>
+          <div class="product-gallery" id="productGallery" aria-label="product gallery"></div>
         </div>
       </div>
 
@@ -721,34 +671,30 @@
         <section class="related">
           <hr class="section-divider">
           <p class="section-label">also from this work.</p>
-          <div class="scroller-shell">
-            <button class="scroller-arrow" type="button" data-scroll-target="relatedRow" data-scroll-direction="prev" aria-label="scroll related work left">&larr;</button>
-            <div class="related-row" id="relatedRow">
-              <a class="related-card" href="/art/lostmarblespainting.html">
-                <div class="related-frame">
-                  <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
-                       alt="AM I LOSING MY MARBLES OR HIDING THEM?">
-                </div>
-                <div class="related-info">
-                  <p class="related-type">original painting</p>
-                  <p class="related-name">AM I LOSING MY MARBLES OR HIDING THEM?</p>
-                  <p class="related-price">price on request</p>
-                </div>
-              </a>
+          <div class="related-row" id="relatedRow">
+            <a class="related-card" href="/art/lostmarblespainting.html">
+              <div class="related-frame">
+                <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+                     alt="AM I LOSING MY MARBLES OR HIDING THEM?">
+              </div>
+              <div class="related-info">
+                <p class="related-type">original painting</p>
+                <p class="related-name">AM I LOSING MY MARBLES OR HIDING THEM?</p>
+                <p class="related-price">price on request</p>
+              </div>
+            </a>
 
-              <a class="related-card" href="/merch/marbles-print.html">
-                <div class="related-frame">
-                  <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
-                       alt="Marbles. Print">
-                </div>
-                <div class="related-info">
-                  <p class="related-type">print</p>
-                  <p class="related-name">Marbles. Print</p>
-                  <p class="related-price">$85</p>
-                </div>
-              </a>
-            </div>
-            <button class="scroller-arrow" type="button" data-scroll-target="relatedRow" data-scroll-direction="next" aria-label="scroll related work right">&rarr;</button>
+            <a class="related-card" href="/merch/marbles-print.html">
+              <div class="related-frame">
+                <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+                     alt="Marbles. Print">
+              </div>
+              <div class="related-info">
+                <p class="related-type">print</p>
+                <p class="related-name">Marbles. Print</p>
+                <p class="related-price">$85</p>
+              </div>
+            </a>
           </div>
         </section>
       </div>
