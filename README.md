@@ -27,3 +27,20 @@ and `/art/`, it should be deployed at the domain root rather than under a subpat
 If a Cloudflare setup flow requires a value for the build command, use `exit 0`.
 
 No bundler, package install, or framework build step is required.
+
+## Shopify setup
+
+This repo now includes Cloudflare Pages Functions under `functions/api/shop/*`
+to proxy Shopify Storefront API catalog, product, and cart requests.
+
+Create a local `.dev.vars` from `.dev.vars.example` and set:
+
+- `SHOPIFY_STORE_DOMAIN`
+- `SHOPIFY_STOREFRONT_ACCESS_TOKEN`
+- `SHOPIFY_STOREFRONT_API_VERSION`
+- `SHOPIFY_MERCH_QUERY`
+
+The default catalog query expects Shopify products to be tagged with
+`construct-merch`. Source venture and merch type metadata can come from
+Shopify tags such as `venture:thoughtpuppet` and `merch:type:print`, with
+page-specific presentation details living in `shared/storefront-config.js`.

@@ -697,61 +697,15 @@
     </div>
   </aside>
 
-  <script>
-  /* ============================================================
-     CART — lightweight version for product pages.
-     No products are added here (painting = inquiry only),
-     but the drawer is present for continuity.
-     When Shopify goes live, rip this out and use SDK cart.
-  ============================================================ */
-  let cart = [];
+  <script type='module' src='/js/merch-cart-only.js'></script>
 
-  const drawer     = document.getElementById("cartDrawer");
-  const overlay    = document.getElementById("cartOverlay");
-  const drawerItems = document.getElementById("drawerItems");
-  const cartCount  = document.getElementById("cartCount");
-  const subtotalEl = document.getElementById("subtotal");
-  const checkoutBtn = document.getElementById("checkoutBtn");
-
-  /* render cart drawer — reflects items added via merch/index.html
-     (future: pull from sessionStorage or Shopify SDK cart) */
-  function renderCart() {
-    const totalQty = cart.reduce((s, i) => s + i.qty, 0);
-    cartCount.textContent = totalQty;
-    if (cart.length === 0) {
-      drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
-      subtotalEl.textContent = "$0";
-      checkoutBtn.disabled = true;
-      return;
-    }
-    checkoutBtn.disabled = false;
-    /* full render logic lives in merch/index.html —
-       this page's cart is display-only for now */
-  }
-
-  function openDrawer() {
-    drawer.classList.add("open"); overlay.classList.add("open");
-    drawer.setAttribute("aria-hidden","false");
-  }
-  function closeDrawer() {
-    drawer.classList.remove("open"); overlay.classList.remove("open");
-    drawer.setAttribute("aria-hidden","true");
-  }
-
-  document.getElementById("cartToggle").addEventListener("click", openDrawer);
-  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
-  overlay.addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
-
-  renderCart();
-  </script>
-
-  <script src="/js/transition.js"></script>
+  <script src='/js/transition.js'></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
 
 </body>
 </html>
+
 
 
 

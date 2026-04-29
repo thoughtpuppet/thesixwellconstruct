@@ -620,7 +620,7 @@
   }
 </style>
 </head>
-<body data-venture="merch">
+<body data-venture="merch" data-product-handle="marbles-print">
 
   <div class="grain"></div>
 
@@ -657,6 +657,7 @@
             Consider renaming to assets/paintings/marbles.jpg (no spaces).
           -->
           <img
+            id="productHeroImage"
             src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
             alt="MARBLES. print preview"
             loading="eager"
@@ -673,26 +674,26 @@
 
       <!-- source venture tag -->
       <div class="source-tag">
-        <span class="source-dot"></span>
-        <span class="source-label">thoughtpuppet</span>
+        <span class="source-dot" id="sourceDot"></span>
+        <span class="source-label" id="sourceLabel">thoughtpuppet</span>
       </div>
 
       <!-- ====================================================
            PRODUCT DATA — edit this block per print
       ==================================================== -->
-      <h1 class="product-title">MARBLES.<br>PRINT</h1>
+      <h1 class="product-title" id="productTitle">MARBLES.<br>PRINT</h1>
 
       <!-- edition badge -->
       <div class="edition-badge">
         <span class="edition-dot"></span>
         <!-- REWRITE: update edition number as prints sell (or remove if open edition) -->
-        <span>edition of 50</span>
+        <span id="editionText">edition of 50</span>
       </div>
 
       <!-- price -->
-      <div class="product-price">$85</div>
+      <div class="product-price" id="productPrice">$85</div>
       <!-- REWRITE: one line, your voice. what does owning this print mean. -->
-      <p class="price-note">giclée archival print. ships flat.</p>
+      <p class="price-note" id="priceNote">giclée archival print. ships flat.</p>
 
       <!-- ====================================================
            SIZE SELECTOR
@@ -734,6 +735,7 @@
         <span>add to cart</span>
         <span class="cta-arrow">&rarr;</span>
       </button>
+      <p class="shipping-note" id="purchaseStatus"></p>
       <p class="shipping-note">free shipping on orders over $150</p>
 
       <!-- ====================================================
@@ -742,17 +744,18 @@
       <hr class="section-divider">
       <p class="section-label">origin.</p>
 
-      <a class="origin-block" href="/merch/am-i-losing-my-marbles.html">
+      <a class="origin-block" id="originLink" href="/merch/am-i-losing-my-marbles.html">
         <div class="origin-thumb">
           <img
+            id="originThumb"
             src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
             alt="AM I LOSING MY MARBLES OR HIDING THEM?"
           >
         </div>
         <div class="origin-info">
           <p class="origin-type">painting · original</p>
-          <p class="origin-title">AM I LOSING MY MARBLES OR HIDING THEM?</p>
-          <p class="origin-meta">acrylic on canvas &middot; 2023</p>
+          <p class="origin-title" id="originTitle">AM I LOSING MY MARBLES OR HIDING THEM?</p>
+          <p class="origin-meta" id="originMeta">acrylic on canvas &middot; 2023</p>
         </div>
         <span class="origin-arrow">&rarr;</span>
       </a>
@@ -765,7 +768,7 @@
 
       <div class="related-row">
         <!-- Marbles Hoodie -->
-        <a class="related-card" href="/merch/marbles-hoodie.html">
+        <a class="related-card" href="/merch/lostmarbles-hoodie.html">
           <div class="related-frame">
             <span class="related-frame-num">05</span>
           </div>
@@ -806,268 +809,19 @@
       <button class="checkout-btn" id="checkoutBtn" disabled>proceed to checkout</button>
       <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
     </div>
-  </aside>
+  </aside>
+  <script type='module' src='/js/merch-print.js'></script>
 
-  <script>
-  /* ============================================================
-     PRODUCT DEFINITION
-     ============================================================
-     Single product definition for this page.
-     When duplicating this template: update id, name, price,
-     sizes, finish, edition, and image paths.
-  ============================================================ */
-  const PRODUCT = {
-    id:       "06",
-    name:     "MARBLES. PRINT",
-    price:    85,
-    category: "thoughtpuppet",
-    color:    "#0581C1",       /* src-color for this product */
-    sizes:    ["8×10", "11×14", "18×24"],
-    finish:   ["matte", "archival gloss"],
-    edition:  50
-  };
-
-  /* ============================================================
-     SELECTION STATE
-     Tracks which size + finish the user has chosen.
-  ============================================================ */
-  let selection = { size: null, finish: null };
-
-  /* ============================================================
-     CART STATE
-     Simple local cart — same key structure as merch/index.html:
-       `${productId}|${size}|${finish}`
-     When Shopify goes live, replace with SDK cart mutations.
-  ============================================================ */
-  let cart = [];
-
-  /* DOM refs */
-  const cartCount   = document.getElementById("cartCount");
-  const subtotalEl  = document.getElementById("subtotal");
-  const checkoutBtn = document.getElementById("checkoutBtn");
-  const drawer      = document.getElementById("cartDrawer");
-  const overlay     = document.getElementById("cartOverlay");
-  const drawerItems = document.getElementById("drawerItems");
-  const sizeVal     = document.getElementById("sizeVal");
-  const finishVal   = document.getElementById("finishVal");
-  const sizeReq     = document.getElementById("sizeRequired");
-  const finishReq   = document.getElementById("finishRequired");
-
-  /* ============================================================
-     SIZE PILLS — wire clicks
-  ============================================================ */
-  document.querySelectorAll(".size-pill").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const size = btn.dataset.size;
-
-      /* toggle off if already selected */
-      if (selection.size === size) {
-        selection.size = null;
-        btn.classList.remove("selected");
-        sizeVal.textContent = "";
-        return;
-      }
-
-      /* select this one, deselect others */
-      selection.size = size;
-      sizeVal.textContent = size;
-      document.querySelectorAll(".size-pill").forEach(b =>
-        b.classList.toggle("selected", b.dataset.size === size));
-
-      /* hide validation message */
-      sizeReq.classList.remove("visible");
-    });
-  });
-
-  /* ============================================================
-     FINISH PILLS — wire clicks
-  ============================================================ */
-  document.querySelectorAll(".finish-pill").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const finish = btn.dataset.finish;
-
-      if (selection.finish === finish) {
-        selection.finish = null;
-        btn.classList.remove("selected");
-        finishVal.textContent = "";
-        return;
-      }
-
-      selection.finish = finish;
-      finishVal.textContent = finish;
-      document.querySelectorAll(".finish-pill").forEach(b =>
-        b.classList.toggle("selected", b.dataset.finish === finish));
-
-      finishReq.classList.remove("visible");
-    });
-  });
-
-  /* ============================================================
-     ADD TO CART
-     Validates selection, builds cart key, opens drawer.
-  ============================================================ */
-  document.getElementById("addToCartBtn").addEventListener("click", () => {
-    let valid = true;
-
-    /* must have size selected */
-    if (!selection.size) {
-      sizeReq.classList.add("visible");
-      /* flash the size pills */
-      const pills = document.getElementById("sizePills");
-      pills.style.opacity = "0.4";
-      setTimeout(() => { pills.style.opacity = "1"; }, 300);
-      valid = false;
-    }
-
-    /* must have finish selected */
-    if (!selection.finish) {
-      finishReq.classList.add("visible");
-      const pills = document.getElementById("finishPills");
-      pills.style.opacity = "0.4";
-      setTimeout(() => { pills.style.opacity = "1"; }, 300);
-      valid = false;
-    }
-
-    if (!valid) return;
-
-    /* build cart key — matches index.html pattern */
-    const key = `${PRODUCT.id}|${selection.size}|${selection.finish}`;
-    const existing = cart.find(i => i.key === key);
-
-    if (existing) {
-      existing.qty += 1;
-    } else {
-      cart.push({
-        key,
-        productId: PRODUCT.id,
-        name:      PRODUCT.name,
-        price:     PRODUCT.price,
-        size:      selection.size,
-        finish:    selection.finish,
-        qty:       1
-      });
-    }
-
-    renderCart();
-    openDrawer();
-    pulseCount();
-  });
-
-  /* ============================================================
-     RENDER CART DRAWER
-  ============================================================ */
-  function renderCart() {
-    const totalQty = cart.reduce((s, i) => s + i.qty, 0);
-    cartCount.textContent = totalQty;
-
-    if (cart.length === 0) {
-      drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
-      subtotalEl.textContent = "$0";
-      checkoutBtn.disabled = true;
-      return;
-    }
-
-    checkoutBtn.disabled = false;
-
-    drawerItems.innerHTML = cart.map(item => {
-      const lineTotal = item.price * item.qty;
-      const variant   = [item.size, item.finish].filter(Boolean).join(" · ");
-      return `
-        <div class="drawer-item">
-          <div class="drawer-item-thumb">${item.productId}</div>
-          <div class="drawer-item-info">
-            <span class="drawer-item-name">${item.name}</span>
-            <span class="drawer-item-cat">
-              <span class="drawer-cat-dot" style="background:${PRODUCT.color}"></span>
-              <span style="color:${PRODUCT.color}; opacity:0.75">thoughtpuppet</span>
-            </span>
-            ${variant ? `<span class="drawer-item-variant">${variant}</span>` : ""}
-            <div class="drawer-item-qty">
-              <button class="qty-btn" data-minus="${item.key}" aria-label="decrease">&minus;</button>
-              <span class="qty-num">${item.qty}</span>
-              <button class="qty-btn" data-plus="${item.key}" aria-label="increase">+</button>
-            </div>
-          </div>
-          <div class="drawer-item-right">
-            <span class="drawer-item-price">$${lineTotal}</span>
-            <button class="drawer-item-remove" data-remove="${item.key}">remove</button>
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    /* wire qty + remove buttons */
-    drawerItems.querySelectorAll("[data-plus]").forEach(b =>
-      b.addEventListener("click", () => updateQty(b.dataset.plus, +1)));
-    drawerItems.querySelectorAll("[data-minus]").forEach(b =>
-      b.addEventListener("click", () => updateQty(b.dataset.minus, -1)));
-    drawerItems.querySelectorAll("[data-remove]").forEach(b =>
-      b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
-
-    const total = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
-    subtotalEl.textContent = "$" + total;
-  }
-
-  function updateQty(key, delta) {
-    const item = cart.find(i => i.key === key);
-    if (!item) return;
-    item.qty += delta;
-    if (item.qty <= 0) removeFromCart(key);
-    else renderCart();
-  }
-
-  function removeFromCart(key) {
-    cart = cart.filter(i => i.key !== key);
-    renderCart();
-  }
-
-  /* ============================================================
-     CART COUNT PULSE — matches index.html animation
-  ============================================================ */
-  function pulseCount() {
-    cartCount.classList.remove("pulse");
-    void cartCount.offsetWidth; /* reflow forces animation restart */
-    cartCount.classList.add("pulse");
-  }
-
-  /* ============================================================
-     DRAWER OPEN / CLOSE
-  ============================================================ */
-  function openDrawer() {
-    drawer.classList.add("open"); overlay.classList.add("open");
-    drawer.setAttribute("aria-hidden","false");
-  }
-  function closeDrawer() {
-    drawer.classList.remove("open"); overlay.classList.remove("open");
-    drawer.setAttribute("aria-hidden","true");
-  }
-
-  document.getElementById("cartToggle").addEventListener("click", openDrawer);
-  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
-  overlay.addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
-
-  /* ============================================================
-     CHECKOUT PLACEHOLDER
-     Replace with Shopify hosted-checkout redirect when ready.
-  ============================================================ */
-  checkoutBtn.addEventListener("click", () => {
-    console.log("CHECKOUT — cart:", cart);
-    alert("Shopify checkout integration plugs in here.\n\n" +
-      cart.map(i => `${i.name} × ${i.qty} — $${i.price * i.qty}`).join("\n")
-    );
-  });
-
-  /* init */
-  renderCart();
-  </script>
-
-  <script src="/js/transition.js"></script>
+  <script src='/js/transition.js'></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
 
 </body>
 </html>
+
+
+
+
 
 
 

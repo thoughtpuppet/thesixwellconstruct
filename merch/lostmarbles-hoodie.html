@@ -186,7 +186,7 @@
     overflow:hidden;
     transition:border-color var(--t-med);
   }
-  .product-image:hover { border-color:var(--src-color); }
+  .product-image:hover { border-color:var(--src-color); }`r`n  .product-image img {`r`n    width:100%;`r`n    height:100%;`r`n    object-fit:cover;`r`n    display:block;`r`n  }
 
   .img-placeholder {
     position:absolute; inset:0;
@@ -607,7 +607,7 @@
   }
 </style>
 </head>
-<body data-venture="merch">
+<body data-venture="merch" data-product-handle="lostmarbles-hoodie">
 
   <!-- BLINK PREVENTION: creates the fade overlay before any content renders.
        Runs immediately as the first thing in <body>, before the browser
@@ -663,17 +663,17 @@
       <div class="product-details">
 
         <div class="product-source">
-          <span class="source-dot"></span>
-          <span class="source-label">thoughtpuppet</span>
+          <span class="source-dot" id="sourceDot"></span>
+          <span class="source-label" id="sourceLabel">thoughtpuppet</span>
         </div>
 
-        <h1 class="product-name">LOST MARBLES. HOODIE</h1>
-        <p class="product-price">$130</p>
-        <p class="product-edition">limited edition &mdash; 30 pieces</p>
+        <h1 class="product-name" id="productName">LOST MARBLES. HOODIE</h1>
+        <p class="product-price" id="productPrice">$130</p>
+        <p class="product-edition" id="productEdition">limited edition &mdash; 30 pieces</p>
 
         <!-- color selector -->
         <p class="selector-label">colorway</p>
-        <div class="color-row">
+        <div class="color-row" id="colorRow">
           <!-- REPLACE hex and name with actual colorway -->
           <button class="color-swatch selected"
                   style="background:#2a2a2a"
@@ -701,6 +701,7 @@
           <span>add to cart</span>
           <span class="arrow">&rarr;</span>
         </button>
+        <p class="product-note" id="purchaseStatus"></p>
 
         <p class="product-note">
           hand-numbered &middot; ships within 2&ndash;3 weeks
@@ -717,13 +718,13 @@
       <div class="origin-inner">
 
         <div class="painting-frame">
-          <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+          <img id="originThumb" src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
                alt="AM I LOSING MY MARBLES OR HIDING THEM — acrylic on canvas, 2024">
         </div>
 
         <div class="painting-info">
-          <h2 class="painting-name">AM I LOSING MY MARBLES OR HIDING THEM?</h2>
-          <p class="painting-meta">2023 &middot; acrylic on wood panel</p>
+          <h2 class="painting-name" id="originTitle">AM I LOSING MY MARBLES OR HIDING THEM?</h2>
+          <p class="painting-meta" id="originMeta">2023 &middot; acrylic on wood panel</p>
 
           <!-- REWRITE: your description of the Marbles painting -->
           <p class="painting-desc">
@@ -733,7 +734,7 @@
           </p>
 
           <!-- absolute path — will 404 until /art is built -->
-          <a class="painting-link" href="/art/lostmarblespainting.html">
+          <a class="painting-link" id="originLink" href="/art/lostmarblespainting.html">
             <span>learn more about the painting that inspired this product</span>
             <span class="arrow">&rarr;</span>
           </a>
@@ -805,132 +806,17 @@
     </div>
   </aside>
 
-  <script>
-  /* ============================================================
-     PRODUCT DATA
-  ============================================================ */
-  const PRODUCT = {
-    id:      "05",
-    name:    "MARBLES HOODIE",
-    price:   130,
-    edition: 30,
-    color:   "marbles"
-  };
+  <script type='module' src='/js/merch-hoodie.js'></script>
 
-  let selectedSize  = null;
-  let selectedColor = PRODUCT.color;
-  let cart          = [];
-
-  const drawer      = document.getElementById("cartDrawer");
-  const overlay     = document.getElementById("cartOverlay");
-  const drawerItems = document.getElementById("drawerItems");
-  const cartCount   = document.getElementById("cartCount");
-  const subtotalEl  = document.getElementById("subtotal");
-  const checkoutBtn = document.getElementById("checkoutBtn");
-  const sizeReq     = document.getElementById("sizeRequired");
-
-  /* size pills */
-  document.querySelectorAll(".size-pill").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".size-pill").forEach(b => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      selectedSize = btn.dataset.size;
-      sizeReq.classList.remove("visible");
-    });
-  });
-
-  /* color swatches */
-  document.querySelectorAll(".color-swatch").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".color-swatch").forEach(b => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      selectedColor = btn.dataset.color;
-      document.getElementById("colorLabel").textContent = selectedColor;
-    });
-  });
-
-  /* add to cart */
-  document.getElementById("addBtn").addEventListener("click", () => {
-    if (!selectedSize) {
-      sizeReq.classList.add("visible");
-      const grid = document.getElementById("sizeGrid");
-      grid.style.opacity = "0.4";
-      setTimeout(() => { grid.style.opacity = "1"; }, 300);
-      return;
-    }
-    const key = `${PRODUCT.id}|${selectedSize}|${selectedColor}`;
-    const existing = cart.find(i => i.key === key);
-    if (existing) existing.qty += 1;
-    else cart.push({ key, id: PRODUCT.id, name: PRODUCT.name, price: PRODUCT.price, size: selectedSize, color: selectedColor, qty: 1 });
-    renderCart();
-    openDrawer();
-    pulseCount();
-  });
-
-  function renderCart() {
-    const totalQty = cart.reduce((sum, i) => sum + i.qty, 0);
-    cartCount.textContent = totalQty;
-    if (cart.length === 0) {
-      drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
-      subtotalEl.textContent = "$0";
-      checkoutBtn.disabled = true;
-      return;
-    }
-    checkoutBtn.disabled = false;
-    drawerItems.innerHTML = cart.map(item => {
-      const variant   = [item.size, item.color].filter(Boolean).join(" · ");
-      const lineTotal = item.price * item.qty;
-      return `
-        <div class="drawer-item">
-          <div class="drawer-item-thumb">${item.id}</div>
-          <div class="drawer-item-info">
-            <span class="drawer-item-name">${item.name}</span>
-            ${variant ? `<span class="drawer-item-variant">${variant}</span>` : ""}
-            <div class="drawer-item-qty">
-              <button class="qty-btn" data-minus="${item.key}">&minus;</button>
-              <span class="qty-num">${item.qty}</span>
-              <button class="qty-btn" data-plus="${item.key}">+</button>
-            </div>
-          </div>
-          <div class="drawer-item-right">
-            <span class="drawer-item-price">$${lineTotal}</span>
-            <button class="drawer-item-remove" data-remove="${item.key}">remove</button>
-          </div>
-        </div>`;
-    }).join("");
-    drawerItems.querySelectorAll("[data-plus]").forEach(b => b.addEventListener("click", () => updateQty(b.dataset.plus, +1)));
-    drawerItems.querySelectorAll("[data-minus]").forEach(b => b.addEventListener("click", () => updateQty(b.dataset.minus, -1)));
-    drawerItems.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
-    subtotalEl.textContent = "$" + cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
-  }
-
-  function removeFromCart(key) { cart = cart.filter(i => i.key !== key); renderCart(); }
-  function updateQty(key, delta) { const item = cart.find(i => i.key === key); if (!item) return; item.qty += delta; if (item.qty <= 0) removeFromCart(key); else renderCart(); }
-  function pulseCount() { cartCount.classList.remove("pulse"); void cartCount.offsetWidth; cartCount.classList.add("pulse"); }
-  function openDrawer() { drawer.classList.add("open"); overlay.classList.add("open"); drawer.setAttribute("aria-hidden","false"); }
-  function closeDrawer() { drawer.classList.remove("open"); overlay.classList.remove("open"); drawer.setAttribute("aria-hidden","true"); }
-
-  document.getElementById("cartToggle").addEventListener("click", openDrawer);
-  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
-  overlay.addEventListener("click", closeDrawer);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
-
-  checkoutBtn.addEventListener("click", () => {
-    console.log("CHECKOUT:", cart);
-    alert("Shopify checkout integration plugs in here.\n\n" +
-      cart.map(i => `${i.name} ${i.size} · ${i.color} × ${i.qty} — $${i.price * i.qty}`).join("\n"));
-  });
-
-  renderCart();
-  </script>
-
-  <!-- shared construct scripts — transition layer + corner element -->
-  <script src="/js/transition.js"></script>
+  <script src='/js/transition.js'></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
 
 </body>
 </html>
+
+
+
 
 
 
