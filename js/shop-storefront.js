@@ -623,7 +623,7 @@ export async function initMerchCatalogPage() {
     const initFilter = new URLSearchParams(window.location.search).get("filter");
     if (initFilter && SOURCES[initFilter]) setFilter(initFilter);
   } catch (error) {
-    grid.innerHTML = `<p class="drawer-empty">shop is temporarily unavailable</p>`;
+    grid.innerHTML = `<p class="drawer-empty">shop is temporarily unavailable: ${error.message || "unknown error"}</p>`;
     console.error(error);
   }
 }

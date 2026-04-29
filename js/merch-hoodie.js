@@ -24,5 +24,5 @@ initMerchProductPage({
 }).catch((error) => {
   console.error(error);
   const statusEl = document.getElementById("purchaseStatus");
-  if (statusEl) statusEl.textContent = "shop connection unavailable";
+  if (statusEl) statusEl.textContent = `shop connection unavailable: ${error.message || "unknown error"}`;
 });
