@@ -102,15 +102,64 @@
     height:calc(100vh - 73px);
     background:var(--bg-raised);
     border-right:5px solid var(--ring-faint);
+    overflow:auto;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:var(--s7) var(--s6);
+  }
+  .product-gallery-shell {
+    width:min(100%, 560px);
+    display:flex;
+    flex-direction:column;
+    gap:var(--s4);
+  }
+  .product-image-main {
+    position:relative;
+    aspect-ratio:4/5;
+    background:#0c0c0c;
+    border:5px solid var(--ring-soft);
     overflow:hidden;
   }
-  .product-image img {
+  .product-image-main img {
     width:100%; height:100%;
     object-fit:cover; display:block;
     filter:brightness(0.92);
     transition:filter var(--t-med);
   }
-  .product-image:hover img { filter:brightness(1); }
+  .product-image-main:hover img { filter:brightness(1); }
+  .product-gallery {
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(88px, 1fr));
+    gap:var(--s2);
+  }
+  .gallery-thumb {
+    position:relative;
+    aspect-ratio:1/1;
+    border:5px solid var(--ring-soft);
+    background:#0c0c0c;
+    overflow:hidden;
+    transition:border-color var(--t-fast), opacity var(--t-fast), transform var(--t-fast);
+  }
+  .gallery-thumb:hover {
+    border-color:var(--src-color);
+    transform:translateY(-2px);
+  }
+  .gallery-thumb.active {
+    border-color:var(--src-color);
+  }
+  .gallery-thumb img {
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+    opacity:0.82;
+    transition:opacity var(--t-fast);
+  }
+  .gallery-thumb:hover img,
+  .gallery-thumb.active img {
+    opacity:1;
+  }
   .img-placeholder {
     position:absolute; inset:0;
     display:flex; align-items:center; justify-content:center;
@@ -281,7 +330,7 @@
   .painting-info { display:flex; flex-direction:column; gap:var(--s5); }
   .painting-name {
     font-family:var(--sans); font-weight:900;
-    font-size:clamp(32px,4vw,56px);
+    font-size:clamp(24px,3vw,36px);
     letter-spacing:-0.04em; line-height:0.92;
     color:var(--text);
   }
@@ -289,11 +338,6 @@
     font-family:var(--serif); font-size:12px;
     letter-spacing:0.18em; text-transform:uppercase;
     color:var(--text-dim);
-  }
-  .painting-desc {
-    font-family:var(--serif); font-size:16px;
-    line-height:1.7; color:var(--body-mute);
-    max-width:480px;
   }
   .painting-link {
     display:inline-flex; align-items:center; gap:var(--s3);
@@ -482,9 +526,11 @@
     main { grid-template-columns:1fr; }
     .product-image {
       position:relative; top:0;
-      height:70vw; max-height:520px;
+      height:auto;
       border-right:none;
+      padding:var(--s6) var(--s5) var(--s4);
     }
+    .product-gallery-shell { width:min(100%, 640px); }
     .product-details { padding:var(--s6) var(--s5) var(--s7); }
     .origin-inner { grid-template-columns:1fr; gap:var(--s6); }
     footer.bottom { grid-column:1; }
@@ -493,7 +539,8 @@
     header.top { padding:var(--s4) var(--s5); }
     .header-right { gap:var(--s4); }
     .breadcrumb { display:none; }
-    .product-image { height:80vw; }
+    .product-image { padding:var(--s5) var(--s4) var(--s3); }
+    .product-gallery { grid-template-columns:repeat(4, minmax(0, 1fr)); }
     .product-details { padding:var(--s5) var(--s4) var(--s6); }
     footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s4); }
   }
@@ -532,9 +579,15 @@
   <main>
     <section class="product-hero">
       <div class="product-image">
-        <span class="img-plaque">N&deg; 05</span>
-        <span class="img-placeholder">product image</span>
-        <span class="img-edition">ed. / 30</span>
+        <div class="product-gallery-shell">
+          <div class="product-image-main">
+            <span class="img-plaque">N&deg; 05</span>
+            <img id="productHeroImage" alt="LOST MARBLES. Hoodie">
+            <span class="img-placeholder">product image</span>
+            <span class="img-edition">ed. / 30</span>
+          </div>
+          <div class="product-gallery" id="productGallery" aria-label="product gallery"></div>
+        </div>
       </div>
 
       <div class="product-details">
@@ -589,11 +642,6 @@
             <div class="painting-info">
               <h2 class="painting-name" id="originTitle">AM I LOSING MY MARBLES OR HIDING THEM?</h2>
               <p class="painting-meta" id="originMeta">2023 &middot; acrylic on wood panel</p>
-              <p class="painting-desc">
-                Placeholder â€” write your description of the Marbles painting here.
-                What it is, what it came from, what it means to you.
-                This is where the artifact and the work meet.
-              </p>
               <a class="painting-link" id="originLink" href="/art/lostmarblespainting.html">
                 <span>learn more about the painting that inspired this product</span>
                 <span class="arrow">&rarr;</span>

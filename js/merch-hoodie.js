@@ -7,6 +7,7 @@ initMerchProductPage({
   colorLabelEl: document.getElementById("colorLabel"),
   editionEl: document.getElementById("productEdition"),
   finishContainer: null,
+  galleryContainer: document.getElementById("productGallery"),
   heroImgEl: document.getElementById("productHeroImage"),
   heroImageContainer: document.querySelector(".product-image"),
   originLinkEl: document.getElementById("originLink"),

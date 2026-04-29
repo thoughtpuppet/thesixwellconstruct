@@ -125,6 +125,57 @@ function resolveOptionValues(product) {
   return values;
 }
 
+function renderProductGallery(product, options) {
+  const images = (product.images && product.images.length ? product.images : []).filter((image) => image?.url);
+  const fallbackImage = product.heroImage
+    ? [{ url: product.heroImage, altText: product.heroImageAlt || product.title }]
+    : [];
+  const galleryImages = images.length ? images : fallbackImage;
+
+  if (!galleryImages.length) return;
+
+  const heroImgEl =
+    options.heroImgEl ||
+    options.heroImageContainer?.querySelector("#productHeroImage") ||
+    options.heroImageContainer?.querySelector("img");
+
+  const placeholder = options.heroImageContainer?.querySelector(".img-placeholder");
+
+  const setActiveImage = (image, thumbButton = null) => {
+    if (!heroImgEl) return;
+    heroImgEl.src = image.url;
+    heroImgEl.alt = image.altText || product.title;
+    if (placeholder) placeholder.remove();
+    if (options.galleryContainer) {
+      options.galleryContainer.querySelectorAll(".gallery-thumb").forEach((button) => {
+        button.classList.toggle("active", button === thumbButton);
+      });
+    }
+  };
+
+  setActiveImage(galleryImages[0]);
+
+  if (!options.galleryContainer) return;
+
+  options.galleryContainer.innerHTML = galleryImages
+    .map(
+      (image, index) => `
+        <button
+          class="gallery-thumb${index === 0 ? " active" : ""}"
+          type="button"
+          data-gallery-index="${index}"
+          aria-label="view image ${index + 1}">
+          <img src="${image.url}" alt="${image.altText || product.title}">
+        </button>
+      `
+    )
+    .join("");
+
+  options.galleryContainer.querySelectorAll(".gallery-thumb").forEach((button, index) => {
+    button.addEventListener("click", () => setActiveImage(galleryImages[index], button));
+  });
+}
+
 export function resolveVariantBySelections(product, selections) {
   const normalizedSelections = Object.fromEntries(
     Object.entries(selections).map(([key, value]) => [normalizeKey(key), normalizeKey(value)])
@@ -659,21 +710,7 @@ export async function initMerchProductPage(options) {
   if (options.sourceLabelEl) options.sourceLabelEl.textContent = source.label;
   if (options.sourceLabelEl) options.sourceLabelEl.style.color = source.color;
   if (options.sourceDotEl) options.sourceDotEl.style.background = source.color;
-  if (product.heroImage) {
-    if (options.heroImgEl) {
-      options.heroImgEl.src = product.heroImage;
-      options.heroImgEl.alt = product.heroImageAlt || product.title;
-    } else if (options.heroImageContainer) {
-      const image = document.createElement("img");
-      image.src = product.heroImage;
-      image.alt = product.heroImageAlt || product.title;
-      const placeholder = options.heroImageContainer.querySelector(".img-placeholder");
-      if (placeholder) placeholder.remove();
-      const plaque = options.heroImageContainer.querySelector(".img-plaque");
-      if (plaque) plaque.insertAdjacentElement("afterend", image);
-      else options.heroImageContainer.prepend(image);
-    }
-  }
+  renderProductGallery(product, options);
   if (options.priceNoteEl && product.priceNote) options.priceNoteEl.textContent = product.priceNote;
   if (options.originThumbEl && product.originThumb) options.originThumbEl.src = product.originThumb;
   if (options.originLinkEl && product.originPath) options.originLinkEl.href = product.originPath;
