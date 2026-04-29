@@ -1,0 +1,6 @@
+_worker.js
+functions/
+shared/
+wrangler.jsonc
+README.md
+.dev.vars.example

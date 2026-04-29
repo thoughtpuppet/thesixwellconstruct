@@ -4,34 +4,32 @@ Pure static site for `thoughtpuppet/thesixwellconstruct`.
 
 ## Hosting
 
-This site is intended to deploy on Cloudflare Pages as a static project.
+This site deploys on Cloudflare Workers using Wrangler's static asset support
+plus a Worker entrypoint for runtime routes.
 
 - Production branch: `main`
-- Framework preset: `None`
 - Root directory: repository root
-- Build command: leave blank
-- Build output directory: `/`
+- Build command: `None`
+- Deploy command: `npx wrangler deploy`
 
 Because the site uses root-relative asset and page paths such as `/css/transitions.css`
 and `/art/`, it should be deployed at the domain root rather than under a subpath.
 
-## Cloudflare Pages setup
+## Cloudflare Worker setup
 
-1. Create a new Cloudflare Pages project connected to this repository.
+1. Create or open the Git-connected Worker for this repository.
 2. Select `main` as the production branch.
-3. Set the framework preset to `None`.
-4. Leave the root directory at the repository root.
-5. Leave the build command empty.
-6. Set the build output directory to `/`.
-
-If a Cloudflare setup flow requires a value for the build command, use `exit 0`.
+3. Leave the root directory at the repository root.
+4. Leave the build command as `None`.
+5. Keep the deploy command as `npx wrangler deploy`.
 
 No bundler, package install, or framework build step is required.
 
 ## Shopify setup
 
-This repo now includes Cloudflare Pages Functions under `functions/api/shop/*`
-to proxy Shopify Storefront API catalog, product, and cart requests.
+This repo now includes Shopify Storefront proxy routes under `/api/shop/*`.
+The route logic lives in `functions/api/shop/*` and is wired into the
+Worker entrypoint at `_worker.js`.
 
 Create a local `.dev.vars` from `.dev.vars.example` and set:
 
@@ -44,3 +42,6 @@ The default catalog query expects Shopify products to be tagged with
 `construct-merch`. Source venture and merch type metadata can come from
 Shopify tags such as `venture:thoughtpuppet` and `merch:type:print`, with
 page-specific presentation details living in `shared/storefront-config.js`.
+
+In Cloudflare, add the same four values under the Worker project's
+`Settings > Variables and secrets`.
