@@ -35,7 +35,8 @@ async function api(path, options = {}) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || "Request failed.");
+    const message = [payload.error, payload.detail].filter(Boolean).join(" ");
+    throw new Error(message || "Request failed.");
   }
   return payload;
 }
