@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Art.Pill Tattoo House · the six.well construct</title>
+<title>Art.Pill Tattoo House Â· the six.well construct</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +12,7 @@
 
 <style>
   /* ============================================================
-     DESIGN TOKENS — Art.Pill Tattoo House
+     DESIGN TOKENS â€” Art.Pill Tattoo House
   ============================================================ */
   :root {
     --bg:           #0e0e0e;
@@ -24,13 +24,13 @@
     --signal-faint: rgba(143,35,29,0.18);
     --signal-wash:  rgba(143,35,29,0.06);
 
-    --text:         #E8E4DC;
-    --text-mute:    rgba(232,228,220,0.6);
-    --text-dim:     rgba(232,228,220,0.35);
-    --text-ghost:   rgba(232,228,220,0.12);
+    --text:         #FFE7CA;
+    --text-mute:    rgba(255,231,202,0.6);
+    --text-dim:     rgba(255,231,202,0.35);
+    --text-ghost:   rgba(255,231,202,0.12);
 
     --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif: 'Times New Roman',Times,serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
 
     --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
@@ -147,7 +147,7 @@
   .section-body + .section-body { margin-top:16px; }
 
   /* ============================================================
-     THE WORK — pillars
+     THE WORK â€” pillars
   ============================================================ */
   .pillars {
     display:grid; grid-template-columns:repeat(3,1fr);
@@ -167,7 +167,7 @@
   }
 
   /* ============================================================
-     WAYS TO WORK — two cards
+     WAYS TO WORK â€” two cards
   ============================================================ */
   .work-types {
     display:grid; grid-template-columns:1fr 1fr;
@@ -191,7 +191,7 @@
   }
 
   /* ============================================================
-     PRICING — tiers
+     PRICING â€” tiers
   ============================================================ */
   .pricing-tiers {
     display:grid; grid-template-columns:1fr 1fr;
@@ -233,7 +233,7 @@
   }
 
   /* ============================================================
-     BOOKING PROCESS — steps
+     BOOKING PROCESS â€” steps
   ============================================================ */
   .process-steps {
     display:grid; grid-template-columns:repeat(5,1fr);
@@ -260,7 +260,7 @@
   }
 
   /* ============================================================
-     PROJECT FIT — two columns
+     PROJECT FIT â€” two columns
   ============================================================ */
   .fit-columns {
     display:grid; grid-template-columns:1fr 1fr;
@@ -377,6 +377,25 @@
 </style>
 </head>
 <body data-venture="tattooing">
+  <script>
+  (function(){
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut() {
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        o.style.opacity = '0';
+        o.style.pointerEvents = 'none';
+      });});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fadeOut);
+    } else {
+      fadeOut();
+    }
+  })();
+  </script>
 
   <div class="grain"></div>
 
@@ -386,7 +405,7 @@
 
   <main>
 
-    <!-- ── HERO ───────────────────────────────────────────────── -->
+    <!-- â”€â”€ HERO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="hero">
       <div class="hero-left">
         <p class="hero-label">Art.Pill Tattoo House</p>
@@ -397,17 +416,15 @@
           Original symbolic, surreal, and mythic tattooing.<br>
           Guided by meaning. Designed to carry weight.
         </p>
-        <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
-        <p class="hero-note">All bookings begin with a project inquiry.</p>
       </div>
     </section>
 
-    <!-- ── THE WORK ───────────────────────────────────────────── -->
+    <!-- â”€â”€ THE WORK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="section" id="the-work">
       <p class="section-label">The Work</p>
       <h2 class="section-title">Symbolic. Surreal. Mythic.</h2>
       <p class="section-body">
-        Every piece begins with a question: what are you carrying, and what do you want on your skin for the rest of your life? The work here is visually original and story-driven — not trend-sourced, not pulled from a reference folder.
+        Every piece begins with a question: what are you carrying, and what do you want on your skin for the rest of your life? The work here is visually original and story-driven â€” not trend-sourced, not pulled from a reference folder.
       </p>
       <p class="section-body">
         The imagery is drawn from mythology, dream logic, personal symbol systems, and the things people need to externalize. If you know what you need to say and are ready to trust a collaborator in saying it, this is the right place.
@@ -416,7 +433,7 @@
       <div class="pillars">
         <div class="pillar">
           <p class="pillar-title">Symbolic</p>
-          <p class="pillar-body">Imagery that carries a private or archetypal meaning. Not decorative first — anchored to something real in the person wearing it.</p>
+          <p class="pillar-body">Imagery that carries a private or archetypal meaning. Not decorative first â€” anchored to something real in the person wearing it.</p>
         </div>
         <div class="pillar">
           <p class="pillar-title">Surreal</p>
@@ -429,19 +446,19 @@
       </div>
     </section>
 
-    <!-- ── THE EXPERIENCE ─────────────────────────────────────── -->
+    <!-- â”€â”€ THE EXPERIENCE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="section" id="the-experience">
       <p class="section-label">The Experience</p>
       <h2 class="section-title">A Guided Creative Process</h2>
       <p class="section-body">
-        Working here is not placing an order. You bring what you need to say — the image, the feeling, the story, or just the intuition that something needs to be on your body — and together we shape it into something permanent.
+        Working here is not placing an order. You bring what you need to say â€” the image, the feeling, the story, or just the intuition that something needs to be on your body â€” and together we shape it into something permanent.
       </p>
       <p class="section-body">
         The process is intentional and unhurried. Every session is preceded by real consultation. The design you receive is original, drawn for you and not pulled from a catalog. The work will not be rushed to fit a timeline that doesn't respect the piece.
       </p>
     </section>
 
-    <!-- ── WAYS TO WORK ───────────────────────────────────────── -->
+    <!-- â”€â”€ WAYS TO WORK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="section" id="ways-to-work">
       <p class="section-label">Ways to Work</p>
       <h2 class="section-title">Flash &amp; Custom</h2>
@@ -451,17 +468,17 @@
         <div class="work-type">
           <p class="work-type-label">Available Now</p>
           <p class="work-type-title">Original Flash</p>
-          <p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog — symbolic, surreal, and built to place. Flash pieces are sized and refined to the right spot on your body. Designs can be adapted within reason, but the concept stays true to its intent.</p>
+          <p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog â€” symbolic, surreal, and built to place. Flash pieces are sized and refined to the right spot on your body. Designs can be adapted within reason, but the concept stays true to its intent.</p>
         </div>
         <div class="work-type">
           <p class="work-type-label">By Inquiry</p>
           <p class="work-type-title">Custom Work</p>
-          <p class="work-type-body">Collaboratively designed pieces built around your concept, story, or symbol system. Custom sessions begin with a written inquiry and are accepted on a project-by-project basis. Not every project is the right fit — the inquiry process exists to determine that before either side commits.</p>
+          <p class="work-type-body">Collaboratively designed pieces built around your concept, story, or symbol system. Custom sessions begin with a written inquiry and are accepted on a project-by-project basis. Not every project is the right fit â€” the inquiry process exists to determine that before either side commits.</p>
         </div>
       </div>
     </section>
 
-    <!-- ── PRICING ────────────────────────────────────────────── -->
+    <!-- â”€â”€ PRICING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="section" id="pricing">
       <p class="section-label">Pricing</p>
       <h2 class="section-title">Transparent Rates</h2>
@@ -489,7 +506,7 @@
       </p>
     </section>
 
-    <!-- ── BOOKING PROCESS ────────────────────────────────────── -->
+    <!-- â”€â”€ BOOKING PROCESS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="section" id="booking-process">
       <p class="section-label">How It Works</p>
       <h2 class="section-title">The Booking Process</h2>
@@ -499,12 +516,12 @@
         <div class="step">
           <span class="step-num">01</span>
           <p class="step-title">Submit Inquiry</p>
-          <p class="step-desc">Describe your project — concept, placement, size, and anything else that matters. No design required at this stage.</p>
+          <p class="step-desc">Describe your project â€” concept, placement, size, and anything else that matters. No design required at this stage.</p>
         </div>
         <div class="step">
           <span class="step-num">02</span>
           <p class="step-title">Project Review</p>
-          <p class="step-desc">Inquiries are reviewed individually. You'll hear back within 1–2 weeks. Not every project is accepted.</p>
+          <p class="step-desc">Inquiries are reviewed individually. You'll hear back within 1â€“2 weeks. Not every project is accepted.</p>
         </div>
         <div class="step">
           <span class="step-num">03</span>
@@ -524,11 +541,11 @@
       </div>
     </section>
 
-    <!-- ── PROJECT FIT ────────────────────────────────────────── -->
+    <!-- â”€â”€ PROJECT FIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="section" id="project-fit">
       <p class="section-label">Project Fit</p>
       <h2 class="section-title">Is This the Right Shop?</h2>
-      <p class="section-body">Not every project belongs here — and that's okay. The inquiry process exists to determine whether this is the right collaboration before either side commits.</p>
+      <p class="section-body">Not every project belongs here â€” and that's okay. The inquiry process exists to determine whether this is the right collaboration before either side commits.</p>
 
       <div class="fit-columns">
         <div class="fit-col good">
@@ -557,13 +574,13 @@
       </div>
     </section>
 
-    <!-- ── BOOKING CTA ─────────────────────────────────────────── -->
+    <!-- â”€â”€ BOOKING CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="booking-cta">
       <div class="booking-cta-left">
         <p class="booking-cta-label">Ready to Begin</p>
         <h2 class="booking-cta-title">Start With an Inquiry.</h2>
         <p class="booking-cta-body">
-          Describe your project and we'll determine whether it's the right fit. No commitment required at this stage — just a conversation about what you want to put on your body and why.
+          Describe your project and we'll determine whether it's the right fit. No commitment required at this stage â€” just a conversation about what you want to put on your body and why.
         </p>
       </div>
       <div class="booking-cta-actions">
@@ -585,3 +602,5 @@
 
 </body>
 </html>
+
+

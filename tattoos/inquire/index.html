@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inquire · Art.Pill Tattoo House</title>
+<title>Inquire Â· Art.Pill Tattoo House</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,12 +19,12 @@
     --signal-dim:   rgba(143,35,29,0.4);
     --signal-faint: rgba(143,35,29,0.18);
     --signal-wash:  rgba(143,35,29,0.06);
-    --text:         #E8E4DC;
-    --text-mute:    rgba(232,228,220,0.6);
-    --text-dim:     rgba(232,228,220,0.35);
-    --text-ghost:   rgba(232,228,220,0.12);
+    --text:         #FFE7CA;
+    --text-mute:    rgba(255,231,202,0.6);
+    --text-dim:     rgba(255,231,202,0.35);
+    --text-ghost:   rgba(255,231,202,0.12);
     --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif: 'Times New Roman',Times,serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
     --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
   }
@@ -45,7 +45,7 @@
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   }
 
-  /* ── HEADER ── */
+  /* â”€â”€ HEADER â”€â”€ */
   header.top {
     position:sticky; top:0; z-index:50;
     display:flex; align-items:center; justify-content:space-between;
@@ -61,7 +61,7 @@
   .breadcrumb-sep { color:var(--text-dim); }
   .breadcrumb-current { color:var(--text-dim); }
 
-  /* ── MAIN ── */
+  /* â”€â”€ MAIN â”€â”€ */
   main {
     position:relative; z-index:2;
     max-width:680px; margin:0 auto;
@@ -84,8 +84,6 @@
   .intro-body {
     font-family:var(--serif); font-size:16px;
     line-height:1.8; color:var(--text);
-    border-left:2px solid var(--signal-dim);
-    padding-left:24px;
   }
   .intro-body + .intro-body { margin-top:20px; }
 
@@ -143,7 +141,7 @@
     color:var(--text-ghost); line-height:1.7;
   }
 
-  /* ── FOOTER ── */
+  /* â”€â”€ FOOTER â”€â”€ */
   footer.bottom {
     position:relative; z-index:2;
     max-width:680px; margin:0 auto;
@@ -167,6 +165,25 @@
 </style>
 </head>
 <body data-venture="tattooing">
+  <script>
+  (function(){
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut() {
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        o.style.opacity = '0';
+        o.style.pointerEvents = 'none';
+      });});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fadeOut);
+    } else {
+      fadeOut();
+    }
+  })();
+  </script>
 
   <div class="grain"></div>
 
@@ -183,7 +200,7 @@
     <h1 class="page-title">Project<br>Inquiry.</h1>
 
     <p class="intro-body">
-      Submitting an inquiry is not a booking. It begins a review process — not every project is accepted. If your project is a good fit, you'll receive a private booking link within 1–2 weeks.
+      Submitting an inquiry is not a booking. It begins a review process â€” not every project is accepted. If your project is a good fit, you'll receive a private booking link within 1â€“2 weeks.
     </p>
     <p class="intro-body">
       Include as much detail as you can. The more specific you are about what you want and why, the better the review process works for both of us.
@@ -193,18 +210,18 @@
 
     <p class="include-label">What to Include</p>
     <ul class="include-list">
-      <li>What you want — concept, subject matter, the meaning behind it</li>
-      <li>Where you want it — body placement</li>
-      <li>Approximate size — doesn't need to be exact</li>
-      <li>Flash or custom — if you have a specific flash piece in mind, say so</li>
-      <li>Any visual references — mood and aesthetic, not necessarily the final design</li>
-      <li>Your timeline — when you're hoping to get tattooed</li>
-      <li>Any relevant context — this helps place the work in the right session type</li>
+      <li>What you want â€” concept, subject matter, the meaning behind it</li>
+      <li>Where you want it â€” body placement</li>
+      <li>Approximate size â€” doesn't need to be exact</li>
+      <li>Flash or custom â€” if you have a specific flash piece in mind, say so</li>
+      <li>Any visual references â€” mood and aesthetic, not necessarily the final design</li>
+      <li>Your timeline â€” when you're hoping to get tattooed</li>
+      <li>Any relevant context â€” this helps place the work in the right session type</li>
     </ul>
 
     <div class="cta-block">
       <p class="cta-block-note">
-        Inquiries are submitted via the Art.Pill booking system. You'll be prompted for your contact information and project details. Response time is 1–2 weeks.
+        Inquiries are submitted via the Art.Pill booking system. You'll be prompted for your contact information and project details. Response time is 1â€“2 weeks.
       </p>
       <!-- Replace href with your actual Acuity inquiry link -->
       <a class="cta-primary" href="https://artpill.acuityscheduling.com/" target="_blank" rel="noopener noreferrer">
@@ -228,3 +245,5 @@
 
 </body>
 </html>
+
+

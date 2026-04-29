@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>acquisition inquiry · art · the six.well construct</title>
+<title>acquisition inquiry Â· art Â· the six.well construct</title>
 
 <!--
   ============================================================
@@ -11,7 +11,7 @@
   ============================================================
 
   PURPOSE:
-    Painting acquisition inquiries — two tracks:
+    Painting acquisition inquiries â€” two tracks:
       1. Purchase interest (original painting)
       2. Delivery + hanging service (local or shipping)
 
@@ -21,38 +21,38 @@
 
     TO ACTIVATE:
       1. Create account at emailjs.com
-      2. Add email service (Gmail etc.) → copy Service ID
-      3. Create email template → copy Template ID
-      4. Account → API Keys → copy Public Key
+      2. Add email service (Gmail etc.) â†’ copy Service ID
+      3. Create email template â†’ copy Template ID
+      4. Account â†’ API Keys â†’ copy Public Key
       5. Replace the three REPLACE_WITH_... values below
       6. Uncomment the EmailJS script tag in <head>
       7. Uncomment the emailjs.send() call in the submit handler
 
     TEMPLATE VARIABLES (use these in your EmailJS template):
-      {{from_name}}       — inquirer's name
-      {{from_email}}      — inquirer's email
-      {{phone}}           — phone (optional)
-      {{painting}}        — which painting
-      {{inquiry_type}}    — purchase / delivery+hanging / both
-      {{location}}        — local or shipping
-      {{city}}            — city (if local)
-      {{shipping_address}}— address (if shipping)
-      {{message}}         — open message
-      {{reply_to}}        — same as from_email
+      {{from_name}}       â€” inquirer's name
+      {{from_email}}      â€” inquirer's email
+      {{phone}}           â€” phone (optional)
+      {{painting}}        â€” which painting
+      {{inquiry_type}}    â€” purchase / delivery+hanging / both
+      {{location}}        â€” local or shipping
+      {{city}}            â€” city (if local)
+      {{shipping_address}}â€” address (if shipping)
+      {{message}}         â€” open message
+      {{reply_to}}        â€” same as from_email
 
   CONTACT INFO:
     REPLACE placeholder email + instagram with real details.
 
   TYPE:
     Inter 900 (display, UI)
-    Times New Roman (body, labels, descriptors)
+    Georgia-first serif (body, labels, descriptors)
 
   COLOR:
     ART node color: #0581C1
   ============================================================
 -->
 
-<!-- EmailJS SDK — uncomment when you have your credentials -->
+<!-- EmailJS SDK â€” uncomment when you have your credentials -->
 <!-- <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script> -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -81,14 +81,14 @@
     --text-dim:   rgba(252,184,103,0.30);
     --text-ghost: rgba(252,184,103,0.13);
 
-    --body:       #E8E4DC;
-    --body-mute:  rgba(232,228,220,0.6);
+    --body:       #FFE7CA;
+    --body-mute:  rgba(255,231,202,0.6);
 
     --s1:4px;  --s2:8px;  --s3:12px; --s4:16px;
     --s5:24px; --s6:40px; --s7:64px; --s8:96px;
 
     --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif: 'Times New Roman',Times,serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
 
     --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
@@ -97,7 +97,7 @@
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body {
     background:var(--bg); color:var(--text);
-    font-family:var(--sans);
+    font-family:var(--serif);
     min-height:100vh; overflow-x:hidden;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
@@ -202,7 +202,7 @@
     color:var(--text); margin-bottom:var(--s2);
   }
 
-  /* ── FIELD GROUP ── */
+  /* â”€â”€ FIELD GROUP â”€â”€ */
   .field-group { display:flex; flex-direction:column; gap:var(--s2); }
   .field-row {
     display:grid; grid-template-columns:1fr 1fr; gap:var(--s4);
@@ -230,7 +230,7 @@
     outline:none;
     transition:border-color var(--t-fast);
     appearance:none; -webkit-appearance:none;
-    border-radius:0;   /* brutalist — no rounding */
+    border-radius:0;   /* brutalist â€” no rounding */
   }
   input:focus, textarea:focus, select:focus {
     border-color:var(--src-color);
@@ -244,14 +244,14 @@
   /* select arrow */
   .select-wrap { position:relative; }
   .select-wrap::after {
-    content:"↓";
+    content:"â†“";
     position:absolute; right:var(--s4); top:50%;
     transform:translateY(-50%);
     font-family:var(--serif); font-size:12px;
     color:var(--text-dim); pointer-events:none;
   }
 
-  /* ── INQUIRY TYPE TOGGLE ──
+  /* â”€â”€ INQUIRY TYPE TOGGLE â”€â”€
      two large clickable tiles: Purchase / Delivery+Hanging
      selecting one shows/hides the relevant conditional fields */
   .type-tiles {
@@ -284,12 +284,12 @@
   /* hidden checkbox behind tile */
   .type-tile input[type="checkbox"] { display:none; }
 
-  /* ── CONDITIONAL FIELDS ──
+  /* â”€â”€ CONDITIONAL FIELDS â”€â”€
      shown/hidden by JS based on inquiry type selection */
   .conditional { display:none; flex-direction:column; gap:var(--s5); }
   .conditional.visible { display:flex; }
 
-  /* ── LOCATION RADIO ── */
+  /* â”€â”€ LOCATION RADIO â”€â”€ */
   .radio-group { display:flex; flex-direction:column; gap:var(--s3); }
   .radio-option {
     display:flex; align-items:flex-start; gap:var(--s3);
@@ -318,7 +318,7 @@
     line-height:1.5;
   }
 
-  /* ── SUBMIT BUTTON ── */
+  /* â”€â”€ SUBMIT BUTTON â”€â”€ */
   .submit-btn {
     display:flex; align-items:center; justify-content:space-between;
     padding:var(--s4) var(--s5);
@@ -357,7 +357,7 @@
   }
 
   /* ============================================================
-     CONTACT INFO PANEL — right column
+     CONTACT INFO PANEL â€” right column
   ============================================================ */
   .contact-panel {
     position:sticky; top:calc(var(--s8) + 24px);
@@ -503,7 +503,7 @@
                 <option value="" disabled selected>select a painting</option>
                 <!-- REPLACE: add real painting titles as they go live -->
                 <option value="am-i-losing-my-marbles">AM I LOSING MY MARBLES OR HIDING THEM?</option>
-                <option value="other">other — I'll describe below</option>
+                <option value="other">other â€” I'll describe below</option>
               </select>
             </div>
           </div>
@@ -532,7 +532,7 @@
             </label>
           </div>
 
-          <!-- CONDITIONAL: delivery fields — shown when delivery is selected -->
+          <!-- CONDITIONAL: delivery fields â€” shown when delivery is selected -->
           <div class="conditional" id="delivery-fields">
             <div class="field-group" style="margin-top:var(--s4);">
               <label>location</label>
@@ -542,7 +542,7 @@
                   <input type="radio" name="location" value="local" id="radio-local">
                   <span class="radio-mark"></span>
                   <span class="radio-label">
-                    local — I'm in the area<br>
+                    local â€” I'm in the area<br>
                     <span style="font-size:11px;opacity:0.6">
                       Saiel will deliver + hang in person
                     </span>
@@ -553,7 +553,7 @@
                   <input type="radio" name="location" value="shipping" id="radio-shipping">
                   <span class="radio-mark"></span>
                   <span class="radio-label">
-                    shipping — I'm elsewhere<br>
+                    shipping â€” I'm elsewhere<br>
                     <span style="font-size:11px;opacity:0.6">
                       professional crating + carrier shipping arranged
                     </span>
@@ -629,7 +629,7 @@
         </div>
 
         <p class="contact-note">
-          Paintings are sold directly — no gallery intermediary.
+          Paintings are sold directly â€” no gallery intermediary.
           Price, availability, and installation details are discussed
           personally after inquiry.
         </p>
@@ -646,7 +646,7 @@
 
   <script>
   /* ============================================================
-     INQUIRY TYPE TILES — toggle selection + show/hide fields
+     INQUIRY TYPE TILES â€” toggle selection + show/hide fields
   ============================================================ */
   const tilePurchase  = document.getElementById("tile-purchase");
   const tileDelivery  = document.getElementById("tile-delivery");
@@ -675,7 +675,7 @@
     }
   });
 
-  /* location radio — show city or address field */
+  /* location radio â€” show city or address field */
   document.getElementById("radio-local").addEventListener("change", () => {
     cityField.classList.add("visible");
     addressField.classList.remove("visible");
@@ -736,12 +736,12 @@
     };
 
     /* ============================================================
-       EMAILJS SEND — uncomment when credentials are ready
+       EMAILJS SEND â€” uncomment when credentials are ready
 
        replace the three REPLACE_WITH_... strings:
-         REPLACE_WITH_SERVICE_ID   → your EmailJS service ID
-         REPLACE_WITH_TEMPLATE_ID  → your EmailJS template ID
-         REPLACE_WITH_PUBLIC_KEY   → your EmailJS public key (init below too)
+         REPLACE_WITH_SERVICE_ID   â†’ your EmailJS service ID
+         REPLACE_WITH_TEMPLATE_ID  â†’ your EmailJS template ID
+         REPLACE_WITH_PUBLIC_KEY   â†’ your EmailJS public key (init below too)
 
        also uncomment the SDK script tag in <head>
     ============================================================ */
@@ -763,7 +763,7 @@
     // });
 
     /* ============================================================
-       PROTOTYPE RESPONSE — remove this block when EmailJS is live
+       PROTOTYPE RESPONSE â€” remove this block when EmailJS is live
     ============================================================ */
     console.log("INQUIRY:", templateParams);
     status.className = "form-status success";
@@ -779,4 +779,6 @@
 
 </body>
 </html>
+
+
 

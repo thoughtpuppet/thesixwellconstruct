@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LOST MARBLES. Hoodie · thoughtpuppet · merch · the six.well construct</title>
+<title>LOST MARBLES. Hoodie Â· thoughtpuppet Â· merch Â· the six.well construct</title>
 
 <!--
   ============================================================
@@ -16,31 +16,31 @@
 
   PAGE STRUCTURE:
     1. header (wordmark + cart)
-    2. breadcrumb nav: merch → thoughtpuppet → marbles hoodie
+    2. breadcrumb nav: merch â†’ thoughtpuppet â†’ marbles hoodie
     3. product hero: image left, details right
-       — edition marker
-       — color swatch (one colorway)
-       — size selector (XS–XXL)
-       — add to cart
-    4. origin section: "this piece comes from" → the Marbles painting
+       â€” edition marker
+       â€” color swatch (one colorway)
+       â€” size selector (XSâ€“XXL)
+       â€” add to cart
+    4. origin section: "this piece comes from" â†’ the Marbles painting
     5. related thoughtpuppet pieces (3 cards)
     6. footer
 
   PLACEHOLDERS TO REPLACE:
-    — product image (currently a dark frame with edition marker)
-    — painting image in origin section
-    — colorway hex (#2a2a2a) → actual garment color
-    — price ($130) → final price
-    — painting description → your words
-    — related pieces → real thoughtpuppet products
+    â€” product image (currently a dark frame with edition marker)
+    â€” painting image in origin section
+    â€” colorway hex (#2a2a2a) â†’ actual garment color
+    â€” price ($130) â†’ final price
+    â€” painting description â†’ your words
+    â€” related pieces â†’ real thoughtpuppet products
 
   SHOPIFY INTEGRATION:
     add to cart button wired to local cart prototype for now.
     swap for Storefront API checkout when token is ready.
 
   TYPE:
-    Inter 900 (display, UI) — matches landing + merch
-    Times New Roman (descriptors, labels, body copy)
+    Inter 900 (display, UI) â€” matches landing + merch
+    Georgia-first serif (descriptors, labels, body copy)
   ============================================================
 -->
 
@@ -53,7 +53,7 @@
 
 <style>
   /* ============================================================
-     DESIGN TOKENS — exact match to merch page
+     DESIGN TOKENS â€” exact match to merch page
   ============================================================ */
   :root {
     --bg:         #0e0e0e;
@@ -72,15 +72,15 @@
     --text-dim:   rgba(252,184,103,0.30);
     --text-ghost: rgba(252,184,103,0.13);
 
-    /* body copy color — off-white per brief */
-    --body:       #E8E4DC;
-    --body-mute:  rgba(232,228,220,0.6);
+    /* body copy color â€” off-white per brief */
+    --body:       #FFE7CA;
+    --body-mute:  rgba(255,231,202,0.6);
 
     --s1:4px;  --s2:8px;  --s3:12px; --s4:16px;
     --s5:24px; --s6:40px; --s7:64px; --s8:96px;
 
     --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif: 'Times New Roman',Times,serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
 
     --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
@@ -89,8 +89,8 @@
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body {
     background:var(--bg); color:var(--text);
-    font-family:var(--sans);
-    min-height:100vh; overflow-x:clip; /* clip not hidden — hidden breaks position:fixed */
+    font-family:var(--serif);
+    min-height:100vh; overflow-x:clip; /* clip not hidden â€” hidden breaks position:fixed */
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
   }
@@ -167,7 +167,7 @@
   .breadcrumb-current { color:var(--src-color); opacity:0.8; }
 
   /* ============================================================
-     PRODUCT HERO — two column: image left, details right
+     PRODUCT HERO â€” two column: image left, details right
   ============================================================ */
   .product-hero {
     display:grid;
@@ -177,7 +177,7 @@
     align-items:start;
   }
 
-  /* ── IMAGE SIDE ── */
+  /* â”€â”€ IMAGE SIDE â”€â”€ */
   .product-image {
     position:relative;
     aspect-ratio:4/5;
@@ -208,7 +208,7 @@
     color:var(--text-ghost);
   }
 
-  /* ── DETAILS SIDE ── */
+  /* â”€â”€ DETAILS SIDE â”€â”€ */
   .product-details {
     display:flex; flex-direction:column;
     padding-top:var(--s3);
@@ -250,7 +250,7 @@
     padding-bottom:var(--s6);
   }
 
-  /* ── COLOR SELECTOR ── */
+  /* â”€â”€ COLOR SELECTOR â”€â”€ */
   .selector-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.28em; text-transform:uppercase;
@@ -276,7 +276,7 @@
     color:var(--text-mute);
   }
 
-  /* ── SIZE SELECTOR ── */
+  /* â”€â”€ SIZE SELECTOR â”€â”€ */
   .size-grid {
     display:flex; flex-wrap:wrap; gap:var(--s2);
     margin-bottom:var(--s3);
@@ -318,7 +318,7 @@
   }
   .size-guide:hover { color:var(--text-mute); border-color:var(--ring-soft); }
 
-  /* ── ADD TO CART ── */
+  /* â”€â”€ ADD TO CART â”€â”€ */
   .add-btn {
     display:flex; align-items:center; justify-content:space-between;
     padding:var(--s4) var(--s5);
@@ -372,7 +372,7 @@
     overflow:hidden;
     transition:border-color var(--t-med);
   }
-  /* image fills the frame naturally — no fixed aspect ratio so it
+  /* image fills the frame naturally â€” no fixed aspect ratio so it
      respects the painting's own proportions */
   .painting-frame img {
     width:100%; height:auto; display:block;
@@ -611,7 +611,7 @@
 
   <!-- BLINK PREVENTION: creates the fade overlay before any content renders.
        Runs immediately as the first thing in <body>, before the browser
-       paints anything — so there is never a frame where the new page is
+       paints anything â€” so there is never a frame where the new page is
        visible without the overlay covering it.
        transition.js (at end of body) handles the fade-out. -->
   <script>
@@ -625,7 +625,7 @@
 
   <div class="grain"></div>
 
-  <!-- HEADER — wordmark removed, lives in corner lockup (construct-corner.js) -->
+  <!-- HEADER â€” wordmark removed, lives in corner lockup (construct-corner.js) -->
   <header class="top">
     <button class="cart-toggle" id="cartToggle" aria-label="open cart">
       <span class="cart-label">cart</span>
@@ -636,7 +636,7 @@
   <!-- MAIN -->
   <main>
 
-    <!-- BREADCRUMB — all paths absolute -->
+    <!-- BREADCRUMB â€” all paths absolute -->
     <nav class="breadcrumb" aria-label="breadcrumb">
       <a href="/">construct</a>
       <span class="breadcrumb-sep">/</span>
@@ -711,14 +711,14 @@
 
     <!-- ORIGIN SECTION
          REPLACE painting description + image when ready.
-         Painting link points to /art/ — will 404 until that page is built. -->
+         Painting link points to /art/ â€” will 404 until that page is built. -->
     <section class="origin">
       <p class="origin-label">this product was inspired by:</p>
       <div class="origin-inner">
 
         <div class="painting-frame">
           <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
-               alt="AM I LOSING MY MARBLES OR HIDING THEM — acrylic on canvas, 2024">
+               alt="AM I LOSING MY MARBLES OR HIDING THEM â€” acrylic on canvas, 2024">
         </div>
 
         <div class="painting-info">
@@ -727,12 +727,12 @@
 
           <!-- REWRITE: your description of the Marbles painting -->
           <p class="painting-desc">
-            Placeholder — write your description of the Marbles painting here.
+            Placeholder â€” write your description of the Marbles painting here.
             What it is, what it came from, what it means to you.
             This is where the artifact and the work meet.
           </p>
 
-          <!-- absolute path — will 404 until /art is built -->
+          <!-- absolute path â€” will 404 until /art is built -->
           <a class="painting-link" href="/art/lostmarblespainting.html">
             <span>learn more about the painting that inspired this product</span>
             <span class="arrow">&rarr;</span>
@@ -779,7 +779,7 @@
 
   </main>
 
-  <!-- FOOTER — absolute path -->
+  <!-- FOOTER â€” absolute path -->
   <footer class="bottom">
     <p>&copy; the six.well construct</p>
     <a href="/">return to construct</a>
@@ -790,7 +790,7 @@
   <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
     <div class="drawer-header">
       <span class="title">cart</span>
-      <button class="drawer-close" id="drawerClose" aria-label="close cart">×</button>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart">Ã—</button>
     </div>
     <div class="drawer-items" id="drawerItems">
       <p class="drawer-empty">cart is empty</p>
@@ -878,7 +878,7 @@
     }
     checkoutBtn.disabled = false;
     drawerItems.innerHTML = cart.map(item => {
-      const variant   = [item.size, item.color].filter(Boolean).join(" · ");
+      const variant   = [item.size, item.color].filter(Boolean).join(" Â· ");
       const lineTotal = item.price * item.qty;
       return `
         <div class="drawer-item">
@@ -918,17 +918,19 @@
   checkoutBtn.addEventListener("click", () => {
     console.log("CHECKOUT:", cart);
     alert("Shopify checkout integration plugs in here.\n\n" +
-      cart.map(i => `${i.name} ${i.size} · ${i.color} × ${i.qty} — $${i.price * i.qty}`).join("\n"));
+      cart.map(i => `${i.name} ${i.size} Â· ${i.color} Ã— ${i.qty} â€” $${i.price * i.qty}`).join("\n"));
   });
 
   renderCart();
   </script>
 
-  <!-- shared construct scripts — transition layer + corner element -->
+  <!-- shared construct scripts â€” transition layer + corner element -->
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
 
 </body>
 </html>
+
+
 

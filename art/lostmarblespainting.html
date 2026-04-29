@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AM I LOSING MY MARBLES OR HIDING THEM? · art · the six.well construct</title>
+<title>AM I LOSING MY MARBLES OR HIDING THEM? Â· art Â· the six.well construct</title>
 
 <!--
 OBJECT METADATA
@@ -31,7 +31,7 @@ media:
   alt:        "Acrylic on wood panel, figure with colourful dot pattern, gold EKG and eyes motif, 2023"
 
 description:  "A figure dissolving into colour. Dot by dot, something that was solid becomes scattered."
-statement:    "placeholder — replace with real statement text"
+statement:    "placeholder â€” replace with real statement text"
 -->
 
 <!--
@@ -39,14 +39,14 @@ statement:    "placeholder — replace with real statement text"
   the six.well construct / art / lostmarblespainting
   ============================================================
 
-  LAYOUT: Split scroll — B variant
+  LAYOUT: Split scroll â€” B variant
     Left column:  painting, sticky. Stays fixed while right scrolls.
     Right column: metadata, statement, availability, related objects.
 
   AVAILABILITY:
-    original:  available — inquiry link (no cart, email trigger)
+    original:  available â€” inquiry link (no cart, email trigger)
     prints:    unavailable
-    related:   Marbles Hoodie → /merch/marbles-hoodie.html
+    related:   Marbles Hoodie â†’ /merch/marbles-hoodie.html
 
   TO UPDATE:
     - Replace statement placeholder with real text
@@ -68,7 +68,7 @@ statement:    "placeholder — replace with real statement text"
 
 <style>
   /* ============================================================
-     DESIGN TOKENS — same as art/index.html
+     DESIGN TOKENS â€” same as art/index.html
   ============================================================ */
   :root {
     --bg:        #0e0e0e;
@@ -85,13 +85,13 @@ statement:    "placeholder — replace with real statement text"
     --text-mute: rgba(252,184,103,0.55);
     --text-dim:  rgba(252,184,103,0.30);
     --text-ghost:rgba(252,184,103,0.13);
-    --body-text: #E8E4DC;
+    --body-text: #FFE7CA;
 
     --s1:4px; --s2:8px; --s3:12px; --s4:16px;
     --s5:24px; --s6:40px; --s7:64px; --s8:96px;
 
     --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif: 'Times New Roman',Times,serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
 
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
@@ -105,7 +105,7 @@ statement:    "placeholder — replace with real statement text"
   html { scroll-behavior:smooth; }
   html,body {
     background:var(--bg); color:var(--text);
-    font-family:var(--sans);
+    font-family:var(--serif);
     min-height:100vh; overflow-x:clip;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
@@ -123,7 +123,7 @@ statement:    "placeholder — replace with real statement text"
   }
 
   /* ============================================================
-     HEADER — same as art/index.html
+     HEADER â€” same as art/index.html
   ============================================================ */
   header.top {
     position:fixed; top:0; left:0; right:0; z-index:50;
@@ -131,7 +131,7 @@ statement:    "placeholder — replace with real statement text"
     padding:var(--s5) var(--s6);
   }
 
-  /* cart toggle — visual only until Shopify connected */
+  /* cart toggle â€” visual only until Shopify connected */
   .cart-toggle {
     display:flex; align-items:center; gap:var(--s3);
     padding:var(--s2) var(--s4);
@@ -149,7 +149,7 @@ statement:    "placeholder — replace with real statement text"
   }
 
   /* ============================================================
-     BREADCRUMB — fixed below header
+     BREADCRUMB â€” fixed below header
   ============================================================ */
   .breadcrumb {
     position:fixed; top:73px; left:0; right:0; z-index:40;
@@ -167,7 +167,7 @@ statement:    "placeholder — replace with real statement text"
   .breadcrumb-current { color:var(--accent-hot); opacity:0.8; }
 
   /* ============================================================
-     SPLIT LAYOUT — clears header + breadcrumb (≈116px)
+     SPLIT LAYOUT â€” clears header + breadcrumb (â‰ˆ116px)
   ============================================================ */
   .split {
     display:grid;
@@ -176,7 +176,7 @@ statement:    "placeholder — replace with real statement text"
     padding-top:116px;
   }
 
-  /* ── LEFT: sticky painting ─────────────────────────────── */
+  /* â”€â”€ LEFT: sticky painting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   .split-image {
     position:sticky;
     top:116px;
@@ -189,7 +189,7 @@ statement:    "placeholder — replace with real statement text"
   }
 
   /* ============================================================
-     LIGHTBOX — full-screen image view on painting click
+     LIGHTBOX â€” full-screen image view on painting click
   ============================================================ */
   .lightbox {
     position:fixed; inset:0; z-index:300;
@@ -235,7 +235,7 @@ statement:    "placeholder — replace with real statement text"
     width:100%;
     max-width:480px;
     height:calc(100vh - 116px - 80px);   /* fills sticky column with breathing room */
-    max-height:680px;                      /* hard cap — prevents giant on tall screens */
+    max-height:680px;                      /* hard cap â€” prevents giant on tall screens */
     overflow:hidden;
   }
 
@@ -252,7 +252,7 @@ statement:    "placeholder — replace with real statement text"
     to   { opacity:1; transform:scale(1); }
   }
 
-  /* edition/availability badge — bottom left of frame */
+  /* edition/availability badge â€” bottom left of frame */
   .painting-badge {
     position:absolute; bottom:var(--s4); left:0;
     font-family:var(--serif); font-size:9px;
@@ -260,7 +260,7 @@ statement:    "placeholder — replace with real statement text"
     color:var(--accent-hot); opacity:0.7;
   }
 
-  /* ── RIGHT: scrolling content ──────────────────────────── */
+  /* â”€â”€ RIGHT: scrolling content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   .split-content {
     padding:var(--s7) var(--s7) var(--s8) var(--s6);
     display:flex;
@@ -269,18 +269,18 @@ statement:    "placeholder — replace with real statement text"
   }
 
   /* ============================================================
-     PAINTING HEADER — title block
+     PAINTING HEADER â€” title block
   ============================================================ */
   .painting-header { display:flex; flex-direction:column; gap:var(--s3); }
 
-  /* venture label — Times, small, blue */
+  /* venture label â€” Times, small, blue */
   .venture-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.28em; text-transform:uppercase;
     color:var(--accent-hot); opacity:0.75;
   }
 
-  /* painting title — Inter 900, large */
+  /* painting title â€” Inter 900, large */
   .painting-title {
     font-family:var(--sans); font-weight:900;
     font-size:clamp(22px,3.5vw,40px);
@@ -288,7 +288,7 @@ statement:    "placeholder — replace with real statement text"
     color:var(--body-text);
   }
 
-  /* metadata row — year · medium · type */
+  /* metadata row â€” year Â· medium Â· type */
   .painting-meta {
     display:flex; align-items:center; gap:var(--s4);
     flex-wrap:wrap;
@@ -315,7 +315,7 @@ statement:    "placeholder — replace with real statement text"
     padding-bottom:var(--s3);
   }
 
-  /* statement body — Times, body-text, generous leading */
+  /* statement body â€” Times, body-text, generous leading */
   .statement-body {
     font-family:var(--serif); font-size:15px;
     line-height:1.8; color:var(--body-text);
@@ -324,7 +324,7 @@ statement:    "placeholder — replace with real statement text"
   /* statement paragraphs */
   .statement-body p + p { margin-top:var(--s5); }
 
-  /* placeholder state — italic, muted */
+  /* placeholder state â€” italic, muted */
   .statement-body.placeholder {
     font-style:italic; color:var(--text-mute);
   }
@@ -353,7 +353,7 @@ statement:    "placeholder — replace with real statement text"
     color:var(--text-dim);
   }
 
-  /* status — "available" / "sold" / "unavailable" */
+  /* status â€” "available" / "sold" / "unavailable" */
   .avail-status {
     font-family:var(--sans); font-weight:900;
     font-size:13px; letter-spacing:0.02em;
@@ -363,7 +363,7 @@ statement:    "placeholder — replace with real statement text"
   .avail-status.sold       { color:var(--text-dim); }
   .avail-status.unavailable{ color:var(--text-dim); }
 
-  /* inquiry / purchase button — solid border always, fills on hover */
+  /* inquiry / purchase button â€” solid border always, fills on hover */
   .avail-action {
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
@@ -392,14 +392,14 @@ statement:    "placeholder — replace with real statement text"
 
   .related-items { display:flex; flex-direction:column; gap:var(--s3); }
 
-  /* single related item — quiet link row */
+  /* single related item â€” quiet link row */
   .related-item {
     display:flex; align-items:center; justify-content:space-between;
     padding:var(--s4);
     border:5px solid var(--ring-faint);
     transition:border-color var(--t-fast), background var(--t-fast);
   }
-  /* related item hover — border + arrow + title use --item-color set inline per item.
+  /* related item hover â€” border + arrow + title use --item-color set inline per item.
      Set --item-color to the venture node color on each <a class="related-item"> */
   .related-item:hover {
     border-color:var(--item-color, var(--ring-soft));
@@ -454,7 +454,7 @@ statement:    "placeholder — replace with real statement text"
   footer.bottom a:hover { color:var(--accent); }
 
   /* ============================================================
-     CART DRAWER — visual only, matches art/index.html
+     CART DRAWER â€” visual only, matches art/index.html
   ============================================================ */
   .cart-overlay {
     position:fixed; inset:0; z-index:90;
@@ -504,7 +504,7 @@ statement:    "placeholder — replace with real statement text"
   }
 
   /* ============================================================
-     RESPONSIVE — stack on mobile
+     RESPONSIVE â€” stack on mobile
   ============================================================ */
   @media (max-width:900px) {
     .split {
@@ -512,7 +512,7 @@ statement:    "placeholder — replace with real statement text"
       padding-top:108px;
     }
 
-    /* image unsticks on mobile — becomes a tall block at top */
+    /* image unsticks on mobile â€” becomes a tall block at top */
     .split-image {
       position:relative;
       top:0;
@@ -616,9 +616,9 @@ statement:    "placeholder — replace with real statement text"
         <h1 class="painting-title">AM I LOSING MY MARBLES<br>OR HIDING THEM?</h1>
         <div class="painting-meta">
           <span class="meta-item">2023</span>
-          <span class="meta-sep">·</span>
+          <span class="meta-sep">Â·</span>
           <span class="meta-item">Acrylic on wood panel</span>
-          <span class="meta-sep">·</span>
+          <span class="meta-sep">Â·</span>
           <span class="meta-item">standalone</span>
         </div>
       </header>
@@ -629,11 +629,11 @@ statement:    "placeholder — replace with real statement text"
         <!--
           STATEMENT TEXT
           Replace the placeholder paragraph with the real statement.
-          Multiple <p> tags are fine — each gets top margin automatically.
-          No length limit — this is where the weight lives.
+          Multiple <p> tags are fine â€” each gets top margin automatically.
+          No length limit â€” this is where the weight lives.
         -->
         <div class="statement-body placeholder">
-          <p>Statement placeholder — replace this with the real text. Write as long as it needs to be. This is not a caption.</p>
+          <p>Statement placeholder â€” replace this with the real text. Write as long as it needs to be. This is not a caption.</p>
         </div>
       </section>
 
@@ -651,7 +651,7 @@ statement:    "placeholder — replace with real statement text"
             <!--
               INQUIRY LINK
               Replace href with actual mailto or form URL when ready.
-              e.g. href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry — AM I LOSING MY MARBLES OR HIDING THEM?"
+              e.g. href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry â€” AM I LOSING MY MARBLES OR HIDING THEM?"
             -->
             <a href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry%20%E2%80%94%20AM%20I%20LOSING%20MY%20MARBLES%20OR%20HIDING%20THEM%3F"
                class="avail-action">
@@ -678,17 +678,17 @@ statement:    "placeholder — replace with real statement text"
 
           <!--
             RELATED ITEM: Marbles Hoodie
-            Bidirectional link — merch/marbles-hoodie.html also links back here.
+            Bidirectional link â€” merch/marbles-hoodie.html also links back here.
             Add more related items as they exist.
           -->
           <a href="/merch/lostmarbles-hoodie.html"
              class="related-item"
              style="--item-color:#F7A226">  <!-- MERCH node color -->
             <div class="related-left">
-              <span class="related-venture">merch · thoughtpuppet</span>
+              <span class="related-venture">merch Â· thoughtpuppet</span>
               <span class="related-title">LOST MARBLES. Hoodie</span>
             </div>
-            <span class="related-arrow">→</span>
+            <span class="related-arrow">â†’</span>
           </a>
 
         </div>
@@ -704,17 +704,17 @@ statement:    "placeholder — replace with real statement text"
 
   </div><!-- /split -->
 
-  <!-- LIGHTBOX — opens on painting click -->
+  <!-- LIGHTBOX â€” opens on painting click -->
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Full size painting">
-    <button class="lightbox-close" id="lightboxClose" aria-label="Close">✕</button>
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">âœ•</button>
     <img id="lightboxImg"
          src="../assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
          alt="AM I LOSING MY MARBLES OR HIDING THEM?, acrylic on wood panel, 2023" />
   </div>
 
-  <!-- cart drawer open/close — visual only -->
+  <!-- cart drawer open/close â€” visual only -->
   <script>
-  /* ── LIGHTBOX ─────────────────────────────────────────────── */
+  /* â”€â”€ LIGHTBOX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   (function(){
     var lightbox = document.getElementById('lightbox');
     var closeBtn = document.getElementById('lightboxClose');
@@ -760,4 +760,6 @@ statement:    "placeholder — replace with real statement text"
 
 </body>
 </html>
+
+
 

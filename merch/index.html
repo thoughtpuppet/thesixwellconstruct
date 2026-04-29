@@ -31,7 +31,7 @@
 
   TYPE:
     Inter 900 (display, UI) — matches landing wordmark
-    Times New Roman (descriptors, category labels, metadata)
+    Georgia-first serif (descriptors, category labels, metadata)
 
   SHOPIFY INTEGRATION:
     per-product Shopify Buy Button mount points marked inside .card-frame.
@@ -74,7 +74,7 @@
     --s5:24px; --s6:40px; --s7:64px; --s8:96px;
 
     --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif:'Times New Roman',Times,serif;
+    --serif:Georgia,'Times New Roman',Times,serif;
 
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
@@ -87,7 +87,7 @@
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body {
     background:var(--bg); color:var(--text);
-    font-family:var(--sans);
+    font-family:var(--serif);
     min-height:100vh; overflow-x:clip;
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
@@ -626,6 +626,25 @@
 </style>
 </head>
 <body data-venture="merch">
+  <script>
+  (function(){
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut() {
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        o.style.opacity = '0';
+        o.style.pointerEvents = 'none';
+      });});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fadeOut);
+    } else {
+      fadeOut();
+    }
+  })();
+  </script>
 
   <div class="grain"></div>
 
