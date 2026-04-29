@@ -2,6 +2,7 @@ import {
   SOURCE_ORDER,
   SOURCES,
   getColorHex,
+  getPresentation,
   getTypeLabel,
 } from "/shared/storefront-config.js";
 
@@ -113,6 +114,12 @@ function resolveOptionValues(product) {
     if (key.includes("size")) values.size = option.values || [];
     else if (key.includes("color")) values.color = option.values || [];
     else if (key.includes("finish")) values.finish = option.values || [];
+  }
+  if (!values.color.length) {
+    const presentation = getPresentation(product.handle);
+    if (presentation.defaultColorway) {
+      values.color = [presentation.defaultColorway];
+    }
   }
   return values;
 }
