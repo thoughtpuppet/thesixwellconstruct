@@ -309,7 +309,27 @@ export async function fetchProductByHandle(env, handle) {
     { handle }
   );
 
-  return data.product ? normalizeProduct(data.product) : null;
+  if (data.product) {
+    return normalizeProduct(data.product);
+  }
+
+  const fallback = await storefrontRequest(
+    env,
+    `#graphql
+      query ProductSearch($first: Int!, $query: String!) {
+        products(first: $first, query: $query) {
+          nodes {
+            ${PRODUCT_FIELDS}
+          }
+        }
+      }
+    `,
+    { first: 1, query: `handle:${handle}` }
+  );
+
+  return fallback.products?.nodes?.[0]
+    ? normalizeProduct(fallback.products.nodes[0])
+    : null;
 }
 
 export async function fetchCartById(env, cartId) {
