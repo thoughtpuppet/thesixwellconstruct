@@ -426,54 +426,66 @@
   .painting-link:hover .arrow { transform:translateX(4px); }
 
   /* ============================================================
-     RELATED PIECES
+     RELATED WORK
+     Matches the painting-page horizontal card treatment.
   ============================================================ */
-  .related {
-    padding-top:var(--s7);
+  .section-divider {
+    border:none;
+    border-top:5px solid var(--ring-faint);
+    margin:0 0 var(--s7);
+  }
+  .section-label {
+    font-family:var(--sans); font-weight:900;
+    font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim);
+    margin-bottom:var(--s5);
+  }
+  .related-row {
+    display:flex; gap:var(--s5);
+    overflow-x:auto; padding-bottom:var(--s3);
+    scrollbar-width:none;
+  }
+  .related-row::-webkit-scrollbar { display:none; }
+  .related-card {
+    flex-shrink:0; width:200px;
+    display:flex; flex-direction:column;
+    border:5px solid var(--ring-soft);
+    transition:border-color var(--t-med);
+  }
+  .related-card:hover { border-color:var(--src-color); }
+  .related-frame {
+    aspect-ratio:4/5;
+    background:var(--bg-raised);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; position:relative;
+  }
+  .related-frame img {
+    width:100%; height:100%;
+    object-fit:cover; filter:brightness(0.88);
+    transition:filter var(--t-med);
+  }
+  .related-card:hover .related-frame img { filter:brightness(1); }
+  .related-frame-num {
+    font-family:var(--serif);
+    font-size:48px; color:var(--text-ghost); font-weight:400;
+  }
+  .related-info {
+    padding:var(--s3) var(--s3) var(--s2);
     border-top:5px solid var(--ring-faint);
   }
-  .related-label {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.35em; text-transform:uppercase;
-    color:var(--text-dim); margin-bottom:var(--s6);
-  }
-  .related-grid {
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:var(--s6);
-  }
-  .rcard { display:flex; flex-direction:column; }
-  .rcard-frame {
-    position:relative; aspect-ratio:4/5;
-    background:var(--bg-raised);
-    border:5px solid var(--ring-soft);
-    overflow:hidden;
-    transition:border-color var(--t-med);
-    margin-bottom:var(--s3);
-  }
-  .rcard:hover .rcard-frame { border-color:var(--src-color); }
-  .rcard-num {
-    position:absolute; top:50%; right:var(--s4);
-    transform:translateY(-50%);
-    font-family:var(--serif);
-    font-size:clamp(60px,8vw,90px); line-height:1;
-    color:var(--text-ghost); font-weight:400;
-    letter-spacing:-0.02em;
-  }
-  .rcard-plaque {
-    position:absolute; top:var(--s3); left:var(--s3);
-    font-family:var(--serif); font-size:10px;
+  .related-type {
+    font-family:var(--serif); font-size:9px;
     letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-ghost);
-  }
-  .rcard-name {
-    font-family:var(--sans); font-weight:700;
-    font-size:13px; letter-spacing:0.02em;
-    text-transform:uppercase; color:var(--text);
+    color:var(--src-color); opacity:0.7;
     margin-bottom:var(--s1);
   }
-  .rcard-price {
-    font-family:var(--serif); font-size:12px;
+  .related-name {
+    font-family:var(--sans); font-weight:700;
+    font-size:11px; letter-spacing:0.04em; text-transform:uppercase;
+    color:var(--text); margin-bottom:var(--s1);
+  }
+  .related-price {
+    font-family:var(--serif); font-size:11px;
     color:var(--text-mute);
   }
 
@@ -609,12 +621,10 @@
     main { padding:var(--s6) var(--s5) var(--s7); }
     .product-hero { grid-template-columns:1fr; gap:var(--s6); }
     .origin-inner { grid-template-columns:1fr; gap:var(--s6); }
-    .related-grid { grid-template-columns:repeat(2,1fr); }
   }
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s5) var(--s4) var(--s6); }
-    .related-grid { grid-template-columns:1fr; }
     footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s5); }
   }
 </style>
@@ -726,7 +736,7 @@
          REPLACE painting description + image when ready.
          Painting link points to /art/ — will 404 until that page is built. -->
     <section class="origin">
-      <p class="origin-label">this product was inspired by:</p>
+      <p class="origin-label">origin.</p>
       <div class="origin-inner">
 
         <div class="painting-frame">
@@ -755,38 +765,35 @@
       </div>
     </section>
 
-    <!-- RELATED PIECES -->
+    <!-- RELATED WORK -->
     <section class="related">
-      <p class="related-label">more from thoughtpuppet</p>
-      <div class="related-grid">
+      <hr class="section-divider">
+      <p class="section-label">also from this work.</p>
 
-        <a class="rcard" href="#">
-          <div class="rcard-frame">
-            <span class="rcard-plaque">N&deg; 06</span>
-            <span class="rcard-num">06</span>
+      <div class="related-row">
+        <a class="related-card" href="/art/lostmarblespainting.html">
+          <div class="related-frame">
+            <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+                 alt="AM I LOSING MY MARBLES OR HIDING THEM?">
           </div>
-          <p class="rcard-name">ARTIFACT 002</p>
-          <p class="rcard-price">$240</p>
+          <div class="related-info">
+            <p class="related-type">original painting</p>
+            <p class="related-name">AM I LOSING MY MARBLES OR HIDING THEM?</p>
+            <p class="related-price">price on request</p>
+          </div>
         </a>
 
-        <a class="rcard" href="#">
-          <div class="rcard-frame">
-            <span class="rcard-plaque">N&deg; 07</span>
-            <span class="rcard-num">07</span>
+        <a class="related-card" href="/merch/marbles-print.html">
+          <div class="related-frame">
+            <img src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+                 alt="Marbles. Print">
           </div>
-          <p class="rcard-name">ARTIFACT 003</p>
-          <p class="rcard-price">$180</p>
-        </a>
-
-        <a class="rcard" href="#">
-          <div class="rcard-frame">
-            <span class="rcard-plaque">N&deg; 08</span>
-            <span class="rcard-num">08</span>
+          <div class="related-info">
+            <p class="related-type">print</p>
+            <p class="related-name">Marbles. Print</p>
+            <p class="related-price">$85</p>
           </div>
-          <p class="rcard-name">ARTIFACT 004</p>
-          <p class="rcard-price">$95</p>
         </a>
-
       </div>
     </section>
 
