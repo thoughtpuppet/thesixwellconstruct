@@ -146,11 +146,14 @@ export function getShopifyConfig(env) {
 
 export async function storefrontRequest(env, query, variables = {}) {
   const config = getShopifyConfig(env);
+  const tokenHeader = config.storefrontAccessToken.startsWith("shpat_")
+    ? "Shopify-Storefront-Private-Token"
+    : "X-Shopify-Storefront-Access-Token";
   const response = await fetch(config.endpoint, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "X-Shopify-Storefront-Access-Token": config.storefrontAccessToken,
+      [tokenHeader]: config.storefrontAccessToken,
     },
     body: JSON.stringify({ query, variables }),
   });
