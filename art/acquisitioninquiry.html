@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>acquisition inquiry ? art ? the six.well construct</title>
+<title>acquisition inquiry · art · the six.well construct</title>
 
 <!--
   ============================================================
@@ -11,7 +11,7 @@
   ============================================================
 
   PURPOSE:
-    Painting acquisition inquiries ? two tracks:
+    Painting acquisition inquiries — two tracks:
       1. Purchase interest (original painting)
       2. Delivery + hanging service (local or shipping)
 
@@ -21,24 +21,24 @@
 
     TO ACTIVATE:
       1. Create account at emailjs.com
-      2. Add email service (Gmail etc.) ? copy Service ID
-      3. Create email template ? copy Template ID
-      4. Account ? API Keys ? copy Public Key
+      2. Add email service (Gmail etc.) → copy Service ID
+      3. Create email template → copy Template ID
+      4. Account → API Keys → copy Public Key
       5. Replace the three REPLACE_WITH_... values below
       6. Uncomment the EmailJS script tag in <head>
       7. Uncomment the emailjs.send() call in the submit handler
 
     TEMPLATE VARIABLES (use these in your EmailJS template):
-      {{from_name}}       ? inquirer's name
-      {{from_email}}      ? inquirer's email
-      {{phone}}           ? phone (optional)
-      {{painting}}        ? which painting
-      {{inquiry_type}}    ? purchase / delivery+hanging / both
-      {{location}}        ? local or shipping
-      {{city}}            ? city (if local)
-      {{shipping_address}}? address (if shipping)
-      {{message}}         ? open message
-      {{reply_to}}        ? same as from_email
+      {{from_name}}       — inquirer's name
+      {{from_email}}      — inquirer's email
+      {{phone}}           — phone (optional)
+      {{painting}}        — which painting
+      {{inquiry_type}}    — purchase / delivery+hanging / both
+      {{location}}        — local or shipping
+      {{city}}            — city (if local)
+      {{shipping_address}}— address (if shipping)
+      {{message}}         — open message
+      {{reply_to}}        — same as from_email
 
   CONTACT INFO:
     REPLACE placeholder email + instagram with real details.
@@ -52,7 +52,7 @@
   ============================================================
 -->
 
-<!-- EmailJS SDK ? uncomment when you have your credentials -->
+<!-- EmailJS SDK — uncomment when you have your credentials -->
 <!-- <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script> -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -202,7 +202,7 @@
     color:var(--text); margin-bottom:var(--s2);
   }
 
-  /* â”€â”€ FIELD GROUP â”€â”€ */
+  /* ── FIELD GROUP ── */
   .field-group { display:flex; flex-direction:column; gap:var(--s2); }
   .field-row {
     display:grid; grid-template-columns:1fr 1fr; gap:var(--s4);
@@ -230,7 +230,7 @@
     outline:none;
     transition:border-color var(--t-fast);
     appearance:none; -webkit-appearance:none;
-    border-radius:0;   /* brutalist ? no rounding */
+    border-radius:0;   /* brutalist — no rounding */
   }
   input:focus, textarea:focus, select:focus {
     border-color:var(--src-color);
@@ -244,14 +244,14 @@
   /* select arrow */
   .select-wrap { position:relative; }
   .select-wrap::after {
-    content:"â†“";
+    content:"↓";
     position:absolute; right:var(--s4); top:50%;
     transform:translateY(-50%);
     font-family:var(--serif); font-size:12px;
     color:var(--text-dim); pointer-events:none;
   }
 
-  /* â”€â”€ INQUIRY TYPE TOGGLE â”€â”€
+  /* ── INQUIRY TYPE TOGGLE ──
      two large clickable tiles: Purchase / Delivery+Hanging
      selecting one shows/hides the relevant conditional fields */
   .type-tiles {
@@ -284,12 +284,12 @@
   /* hidden checkbox behind tile */
   .type-tile input[type="checkbox"] { display:none; }
 
-  /* â”€â”€ CONDITIONAL FIELDS â”€â”€
+  /* ── CONDITIONAL FIELDS ──
      shown/hidden by JS based on inquiry type selection */
   .conditional { display:none; flex-direction:column; gap:var(--s5); }
   .conditional.visible { display:flex; }
 
-  /* â”€â”€ LOCATION RADIO â”€â”€ */
+  /* ── LOCATION RADIO ── */
   .radio-group { display:flex; flex-direction:column; gap:var(--s3); }
   .radio-option {
     display:flex; align-items:flex-start; gap:var(--s3);
@@ -318,7 +318,7 @@
     line-height:1.5;
   }
 
-  /* â”€â”€ SUBMIT BUTTON â”€â”€ */
+  /* ── SUBMIT BUTTON ── */
   .submit-btn {
     display:flex; align-items:center; justify-content:space-between;
     padding:var(--s4) var(--s5);
@@ -357,7 +357,7 @@
   }
 
   /* ============================================================
-     CONTACT INFO PANEL ? right column
+     CONTACT INFO PANEL — right column
   ============================================================ */
   .contact-panel {
     position:sticky; top:calc(var(--s8) + 24px);
@@ -503,7 +503,7 @@
                 <option value="" disabled selected>select a painting</option>
                 <!-- REPLACE: add real painting titles as they go live -->
                 <option value="am-i-losing-my-marbles">AM I LOSING MY MARBLES OR HIDING THEM?</option>
-                <option value="other">other ? I'll describe below</option>
+                <option value="other">other — I'll describe below</option>
               </select>
             </div>
           </div>
@@ -532,7 +532,7 @@
             </label>
           </div>
 
-          <!-- CONDITIONAL: delivery fields ? shown when delivery is selected -->
+          <!-- CONDITIONAL: delivery fields — shown when delivery is selected -->
           <div class="conditional" id="delivery-fields">
             <div class="field-group" style="margin-top:var(--s4);">
               <label>location</label>
@@ -542,7 +542,7 @@
                   <input type="radio" name="location" value="local" id="radio-local">
                   <span class="radio-mark"></span>
                   <span class="radio-label">
-                    local ? I'm in the area<br>
+                    local — I'm in the area<br>
                     <span style="font-size:11px;opacity:0.6">
                       Saiel will deliver + hang in person
                     </span>
@@ -553,7 +553,7 @@
                   <input type="radio" name="location" value="shipping" id="radio-shipping">
                   <span class="radio-mark"></span>
                   <span class="radio-label">
-                    shipping ? I'm elsewhere<br>
+                    shipping — I'm elsewhere<br>
                     <span style="font-size:11px;opacity:0.6">
                       professional crating + carrier shipping arranged
                     </span>
@@ -629,7 +629,7 @@
         </div>
 
         <p class="contact-note">
-          Paintings are sold directly ? no gallery intermediary.
+          Paintings are sold directly — no gallery intermediary.
           Price, availability, and installation details are discussed
           personally after inquiry.
         </p>
@@ -646,7 +646,7 @@
 
   <script>
   /* ============================================================
-     INQUIRY TYPE TILES ? toggle selection + show/hide fields
+     INQUIRY TYPE TILES — toggle selection + show/hide fields
   ============================================================ */
   const tilePurchase  = document.getElementById("tile-purchase");
   const tileDelivery  = document.getElementById("tile-delivery");
@@ -675,7 +675,7 @@
     }
   });
 
-  /* location radio ? show city or address field */
+  /* location radio — show city or address field */
   document.getElementById("radio-local").addEventListener("change", () => {
     cityField.classList.add("visible");
     addressField.classList.remove("visible");
@@ -736,12 +736,12 @@
     };
 
     /* ============================================================
-       EMAILJS SEND ? uncomment when credentials are ready
+       EMAILJS SEND — uncomment when credentials are ready
 
        replace the three REPLACE_WITH_... strings:
-         REPLACE_WITH_SERVICE_ID   ? your EmailJS service ID
-         REPLACE_WITH_TEMPLATE_ID  ? your EmailJS template ID
-         REPLACE_WITH_PUBLIC_KEY   ? your EmailJS public key (init below too)
+         REPLACE_WITH_SERVICE_ID   → your EmailJS service ID
+         REPLACE_WITH_TEMPLATE_ID  → your EmailJS template ID
+         REPLACE_WITH_PUBLIC_KEY   → your EmailJS public key (init below too)
 
        also uncomment the SDK script tag in <head>
     ============================================================ */
@@ -763,7 +763,7 @@
     // });
 
     /* ============================================================
-       PROTOTYPE RESPONSE ? remove this block when EmailJS is live
+       PROTOTYPE RESPONSE — remove this block when EmailJS is live
     ============================================================ */
     console.log("INQUIRY:", templateParams);
     status.className = "form-status success";

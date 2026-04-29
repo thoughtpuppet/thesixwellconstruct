@@ -1,14 +1,14 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AM I LOSING MY MARBLES OR HIDING THEM? ? merch ? the six.well construct</title>
+<title>AM I LOSING MY MARBLES OR HIDING THEM? · merch · the six.well construct</title>
 
 <!--
   ============================================================
   merch/am-i-losing-my-marbles.html
-  PRODUCT PAGE ? PAINTING (original)
+  PRODUCT PAGE — PAINTING (original)
   ============================================================
 
   TEMPLATE TYPE: painting
@@ -17,11 +17,11 @@
   a new painting page.
 
   ANATOMY:
-    1. Header (sticky, cart toggle ? shared with merch/index.html)
-    2. Hero ? full-bleed painting image, left column
-    3. Product panel ? right column: title, metadata, price, CTA
-    4. Origin section ? link back to /art/ painting page
-    5. Related objects ? hoodie, print, or other derivatives
+    1. Header (sticky, cart toggle — shared with merch/index.html)
+    2. Hero — full-bleed painting image, left column
+    3. Product panel — right column: title, metadata, price, CTA
+    4. Origin section — link back to /art/ painting page
+    5. Related objects — hoodie, print, or other derivatives
     6. Cart drawer (full implementation, shared logic with index)
     7. Footer
 
@@ -50,7 +50,7 @@
 <style>
   /* ============================================================
      DESIGN TOKENS
-     Mirrors merch/index.html exactly ? keep in sync.
+     Mirrors merch/index.html exactly — keep in sync.
   ============================================================ */
   :root {
     --bg:        #0e0e0e;
@@ -58,7 +58,7 @@
     --bg-drawer: #0a0a0a;
 
     --accent:    #FCB867;            /* wordmark amber */
-    --src-color: #0581C1;            /* thoughtpuppet blue ? drives all accents on this page */
+    --src-color: #0581C1;            /* thoughtpuppet blue — drives all accents on this page */
 
     --ring:      #6D3D15;
     --ring-soft: rgba(109,61,21,0.4);
@@ -94,7 +94,7 @@
   button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
 
   /* ============================================================
-     GRAIN OVERLAY ? ambient texture, matches index
+     GRAIN OVERLAY — ambient texture, matches index
   ============================================================ */
   .grain {
     position:fixed; inset:0; z-index:1; pointer-events:none;
@@ -103,7 +103,7 @@
   }
 
   /* ============================================================
-     HEADER ? sticky, matches merch/index.html
+     HEADER — sticky, matches merch/index.html
   ============================================================ */
   header.top {
     position:sticky; top:0; z-index:50;
@@ -118,7 +118,7 @@
   }
   .wordmark:hover { opacity:1; }
 
-  /* breadcrumb ? "merch." in amber, links back */
+  /* breadcrumb — "merch." in amber, links back */
   .breadcrumb {
     display:flex; align-items:center; gap:var(--s3);
     font-family:var(--serif); font-size:11px;
@@ -155,11 +155,11 @@
     100% { transform:scale(1);   }
   }
 
-  /* header right cluster ? breadcrumb + cart */
+  /* header right cluster — breadcrumb + cart */
   .header-right { display:flex; align-items:center; gap:var(--s6); }
 
   /* ============================================================
-     MAIN LAYOUT ? two-column split
+     MAIN LAYOUT — two-column split
      Left: painting image (sticky on desktop)
      Right: product panel (scrolls)
   ============================================================ */
@@ -171,7 +171,7 @@
   }
 
   /* ============================================================
-     LEFT ? PAINTING IMAGE
+     LEFT — PAINTING IMAGE
      Full height, image fills the column
   ============================================================ */
   .painting-col {
@@ -184,13 +184,13 @@
     width:100%; height:100%;
     object-fit:cover; object-position:center;
     display:block;
-    /* subtle multiply tint ? consistent with how paintings appear across the site */
+    /* subtle multiply tint — consistent with how paintings appear across the site */
     filter:brightness(0.92);
     transition:filter 0.6s ease;
   }
   .painting-col:hover .painting-img { filter:brightness(1); }
 
-  /* catalog number watermark on image ? bottom left, very dim */
+  /* catalog number watermark on image — bottom left, very dim */
   .painting-number {
     position:absolute; bottom:var(--s5); left:var(--s5);
     font-family:var(--serif); font-size:10px;
@@ -200,7 +200,7 @@
   }
 
   /* ============================================================
-     RIGHT ? PRODUCT PANEL
+     RIGHT — PRODUCT PANEL
      Scrollable content: title, metadata, CTA, origin, related
   ============================================================ */
   .product-col {
@@ -209,7 +209,7 @@
     max-width:680px;
   }
 
-  /* source tag ? thoughtpuppet dot + label */
+  /* source tag — thoughtpuppet dot + label */
   .source-tag {
     display:flex; align-items:center; gap:var(--s2);
     margin-bottom:var(--s5);
@@ -224,18 +224,18 @@
     color:var(--src-color); opacity:0.7;
   }
 
-  /* painting title ? big, Inter 900 */
+  /* painting title — big, Inter 900 */
   .product-title {
     font-family:var(--sans); font-weight:900;
     font-size:clamp(28px,4vw,52px);
     letter-spacing:-0.03em; line-height:0.95;
     color:var(--text); /* amber */
     margin-bottom:var(--s5);
-    /* deliberate: title in amber not body-white ?
+    /* deliberate: title in amber not body-white —
        same rule as landing page wordmark */
   }
 
-  /* metadata row ? medium ? dimensions ? year */
+  /* metadata row — medium · dimensions · year */
   .product-meta {
     display:flex; flex-wrap:wrap; gap:var(--s2) var(--s4);
     padding:var(--s5) 0;
@@ -249,7 +249,7 @@
   }
   .meta-sep { color:var(--text-dim); }
 
-  /* price block ? price on request for originals */
+  /* price block — price on request for originals */
   .product-price {
     font-family:var(--sans); font-weight:900;
     font-size:clamp(32px,4vw,48px);
@@ -264,7 +264,7 @@
     margin-bottom:var(--s6);
   }
 
-  /* CTA ? inquire to acquire */
+  /* CTA — inquire to acquire */
   .cta-inquire {
     display:flex; align-items:center; justify-content:space-between;
     width:100%;
@@ -286,7 +286,7 @@
   }
   .cta-inquire:hover .cta-arrow { transform:translateX(4px); }
 
-  /* secondary CTA ? link to /art/ painting page */
+  /* secondary CTA — link to /art/ painting page */
   .cta-secondary {
     display:flex; align-items:center; gap:var(--s2);
     font-family:var(--serif); font-size:11px;
@@ -297,10 +297,10 @@
     margin-bottom:var(--s7);
   }
   .cta-secondary:hover { color:var(--text-mute); }
-  .cta-secondary::after { content:"â†—"; font-size:12px; }
+  .cta-secondary::after { content:"↗"; font-size:12px; }
 
   /* ============================================================
-     DIVIDER ? thin amber line, separates sections
+     DIVIDER — thin amber line, separates sections
   ============================================================ */
   .section-divider {
     border:none; border-top:5px solid var(--ring-faint);
@@ -308,7 +308,7 @@
   }
 
   /* ============================================================
-     SECTION LABEL ? "ORIGIN." / "ALSO FROM THIS WORK." etc.
+     SECTION LABEL — "ORIGIN." / "ALSO FROM THIS WORK." etc.
   ============================================================ */
   .section-label {
     font-family:var(--sans); font-weight:900;
@@ -318,7 +318,7 @@
   }
 
   /* ============================================================
-     RELATED OBJECTS ? horizontal scroll of cards linking
+     RELATED OBJECTS — horizontal scroll of cards linking
      to derivative products (hoodie, print)
   ============================================================ */
   .related-row {
@@ -393,7 +393,7 @@
   footer.bottom a:hover { color:var(--accent); }
 
   /* ============================================================
-     CART DRAWER ? identical to merch/index.html
+     CART DRAWER — identical to merch/index.html
   ============================================================ */
   .cart-overlay {
     position:fixed; inset:0; z-index:90;
@@ -537,7 +537,7 @@
 
   <!-- ============================================================
        HEADER
-       breadcrumb: construct ? merch ? this page
+       breadcrumb: construct → merch → this page
   ============================================================ -->
   <header class="top" style="justify-content:flex-end;">
     <div class="header-right">
@@ -554,7 +554,7 @@
   </header>
 
   <!-- ============================================================
-       MAIN ? two-column
+       MAIN — two-column
   ============================================================ -->
   <main>
 
@@ -569,7 +569,7 @@
       <img
         class="painting-img"
         src="/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
-        alt="AM I LOSING MY MARBLES OR HIDING THEM? ? acrylic on canvas, 2023"
+        alt="AM I LOSING MY MARBLES OR HIDING THEM? — acrylic on canvas, 2023"
         loading="eager"
       >
       <!-- catalog number, very faint -->
@@ -586,11 +586,11 @@
       </div>
 
       <!-- ====================================================
-           PRODUCT DATA ? edit this block per painting
+           PRODUCT DATA — edit this block per painting
       ==================================================== -->
       <h1 class="product-title">AM I LOSING MY MARBLES OR HIDING THEM?</h1>
 
-      <!-- medium ? dimensions ? year -->
+      <!-- medium · dimensions · year -->
       <div class="product-meta">
         <span class="meta-item">acrylic on canvas</span>
         <span class="meta-sep">&middot;</span>
@@ -599,14 +599,14 @@
         <span class="meta-item">2023</span>
       </div>
 
-      <!-- price ? original paintings are price on request -->
+      <!-- price — original paintings are price on request -->
       <div class="product-price" style="font-style:italic; font-size:clamp(16px,2vw,22px); letter-spacing:0; font-weight:400; font-family:var(--serif);">
         price on request
       </div>
       <!-- REWRITE: one line, your voice. what does acquiring this mean. -->
       <p class="price-note">original. one exists.</p>
 
-      <!-- PRIMARY CTA ? inquiry -->
+      <!-- PRIMARY CTA — inquiry -->
       <!--
         SHOPIFY / FORM INTEGRATION POINT:
         Replace this <a> with your inquiry form embed or JS handler.
@@ -617,7 +617,7 @@
         <span class="cta-arrow">&rarr;</span>
       </a>
 
-      <!-- SECONDARY CTA ? full painting page on /art/ -->
+      <!-- SECONDARY CTA — full painting page on /art/ -->
       <a class="cta-secondary" href="/art/lostmarblespainting">
         view painting page on /art/
       </a>
@@ -632,7 +632,7 @@
 
       <div class="related-row">
 
-        <!-- Marbles Hoodie ? thoughtpuppet apparel -->
+        <!-- Marbles Hoodie — thoughtpuppet apparel -->
         <a class="related-card" href="/merch/marbles-hoodie.html">
           <div class="related-frame">
             <!-- swap for real hoodie image when available -->
@@ -645,7 +645,7 @@
           </div>
         </a>
 
-        <!-- Marbles Print ? thoughtpuppet print -->
+        <!-- Marbles Print — thoughtpuppet print -->
         <a class="related-card" href="/merch/marbles-print.html">
           <div class="related-frame">
             <span class="related-frame-num">06</span>
@@ -672,7 +672,7 @@
   <!-- ============================================================
        CART DRAWER
        Note: this page has no add-to-cart (paintings are inquiry only).
-       Cart drawer is present for navigation continuity ? if user
+       Cart drawer is present for navigation continuity — if user
        visited from merch/index.html with items already in cart,
        they can still access it here.
        Cart state is session-only (not persisted across pages yet).
@@ -699,7 +699,7 @@
 
   <script>
   /* ============================================================
-     CART ? lightweight version for product pages.
+     CART — lightweight version for product pages.
      No products are added here (painting = inquiry only),
      but the drawer is present for continuity.
      When Shopify goes live, rip this out and use SDK cart.
@@ -713,7 +713,7 @@
   const subtotalEl = document.getElementById("subtotal");
   const checkoutBtn = document.getElementById("checkoutBtn");
 
-  /* render cart drawer ? reflects items added via merch/index.html
+  /* render cart drawer — reflects items added via merch/index.html
      (future: pull from sessionStorage or Shopify SDK cart) */
   function renderCart() {
     const totalQty = cart.reduce((s, i) => s + i.qty, 0);
@@ -725,7 +725,7 @@
       return;
     }
     checkoutBtn.disabled = false;
-    /* full render logic lives in merch/index.html ?
+    /* full render logic lives in merch/index.html —
        this page's cart is display-only for now */
   }
 

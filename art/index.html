@@ -1,13 +1,13 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>art making ? the six.well construct</title>
+<title>art making · the six.well construct</title>
 
 <!--
   ============================================================
-  the six.well construct / art  ?  portfolio index
+  the six.well construct / art  —  portfolio index
   ============================================================
 
   ARCHITECTURE:
@@ -18,21 +18,21 @@
     /art/[slug] and /art/statements/[slug] respectively.
 
   MEDIUMS:
-    paintings  ? narrative, non-narrative, series, standalone
-    wood       ? placeholder, coming later
+    paintings  — narrative, non-narrative, series, standalone
+    wood       — placeholder, coming later
 
   TOKENS:
     Accent color: #0581C1 (ART MAKING node color)
     All other tokens match the shared construct system.
 
   TYPE:
-    Inter 900 ? display, titles, UI labels
-    Georgia-first serif ? all serif roles (descriptors, metadata, labels)
+    Inter 900 — display, titles, UI labels
+    Georgia-first serif — all serif roles (descriptors, metadata, labels)
 
   SHARED SCRIPTS:
-    /css/transitions.css  ? fade-to-black page transitions
-    /js/transition.js     ? link interception + fade logic
-    /js/construct-corner.js ? top-left ring + wordmark lockup
+    /css/transitions.css  — fade-to-black page transitions
+    /js/transition.js     — link interception + fade logic
+    /js/construct-corner.js — top-left ring + wordmark lockup
 
   TO ADD A REAL WORK:
     Find the card with the matching data-id.
@@ -49,23 +49,23 @@ id:           art-index
 title:        Art Making
 type:         index                     (index | painting | product | writing | music | film | event | archive)
 venture:      art                       (art | merch | tattooing | music | writings | film | events | archive | about)
-year:         ?
+year:         —
 
-tags:         []                        (Saiel's language ? add freely, stay consistent)
+tags:         []                        (Saiel's language — add freely, stay consistent)
 
 status:
-  original:   ?
-  prints:     ?
+  original:   —
+  prints:     —
   inquiry:    false
 
 related:      []
 
 media:
-  primary:    ?
-  alt:        ?
+  primary:    —
+  alt:        —
 
-description:  "Portfolio index for ART MAKING ? paintings and wood works by Saiel Dauhn Solehman."
-statement:    ?
+description:  "Portfolio index for ART MAKING — paintings and wood works by Saiel Dauhn Solehman."
+statement:    —
 -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,21 +77,21 @@ statement:    ?
 
 <style>
   /* ============================================================
-     DESIGN TOKENS ? mirrors merch/index.html token system
+     DESIGN TOKENS — mirrors merch/index.html token system
      ART accent replaces MERCH hot orange throughout
   ============================================================ */
   :root {
     --bg:        #0e0e0e;
     --bg-raised: #111111;
 
-    --accent:    #FCB867;             /* construct amber ? wordmark, corner */
-    --accent-hot:#0581C1;             /* ART MAKING node color ? title + active states */
+    --accent:    #FCB867;             /* construct amber — wordmark, corner */
+    --accent-hot:#0581C1;             /* ART MAKING node color — title + active states */
 
     --ring:      #6D3D15;
     --ring-soft: rgba(109,61,21,0.4);
     --ring-faint:rgba(109,61,21,0.18);
 
-    /* text scale ? keyed to amber at descending opacity, same as merch */
+    /* text scale — keyed to amber at descending opacity, same as merch */
     --text:      #FCB867;
     --text-mute: rgba(252,184,103,0.55);
     --text-dim:  rgba(252,184,103,0.30);
@@ -110,13 +110,13 @@ statement:    ?
     --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
     --t-slow:0.5s  cubic-bezier(0.22,1,0.36,1);
 
-    /* driven by JS ? switches to active filter's color on chip click.
+    /* driven by JS — switches to active filter's color on chip click.
        defaults to ART node blue for the "all" state. */
     --title-color: #0581C1;
   }
 
   /* ============================================================
-     RESET ? matches merch exactly
+     RESET — matches merch exactly
   ============================================================ */
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body {
@@ -130,7 +130,7 @@ statement:    ?
   button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
 
   /* ============================================================
-     GRAIN ? same data URI as merch
+     GRAIN — same data URI as merch
   ============================================================ */
   .grain {
     position:fixed; inset:0; z-index:1; pointer-events:none;
@@ -139,7 +139,7 @@ statement:    ?
   }
 
   /* ============================================================
-     HEADER ? matches merch header.top exactly
+     HEADER — matches merch header.top exactly
      construct-corner.js injects the ring lockup top-left
   ============================================================ */
   header.top {
@@ -158,7 +158,7 @@ statement:    ?
   }
 
   /* ============================================================
-     INTRO ? matches merch .intro exactly
+     INTRO — matches merch .intro exactly
      Same scale, alignment, spacing. --accent-hot replaces
      --title-color from merch (no JS color-swap needed here).
   ============================================================ */
@@ -170,7 +170,7 @@ statement:    ?
     display:flex; flex-direction:column; align-items:flex-start;
   }
 
-  /* ART MAKING. ? same scale as MERCH. on the merch page
+  /* ART MAKING. — same scale as MERCH. on the merch page
      color driven by --title-color, set by JS on filter change */
   .intro h1 {
     font-family:var(--sans); font-weight:900;
@@ -180,10 +180,10 @@ statement:    ?
     transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
   }
 
-  /* dot inherits h1 color ? same venture color as title */
-  .art-dot { /* inherits color from h1 ? no override needed */ }
+  /* dot inherits h1 color — same venture color as title */
+  .art-dot { /* inherits color from h1 — no override needed */ }
 
-  /* descriptor ? Times, uppercase, right-aligned ? matches merch .intro p */
+  /* descriptor — Times, uppercase, right-aligned — matches merch .intro p */
   .intro-desc {
     font-family:var(--serif); font-size:12px;
     letter-spacing:0.22em; text-transform:uppercase;
@@ -194,7 +194,7 @@ statement:    ?
   }
 
   /* ============================================================
-     FILTER BAR ? two rows: medium then type
+     FILTER BAR — two rows: medium then type
      No group label text. Underline+dot style on active chips.
      Row 2 scopes to types present in the active medium.
   ============================================================ */
@@ -241,7 +241,7 @@ statement:    ?
 
   .chip-label { position:relative; }
 
-  /* small superscript count ? Times, dimmer */
+  /* small superscript count — Times, dimmer */
   .chip-count {
     font-family:var(--serif); font-size:10px;
     color:var(--text-dim); margin-left:2px;
@@ -265,7 +265,7 @@ statement:    ?
   }
 
   /* ============================================================
-     WORK GRID ? vault layout
+     WORK GRID — vault layout
   ============================================================ */
   .work-grid {
     display:grid;
@@ -282,7 +282,7 @@ statement:    ?
     border:5px solid var(--ring-faint);
     transition:border-color var(--t-med);
   }
-  .work-card:hover { border-color:var(--text); }    /* amber ? same as filter font color */
+  .work-card:hover { border-color:var(--text); }    /* amber — same as filter font color */
 
   .work-card img {
     width:100%; height:100%;
@@ -338,7 +338,7 @@ statement:    ?
     letter-spacing:0.03em;
   }
 
-  /* placeholder card ? wood works coming later */
+  /* placeholder card — wood works coming later */
   .work-card.placeholder {
     cursor:default;
     display:flex; align-items:center; justify-content:center;
@@ -465,11 +465,11 @@ statement:    ?
     opacity:0.75;
     transition:opacity var(--t-fast);
   }
-  .overlay-statement-link::after { content:'?'; }
+  .overlay-statement-link::after { content:'→'; }
   .overlay-statement-link:hover { opacity:1; }
 
   /* ============================================================
-     FOOTER ? matches merch footer.bottom
+     FOOTER — matches merch footer.bottom
   ============================================================ */
   footer.bottom {
     position:relative; z-index:2;
@@ -507,11 +507,11 @@ statement:    ?
     }
   }
 
-  /* â”€â”€ CART TOGGLE + DRAWER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /* ── CART TOGGLE + DRAWER ─────────────────────────────────
      Matches merch page cart exactly.
-     Drawer opens empty on non-merch pages ? wires to
+     Drawer opens empty on non-merch pages — wires to
      Shopify when Storefront API is connected.
-  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  ────────────────────────────────────────────────────────── */
   .cart-toggle {
     display:flex; align-items:center; gap:var(--s3);
     padding:var(--s2) var(--s4);
@@ -587,7 +587,7 @@ statement:    ?
 
 <body data-venture="art">
 
-  <!-- early overlay ? prevents flash on navigation.
+  <!-- early overlay — prevents flash on navigation.
        self-contained: fades out even if transition.js fails to load
        (e.g. in local preview or the Claude viewer) -->
   <script>
@@ -612,7 +612,7 @@ statement:    ?
 
   <div class="grain"></div>
 
-  <!-- HEADER ? construct-corner.js injects ring lockup top-left.
+  <!-- HEADER — construct-corner.js injects ring lockup top-left.
        cart toggle is visual-only until Shopify Storefront API is connected. -->
   <header class="top">
     <button class="cart-toggle" id="cartToggle" aria-label="open cart">
@@ -639,7 +639,7 @@ statement:    ?
 
   <!-- EXPANDED WORK OVERLAY -->
   <div id="work-overlay" role="dialog" aria-modal="true" aria-label="Work detail">
-    <button class="overlay-close" id="overlayCloseBtn" aria-label="Close">âœ•</button>
+    <button class="overlay-close" id="overlayCloseBtn" aria-label="Close">✕</button>
     <div class="overlay-inner">
       <div class="overlay-image-wrap">
         <img id="overlayImg" src="" alt="" />
@@ -662,11 +662,11 @@ statement:    ?
       <div class="intro-left">
         <h1>ART MAKING<span class="art-dot">.</span></h1>
       </div>
-      <!-- REWRITE: one line in your voice ? swapped by JS on filter change -->
+      <!-- REWRITE: one line in your voice — swapped by JS on filter change -->
       <p class="intro-desc" id="introDesc">works made by Saiel Dauhn Solehman</p>
     </section>
 
-    <!-- filter rows ? row 1: medium, row 2: type (scoped to active medium) -->
+    <!-- filter rows — row 1: medium, row 2: type (scoped to active medium) -->
     <nav class="filters" id="filters" role="tablist">
       <div class="filter-row" id="mediumRow"></div>
       <div class="filter-row" id="typeRow"></div>
@@ -679,12 +679,12 @@ statement:    ?
 
         <!--
           WORK CARD ANATOMY
-          â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          ─────────────────────────────────────────────────────
           data-medium:       "painting" | "wood"
           data-type:         "narrative" | "non-narrative" | "series" | "standalone"
-          data-id:           unique slug ? /art/statements/[id]
+          data-id:           unique slug → /art/statements/[id]
           data-title:        display title
-          data-year:         "2024" or "?"
+          data-year:         "2024" or "—"
           data-medium-label: "Acrylic on canvas" etc.
           data-fragment:     one or two sentences, shown in overlay
           data-series:       series name or "" if standalone
@@ -694,123 +694,123 @@ statement:    ?
             Update all data-* attributes above.
         -->
 
-        <!-- Work 01 ? Marbles (real) -->
+        <!-- Work 01 — Marbles (real) -->
         <div class="work-card entrance-fade entrance-delay-1"
              data-medium="painting" data-type="standalone" data-id="marbles"
              data-slug="lostmarblespainting"
              data-title="AM I LOSING MY MARBLES OR HIDING THEM?" data-year="2023" data-medium-label="Acrylic on wood panel"
-             data-fragment="A figure dissolving into colour. Dot by dot, something that was solid becomes scattered ? and maybe freer for it."
+             data-fragment="A figure dissolving into colour. Dot by dot, something that was solid becomes scattered — and maybe freer for it."
              data-series="">
           <img src="../assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg" alt="AM I LOSING MY MARBLES OR HIDING THEM?, 2024" loading="lazy" />
           <span class="work-badge">standalone</span>
           <div class="work-meta">
             <span class="work-title">AM I LOSING MY MARBLES OR HIDING THEM?</span>
-            <span class="work-info">2023 ? Acrylic on wood panel</span>
+            <span class="work-info">2023 · Acrylic on wood panel</span>
           </div>
         </div>
 
-        <!-- Works 02?08 ? placeholders. Replace src + data-* as works are ready. -->
+        <!-- Works 02–08 — placeholders. Replace src + data-* as works are ready. -->
 
         <div class="work-card entrance-fade entrance-delay-2"
              data-medium="painting" data-type="standalone" data-id="lust"
              data-slug="lustpainting"
              data-title="LUST." data-year="2023" data-medium-label="Acrylic on wood panel"
-             data-fragment="Fragment placeholder ? replace with a short note for this work."
+             data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/LUST.JPG" alt="" loading="lazy" />
           <span class="work-badge">narrative</span>
           <div class="work-meta">
             <span class="work-title">LUST.</span>
-            <span class="work-info">2023 ? Acrylic on wood panel</span>
+            <span class="work-info">2023 · Acrylic on wood panel</span>
           </div>
         </div>
 
         <div class="work-card entrance-fade entrance-delay-2"
              data-medium="painting" data-type="standalone" data-id="sloth"
              data-slug="slothpainting"
-             data-title="SLOTH." data-year="?" data-medium-label="Painting"
-             data-fragment="Fragment placeholder ? replace with a short note for this work."
+             data-title="SLOTH." data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/SLOTH.JPG" alt="" loading="lazy" />
           <span class="work-badge">narrative</span>
           <div class="work-meta">
             <span class="work-title">SLOTH.</span>
-            <span class="work-info">? ? Painting</span>
+            <span class="work-info">— · Painting</span>
           </div>
         </div>
 
         <div class="work-card entrance-fade entrance-delay-3"
              data-medium="painting" data-type="series" data-id="homelandsecurity"
              data-slug="homelandsecuritypainting"
-             data-title="HOMELAND SECURITY." data-year="?" data-medium-label="Painting"
-             data-fragment="Fragment placeholder ? replace with a short note for this work."
+             data-title="HOMELAND SECURITY." data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="series-01">
           <img src="../assets/paintings/HOMELAND SECURITY.jpg" alt="" loading="lazy" />
           <span class="work-badge">series</span>
           <div class="work-meta">
             <span class="work-title">HOMELAND SECURITY.</span>
-            <span class="work-info">? ? Painting</span>
+            <span class="work-info">— · Painting</span>
           </div>
         </div>
 
         <div class="work-card entrance-fade entrance-delay-3"
              data-medium="painting" data-type="series" data-id="thefrustrationsofinnercharos"
              data-slug="thefrustrationsofinnercharospainting"
-             data-title="THE FRUSTRATIONS OF INNER CHAOS." data-year="?" data-medium-label="Painting"
-             data-fragment="Fragment placeholder ? replace with a short note for this work."
+             data-title="THE FRUSTRATIONS OF INNER CHAOS." data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="series-02">
           <img src="../assets/paintings/THE FRUSTRATIONS OF INNER CHAOS.jpg" alt="" loading="lazy" />
           <span class="work-badge">series</span>
           <div class="work-meta">
             <span class="work-title">THE FRUSTRATIONS OF INNER CHAOS.</span>
-            <span class="work-info">? ? Painting</span>
+            <span class="work-info">— · Painting</span>
           </div>
         </div>
 
         <div class="work-card entrance-fade entrance-delay-4"
              data-medium="painting" data-type="standalone" data-id="paranoiafosteredtrauma"
              data-slug="paranoiafosteredtraumapainting"
-             data-title="PARANOIA & FOSTERED TRAUMA." data-year="?" data-medium-label="Painting"
-             data-fragment="Fragment placeholder ? replace with a short note for this work."
+             data-title="PARANOIA & FOSTERED TRAUMA." data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="../assets/paintings/PARANOIA & FOSTERED TRAUMA.jpg" alt="" loading="lazy" />
           <span class="work-badge">narrative</span>
           <div class="work-meta">
             <span class="work-title">PARANOIA & FOSTERED TRAUMA.</span>
-            <span class="work-info">? ? Painting</span>
+            <span class="work-info">— · Painting</span>
           </div>
         </div>
 
         <div class="work-card entrance-fade entrance-delay-4"
              data-medium="painting" data-type="standalone" data-id="work-07"
-             data-title="UNTITLED 07" data-year="?" data-medium-label="Painting"
-             data-fragment="Fragment placeholder ? replace with a short note for this work."
+             data-title="UNTITLED 07" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="" alt="" loading="lazy" />
           <span class="work-badge">standalone</span>
           <div class="work-meta">
             <span class="work-title">UNTITLED 07</span>
-            <span class="work-info">? ? Painting</span>
+            <span class="work-info">— · Painting</span>
           </div>
         </div>
 
         <div class="work-card entrance-fade entrance-delay-5"
              data-medium="painting" data-type="standalone" data-id="work-08"
-             data-title="UNTITLED 08" data-year="?" data-medium-label="Painting"
-             data-fragment="Fragment placeholder ? replace with a short note for this work."
+             data-title="UNTITLED 08" data-year="—" data-medium-label="Painting"
+             data-fragment="Fragment placeholder — replace with a short note for this work."
              data-series="">
           <img src="" alt="" loading="lazy" />
           <span class="work-badge">non-narrative</span>
           <div class="work-meta">
             <span class="work-title">UNTITLED 08</span>
-            <span class="work-info">? ? Painting</span>
+            <span class="work-info">— · Painting</span>
           </div>
         </div>
 
       </div><!-- /gridPainting -->
     </section>
 
-    <!-- WOOD WORKS ? placeholder section, populated in future phase -->
+    <!-- WOOD WORKS — placeholder section, populated in future phase -->
     <section class="medium-section" id="sectionWood">
       <p class="medium-heading">Wood works</p>
       <div class="work-grid" id="gridWood">
@@ -842,7 +842,7 @@ statement:    ?
     <a href="/">return to construct</a>
   </footer>
 
-  <!-- shared scripts ? same load order as merch/index.html -->
+  <!-- shared scripts — same load order as merch/index.html -->
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
@@ -862,24 +862,24 @@ statement:    ?
      MEDIUMS: top-level medium filters
      SERIES:  sub-options shown when "by series" is active
               replace placeholder names with real series names as they exist
-     Each entry has a descriptor string ? REWRITE in your voice.
+     Each entry has a descriptor string — REWRITE in your voice.
   ============================================================ */
 
   const MEDIUMS = [
-    { value:'painting', label:'paintings',   descriptor:'paintings ? works on canvas and panel' },
-    { value:'wood',     label:'wood works',  descriptor:'wood works ? objects made from material' },
+    { value:'painting', label:'paintings',   descriptor:'paintings — works on canvas and panel' },
+    { value:'wood',     label:'wood works',  descriptor:'wood works — objects made from material' },
   ];
 
-  /* series placeholder names ? replace values + labels with real series */
+  /* series placeholder names — replace values + labels with real series */
   const SERIES = [
-    { value:'series-01', label:'series 01', descriptor:'series 01 ? placeholder' },
-    { value:'series-02', label:'series 02', descriptor:'series 02 ? placeholder' },
-    { value:'series-03', label:'series 03', descriptor:'series 03 ? placeholder' },
+    { value:'series-01', label:'series 01', descriptor:'series 01 — placeholder' },
+    { value:'series-02', label:'series 02', descriptor:'series 02 — placeholder' },
+    { value:'series-03', label:'series 03', descriptor:'series 03 — placeholder' },
   ];
 
   const DEFAULT_DESC = 'works made by Saiel Dauhn Solehman';
 
-  /* â”€â”€ state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── state ───────────────────────────────────────────────── */
   const active = {
     medium: null,   /* "painting" | "wood" | null */
     mode:   null,   /* "series" | "standalone" | null */
@@ -891,11 +891,11 @@ statement:    ?
   const row1      = document.getElementById('mediumRow');
   const row2      = document.getElementById('typeRow');
 
-  /* â”€â”€ chip factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── chip factory ────────────────────────────────────────── */
   function makeChip(label, count, isActive) {
     const btn = document.createElement('button');
     btn.className = 'chip' + (isActive ? ' active' : '');
-    /* count is optional ? omit for series sub-chips if no count logic needed */
+    /* count is optional — omit for series sub-chips if no count logic needed */
     const countHtml = count !== null
       ? `<span class="chip-count">${count}</span>`
       : '';
@@ -903,7 +903,7 @@ statement:    ?
     return btn;
   }
 
-  /* â”€â”€ count helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── count helpers ───────────────────────────────────────── */
 
   /* cards matching medium scope (includes placeholders for wood) */
   function countMedium(value) {
@@ -918,7 +918,7 @@ statement:    ?
     return [...document.querySelectorAll(mediumSelector)].filter(filterFn).length;
   }
 
-  /* â”€â”€ render row 1: all ? paintings ? wood works ? by series ? standalone â”€â”€ */
+  /* ── render row 1: all · paintings · wood works · by series · standalone ── */
   function renderRow1() {
     row1.innerHTML = '';
 
@@ -928,7 +928,7 @@ statement:    ?
     allBtn.addEventListener('click', () => setFilter('all', null));
     row1.appendChild(allBtn);
 
-    /* paintings ? wood works */
+    /* paintings · wood works */
     MEDIUMS.forEach(m => {
       const count = countMedium(m.value);
       if (!count) return;
@@ -950,7 +950,7 @@ statement:    ?
     row1.appendChild(standaloneBtn);
   }
 
-  /* â”€â”€ render row 2: series sub-options (only when "by series" active) â”€â”€ */
+  /* ── render row 2: series sub-options (only when "by series" active) ── */
   function renderRow2() {
     row2.innerHTML = '';
 
@@ -961,7 +961,7 @@ statement:    ?
     allSeriesBtn.addEventListener('click', () => setSeries(null));
     row2.appendChild(allSeriesBtn);
 
-    /* one chip per series ? filtered by active medium if set */
+    /* one chip per series — filtered by active medium if set */
     SERIES.forEach(s => {
       /* count cards belonging to this series, respecting medium scope */
       const count = countInScope(c => c.dataset.series === s.value);
@@ -972,7 +972,7 @@ statement:    ?
     });
   }
 
-  /* â”€â”€ apply card visibility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── apply card visibility ───────────────────────────────── */
   function applyFilters() {
     document.querySelectorAll('.work-card:not(.placeholder)').forEach(card => {
       let show = true;
@@ -1004,7 +1004,7 @@ statement:    ?
     });
   }
 
-  /* â”€â”€ descriptor swap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── descriptor swap ─────────────────────────────────────── */
   function updateIntro() {
     /* priority: series > mode > medium > default */
     let desc = DEFAULT_DESC;
@@ -1014,9 +1014,9 @@ statement:    ?
       const s = SERIES.find(x => x.value === active.series);
       if (s) { desc = s.descriptor; color = '#0581C1'; }
     } else if (active.mode === 'standalone') {
-      desc = 'standalone ? singular works'; color = '#0581C1';
+      desc = 'standalone — singular works'; color = '#0581C1';
     } else if (active.mode === 'series') {
-      desc = 'series ? works made in relation to each other'; color = '#0581C1';
+      desc = 'series — works made in relation to each other'; color = '#0581C1';
     } else if (active.medium) {
       const m = MEDIUMS.find(x => x.value === active.medium);
       if (m) { desc = m.descriptor; color = '#0581C1'; }
@@ -1030,7 +1030,7 @@ statement:    ?
     }, 200);
   }
 
-  /* â”€â”€ state setters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── state setters ───────────────────────────────────────── */
 
   /* setFilter handles row 1 clicks */
   function setFilter(type, value) {
@@ -1039,12 +1039,12 @@ statement:    ?
       active.mode   = null;
       active.series = null;
     } else if (type === 'medium') {
-      /* toggle medium ? clicking active medium resets to all */
+      /* toggle medium — clicking active medium resets to all */
       active.medium = active.medium === value ? null : value;
       active.series = null;        /* reset series when medium changes */
-      /* keep mode if set ? medium + mode both active is valid */
+      /* keep mode if set — medium + mode both active is valid */
     } else if (type === 'mode') {
-      /* toggle mode ? clicking active mode resets it */
+      /* toggle mode — clicking active mode resets it */
       if (active.mode === value) {
         active.mode   = null;
         active.series = null;
@@ -1069,7 +1069,7 @@ statement:    ?
     updateIntro();
   }
 
-  /* â”€â”€ init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  /* ── init ────────────────────────────────────────────────── */
   renderRow1();
   renderRow2();
   applyFilters();
@@ -1078,7 +1078,7 @@ statement:    ?
   /* ============================================================
      EXPANDED OVERLAY SYSTEM
      ============================================================
-     Click non-placeholder card ? overlay opens, content injected
+     Click non-placeholder card → overlay opens, content injected
      from card data-* attributes.
   ============================================================ */
 
@@ -1096,7 +1096,7 @@ statement:    ?
     overlayImg.src         = card.querySelector('img').src;
     overlayImg.alt         = d.title;
     overlayTitle.textContent = d.title;
-    overlaySub.textContent = [d.year, d.mediumLabel].filter(s => s && s !== '?').join(' ? ') || d.year;
+    overlaySub.textContent = [d.year, d.mediumLabel].filter(s => s && s !== '—').join(' · ') || d.year;
 
     overlayTags.innerHTML = '';
     [d.type, d.series].filter(Boolean).forEach(val => {
@@ -1138,10 +1138,10 @@ statement:    ?
   });
 
 
-  /* â”€â”€ CART DRAWER ? open/close only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /* ── CART DRAWER — open/close only ───────────────────────
      Visual-only until Shopify Storefront API is connected.
      Cart state and product logic lives on /merch pages.
-  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  ────────────────────────────────────────────────────────── */
   (function() {
     var drawer  = document.getElementById('cartDrawer');
     var overlay = document.getElementById('cartOverlay');
