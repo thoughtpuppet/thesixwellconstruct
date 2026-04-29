@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "thesixwellconstruct",
   "main": "_worker.js",
+  "keep_vars": true,
   "compatibility_date": "2026-04-27",
   "observability": {
     "enabled": true
@@ -9,6 +10,11 @@
   "assets": {
     "directory": ".",
     "binding": "ASSETS"
+  },
+  "vars": {
+    "SHOPIFY_STORE_DOMAIN": "six-well-2.myshopify.com",
+    "SHOPIFY_STOREFRONT_API_VERSION": "2025-07",
+    "SHOPIFY_MERCH_QUERY": "tag:construct-merch"
   },
   "compatibility_flags": [
     "nodejs_compat"
