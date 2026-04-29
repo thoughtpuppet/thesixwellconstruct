@@ -1,5 +1,5 @@
 ﻿/* ============================================================
-   tokens.css â€” the six.well construct
+   tokens.css ? the six.well construct
    ============================================================
    Single source of truth for all brand values.
    Import this at the top of every venture page's CSS:
@@ -14,24 +14,24 @@
 :root {
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     COLORS â€” BASE
+     COLORS ? BASE
      The foundation every venture page is built on.
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-  --color-bg:         #0e0e0e;   /* site background â€” near black */
-  --color-body:       #FFE7CA;   /* all body text â€” warm off-white */
-  --color-accent:     #FCB867;   /* global amber â€” wordmark, landing accents */
-  --color-accent-dim: rgba(252, 184, 103, 0.25); /* amber at low opacity â€” borders, dividers */
+  --color-bg:         #0e0e0e;   /* site background ? near black */
+  --color-body:       #FFE7CA;   /* all body text ? warm off-white */
+  --color-accent:     #FCB867;   /* global amber ? wordmark, landing accents */
+  --color-accent-dim: rgba(252, 184, 103, 0.25); /* amber at low opacity ? borders, dividers */
 
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     COLORS â€” VENTURE NODES
+     COLORS ? VENTURE NODES
      Each venture has a full-strength signal color and a
      dimmed variant for subtle UI use (borders, hover states,
      section dividers, background washes).
 
-     Signal  â†’ use for: dots, active states, highlighted UI
-     Dim     â†’ use for: borders, dividers, bg washes, inactive
+     Signal  ? use for: dots, active states, highlighted UI
+     Dim     ? use for: borders, dividers, bg washes, inactive
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   /* TATTOOING */
@@ -72,11 +72,11 @@
 
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     TYPOGRAPHY â€” STACKS
-     Two stacks only. No web font loading â€” zero dependency.
+     TYPOGRAPHY ? STACKS
+     Two stacks only. No web font loading ? zero dependency.
 
-     Display  â†’ Inter 900 â€” titles, wordmarks, anything declarative
-     Serif    â†’ Georgia â€” body copy, labels, descriptors,
+     Display  ? Inter 900 ? titles, wordmarks, anything declarative
+     Serif    ? Georgia ? body copy, labels, descriptors,
                 metadata, captions. All serif roles.
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -85,8 +85,8 @@
 
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     TYPOGRAPHY â€” SIZES
-     Scale is intentional. Don't freestyle between these â€”
+     TYPOGRAPHY ? SIZES
+     Scale is intentional. Don't freestyle between these ?
      pick the closest one that fits the context.
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -102,35 +102,35 @@
 
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     TYPOGRAPHY â€” TRACKING (letter-spacing)
-     Tracking scales with size and role â€” not flattened.
+     TYPOGRAPHY ? TRACKING (letter-spacing)
+     Tracking scales with size and role ? not flattened.
 
      Display text (Inter 900) gets tighter as it gets bigger.
-     Serif labels (TNR uppercase) get wider â€” creates contrast
+     Serif labels (TNR uppercase) get wider ? creates contrast
      between the two voices.
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   --tracking-display-tight:  -0.05em;   /* wordmark scale, 32px+ */
   --tracking-display-tighter:-0.06em;   /* hero display, 56px+ */
-  --tracking-body:            0em;      /* body copy â€” default, no adjustment */
+  --tracking-body:            0em;      /* body copy ? default, no adjustment */
   --tracking-label:           0.14em;   /* small serif labels */
   --tracking-label-wide:      0.18em;   /* small caps, hint text, metadata */
 
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-     TYPOGRAPHY â€” LINE HEIGHT
+     TYPOGRAPHY ? LINE HEIGHT
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   --leading-tight:   1.1;    /* display text, titles */
   --leading-snug:    1.3;    /* sub-headings */
-  --leading-normal:  1.6;    /* body copy â€” main reading line-height */
+  --leading-normal:  1.6;    /* body copy ? main reading line-height */
   --leading-relaxed: 1.8;    /* long-form body, /writings */
 
 
   /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
      SPACING SCALE
      Use these for padding, margin, gap.
-     Named by relative size â€” not px values â€” so they can
+     Named by relative size ? not px values ? so they can
      be understood in context without looking them up.
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -148,7 +148,7 @@
      TRANSITION TIMING
      Shared easing values for hover states, reveals, etc.
      The fade-to-black page transition lives in transitions.css
-     and transition.js â€” these are for smaller UI interactions.
+     and transition.js ? these are for smaller UI interactions.
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
   --ease-out:        cubic-bezier(0.16, 1, 0.3, 1);     /* snappy exit */
