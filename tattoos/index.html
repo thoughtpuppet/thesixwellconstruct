@@ -29,6 +29,9 @@
     --text-dim:     rgba(255,231,202,0.35);
     --text-ghost:   rgba(255,231,202,0.12);
 
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px;
+    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+
     --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
     --serif: Georgia,'Times New Roman',Times,serif;
 
@@ -59,7 +62,7 @@
   header.top {
     position:sticky; top:0; z-index:50;
     display:flex; align-items:center; justify-content:flex-end;
-    padding:24px 40px;
+    padding:var(--s5) var(--s6);
   }
   .nav-inquire {
     font-family:var(--sans); font-weight:700; font-size:11px;
@@ -75,8 +78,8 @@
   ============================================================ */
   main {
     position:relative; z-index:2;
-    max-width:1080px; margin:0 auto;
-    padding:96px 40px 80px;
+    max-width:1440px; margin:0 auto;
+    padding:var(--s8) var(--s6) var(--s7);
   }
 
   /* ============================================================
@@ -334,8 +337,8 @@
   ============================================================ */
   footer.bottom {
     position:relative; z-index:2;
-    max-width:1080px; margin:0 auto;
-    padding:56px 40px;
+    max-width:1440px; margin:0 auto;
+    padding:56px var(--s6);
     border-top:5px solid var(--signal-faint);
     display:flex; justify-content:space-between; align-items:center;
   }
@@ -351,8 +354,8 @@
   ============================================================ */
   @media (max-width:1024px) {
     .process-steps { grid-template-columns:repeat(3,1fr); }
-    main { padding:72px 32px 64px; }
-    footer.bottom { padding:48px 32px; }
+    main { padding:var(--s7) var(--s5) var(--s6); }
+    footer.bottom { padding:48px var(--s5); }
   }
   @media (max-width:768px) {
     .hero { flex-direction:column; align-items:flex-start; gap:20px; }
@@ -368,11 +371,11 @@
     .booking-cta-note { text-align:left; }
   }
   @media (max-width:640px) {
-    header.top { padding:16px 20px; }
-    main { padding:56px 20px 48px; }
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s6) var(--s5); }
     .section { padding:48px 0; }
     .process-steps { grid-template-columns:1fr; }
-    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px 20px; }
+    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 </style>
 </head>
