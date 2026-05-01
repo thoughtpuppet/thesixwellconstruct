@@ -621,6 +621,13 @@
     letter-spacing:0.24em; color:var(--text-dim);
     text-transform:uppercase; text-align:center;
   }
+  .drawer-status {
+    margin-top:var(--s3);
+    min-height:1.4em;
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.08em; color:var(--accent);
+    text-align:center;
+  }
 
   /* ============================================================
      RESPONSIVE
@@ -665,7 +672,7 @@
 
   <!-- HEADER -->
   <header class="top" style="justify-content:flex-end;">
-    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+    <button class="cart-toggle" id="cartToggle" type="button" aria-label="open cart">
       <span class="cart-label">cart</span>
       <span class="cart-count" id="cartCount">0</span>
     </button>
@@ -703,7 +710,7 @@
   <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
     <div class="drawer-header">
       <span class="title">cart</span>
-      <button class="drawer-close" id="drawerClose" aria-label="close cart">×</button>
+      <button class="drawer-close" id="drawerClose" type="button" aria-label="close cart">×</button>
     </div>
     <div class="drawer-items" id="drawerItems">
       <p class="drawer-empty">cart is empty</p>
@@ -716,7 +723,8 @@
       <!-- CHECKOUT INTEGRATION POINT
            replace click handler with Shopify SDK checkout.create()
            or hosted-checkout redirect built from cart line items -->
-      <button class="checkout-btn" id="checkoutBtn" disabled>proceed to checkout</button>
+      <button class="checkout-btn" id="checkoutBtn" type="button" disabled>proceed to checkout</button>
+      <p class="drawer-status" id="checkoutStatus" aria-live="polite"></p>
       <p class="drawer-note">shipping &amp; taxes calculated at checkout</p>
     </div>
   </aside>

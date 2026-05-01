@@ -98,7 +98,7 @@ export async function removeCartLines(cartId, lineIds) {
 }
 
 export function goToCheckout(checkoutUrl) {
-  window.location.href = checkoutUrl;
+  window.location.assign(checkoutUrl);
 }
 
 function summarizeOptions(selectedOptions = []) {
@@ -203,6 +203,7 @@ export function createCartController(elements) {
   function renderCart() {
     const cart = state.cart;
     setCount(cart?.totalQuantity || 0);
+    if (elements.checkoutStatusEl) elements.checkoutStatusEl.textContent = "";
 
     if (!cart || !cart.lines || cart.lines.length === 0) {
       elements.drawerItems.innerHTML = `<p class="drawer-empty">cart is empty</p>`;
@@ -230,9 +231,9 @@ export function createCartController(elements) {
               </span>
               ${variant ? `<span class="drawer-item-variant">${variant}</span>` : ""}
               <div class="drawer-item-qty">
-                <button class="qty-btn" data-minus="${line.id}" aria-label="decrease">&minus;</button>
+                <button class="qty-btn" type="button" data-minus="${line.id}" aria-label="decrease">&minus;</button>
                 <span class="qty-num">${line.quantity}</span>
-                <button class="qty-btn" data-plus="${line.id}" aria-label="increase">+</button>
+                <button class="qty-btn" type="button" data-plus="${line.id}" aria-label="increase">+</button>
               </div>
             </div>
             <div class="drawer-item-right">
@@ -240,7 +241,7 @@ export function createCartController(elements) {
                 amount: Number(line.price?.amount || 0) * Number(line.quantity || 0),
                 currencyCode: line.price?.currencyCode || "USD",
               })}</span>
-              <button class="drawer-item-remove" data-remove="${line.id}">remove</button>
+              <button class="drawer-item-remove" type="button" data-remove="${line.id}">remove</button>
             </div>
           </div>
         `;
@@ -361,11 +362,20 @@ export function createCartController(elements) {
   elements.cartToggle.addEventListener("click", openDrawer);
   elements.drawerClose.addEventListener("click", closeDrawer);
   elements.overlay.addEventListener("click", closeDrawer);
+  elements.checkoutBtn.type = "button";
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeDrawer();
   });
-  elements.checkoutBtn.addEventListener("click", () => {
-    if (state.cart?.checkoutUrl) goToCheckout(state.cart.checkoutUrl);
+  elements.checkoutBtn.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!state.cart?.checkoutUrl) {
+      if (elements.checkoutStatusEl) {
+        elements.checkoutStatusEl.textContent = "checkout is unavailable right now. please try again in a moment.";
+      }
+      return;
+    }
+    goToCheckout(state.cart.checkoutUrl);
   });
 
   const controller = {
@@ -391,6 +401,7 @@ export async function initMerchCartOnlyPage() {
     drawer: document.getElementById("cartDrawer"),
     drawerClose: document.getElementById("drawerClose"),
     drawerItems: document.getElementById("drawerItems"),
+    checkoutStatusEl: document.getElementById("checkoutStatus"),
     overlay: document.getElementById("cartOverlay"),
     subtotalEl: document.getElementById("subtotal"),
   });
@@ -448,6 +459,7 @@ export async function initMerchCatalogPage() {
     drawer: document.getElementById("cartDrawer"),
     drawerClose: document.getElementById("drawerClose"),
     drawerItems: document.getElementById("drawerItems"),
+    checkoutStatusEl: document.getElementById("checkoutStatus"),
     overlay: document.getElementById("cartOverlay"),
     subtotalEl: document.getElementById("subtotal"),
   });
@@ -688,6 +700,7 @@ export async function initMerchProductPage(options) {
     drawer: document.getElementById("cartDrawer"),
     drawerClose: document.getElementById("drawerClose"),
     drawerItems: document.getElementById("drawerItems"),
+    checkoutStatusEl: document.getElementById("checkoutStatus"),
     overlay: document.getElementById("cartOverlay"),
     subtotalEl: document.getElementById("subtotal"),
   });
