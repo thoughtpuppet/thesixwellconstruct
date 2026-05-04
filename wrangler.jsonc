@@ -14,8 +14,22 @@
   "vars": {
     "SHOPIFY_STORE_DOMAIN": "six-well-2.myshopify.com",
     "SHOPIFY_STOREFRONT_API_VERSION": "2025-07",
-    "SHOPIFY_MERCH_QUERY": "tag:construct-merch"
+    "SHOPIFY_MERCH_QUERY": "tag:construct-merch",
+    "PUBLIC_SITE_ORIGIN": "https://thesixwellconstruct.com",
+    "RESEND_FROM_EMAIL": "Art.Pill Tattoo House <tattoo@thesixwellconstruct.com>",
+    "ACUITY_BOOKING_URL": "https://artpill.acuityscheduling.com/",
+    "ACUITY_STANDARD_APPOINTMENT_TYPE_ID": "",
+    "ACUITY_FLASH_APPOINTMENT_TYPE_ID": "",
+    "ACUITY_SPECIAL_PROJECT_APPOINTMENT_TYPE_ID": ""
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "thesixwellconstruct-submissions",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
   "compatibility_flags": [
     "nodejs_compat"
   ]

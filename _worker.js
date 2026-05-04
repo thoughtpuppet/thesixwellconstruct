@@ -11,6 +11,13 @@ import {
   serverError,
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
+import {
+  handleAvailability,
+  handleCreateSubmission,
+  handleGetAction,
+  handleGetBooking,
+  handlePostAction,
+} from "./functions/api/tattoo/_lib.js";
 
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
@@ -188,11 +195,43 @@ async function handleShopApi(request, env) {
   return notFound("Unknown shop API route.");
 }
 
+async function handleTattooApi(request, env) {
+  const url = new URL(request.url);
+  const { pathname } = url;
+  const { method } = request;
+
+  if (pathname === "/api/tattoo/submissions") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleCreateSubmission(request, env);
+  }
+
+  if (pathname === "/api/tattoo/action") {
+    if (method === "GET") return handleGetAction(request, env);
+    if (method === "POST") return handlePostAction(request, env);
+    return methodNotAllowed(method, ["GET", "POST"]);
+  }
+
+  if (pathname === "/api/tattoo/booking") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleGetBooking(request, env);
+  }
+
+  if (pathname === "/api/tattoo/availability") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAvailability(request, env);
+  }
+
+  return notFound("Unknown tattoo API route.");
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname.startsWith("/api/shop/")) {
       return handleShopApi(request, env);
+    }
+    if (url.pathname.startsWith("/api/tattoo/")) {
+      return handleTattooApi(request, env);
     }
 
     return env.ASSETS.fetch(request);

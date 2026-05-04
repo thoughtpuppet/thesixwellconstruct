@@ -3,147 +3,66 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Application Opens Soon - Special Projects</title>
+<title>Apply - Special Projects</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg: #0e0e0e;
-    --accent: #FCB867;
-    --signal: #8F231D;
-    --ring: #6D3D15;
-    --ring-soft: rgba(109,61,21,0.4);
-    --ring-faint: rgba(109,61,21,0.18);
-    --text: #FFE7CA;
-    --text-mute: rgba(255,231,202,0.62);
-    --text-dim: rgba(255,231,202,0.38);
-    --text-ghost: rgba(255,231,202,0.14);
-    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif: Georgia,'Times New Roman',Times,serif;
+    --bg:#0e0e0e; --accent:#FCB867; --signal:#8F231D; --ring:#6D3D15;
+    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --text:#FFE7CA; --text-mute:rgba(255,231,202,0.62);
+    --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
+    --sans:'Inter','Helvetica Neue',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
     --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
-    --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-  html,body {
-    background:var(--bg); color:var(--text);
-    font-family:var(--serif);
-    min-height:100vh; overflow-x:clip;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-  }
+  html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   a { color:inherit; text-decoration:none; }
-  .grain {
-    position:fixed; inset:0; z-index:1; pointer-events:none;
-    opacity:0.035; mix-blend-mode:overlay;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  }
-  header.top {
-    position:sticky; top:0; z-index:50;
-    display:flex; align-items:center; justify-content:flex-end;
-    padding:var(--s5) var(--s6); min-height:72px;
-  }
-  .breadcrumb {
-    display:flex; align-items:center; gap:10px;
-    font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-  }
+  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+  header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
+  .breadcrumb { display:flex; align-items:center; gap:10px; font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
   .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
-  main {
-    position:relative; z-index:2;
-    width:100%;
-    max-width:1440px; margin:0 auto;
-    padding:var(--s8) var(--s6) var(--s7);
-  }
-  .gate {
-    max-width:760px;
-  }
-  .gate-label {
-    font-family:var(--serif); font-size:11px; letter-spacing:0.22em;
-    text-transform:uppercase; color:var(--signal); opacity:0.7; margin-bottom:16px;
-  }
-  .gate-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px);
-    letter-spacing:-0.05em; line-height:0.9; color:var(--accent);
-    text-transform:uppercase; margin-bottom:36px;
-  }
-  .gate-body {
-    font-family:var(--serif); font-size:17px; line-height:1.8;
-    color:var(--text); max-width:640px;
-  }
+  main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
+  .layout { display:grid; grid-template-columns:minmax(0,0.8fr) minmax(380px,600px); gap:72px; align-items:start; }
+  .gate-label { font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.7; margin-bottom:16px; }
+  .gate-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--accent); text-transform:uppercase; margin-bottom:36px; }
+  .gate-body { font-size:17px; line-height:1.8; color:var(--text); max-width:640px; }
   .gate-body + .gate-body { margin-top:20px; }
-  .review-panel {
-    max-width:720px; margin-top:56px; border:5px solid var(--ring-soft);
-    padding:42px 38px; background:transparent;
-  }
-  .review-label {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
-    text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:18px;
-  }
-  .review-copy {
-    font-family:var(--serif); font-size:14px; line-height:1.8;
-    color:var(--text-mute); max-width:560px; margin-bottom:30px;
-  }
-  .cta-primary {
-    display:inline-flex; align-items:center; justify-content:center;
-    font-family:var(--sans); font-weight:700; font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute); background:transparent;
-    border:5px solid var(--ring-soft);
-    min-height:48px; padding:0 26px;
-    transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
-  }
-  .cta-primary:hover,
-  .cta-primary:focus-visible {
-    background:rgba(252,184,103,0.04);
-    border-color:var(--accent);
-    color:var(--accent);
-    outline:none;
-  }
-  .gate-note {
-    margin-top:22px; font-family:var(--serif); font-size:10px;
-    letter-spacing:0.14em; line-height:1.7; text-transform:uppercase;
-    color:var(--text-ghost);
-  }
-  footer.bottom {
-    position:relative; z-index:2; max-width:1440px; margin:0 auto;
-    padding:56px var(--s6); border-top:5px solid var(--ring-faint);
-    display:flex; justify-content:space-between; align-items:center;
-  }
-  footer.bottom p, footer.bottom a {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
-    color:var(--text-dim); text-transform:uppercase;
-  }
+  .review-panel { margin-top:48px; border-left:1px solid var(--signal); padding-left:22px; max-width:620px; }
+  .review-label { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:18px; }
+  .review-copy { font-size:14px; line-height:1.8; color:var(--text-mute); }
+  .form-panel { border:5px solid var(--ring-soft); padding:42px 38px; background:transparent; }
+  .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
+  .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
+  .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+  .field.full { grid-column:1 / -1; }
+  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
+  input,textarea,select { width:100%; border:1px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
+  textarea { min-height:124px; resize:vertical; }
+  input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
+  .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+  .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
+  .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
+  .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
+  .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast), opacity var(--t-fast); }
+  .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
+  .cta-primary:disabled { opacity:0.5; cursor:not-allowed; }
+  .form-status { flex:1 1 220px; font-size:12px; line-height:1.6; color:var(--text-dim); }
+  .form-status[data-state="success"] { color:var(--accent); }
+  .form-status[data-state="error"] { color:#ffb1a8; }
+  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
+  footer.bottom p,footer.bottom a { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
-  @media (max-width:640px) {
-    header.top { padding:var(--s4) var(--s5); }
-    .breadcrumb {
-      max-width:100%;
-      overflow:hidden;
-      justify-content:flex-end;
-      font-size:10px;
-    }
-    .breadcrumb-link,.breadcrumb-current {
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
-    main { padding:var(--s6) var(--s5); }
-    .gate-title {
-      font-size:clamp(38px,13vw,52px);
-      overflow-wrap:break-word;
-    }
-    .gate-body,
-    .review-copy {
-      max-width:100%;
-      overflow-wrap:break-word;
-    }
-    .review-panel { padding:30px 24px; }
-    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
-  }
+  @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } }
+  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } .breadcrumb { max-width:100%; overflow:hidden; justify-content:flex-end; font-size:10px; } main { padding:var(--s6) var(--s5); } .gate-title { font-size:clamp(38px,13vw,52px); overflow-wrap:break-word; } .form-panel { padding:30px 24px; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
 </style>
 </head>
 <body data-venture="tattooing">
@@ -153,17 +72,8 @@
     o.id = 'construct-fade';
     o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
     document.body.appendChild(o);
-    function fadeOut() {
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        o.style.opacity = '0';
-        o.style.pointerEvents = 'none';
-      });});
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', fadeOut);
-    } else {
-      fadeOut();
-    }
+    function fadeOut() { requestAnimationFrame(function(){ requestAnimationFrame(function(){ o.style.opacity = '0'; o.style.pointerEvents = 'none'; });}); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fadeOut); else fadeOut();
   })();
   </script>
   <div class="grain"></div>
@@ -175,23 +85,97 @@
     </nav>
   </header>
   <main>
-    <section class="gate">
-      <p class="gate-label">Special Projects</p>
-      <h1 class="gate-title">Application Opens Soon.</h1>
-      <p class="gate-body">Special Projects applications are being prepared as a dedicated review process for concept-driven, long-form, symbolic, collaborative, and experimental tattoo work.</p>
-      <p class="gate-body">Special Projects are reviewed before booking. If approved, you will receive a private booking link and next steps.</p>
-      <div class="review-panel">
-        <p class="review-label">Application Gate</p>
-        <p class="review-copy">This page is intentionally separate from standard tattoo booking. When applications open, you will be asked to share the project title, body placement, scale, conceptual direction, timeline, budget range, and any references that describe feeling rather than final design.</p>
-        <a class="cta-primary" href="/tattooing/special-projects/">Return to Special Projects</a>
-        <p class="gate-note">Not a booking page. Not a confirmed appointment. Review comes first.</p>
-      </div>
-    </section>
+    <div class="layout">
+      <section>
+        <p class="gate-label">Special Projects</p>
+        <h1 class="gate-title">Application Gate.</h1>
+        <p class="gate-body">Special Projects applications are for concept-driven, long-form, symbolic, collaborative, and experimental tattoo work.</p>
+        <p class="gate-body">Special Projects are reviewed before booking. If approved, you will receive a private booking link and next steps.</p>
+        <div class="review-panel">
+          <p class="review-label">Application Frame</p>
+          <p class="review-copy">This page is intentionally separate from standard tattoo booking. Share the project title, body placement, scale, conceptual direction, timeline, budget range, and references that describe feeling rather than final design.</p>
+        </div>
+      </section>
+      <section class="form-panel" aria-label="Special Projects application form">
+        <h2 class="form-title">Apply for Review</h2>
+        <p class="form-note">Applications are reviewed before any scheduling link is sent. This is not a casual booking form.</p>
+        <form data-tattoo-form>
+          <input type="hidden" name="formType" value="special_project">
+          <div class="honeypot" aria-hidden="true">
+            <label for="website">Website</label>
+            <input id="website" name="website" tabindex="-1" autocomplete="off">
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="firstName">First name</label>
+              <input id="firstName" name="firstName" autocomplete="given-name" required>
+            </div>
+            <div class="field">
+              <label for="lastName">Last name</label>
+              <input id="lastName" name="lastName" autocomplete="family-name" required>
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" autocomplete="email" required>
+            </div>
+            <div class="field">
+              <label for="phone">Phone</label>
+              <input id="phone" name="phone" autocomplete="tel">
+            </div>
+            <div class="field full">
+              <label for="projectTitle">Project call or working title</label>
+              <select id="projectTitle" name="projectTitle" required>
+                <option value="">Select one</option>
+                <option>Lost Marbles</option>
+                <option>Mythic Body Studies</option>
+                <option>The Hand / The Outline</option>
+                <option>Memory Transfer Studies</option>
+                <option>Large Scale Symbolic Work</option>
+                <option>Other symbolic commission</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="placement">Placement</label>
+              <input id="placement" name="placement" required>
+            </div>
+            <div class="field">
+              <label for="size">Scale</label>
+              <input id="size" name="size" placeholder="Example: upper arm, back panel">
+            </div>
+            <div class="field">
+              <label for="budgetRange">Budget range</label>
+              <input id="budgetRange" name="budgetRange" required>
+            </div>
+            <div class="field">
+              <label for="timeline">Timeline</label>
+              <input id="timeline" name="timeline">
+            </div>
+            <div class="field full">
+              <label for="referenceUrls">Reference links</label>
+              <textarea id="referenceUrls" name="referenceUrls" placeholder="Paste links. No uploads in this version."></textarea>
+            </div>
+            <div class="field full">
+              <label for="message">Concept direction</label>
+              <textarea id="message" name="message" required></textarea>
+            </div>
+          </div>
+          <label class="check">
+            <input type="checkbox" name="consent" required>
+            <span class="check-label">I understand the final image is developed through shared symbolic direction while remaining rooted in the artist's existing body of work.</span>
+          </label>
+          <div class="submit-row">
+            <button class="cta-primary" type="submit" data-submit-label>Submit Application</button>
+            <p class="form-status" data-form-status aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+    </div>
   </main>
   <footer class="bottom">
     <a href="/tattooing/special-projects/">&larr; back to Special Projects</a>
     <a href="/">the six.well construct</a>
   </footer>
+  <script src="/js/tattoo-forms.js"></script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>

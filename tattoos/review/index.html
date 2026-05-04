@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Review Submission - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --bg:#0e0e0e; --accent:#FCB867; --signal:#8F231D; --ring:#6D3D15;
+    --ring-soft:rgba(109,61,21,0.4); --text:#FFE7CA;
+    --text-mute:rgba(255,231,202,0.62); --text-dim:rgba(255,231,202,0.38);
+    --sans:'Inter','Helvetica Neue',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
+  }
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; -webkit-font-smoothing:antialiased; }
+  body { display:grid; place-items:center; padding:32px; }
+  main { width:min(100%,720px); border:5px solid var(--ring-soft); padding:44px 38px; }
+  .label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); margin-bottom:18px; }
+  h1 { font-family:var(--sans); font-weight:900; font-size:clamp(34px,7vw,74px); line-height:0.9; letter-spacing:-0.05em; color:var(--accent); text-transform:uppercase; margin-bottom:28px; }
+  p { font-size:15px; line-height:1.75; color:var(--text-mute); margin-bottom:18px; }
+  dl { display:grid; grid-template-columns:120px 1fr; gap:10px 16px; margin:28px 0; }
+  dt { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-dim); }
+  dd { color:var(--text); }
+  .actions { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-top:30px; }
+  button,a { display:inline-flex; min-height:50px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--text-mute); padding:0 24px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; cursor:pointer; }
+  button:hover,a:hover { border-color:var(--accent); color:var(--accent); }
+  button.danger:hover { border-color:#ffb1a8; color:#ffb1a8; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .status { flex:1 1 220px; margin:0; font-size:12px; }
+  .status[data-state="error"] { color:#ffb1a8; }
+  .status[data-state="success"] { color:var(--accent); }
+</style>
+</head>
+<body data-venture="tattooing">
+  <main>
+    <p class="label">Private review</p>
+    <h1>Confirm Action.</h1>
+    <p id="intro">Loading review token.</p>
+    <dl id="details" hidden>
+      <dt>Action</dt><dd id="actionLabel"></dd>
+      <dt>Name</dt><dd id="nameLabel"></dd>
+      <dt>Email</dt><dd id="emailLabel"></dd>
+      <dt>Form</dt><dd id="formLabel"></dd>
+      <dt>Project</dt><dd id="projectLabel"></dd>
+    </dl>
+    <div class="actions">
+      <button id="confirmButton" type="button" disabled>Confirm</button>
+      <a href="/tattoos/">Cancel</a>
+      <p class="status" id="status" aria-live="polite"></p>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var token = params.get("token") || "";
+      var action = params.get("action") || "";
+      var intro = document.getElementById("intro");
+      var details = document.getElementById("details");
+      var status = document.getElementById("status");
+      var button = document.getElementById("confirmButton");
+
+      function setStatus(message, state) {
+        status.textContent = message;
+        status.dataset.state = state || "idle";
+      }
+
+      function setText(id, value) {
+        document.getElementById(id).textContent = value || "Not provided";
+      }
+
+      async function loadToken() {
+        if (!token || !action) {
+          intro.textContent = "This review link is missing its token or action.";
+          return;
+        }
+        var response = await fetch("/api/tattoo/action?token=" + encodeURIComponent(token) + "&action=" + encodeURIComponent(action));
+        var payload = await response.json().catch(function () { return {}; });
+        if (!response.ok || !payload.valid) {
+          intro.textContent = payload.error || "This review link is not valid.";
+          setStatus("No action was taken.", "error");
+          return;
+        }
+        intro.textContent = "Review this submission before confirming. The action will not run until you press the button below.";
+        setText("actionLabel", action === "approve" ? "Approve and send private booking access" : "Reject submission");
+        setText("nameLabel", payload.submission.name);
+        setText("emailLabel", payload.submission.email);
+        setText("formLabel", payload.submission.formLabel);
+        setText("projectLabel", payload.submission.projectTitle);
+        details.hidden = false;
+        button.textContent = action === "approve" ? "Approve" : "Reject";
+        if (action === "reject") button.classList.add("danger");
+        button.disabled = false;
+      }
+
+      button.addEventListener("click", async function () {
+        button.disabled = true;
+        setStatus("Submitting review action.", "pending");
+        var response = await fetch("/api/tattoo/action", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ token: token, action: action }),
+        });
+        var payload = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          setStatus(payload.error || "Review action failed.", "error");
+          button.disabled = false;
+          return;
+        }
+        setStatus(action === "approve" ? "Approved. Private booking access was sent." : "Rejected. No booking access was sent.", "success");
+      });
+
+      loadToken().catch(function (error) {
+        intro.textContent = "This review link could not be loaded.";
+        setStatus(error.message, "error");
+      });
+    })();
+  </script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+</body>
+</html>
