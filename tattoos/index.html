@@ -43,9 +43,17 @@
   }
   header.top {
     position:sticky; top:0; z-index:50;
-    display:flex; align-items:center; justify-content:flex-end;
+    display:flex; align-items:center; justify-content:flex-end; gap:18px;
     padding:var(--s5) var(--s6);
   }
+  .top-nav {
+    display:flex; align-items:center; gap:16px;
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.2em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .top-nav a { transition:color var(--t-fast); }
+  .top-nav a:hover { color:var(--accent); }
   .nav-inquire {
     font-family:var(--sans); font-weight:700; font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
@@ -150,6 +158,14 @@
     font-weight:900; font-size:22px; letter-spacing:-0.02em;
     color:var(--accent); margin-bottom:16px;
   }
+  .work-type-action {
+    display:inline-block; margin-top:22px;
+    font-family:var(--sans); font-weight:700; font-size:10px;
+    letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--text-dim);
+    transition:color var(--t-fast);
+  }
+  .work-type-action:hover { color:var(--accent); }
   .tier-label {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
     text-transform:uppercase; color:var(--text-dim); margin-bottom:20px;
@@ -237,6 +253,7 @@
   }
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
+    .top-nav { display:none; }
     main { padding:var(--s6) var(--s5); }
     .section { padding:48px 0; }
     .process-steps { grid-template-columns:1fr; }
@@ -266,6 +283,11 @@
   </script>
   <div class="grain"></div>
   <header class="top">
+    <nav class="top-nav" aria-label="tattoo pages">
+      <a href="/tattoos/portfolio/">Portfolio</a>
+      <a href="/tattoos/flash/">Flash</a>
+      <a href="/tattooing/special-projects/">Tattoo Studies</a>
+    </nav>
     <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
   </header>
   <main>
@@ -300,8 +322,8 @@
       <h2 class="section-title">Flash &amp; Custom</h2>
       <p class="section-body">Two paths in. Both begin with an inquiry.</p>
       <div class="work-types">
-        <div class="work-type"><p class="work-type-label">Available Now</p><p class="work-type-title">Original Flash</p><p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog: symbolic, surreal, and built to place. Flash pieces are sized and refined to the right spot on your body.</p></div>
-        <div class="work-type"><p class="work-type-label">By Inquiry</p><p class="work-type-title">Custom Work</p><p class="work-type-body">Collaboratively designed pieces built around your concept, story, or symbol system. Custom sessions begin with a written inquiry and are accepted on a project-by-project basis.</p></div>
+        <div class="work-type"><p class="work-type-label">Available Now</p><p class="work-type-title">Original Flash</p><p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog: symbolic, surreal, and built to place. Flash pieces are sized and refined to the right spot on your body.</p><a class="work-type-action" href="/tattoos/flash/">View flash &rarr;</a></div>
+        <div class="work-type"><p class="work-type-label">By Inquiry</p><p class="work-type-title">Custom Work</p><p class="work-type-body">Collaboratively designed pieces built around your concept, story, or symbol system. Custom sessions begin with a written inquiry and are accepted on a project-by-project basis.</p><a class="work-type-action" href="/tattoos/portfolio/">View portfolio &rarr;</a></div>
       </div>
     </section>
     <section class="section" id="pricing">

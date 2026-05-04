@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flash - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --accent: #FCB867;
+    --signal: #8F231D;
+    --ring: #6D3D15;
+    --ring-soft: rgba(109,61,21,0.4);
+    --ring-faint: rgba(109,61,21,0.18);
+    --text: #FFE7CA;
+    --text-mute: rgba(255,231,202,0.6);
+    --text-dim: rgba(255,231,202,0.35);
+    --text-ghost: rgba(255,231,202,0.12);
+    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
+    --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+    --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
+  }
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body {
+    background:var(--bg); color:var(--text);
+    font-family:var(--serif);
+    min-height:100vh; overflow-x:clip;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
+  a { color:inherit; text-decoration:none; }
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  header.top {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:flex-end;
+    padding:var(--s5) var(--s6); min-height:72px;
+  }
+  .breadcrumb {
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+  }
+  .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
+  .breadcrumb-link:hover { color:var(--accent); }
+  .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
+  main {
+    position:relative; z-index:2;
+    max-width:1440px; margin:0 auto;
+    padding:var(--s8) var(--s6) var(--s7);
+  }
+  .hero {
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,360px);
+    gap:48px; align-items:end; margin-bottom:80px;
+  }
+  .page-label {
+    font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); opacity:0.7; margin-bottom:16px;
+  }
+  .page-title {
+    font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px);
+    letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase;
+  }
+  .hero-desc {
+    font-family:var(--serif); font-size:14px; letter-spacing:0.03em;
+    line-height:1.75; color:var(--text-mute); text-align:right;
+  }
+  .section {
+    padding:72px 0;
+    border-top:5px solid var(--ring-faint);
+  }
+  .section:first-of-type { border-top:none; padding-top:0; }
+  .section-label {
+    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); opacity:0.6; margin-bottom:16px;
+  }
+  .section-title {
+    font-family:var(--sans); font-weight:900; font-size:clamp(28px,4vw,52px);
+    letter-spacing:-0.03em; line-height:0.94; color:var(--accent); margin-bottom:24px;
+  }
+  .section-body {
+    font-family:var(--serif); font-size:16px; line-height:1.8; color:var(--text);
+    max-width:640px;
+  }
+  .flash-grid {
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:1px; border:5px solid var(--ring-faint); margin-top:48px;
+  }
+  .flash-card {
+    min-height:330px; padding:20px; position:relative; overflow:hidden;
+    display:flex; flex-direction:column; justify-content:space-between;
+    background:#0f0f0f;
+  }
+  .flash-card::before {
+    content:""; position:absolute; inset:18px; border:1px solid var(--ring-faint);
+  }
+  .flash-card::after {
+    content:""; position:absolute; left:50%; top:48%;
+    width:46%; aspect-ratio:1; border:5px solid rgba(143,35,29,0.5);
+    transform:translate(-50%,-50%) rotate(45deg);
+  }
+  .flash-card:nth-child(2n)::after { border-radius:50% 50% 0 50%; transform:translate(-50%,-50%) rotate(-24deg); }
+  .flash-card:nth-child(3n)::after { width:34%; height:58%; aspect-ratio:auto; transform:translate(-50%,-50%) skewY(-12deg); }
+  .flash-card:nth-child(4n)::after { width:54%; border-color:rgba(252,184,103,0.32); transform:translate(-50%,-50%) rotate(18deg); }
+  .flash-status,.flash-size {
+    position:relative; z-index:2;
+    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .flash-name {
+    position:relative; z-index:2;
+    font-family:var(--sans); font-weight:900; font-size:18px;
+    letter-spacing:0.02em; line-height:1; color:var(--accent); text-transform:uppercase;
+  }
+  .flash-meta {
+    display:flex; justify-content:space-between; gap:16px; align-items:end;
+    position:relative; z-index:2;
+  }
+  .detail-grid {
+    display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px;
+    border:5px solid var(--ring-faint); margin-top:48px;
+  }
+  .detail {
+    padding:32px 28px;
+  }
+  .detail-title {
+    font-family:var(--sans); font-weight:900; font-size:13px; letter-spacing:0.1em;
+    text-transform:uppercase; color:var(--signal); margin-bottom:14px;
+  }
+  .detail-body {
+    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
+  }
+  .cta-block {
+    margin-top:80px; border:5px solid var(--ring-soft); background:transparent;
+    padding:56px 48px; display:flex; justify-content:space-between; gap:48px; align-items:center;
+  }
+  .cta-title {
+    font-family:var(--sans); font-weight:900; font-size:clamp(24px,3vw,42px);
+    letter-spacing:-0.03em; line-height:0.94; color:var(--accent); margin-bottom:16px;
+  }
+  .cta-body {
+    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
+    max-width:500px;
+  }
+  .cta-primary {
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); padding:14px 28px;
+    transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+    white-space:nowrap;
+  }
+  .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
+  footer.bottom {
+    position:relative; z-index:2; max-width:1440px; margin:0 auto;
+    padding:56px var(--s6); border-top:5px solid var(--ring-faint);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  footer.bottom p, footer.bottom a {
+    font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
+    color:var(--text-dim); text-transform:uppercase;
+  }
+  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
+  footer.bottom a:hover { color:var(--accent); }
+  @media (max-width:1100px) {
+    .flash-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .detail-grid { grid-template-columns:1fr; }
+    main { padding:var(--s7) var(--s5) var(--s6); }
+    footer.bottom { padding:48px var(--s5); }
+  }
+  @media (max-width:768px) {
+    .hero { grid-template-columns:1fr; gap:20px; }
+    .hero-desc { text-align:left; }
+    .cta-block { flex-direction:column; align-items:flex-start; padding:40px 32px; }
+  }
+  @media (max-width:640px) {
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s6) var(--s5); }
+    .section { padding:48px 0; }
+    .flash-grid { grid-template-columns:1fr; }
+    .flash-card { min-height:300px; }
+    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
+  }
+</style>
+</head>
+<body data-venture="tattooing">
+  <script>
+  (function(){
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut() {
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        o.style.opacity = '0';
+        o.style.pointerEvents = 'none';
+      });});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fadeOut);
+    } else {
+      fadeOut();
+    }
+  })();
+  </script>
+  <div class="grain"></div>
+  <header class="top">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <a class="breadcrumb-link" href="/tattoos/">tattoos</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">flash</span>
+    </nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div>
+        <p class="page-label">Art.Pill Tattoo House</p>
+        <h1 class="page-title">Flash.</h1>
+      </div>
+      <p class="hero-desc">Original pre-drawn designs from the Art.Pill catalog. Symbolic, surreal, and ready to be claimed, placed, and refined for the body.</p>
+    </section>
+    <section class="section">
+      <p class="section-label">Available Work</p>
+      <h2 class="section-title">Claimable Flash</h2>
+      <p class="section-body">Flash designs are drawn in advance but still treated as real tattoos: placement, scale, and small fit adjustments are handled at the appointment. To claim a piece, include the flash title in your inquiry.</p>
+      <div class="flash-grid" aria-label="Available flash designs">
+        <article class="flash-card">
+          <p class="flash-status">available</p>
+          <div class="flash-meta">
+            <h3 class="flash-name">Votive Eye</h3>
+            <p class="flash-size">palm</p>
+          </div>
+        </article>
+        <article class="flash-card">
+          <p class="flash-status">available</p>
+          <div class="flash-meta">
+            <h3 class="flash-name">Sleep Token</h3>
+            <p class="flash-size">4-6 in</p>
+          </div>
+        </article>
+        <article class="flash-card">
+          <p class="flash-status">available</p>
+          <div class="flash-meta">
+            <h3 class="flash-name">Oracle Stem</h3>
+            <p class="flash-size">forearm</p>
+          </div>
+        </article>
+        <article class="flash-card">
+          <p class="flash-status">available</p>
+          <div class="flash-meta">
+            <h3 class="flash-name">Burnt Halo</h3>
+            <p class="flash-size">3-5 in</p>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section class="section">
+      <p class="section-label">Claiming Flash</p>
+      <h2 class="section-title">How It Works</h2>
+      <p class="section-body">Flash is booked through the same inquiry process as custom work. The difference is that the drawing already exists, so the review focuses on placement, size, timing, and whether the piece is still available.</p>
+      <div class="detail-grid">
+        <article class="detail">
+          <h3 class="detail-title">One Claim</h3>
+          <p class="detail-body">Most flash is tattooed once unless it is explicitly listed as repeatable. Claimed designs are removed or marked unavailable.</p>
+        </article>
+        <article class="detail">
+          <h3 class="detail-title">Fit Adjustments</h3>
+          <p class="detail-body">Small changes for placement and scale are expected. Major concept changes move the project into custom work.</p>
+        </article>
+        <article class="detail">
+          <h3 class="detail-title">Deposit Required</h3>
+          <p class="detail-body">Approved flash appointments require a deposit to hold the design and secure the session date.</p>
+        </article>
+      </div>
+    </section>
+    <div class="cta-block">
+      <div>
+        <h2 class="cta-title">Want to Claim a Piece?</h2>
+        <p class="cta-body">Send the flash title, desired placement, approximate size, and your timeline. If the piece is available and the placement makes sense, you will receive the next booking step.</p>
+      </div>
+      <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
+    </div>
+  </main>
+  <footer class="bottom">
+    <a href="/tattoos/">&larr; back to Art.Pill</a>
+    <a href="/">the six.well construct</a>
+  </footer>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>
