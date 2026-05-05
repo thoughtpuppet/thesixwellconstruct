@@ -45,3 +45,33 @@ page-specific presentation details living in `shared/storefront-config.js`.
 
 In Cloudflare, add the same four values under the Worker project's
 `Settings > Variables and secrets`.
+
+## Art.Pill form setup
+
+Tattoo inquiry, flash claim, and Special Projects application forms are static
+HTML forms that submit directly to Formspree. There is no custom form backend,
+database, Worker route, or submission secret in this repository.
+
+The configured Formspree endpoints are:
+
+- Standard tattoo inquiry: `https://formspree.io/f/xqenbpoj`
+- Flash claim: `https://formspree.io/f/mrejkpnl`
+- Special Projects application: `https://formspree.io/f/mnjwvpeg`
+
+The forms live at:
+
+- `/tattoos/inquire/`
+- `/tattoos/flash/`
+- `/tattooing/special-projects/apply/`
+
+Each form uses `method="POST"` and `enctype="multipart/form-data"` so reference
+uploads can be captured by Formspree. File uploads require a Formspree plan that
+supports attachments. The forms include Formspree's `_gotcha` honeypot field.
+
+Recommended Formspree settings:
+
+- Send notification emails to the studio inbox.
+- Store submissions in Formspree Inbox for review.
+- Set the thank-you redirect to `/tattoos/submission-received/`.
+- Keep Acuity as the manual final scheduling and deposit step for approved
+  submissions.
