@@ -157,39 +157,6 @@
     white-space:nowrap;
   }
   .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
-  .claim-form {
-    margin-top:48px; border:5px solid var(--ring-soft); padding:44px 38px;
-  }
-  .form-title {
-    font-family:var(--sans); font-weight:900; font-size:26px; line-height:1;
-    color:var(--accent); text-transform:uppercase; margin-bottom:12px;
-  }
-  .form-note {
-    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
-    max-width:620px; margin-bottom:28px;
-  }
-  .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
-  .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
-  .field.full { grid-column:1 / -1; }
-  label,.check-label {
-    font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em;
-    text-transform:uppercase; color:var(--text-dim);
-  }
-  input,textarea {
-    width:100%; border:1px solid var(--ring-soft); background:rgba(14,14,14,0.78);
-    color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5;
-    padding:13px 14px; border-radius:0;
-  }
-  textarea { min-height:112px; resize:vertical; }
-  input:focus,textarea:focus { outline:1px solid var(--signal); border-color:var(--signal); }
-  .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
-  .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
-  .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
-  .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
-  .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .form-status { flex:1 1 220px; font-family:var(--serif); font-size:12px; line-height:1.6; color:var(--text-dim); }
-  .form-status[data-state="success"] { color:var(--accent); }
-  .form-status[data-state="error"] { color:#ffb1a8; }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
     padding:56px var(--s6); border-top:5px solid var(--ring-faint);
@@ -218,8 +185,6 @@
     .section { padding:48px 0; }
     .flash-grid { grid-template-columns:1fr; }
     .flash-card { min-height:300px; }
-    .claim-form { padding:30px 24px; }
-    .field-grid { grid-template-columns:1fr; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 </style>
@@ -319,72 +284,14 @@
         <h2 class="cta-title">Want to Claim a Piece?</h2>
         <p class="cta-body">Send the flash title, desired placement, approximate size, and your timeline. If the piece is available and the placement makes sense, you will receive the next booking step.</p>
       </div>
-      <a class="cta-primary" href="#flash-claim">Claim flash &rarr;</a>
+      <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
     </div>
-    <section class="claim-form" id="flash-claim" aria-label="Flash claim form">
-      <h2 class="form-title">Flash Claim</h2>
-      <p class="form-note">Claim requests are reviewed before scheduling. If the piece is available and the placement works, you will receive private booking access.</p>
-      <form data-tattoo-form>
-        <input type="hidden" name="formType" value="flash">
-        <div class="honeypot" aria-hidden="true">
-          <label for="website">Website</label>
-          <input id="website" name="website" tabindex="-1" autocomplete="off">
-        </div>
-        <div class="field-grid">
-          <div class="field">
-            <label for="firstName">First name</label>
-            <input id="firstName" name="firstName" autocomplete="given-name" required>
-          </div>
-          <div class="field">
-            <label for="lastName">Last name</label>
-            <input id="lastName" name="lastName" autocomplete="family-name" required>
-          </div>
-          <div class="field">
-            <label for="email">Email</label>
-            <input id="email" name="email" type="email" autocomplete="email" required>
-          </div>
-          <div class="field">
-            <label for="phone">Phone</label>
-            <input id="phone" name="phone" autocomplete="tel">
-          </div>
-          <div class="field">
-            <label for="projectTitle">Flash title</label>
-            <input id="projectTitle" name="projectTitle" required>
-          </div>
-          <div class="field">
-            <label for="placement">Placement</label>
-            <input id="placement" name="placement" required>
-          </div>
-          <div class="field">
-            <label for="size">Approx. size</label>
-            <input id="size" name="size">
-          </div>
-          <div class="field">
-            <label for="timeline">Timeline</label>
-            <input id="timeline" name="timeline">
-          </div>
-          <div class="field full">
-            <label for="message">Claim notes</label>
-            <textarea id="message" name="message" required></textarea>
-          </div>
-        </div>
-        <label class="check">
-          <input type="checkbox" name="consent" required>
-          <span class="check-label">I understand this request is reviewed before private booking access is sent.</span>
-        </label>
-        <div class="submit-row">
-          <button class="cta-primary" type="submit" data-submit-label>Submit Claim</button>
-          <p class="form-status" data-form-status aria-live="polite"></p>
-        </div>
-      </form>
-    </section>
   </main>
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/">the six.well construct</a>
   </footer>
   <script src="/js/transition.js"></script>
-  <script src="/js/tattoo-forms.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
 </body>

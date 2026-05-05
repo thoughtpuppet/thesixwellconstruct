@@ -3,67 +3,123 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inquire - Art.Pill Tattoo House</title>
+<title>Inquire · Art.Pill Tattoo House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --accent:#FCB867; --signal:#8F231D; --ring:#6D3D15;
-    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
-    --text:#FFE7CA; --text-mute:rgba(255,231,202,0.62);
-    --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
-    --sans:'Inter','Helvetica Neue',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
-    --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
-    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+    --bg: #0e0e0e;
+    --accent: #FCB867;
+    --signal: #8F231D;
+    --ring: #6D3D15;
+    --ring-soft: rgba(109,61,21,0.4);
+    --ring-faint: rgba(109,61,21,0.18);
+    --text: #FFE7CA;
+    --text-mute: rgba(255,231,202,0.6);
+    --text-dim: rgba(255,231,202,0.35);
+    --text-ghost: rgba(255,231,202,0.12);
+    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px;
+    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+    --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-  html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  html,body {
+    background:var(--bg); color:var(--text);
+    font-family:var(--serif);
+    min-height:100vh; overflow-x:clip;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
   a { color:inherit; text-decoration:none; }
-  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
-  header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
-  .breadcrumb { display:flex; align-items:center; gap:10px; font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  header.top {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:flex-end;
+    padding:var(--s5) var(--s6); min-height:72px;
+  }
+  .breadcrumb {
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+  }
   .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
-  main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
-  .layout { display:grid; grid-template-columns:minmax(0,0.85fr) minmax(360px,560px); gap:72px; align-items:start; }
-  .page-label { font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:16px; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); margin-bottom:38px; }
-  .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
+  main {
+    position:relative; z-index:2;
+    max-width:1440px; margin:0 auto;
+    padding:var(--s8) var(--s6) var(--s7);
+  }
+  main > * { max-width:680px; }
+  .page-label {
+    font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); opacity:0.7; margin-bottom:16px;
+  }
+  .page-title {
+    font-family:var(--sans); font-weight:900; font-size:clamp(40px,7vw,88px);
+    letter-spacing:-0.04em; line-height:0.88; color:var(--signal); margin-bottom:48px;
+  }
+  .intro-body {
+    font-family:var(--serif); font-size:16px; line-height:1.8; color:var(--text);
+  }
   .intro-body + .intro-body { margin-top:20px; }
-  .include-label { margin-top:48px; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; }
-  .include-list { list-style:none; display:flex; flex-direction:column; gap:14px; max-width:620px; }
-  .include-list li { font-size:14px; line-height:1.6; color:var(--text-mute); padding-left:20px; position:relative; }
-  .include-list li::before { content:""; position:absolute; left:0; top:8px; width:4px; height:4px; border-radius:50%; background:var(--signal); opacity:0.55; }
-  .form-panel { border:5px solid var(--ring-soft); padding:42px 38px; background:transparent; }
-  .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
-  .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
-  .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-  .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
-  .field.full { grid-column:1 / -1; }
-  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
-  input,textarea,select { width:100%; border:1px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
-  textarea { min-height:132px; resize:vertical; }
-  input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
-  .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
-  .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
-  .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
-  .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
-  .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast), opacity var(--t-fast); }
-  .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
-  .cta-primary:disabled { opacity:0.5; cursor:not-allowed; }
-  .form-status { flex:1 1 220px; font-size:12px; line-height:1.6; color:var(--text-dim); }
-  .form-status[data-state="success"] { color:var(--accent); }
-  .form-status[data-state="error"] { color:#ffb1a8; }
-  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
-  footer.bottom p,footer.bottom a { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
+  .divider { border:none; border-top:5px solid var(--ring-faint); margin:56px 0; }
+  .include-label {
+    font-family:var(--sans); font-weight:900; font-size:11px;
+    letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:28px;
+  }
+  .include-list {
+    list-style:none; display:flex; flex-direction:column; gap:14px; margin-bottom:56px;
+  }
+  .include-list li {
+    font-family:var(--serif); font-size:14px; line-height:1.6; color:var(--text-mute);
+    padding-left:20px; position:relative;
+  }
+  .include-list li::before {
+    content:""; position:absolute; left:0; top:8px; width:4px; height:4px; border-radius:50%;
+    background:var(--signal); opacity:0.55;
+  }
+  .cta-block {
+    border:5px solid var(--ring-soft); background:transparent; padding:40px 36px;
+  }
+  .cta-block-note {
+    font-family:var(--serif); font-size:13px; letter-spacing:0.02em; color:var(--text-mute);
+    margin-bottom:28px; line-height:1.75;
+  }
+  .cta-primary {
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); padding:14px 28px;
+    transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+  }
+  .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
+  .cta-disclaimer {
+    margin-top:20px; font-family:var(--serif); font-size:10px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--text-ghost); line-height:1.7;
+  }
+  footer.bottom {
+    position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:48px var(--s6);
+    border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center;
+  }
+  footer.bottom p, footer.bottom a {
+    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+  }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
-  @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 24px; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
+  @media (max-width:640px) {
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s6) var(--s5); }
+    main > * { max-width:none; }
+    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
+    .cta-block { padding:28px 24px; }
+  }
 </style>
 </head>
 <body data-venture="tattooing">
@@ -73,8 +129,17 @@
     o.id = 'construct-fade';
     o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
     document.body.appendChild(o);
-    function fadeOut() { requestAnimationFrame(function(){ requestAnimationFrame(function(){ o.style.opacity = '0'; o.style.pointerEvents = 'none'; });}); }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fadeOut); else fadeOut();
+    function fadeOut() {
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        o.style.opacity = '0';
+        o.style.pointerEvents = 'none';
+      });});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fadeOut);
+    } else {
+      fadeOut();
+    }
   })();
   </script>
   <div class="grain"></div>
@@ -86,103 +151,35 @@
     </nav>
   </header>
   <main>
-    <div class="layout">
-      <section>
-        <p class="page-label">Art.Pill Tattoo House</p>
-        <h1 class="page-title">Project<br>Inquiry.</h1>
-        <p class="intro-body">Submitting an inquiry is not a booking. It begins a review process and not every project is accepted. If your project is a good fit, you will receive a private booking link and next steps.</p>
-        <p class="intro-body">Include as much detail as you can. The more specific you are about what you want and why, the better the review process works for both of us.</p>
-        <p class="include-label">What to Include</p>
-        <ul class="include-list">
-          <li>Concept, subject matter, and the meaning behind it</li>
-          <li>Body placement and approximate size</li>
-          <li>Whether this is custom work or a specific flash piece</li>
-          <li>Reference links for mood and aesthetic, not a final design to copy</li>
-          <li>Your timing, budget range, and any context that shapes the project</li>
-        </ul>
-      </section>
-      <section class="form-panel" aria-label="Tattoo inquiry form">
-        <h2 class="form-title">Submit for Review</h2>
-        <p class="form-note">Reviewed before booking. Approved projects receive a private scheduling link and next steps.</p>
-        <form data-tattoo-form>
-          <input type="hidden" name="formType" value="standard">
-          <div class="honeypot" aria-hidden="true">
-            <label for="website">Website</label>
-            <input id="website" name="website" tabindex="-1" autocomplete="off">
-          </div>
-          <div class="field-grid">
-            <div class="field">
-              <label for="firstName">First name</label>
-              <input id="firstName" name="firstName" autocomplete="given-name" required>
-            </div>
-            <div class="field">
-              <label for="lastName">Last name</label>
-              <input id="lastName" name="lastName" autocomplete="family-name" required>
-            </div>
-            <div class="field">
-              <label for="email">Email</label>
-              <input id="email" name="email" type="email" autocomplete="email" required>
-            </div>
-            <div class="field">
-              <label for="phone">Phone</label>
-              <input id="phone" name="phone" autocomplete="tel">
-            </div>
-            <div class="field">
-              <label for="instagram">Instagram</label>
-              <input id="instagram" name="instagram" placeholder="@">
-            </div>
-            <div class="field">
-              <label for="pronouns">Pronouns</label>
-              <input id="pronouns" name="pronouns">
-            </div>
-            <div class="field">
-              <label for="placement">Placement</label>
-              <input id="placement" name="placement" required>
-            </div>
-            <div class="field">
-              <label for="size">Approx. size</label>
-              <input id="size" name="size" placeholder="Example: 4-6 in">
-            </div>
-            <div class="field">
-              <label for="budgetRange">Budget range</label>
-              <input id="budgetRange" name="budgetRange">
-            </div>
-            <div class="field">
-              <label for="timeline">Timeline</label>
-              <input id="timeline" name="timeline">
-            </div>
-            <div class="field full">
-              <label for="projectTitle">Project or flash title</label>
-              <input id="projectTitle" name="projectTitle">
-            </div>
-            <div class="field full">
-              <label for="referenceUrls">Reference links</label>
-              <textarea id="referenceUrls" name="referenceUrls" placeholder="Paste links. No uploads in this version."></textarea>
-            </div>
-            <div class="field full">
-              <label for="message">Project notes</label>
-              <textarea id="message" name="message" required></textarea>
-            </div>
-          </div>
-          <label class="check">
-            <input type="checkbox" name="consent" required>
-            <span class="check-label">I understand this is a review submission, not a confirmed appointment.</span>
-          </label>
-          <div class="submit-row">
-            <button class="cta-primary" type="submit" data-submit-label>Submit for Review</button>
-            <p class="form-status" data-form-status aria-live="polite"></p>
-          </div>
-        </form>
-      </section>
+    <p class="page-label">Art.Pill Tattoo House</p>
+    <h1 class="page-title">Project<br>Inquiry.</h1>
+    <p class="intro-body">Submitting an inquiry is not a booking. It begins a review process and not every project is accepted. If your project is a good fit, you will receive a private booking link within 1–2 weeks.</p>
+    <p class="intro-body">Include as much detail as you can. The more specific you are about what you want and why, the better the review process works for both of us.</p>
+    <hr class="divider">
+    <p class="include-label">What to Include</p>
+    <ul class="include-list">
+      <li>What you want: concept, subject matter, and the meaning behind it</li>
+      <li>Where you want it: body placement</li>
+      <li>Approximate size: it does not need to be exact</li>
+      <li>Flash or custom: if you have a specific flash piece in mind, say so</li>
+      <li>Visual references: mood and aesthetic, not necessarily the final design</li>
+      <li>Your timeline: when you are hoping to get tattooed</li>
+      <li>Any relevant context that helps place the work in the right session type</li>
+    </ul>
+    <div class="cta-block">
+      <p class="cta-block-note">Inquiries are submitted via the Art.Pill booking system. You will be prompted for your contact information and project details. Response time is 1–2 weeks.</p>
+      <a class="cta-primary" href="https://artpill.acuityscheduling.com/" target="_blank" rel="noopener noreferrer">Submit Inquiry &rarr;</a>
+      <p class="cta-disclaimer">Opens externally. This is a project inquiry, not a confirmed booking.<br>Approval is required before an appointment can be scheduled.</p>
     </div>
   </main>
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/">the six.well construct</a>
   </footer>
-  <script src="/js/tattoo-forms.js"></script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
 </body>
 </html>
+
+

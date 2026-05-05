@@ -45,30 +45,3 @@ page-specific presentation details living in `shared/storefront-config.js`.
 
 In Cloudflare, add the same four values under the Worker project's
 `Settings > Variables and secrets`.
-
-## Tattoo inquiry setup
-
-Tattoo inquiry, flash claim, and Special Projects application forms post to
-Worker routes under `/api/tattoo/*`. Submissions are stored in Cloudflare D1,
-review links are sent through Resend, and approved clients receive private
-booking access that hands off to Acuity for final scheduling and deposits.
-
-Before deploying the live form flow:
-
-1. Create the D1 database:
-   `npx wrangler d1 create thesixwellconstruct-submissions`
-2. Replace the placeholder `database_id` in `wrangler.jsonc`.
-3. Apply migrations:
-   `npx wrangler d1 migrations apply thesixwellconstruct-submissions`
-4. Add Worker secrets:
-   - `RESEND_API_KEY`
-   - `TATTOO_NOTIFY_EMAIL`
-   - `ACUITY_USER_ID`
-   - `ACUITY_API_KEY`
-5. Fill the Acuity appointment type IDs in `wrangler.jsonc` or Cloudflare vars:
-   - `ACUITY_STANDARD_APPOINTMENT_TYPE_ID`
-   - `ACUITY_FLASH_APPOINTMENT_TYPE_ID`
-   - `ACUITY_SPECIAL_PROJECT_APPOINTMENT_TYPE_ID`
-
-The D1 binding must remain named `DB`, because `_worker.js` reads submissions
-through `env.DB`.

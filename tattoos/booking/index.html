@@ -4,49 +4,97 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Private Booking Access - Art.Pill Tattoo House</title>
+<title>Book Your Appointment · Art.Pill Tattoo House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --accent:#FCB867; --signal:#8F231D; --ring:#6D3D15;
-    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
-    --text:#FFE7CA; --text-mute:rgba(255,231,202,0.6);
-    --text-dim:rgba(255,231,202,0.35); --text-ghost:rgba(255,231,202,0.12);
-    --sans:'Inter','Helvetica Neue',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
+    --bg: #0e0e0e;
+    --accent: #FCB867;
+    --signal: #8F231D;
+    --ring: #6D3D15;
+    --ring-soft: rgba(109,61,21,0.4);
+    --text: #FFE7CA;
+    --text-mute: rgba(255,231,202,0.6);
+    --text-dim: rgba(255,231,202,0.35);
+    --text-ghost: rgba(255,231,202,0.12);
+    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif: Georgia,'Times New Roman',Times,serif;
     --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
-    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-  html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  html,body {
+    background:var(--bg); color:var(--text);
+    font-family:var(--serif);
+    min-height:100vh; overflow-x:clip;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+  }
   a { color:inherit; text-decoration:none; }
-  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
-  header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
-  main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
-  .layout { display:grid; grid-template-columns:minmax(0,620px) minmax(320px,1fr); gap:64px; align-items:start; }
-  .private-badge { display:inline-flex; align-items:center; gap:8px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); border:5px solid var(--ring-soft); padding:5px 12px; margin-bottom:36px; }
-  .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--signal); flex-shrink:0; }
-  .page-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--text-dim); margin-bottom:16px; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(36px,6vw,72px); letter-spacing:-0.04em; line-height:0.9; color:var(--accent); margin-bottom:36px; }
-  .page-body { font-size:15px; line-height:1.8; color:var(--text-mute); margin-bottom:34px; max-width:560px; }
-  .booking-block,.availability-block { border:5px solid var(--ring-soft); background:transparent; padding:42px 36px; }
-  .block-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--text-dim); margin-bottom:20px; }
-  .block-note { font-size:14px; line-height:1.8; color:var(--text-mute); margin-bottom:28px; }
-  .cta-primary { display:inline-flex; align-items:center; gap:8px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); padding:14px 28px; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast), opacity var(--t-fast); }
+  .grain {
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  header.top {
+    position:sticky; top:0; z-index:50;
+    display:flex; align-items:center; justify-content:flex-end;
+    padding:var(--s5) var(--s6); min-height:72px;
+  }
+  main {
+    position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7);
+  }
+  main > * { max-width:600px; }
+  .private-badge {
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--signal); border:5px solid var(--ring-soft); padding:5px 12px; margin-bottom:36px;
+  }
+  .badge-dot {
+    width:5px; height:5px; border-radius:50%; background:var(--signal); flex-shrink:0;
+  }
+  .page-label {
+    font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:16px;
+  }
+  .page-title {
+    font-family:var(--sans); font-weight:900; font-size:clamp(36px,6vw,72px);
+    letter-spacing:-0.04em; line-height:0.9; color:var(--accent); margin-bottom:36px;
+  }
+  .page-body {
+    font-family:var(--serif); font-size:15px; line-height:1.8; color:var(--text-mute);
+    margin-bottom:56px; max-width:520px;
+  }
+  .booking-block {
+    border:5px solid var(--ring-soft); background:transparent; padding:48px 40px;
+  }
+  .booking-block-label {
+    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:20px;
+  }
+  .booking-block-note {
+    font-family:var(--serif); font-size:14px; line-height:1.8; color:var(--text-mute); margin-bottom:32px;
+  }
+  .cta-primary {
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); padding:14px 28px;
+    transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+  }
   .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
-  .cta-primary[aria-disabled="true"] { opacity:.5; pointer-events:none; }
-  .booking-disclaimer { margin-top:20px; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-ghost); line-height:1.7; }
-  dl { display:grid; grid-template-columns:120px 1fr; gap:12px 16px; margin-bottom:30px; }
-  dt { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-dim); }
-  dd { color:var(--text); font-size:14px; line-height:1.55; }
-  .availability-list { list-style:none; display:grid; gap:10px; margin-top:22px; }
-  .availability-list li { border-left:1px solid var(--signal); padding:8px 0 8px 14px; color:var(--text-mute); font-size:13px; }
-  .status { font-size:13px; line-height:1.7; color:var(--text-mute); }
-  .status.error { color:#ffb1a8; }
-  @media (max-width:900px) { .layout { grid-template-columns:1fr; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .booking-block,.availability-block { padding:28px 24px; } dl { grid-template-columns:1fr; } }
+  .booking-disclaimer {
+    margin-top:20px; font-family:var(--serif); font-size:10px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--text-ghost); line-height:1.7;
+  }
+  @media (max-width:640px) {
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s6) var(--s5); }
+    main > * { max-width:none; }
+    .booking-block { padding:28px 24px; }
+  }
 </style>
 </head>
 <body data-venture="tattooing">
@@ -56,112 +104,36 @@
     o.id = 'construct-fade';
     o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
     document.body.appendChild(o);
-    function fadeOut() { requestAnimationFrame(function(){ requestAnimationFrame(function(){ o.style.opacity = '0'; o.style.pointerEvents = 'none'; });}); }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fadeOut); else fadeOut();
+    function fadeOut() {
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        o.style.opacity = '0';
+        o.style.pointerEvents = 'none';
+      });});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fadeOut);
+    } else {
+      fadeOut();
+    }
   })();
   </script>
   <div class="grain"></div>
   <header class="top"></header>
   <main>
     <div class="private-badge"><span class="badge-dot"></span>Approved Clients Only</div>
-    <div class="layout">
-      <section>
-        <p class="page-label">Art.Pill Tattoo House</p>
-        <h1 class="page-title">Private Booking Access.</h1>
-        <p class="page-body" id="intro">Checking your private booking link.</p>
-        <div class="booking-block">
-          <p class="block-label">Approved Project</p>
-          <dl id="bookingDetails" hidden>
-            <dt>Name</dt><dd id="nameLabel"></dd>
-            <dt>Form</dt><dd id="formLabel"></dd>
-            <dt>Project</dt><dd id="projectLabel"></dd>
-            <dt>Expires</dt><dd id="expiresLabel"></dd>
-          </dl>
-          <p class="block-note">Final scheduling and deposit are completed through Acuity. Availability shown here is informational until Acuity confirms the appointment.</p>
-          <a class="cta-primary" id="acuityLink" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">Continue to Acuity &rarr;</a>
-          <p class="booking-disclaimer">Private approval link. Not publicly linked or indexed.</p>
-        </div>
-      </section>
-      <aside class="availability-block">
-        <p class="block-label">Availability Preview</p>
-        <p class="status" id="availabilityStatus">Availability loads after the private link is validated.</p>
-        <ul class="availability-list" id="availabilityList"></ul>
-      </aside>
+    <p class="page-label">Art.Pill Tattoo House</p>
+    <h1 class="page-title">Book Your Appointment.</h1>
+    <p class="page-body">Your project has been reviewed and accepted. Use the link below to select your session type, choose a date and time, and submit your deposit. The deposit is applied toward the total cost of your tattoo and is required to secure your appointment.</p>
+    <div class="booking-block">
+      <p class="booking-block-label">Secure Scheduling</p>
+      <p class="booking-block-note">Select the session type that matches your approved project, pick a date that works for you, and complete your deposit to lock in the appointment. If you have questions, reply directly to the email you received.</p>
+      <a class="cta-primary" href="https://artpill.acuityscheduling.com/" target="_blank" rel="noopener noreferrer">Schedule &amp; Deposit &rarr;</a>
+      <p class="booking-disclaimer">This page is not publicly linked or indexed.<br>Sharing this link is at your discretion.</p>
     </div>
   </main>
-  <script>
-    (function () {
-      var params = new URLSearchParams(window.location.search);
-      var token = params.get("token") || "";
-      var intro = document.getElementById("intro");
-      var details = document.getElementById("bookingDetails");
-      var availabilityStatus = document.getElementById("availabilityStatus");
-      var availabilityList = document.getElementById("availabilityList");
-      var acuityLink = document.getElementById("acuityLink");
-
-      function setText(id, value) {
-        document.getElementById(id).textContent = value || "Not provided";
-      }
-
-      function formatDate(value) {
-        if (!value) return "Not provided";
-        return new Date(value).toLocaleDateString([], { month:"short", day:"numeric", year:"numeric" });
-      }
-
-      async function loadAvailability() {
-        var month = new Date().toISOString().slice(0, 7);
-        var response = await fetch("/api/tattoo/availability?token=" + encodeURIComponent(token) + "&month=" + encodeURIComponent(month));
-        var payload = await response.json().catch(function () { return {}; });
-        if (!response.ok) {
-          availabilityStatus.textContent = payload.error || "Availability preview is not configured yet.";
-          availabilityStatus.classList.add("error");
-          return;
-        }
-        var dates = Array.isArray(payload.availability) ? payload.availability.slice(0, 6) : [];
-        if (!dates.length) {
-          availabilityStatus.textContent = "No preview dates were returned. Continue to Acuity for current scheduling options.";
-          return;
-        }
-        availabilityStatus.textContent = "Acuity returned upcoming dates with availability. Final selection happens in Acuity.";
-        availabilityList.innerHTML = dates.map(function (item) {
-          var date = item.date || item;
-          return "<li>" + date + "</li>";
-        }).join("");
-      }
-
-      async function loadBooking() {
-        if (!token) {
-          intro.textContent = "This private booking page needs the approval token from your email.";
-          return;
-        }
-        var response = await fetch("/api/tattoo/booking?token=" + encodeURIComponent(token));
-        var payload = await response.json().catch(function () { return {}; });
-        if (!response.ok || !payload.valid) {
-          intro.textContent = payload.error || "This private booking link is not valid.";
-          availabilityStatus.textContent = "No availability was loaded.";
-          availabilityStatus.classList.add("error");
-          return;
-        }
-        var booking = payload.booking;
-        intro.textContent = "Your project has been approved. Use the private Acuity step below to finalize scheduling and deposit.";
-        setText("nameLabel", booking.name);
-        setText("formLabel", booking.formLabel);
-        setText("projectLabel", booking.projectTitle);
-        setText("expiresLabel", formatDate(booking.expiresAt));
-        details.hidden = false;
-        acuityLink.href = booking.acuityUrl;
-        acuityLink.setAttribute("aria-disabled", "false");
-        loadAvailability();
-      }
-
-      loadBooking().catch(function (error) {
-        intro.textContent = "This private booking link could not be checked.";
-        availabilityStatus.textContent = error.message;
-        availabilityStatus.classList.add("error");
-      });
-    })();
-  </script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
 </body>
 </html>
+
+
