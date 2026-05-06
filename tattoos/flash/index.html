@@ -10,210 +10,145 @@
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg: #0e0e0e;
-    --accent: #FCB867;
-    --signal: #8F231D;
-    --ring: #6D3D15;
-    --ring-soft: rgba(109,61,21,0.4);
-    --ring-faint: rgba(109,61,21,0.18);
-    --text: #FFE7CA;
-    --text-mute: rgba(255,231,202,0.6);
-    --text-dim: rgba(255,231,202,0.35);
-    --text-ghost: rgba(255,231,202,0.12);
-    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
-    --serif: Georgia,'Times New Roman',Times,serif;
+    --bg:#0e0e0e; --accent:#FCB867; --signal:#8F231D; --ring:#6D3D15;
+    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --text:#FFE7CA; --text-mute:rgba(255,231,202,0.62);
+    --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
+    --panel:#0f0f0f; --sans:'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif:Georgia,'Times New Roman',Times,serif;
     --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
-    --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-  html,body {
-    background:var(--bg); color:var(--text);
-    font-family:var(--serif);
-    min-height:100vh; overflow-x:clip;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-  }
+  html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  body.modal-open { overflow:hidden; }
   a { color:inherit; text-decoration:none; }
-  .grain {
-    position:fixed; inset:0; z-index:1; pointer-events:none;
-    opacity:0.035; mix-blend-mode:overlay;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  }
-  header.top {
-    position:sticky; top:0; z-index:50;
-    display:flex; align-items:center; justify-content:flex-end;
-    padding:var(--s5) var(--s6); min-height:72px;
-  }
-  .breadcrumb {
-    display:flex; align-items:center; gap:10px;
-    font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-  }
+  button,input,textarea,select { font:inherit; }
+  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+  header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
+  .breadcrumb { display:flex; align-items:center; gap:10px; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
   .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
-  main {
-    position:relative; z-index:2;
-    max-width:1440px; margin:0 auto;
-    padding:var(--s8) var(--s6) var(--s7);
-  }
-  .hero {
-    display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,360px);
-    gap:48px; align-items:end; margin-bottom:80px;
-  }
-  .page-label {
-    font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--signal); opacity:0.7; margin-bottom:16px;
-  }
-  .page-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px);
-    letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase;
-  }
-  .hero-desc {
-    font-family:var(--serif); font-size:14px; letter-spacing:0.03em;
-    line-height:1.75; color:var(--text-mute); text-align:right;
-  }
-  .section {
-    padding:72px 0;
-    border-top:5px solid var(--ring-faint);
-  }
+  main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
+  .hero { display:grid; grid-template-columns:minmax(0,1fr) minmax(260px,420px); gap:48px; align-items:end; margin-bottom:72px; }
+  .page-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:16px; }
+  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; }
+  .hero-desc { font-size:14px; letter-spacing:0.03em; line-height:1.75; color:var(--text-mute); text-align:right; }
+  .filter-band { border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); padding:28px 0; margin-bottom:64px; display:grid; grid-template-columns:auto 1fr; gap:24px 36px; align-items:start; }
+  .filter-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; padding-top:13px; }
+  .filter-groups { display:flex; flex-wrap:wrap; gap:14px; }
+  .filter-group { display:flex; flex-wrap:wrap; gap:6px; padding-right:14px; border-right:1px solid var(--ring-faint); }
+  .filter-group:last-child { border-right:none; padding-right:0; }
+  .filter-btn { min-height:40px; padding:0 14px; border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); cursor:pointer; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .filter-btn:hover,.filter-btn[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
+  .section { padding:72px 0; border-top:5px solid var(--ring-faint); }
   .section:first-of-type { border-top:none; padding-top:0; }
-  .section-label {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--signal); opacity:0.6; margin-bottom:16px;
-  }
-  .section-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(28px,4vw,52px);
-    letter-spacing:-0.03em; line-height:0.94; color:var(--accent); margin-bottom:24px;
-  }
-  .section-body {
-    font-family:var(--serif); font-size:16px; line-height:1.8; color:var(--text);
-    max-width:640px;
-  }
-  .flash-grid {
-    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
-    gap:1px; border:5px solid var(--ring-faint); margin-top:48px;
-  }
-  .flash-card {
-    min-height:330px; padding:20px; position:relative; overflow:hidden;
-    display:flex; flex-direction:column; justify-content:space-between;
-    background:#0f0f0f;
-  }
-  .flash-card::before {
-    content:""; position:absolute; inset:18px; border:1px solid var(--ring-faint);
-  }
-  .flash-card::after {
-    content:""; position:absolute; left:50%; top:48%;
-    width:46%; aspect-ratio:1; border:5px solid rgba(143,35,29,0.5);
-    transform:translate(-50%,-50%) rotate(45deg);
-  }
-  .flash-card:nth-child(2n)::after { border-radius:50% 50% 0 50%; transform:translate(-50%,-50%) rotate(-24deg); }
-  .flash-card:nth-child(3n)::after { width:34%; height:58%; aspect-ratio:auto; transform:translate(-50%,-50%) skewY(-12deg); }
-  .flash-card:nth-child(4n)::after { width:54%; border-color:rgba(252,184,103,0.32); transform:translate(-50%,-50%) rotate(18deg); }
-  .flash-status,.flash-size {
-    position:relative; z-index:2;
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-dim);
-  }
-  .flash-name {
-    position:relative; z-index:2;
-    font-family:var(--sans); font-weight:900; font-size:18px;
-    letter-spacing:0.02em; line-height:1; color:var(--accent); text-transform:uppercase;
-  }
-  .flash-meta {
-    display:flex; justify-content:space-between; gap:16px; align-items:end;
-    position:relative; z-index:2;
-  }
-  .detail-grid {
-    display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px;
-    border:5px solid var(--ring-faint); margin-top:48px;
-  }
-  .detail {
-    padding:32px 28px;
-  }
-  .detail-title {
-    font-family:var(--sans); font-weight:900; font-size:13px; letter-spacing:0.1em;
-    text-transform:uppercase; color:var(--signal); margin-bottom:14px;
-  }
-  .detail-body {
-    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
-  }
-  .cta-block {
-    margin-top:80px; border:5px solid var(--ring-soft); background:transparent;
-    padding:56px 48px; display:flex; justify-content:space-between; gap:48px; align-items:center;
-  }
-  .cta-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(24px,3vw,42px);
-    letter-spacing:-0.03em; line-height:0.94; color:var(--accent); margin-bottom:16px;
-  }
-  .cta-body {
-    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
-    max-width:500px;
-  }
-  .cta-primary {
-    display:inline-flex; align-items:center; gap:8px;
-    font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); padding:14px 28px;
-    transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
-    white-space:nowrap;
-  }
-  .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
-  .claim-form { margin-top:48px; border:5px solid var(--ring-soft); padding:44px 38px; }
-  .form-title {
-    font-family:var(--sans); font-weight:900; font-size:26px; line-height:1;
-    color:var(--accent); text-transform:uppercase; margin-bottom:12px;
-  }
-  .form-note { font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute); max-width:620px; margin-bottom:28px; }
+  .section-head { display:grid; grid-template-columns:minmax(0,640px) minmax(200px,1fr); gap:32px; align-items:end; margin-bottom:36px; }
+  .section-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.68; margin-bottom:16px; }
+  .section-title { font-family:var(--sans); font-weight:900; font-size:clamp(30px,5vw,68px); letter-spacing:-0.04em; line-height:0.92; color:var(--accent); text-transform:uppercase; }
+  .section-body { font-size:15px; line-height:1.8; color:var(--text-mute); }
+  .count-label { font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim); text-align:right; }
+  .sheet-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; border:5px solid var(--ring-faint); }
+  .catalog-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; border:5px solid var(--ring-faint); }
+  .flash-item { position:relative; min-height:420px; border:0; background:#0f0f0f; color:var(--text); text-align:left; cursor:pointer; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; }
+  .flash-item::before { content:""; position:absolute; inset:18px; border:1px solid var(--ring-faint); z-index:2; pointer-events:none; }
+  .flash-item:hover .item-image img { transform:scale(1.025); filter:saturate(1) contrast(1.05); }
+  .flash-item:hover .item-title { color:var(--accent); }
+  .sheet-item { min-height:620px; }
+  .item-image { position:absolute; inset:0; z-index:1; background:#111; }
+  .item-image img { width:100%; height:100%; object-fit:cover; opacity:0.78; filter:saturate(0.85) contrast(0.95); transition:transform 0.5s ease, filter var(--t-fast); }
+  .sheet-item .item-image img { object-fit:contain; padding:30px; background:#100f0e; }
+  .item-scrim { position:absolute; inset:0; z-index:1; background:linear-gradient(180deg,rgba(14,14,14,0.22),rgba(14,14,14,0.25) 45%,rgba(14,14,14,0.88)); }
+  .item-top,.item-bottom { position:relative; z-index:3; padding:24px; }
+  .item-top { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; }
+  .pill { display:inline-flex; min-height:24px; align-items:center; border:1px solid var(--ring-soft); padding:0 8px; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:rgba(14,14,14,0.55); }
+  .pill.available { color:var(--accent); border-color:rgba(252,184,103,0.45); }
+  .pill.past { color:var(--text-dim); }
+  .item-code { font-size:10px; letter-spacing:0.2em; color:var(--text-dim); text-transform:uppercase; }
+  .item-title { font-family:var(--sans); font-weight:900; font-size:clamp(20px,2.5vw,34px); line-height:0.95; letter-spacing:-0.03em; text-transform:uppercase; color:var(--text); transition:color var(--t-fast); }
+  .item-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  .empty-state { border:5px solid var(--ring-faint); padding:40px; color:var(--text-dim); font-size:13px; letter-spacing:0.12em; text-transform:uppercase; }
+  .detail-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; border:5px solid var(--ring-faint); margin-top:48px; }
+  .detail { padding:32px 28px; }
+  .detail-title { font-family:var(--sans); font-weight:900; font-size:13px; letter-spacing:0.1em; text-transform:uppercase; color:var(--signal); margin-bottom:14px; }
+  .detail-body { font-size:13px; line-height:1.75; color:var(--text-mute); }
+  .cta-block,.claim-form { margin-top:80px; border:5px solid var(--ring-soft); background:transparent; }
+  .cta-block { padding:56px 48px; display:flex; justify-content:space-between; gap:48px; align-items:center; }
+  .cta-title,.form-title { font-family:var(--sans); font-weight:900; line-height:0.94; color:var(--accent); text-transform:uppercase; }
+  .cta-title { font-size:clamp(24px,3vw,42px); letter-spacing:-0.03em; margin-bottom:16px; }
+  .cta-body,.form-note { font-size:13px; line-height:1.75; color:var(--text-mute); max-width:620px; }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 28px; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); white-space:nowrap; cursor:pointer; }
+  .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
+  .cta-primary[disabled] { opacity:0.45; cursor:not-allowed; }
+  .claim-form { padding:44px 38px; }
+  .form-title { font-size:26px; letter-spacing:0; margin-bottom:12px; }
+  .form-note { margin-bottom:28px; }
   .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
-  label,.check-label {
-    font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em;
-    text-transform:uppercase; color:var(--text-dim);
-  }
-  input,textarea {
-    width:100%; border:1px solid var(--ring-soft); background:rgba(14,14,14,0.78);
-    color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5;
-    padding:13px 14px; border-radius:0;
-  }
+  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
+  input,textarea { width:100%; border:1px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
   input[type="file"] { padding:11px 12px; color:var(--text-mute); }
   textarea { min-height:112px; resize:vertical; }
   input:focus,textarea:focus { outline:1px solid var(--signal); border-color:var(--signal); }
   .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
-  .file-note,.form-status { font-family:var(--serif); font-size:12px; line-height:1.6; color:var(--text-dim); }
+  .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
   .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  footer.bottom {
-    position:relative; z-index:2; max-width:1440px; margin:0 auto;
-    padding:56px var(--s6); border-top:5px solid var(--ring-faint);
-    display:flex; justify-content:space-between; align-items:center;
-  }
-  footer.bottom p, footer.bottom a {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
-    color:var(--text-dim); text-transform:uppercase;
-  }
+  .modal { position:fixed; inset:0; z-index:120; display:none; }
+  .modal[aria-hidden="false"] { display:block; }
+  .modal-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.78); }
+  .modal-panel { position:absolute; inset:32px; display:grid; grid-template-columns:minmax(0,0.9fr) minmax(360px,0.7fr); background:#0d0d0d; border:5px solid var(--ring-soft); overflow:hidden; }
+  .modal-image { min-height:0; background:#111; display:grid; place-items:center; border-right:1px solid var(--ring-faint); }
+  .modal-image img { width:100%; height:100%; object-fit:contain; padding:28px; }
+  .modal-copy { padding:36px; overflow:auto; }
+  .modal-close { position:absolute; top:18px; right:18px; z-index:4; width:44px; height:44px; display:grid; place-items:center; border:1px solid var(--ring-soft); background:rgba(14,14,14,0.86); color:var(--text-mute); cursor:pointer; font-family:var(--sans); font-weight:900; font-size:18px; }
+  .modal-close:hover { color:var(--accent); border-color:var(--accent); }
+  .modal-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); margin-bottom:16px; }
+  .modal-title { font-family:var(--sans); font-weight:900; font-size:clamp(32px,5vw,68px); line-height:0.9; letter-spacing:-0.05em; color:var(--accent); text-transform:uppercase; margin-bottom:22px; }
+  .modal-description { font-size:15px; line-height:1.8; color:var(--text-mute); margin-bottom:26px; }
+  .modal-meta { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; border:1px solid var(--ring-faint); margin-bottom:28px; }
+  .modal-meta div { padding:16px; border-right:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); }
+  .modal-meta div:nth-child(2n) { border-right:none; }
+  .meta-label { display:block; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-dim); margin-bottom:7px; }
+  .meta-value { font-size:13px; line-height:1.4; color:var(--text); }
+  .merch-row { border-left:1px solid var(--signal); padding:14px 0 14px 16px; margin-bottom:30px; }
+  .merch-title { font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--signal); margin-bottom:8px; }
+  .merch-copy { font-size:13px; line-height:1.65; color:var(--text-mute); }
+  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
+  footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:1100px) {
-    .flash-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .detail-grid { grid-template-columns:1fr; }
     main { padding:var(--s7) var(--s5) var(--s6); }
+    .catalog-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .sheet-grid,.detail-grid,.modal-panel { grid-template-columns:1fr; }
+    .modal-panel { overflow:auto; }
+    .modal-image { min-height:52vh; border-right:none; border-bottom:1px solid var(--ring-faint); }
     footer.bottom { padding:48px var(--s5); }
   }
   @media (max-width:768px) {
-    .hero { grid-template-columns:1fr; gap:20px; }
-    .hero-desc { text-align:left; }
+    .hero,.section-head,.filter-band { grid-template-columns:1fr; }
+    .hero-desc,.count-label { text-align:left; }
+    .filter-label { padding-top:0; }
+    .filter-group { border-right:none; padding-right:0; }
     .cta-block { flex-direction:column; align-items:flex-start; padding:40px 32px; }
+    .modal-panel { inset:14px; }
+    .modal-copy { padding:26px; }
   }
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
+    .page-title { font-size:clamp(58px,18vw,92px); }
     .section { padding:48px 0; }
-    .flash-grid { grid-template-columns:1fr; }
-    .flash-card { min-height:300px; }
+    .catalog-grid,.sheet-grid { grid-template-columns:1fr; }
+    .flash-item,.sheet-item { min-height:420px; }
     .claim-form { padding:30px 24px; }
-    .field-grid { grid-template-columns:1fr; }
+    .field-grid,.modal-meta { grid-template-columns:1fr; }
+    .modal-meta div,.modal-meta div:nth-child(2n) { border-right:none; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 </style>
@@ -225,17 +160,8 @@
     o.id = 'construct-fade';
     o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
     document.body.appendChild(o);
-    function fadeOut() {
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        o.style.opacity = '0';
-        o.style.pointerEvents = 'none';
-      });});
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', fadeOut);
-    } else {
-      fadeOut();
-    }
+    function fadeOut() { requestAnimationFrame(function(){ requestAnimationFrame(function(){ o.style.opacity = '0'; o.style.pointerEvents = 'none'; });}); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fadeOut); else fadeOut();
   })();
   </script>
   <div class="grain"></div>
@@ -252,69 +178,68 @@
         <p class="page-label">Art.Pill Tattoo House</p>
         <h1 class="page-title">Flash.</h1>
       </div>
-      <p class="hero-desc">Original pre-drawn designs from the Art.Pill catalog. Symbolic, surreal, and ready to be claimed, placed, and refined for the body.</p>
+      <p class="hero-desc">Original pre-drawn designs, flash sheets, symbolic alphabets, MAZE studies, and standalone pieces. Browse the archive, open a sheet, then claim the design that fits.</p>
     </section>
-    <section class="section">
-      <p class="section-label">Available Work</p>
-      <h2 class="section-title">Claimable Flash</h2>
-      <p class="section-body">Flash designs are drawn in advance but still treated as real tattoos: placement, scale, and small fit adjustments are handled at the appointment. To claim a piece, include the flash title in your inquiry.</p>
-      <div class="flash-grid" aria-label="Available flash designs">
-        <article class="flash-card">
-          <p class="flash-status">available</p>
-          <div class="flash-meta">
-            <h3 class="flash-name">Votive Eye</h3>
-            <p class="flash-size">palm</p>
-          </div>
-        </article>
-        <article class="flash-card">
-          <p class="flash-status">available</p>
-          <div class="flash-meta">
-            <h3 class="flash-name">Sleep Token</h3>
-            <p class="flash-size">4-6 in</p>
-          </div>
-        </article>
-        <article class="flash-card">
-          <p class="flash-status">available</p>
-          <div class="flash-meta">
-            <h3 class="flash-name">Oracle Stem</h3>
-            <p class="flash-size">forearm</p>
-          </div>
-        </article>
-        <article class="flash-card">
-          <p class="flash-status">available</p>
-          <div class="flash-meta">
-            <h3 class="flash-name">Burnt Halo</h3>
-            <p class="flash-size">3-5 in</p>
-          </div>
-        </article>
+
+    <section class="filter-band" aria-label="Flash catalog filters">
+      <p class="filter-label">Catalog filters</p>
+      <div class="filter-groups">
+        <div class="filter-group" data-filter-group="series" aria-label="Filter by series"></div>
+        <div class="filter-group" data-filter-group="status" aria-label="Filter by status"></div>
+        <div class="filter-group" data-filter-group="sizeBucket" aria-label="Filter by size"></div>
       </div>
     </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-label">Flash Sheets</p>
+          <h2 class="section-title">Shop Wall</h2>
+        </div>
+        <p class="section-body">Sheets collect multiple drawings into one old-shop style plate. Some sheets contain available designs, while others are kept as past studies so the visual language remains visible.</p>
+      </div>
+      <div class="sheet-grid" id="sheetGrid" aria-live="polite"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <p class="section-label">Catalog</p>
+          <h2 class="section-title">Individual Designs</h2>
+        </div>
+        <p class="count-label" id="resultCount">Loading catalog</p>
+      </div>
+      <div class="catalog-grid" id="catalogGrid" aria-live="polite"></div>
+    </section>
+
     <section class="section">
       <p class="section-label">Claiming Flash</p>
       <h2 class="section-title">How It Works</h2>
-      <p class="section-body">Flash is booked through the same inquiry process as custom work. The difference is that the drawing already exists, so the review focuses on placement, size, timing, and whether the piece is still available.</p>
+      <p class="section-body">Flash is booked through review first. Available designs can be claimed, placement and scale are checked, then approved clients receive the private Acuity scheduling step.</p>
       <div class="detail-grid">
         <article class="detail">
-          <h3 class="detail-title">One Claim</h3>
-          <p class="detail-body">Most flash is tattooed once unless it is explicitly listed as repeatable. Claimed designs are removed or marked unavailable.</p>
+          <h3 class="detail-title">Available / Past</h3>
+          <p class="detail-body">Available work can be requested now. Past work remains visible as archive and direction, not as a promise that the exact design can be repeated.</p>
         </article>
         <article class="detail">
-          <h3 class="detail-title">Fit Adjustments</h3>
-          <p class="detail-body">Small changes for placement and scale are expected. Major concept changes move the project into custom work.</p>
+          <h3 class="detail-title">Small / Medium / Large</h3>
+          <p class="detail-body">Size buckets keep browsing simple. Final pricing still depends on placement, scale, and whether the design needs fit adjustments.</p>
         </article>
         <article class="detail">
-          <h3 class="detail-title">Deposit Required</h3>
-          <p class="detail-body">Approved flash appointments require a deposit to hold the design and secure the session date.</p>
+          <h3 class="detail-title">Merch Links</h3>
+          <p class="detail-body">Series may show merch as coming soon. Individual standalone designs only show merch links when a product is actually available.</p>
         </article>
       </div>
     </section>
+
     <div class="cta-block">
       <div>
         <h2 class="cta-title">Want to Claim a Piece?</h2>
-        <p class="cta-body">Send the flash title, desired placement, approximate size, and your timeline. If the piece is available and the placement makes sense, you will receive the next booking step.</p>
+        <p class="cta-body">Open a flash card, review the details, then send a claim request. The form will carry the selected title and catalog metadata into Formspree.</p>
       </div>
-      <a class="cta-primary" href="#flash-claim">Claim flash &rarr;</a>
+      <a class="cta-primary" href="#flash-claim">Claim flash</a>
     </div>
+
     <section class="claim-form" id="flash-claim" aria-label="Flash claim form">
       <h2 class="form-title">Flash Claim</h2>
       <p class="form-note">Claim requests are reviewed before scheduling. If the piece is available and the placement works, you will receive private Acuity booking access.</p>
@@ -322,6 +247,11 @@
         <input type="hidden" name="form_type" value="flash_claim">
         <input type="hidden" name="source_path" value="/tattoos/flash/">
         <input type="hidden" name="project_category" value="flash">
+        <input type="hidden" name="selected_series" id="selected_series">
+        <input type="hidden" name="selected_size_bucket" id="selected_size_bucket">
+        <input type="hidden" name="selected_price" id="selected_price">
+        <input type="hidden" name="selected_design_code" id="selected_design_code">
+        <input type="hidden" name="selected_status" id="selected_status">
         <input type="hidden" name="subject" value="New Art.Pill flash claim">
         <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
         <div class="field-grid">
@@ -344,10 +274,230 @@
       </form>
     </section>
   </main>
+
+  <div class="modal" id="flashModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-panel">
+      <button class="modal-close" type="button" data-modal-close aria-label="Close flash detail">x</button>
+      <div class="modal-image"><img id="modalImage" src="" alt=""></div>
+      <div class="modal-copy">
+        <p class="modal-label" id="modalLabel">Flash detail</p>
+        <h2 class="modal-title" id="modalTitle"></h2>
+        <p class="modal-description" id="modalDescription"></p>
+        <div class="modal-meta" aria-label="Flash metadata">
+          <div><span class="meta-label">Series</span><span class="meta-value" id="modalSeries"></span></div>
+          <div><span class="meta-label">Status</span><span class="meta-value" id="modalStatus"></span></div>
+          <div><span class="meta-label">Size</span><span class="meta-value" id="modalSize"></span></div>
+          <div><span class="meta-label">Price</span><span class="meta-value" id="modalPrice"></span></div>
+          <div><span class="meta-label">Type</span><span class="meta-value" id="modalType"></span></div>
+          <div><span class="meta-label">Code</span><span class="meta-value" id="modalCode"></span></div>
+        </div>
+        <div class="merch-row" id="modalMerch"></div>
+        <button class="cta-primary" type="button" id="modalClaim">Use This in Claim Form</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/">the six.well construct</a>
   </footer>
+  <script>
+    const fallbackCatalog = {
+      series: [],
+      items: []
+    };
+    const state = { series: "All", status: "All", sizeBucket: "All", items: [], seriesMeta: [] };
+    const groups = {
+      series: ["All", "MAZE", "Sairoglyphs", "Standalones"],
+      status: ["All", "Available", "Past"],
+      sizeBucket: ["All", "Small", "Medium", "Large"]
+    };
+    const els = {
+      sheetGrid: document.getElementById("sheetGrid"),
+      catalogGrid: document.getElementById("catalogGrid"),
+      resultCount: document.getElementById("resultCount"),
+      modal: document.getElementById("flashModal"),
+      modalImage: document.getElementById("modalImage"),
+      modalLabel: document.getElementById("modalLabel"),
+      modalTitle: document.getElementById("modalTitle"),
+      modalDescription: document.getElementById("modalDescription"),
+      modalSeries: document.getElementById("modalSeries"),
+      modalStatus: document.getElementById("modalStatus"),
+      modalSize: document.getElementById("modalSize"),
+      modalPrice: document.getElementById("modalPrice"),
+      modalType: document.getElementById("modalType"),
+      modalCode: document.getElementById("modalCode"),
+      modalMerch: document.getElementById("modalMerch"),
+      modalClaim: document.getElementById("modalClaim")
+    };
+
+    function slug(value) {
+      return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    }
+
+    function codeFor(item) {
+      return item.sheetCode || item.designCode || item.id;
+    }
+
+    function matches(item) {
+      return ["series", "status", "sizeBucket"].every((key) => state[key] === "All" || item[key] === state[key]);
+    }
+
+    function createFilterButton(group, value) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "filter-btn";
+      button.textContent = value;
+      button.setAttribute("aria-pressed", String(state[group] === value));
+      button.addEventListener("click", () => {
+        state[group] = value;
+        document.querySelectorAll(`[data-filter-group="${group}"] .filter-btn`).forEach((btn) => {
+          btn.setAttribute("aria-pressed", String(btn.textContent === value));
+        });
+        renderCatalog();
+      });
+      return button;
+    }
+
+    function renderFilters() {
+      Object.entries(groups).forEach(([group, values]) => {
+        const container = document.querySelector(`[data-filter-group="${group}"]`);
+        container.innerHTML = "";
+        values.forEach((value) => container.appendChild(createFilterButton(group, value)));
+      });
+    }
+
+    function card(item) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `flash-item ${item.type === "Sheet" ? "sheet-item" : ""}`;
+      button.dataset.itemId = item.id;
+      button.innerHTML = `
+        <span class="item-image"><img src="${item.image}" alt="${item.title}"></span>
+        <span class="item-scrim"></span>
+        <span class="item-top">
+          <span class="pill ${slug(item.status)}">${item.status}</span>
+          <span class="item-code">${codeFor(item)}</span>
+        </span>
+        <span class="item-bottom">
+          <span class="item-title">${item.title}</span>
+          <span class="item-meta">
+            <span class="pill">${item.series}</span>
+            <span class="pill">${item.sizeBucket}</span>
+            <span class="pill">${item.price}</span>
+          </span>
+        </span>
+      `;
+      button.addEventListener("click", () => openModal(item));
+      return button;
+    }
+
+    function renderList(container, items, emptyText) {
+      container.innerHTML = "";
+      if (!items.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty-state";
+        empty.textContent = emptyText;
+        container.appendChild(empty);
+        return;
+      }
+      items.forEach((item) => container.appendChild(card(item)));
+    }
+
+    function renderCatalog() {
+      const filtered = state.items.filter(matches);
+      const sheets = filtered.filter((item) => item.type === "Sheet");
+      const designs = filtered.filter((item) => item.type !== "Sheet");
+      renderList(els.sheetGrid, sheets, "No sheets match the current filters.");
+      renderList(els.catalogGrid, designs, "No individual designs match the current filters.");
+      els.resultCount.textContent = `${designs.length} individual / ${sheets.length} sheet`;
+    }
+
+    function merchMarkup(item) {
+      const seriesMeta = state.seriesMeta.find((entry) => entry.name === item.series);
+      if (item.merchUrl) {
+        return `<p class="merch-title">Related merch</p><p class="merch-copy"><a href="${item.merchUrl}">View related merch</a></p>`;
+      }
+      if (item.merchStatus === "coming soon" || seriesMeta?.merchStatus === "coming soon") {
+        return `<p class="merch-title">Merch coming soon</p><p class="merch-copy">${item.series} merch is planned but not live yet. This row is the placeholder pattern for future drops.</p>`;
+      }
+      return `<p class="merch-title">No merch link</p><p class="merch-copy">This design does not have related merch attached yet.</p>`;
+    }
+
+    function openModal(item) {
+      els.modalImage.src = item.image;
+      els.modalImage.alt = item.title;
+      els.modalLabel.textContent = `${item.series} / ${item.status}`;
+      els.modalTitle.textContent = item.title;
+      els.modalDescription.textContent = item.description;
+      els.modalSeries.textContent = item.series;
+      els.modalStatus.textContent = item.status;
+      els.modalSize.textContent = item.sizeBucket;
+      els.modalPrice.textContent = item.price;
+      els.modalType.textContent = item.type;
+      els.modalCode.textContent = codeFor(item);
+      els.modalMerch.innerHTML = merchMarkup(item);
+      els.modalClaim.disabled = !item.claimable;
+      els.modalClaim.textContent = item.claimable ? "Use This in Claim Form" : "Archive Only";
+      els.modalClaim.onclick = () => item.claimable && useInClaimForm(item);
+      els.modal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("modal-open");
+      document.querySelector(".modal-close").focus();
+    }
+
+    function closeModal() {
+      els.modal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("modal-open");
+    }
+
+    function useInClaimForm(item) {
+      const mappings = {
+        flash_title: item.title,
+        selected_series: item.series,
+        selected_size_bucket: item.sizeBucket,
+        selected_price: item.price,
+        selected_design_code: codeFor(item),
+        selected_status: item.status,
+        size: item.sizeBucket
+      };
+      Object.entries(mappings).forEach(([id, value]) => {
+        const field = document.getElementById(id);
+        if (field) field.value = value;
+      });
+      const message = document.getElementById("message");
+      if (message && !message.value.trim()) {
+        message.value = `I am interested in ${item.title} (${codeFor(item)}).`;
+      }
+      closeModal();
+      document.getElementById("flash-claim").scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("placement").focus({ preventScroll: true });
+    }
+
+    document.querySelectorAll("[data-modal-close]").forEach((control) => {
+      control.addEventListener("click", closeModal);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeModal();
+    });
+
+    async function init() {
+      renderFilters();
+      try {
+        const response = await fetch("/assets/flash/flash-catalog.json", { cache: "no-store" });
+        if (!response.ok) throw new Error("Catalog unavailable");
+        const catalog = await response.json();
+        state.items = catalog.items || [];
+        state.seriesMeta = catalog.series || [];
+      } catch {
+        state.items = fallbackCatalog.items;
+        state.seriesMeta = fallbackCatalog.series;
+      }
+      renderCatalog();
+    }
+
+    init();
+  </script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
