@@ -31,6 +31,7 @@
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
   main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
+  body.modal-open main { z-index:200; }
   .hero { display:grid; grid-template-columns:minmax(0,1fr) minmax(260px,420px); gap:48px; align-items:end; margin-bottom:72px; }
   .page-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:16px; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; }
@@ -98,7 +99,7 @@
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .modal { position:fixed; inset:0; z-index:120; display:none; }
+  .modal { position:fixed; inset:0; z-index:1000; display:none; }
   .modal[aria-hidden="false"] { display:block; }
   .modal-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.78); }
   .modal-panel { position:absolute; top:50%; left:50%; width:min(1120px,calc(100vw - 64px)); max-height:calc(100vh - 64px); transform:translate(-50%,-50%); display:grid; grid-template-columns:minmax(0,0.72fr) minmax(340px,0.58fr); background:#0d0d0d; border:5px solid var(--ring-soft); overflow:hidden; }
