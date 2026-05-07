@@ -176,8 +176,9 @@ function drawEyes(t) {
   // Flatten twinkle/shimmer at high presence so eyes can't dip to invisibility
   const _flat = BREATH_FLOOR;
 
-  // Slow tint cross-fade so eye-1/eye-2 alternation feels alive over ~17s
-  const xfade = 0.5 + 0.5 * Math.sin(((t * PULSE_SPEED) / 17000) * Math.PI * 2);
+  // Stable tint mix — both eye images blended at fixed proportions per index.
+  // Removes the prior 17s cross-fade that beat against the breath and caused glitchy shimmer.
+  const MIX_A = 0.62, MIX_B = 0.38;
 
   let idx = 0;
   EYE_RINGS.forEach((ring, ri) => {
@@ -216,10 +217,10 @@ function drawEyes(t) {
       const ex = cx + Math.cos(angle) * breathDist;
       const ey = cy + Math.sin(angle) * breathDist;
 
-      // Cross-fade between the two eye tints — smooth blend instead of hard alternation
+      // Stable tint mix — even eyes lean tint-1, odd lean tint-2. No time-varying fade.
       const isEven = idx % 2 === 0;
-      const a1 = isEven ? xfade : (1 - xfade);
-      const a2 = isEven ? (1 - xfade) : xfade;
+      const a1 = isEven ? MIX_A : MIX_B;
+      const a2 = isEven ? MIX_B : MIX_A;
 
       const aspect = eyeTint1.height / eyeTint1.width;
       const iw = eyeW, ih = iw * aspect;
