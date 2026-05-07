@@ -3,37 +3,128 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>events · the six.well construct</title>
+<title>events - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
-<link rel="stylesheet" href="/css/venture-placeholder.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
 <style>
   :root {
     --venture-accent: var(--color-events);
-    --venture-accent-dim: var(--color-events-dim);
-    --venture-accent-wash: rgba(85, 186, 90, 0.08);
+    --venture-dim: var(--color-events-dim);
+    --venture-wash: rgba(85, 186, 90, 0.1);
   }
 </style>
 </head>
-<body class="venture-placeholder" data-venture="events">
-  <main class="placeholder-shell">
-    <section class="placeholder-card entrance-fade" aria-labelledby="page-title">
-      <span class="placeholder-label">venture placeholder</span>
-      <h1 class="placeholder-title" id="page-title">Events</h1>
-      <p class="placeholder-copy">
-        The events section now resolves at a stable public URL so the main navigation
-        can point somewhere intentional while calendars and event-specific pages are built.
-      </p>
-      <p class="placeholder-status">Routing is now live at /events/ while content is still in progress.</p>
-      <div class="placeholder-actions">
-        <a class="placeholder-link" href="/">return to the construct</a>
+<body class="venture-page" data-venture="events">
+  <div class="venture-grain" aria-hidden="true"></div>
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">live container</span>
+        <h1 class="venture-title" id="page-title">Events.</h1>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-lede">Gatherings, open calls, temporary rooms, and live experiments attached to the construct.</p>
+        <p class="hero-note">This page is built as a public event board and project doorway. Dates can be added as the calendar firms up without rebuilding the whole route.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="/about/#construct-accesspoints">access points</a>
+          <a class="venture-link" href="/archive/">past record</a>
+        </div>
       </div>
     </section>
-  </main>
 
+    <section class="section" aria-label="events visual board">
+      <div class="visual-board">
+        <span class="signal-mark" aria-hidden="true"></span>
+        <p class="visual-caption">A working board for gatherings that carry the work into shared time: salons, pop-ups, open studios, performances, readings, project nights, and temporary rooms.</p>
+        <div class="asset-strip" aria-hidden="true">
+          <div class="asset-tile" style="background-image:url('/assets/paintings/PAINTING%20CONTAINER.JPG')"></div>
+          <div class="asset-tile" style="background-image:url('/assets/flash/IMG_0356.jpg')"></div>
+          <div class="asset-tile is-empty"><span>event media slot</span></div>
+        </div>
+        <h2 class="visual-title">Rooms for the work to happen in public.</h2>
+      </div>
+    </section>
+
+    <section class="section">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">calendar layer</span>
+          <h2 class="section-title">Upcoming / Active</h2>
+        </div>
+        <p class="section-copy">The events node should make it easy to understand what is currently open, what is forming, and where participation may be useful.</p>
+      </header>
+      <div class="feature-grid">
+        <article class="feature-card is-large" style="--feature-image:url('/assets/paintings/DECISION%204AM.jpg')">
+          <span class="tile-kicker">forming</span>
+          <h3>Construct Night</h3>
+          <p>A draft container for small gatherings around work in process, readings, object studies, conversation, and node updates.</p>
+          <div class="meta-row">
+            <span class="meta-pill">date to be announced</span>
+            <span class="meta-pill">small room</span>
+            <span class="meta-pill">mixed format</span>
+          </div>
+        </article>
+        <div class="status-grid">
+          <article class="status-card">
+            <h3>Open-call channel</h3>
+            <p>A future place for calls for readers, helpers, vendors, performers, documenters, and project-specific contributors.</p>
+          </article>
+          <article class="status-card">
+            <h3>Hosting notes</h3>
+            <p>Event language, capacity, location details, accessibility notes, and house rules can live here once each gathering is real.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">ways in</span>
+          <h2 class="section-title">Event Pathways</h2>
+        </div>
+        <p class="section-copy">The page is structured for several kinds of public time without forcing every event into the same shape.</p>
+      </header>
+      <div class="path-grid">
+        <article class="path-card"><h3>Readings</h3><p>Language-led nights for letters, essays, statements, fragments, and unfinished public thinking.</p></article>
+        <article class="path-card"><h3>Open studios</h3><p>Temporary access to process, works in progress, object studies, and material decisions.</p></article>
+        <article class="path-card"><h3>Pop-ups</h3><p>Small commerce rooms for merch, prints, flash, editions, and experiments that fund the next layer.</p></article>
+        <article class="path-card"><h3>Project nights</h3><p>Focused gatherings attached to a film, archive room, collaborative build, or special tattoo project.</p></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">record</span>
+          <h2 class="section-title">Past / Recorded</h2>
+        </div>
+        <p class="section-copy">As events happen, this becomes the bridge between calendar and archive: what happened, who helped, what changed, and what evidence remains.</p>
+      </header>
+      <div class="timeline">
+        <article class="timeline-item">
+          <span class="timeline-date">in development</span>
+          <div><h3>First public record</h3><p>Photo sets, flyers, set lists, readings, recap notes, or participant credits can be added here after the first documented gathering.</p></div>
+        </article>
+        <article class="timeline-item">
+          <span class="timeline-date">archive bridge</span>
+          <div><h3>Event residue</h3><p>Each event should eventually leave a trail into the archive rather than disappearing after the date passes.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>&copy; the six.well construct</p>
+      <div class="page-links">
+        <a href="/">return to construct</a>
+        <a href="/archive/">archive</a>
+      </div>
+    </footer>
+  </main>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>

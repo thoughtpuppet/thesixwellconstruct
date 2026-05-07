@@ -3,37 +3,113 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>music · the six.well construct</title>
+<title>music - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
-<link rel="stylesheet" href="/css/venture-placeholder.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
 <style>
   :root {
     --venture-accent: var(--color-music);
-    --venture-accent-dim: var(--color-music-dim);
-    --venture-accent-wash: rgba(168, 86, 161, 0.08);
+    --venture-dim: var(--color-music-dim);
+    --venture-wash: rgba(168, 86, 161, 0.1);
   }
 </style>
 </head>
-<body class="venture-placeholder" data-venture="music">
-  <main class="placeholder-shell">
-    <section class="placeholder-card entrance-fade" aria-labelledby="page-title">
-      <span class="placeholder-label">venture placeholder</span>
-      <h1 class="placeholder-title" id="page-title">Music</h1>
-      <p class="placeholder-copy">
-        The music route is now in place so visitors reaching it from the main construct
-        navigation land on a live page instead of an empty directory.
-      </p>
-      <p class="placeholder-status">Routing is now live at /music/ while content is still in progress.</p>
-      <div class="placeholder-actions">
-        <a class="placeholder-link" href="/">return to the construct</a>
+<body class="venture-page" data-venture="music">
+  <div class="venture-grain" aria-hidden="true"></div>
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">sound node</span>
+        <h1 class="venture-title" id="page-title">Music.</h1>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-lede">Sound as fragment, score, atmosphere, ringtone, release, and field signal inside the larger construct.</p>
+        <p class="hero-note">This first version gives the music node a real listening structure while the actual releases and embeds are still being assembled.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="/writings/">related writings</a>
+          <a class="venture-link" href="/archive/">sound archive</a>
+        </div>
       </div>
     </section>
-  </main>
 
+    <section class="section" aria-label="music visual board">
+      <div class="visual-board">
+        <span class="signal-mark" aria-hidden="true"></span>
+        <p class="visual-caption">Not only songs. This node can hold audio notes, voice, project scores, temporary loops, sonic branding, performance remnants, and releases that belong to a visual system.</p>
+        <div class="asset-strip" aria-hidden="true">
+          <div class="asset-tile" style="background-image:url('/assets/paintings/LUST.JPG')"></div>
+          <div class="asset-tile is-empty"><span>audio embed slot</span></div>
+          <div class="asset-tile" style="background-image:url('/assets/paintings/IMG_8907.jpg')"></div>
+        </div>
+        <h2 class="visual-title">Sound for the rooms, films, objects, and private weather.</h2>
+      </div>
+    </section>
+
+    <section class="section">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">release board</span>
+          <h2 class="section-title">Listening Index</h2>
+        </div>
+        <p class="section-copy">The music page is organized for future audio without pretending a finished catalog exists before it does.</p>
+      </header>
+      <div class="media-grid">
+        <article class="media-panel is-open">
+          <span class="tile-kicker">in development</span>
+          <h3>Field score one</h3>
+          <p>A future slot for an ambient or project-attached piece. The page can accept an embedded player when the audio is ready.</p>
+        </article>
+        <article class="media-panel" style="--panel-image:url('/assets/paintings/THE%20FRUSTRATIONS%20OF%20INNER%20CHAOS.jpg')">
+          <span class="tile-kicker">fragment</span>
+          <h3>Voice / note / loop</h3>
+          <p>Short sounds, spoken fragments, ringtones, and repeatable motifs can live beside formal releases.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">forms</span>
+          <h2 class="section-title">What This Node Holds</h2>
+        </div>
+        <p class="section-copy">The structure keeps music flexible: some things may be full releases, some may be scores for other nodes, and some may be temporary traces.</p>
+      </header>
+      <div class="record-grid">
+        <article class="record-card"><h3>Scores</h3><p>Sound attached to film, event rooms, tattoo projects, image sequences, or performance containers.</p></article>
+        <article class="record-card"><h3>Releases</h3><p>Singles, EPs, mixes, and finished audio works can be indexed with art, notes, credits, and external links.</p></article>
+        <article class="record-card"><h3>Fragments</h3><p>Voice notes, field recordings, rough motifs, loops, and audio evidence that belongs to the archive.</p></article>
+      </div>
+    </section>
+
+    <section class="section">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">future wiring</span>
+          <h2 class="section-title">Listening Surfaces</h2>
+        </div>
+        <p class="section-copy">When audio is ready, each entry can support an embedded player, cover image, release notes, credits, and cross-links into film, writing, or archive.</p>
+      </header>
+      <div class="path-grid">
+        <article class="path-card"><h3>Embedded players</h3><p>Bandcamp, SoundCloud, Spotify, self-hosted files, or private previews can be dropped into the media panels.</p></article>
+        <article class="path-card"><h3>Release notes</h3><p>Short statements can explain where a sound came from and which project it belongs to.</p></article>
+        <article class="path-card"><h3>Credits</h3><p>Collaborators, producers, performers, rooms, tools, and samples can be tracked cleanly.</p></article>
+        <article class="path-card"><h3>Archive link</h3><p>Drafts and residue can move to the archive without crowding finished releases.</p></article>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>&copy; the six.well construct</p>
+      <div class="page-links">
+        <a href="/">return to construct</a>
+        <a href="/archive/">archive</a>
+      </div>
+    </footer>
+  </main>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
