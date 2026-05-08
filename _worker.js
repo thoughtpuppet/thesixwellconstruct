@@ -23,6 +23,18 @@ function methodNotAllowed(method, allowed) {
   );
 }
 
+function isLocalPreview(url) {
+  return (
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "::1"
+  );
+}
+
+function isLocalOnlyPath(pathname) {
+  return pathname === "/edit-links.html" || pathname === "/js/live-text-editor.js";
+}
+
 function lineInputs(lines = []) {
   return lines.map((line) => ({
     merchandiseId: line.variantId,
@@ -191,6 +203,10 @@ async function handleShopApi(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (isLocalOnlyPath(url.pathname) && !isLocalPreview(url)) {
+      return notFound();
+    }
+
     if (url.pathname.startsWith("/api/shop/")) {
       return handleShopApi(request, env);
     }
