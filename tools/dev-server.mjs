@@ -26,6 +26,7 @@ const types = new Map([
 const checkRoutes = [
   "/",
   "/edit-links.html",
+  "/edit-links",
   "/events/",
   "/music/",
   "/film/",
@@ -37,8 +38,18 @@ const checkRoutes = [
   "/js/live-text-editor.js",
 ];
 
+const localOnlyRoutes = new Map([
+  ["/edit-links", "tools/edit-links.html"],
+  ["/edit-links/", "tools/edit-links.html"],
+  ["/edit-links.html", "tools/edit-links.html"],
+  ["/js/live-text-editor.js", "tools/live-text-editor.js"],
+]);
+
 function safePath(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
+  const localOnlyFile = localOnlyRoutes.get(decoded);
+  if (localOnlyFile) return path.resolve(root, localOnlyFile);
+
   const clean = decoded === "/" ? "/index.html" : decoded;
   const resolved = path.resolve(root, "." + clean);
   if (!resolved.startsWith(root)) return null;

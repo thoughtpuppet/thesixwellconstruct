@@ -3,3 +3,4 @@ functions/
 wrangler.jsonc
 README.md
 .dev.vars.example
+tools/
