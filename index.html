@@ -15,8 +15,6 @@
   body { background: #0e0e0e; overflow: hidden; font-family: 'Inter','Helvetica Neue',sans-serif; -webkit-tap-highlight-color: transparent; touch-action: manipulation; overscroll-behavior: none; }
   #stage { width: 100vw; height: 100vh; height: 100dvh; position: relative; overflow: hidden; }
   canvas { position: absolute; inset: 0; }
-  /* iOS canvases tend to read flat — punch saturation/contrast slightly. Desktop is unaffected by the same filter values. */
-  body.is-mobile canvas { filter: saturate(1.18) contrast(1.06); }
   #node-labels { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
   .node-label {
     position: absolute; font-family: 'Inter','Helvetica Neue',sans-serif; font-size: clamp(11px, 2.6vw, 14px); font-weight: 900; letter-spacing: -0.1em;
