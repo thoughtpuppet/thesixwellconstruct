@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -27,7 +27,7 @@
   #wordmark-desc {
     position: absolute; top: clamp(42px, 9vw, 62px); left: 50%; transform: translateX(-50%);
     font-family: Georgia, 'Times New Roman', Times, serif;
-    font-size: clamp(10px, 2.4vw, 13px); letter-spacing: 0.08em; text-transform: uppercase; color: #FCB867; opacity: 0;
+    font-size: clamp(10px, 2.4vw, 13px); letter-spacing: 0.18em; text-transform: uppercase; color: #FCB867; opacity: 0;
     z-index: 10; white-space: nowrap; pointer-events: none;
     transition: opacity 0.6s ease;
   }
@@ -64,6 +64,25 @@
     text-align: center;
     line-height: 1.35;
   }
+  /* Mobile body class — adjusts wordmark, layout chip visibility, descriptors */
+  body.is-mobile #wordmark { top: 14px; font-size: clamp(22px, 6.2vw, 30px); letter-spacing: -0.04em; }
+  body.is-mobile #wordmark-desc { top: clamp(46px, 11vw, 56px); font-size: clamp(9px, 2.2vw, 11px); letter-spacing: 0.18em; }
+  /* Back button — visible only on mobile when a sub-node takeover is active */
+  #back-btn {
+    position: fixed; bottom: max(20px, env(safe-area-inset-bottom)); left: 16px; z-index: 31;
+    display: none; align-items: center; gap: 6px;
+    padding: 6px 9px 6px 7px;
+    background: rgba(20,18,15,0.55); backdrop-filter: blur(6px);
+    border: 2px solid #FCB86777; border-radius: 4px;
+    color: #FCB86799; font-size: 8.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    font-family: inherit; cursor: pointer; font-weight: 500;
+    opacity: 0; transition: opacity 0.35s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #back-btn svg { display: block; opacity: 0.7; }
+  body.is-mobile #back-btn.visible { display: inline-flex; opacity: 0.65; }
+  body.is-mobile .node-label { font-size: 13px; }
+  body.is-mobile .sub-node-label { font-size: 17px; letter-spacing: 0.04em; }
 </style>
 </head>
 <body>
@@ -75,6 +94,10 @@
   <div id="node-descs"></div>
   <div id="sub-node-labels"></div>
   <div id="hint">HOVER THE CONSTRUCT</div>
+  <button id="back-btn" aria-label="Return to ventures" type="button">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    <span>return</span>
+  </button>
 </div>
 
 <!-- shared construct transition layer — enables fade-to-black on sub-node navigation -->
@@ -89,13 +112,16 @@ const hint = document.getElementById('hint');
 const wordmarkDesc = document.getElementById('wordmark-desc');
 
 let W, H, cx, cy, scale = 1, dpr = 1;
+// Mobile layout state — set by resize(). When true, ring shrinks to top, ventures use vertical stack layout.
+let isMobile = false;
 // Reference viewport: scale = 1 at >= 1000px short edge.
 // Below that, everything (rings, nodes, eyes, particles, dots) scales down proportionally
 // so the composition remains balanced on phones and tablets.
 function computeScale(w, h) {
   const shortEdge = Math.min(w, h);
-  // Smooth scale curve — full size at 1000+, ~0.55 at 360, never below 0.5
-  const s = Math.max(0.5, Math.min(1, shortEdge / 1000));
+  // Smooth scale curve — full size at 1000+, ~0.78 at 360, never below 0.7
+  // (the idle ring should still feel like a real presence on phones)
+  const s = Math.max(0.7, Math.min(1, 0.5 + shortEdge / 2000));
   return s;
 }
 let eyeTint1 = null, eyeTint2 = null;
@@ -110,6 +136,8 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   cx = W / 2; cy = H / 2;
   scale = computeScale(W, H);
+  isMobile = w < 900;
+  document.body.classList.toggle('is-mobile', isMobile);
   // Invalidate cached eye tints so they redraw at new scale on first frame
   eyeTint1 = null; eyeTint2 = null;
 }
@@ -158,13 +186,21 @@ function smoothBreath(phase) {
   // Reshape via smoothstep so peaks hold a beat longer
   return s * s * (3 - 2 * s);
 }
+// Heartbeat waveform — lub-dub-rest. Two gaussian pulses per cycle.
+// p in 0..1 across one beat. Lub at ~0.06, dub at ~0.20, then long rest.
+function heartBeat(phase) {
+  const p = phase - Math.floor(phase);
+  const lub = Math.exp(-Math.pow((p - 0.06) / 0.038, 2));
+  const dub = Math.exp(-Math.pow((p - 0.20) / 0.048, 2)) * 0.72;
+  return Math.min(1, lub + dub);
+}
 function drawEyes(t) {
   if (eyesLoaded < 2) return;
   if (!eyeTint1) eyeTint1 = buildEyeTint(eyeImg1);
   if (!eyeTint2) eyeTint2 = buildEyeTint(eyeImg2);
 
   // Tunable constants — adjust to taste
-  const PULSE_SPEED = 1.375;       // breath time multiplier (pulse slider, default 50)
+  const PULSE_SPEED = 1.375;       // breath time multiplier — steady
   const PULSE_AMP   = 1.05;        // breath amplitude — peak bright, slight exhale dip
   const DENSITY_MUL = 1.05;        // eyes-per-ring multiplier
   const BREATH_FLOOR = 0.58;       // 0..0.95 — higher = eyes hold their glow on exhale
@@ -181,6 +217,9 @@ function drawEyes(t) {
   const MIX_A = 0.62, MIX_B = 0.38;
 
   let idx = 0;
+  // Mobile-aware ring center + scale — eyes shrink and slide up with the ring on small viewports
+  const _rt = ringTransform();
+  const _rcx = _rt.x, _rcy = _rt.y, _rs = _rt.s;
   EYE_RINGS.forEach((ring, ri) => {
     // Per-ring breath phase — outer rings lag inner rings slightly, creating an outward wave
     // BUT phase offset is small (was 0.11 → 0.04) so rings inhale together
@@ -201,8 +240,8 @@ function drawEyes(t) {
     // Per-ring opacity shimmer — locked closer to the breath, narrow range
     const shimmer = 0.95 + 0.05 * Math.sin((t / 4500) + ri * 1.7);
 
-    // Scale eye image width with viewport
-    const eyeW = ring.w * scale * ringScale;
+    // Scale eye image width with viewport AND mobile ring transform
+    const eyeW = ring.w * scale * ringScale * _rs;
 
     const _count = Math.max(3, Math.round(ring.count * DENSITY_MUL));
     for (let i = 0; i < _count; i++) {
@@ -214,8 +253,8 @@ function drawEyes(t) {
       const eyePhase = ((t * PULSE_SPEED) / 9000) + idx * 0.04;
       const twinkle = 0.92 + 0.08 * smoothBreath(eyePhase);
 
-      const ex = cx + Math.cos(angle) * breathDist;
-      const ey = cy + Math.sin(angle) * breathDist;
+      const ex = _rcx + Math.cos(angle) * breathDist * _rs;
+      const ey = _rcy + Math.sin(angle) * breathDist * _rs;
 
       // Stable tint mix — even eyes lean tint-1, odd lean tint-2. No time-varying fade.
       const isEven = idx % 2 === 0;
@@ -289,11 +328,18 @@ function spawnP(pre){
   const ro = RING_OUTER();
   const close=Math.random()<0.4, minD=close?8:80, maxD=close?90:370;
   const dv = DEPTH_VAR;
-  // Original: size 2 + rand*3.8. Apply depthVar to widen/narrow that range.
   const baseSize = 2 + Math.random()*3.8;
   const mid = 3.9;
-  const size = mid + (baseSize - mid) * (0.6 + dv*0.9); // dv=0 → tight band, dv=1 → original, dv>1 → wide
+  const size = mid + (baseSize - mid) * (0.6 + dv*0.9);
+  // On mobile when the stack is open, scatter the spawn origin along the stack
+  // so particles populate the full vertical column instead of clustering at center.
+  let originY = 0;
+  if(isMobile && (state==='expanded' || (state==='expanding' && expandProgress>0.3))){
+    const stackTop = H*0.24, stackBot = H*0.94;
+    originY = (stackTop + Math.random() * (stackBot - stackTop)) - cy;
+  }
   const p={
+    originYOff: originY,
     angle:Math.random()*Math.PI*2,
     dist:ro,
     targetDist: ro + minD + Math.random()*(maxD-minD),
@@ -356,7 +402,7 @@ function updateParticles(dt,t){
     const fx=p.floatAmpX*Math.sin((t/p.floatPX)*Math.PI*2+p.floatOX);
     const fy=p.floatAmpY*Math.sin((t/p.floatPY)*Math.PI*2+p.floatOY);
     const px = cx + Math.cos(p.angle)*p.dist*scale + fx*scale;
-    const py = cy + Math.sin(p.angle)*p.dist*scale + fy*scale;
+    const py = cy + (p.originYOff || 0) + Math.sin(p.angle)*p.dist*scale + fy*scale;
     ctx.globalAlpha=alpha;
     ctx.beginPath();ctx.arc(px,py,p.size*scale,0,Math.PI*2);
     ctx.fillStyle=moodDot;ctx.fill();
@@ -400,12 +446,45 @@ function lerp(a,b,t){return a+(b-a)*t;}
 function clamp01(t){return Math.max(0,Math.min(1,t));}
 function driftOpenFactor(i,prog){if(prog<ARRIVE_AT[i])return 0;return easeOutSoft(Math.min((prog-ARRIVE_AT[i])/DRIFT_OPEN_DURATION,1));}
 function getDrift(i,t,of){const d=DRIFTS[i];return{x:d.ax*of*Math.sin((t/d.px)*Math.PI*2+d.ox),y:d.ay*of*Math.sin((t/d.py)*Math.PI*2+d.oy)};}
-function getNodeAnchor(v){const a=toRad(v.angle)+slowOrbit*0.00004;const d=v.dist*scale;return{x:cx+Math.cos(a)*d,y:cy+Math.sin(a)*d};}
-function getRingEdgeForNode(v){const a=toRad(v.angle)+slowOrbit*0.00004;return{x:cx+Math.cos(a)*RING_OUTER(),y:cy+Math.sin(a)*RING_OUTER()};}
+function getMobileNodeAnchor(i,n){
+  // Layout space: ring sits at H*0.17, ventures pack tightly underneath with breathing room
+  const top = H * 0.24;
+  const bot = H * 0.94;
+  const cxv = W / 2;
+  const usableH = bot - top;
+  const t = n > 1 ? i / (n - 1) : 0.5;
+  const _t = slowOrbit;
+  // Stack layout — floatier: larger sway + gentle vertical bob, each node phase-offset
+  const swayX = Math.sin((_t*0.00065) + i*0.85) * 18 + Math.sin((_t*0.00031) + i*1.7) * 6;
+  const bobY  = Math.sin((_t*0.00048) + i*1.3) * 7;
+  let pos = { x: cxv + swayX, y: top + t * usableH + bobY };
+  // Mobile takeover: drift the active venture toward upper-center of viewport
+  // so the orbital sub-node ring has room to fill the page around it.
+  if(i === activeVentureIdx && subNodeState !== 'idle'){
+    const tk = subNodeState==='collapsing' ? 1 - subNodeCollapseProgress
+             : subNodeState==='expanding' ? subNodeProgress : 1;
+    // Smoother spread to center — easeInOut feels continuous, no early hesitation
+    const e = easeInOut(tk);
+    pos.x = lerp(pos.x, cxv, e);
+    pos.y = lerp(pos.y, H * 0.5, e);
+  }
+  return pos;
+}
+function getNodeAnchor(v){
+  if(isMobile){
+    const idx = VENTURES.indexOf(v);
+    return getMobileNodeAnchor(idx, VENTURES.length);
+  }
+  const a=toRad(v.angle)+slowOrbit*0.00004;const d=v.dist*scale;return{x:cx+Math.cos(a)*d,y:cy+Math.sin(a)*d};
+}
+function getRingEdgeForNode(v){
+  if(isMobile){const rt=ringTransform();return{x:rt.x,y:rt.y+RING_OUTER()*rt.s};}
+  const a=toRad(v.angle)+slowOrbit*0.00004;return{x:cx+Math.cos(a)*RING_OUTER(),y:cy+Math.sin(a)*RING_OUTER()};
+}
 function getDotCurrentPos(i){const d=DOT_POS(i);const angle=Math.atan2(d[1],d[0])+time*0.003;const r=Math.hypot(d[0],d[1]);return{x:cx+Math.cos(angle)*r,y:cy+Math.sin(angle)*r};}
 function getDotTargetPos(i){const d=DOT_POS(i);const angle=Math.atan2(d[1],d[0])+time*0.003;const r=Math.hypot(d[0],d[1]);return{x:cx+Math.cos(angle)*r,y:cy+Math.sin(angle)*r};}
-function isOverCenter(mx,my){return Math.hypot(mx-cx,my-cy)<Math.max(50,65*scale);}
-function isOverLogo(mx,my){if(state==='expanded'||state==='collapsing')return false;if(expandProgress>0.35)return false;return Math.hypot(mx-cx,my-cy)<RING_OUTER()+Math.max(8,12*scale);}
+function isOverCenter(mx,my){const rt=ringTransform();return Math.hypot(mx-rt.x,my-rt.y)<Math.max(44,65*scale*rt.s);}
+function isOverLogo(mx,my){if(state==='expanded'||state==='collapsing')return false;if(expandProgress>0.35)return false;const rt=ringTransform();return Math.hypot(mx-rt.x,my-rt.y)<RING_OUTER()*rt.s+Math.max(10,14*scale);}
 function getHoveredNode(mx,my){if(expandProgress<0.8||state==='collapsing')return -1;const r=Math.max(26,30*scale);for(let i=0;i<VENTURES.length;i++)if(Math.hypot(mx-nodeX[i],my-nodeY[i])<r)return i;return -1;}
 function triggerCollapse(){
   // Instantly clear any open sub-nodes — parent is about to move
@@ -450,7 +529,7 @@ stage.addEventListener('click',e=>{
   if(isOverLogo(mx,my)&&expandProgress<0.05&&state!=='collapsing'){
     VENTURES.forEach((v,i)=>{
       if(v.fromDot>=0){const p=getDotCurrentPos(v.fromDot);dotStartX[i]=p.x;dotStartY[i]=p.y;}
-      else{const a=toRad(v.angle)+slowOrbit*0.00004;dotStartX[i]=cx+Math.cos(a)*RING_OUTER();dotStartY[i]=cy+Math.sin(a)*RING_OUTER();}
+      else{const edge=getRingEdgeForNode(v);dotStartX[i]=edge.x;dotStartY[i]=edge.y;}
     });
     state='expanding';hint.style.opacity='0';return;
   }
@@ -512,15 +591,33 @@ stage.addEventListener('touchstart', e => {
 }, {passive:true});
 stage.addEventListener('mouseleave',()=>{logoHover=false;hoveredNode=-1;mouseX=cx;mouseY=cy;if(state==='hover-logo'){state='idle';hint.style.opacity='1';}});
 
+// Mobile-aware ring transform: shrinks + slides up when ventures are expanding on small viewports
+function ringTransform(){
+  if(!isMobile) return { x: cx, y: cy, s: 1 };
+  // Use overall expansion (parent ring + subnode takeover) to drive shrink.
+  // When collapsing back to idle, ease the ring smoothly back to center (don't snap).
+  const subT = (subNodeState==='expanding') ? subNodeProgress : (subNodeState==='expanded' ? 1 : (subNodeState==='collapsing' ? 1 - subNodeCollapseProgress : 0));
+  const stateT = state==='collapsing' ? (1 - collapseProgress) * expandProgress : expandProgress;
+  const t = Math.max(stateT, subT * 0.85);
+  const e = easeInOutSoft(t);
+  // Slide up to ~17% of viewport height, shrink to 62% (room for stack below)
+  const targetY = H * 0.17;
+  const targetS = 0.62;
+  return { x: cx, y: lerp(cy, targetY, e), s: lerp(1, targetS, e) };
+}
 function drawRing(){
-  ctx.save();ctx.translate(cx,cy);
+  const rt = ringTransform();
+  ctx.save();ctx.translate(rt.x,rt.y);ctx.scale(rt.s,rt.s);
   const ro=RING_OUTER(), ri=RING_INNER();
   if(logoHover&&expandProgress<0.08){ctx.beginPath();ctx.arc(0,0,ro+14*scale,0,Math.PI*2);ctx.arc(0,0,ro+3*scale,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();}
   ctx.beginPath();ctx.arc(0,0,ro,0,Math.PI*2);ctx.arc(0,0,ri,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();ctx.restore();
 }
 function drawDots(alpha){
   if(alpha<=0)return;const orbitT=time*0.003;
+  const _rt = ringTransform();
+  ctx.save();ctx.translate(_rt.x - cx, _rt.y - cy);ctx.translate(cx,cy);ctx.scale(_rt.s,_rt.s);ctx.translate(-cx,-cy);
   BASE_DOT_POSITIONS.forEach((d0,i)=>{const d=[d0[0]*scale,d0[1]*scale];const angle=Math.atan2(d[1],d[0])+orbitT;const dist=Math.hypot(d[0],d[1])+Math.sin(time*0.025+i*1.1)*1.5*scale;ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(cx+Math.cos(angle)*dist,cy+Math.sin(angle)*dist,DOT_RADIUS(),0,Math.PI*2);ctx.fillStyle=DOT_COLOR;ctx.fill();});ctx.globalAlpha=1;
+  ctx.restore();
 }
 function drawTravelingDots(prog){
   const tp=easeOut(clamp01(prog/TRAVEL_END));
@@ -546,6 +643,8 @@ function updateNodePositions(dt){
 }
 function drawSettledNodes(prog){
   const xt=clamp01((prog-XFADE_START)/(TRAVEL_END-XFADE_START));const ba=easeOutSoft(xt);
+  const _takeover = isMobile && activeVentureIdx >= 0 && subNodeState !== 'idle';
+  const _takeoverT = !_takeover ? 0 : (subNodeState==='collapsing' ? 1 - subNodeCollapseProgress : (subNodeState==='expanding' ? subNodeProgress : 1));
   VENTURES.forEach((v,i)=>{
     if(ba<=0)return;
     const px=nodeX[i],py=nodeY[i];
@@ -556,12 +655,15 @@ function drawSettledNodes(prog){
     if(isActive){
       ctx.globalAlpha=ba;
       ctx.beginPath();
-      const ns=NODE_SIZE_S();
-      ctx.arc(px,py,ns+4*scale,0,Math.PI*2);
-      ctx.arc(px,py,ns-3*scale,0,Math.PI*2,true);
+      // Active parent grows during takeover so it reads as a "ring" with sub-nodes orbiting it.
+      const _grow = isMobile ? (1 + _takeoverT * 1.5) : (1 + _takeoverT * 0.4);
+      const ns = NODE_SIZE_S() * _grow;
+      const _w = (4 * scale) * (1 + _takeoverT * 0.6);
+      ctx.arc(px,py,ns + _w,0,Math.PI*2);
+      ctx.arc(px,py,ns - _w * 0.75,0,Math.PI*2,true);
       ctx.fillStyle=v.color;ctx.fill();
     }else{
-      ctx.globalAlpha=ba*(1-eHp*0.35);
+      ctx.globalAlpha=ba*(1-eHp*0.35)*(1-_takeoverT);
       const ns2=NODE_SIZE_S();
       ctx.beginPath();ctx.arc(px,py,ns2,0,Math.PI*2);
       ctx.fillStyle=v.color;ctx.fill();
@@ -573,7 +675,10 @@ function drawSettledNodes(prog){
       }
     }
     const el=nodeLabelEls[i];
-    if(ba>0.25){el.style.opacity=String(lerp(ba*0.4,ba,eHp));el.style.left=px+'px';el.style.top=(py+NODE_SIZE_S()+18)+'px';}
+    const _labelMul = (i===activeVentureIdx&&subNodeState!=="idle") ? 1 : (1 - _takeoverT);
+    const _labelGrow = (i===activeVentureIdx) ? (isMobile ? (1 + _takeoverT * 1.5) : (1 + _takeoverT * 0.4)) : 1;
+    const _labelGap = 18 + _takeoverT * (isMobile ? 16 : 6);
+    if(ba>0.25){el.style.opacity=String(lerp(ba*0.4,ba,eHp)*_labelMul);el.style.left=px+'px';el.style.top=(py+NODE_SIZE_S()*_labelGrow+_labelGap)+'px';}
     else el.style.opacity='0';
     // Description — italic serif, fades in on hover, hides when sub-nodes are open
     const descEl=nodeDescEls[i];
@@ -636,10 +741,16 @@ const SUB_SHAPES = {
 // Sub-node animation + sizing constants
 const BASE_SUB_NODE_RADIUS = 9;
 const BASE_SUB_NODE_DIST   = 75;
-function SUB_NODE_RADIUS(){return BASE_SUB_NODE_RADIUS*scale;}
+function SUB_NODE_RADIUS(){
+  // On mobile during a takeover, sub-node dots scale up so they're easy to see and tap.
+  if(isMobile && activeVentureIdx >= 0 && subNodeState !== 'idle'){
+    return BASE_SUB_NODE_RADIUS * scale * 1.7;
+  }
+  return BASE_SUB_NODE_RADIUS*scale;
+}
 function SUB_NODE_DIST(){return BASE_SUB_NODE_DIST*scale;}
 const SUB_SPREAD_DEG    = 26;    // (unused in orbit mode — kept for reference)
-const SUB_EXPAND_SPEED  = 0.0012;
+const SUB_EXPAND_SPEED  = 0.00038;
 const SUB_COLLAPSE_SPEED= 0.0018;
 const SUB_HOVER_IN      = 0.003;
 const SUB_HOVER_OUT     = 0.002;
@@ -675,10 +786,18 @@ for(let i = 0; i < MAX_SUBNODES; i++){
 // First node is aligned outward (away from center) so the cluster feels grounded.
 function getSubNodeTargetPos(ventureIdx, subIdx){
   const px = nodeX[ventureIdx], py = nodeY[ventureIdx];
-  const outAngle = Math.atan2(py - cy, px - cx); // direction: center → parent
   const subs = SUB_NODE_DATA[VENTURES[ventureIdx].name];
   const n = subs.length;
-  // Distribute evenly around parent, first node points away from ring center
+  // Mobile takeover: sub-nodes orbit the active venture (now drifted near top-center)
+  // at a large radius that fills the viewport.
+  if(isMobile && ventureIdx === activeVentureIdx){
+    const orbitR = Math.min(W * 0.34, H * 0.26);
+    const baseAng = Math.PI / 2 + slowOrbit * 0.00012;
+    const angle = baseAng + (subIdx / n) * Math.PI * 2;
+    return { x: px + Math.cos(angle) * orbitR,
+             y: py + Math.sin(angle) * orbitR };
+  }
+  const outAngle = Math.atan2(py - cy, px - cx);
   const angle = outAngle + (subIdx / n) * Math.PI * 2;
   return { x: px + Math.cos(angle) * SUB_NODE_DIST(),
            y: py + Math.sin(angle) * SUB_NODE_DIST() };
@@ -687,8 +806,8 @@ function getSubNodeTargetPos(ventureIdx, subIdx){
 // ── Helper: staggered arrival factor for sub-node i during expansion ─────────
 function getSubEp(i, n){
   if(subNodeState === 'expanded') return 1;
-  const delay = (i / n) * 0.30; // each node starts slightly later
-  return easeOut(clamp01((subNodeProgress - delay) / (1 - delay + 0.001)));
+  const delay = (i / n) * 0.42; // longer cascade — each node arrives more deliberately
+  return easeInOut(clamp01((subNodeProgress - delay) / (1 - delay + 0.001)));
 }
 
 // ── Helper: returns index of sub-node under cursor, or -1 ───────────────────
@@ -896,7 +1015,7 @@ function tick(ts){
   if(state==='expanding'){expandProgress=Math.min(expandProgress+dt*EXPAND_SPEED,1);if(expandProgress>=1)state='expanded';}
   if(state==='collapsing'){collapseProgress=Math.min(collapseProgress+dt*COLLAPSE_SPEED,1);if(collapseProgress>=1){state='idle';expandProgress=0;collapseProgress=0;nodePosInit=false;nodeHP.fill(0);hint.style.opacity='1';hint.style.color='#FCB86733';hint.textContent='HOVER THE CONSTRUCT';}}
   // Descriptor fades in once expansion is well underway, out on collapse
-  wordmarkDesc.style.opacity = String(easeOutSoft(clamp01((expandProgress-0.5)/0.5)) * (1-collapseProgress));
+  wordmarkDesc.style.opacity = String(easeOutSoft(clamp01((expandProgress-0.5)/0.5)) * (1-collapseProgress) * 0.55);
   VENTURES.forEach((v,i)=>{const target=hoveredNode===i?1:0;nodeHP[i]=target>nodeHP[i]?Math.min(nodeHP[i]+dt*HOVER_IN,1):Math.max(nodeHP[i]-dt*HOVER_OUT,0);});
   if(!nodePosInit&&expandProgress>=XFADE_START){VENTURES.forEach((v,i)=>{const anc=getNodeAnchor(v);nodeX[i]=anc.x;nodeY[i]=anc.y;});nodePosInit=true;}
   if(nodePosInit&&state!=='collapsing')updateNodePositions(dt);
@@ -951,6 +1070,45 @@ function tick(ts){
 }
 
 requestAnimationFrame(tick);
+
+
+// Back button — mobile only, visible during sub-node takeover. Collapses sub-nodes back to the stack.
+(()=>{
+  const btn = document.getElementById('back-btn');
+  if(!btn) return;
+  function collapseActive(){
+    // If sub-nodes are open, collapse them first. Otherwise (ring is expanded), collapse the whole thing.
+    if(subNodeState !== 'idle' && subNodeState !== 'collapsing'){
+      // fall through to sub-node collapse below
+    } else if(state === 'expanded'){
+      triggerCollapse();
+      return;
+    } else {
+      return;
+    }
+    if(activeVentureIdx < 0) return;
+    const subs = SUB_NODE_DATA[VENTURES[activeVentureIdx].name];
+    for(let i=0;i<MAX_SUBNODES;i++){
+      subNodeCollapseStartX[i]=subNodeX[i];
+      subNodeCollapseStartY[i]=subNodeY[i];
+    }
+    subNodeCollapseProgress=0;
+    subNodeState='collapsing';
+    subNodeHP.fill(0);
+    hoveredSubNode=-1;
+    if(hint){ hint.style.opacity='0'; }
+  }
+  btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); collapseActive(); });
+  btn.addEventListener('touchend', (e)=>{ e.preventDefault(); e.stopPropagation(); collapseActive(); }, {passive:false});
+  function vis(){
+    const subOpen = activeVentureIdx>=0 && (subNodeState==='expanding' || subNodeState==='expanded');
+    const ringOpen = state==='expanded' || (state==='expanding' && expandProgress>0.5);
+    const show = isMobile && (subOpen || ringOpen);
+    btn.classList.toggle('visible', show);
+    requestAnimationFrame(vis);
+  }
+  vis();
+})();
 </script>
 
 
