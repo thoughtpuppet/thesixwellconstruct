@@ -32,7 +32,12 @@ function isLocalPreview(url) {
 }
 
 function isLocalOnlyPath(pathname) {
-  return pathname === "/edit-links.html" || pathname === "/js/live-text-editor.js";
+  return (
+    pathname === "/edit-links" ||
+    pathname === "/edit-links/" ||
+    pathname === "/edit-links.html" ||
+    pathname === "/js/live-text-editor.js"
+  );
 }
 
 function lineInputs(lines = []) {
