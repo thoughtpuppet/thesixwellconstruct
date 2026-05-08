@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0e0e0e">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; }
@@ -105,7 +110,7 @@
 
 <script>
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+const ctx = (canvas.getContext('2d', { colorSpace: 'display-p3' })) || canvas.getContext('2d');
 const stage = document.getElementById('stage');
 const nodeLabelsDiv = document.getElementById('node-labels');
 const hint = document.getElementById('hint');
@@ -172,7 +177,7 @@ const EYE_RINGS = [
 function buildEyeTint(img) {
   const oc = document.createElement('canvas');
   oc.width = img.naturalWidth; oc.height = img.naturalHeight;
-  const oc2 = oc.getContext('2d');
+  const oc2 = (oc.getContext('2d', { colorSpace: 'display-p3' })) || oc.getContext('2d');
   oc2.drawImage(img, 0, 0);
   oc2.globalCompositeOperation = 'multiply';
   oc2.fillStyle = '#FCB867';
