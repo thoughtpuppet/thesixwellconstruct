@@ -194,4 +194,24 @@
   ────────────────────────────────────────────────────────── */
   window._constructFade = fadeOutThenNavigate;
 
+  /* ── LOCAL PROTOTYPE TEXT EDITOR ─────────────────────────
+     Loads the optional canvas-like copy editor once per page.
+     It stays inert until ?edit=1 is present or Cmd/Ctrl+Shift+E
+     is pressed, so production visitors get the normal site.
+  ────────────────────────────────────────────────────────── */
+  var isLocalHost = (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '::1' ||
+    window.location.hostname === ''
+  );
+
+  if (isLocalHost && !document.querySelector('script[data-live-text-editor]')) {
+    var liveTextEditor = document.createElement('script');
+    liveTextEditor.src = '/js/live-text-editor.js';
+    liveTextEditor.defer = true;
+    liveTextEditor.setAttribute('data-live-text-editor', 'true');
+    document.body.appendChild(liveTextEditor);
+  }
+
 })(); // end IIFE — keeps all variables out of global scope
