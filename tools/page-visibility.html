@@ -196,9 +196,19 @@
 </main>
 
 <script type="module">
-import { HIDDEN_PUBLIC_PATHS } from "/shared/page-visibility.js";
-
-const FILE_PATH = ["shared", "page-visibility.js"];
+const WORKER_PATH = ["_worker.js"];
+const REDIRECTS_PATH = ["_redirects"];
+const VISIBILITY_START = "# BEGIN PAGE VISIBILITY";
+const VISIBILITY_END = "# END PAGE VISIBILITY";
+const WORKER_LIST_PATTERN = /const HIDDEN_PUBLIC_PATHS = \[[\s\S]*?\];/;
+const DEFAULT_HIDDEN_PUBLIC_PATHS = [
+  "/about",
+  "/archive",
+  "/events",
+  "/film",
+  "/music",
+  "/writings"
+];
 const pages = [
   { label: "Home", path: "/" },
   { label: "About", path: "/about/" },
@@ -233,7 +243,7 @@ const pages = [
 
 const state = {
   folderHandle: null,
-  hiddenPaths: new Set(HIDDEN_PUBLIC_PATHS.map(normalizePath))
+  hiddenPaths: new Set(DEFAULT_HIDDEN_PUBLIC_PATHS.map(normalizePath))
 };
 
 const els = {
@@ -267,23 +277,93 @@ function setStatus(message) {
 
 function serializeVisibility() {
   const paths = Array.from(state.hiddenPaths).sort();
-  return `export const HIDDEN_PUBLIC_PATHS = ${JSON.stringify(paths, null, 2)};\n`;
+  return `const HIDDEN_PUBLIC_PATHS = ${JSON.stringify(paths, null, 2)};`;
 }
 
-async function getVisibilityFile() {
+async function getFileHandle(pathSegments, options = {}) {
   if (!state.folderHandle) throw new Error("Choose the site folder first.");
   let current = state.folderHandle;
-  for (const segment of FILE_PATH.slice(0, -1)) {
+  for (const segment of pathSegments.slice(0, -1)) {
     current = await current.getDirectoryHandle(segment);
   }
-  return current.getFileHandle(FILE_PATH.at(-1), { create: true });
+  return current.getFileHandle(pathSegments.at(-1), options);
+}
+
+async function readFile(pathSegments) {
+  const fileHandle = await getFileHandle(pathSegments, { create: true });
+  const file = await fileHandle.getFile();
+  return file.text();
+}
+
+async function writeFile(pathSegments, content) {
+  const fileHandle = await getFileHandle(pathSegments, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+function parseRedirects(content) {
+  const start = content.indexOf(VISIBILITY_START);
+  const end = content.indexOf(VISIBILITY_END);
+  if (start === -1 || end === -1 || end <= start) return null;
+  const block = content.slice(start + VISIBILITY_START.length, end);
+  const paths = block
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/)[0])
+    .filter((path) => path && !path.startsWith("#") && !path.startsWith("/tools/"))
+    .map(normalizePath);
+  return new Set(paths);
+}
+
+function buildRedirectBlock() {
+  const rules = Array.from(state.hiddenPaths)
+    .sort()
+    .flatMap((path) => {
+      if (path === "/") return ["/ /404.html 404", "/index.html /404.html 404"];
+      return [
+        `${path} /404.html 404`,
+        `${path}/ /404.html 404`,
+        `${path}/index.html /404.html 404`
+      ];
+    });
+
+  rules.push("/tools/edit-links.html /404.html 404");
+  rules.push("/tools/page-visibility.html /404.html 404");
+  rules.push("/shared/page-visibility.js /404.html 404");
+  return [VISIBILITY_START, ...rules, VISIBILITY_END].join("\n");
+}
+
+function updateRedirects(content) {
+  const block = buildRedirectBlock();
+  const start = content.indexOf(VISIBILITY_START);
+  const end = content.indexOf(VISIBILITY_END);
+  if (start === -1 || end === -1 || end <= start) {
+    const spacer = content.trim() ? "\n\n" : "";
+    return `${content.trimEnd()}${spacer}${block}\n`;
+  }
+  return `${content.slice(0, start)}${block}${content.slice(end + VISIBILITY_END.length)}`.trimEnd() + "\n";
+}
+
+function updateWorker(content) {
+  if (!WORKER_LIST_PATTERN.test(content)) {
+    throw new Error("_worker.js is missing the HIDDEN_PUBLIC_PATHS list.");
+  }
+  return content.replace(WORKER_LIST_PATTERN, serializeVisibility());
+}
+
+async function loadVisibilityState() {
+  const redirects = await readFile(REDIRECTS_PATH);
+  const parsed = parseRedirects(redirects);
+  if (parsed) state.hiddenPaths = parsed;
 }
 
 async function writeVisibilityFile() {
-  const fileHandle = await getVisibilityFile();
-  const writable = await fileHandle.createWritable();
-  await writable.write(serializeVisibility());
-  await writable.close();
+  const [redirects, worker] = await Promise.all([
+    readFile(REDIRECTS_PATH),
+    readFile(WORKER_PATH)
+  ]);
+  await writeFile(REDIRECTS_PATH, updateRedirects(redirects));
+  await writeFile(WORKER_PATH, updateWorker(worker));
 }
 
 async function saveAndRender(message) {
@@ -326,8 +406,9 @@ function render() {
 
 async function chooseFolder() {
   state.folderHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+  await loadVisibilityState();
   await writeVisibilityFile();
-  setStatus("Connected. Hide/show changes now save to shared/page-visibility.js.");
+  setStatus("Connected. Hide/show changes now save to _redirects and _worker.js.");
   render();
 }
 

@@ -11,7 +11,15 @@ import {
   serverError,
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
-import { HIDDEN_PUBLIC_PATHS } from "./shared/page-visibility.js";
+
+const HIDDEN_PUBLIC_PATHS = [
+  "/about",
+  "/archive",
+  "/events",
+  "/film",
+  "/music",
+  "/writings"
+];
 
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });

@@ -29,11 +29,11 @@ No bundler, package install, or framework build step is required.
 
 Open the local preview, then visit `/tools/page-visibility.html`. Choose the
 site folder when the browser asks, then use the Hide/Show buttons. The tool
-updates `shared/page-visibility.js`.
+updates `_redirects` and `_worker.js`.
 
 Hidden pages still load on localhost for editing, but the deployed Worker
-returns a 404 for those paths on the public site. Commit and push the updated
-visibility file for the change to go live.
+or static deploy layer returns a 404 for those paths on the public site. Commit
+and push the updated visibility files for the change to go live.
 
 ## Shopify setup
 
