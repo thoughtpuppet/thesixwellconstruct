@@ -198,6 +198,8 @@
 <script type="module">
 const WORKER_PATH = ["_worker.js"];
 const REDIRECTS_PATH = ["_redirects"];
+const NOT_FOUND_PATH = ["404.html"];
+const BACKUP_ROOT = ".hidden-pages";
 const VISIBILITY_START = "# BEGIN PAGE VISIBILITY";
 const VISIBILITY_END = "# END PAGE VISIBILITY";
 const WORKER_LIST_PATTERN = /const HIDDEN_PUBLIC_PATHS = \[[\s\S]*?\];/;
@@ -284,22 +286,64 @@ async function getFileHandle(pathSegments, options = {}) {
   if (!state.folderHandle) throw new Error("Choose the site folder first.");
   let current = state.folderHandle;
   for (const segment of pathSegments.slice(0, -1)) {
-    current = await current.getDirectoryHandle(segment);
+    current = await current.getDirectoryHandle(segment, { create: Boolean(options.createDirs) });
   }
   return current.getFileHandle(pathSegments.at(-1), options);
 }
 
-async function readFile(pathSegments) {
-  const fileHandle = await getFileHandle(pathSegments, { create: true });
+async function readFile(pathSegments, options = {}) {
+  const fileHandle = await getFileHandle(pathSegments, options);
   const file = await fileHandle.getFile();
   return file.text();
 }
 
-async function writeFile(pathSegments, content) {
-  const fileHandle = await getFileHandle(pathSegments, { create: true });
+async function readOptionalFile(pathSegments) {
+  try {
+    return await readFile(pathSegments);
+  } catch (error) {
+    if (error.name === "NotFoundError") return null;
+    throw error;
+  }
+}
+
+async function writeFile(pathSegments, content, options = {}) {
+  const fileHandle = await getFileHandle(pathSegments, { create: true, createDirs: options.createDirs });
   const writable = await fileHandle.createWritable();
   await writable.write(content);
   await writable.close();
+}
+
+function pageFilePath(path) {
+  if (path === "/") return ["index.html"];
+  const trimmed = path.replace(/^\/+|\/+$/g, "");
+  if (!trimmed) return ["index.html"];
+  const segments = trimmed.split("/");
+  if (segments.at(-1).includes(".")) return segments;
+  return [...segments, "index.html"];
+}
+
+function backupFilePath(path) {
+  return [BACKUP_ROOT, ...pageFilePath(path)];
+}
+
+async function hidePageFile(path) {
+  const publicPath = pageFilePath(path);
+  const backupPath = backupFilePath(path);
+  const currentContent = await readOptionalFile(publicPath);
+  if (currentContent === null) return;
+  const existingBackup = await readOptionalFile(backupPath);
+  if (existingBackup === null && !currentContent.includes("<h1>Not found.</h1>")) {
+    await writeFile(backupPath, currentContent, { createDirs: true });
+  }
+  await writeFile(publicPath, await readFile(NOT_FOUND_PATH));
+}
+
+async function restorePageFile(path) {
+  const backupContent = await readOptionalFile(backupFilePath(path));
+  if (backupContent === null) {
+    throw new Error(`No saved source copy exists for ${displayPath(path)}.`);
+  }
+  await writeFile(pageFilePath(path), backupContent);
 }
 
 function parseRedirects(content) {
@@ -393,9 +437,11 @@ function render() {
     card.querySelector(".path").textContent = displayPath(path);
     card.querySelector("button").addEventListener("click", async () => {
       if (isHidden) {
+        await restorePageFile(path);
         state.hiddenPaths.delete(path);
         await saveAndRender(`${displayPath(path)} will be public after the next deploy.`);
       } else {
+        await hidePageFile(path);
         state.hiddenPaths.add(path);
         await saveAndRender(`${displayPath(path)} will return 404 publicly after the next deploy.`);
       }
@@ -413,6 +459,9 @@ async function chooseFolder() {
 }
 
 async function showAllPages() {
+  for (const path of Array.from(state.hiddenPaths)) {
+    await restorePageFile(path);
+  }
   state.hiddenPaths.clear();
   await saveAndRender("All pages will be public after the next deploy.");
 }

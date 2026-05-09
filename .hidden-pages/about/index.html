@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>about - the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --bg-raised: #111111;
+    --accent: #FCB867;
+    --accent-dim: rgba(252, 184, 103, 0.25);
+    --accent-faint: rgba(252, 184, 103, 0.12);
+    --ring-soft: rgba(109, 61, 21, 0.4);
+    --ring-faint: rgba(109, 61, 21, 0.18);
+    --body: #FFE7CA;
+    --body-muted: rgba(255, 231, 202, 0.68);
+    --body-dim: rgba(255, 231, 202, 0.42);
+    --sans: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    --serif: Georgia, 'Times New Roman', Times, serif;
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 40px;
+    --s7: 64px;
+    --s8: 96px;
+    --t-fast: 180ms cubic-bezier(0.2, 0, 0.2, 1);
+    --t-med: 350ms cubic-bezier(0.2, 0, 0.2, 1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); scroll-behavior: smooth; }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--body);
+    font-family: var(--serif);
+    overflow-x: clip;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+
+  .grain {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .about-page {
+    position: relative;
+    z-index: 2;
+    width: min(100%, 1480px);
+    margin: 0 auto;
+    padding: 132px var(--s6) var(--s7);
+  }
+
+  .intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+    align-items: end;
+    gap: var(--s6);
+    margin-bottom: var(--s7);
+  }
+
+  .eyebrow {
+    display: block;
+    margin-bottom: var(--s3);
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 160px;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.86;
+    text-transform: uppercase;
+  }
+
+  .intro-copy {
+    max-width: 360px;
+    padding-bottom: var(--s4);
+    color: var(--body-muted);
+    font-size: 13px;
+    letter-spacing: 0;
+    line-height: 1.7;
+    text-align: right;
+    text-transform: uppercase;
+  }
+
+  .about-layout {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: var(--s6);
+    align-items: start;
+  }
+
+  .tab-rail {
+    position: sticky;
+    top: 116px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    padding-top: var(--s1);
+  }
+
+  .top-tab,
+  .nested-tab {
+    position: relative;
+    width: 100%;
+    min-height: 40px;
+    padding: var(--s2) 0;
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.3;
+    text-align: left;
+    text-transform: uppercase;
+    transition: color var(--t-fast), padding-left var(--t-fast);
+  }
+
+  .top-tab::before,
+  .nested-tab::before {
+    content: "";
+    position: absolute;
+    left: -14px;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity var(--t-fast);
+  }
+
+  .top-tab:hover,
+  .top-tab.is-active,
+  .nested-tab:hover,
+  .nested-tab.is-active {
+    color: var(--accent);
+    padding-left: var(--s2);
+  }
+
+  .top-tab.is-active::before,
+  .nested-tab.is-active::before { opacity: 1; }
+
+  .panel-shell {
+    min-height: 680px;
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s6);
+  }
+
+  .panel { display: none; }
+  .panel.is-active { display: block; }
+
+  .panel-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+    gap: var(--s6);
+    align-items: start;
+    margin-bottom: var(--s6);
+  }
+
+  .panel-kicker,
+  .section-kicker {
+    display: block;
+    margin-bottom: var(--s3);
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .panel-title {
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 56px;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.92;
+    text-transform: uppercase;
+  }
+
+  .panel-lede {
+    color: var(--body-muted);
+    font-size: 17px;
+    line-height: 1.7;
+  }
+
+  .panel-note {
+    color: var(--body-dim);
+    font-size: 12px;
+    letter-spacing: 0;
+    line-height: 1.7;
+    text-transform: uppercase;
+  }
+
+  .construct-grid {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--s6);
+    align-items: start;
+  }
+
+  .nested-rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+  }
+
+  .construct-section { display: none; }
+  .construct-section.is-active { display: block; }
+
+  .section-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s5);
+  }
+
+  .section-grid.single { grid-template-columns: 1fr; }
+
+  .text-block,
+  .stat-block,
+  .pathway,
+  .faq-item {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .text-block h3,
+  .stat-block h3,
+  .pathway h3,
+  .faq-item h3,
+  .node-detail h3 {
+    margin-bottom: var(--s2);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+
+  .text-block p,
+  .stat-block p,
+  .pathway p,
+  .faq-item p,
+  .node-detail p,
+  .bio-copy p {
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .text-list {
+    display: grid;
+    gap: var(--s3);
+    list-style: none;
+  }
+
+  .text-list li {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s3);
+    color: var(--body-muted);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .text-list strong {
+    display: block;
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .map-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 0.92fr) minmax(260px, 0.78fr);
+    gap: var(--s5);
+    align-items: start;
+  }
+
+  .map-stage {
+    position: relative;
+    min-height: 420px;
+    border: 5px solid var(--ring-faint);
+    overflow: hidden;
+    background: radial-gradient(circle at center, rgba(252, 184, 103, 0.08), transparent 58%);
+  }
+
+  #constructMap {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .node-buttons {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .map-node {
+    position: absolute;
+    min-width: 108px;
+    color: var(--body-muted);
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-align: center;
+    text-transform: uppercase;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    transition: color var(--t-fast), transform var(--t-fast);
+  }
+
+  .map-node::before {
+    content: "";
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0 auto var(--s2);
+    border-radius: 50%;
+    background: var(--node-color);
+    box-shadow: 0 0 0 0 var(--node-color);
+    opacity: 0.8;
+    transition: box-shadow var(--t-fast), opacity var(--t-fast), transform var(--t-fast);
+  }
+
+  .map-node:hover,
+  .map-node.is-active {
+    color: var(--node-color);
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+
+  .map-node.is-active::before {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 0 0 8px rgba(252, 184, 103, 0.14);
+  }
+
+  .node-detail {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .node-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-top: var(--s4);
+  }
+
+  .link-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border-top: 5px solid var(--ring-faint);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+
+  .link-pill:hover {
+    border-color: var(--accent);
+    color: var(--body);
+  }
+
+  .function-row,
+  .status-grid,
+  .timeline-list,
+  .manifesto-grid,
+  .pathway-grid,
+  .faq-grid {
+    display: grid;
+    gap: var(--s5);
+  }
+
+  .function-row {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .function-chip {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s3);
+  }
+
+  .function-chip span {
+    display: block;
+    margin-bottom: var(--s2);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .function-chip p {
+    color: var(--body-muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .timeline-item {
+    display: grid;
+    grid-template-columns: 130px minmax(0, 1fr);
+    gap: var(--s5);
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .timeline-year {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .timeline-item h3 {
+    margin-bottom: var(--s2);
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .timeline-item p {
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .status-grid,
+  .manifesto-grid,
+  .pathway-grid,
+  .faq-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bio-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(280px, 0.7fr);
+    gap: var(--s6);
+  }
+
+  .bio-copy {
+    display: grid;
+    gap: var(--s5);
+  }
+
+  .bio-stack,
+  .library-grid,
+  .press-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s5);
+  }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s5);
+    margin-top: var(--s7);
+    padding-top: var(--s5);
+    border-top: 5px solid var(--ring-faint);
+  }
+
+  .footer-links a {
+    color: var(--body-dim);
+    font-family: var(--serif);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    transition: color var(--t-fast);
+  }
+
+  .footer-links a:hover { color: var(--accent); }
+
+  @media (max-width: 1120px) {
+    .about-layout,
+    .construct-grid,
+    .panel-head,
+    .intro,
+    .map-layout,
+    .bio-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .tab-rail {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--s3);
+      padding-bottom: var(--s5);
+      border-bottom: 5px solid var(--ring-faint);
+    }
+
+    .top-tab {
+      min-height: 48px;
+      border-top: 5px solid var(--ring-faint);
+      padding-top: var(--s3);
+    }
+
+    .top-tab::before { left: 0; top: 0; transform: none; }
+    .intro-copy { text-align: left; }
+    .nested-rail {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--s3);
+    }
+
+    .nested-tab {
+      min-height: 44px;
+      border-top: 5px solid var(--ring-faint);
+      padding-top: var(--s3);
+    }
+
+    .nested-tab::before { left: 0; top: 0; transform: none; }
+    .function-row,
+    .status-grid,
+    .manifesto-grid,
+    .pathway-grid,
+    .faq-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .about-page {
+      padding: 116px var(--s5) var(--s6);
+    }
+
+    h1 { font-size: 68px; }
+    .tab-rail,
+    .nested-rail {
+      display: flex;
+      flex-direction: row;
+      gap: var(--s4);
+      overflow-x: auto;
+      padding-bottom: var(--s4);
+      scrollbar-width: thin;
+    }
+
+    .top-tab,
+    .nested-tab {
+      width: auto;
+      min-width: max-content;
+      padding-right: var(--s2);
+    }
+
+    .panel-shell { padding-top: var(--s5); }
+    .section-grid,
+    .status-grid,
+    .manifesto-grid,
+    .pathway-grid,
+    .faq-grid,
+    .bio-stack,
+    .library-grid,
+    .press-grid,
+    .function-row {
+      grid-template-columns: 1fr;
+    }
+
+    .map-stage { min-height: 460px; }
+    .map-node {
+      min-width: 84px;
+      font-size: 9px;
+    }
+
+    .timeline-item {
+      grid-template-columns: 1fr;
+      gap: var(--s2);
+    }
+  }
+</style>
+</head>
+<body data-venture="about">
+  <div class="grain" aria-hidden="true"></div>
+
+  <main class="about-page entrance-fade">
+    <section class="intro" aria-labelledby="page-title">
+      <div>
+        <span class="eyebrow">about node</span>
+        <h1 id="page-title">About.</h1>
+      </div>
+      <p class="intro-copy">
+        The orientation layer for the six.well construct: system map, origin point,
+        entry paths, public record, and live operating language.
+      </p>
+    </section>
+
+    <section class="about-layout" aria-label="about node sections">
+      <nav class="tab-rail" aria-label="about tabs">
+        <button class="top-tab is-active" type="button" data-tab="construct">The six.well Construct</button>
+        <button class="top-tab" type="button" data-tab="saiel">Saiel Dauhn Solehman</button>
+        <button class="top-tab" type="button" data-tab="access">Access</button>
+        <button class="top-tab" type="button" data-tab="library">Library</button>
+        <button class="top-tab" type="button" data-tab="contact">Contact / Press</button>
+        <button class="top-tab" type="button" data-tab="faq">FAQ</button>
+      </nav>
+
+      <div class="panel-shell">
+        <article class="panel is-active" id="panel-construct" data-panel="construct">
+          <header class="panel-head">
+            <div>
+              <span class="panel-kicker">primary system layer</span>
+              <h2 class="panel-title">The six.well Construct</h2>
+            </div>
+            <p class="panel-lede">
+              A living structure for work that refuses to stay in one discipline.
+              The construct names the containers, shows how they connect, and keeps
+              each node accountable to the whole.
+            </p>
+          </header>
+
+          <div class="construct-grid">
+            <nav class="nested-rail" aria-label="construct sections">
+              <button class="nested-tab is-active" type="button" data-construct-section="overview">Overview</button>
+              <button class="nested-tab" type="button" data-construct-section="architecture">Architecture</button>
+              <button class="nested-tab" type="button" data-construct-section="framework">Framework</button>
+              <button class="nested-tab" type="button" data-construct-section="timeline">Timeline</button>
+              <button class="nested-tab" type="button" data-construct-section="state">Current State</button>
+              <button class="nested-tab" type="button" data-construct-section="manifesto">Manifesto</button>
+              <button class="nested-tab" type="button" data-construct-section="collaborators">Collaborators</button>
+              <button class="nested-tab" type="button" data-construct-section="accesspoints">Access Points</button>
+              <button class="nested-tab" type="button" data-construct-section="links">Links</button>
+            </nav>
+
+            <div class="construct-sections">
+              <section class="construct-section is-active" id="construct-overview" data-construct-panel="overview">
+                <span class="section-kicker">overview</span>
+                <div class="section-grid">
+                  <div class="text-block">
+                    <h3>What it is</h3>
+                    <p>
+                      The six.well construct is a creative operating system: a set of
+                      nodes that hold art, tattooing, merch, writing, film, music,
+                      events, archive, and the context that binds them.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>What it is not</h3>
+                    <p>
+                      It is not a moodboard, a loose brand family, or a pile of side
+                      projects. It is a structure built to let each discipline fund,
+                      document, sharpen, and challenge the others.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Intent</h3>
+                    <p>
+                      The intent is coherence without flattening. The work can move
+                      between commerce, ritual, image, object, language, and gathering
+                      without pretending those forms are separate lives.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Purpose</h3>
+                    <p>
+                      The purpose is to create, fund, distribute, archive, and evolve
+                      work through a system that can hold both public entry points and
+                      private logic.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-architecture" data-construct-panel="architecture">
+                <span class="section-kicker">architecture</span>
+                <div class="map-layout">
+                  <div class="map-stage" aria-label="animated construct map">
+                    <canvas id="constructMap"></canvas>
+                    <div class="node-buttons" id="nodeButtons"></div>
+                  </div>
+                  <aside class="node-detail" aria-live="polite">
+                    <h3 id="nodeTitle">About</h3>
+                    <p id="nodeCopy">
+                      The context layer. It explains the system, the origin point,
+                      the ways in, and the record around the work.
+                    </p>
+                    <div class="node-meta" id="nodeLinks"></div>
+                  </aside>
+                </div>
+
+                <div class="section-grid" style="margin-top: var(--s6);">
+                  <div class="text-block">
+                    <h3>Intent + purpose</h3>
+                    <p>
+                      The construct exists so each node can do specific work without
+                      losing relationship to the larger body. It gives shape to a
+                      practice that is artistic, operational, commercial, archival,
+                      and social at once.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>What this holds</h3>
+                    <p>
+                      Finished work, unfinished systems, public offerings, private
+                      methods, collaborators, experiments, evidence, objects, rituals,
+                      records, and future doors.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="function-row" style="margin-top: var(--s6);" aria-label="function model">
+                  <div class="function-chip"><span>Create</span><p>Make work through image, mark, event, object, sound, and text.</p></div>
+                  <div class="function-chip"><span>Fund</span><p>Let offerings support the next layer of the system.</p></div>
+                  <div class="function-chip"><span>Distribute</span><p>Move work through pages, products, appointments, gatherings, and letters.</p></div>
+                  <div class="function-chip"><span>Archive</span><p>Keep proof, process, and abandoned paths visible enough to matter.</p></div>
+                  <div class="function-chip"><span>Evolve</span><p>Allow nodes to split, merge, pause, or sharpen as the work changes.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-framework" data-construct-panel="framework">
+                <span class="section-kicker">framework</span>
+                <div class="section-grid">
+                  <div class="text-block">
+                    <h3>Principles</h3>
+                    <p>
+                      Nothing enters because it looks good next to the rest. It enters
+                      because it has a function, a charge, and a relationship to the
+                      whole.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>System design</h3>
+                    <p>
+                      Nodes organize energy. Containers give that energy a form.
+                      Links keep the form from becoming isolated. The archive remembers
+                      what the active system cannot carry every day.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Core concepts</h3>
+                    <p>
+                      Nodes are active disciplines or ventures. Containers are the
+                      formats that hold them. Myth logic is the symbolic pressure that
+                      keeps the system from becoming plain administration.
+                    </p>
+                  </div>
+                  <div class="text-block">
+                    <h3>Rules</h3>
+                    <p>
+                      Things are added when they create a useful relation. Things evolve
+                      when the old container becomes too small. Things are archived when
+                      they still matter but no longer need to lead.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-timeline" data-construct-panel="timeline">
+                <span class="section-kicker">timeline</span>
+                <div class="timeline-list">
+                  <div class="timeline-item">
+                    <span class="timeline-year">Origin</span>
+                    <div><h3>Practice before system</h3><p>The work begins as separate disciplines, each demanding its own room.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Key shifts</span>
+                    <div><h3>Nodes become containers</h3><p>The names and pages start acting as structure, not just labels.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Active era</span>
+                    <div><h3>The construct becomes public</h3><p>Index pages, offerings, archive paths, and entry points begin to connect.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Current phase</span>
+                    <div><h3>System clarity</h3><p>The About node explains how the whole thing works and where people should enter.</p></div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-year">Coming next</span>
+                    <div><h3>Deeper proof</h3><p>More live records, collaborator histories, press material, and archive bridges.</p></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-state" data-construct-panel="state">
+                <span class="section-kicker">current state</span>
+                <div class="status-grid">
+                  <div class="stat-block"><h3>Active nodes</h3><p>Tattooing, art, merch, writings, archive, and About are active public pathways.</p></div>
+                  <div class="stat-block"><h3>In development</h3><p>Events, music, film, library depth, collaborator records, and press surfaces.</p></div>
+                  <div class="stat-block"><h3>Paused / archived</h3><p>Past iterations, abandoned concepts, process fragments, and dormant project rooms.</p></div>
+                  <div class="stat-block"><h3>Current priorities</h3><p>Make the system legible, preserve the voice, and give each entry point a practical next step.</p></div>
+                  <div class="stat-block"><h3>Last updated</h3><p>About node structure drafted and implemented as the current public orientation layer.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-manifesto" data-construct-panel="manifesto">
+                <span class="section-kicker">manifesto</span>
+                <div class="manifesto-grid">
+                  <div class="stat-block"><h3>Beliefs</h3><p>Art can be a business without becoming hollow. Systems can be poetic without becoming vague.</p></div>
+                  <div class="stat-block"><h3>Rejections</h3><p>The construct rejects flattened branding, disposable output, and the idea that discipline has to mean separation.</p></div>
+                  <div class="stat-block"><h3>Direction</h3><p>Build a body of work that can hold itself, feed itself, remember itself, and keep mutating.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-collaborators" data-construct-panel="collaborators">
+                <span class="section-kicker">collaborators</span>
+                <div class="section-grid">
+                  <div class="text-block"><h3>Active collaborators</h3><p>People currently helping build, document, host, fabricate, perform, design, produce, or support active nodes.</p></div>
+                  <div class="text-block"><h3>Past collaborators</h3><p>People whose work, labor, presence, or exchange shaped earlier forms of the system.</p></div>
+                  <div class="text-block"><h3>Upcoming collaborators</h3><p>Future project partners, invited artists, volunteers, vendors, and temporary working groups.</p></div>
+                  <div class="text-block"><h3>By node / project</h3><p>Collaborators should eventually be tagged to the node or project they helped carry.</p></div>
+                  <div class="text-block"><h3>Volunteer / open-call pathways</h3><p>Clear ways for people to enter without guessing what kind of help is actually useful.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-accesspoints" data-construct-panel="accesspoints">
+                <span class="section-kicker">access points into the construct</span>
+                <div class="pathway-grid">
+                  <div class="pathway"><h3>Tattoos</h3><p>Enter through the body, appointment, flash, special project, or ritualized mark.</p></div>
+                  <div class="pathway"><h3>Events</h3><p>Enter through gathering, performance, hosting, shared time, and live participation.</p></div>
+                  <div class="pathway"><h3>Merch</h3><p>Enter through objects, garments, printed matter, and commerce that feeds the system.</p></div>
+                  <div class="pathway"><h3>Writings / letters</h3><p>Enter through language, record, theory, update, confession, and public thinking.</p></div>
+                  <div class="pathway"><h3>Archive</h3><p>Enter through residue, process, abandoned concepts, evidence, and past versions.</p></div>
+                </div>
+              </section>
+
+              <section class="construct-section" id="construct-links" data-construct-panel="links">
+                <span class="section-kicker">links to indexes + archive</span>
+                <ul class="text-list">
+                  <li><strong>Tattooing</strong><a class="link-pill" href="/tattoos/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Art making</strong><a class="link-pill" href="/art/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Merch</strong><a class="link-pill" href="/merch/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Events</strong><a class="link-pill" href="/events/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Music</strong><a class="link-pill" href="/music/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Writings</strong><a class="link-pill" href="/writings/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                  <li><strong>Film</strong><a class="link-pill" href="/film/">Index</a> <a class="link-pill" href="/archive/">Archive</a></li>
+                </ul>
+              </section>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel" id="panel-saiel" data-panel="saiel">
+          <header class="panel-head">
+            <div>
+              <span class="panel-kicker">origin point</span>
+              <h2 class="panel-title">Saiel Dauhn Solehman</h2>
+            </div>
+            <p class="panel-lede">
+              Founder, creator, visionary, artist, thinker, operator, and one-woman
+              army behind the construct.
+            </p>
+          </header>
+          <div class="bio-grid">
+            <div class="bio-copy">
+              <div class="text-block"><h3>Founder statement</h3><p>I build systems because the work keeps arriving in more than one form. The construct is the room I made so the forms could stop apologizing for knowing each other.</p></div>
+              <div class="text-block"><h3>Formal bio</h3><p>Saiel Dauhn Solehman is an interdisciplinary artist and founder working across tattooing, painting, systems, objects, writing, film, sound, and event-based forms.</p></div>
+              <div class="text-block"><h3>Method</h3><p>The method is accumulation with discipline: observe the charge, choose the container, make the work, document the residue, and let the result alter the system.</p></div>
+            </div>
+            <div class="bio-stack">
+              <div class="stat-block"><h3>Discipline stack</h3><p>Tattooing, painting, film, writing, design, hosting, commerce, archive, and system architecture.</p></div>
+              <div class="stat-block"><h3>Select work</h3><p>A tight edit belongs here: major paintings, tattoo projects, written pieces, films, events, and objects.</p></div>
+              <div class="stat-block"><h3>Practice links</h3><p><a class="link-pill" href="/art/">Art</a> <a class="link-pill" href="/tattoos/">Tattooing</a> <a class="link-pill" href="/writings/">Writings</a></p></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel" id="panel-access" data-panel="access">
+          <header class="panel-head">
+            <div><span class="panel-kicker">entry points</span><h2 class="panel-title">Access</h2></div>
+            <p class="panel-lede">This is where the maze gives you doors. Choose the form of entry that matches what you need.</p>
+          </header>
+          <div class="pathway-grid">
+            <div class="pathway"><h3>Work with me</h3><p>Book tattoo work, commission a project, inquire about acquisition, or request a focused collaboration.</p><a class="link-pill" href="/tattoos/inquire/">Tattoo inquiry</a></div>
+            <div class="pathway"><h3>Enter a project</h3><p>Events, open calls, volunteer support, and node-specific project entry points will live here.</p><a class="link-pill" href="/events/">Events</a></div>
+            <div class="pathway"><h3>Follow the system</h3><p>Track the work through writings, archive updates, drops, releases, and public records.</p><a class="link-pill" href="/writings/">Writings</a></div>
+            <div class="pathway"><h3>Practical pathways</h3><p>Use the index pages when you know the node. Use Library or Archive when you are tracing the record.</p><a class="link-pill" href="/archive/">Archive</a></div>
+          </div>
+        </article>
+
+        <article class="panel" id="panel-library" data-panel="library">
+          <header class="panel-head">
+            <div><span class="panel-kicker">archive bridge</span><h2 class="panel-title">Library</h2></div>
+            <p class="panel-lede">A calmer bridge into the record: projects, writing, visual work, and past iterations of nodes.</p>
+          </header>
+          <div class="library-grid">
+            <div class="text-block"><h3>Projects</h3><p>Finished, active, paused, and unrealized project rooms from across the construct.</p></div>
+            <div class="text-block"><h3>Writing</h3><p>Letters, statements, fragments, frameworks, and public thought records.</p></div>
+            <div class="text-block"><h3>Visual work</h3><p>Images, paintings, process documentation, sketch material, and visual evidence.</p></div>
+            <div class="text-block"><h3>Past iterations of nodes</h3><p>Older names, abandoned structures, temporary containers, and proof of evolution.</p></div>
+          </div>
+        </article>
+
+        <article class="panel" id="panel-contact" data-panel="contact">
+          <header class="panel-head">
+            <div><span class="panel-kicker">contact / press</span><h2 class="panel-title">Contact / Press</h2></div>
+            <p class="panel-lede">Utility without shrinking the system: inquiries, links, press text, and features.</p>
+          </header>
+          <div class="press-grid">
+            <div class="text-block"><h3>Inquiries</h3><p>Use node-specific forms when possible. General inquiries can be routed here once the public contact channel is finalized.</p></div>
+            <div class="text-block"><h3>Practical links</h3><p><a class="link-pill" href="/tattoos/inquire/">Tattoo inquiry</a> <a class="link-pill" href="/art/acquisitioninquiry.html">Acquire art</a> <a class="link-pill" href="/events/">Events</a></p></div>
+            <div class="text-block"><h3>Press text</h3><p>Short bio, construct description, and project language can be placed here for clean public reference.</p></div>
+            <div class="text-block"><h3>Features</h3><p>Press, interviews, external documentation, and notable public mentions will collect here.</p></div>
+          </div>
+        </article>
+
+        <article class="panel" id="panel-faq" data-panel="faq">
+          <header class="panel-head">
+            <div><span class="panel-kicker">questions</span><h2 class="panel-title">FAQ</h2></div>
+            <p class="panel-lede">Not client service basics. System questions, collaboration questions, process questions.</p>
+          </header>
+          <div class="faq-grid">
+            <div class="faq-item"><h3>System questions</h3><p>What is a node? What is a container? Why are disciplines connected instead of separated?</p></div>
+            <div class="faq-item"><h3>Collaboration questions</h3><p>How do people enter a project, volunteer, contribute, or become attached to a node?</p></div>
+            <div class="faq-item"><h3>Process questions</h3><p>How are projects added, changed, paused, archived, or made public?</p></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer-links">
+      <a href="/">return to construct</a>
+      <a href="/archive/">archive</a>
+      <a href="/art/">art</a>
+      <a href="/tattoos/">tattooing</a>
+      <a href="/merch/">merch</a>
+      <a href="/writings/">writings</a>
+    </footer>
+  </main>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script>
+    (function() {
+      const tabButtons = Array.from(document.querySelectorAll('[data-tab]'));
+      const panels = Array.from(document.querySelectorAll('[data-panel]'));
+      const nestedButtons = Array.from(document.querySelectorAll('[data-construct-section]'));
+      const constructPanels = Array.from(document.querySelectorAll('[data-construct-panel]'));
+
+      const nodes = [
+        { key: 'tattooing', label: 'Tattooing', color: '#8F231D', url: '/tattoos/', note: 'The mark, the appointment, the ritual, and the public/private threshold of the body.' },
+        { key: 'art', label: 'Art making', color: '#0581C1', url: '/art/', note: 'Paintings, objects, statements, images, and the visual grammar of the construct.' },
+        { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', note: 'Commerce as object system: garments, prints, editions, and things that help fund the next layer.' },
+        { key: 'about', label: 'About', color: '#FCB867', url: '/about/', note: 'The context layer. It explains the system, the origin point, the ways in, and the record around the work.' },
+        { key: 'events', label: 'Events', color: '#55BA5A', url: '/events/', note: 'Gatherings, hosting, temporary containers, public ritual, and live social structure.' },
+        { key: 'music', label: 'Music', color: '#A856A1', url: '/music/', note: 'Sound, scores, releases, ringtones, and audio fragments attached to the wider system.' },
+        { key: 'writings', label: 'Writings', color: '#328C84', url: '/writings/', note: 'Letters, statements, field notes, theory, and language that keeps the system legible.' },
+        { key: 'archive', label: 'Archive', color: '#EC5E26', url: '/archive/', note: 'The record: process, sketches, abandoned concepts, ephemera, and old versions that still speak.' },
+        { key: 'film', label: 'Film', color: '#FFE7CA', url: '/film/', note: 'Moving image, performance trace, animation, documentation, and cinematic containers.' }
+      ];
+
+      let activeNode = nodes.findIndex(node => node.key === 'about');
+      const nodeButtons = document.getElementById('nodeButtons');
+      const nodeTitle = document.getElementById('nodeTitle');
+      const nodeCopy = document.getElementById('nodeCopy');
+      const nodeLinks = document.getElementById('nodeLinks');
+      const canvas = document.getElementById('constructMap');
+      const ctx = canvas ? canvas.getContext('2d') : null;
+      let mapTime = 0;
+
+      function activateTopTab(key, updateHash) {
+        const target = panels.find(panel => panel.dataset.panel === key);
+        if (!target) return;
+        tabButtons.forEach(button => button.classList.toggle('is-active', button.dataset.tab === key));
+        panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.panel === key));
+        if (updateHash) history.replaceState(null, '', '#' + key);
+      }
+
+      function activateConstructSection(key, updateHash) {
+        const target = constructPanels.find(panel => panel.dataset.constructPanel === key);
+        if (!target) return;
+        nestedButtons.forEach(button => button.classList.toggle('is-active', button.dataset.constructSection === key));
+        constructPanels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.constructPanel === key));
+        if (updateHash) history.replaceState(null, '', '#construct-' + key);
+      }
+
+      function readHash() {
+        const raw = window.location.hash.replace('#', '').toLowerCase();
+        if (!raw) return;
+        if (raw.startsWith('construct-')) {
+          activateTopTab('construct', false);
+          activateConstructSection(raw.replace('construct-', ''), false);
+          return;
+        }
+        activateTopTab(raw, false);
+      }
+
+      function setNode(index) {
+        activeNode = index;
+        const node = nodes[index];
+        nodeTitle.textContent = node.label;
+        nodeTitle.style.color = node.color;
+        nodeCopy.textContent = node.note;
+        nodeLinks.innerHTML = '';
+        const indexLink = document.createElement('a');
+        indexLink.className = 'link-pill';
+        indexLink.href = node.url;
+        indexLink.textContent = node.key === 'about' ? 'Current node' : 'Index';
+        const archiveLink = document.createElement('a');
+        archiveLink.className = 'link-pill';
+        archiveLink.href = '/archive/';
+        archiveLink.textContent = 'Archive';
+        nodeLinks.append(indexLink, archiveLink);
+        Array.from(document.querySelectorAll('.map-node')).forEach((button, buttonIndex) => {
+          button.classList.toggle('is-active', buttonIndex === activeNode);
+        });
+      }
+
+      function buildNodeButtons() {
+        if (!nodeButtons) return;
+        nodeButtons.innerHTML = '';
+        nodes.forEach((node, index) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'map-node';
+          button.textContent = node.label;
+          button.style.setProperty('--node-color', node.color);
+          button.dataset.node = node.key;
+          button.addEventListener('click', () => setNode(index));
+          nodeButtons.appendChild(button);
+        });
+        setNode(activeNode);
+      }
+
+      function positionNodeButtons() {
+        if (!nodeButtons) return;
+        const bounds = nodeButtons.getBoundingClientRect();
+        const width = bounds.width || 1;
+        const height = bounds.height || 1;
+        const radiusX = Math.max(92, width * 0.34);
+        const radiusY = Math.max(122, height * 0.33);
+        const cx = width / 2;
+        const cy = height / 2;
+        Array.from(nodeButtons.children).forEach((button, index) => {
+          const angle = -Math.PI / 2 + index * (Math.PI * 2 / nodes.length);
+          button.style.left = (cx + Math.cos(angle) * radiusX) + 'px';
+          button.style.top = (cy + Math.sin(angle) * radiusY) + 'px';
+        });
+      }
+
+      function resizeCanvas() {
+        if (!canvas || !ctx) return;
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        positionNodeButtons();
+      }
+
+      function drawMap(timestamp) {
+        if (!ctx || !canvas) return;
+        mapTime = timestamp * 0.001;
+        const rect = canvas.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const cx = width / 2;
+        const cy = height / 2;
+        const radiusX = Math.max(92, width * 0.34);
+        const radiusY = Math.max(122, height * 0.33);
+        ctx.clearRect(0, 0, width, height);
+
+        const points = nodes.map((node, index) => {
+          const angle = -Math.PI / 2 + index * (Math.PI * 2 / nodes.length);
+          const drift = Math.sin(mapTime * 0.8 + index) * 3;
+          return {
+            x: cx + Math.cos(angle) * (radiusX + drift),
+            y: cy + Math.sin(angle) * (radiusY + drift),
+            node
+          };
+        });
+
+        ctx.lineWidth = 1;
+        points.forEach(point => {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(point.x, point.y);
+          ctx.strokeStyle = 'rgba(252, 184, 103, 0.12)';
+          ctx.stroke();
+        });
+
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          if (index === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
+        });
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(252, 184, 103, 0.18)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 28 + Math.sin(mapTime) * 2, 0, Math.PI * 2);
+        ctx.arc(cx, cy, 18, 0, Math.PI * 2, true);
+        ctx.fillStyle = 'rgba(109, 61, 21, 0.82)';
+        ctx.fill();
+
+        points.forEach((point, index) => {
+          const isActive = index === activeNode;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, isActive ? 9 : 5, 0, Math.PI * 2);
+          ctx.fillStyle = point.node.color;
+          ctx.globalAlpha = isActive ? 1 : 0.42;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+
+        requestAnimationFrame(drawMap);
+      }
+
+      tabButtons.forEach(button => {
+        button.addEventListener('click', () => activateTopTab(button.dataset.tab, true));
+      });
+
+      nestedButtons.forEach(button => {
+        button.addEventListener('click', () => activateConstructSection(button.dataset.constructSection, true));
+      });
+
+      buildNodeButtons();
+      resizeCanvas();
+      readHash();
+      window.addEventListener('hashchange', readHash);
+      window.addEventListener('resize', resizeCanvas);
+      requestAnimationFrame(drawMap);
+    })();
+  </script>
+</body>
+</html>

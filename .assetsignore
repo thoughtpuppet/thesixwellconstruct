@@ -4,3 +4,4 @@ wrangler.jsonc
 README.md
 .dev.vars.example
 tools/
+.hidden-pages/
