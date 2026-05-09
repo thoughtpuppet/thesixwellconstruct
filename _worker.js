@@ -68,7 +68,10 @@ function isHiddenPublicPath(pathname) {
   const normalizedPath = normalizePath(pathname);
   return HIDDEN_PUBLIC_PATHS.some((hiddenPath) => {
     const normalizedHidden = normalizePath(hiddenPath);
-    return normalizedPath === normalizedHidden;
+    return (
+      normalizedPath === normalizedHidden ||
+      normalizedPath.startsWith(`${normalizedHidden}/`)
+    );
   });
 }
 
@@ -211,7 +214,7 @@ async function handleShopApi(request, env) {
 
   if (pathname === "/api/shop/cart") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
-    return handleGetCart(request, env);
+    return handleGetCart(env);
   }
 
   if (pathname === "/api/shop/cart/create") {
