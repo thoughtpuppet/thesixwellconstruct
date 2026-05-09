@@ -24,18 +24,18 @@ const types = new Map([
 ]);
 
 const checkRoutes = [
-  "/",
-  "/edit-links.html",
-  "/edit-links",
-  "/events/",
-  "/music/",
-  "/film/",
-  "/writings/",
-  "/archive/",
-  "/tattoos/",
-  "/merch/",
-  "/art/",
-  "/js/live-text-editor.js",
+  ["/", 200],
+  ["/edit-links.html", 200],
+  ["/edit-links", 200],
+  ["/events/", 404],
+  ["/music/", 404],
+  ["/film/", 404],
+  ["/writings/", 404],
+  ["/archive/", 404],
+  ["/tattoos/", 200],
+  ["/merch/", 200],
+  ["/art/", 200],
+  ["/js/live-text-editor.js", 200],
 ];
 
 const localOnlyRoutes = new Map([
@@ -44,6 +44,31 @@ const localOnlyRoutes = new Map([
   ["/edit-links.html", "tools/edit-links.html"],
   ["/js/live-text-editor.js", "tools/live-text-editor.js"],
 ]);
+
+const hiddenPublicPaths = new Set([
+  "/about",
+  "/archive",
+  "/events",
+  "/film",
+  "/music",
+  "/writings",
+]);
+
+function normalizeRoute(urlPath) {
+  let normalized = decodeURIComponent(urlPath.split("?")[0].split("#")[0]) || "/";
+  if (!normalized.startsWith("/")) normalized = `/${normalized}`;
+  normalized = normalized.replace(/\/index\.html$/i, "/");
+  if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, "");
+  return normalized || "/";
+}
+
+function isHiddenPublicRoute(urlPath) {
+  const normalized = normalizeRoute(urlPath);
+  for (const hiddenPath of hiddenPublicPaths) {
+    if (normalized === hiddenPath || normalized.startsWith(`${hiddenPath}/`)) return true;
+  }
+  return false;
+}
 
 function safePath(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
@@ -76,6 +101,12 @@ async function resolveFile(urlPath) {
 }
 
 const server = createServer(async (req, res) => {
+  if (isHiddenPublicRoute(req.url || "/")) {
+    res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+    createReadStream(path.resolve(root, "404.html")).pipe(res);
+    return;
+  }
+
   const file = await resolveFile(req.url || "/");
   if (!file) {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
@@ -97,10 +128,10 @@ async function runCheck() {
   let failed = false;
 
   try {
-    for (const route of checkRoutes) {
+    for (const [route, expectedStatus] of checkRoutes) {
       const response = await fetch(`http://${host}:${testPort}${route}`);
       console.log(`${route} ${response.status}`);
-      if (response.status !== 200) failed = true;
+      if (response.status !== expectedStatus) failed = true;
       await response.arrayBuffer();
     }
   } finally {
