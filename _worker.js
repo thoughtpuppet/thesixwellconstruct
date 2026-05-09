@@ -11,6 +11,7 @@ import {
   serverError,
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
+import { HIDDEN_PUBLIC_PATHS } from "./shared/page-visibility.js";
 
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
@@ -36,8 +37,31 @@ function isLocalOnlyPath(pathname) {
     pathname === "/edit-links" ||
     pathname === "/edit-links/" ||
     pathname === "/edit-links.html" ||
-    pathname === "/js/live-text-editor.js"
+    pathname === "/tools/edit-links.html" ||
+    pathname === "/page-visibility" ||
+    pathname === "/page-visibility/" ||
+    pathname === "/page-visibility.html" ||
+    pathname === "/tools/page-visibility.html" ||
+    pathname === "/tools/live-text-editor.js" ||
+    pathname === "/js/live-text-editor.js" ||
+    pathname === "/shared/page-visibility.js"
   );
+}
+
+function normalizePath(pathname) {
+  let normalized = pathname || "/";
+  if (!normalized.startsWith("/")) normalized = `/${normalized}`;
+  normalized = normalized.replace(/\/index\.html$/i, "/");
+  if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, "");
+  return normalized || "/";
+}
+
+function isHiddenPublicPath(pathname) {
+  const normalizedPath = normalizePath(pathname);
+  return HIDDEN_PUBLIC_PATHS.some((hiddenPath) => {
+    const normalizedHidden = normalizePath(hiddenPath);
+    return normalizedPath === normalizedHidden;
+  });
 }
 
 function lineInputs(lines = []) {
@@ -209,6 +233,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (isLocalOnlyPath(url.pathname) && !isLocalPreview(url)) {
+      return notFound();
+    }
+
+    if (!isLocalPreview(url) && isHiddenPublicPath(url.pathname)) {
       return notFound();
     }
 

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>page visibility - the six.well construct</title>
+<style>
+  :root {
+    --bg:#0e0e0e;
+    --panel:#141414;
+    --text:#FFE7CA;
+    --muted:rgba(255,231,202,0.62);
+    --dim:rgba(255,231,202,0.36);
+    --accent:#FCB867;
+    --blue:#0581C1;
+    --green:#55BA5A;
+    --red:#8F231D;
+    --ring:rgba(252,184,103,0.22);
+    --sans:Inter,"Helvetica Neue",Arial,sans-serif;
+    --serif:Georgia,"Times New Roman",Times,serif;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--serif);
+    padding:48px clamp(18px,4vw,56px);
+    overflow-x:hidden;
+  }
+  main { max-width:1240px; margin:0 auto; min-width:0; }
+  header {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:24px;
+    align-items:end;
+    padding-bottom:28px;
+    border-bottom:5px solid var(--ring);
+  }
+  h1 {
+    margin:0;
+    font-family:var(--sans);
+    font-size:clamp(40px,8vw,112px);
+    line-height:0.88;
+    letter-spacing:0;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  .meta {
+    width:min(100%,360px);
+    margin:0 0 8px;
+    color:var(--muted);
+    font-size:11px;
+    line-height:1.55;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    text-align:right;
+  }
+  .toolbar {
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    justify-content:space-between;
+    margin:24px 0 18px;
+  }
+  .actions { display:flex; flex-wrap:wrap; gap:10px; }
+  button {
+    min-height:42px;
+    border:1px solid rgba(252,184,103,0.28);
+    background:transparent;
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    padding:0 14px;
+    cursor:pointer;
+  }
+  button:hover,
+  button:focus-visible {
+    outline:none;
+    border-color:var(--accent);
+    color:var(--accent);
+  }
+  button.primary {
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#111;
+  }
+  button.danger { border-color:rgba(143,35,29,0.82); color:#ffb6ad; }
+  button.safe { border-color:rgba(85,186,90,0.7); color:#baf5bd; }
+  button:disabled { cursor:not-allowed; opacity:0.42; }
+  .status {
+    margin:0;
+    color:var(--muted);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;
+    line-height:1.4;
+  }
+  .grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));
+    gap:14px;
+  }
+  .page-card {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:16px;
+    align-items:center;
+    border:2px solid var(--ring);
+    background:var(--panel);
+    padding:16px;
+    min-width:0;
+  }
+  .page-card.hidden {
+    border-color:rgba(143,35,29,0.72);
+    background:rgba(143,35,29,0.12);
+  }
+  .label {
+    margin:0 0 8px;
+    font-family:var(--sans);
+    font-size:13px;
+    font-weight:850;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text);
+  }
+  .path {
+    margin:0;
+    color:var(--dim);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .badge {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:72px;
+    min-height:28px;
+    border:1px solid rgba(85,186,90,0.66);
+    color:#baf5bd;
+    font-family:var(--sans);
+    font-size:10px;
+    font-weight:850;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+  }
+  .hidden .badge {
+    border-color:rgba(143,35,29,0.82);
+    color:#ffb6ad;
+  }
+  .unsupported {
+    display:none;
+    margin:18px 0 0;
+    border:2px solid rgba(143,35,29,0.82);
+    padding:14px;
+    color:#ffb6ad;
+    line-height:1.45;
+  }
+  body.no-file-system .unsupported { display:block; }
+  @media (max-width:720px) {
+    body { padding:28px 14px; }
+    header { display:block; }
+    .meta { text-align:left; margin-top:18px; }
+    .page-card { grid-template-columns:1fr; }
+    .page-card button { width:100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>page visibility</h1>
+    <p class="meta">local-only controls for hiding or restoring deployed public pages.</p>
+  </header>
+
+  <p class="unsupported">This tool needs Chrome or Edge on localhost so it can write the visibility file after you choose the site folder.</p>
+
+  <div class="toolbar">
+    <div class="actions">
+      <button class="primary" id="chooseFolder" type="button">Choose site folder</button>
+      <button id="reloadState" type="button">Reload</button>
+      <button id="showAll" class="safe" type="button">Show all pages</button>
+    </div>
+    <p class="status" id="status">Choose the site folder to begin.</p>
+  </div>
+
+  <section class="grid" id="pageGrid" aria-label="page visibility controls"></section>
+</main>
+
+<script type="module">
+import { HIDDEN_PUBLIC_PATHS } from "/shared/page-visibility.js";
+
+const FILE_PATH = ["shared", "page-visibility.js"];
+const pages = [
+  { label: "Home", path: "/" },
+  { label: "About", path: "/about/" },
+  { label: "Archive", path: "/archive/" },
+  { label: "Events", path: "/events/" },
+  { label: "Film", path: "/film/" },
+  { label: "Music", path: "/music/" },
+  { label: "Writings", path: "/writings/" },
+  { label: "Art Index", path: "/art/" },
+  { label: "Acquisition Inquiry", path: "/art/acquisitioninquiry.html" },
+  { label: "Homeland Security", path: "/art/homelandsecuritypainting.html" },
+  { label: "Lost Marbles Painting", path: "/art/lostmarblespainting.html" },
+  { label: "Lust Painting", path: "/art/lustpainting.html" },
+  { label: "Paranoia & Fostered Trauma", path: "/art/paranoiafosteredtraumapainting.html" },
+  { label: "Sloth Painting", path: "/art/slothpainting.html" },
+  { label: "The Frustrations Of Inner Chaos", path: "/art/thefrustrationsofinnercharospainting.html" },
+  { label: "Merch Index", path: "/merch/" },
+  { label: "Am I Losing My Marbles", path: "/merch/am-i-losing-my-marbles.html" },
+  { label: "Lost Marbles Hoodie", path: "/merch/lostmarbles-hoodie.html" },
+  { label: "Marbles Print", path: "/merch/marbles-print.html" },
+  { label: "Tattooing Index", path: "/tattooing/" },
+  { label: "Special Projects", path: "/tattooing/special-projects/" },
+  { label: "Special Projects Apply", path: "/tattooing/special-projects/apply/" },
+  { label: "Tattoos Index", path: "/tattoos/" },
+  { label: "Approved", path: "/tattoos/approved/" },
+  { label: "Booking", path: "/tattoos/booking/" },
+  { label: "Flash", path: "/tattoos/flash/" },
+  { label: "Inquire", path: "/tattoos/inquire/" },
+  { label: "Portfolio", path: "/tattoos/portfolio/" },
+  { label: "Submission Received", path: "/tattoos/submission-received/" }
+];
+
+const state = {
+  folderHandle: null,
+  hiddenPaths: new Set(HIDDEN_PUBLIC_PATHS.map(normalizePath))
+};
+
+const els = {
+  chooseFolder: document.querySelector("#chooseFolder"),
+  reloadState: document.querySelector("#reloadState"),
+  showAll: document.querySelector("#showAll"),
+  status: document.querySelector("#status"),
+  pageGrid: document.querySelector("#pageGrid")
+};
+
+if (!("showDirectoryPicker" in window)) {
+  document.body.classList.add("no-file-system");
+  els.chooseFolder.disabled = true;
+}
+
+function normalizePath(path) {
+  let normalized = path || "/";
+  if (!normalized.startsWith("/")) normalized = `/${normalized}`;
+  normalized = normalized.replace(/\/index\.html$/i, "/");
+  if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, "");
+  return normalized || "/";
+}
+
+function displayPath(path) {
+  return path === "/" ? "/" : path;
+}
+
+function setStatus(message) {
+  els.status.textContent = message;
+}
+
+function serializeVisibility() {
+  const paths = Array.from(state.hiddenPaths).sort();
+  return `export const HIDDEN_PUBLIC_PATHS = ${JSON.stringify(paths, null, 2)};\n`;
+}
+
+async function getVisibilityFile() {
+  if (!state.folderHandle) throw new Error("Choose the site folder first.");
+  let current = state.folderHandle;
+  for (const segment of FILE_PATH.slice(0, -1)) {
+    current = await current.getDirectoryHandle(segment);
+  }
+  return current.getFileHandle(FILE_PATH.at(-1), { create: true });
+}
+
+async function writeVisibilityFile() {
+  const fileHandle = await getVisibilityFile();
+  const writable = await fileHandle.createWritable();
+  await writable.write(serializeVisibility());
+  await writable.close();
+}
+
+async function saveAndRender(message) {
+  await writeVisibilityFile();
+  render();
+  setStatus(message);
+}
+
+function render() {
+  els.pageGrid.innerHTML = "";
+  pages.forEach((page) => {
+    const path = normalizePath(page.path);
+    const isHidden = state.hiddenPaths.has(path);
+    const card = document.createElement("article");
+    card.className = `page-card${isHidden ? " hidden" : ""}`;
+    card.innerHTML = `
+      <div>
+        <p class="label"></p>
+        <p class="path"></p>
+      </div>
+      <div>
+        <span class="badge">${isHidden ? "hidden" : "public"}</span>
+      </div>
+      <button type="button" class="${isHidden ? "safe" : "danger"}">${isHidden ? "Show page" : "Hide page"}</button>
+    `;
+    card.querySelector(".label").textContent = page.label;
+    card.querySelector(".path").textContent = displayPath(path);
+    card.querySelector("button").addEventListener("click", async () => {
+      if (isHidden) {
+        state.hiddenPaths.delete(path);
+        await saveAndRender(`${displayPath(path)} will be public after the next deploy.`);
+      } else {
+        state.hiddenPaths.add(path);
+        await saveAndRender(`${displayPath(path)} will return 404 publicly after the next deploy.`);
+      }
+    });
+    els.pageGrid.append(card);
+  });
+}
+
+async function chooseFolder() {
+  state.folderHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+  await writeVisibilityFile();
+  setStatus("Connected. Hide/show changes now save to shared/page-visibility.js.");
+  render();
+}
+
+async function showAllPages() {
+  state.hiddenPaths.clear();
+  await saveAndRender("All pages will be public after the next deploy.");
+}
+
+els.chooseFolder.addEventListener("click", () => chooseFolder().catch((error) => setStatus(error.message)));
+els.reloadState.addEventListener("click", () => window.location.reload());
+els.showAll.addEventListener("click", () => showAllPages().catch((error) => setStatus(error.message)));
+
+render();
+</script>
+</body>
+</html>

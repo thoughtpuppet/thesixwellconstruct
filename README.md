@@ -25,6 +25,16 @@ and `/art/`, it should be deployed at the domain root rather than under a subpat
 
 No bundler, package install, or framework build step is required.
 
+## Hiding public pages
+
+Open the local preview, then visit `/tools/page-visibility.html`. Choose the
+site folder when the browser asks, then use the Hide/Show buttons. The tool
+updates `shared/page-visibility.js`.
+
+Hidden pages still load on localhost for editing, but the deployed Worker
+returns a 404 for those paths on the public site. Commit and push the updated
+visibility file for the change to go live.
+
 ## Shopify setup
 
 This repo now includes Shopify Storefront proxy routes under `/api/shop/*`.
