@@ -453,8 +453,8 @@ function driftOpenFactor(i,prog){if(prog<ARRIVE_AT[i])return 0;return easeOutSof
 function getDrift(i,t,of){const d=DRIFTS[i];return{x:d.ax*of*Math.sin((t/d.px)*Math.PI*2+d.ox),y:d.ay*of*Math.sin((t/d.py)*Math.PI*2+d.oy)};}
 function getMobileNodeAnchor(i,n){
   // Layout space: ring sits at H*0.17, ventures pack tightly underneath with breathing room
-  const top = H * 0.24;
-  const bot = H * 0.94;
+  const top = H * 0.26;
+  const bot = H * 0.93;
   const cxv = W / 2;
   const usableH = bot - top;
   const t = n > 1 ? i / (n - 1) : 0.5;
