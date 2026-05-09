@@ -214,7 +214,7 @@ async function handleShopApi(request, env) {
 
   if (pathname === "/api/shop/cart") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
-    return handleGetCart(env);
+    return handleGetCart(request, env);
   }
 
   if (pathname === "/api/shop/cart/create") {
