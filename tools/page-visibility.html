@@ -319,17 +319,17 @@ function buildRedirectBlock() {
   const rules = Array.from(state.hiddenPaths)
     .sort()
     .flatMap((path) => {
-      if (path === "/") return ["/ /404.html 404", "/index.html /404.html 404"];
+      if (path === "/") return ["/ /404.html 404!", "/index.html /404.html 404!"];
       return [
-        `${path} /404.html 404`,
-        `${path}/ /404.html 404`,
-        `${path}/index.html /404.html 404`
+        `${path} /404.html 404!`,
+        `${path}/ /404.html 404!`,
+        `${path}/* /404.html 404!`
       ];
     });
 
-  rules.push("/tools/edit-links.html /404.html 404");
-  rules.push("/tools/page-visibility.html /404.html 404");
-  rules.push("/shared/page-visibility.js /404.html 404");
+  rules.push("/tools/edit-links.html /404.html 404!");
+  rules.push("/tools/page-visibility.html /404.html 404!");
+  rules.push("/shared/page-visibility.js /404.html 404!");
   return [VISIBILITY_START, ...rules, VISIBILITY_END].join("\n");
 }
 
