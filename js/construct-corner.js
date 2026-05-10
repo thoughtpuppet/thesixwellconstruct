@@ -196,6 +196,36 @@
   syncHeaderState();
   window.addEventListener('scroll', syncHeaderState, { passive: true });
 
+  /* ── RESPONSIVE ───────────────────────────────────────────
+     <700px: hide the wordmark (the ring alone reads as the
+     home glyph), pull inset closer to the edge, tighten gap.
+     <420px: nudge inset further in for very small phones.
+     Restored automatically when the viewport grows again.
+  ────────────────────────────────────────────────────────── */
+  var MOBILE_BP = 700;
+  var TINY_BP   = 420;
+
+  function applyResponsiveCorner() {
+    var w = window.innerWidth;
+    if (w < MOBILE_BP) {
+      wm.style.display        = 'none';
+      wrapper.style.left      = (w < TINY_BP ? 12 : 16) + 'px';
+      wrapper.style.top       = '30px';
+      wrapper.style.transform = 'translateY(-50%)';
+      wrapper.style.gap       = '0px';
+    } else {
+      wm.style.display        = '';
+      wrapper.style.left      = CONFIG.insetX + 'px';
+      wrapper.style.top       = CONFIG.insetY + 'px';
+      wrapper.style.transform = 'none';
+      wrapper.style.gap       = CONFIG.gap + 'px';
+    }
+  }
+  applyResponsiveCorner();
+  window.addEventListener('resize', applyResponsiveCorner);
+  window.addEventListener('orientationchange', function() {
+    setTimeout(applyResponsiveCorner, 150);
+  });
 
   /* ── HOVER ────────────────────────────────────────────────
      Wordmark opacity bumps up on hover to signal interactivity.

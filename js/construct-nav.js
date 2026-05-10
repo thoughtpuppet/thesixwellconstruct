@@ -90,19 +90,25 @@
   /* Nav is fixed, horizontally centered, vertically aligned
      with the corner element. Uses pointer-events:none on the
      nav itself so only the dot buttons capture clicks —
-     prevents invisible hit areas between dots blocking page. */
+     prevents invisible hit areas between dots blocking page.
+
+     Mobile (<700px): positioned relative to header, centered
+     in the space between corner ring and cart button.
+  ────────────────────────────────────────────────────────── */
   nav.style.cssText = [
     'position:fixed',
     'top:' + CONFIG.topInset + 'px',
     'left:50%',
     'transform:translateX(-50%)',
     'display:flex',
+    'flex-wrap:wrap',
     'align-items:center',
+    'justify-content:center',
     'gap:' + CONFIG.dotGap + 'px',
     'z-index:' + CONFIG.zIndex,
-    'pointer-events:none',   /* restored per-dot below */
+    'pointer-events:none',
     'opacity:0',
-    'transition:opacity ' + CONFIG.fadeInDuration + 'ms ease',
+    'transition:opacity ' + CONFIG.fadeInDuration + 'ms ease, top 0ms, left 0ms, transform 0ms',
   ].join(';');
 
 
@@ -148,6 +154,7 @@
     var dot = document.createElement('button');
     dot.className = 'cnav-dot';
     dot.setAttribute('aria-label', v.label);
+    dot.setAttribute('data-bg-color', v.color);  // store for desktop restore
 
     /* Base opacity: full for current, dim for others */
     var baseOpacity = isCurrent
@@ -166,6 +173,11 @@
       'transition:opacity 180ms ease, transform 180ms ease',
       'flex-shrink:0',
     ].join(';');
+
+    /* Mobile: current dot shows as open ring instead of dim filled dot */
+    if (isCurrent) {
+      dot.setAttribute('data-current', 'true');
+    }
 
 
     /* ── Hover: brighten dot + show label ─── */
@@ -211,6 +223,90 @@
     nav.style.opacity = '1';
   }, CONFIG.fadeInDelay);
 
+  /* ── RESPONSIVE ───────────────────────────────────────────
+     <700px: position nav inside the header band, centered in the
+             space between the corner ring (left) and cart button
+             (right). Tighter gaps. Current venture dot rendered
+             as an open ring so it reads at small size.
+     <380px: shrink dots + reduce gaps further so all 9 fit.
+  ────────────────────────────────────────────────────────── */
+  var MOBILE_BP = 700;
+  var TINY_BP   = 380;
+
+  function applyResponsiveNav() {
+    var w = window.innerWidth;
+
+    if (w < MOBILE_BP) {
+      var ringRight = w < TINY_BP ? 68 : 72;
+      var cartWidth = w < TINY_BP ? 75 : 85;
+      var cartLeft  = w - cartWidth - (w < TINY_BP ? 12 : 16);
+
+      var availableWidth = cartLeft - ringRight;
+      var centerX        = ringRight + (availableWidth / 2);
+
+      nav.style.position       = 'fixed';
+      nav.style.top            = '30px';
+      nav.style.left           = centerX + 'px';
+      nav.style.transform      = 'translate(-50%, -50%)';
+      nav.style.justifyContent = 'center';
+      nav.style.maxWidth       = (availableWidth - 20) + 'px';
+      nav.style.flexWrap       = 'wrap';
+
+      var gapSize = w < TINY_BP ? 8 : 12;
+      nav.style.gap = gapSize + 'px';
+
+      var dotSize = w < TINY_BP ? 10 : 12;
+      var dots = nav.querySelectorAll('.cnav-dot');
+      dots.forEach(function(d) {
+        d.style.width  = dotSize + 'px';
+        d.style.height = dotSize + 'px';
+
+        var isCurrent = d.hasAttribute('data-current');
+        if (isCurrent) {
+          var bgColor = d.getAttribute('data-bg-color') || '#FCB867';
+          d.style.background = 'transparent';
+          d.style.border     = '2px solid ' + bgColor;
+          d.style.opacity    = '1';
+        } else {
+          d.style.opacity = '1';
+          d.style.border  = 'none';
+          var bgColor2 = d.getAttribute('data-bg-color');
+          if (bgColor2 && d.style.background === 'transparent') {
+            d.style.background = bgColor2;
+          }
+        }
+      });
+
+    } else {
+      nav.style.top            = CONFIG.topInset + 'px';
+      nav.style.left           = '50%';
+      nav.style.transform      = 'translateX(-50%)';
+      nav.style.justifyContent = 'center';
+      nav.style.maxWidth       = 'none';
+      nav.style.flexWrap       = 'nowrap';
+      nav.style.gap            = CONFIG.dotGap + 'px';
+
+      var desktopDots = nav.querySelectorAll('.cnav-dot');
+      desktopDots.forEach(function(d) {
+        d.style.width  = CONFIG.dotSize + 'px';
+        d.style.height = CONFIG.dotSize + 'px';
+
+        var isCurrent = d.hasAttribute('data-current');
+        d.style.opacity = isCurrent ? String(CONFIG.opacityActive) : String(CONFIG.opacityInactive);
+        d.style.border  = 'none';
+        if (d.style.background === 'transparent' || !d.style.background) {
+          var bgColor = d.getAttribute('data-bg-color');
+          if (bgColor) d.style.background = bgColor;
+        }
+      });
+    }
+  }
+
+  applyResponsiveNav();
+  window.addEventListener('resize', applyResponsiveNav);
+  window.addEventListener('orientationchange', function() {
+    setTimeout(applyResponsiveNav, 150);
+  });
 
   /* ── EXPOSE API ───────────────────────────────────────────
      Allows external scripts to show/hide the nav.

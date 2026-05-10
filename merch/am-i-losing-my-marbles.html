@@ -134,19 +134,36 @@
 
   /* cart toggle */
   .cart-toggle {
-    display:flex; align-items:center; gap:var(--s3);
-    padding:var(--s2) var(--s4);
-    border:5px solid var(--ring-soft);
-    transition:border-color var(--t-fast), background var(--t-fast);
+    display: flex; align-items: center; gap: var(--s3);
+    padding: var(--s2) var(--s4);
+    border: 5px solid var(--ring-soft);
+    background: none; cursor: pointer; color: inherit;
+    font: inherit;
+    transition: border-color var(--t-fast), background var(--t-fast);
   }
-  .cart-toggle:hover { border-color:var(--accent); background:rgba(252,184,103,0.04); }
+  .cart-toggle:hover {
+    border-color: var(--accent);
+    background: rgba(252, 184, 103, 0.04);
+  }
   .cart-label {
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute);
+    font-family: var(--serif); font-size: 11px;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-mute);
   }
   .cart-count {
-    font-family:var(--sans); font-weight:700; font-size:12px;
-    color:var(--accent); min-width:14px; text-align:right;
+    font-family: var(--sans); font-weight: 700; font-size: 12px;
+    color: var(--accent); min-width: 14px; text-align: right;
+  }
+
+  @media (max-width: 700px) {
+    .cart-toggle  { padding: 5px 8px; gap: 5px; border-width: 3px; }
+    .cart-label   { font-size: 9px;  letter-spacing: 0.12em; }
+    .cart-count   { font-size: 9px;  min-width: 10px; }
+  }
+
+  @media (max-width: 380px) {
+    .cart-toggle  { padding: 4px 6px; gap: 4px; border-width: 2px; }
+    .cart-label   { font-size: 8px;  letter-spacing: 0.10em; }
+    .cart-count   { font-size: 8px;  min-width: 8px; }
   }
   .cart-count.pulse { animation:pulse 0.4s ease-out; }
   @keyframes pulse {
@@ -541,6 +558,14 @@
     .product-col { padding:var(--s5) var(--s4) var(--s6); }
     footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s4); }
   }
+@media (max-width: 700px) {
+  header.top {
+    position: sticky;
+    padding: var(--s3) var(--s4);
+    min-height: 60px;
+    align-items: center;
+  }
+}
 </style>
 </head>
 <body data-venture="merch">
