@@ -34,6 +34,7 @@
     z-index:0;
     pointer-events:none;
     filter:brightness(0.20) saturate(2);
+    opacity:0.25;
   }
   main {
     width:100%;
@@ -85,11 +86,20 @@
   const canvas = document.getElementById('bg');
   const ctx = canvas.getContext('2d');
 
-  // Tile dimensions & eye draw size
-  const TW = 175, TH = 155;
-  const EYE = 115;
-  const OX = (TW - EYE) / 2;
-  const OY = (TH - EYE) / 2;
+  // Tile dimensions — set responsively, called before anything uses them
+  let TW, TH, EYE, OX, OY;
+
+  function tileSize() {
+    const w = window.innerWidth;
+    if (w < 480)       { TW = 95;  TH = 85;  EYE = 65; }
+    else if (w < 768)  { TW = 120; TH = 108; EYE = 85; }
+    else if (w < 1200) { TW = 148; TH = 132; EYE = 100; }
+    else               { TW = 175; TH = 155; EYE = 115; }
+    OX = (TW - EYE) / 2;
+    OY = (TH - EYE) / 2;
+  }
+
+  tileSize(); // initialise before rowOffset/rowSpeed use TW
 
   const GLOBAL_DOWN = 0.10;
   const BASE_SPEED  = 0.18;
@@ -113,6 +123,7 @@
   let loaded = 0;
 
   function resize() {
+    tileSize();
     W = canvas.width  = window.innerWidth;
     H = canvas.height = window.innerHeight;
   }
