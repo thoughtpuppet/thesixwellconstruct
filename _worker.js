@@ -25,6 +25,17 @@ function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
 }
 
+async function notFoundPage(request, env) {
+  const url = new URL(request.url);
+  url.pathname = "/404.html";
+  url.search = "";
+  const response = await env.ASSETS.fetch(new Request(url, request));
+  return new Response(response.body, {
+    status: 404,
+    headers: response.headers,
+  });
+}
+
 function methodNotAllowed(method, allowed) {
   return json(
     { error: `Method ${method} not allowed.` },
@@ -244,11 +255,11 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (isLocalOnlyPath(url.pathname) && !isLocalPreview(url)) {
-      return notFound();
+      return notFoundPage(request, env);
     }
 
     if (!isLocalPreview(url) && isHiddenPublicPath(url.pathname)) {
-      return notFound();
+      return notFoundPage(request, env);
     }
 
     if (url.pathname.startsWith("/api/shop/")) {
