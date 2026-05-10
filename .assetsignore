@@ -5,3 +5,6 @@ README.md
 .dev.vars.example
 tools/
 .hidden-pages/
+.DS_Store
+**/.DS_Store
+Sequence 01_1.gif

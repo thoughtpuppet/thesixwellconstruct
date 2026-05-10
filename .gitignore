@@ -4,3 +4,6 @@
 !.dev.vars.example
 .env*
 !.env.example
+.DS_Store
+**/.DS_Store
+Sequence 01_1.gif
