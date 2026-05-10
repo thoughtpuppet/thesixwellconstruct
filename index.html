@@ -106,7 +106,7 @@
 </div>
 
 <!-- shared construct transition layer — enables fade-to-black on sub-node navigation -->
-<script src="/js/transition.js"></script>
+<script src="js/transition.js"></script>
 
 <script>
 const canvas = document.getElementById('c');
@@ -217,9 +217,8 @@ function drawEyes(t) {
   // Flatten twinkle/shimmer at high presence so eyes can't dip to invisibility
   const _flat = BREATH_FLOOR;
 
-  // Stable tint mix — both eye images blended at fixed proportions per index.
-  // Removes the prior 17s cross-fade that beat against the breath and caused glitchy shimmer.
-  const MIX_A = 0.62, MIX_B = 0.38;
+  // Discrete alternation — each eye position is EITHER open or closed (matches reference graphic).
+  // No blending: even idx → eyeTint1 (open), odd idx → eyeTint2 (closed).
 
   let idx = 0;
   // Mobile-aware ring center + scale — eyes shrink and slide up with the ring on small viewports
@@ -261,12 +260,10 @@ function drawEyes(t) {
       const ex = _rcx + Math.cos(angle) * breathDist * _rs;
       const ey = _rcy + Math.sin(angle) * breathDist * _rs;
 
-      // Stable tint mix — even eyes lean tint-1, odd lean tint-2. No time-varying fade.
-      const isEven = idx % 2 === 0;
-      const a1 = isEven ? MIX_A : MIX_B;
-      const a2 = isEven ? MIX_B : MIX_A;
+      // Discrete: even → open eye, odd → closed eye. No blend.
+      const tint = idx % 2 === 0 ? eyeTint1 : eyeTint2;
 
-      const aspect = eyeTint1.height / eyeTint1.width;
+      const aspect = tint.height / tint.width;
       const iw = eyeW, ih = iw * aspect;
 
       const finalAlpha = ring.alpha * baseOpacity
@@ -275,12 +272,8 @@ function drawEyes(t) {
 
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      ctx.globalAlpha = finalAlpha * a1;
-      ctx.drawImage(eyeTint1, ex - iw/2, ey - ih/2, iw, ih);
-      if (a2 > 0.01) {
-        ctx.globalAlpha = finalAlpha * a2;
-        ctx.drawImage(eyeTint2, ex - iw/2, ey - ih/2, iw, ih);
-      }
+      ctx.globalAlpha = finalAlpha;
+      ctx.drawImage(tint, ex - iw/2, ey - ih/2, iw, ih);
       ctx.restore();
       idx++;
     }
