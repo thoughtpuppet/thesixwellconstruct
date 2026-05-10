@@ -24,24 +24,43 @@
     color:var(--text);
     font-family:var(--serif);
     padding:32px;
+    overflow:hidden;
   }
-  main { width:min(100%,720px); }
+  #bg {
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    z-index:0;
+    pointer-events:none;
+    filter:brightness(0.20) saturate(2);
+  }
+  main {
+    width:100%;
+    position:relative;
+    z-index:1;
+  }
   p {
     margin:0 0 18px;
     color:var(--muted);
     font-size:14px;
     line-height:1.6;
+    font-family:var(--sans);
+    text-transform:uppercase;
+    letter-spacing:0.35em;
   }
   h1 {
     margin:0 0 20px;
     font-family:var(--sans);
-    font-size:clamp(52px,12vw,132px);
+    font-size:23vw;
     line-height:0.88;
-    letter-spacing:0;
+    letter-spacing:-0.02em;
     text-transform:uppercase;
     color:var(--accent);
   }
   a {
+    display:inline-block;
+    background:#7B1A1A;
     color:var(--accent);
     font-family:var(--sans);
     font-size:12px;
@@ -49,14 +68,104 @@
     letter-spacing:0.14em;
     text-transform:uppercase;
     text-decoration:none;
+    padding:10px 14px;
+    border-radius:6px;
   }
 </style>
 </head>
 <body>
+<canvas id="bg"></canvas>
 <main>
-  <h1>Not found.</h1>
-  <p>This page is unavailable.</p>
+  <h1>Nope.</h1>
+  <p>Come back later.</p>
   <a href="/">Return home</a>
 </main>
+<script>
+(function () {
+  const canvas = document.getElementById('bg');
+  const ctx = canvas.getContext('2d');
+
+  // Tile dimensions & eye draw size
+  const TW = 175, TH = 155;
+  const EYE = 115;
+  const OX = (TW - EYE) / 2;
+  const OY = (TH - EYE) / 2;
+
+  const GLOBAL_DOWN = 0.10;
+  const BASE_SPEED  = 0.18;
+  const POOL        = 20;
+
+  const rowOffset = new Array(POOL);
+  const rowSpeed  = new Array(POOL);
+  for (let r = 0; r < POOL; r++) {
+    const dir    = r % 2 === 0 ? 1 : -1;
+    rowOffset[r] = Math.random() * TW * 1000;
+    rowSpeed[r]  = dir * BASE_SPEED * (0.70 + Math.random() * 0.60);
+  }
+
+  let W, H;
+  let slotY   = 0;
+  let baseRow = 0;
+  let lastTime = 0;
+
+  const openImg   = new Image();
+  const closedImg = new Image();
+  let loaded = 0;
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  /* ---------- draw ---------- */
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+
+    const slots = Math.ceil(H / TH) + 2;
+    const cols  = Math.ceil(W / TW) + 3;
+
+    for (let i = 0; i < slots; i++) {
+      const logicalRow = baseRow + i;
+      const rowId  = ((logicalRow % POOL) + POOL) % POOL;
+      const isOdd  = ((logicalRow % 2) + 2) % 2 === 1;
+      const stagger = isOdd ? TW / 2 : 0;
+      const ox = ((rowOffset[rowId] + stagger) % TW + TW) % TW - TW;
+      const y  = i * TH + slotY - TH;
+
+      for (let c = 0; c < cols; c++) {
+        const parity = ((logicalRow + c) % 2 + 2) % 2;
+        ctx.drawImage(parity === 0 ? openImg : closedImg, c * TW + ox + OX, y + OY, EYE, EYE);
+      }
+    }
+  }
+
+  /* ---------- loop ---------- */
+  function loop(ts) {
+    const dt = Math.min(ts - lastTime, 50);
+    lastTime = ts;
+    const f = dt / 16.667;
+    slotY += GLOBAL_DOWN * f;
+    while (slotY >= TH) { slotY -= TH; baseRow--; }
+    for (let r = 0; r < POOL; r++) {
+      rowOffset[r] = (rowOffset[r] + rowSpeed[r] * f + TW * 10000) % (TW * 10000);
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function onLoad() {
+    if (++loaded < 2) return;
+    resize();
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(ts => { lastTime = ts; requestAnimationFrame(loop); });
+  }
+
+  openImg.onload   = onLoad;
+  closedImg.onload = onLoad;
+  openImg.src   = '/assets/eyes/openeye.png';
+  closedImg.src = '/assets/eyes/closedeye.png';
+})();
+</script>
 </body>
 </html>
