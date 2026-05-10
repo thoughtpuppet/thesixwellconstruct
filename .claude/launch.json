@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Static dev server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/dev-server.mjs"],
+      "port": 4173,
+      "autoPort": true
+    },
+    {
+      "name": "Wrangler (Cloudflare Workers)",
+      "runtimeExecutable": "wrangler",
+      "runtimeArgs": ["dev"],
+      "port": 8787
+    }
+  ]
+}
