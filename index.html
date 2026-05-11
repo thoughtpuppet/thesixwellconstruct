@@ -1016,7 +1016,7 @@ function tick(ts){
   // Descriptor fades in once expansion is well underway, out on collapse
   wordmarkDesc.style.opacity = String(easeOutSoft(clamp01((expandProgress-0.5)/0.5)) * (1-collapseProgress) * 0.55);
   VENTURES.forEach((v,i)=>{const target=hoveredNode===i?1:0;nodeHP[i]=target>nodeHP[i]?Math.min(nodeHP[i]+dt*HOVER_IN,1):Math.max(nodeHP[i]-dt*HOVER_OUT,0);});
-  if(!nodePosInit&&expandProgress>=XFADE_START){VENTURES.forEach((v,i)=>{const anc=getNodeAnchor(v);nodeX[i]=anc.x;nodeY[i]=anc.y;});nodePosInit=true;}
+  if(!nodePosInit&&expandProgress>=XFADE_START){const _tp=easeOut(clamp01(expandProgress/TRAVEL_END));VENTURES.forEach((v,i)=>{const anc=getNodeAnchor(v);nodeX[i]=lerp(dotStartX[i],anc.x,_tp);nodeY[i]=lerp(dotStartY[i],anc.y,_tp);});nodePosInit=true;}
   if(nodePosInit&&state!=='collapsing')updateNodePositions(dt);
 
   // ── Sub-node state machine ──
