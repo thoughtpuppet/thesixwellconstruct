@@ -68,9 +68,8 @@
     ],
     dotRadius:     2.8,       /* px — slightly larger to match roomier header */
     dotColor:      '#FCB867', /* matches landing DOT_COLOR exactly */
-    /* Landing orbit: time * 0.003. Slowed slightly at small scale
-       so the motion reads clearly without feeling frantic. */
-    dotOrbitSpeed: 0.0018,    /* radians/ms */
+    /* Matches landing orbit speed exactly: time * 0.003 */
+    dotOrbitSpeed: 0.003,     /* radians/ms */
 
     /* Wordmark */
     wordmark:        'the six.well construct',
@@ -296,9 +295,12 @@
     ────────────────────────────────────────────────────── */
     var orbitT = t * CONFIG.dotOrbitSpeed;
 
-    CONFIG.dotPositions.forEach(function(d) {
-      var angle = Math.atan2(d[1], d[0]) + orbitT;
-      var dist  = Math.hypot(d[0], d[1]);
+    CONFIG.dotPositions.forEach(function(d, i) {
+      var angle    = Math.atan2(d[1], d[0]) + orbitT;
+      var baseDist = Math.hypot(d[0], d[1]);
+      /* Radial pulse — matches landing's sin(time*0.025 + i*1.1)*1.5*scale,
+         amplitude scaled down by SCALE so it's proportional at corner size. */
+      var dist = baseDist + Math.sin(t * 0.025 + i * 1.1) * 1.5 * SCALE;
 
       ctx.beginPath();
       ctx.arc(
