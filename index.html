@@ -621,10 +621,13 @@ function drawTravelingDots(prog){
   const tp=easeOut(clamp01(prog/TRAVEL_END));
   const xt=clamp01((prog-XFADE_START)/(TRAVEL_END-XFADE_START));
   const ta=1-xt;
+  if(ta<=0)return;
   VENTURES.forEach((v,i)=>{
     const anc=getNodeAnchor(v);
-    const px=lerp(dotStartX[i],anc.x,tp);
-    const py=lerp(dotStartY[i],anc.y,tp);
+    /* Once nodePosInit has fired, use the settled node's live position so
+       both renderers are always coincident — no double-dot during crossfade. */
+    const px=nodePosInit?nodeX[i]:lerp(dotStartX[i],anc.x,tp);
+    const py=nodePosInit?nodeY[i]:lerp(dotStartY[i],anc.y,tp);
     const hex=v.color.replace('#','');
     const r2=parseInt(hex.slice(0,2),16),g2=parseInt(hex.slice(2,4),16),b2=parseInt(hex.slice(4,6),16);
     const startSize=v.fromDot>=0?DOT_RADIUS():3*scale;
