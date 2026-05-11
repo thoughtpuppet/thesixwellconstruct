@@ -676,7 +676,7 @@ function drawSettledNodes(prog){
     const _labelMul = (i===activeVentureIdx&&subNodeState!=="idle") ? 1 : (1 - _takeoverT);
     const _labelGrow = (i===activeVentureIdx) ? (isMobile ? (1 + _takeoverT * 1.5) : (1 + _takeoverT * 0.4)) : 1;
     const _labelGap = 18 + _takeoverT * (isMobile ? 16 : 6);
-    if(ba>0.25){el.style.opacity=String(lerp(ba*0.4,ba,eHp)*_labelMul);el.style.left=px+'px';el.style.top=(py+NODE_SIZE_S()*_labelGrow+_labelGap)+'px';}
+    if(ba>0.25){el.style.opacity=String((isMobile ? ba : lerp(ba*0.4,ba,eHp))*_labelMul);el.style.left=px+'px';el.style.top=(py+NODE_SIZE_S()*_labelGrow+_labelGap)+'px';}
     else el.style.opacity='0';
     // Description — italic serif, fades in on hover, hides when sub-nodes are open
     const descEl=nodeDescEls[i];
