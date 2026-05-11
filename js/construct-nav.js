@@ -252,10 +252,16 @@
       nav.style.maxWidth       = (availableWidth - 20) + 'px';
       nav.style.flexWrap       = 'wrap';
 
-      var gapSize = w < TINY_BP ? 8 : 12;
-      nav.style.gap = gapSize + 'px';
+      var dotSize = w < TINY_BP ? 10 : 11;
 
-      var dotSize = w < TINY_BP ? 10 : 12;
+      // Calculate gap so all 9 dots always fit on one line — no wrap ever
+      var usableWidth = availableWidth - 16;
+      var maxGap = Math.floor((usableWidth - dotSize * 9) / 8);
+      var gapSize = Math.max(4, Math.min(maxGap, w < TINY_BP ? 9 : 11));
+
+      nav.style.gap     = gapSize + 'px';
+      nav.style.flexWrap = 'nowrap';
+
       var dots = nav.querySelectorAll('.cnav-dot');
       dots.forEach(function(d) {
         d.style.width  = dotSize + 'px';
