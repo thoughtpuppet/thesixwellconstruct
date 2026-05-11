@@ -642,7 +642,8 @@ function updateNodePositions(dt){
 function drawSettledNodes(prog){
   const xt=clamp01((prog-XFADE_START)/(TRAVEL_END-XFADE_START));const ba=easeOutSoft(xt);
   const _takeover = isMobile && activeVentureIdx >= 0 && subNodeState !== 'idle';
-  const _takeoverT = !_takeover ? 0 : (subNodeState==='collapsing' ? 1 - subNodeCollapseProgress : (subNodeState==='expanding' ? subNodeProgress : 1));
+  const _rawTakeover = !_takeover ? 0 : (subNodeState==='collapsing' ? 1 - subNodeCollapseProgress : (subNodeState==='expanding' ? subNodeProgress : 1));
+  const _takeoverT = easeOutSoft(Math.min(_rawTakeover * 2.5, 1));
   VENTURES.forEach((v,i)=>{
     if(ba<=0)return;
     const px=nodeX[i],py=nodeY[i];
@@ -805,7 +806,7 @@ function getSubNodeTargetPos(ventureIdx, subIdx){
 function getSubEp(i, n){
   if(subNodeState === 'expanded') return 1;
   const delay = (i / n) * 0.42; // longer cascade — each node arrives more deliberately
-  return easeInOut(clamp01((subNodeProgress - delay) / (1 - delay + 0.001)));
+  return easeOut(clamp01((subNodeProgress - delay) / (1 - delay + 0.001)));
 }
 
 // ── Helper: returns index of sub-node under cursor, or -1 ───────────────────
