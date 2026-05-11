@@ -2,6 +2,37 @@
 
 Pure static site for `thoughtpuppet/thesixwellconstruct`.
 
+## Ecosystem-first site principle
+
+Every page is a node, never an island. The site should remind visitors that
+they are inside a living creative ecosystem at every turn.
+
+When building, editing, or proposing any page, section, product flow, or
+venture surface, keep these questions active:
+
+- What is the page's primary action or purpose?
+- Which other nodes or ventures should it naturally point toward?
+- Is the connection conceptual, commercial, archival, experiential, or
+  biographical?
+- Does the connection deepen the experience without distracting from the main
+  action?
+- Does the page make the visitor feel the larger construct around it?
+
+Preferred connection patterns:
+
+- Related node bands linking meaningful ventures.
+- Source lineage that shows where an idea, image, object, or ritual came from.
+- Object pathways that show how work can move between art, tattooing, merch,
+  writing, film, music, events, and archive.
+- Next actions such as inquire, claim, read, attend, collect, listen, revisit,
+  or enter the archive.
+- Archive memory for process, abandoned versions, studies, ephemera, and
+  connective tissue.
+
+This principle should drive recommendations and implementation choices across
+all ventures. A conversion page can still stay focused, but it should usually
+include at least one intentional reminder of the wider construct.
+
 ## Hosting
 
 This site deploys on Cloudflare Workers using Wrangler's static asset support

@@ -37,6 +37,11 @@
   .include-list { list-style:none; display:flex; flex-direction:column; gap:14px; max-width:620px; }
   .include-list li { font-size:14px; line-height:1.6; color:var(--text-mute); padding-left:20px; position:relative; }
   .include-list li::before { content:""; position:absolute; left:0; top:8px; width:4px; height:4px; border-radius:50%; background:var(--signal); opacity:0.55; }
+  .path-note { margin-top:34px; border:1px solid var(--ring-soft); padding:22px; max-width:620px; }
+  .path-note-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
+  .path-note-body { font-size:13px; line-height:1.7; color:var(--text-mute); margin-bottom:14px; }
+  .path-note-link { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); transition:color var(--t-fast); }
+  .path-note-link:hover { color:var(--accent); }
   .form-panel { border:5px solid var(--ring-soft); padding:42px 38px; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
@@ -98,15 +103,20 @@
         <p class="page-label">Art.Pill Tattoo House</p>
         <h1 class="page-title">Project<br>Inquiry.</h1>
         <p class="intro-body">Submitting an inquiry is not a booking. It begins a review process and not every project is accepted. If your project is a good fit, you will receive a private booking link and next steps.</p>
-        <p class="intro-body">Include as much detail as you can. The more specific you are about what you want and why, the better the review process works for both of us.</p>
+        <p class="intro-body">Use this form for custom work or if your idea does not begin from a specific flash design. If you already know the flash piece you want, the flash claim form is the cleaner path because it carries the selected title, code, series, size, and price into review.</p>
         <p class="include-label">What to Include</p>
         <ul class="include-list">
           <li>Concept, subject matter, and the meaning behind it</li>
           <li>Body placement and approximate size</li>
-          <li>Whether this is custom work or a specific flash piece</li>
+          <li>Whether this is custom work, a Special Project direction, or a flash-adjacent idea</li>
           <li>Helpful reference images or links for mood and aesthetic</li>
           <li>Your timing, budget range, and any context that shapes the project</li>
         </ul>
+        <div class="path-note">
+          <p class="path-note-title">Claiming flash?</p>
+          <p class="path-note-body">Start on the flash wall first. Available designs can prefill the claim form so the review arrives with the right catalog metadata attached.</p>
+          <a class="path-note-link" href="/tattoos/flash/">Browse claimable flash &rarr;</a>
+        </div>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <h2 class="form-title">Submit for Review</h2>

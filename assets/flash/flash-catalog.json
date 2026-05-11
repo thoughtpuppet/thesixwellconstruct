@@ -5,21 +5,36 @@
       "name": "MAZE",
       "description": "A symbolic series built from looping paths, blocked routes, memory, and movement through impossible rooms.",
       "merchStatus": "coming soon",
-      "merchUrl": ""
+      "merchUrl": "",
+      "relatedNodes": [
+        { "label": "Archive studies", "venture": "archive", "url": "/#archive", "description": "Process rooms for symbolic systems, sketches, and abandoned routes." },
+        { "label": "Written field notes", "venture": "writings", "url": "/#writings", "description": "Language around memory, ritual, and private mythology." },
+        { "label": "Art.Pill supply", "venture": "merch", "url": "/merch/?filter=art.pill", "description": "Objects and tools connected to the mark-making practice." }
+      ]
     },
     {
       "id": "sairoglyphs",
       "name": "Sairoglyphs",
       "description": "A private writing system of letters, marks, and symbolic language developed for tattoo-scale translation.",
       "merchStatus": "coming soon",
-      "merchUrl": ""
+      "merchUrl": "",
+      "relatedNodes": [
+        { "label": "Artist language", "venture": "art", "url": "/art/", "description": "The visual source system behind the marks." },
+        { "label": "Symbol archive", "venture": "archive", "url": "/#archive", "description": "Study rooms for sketches, ephemera, and process." },
+        { "label": "Statements", "venture": "writings", "url": "/#writings", "description": "Writing that gives the symbol system more context." }
+      ]
     },
     {
       "id": "standalones",
       "name": "Standalones",
       "description": "Single drawings and flash studies that live outside a larger series but still carry the Art.Pill visual language.",
       "merchStatus": "optional",
-      "merchUrl": ""
+      "merchUrl": "",
+      "relatedNodes": [
+        { "label": "Painting source", "venture": "art", "url": "/art/", "description": "Related image language from the larger art practice." },
+        { "label": "Open studio paths", "venture": "events", "url": "/#events", "description": "Ways to encounter the work before it becomes permanent." },
+        { "label": "Art.Pill supply", "venture": "merch", "url": "/merch/?filter=art.pill", "description": "Future drops connected to flash and mark-making." }
+      ]
     }
   ],
   "items": [
@@ -37,7 +52,11 @@
       "sheetCode": "AP-01",
       "designCode": "",
       "merchStatus": "none",
-      "merchUrl": ""
+      "merchUrl": "",
+      "relatedNodes": [
+        { "label": "Browse supply", "venture": "merch", "url": "/merch/?filter=art.pill", "description": "Art.Pill material culture and future flash-related drops." },
+        { "label": "Archive rooms", "venture": "archive", "url": "/#archive", "description": "Sketches and process that feed the flash wall." }
+      ]
     },
     {
       "id": "ap-maze-001",
@@ -53,7 +72,13 @@
       "sheetCode": "",
       "designCode": "MAZE-ARCHIVE-01",
       "merchStatus": "coming soon",
-      "merchUrl": ""
+      "merchUrl": "",
+      "archivePath": "/#archive",
+      "writingPath": "/#writings",
+      "relatedNodes": [
+        { "label": "MAZE archive", "venture": "archive", "url": "/#archive", "description": "This piece is currently a study, not a claimable flash design." },
+        { "label": "Memory writing", "venture": "writings", "url": "/#writings", "description": "Writing around blocked routes, private maps, and memory." }
+      ]
     },
     {
       "id": "ap-standalone-001",
@@ -69,7 +94,13 @@
       "sheetCode": "",
       "designCode": "STAND-CP-01",
       "merchStatus": "coming soon",
-      "merchUrl": ""
+      "originPath": "/art/",
+      "merchUrl": "/merch/?filter=art.pill",
+      "relatedNodes": [
+        { "label": "Source imagery", "venture": "art", "url": "/art/", "description": "The broader image world this standalone belongs to." },
+        { "label": "Related merch", "venture": "merch", "url": "/merch/?filter=art.pill", "description": "Art.Pill supply and future design objects." },
+        { "label": "Open studio", "venture": "events", "url": "/#events", "description": "Encounter connected work through studio and gathering paths." }
+      ]
     },
     {
       "id": "ap-sairo-001",
@@ -85,7 +116,13 @@
       "sheetCode": "",
       "designCode": "SAIRO-PLACEHOLDER-01",
       "merchStatus": "coming soon",
-      "merchUrl": ""
+      "merchUrl": "",
+      "writingPath": "/#writings",
+      "relatedNodes": [
+        { "label": "Symbol writing", "venture": "writings", "url": "/#writings", "description": "Language behind the private alphabet." },
+        { "label": "Process archive", "venture": "archive", "url": "/#archive", "description": "Symbol studies and visual fragments." },
+        { "label": "Art source", "venture": "art", "url": "/art/", "description": "The visual field that teaches the marks how to move." }
+      ]
     },
     {
       "id": "ap-standalone-archive-001",
@@ -101,7 +138,12 @@
       "sheetCode": "",
       "designCode": "STAND-ARCHIVE-01",
       "merchStatus": "none",
-      "merchUrl": ""
+      "merchUrl": "",
+      "archivePath": "/#archive",
+      "relatedNodes": [
+        { "label": "Archive room", "venture": "archive", "url": "/#archive", "description": "Past flash remains as reference and direction." },
+        { "label": "Portfolio", "venture": "tattooing", "url": "/tattoos/portfolio/", "description": "See how the language translates onto skin." }
+      ]
     }
   ]
 }

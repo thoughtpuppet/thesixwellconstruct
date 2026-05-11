@@ -23,7 +23,8 @@
   .label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); margin-bottom:18px; }
   h1 { font-family:var(--sans); font-weight:900; font-size:clamp(34px,7vw,74px); line-height:0.9; letter-spacing:-0.05em; color:var(--accent); text-transform:uppercase; margin-bottom:28px; }
   p { font-size:15px; line-height:1.75; color:var(--text-mute); margin-bottom:18px; }
-  a { display:inline-flex; min-height:50px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--text-mute); padding:0 24px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; margin-top:12px; }
+  .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
+  a { display:inline-flex; min-height:50px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--text-mute); padding:0 24px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; }
   a:hover { border-color:var(--accent); color:var(--accent); }
 </style>
 </head>
@@ -32,8 +33,11 @@
     <p class="label">Art.Pill Tattoo House</p>
     <h1>Inquiry Received.</h1>
     <p>Your submission was captured for review. This is not a booking confirmation.</p>
-    <p>If the project is approved, you will receive a private Acuity booking link and next steps.</p>
-    <a href="/tattoos/">Return to Art.Pill</a>
+    <p>Flash claims are checked for availability, placement, and scale. Custom inquiries and Special Projects are reviewed for fit. If approved, you will receive a private Acuity booking link and next steps.</p>
+    <div class="actions">
+      <a href="/tattoos/flash/">Back to flash</a>
+      <a href="/tattoos/">Return to Art.Pill</a>
+    </div>
   </main>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

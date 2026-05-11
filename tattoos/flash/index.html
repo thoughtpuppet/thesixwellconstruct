@@ -43,6 +43,19 @@
   .filter-group:last-child { border-right:none; padding-right:0; }
   .filter-btn { min-height:40px; padding:0 14px; border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); cursor:pointer; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .filter-btn:hover,.filter-btn[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
+  .ecosystem-band { border:5px solid var(--ring-faint); margin-bottom:72px; display:grid; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr); gap:1px; }
+  .ecosystem-intro,.node-link { padding:30px 28px; }
+  .ecosystem-kicker,.node-venture,.selected-kicker,.connected-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; }
+  .ecosystem-kicker,.selected-kicker,.connected-kicker { color:var(--signal); margin-bottom:12px; }
+  .ecosystem-title { font-family:var(--sans); font-weight:900; font-size:clamp(24px,3vw,42px); line-height:0.94; letter-spacing:-0.03em; color:var(--accent); text-transform:uppercase; margin-bottom:14px; }
+  .ecosystem-copy,.node-copy,.selected-copy,.connected-copy { font-size:13px; line-height:1.7; color:var(--text-mute); }
+  .node-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; border-left:1px solid var(--ring-faint); }
+  .node-link { min-height:132px; border-bottom:1px solid var(--ring-faint); border-right:1px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast); }
+  .node-link:nth-child(2n) { border-right:none; }
+  .node-link:nth-last-child(-n+2) { border-bottom:none; }
+  .node-link:hover { background:rgba(252,184,103,0.035); }
+  .node-venture { display:block; color:var(--signal); margin-bottom:10px; }
+  .node-title { display:block; font-family:var(--sans); font-weight:900; font-size:15px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
   .section { padding:72px 0; border-top:5px solid var(--ring-faint); }
   .section:first-of-type { border-top:none; padding-top:0; }
   .section-head { display:grid; grid-template-columns:minmax(0,640px) minmax(200px,1fr); gap:32px; align-items:end; margin-bottom:36px; }
@@ -119,6 +132,17 @@
   .merch-row { border-left:1px solid var(--signal); padding:14px 0 14px 16px; margin-bottom:30px; }
   .merch-title { font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--signal); margin-bottom:8px; }
   .merch-copy { font-size:13px; line-height:1.65; color:var(--text-mute); }
+  .connected-row { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:22px 0 8px; margin-bottom:28px; }
+  .connected-grid { display:grid; grid-template-columns:1fr; gap:10px; }
+  .connected-link { display:block; border:1px solid var(--ring-soft); padding:13px 14px; transition:border-color var(--t-fast), background var(--t-fast); }
+  .connected-link:hover { border-color:var(--accent); background:rgba(252,184,103,0.035); }
+  .connected-title { display:block; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.13em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
+  .selected-piece { display:none; grid-template-columns:minmax(0,1fr) auto; gap:22px; align-items:center; border:1px solid var(--ring-soft); background:rgba(143,35,29,0.08); padding:22px; margin-bottom:28px; }
+  .selected-piece.is-active { display:grid; }
+  .selected-title { font-family:var(--sans); font-weight:900; font-size:clamp(20px,3vw,32px); line-height:0.95; letter-spacing:-0.03em; color:var(--accent); text-transform:uppercase; margin-bottom:10px; }
+  .selected-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .selected-clear { min-height:42px; padding:0 14px; border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); cursor:pointer; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast); }
+  .selected-clear:hover,.selected-clear:focus-visible { border-color:var(--accent); color:var(--accent); outline:none; }
   footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
@@ -134,6 +158,10 @@
   }
   @media (max-width:768px) {
     .hero,.section-head,.filter-band { grid-template-columns:1fr; }
+    .ecosystem-band,.node-grid,.selected-piece.is-active { grid-template-columns:1fr; }
+    .node-grid { border-left:none; }
+    .node-link,.node-link:nth-child(2n),.node-link:nth-last-child(-n+2) { border-right:none; border-bottom:1px solid var(--ring-faint); }
+    .node-link:last-child { border-bottom:none; }
     .hero-desc,.count-label { text-align:left; }
     .filter-label { padding-top:0; }
     .filter-group { border-right:none; padding-right:0; }
@@ -203,6 +231,20 @@
       </div>
     </section>
 
+    <section class="ecosystem-band" aria-label="Connected construct nodes">
+      <div class="ecosystem-intro">
+        <p class="ecosystem-kicker">Connected Nodes</p>
+        <h2 class="ecosystem-title">Flash is the doorway.</h2>
+        <p class="ecosystem-copy">Art.Pill flash starts on paper, moves through archive and writing, becomes tattoo work, and can later branch into objects, supplies, and studio gatherings.</p>
+      </div>
+      <div class="node-grid">
+        <a class="node-link" href="/art/"><span class="node-venture">Art</span><span class="node-title">Source imagery</span><span class="node-copy">Painting, drawing, and symbolic language behind the flash wall.</span></a>
+        <a class="node-link" href="/merch/?filter=art.pill"><span class="node-venture">Merch</span><span class="node-title">Art.Pill supply</span><span class="node-copy">Materials, objects, and future drops connected to mark-making.</span></a>
+        <a class="node-link" href="/#archive"><span class="node-venture">Archive</span><span class="node-title">Studies &amp; process</span><span class="node-copy">Sketch rooms, abandoned routes, and visual fragments that feed new flash.</span></a>
+        <a class="node-link" href="/#events"><span class="node-venture">Events</span><span class="node-title">Open calls</span><span class="node-copy">Studio paths and gatherings where tattoo projects can begin in person.</span></a>
+      </div>
+    </section>
+
     <section class="section">
       <div class="section-head">
         <div>
@@ -256,6 +298,15 @@
     <section class="claim-form" id="flash-claim" aria-label="Flash claim form">
       <h2 class="form-title">Flash Claim</h2>
       <p class="form-note">Claim requests are reviewed before scheduling. If the piece is available and the placement works, you will receive private Acuity booking access.</p>
+      <div class="selected-piece" id="selectedPiece" aria-live="polite">
+        <div>
+          <p class="selected-kicker">Selected flash</p>
+          <h3 class="selected-title" id="selectedTitle">No piece selected yet.</h3>
+          <p class="selected-copy" id="selectedCopy">Open an available flash card and choose "Use This in Claim Form" to carry its title, code, series, size, and price into this request.</p>
+          <div class="selected-meta" id="selectedMeta"></div>
+        </div>
+        <button class="selected-clear" type="button" id="clearSelected">Clear selection</button>
+      </div>
       <form method="POST" action="https://formspree.io/f/mrejkpnl" enctype="multipart/form-data">
         <input type="hidden" name="form_type" value="flash_claim">
         <input type="hidden" name="source_path" value="/tattoos/flash/">
@@ -306,6 +357,7 @@
           <div><span class="meta-label">Code</span><span class="meta-value" id="modalCode"></span></div>
         </div>
         <div class="merch-row" id="modalMerch"></div>
+        <div class="connected-row" id="modalConnected"></div>
         <button class="cta-primary" type="button" id="modalClaim">Use This in Claim Form</button>
       </div>
     </div>
@@ -342,8 +394,23 @@
       modalType: document.getElementById("modalType"),
       modalCode: document.getElementById("modalCode"),
       modalMerch: document.getElementById("modalMerch"),
-      modalClaim: document.getElementById("modalClaim")
+      modalConnected: document.getElementById("modalConnected"),
+      modalClaim: document.getElementById("modalClaim"),
+      selectedPiece: document.getElementById("selectedPiece"),
+      selectedTitle: document.getElementById("selectedTitle"),
+      selectedCopy: document.getElementById("selectedCopy"),
+      selectedMeta: document.getElementById("selectedMeta"),
+      clearSelected: document.getElementById("clearSelected")
     };
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
 
     function slug(value) {
       return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -351,6 +418,14 @@
 
     function codeFor(item) {
       return item.sheetCode || item.designCode || item.id;
+    }
+
+    function seriesFor(item) {
+      return state.seriesMeta.find((entry) => entry.name === item.series) || {};
+    }
+
+    function connectedNodesFor(item) {
+      return item.relatedNodes?.length ? item.relatedNodes : seriesFor(item).relatedNodes || [];
     }
 
     function matches(item) {
@@ -428,7 +503,7 @@
     }
 
     function merchMarkup(item) {
-      const seriesMeta = state.seriesMeta.find((entry) => entry.name === item.series);
+      const seriesMeta = seriesFor(item);
       if (item.merchUrl) {
         return `<p class="merch-title">Related merch</p><p class="merch-copy"><a href="${item.merchUrl}">View related merch</a></p>`;
       }
@@ -436,6 +511,49 @@
         return `<p class="merch-title">Merch coming soon</p><p class="merch-copy">${item.series} merch is planned but not live yet. This row is the placeholder pattern for future drops.</p>`;
       }
       return `<p class="merch-title">No merch link</p><p class="merch-copy">This design does not have related merch attached yet.</p>`;
+    }
+
+    function connectedMarkup(item) {
+      const nodes = connectedNodesFor(item);
+      if (!nodes.length) {
+        return `<p class="connected-kicker">Connected nodes</p><p class="connected-copy">No connected construct nodes are attached yet.</p>`;
+      }
+      return `
+        <p class="connected-kicker">Connected nodes</p>
+        <div class="connected-grid">
+          ${nodes.map((node) => `
+            <a class="connected-link" href="${escapeHtml(node.url)}">
+              <span class="connected-title">${escapeHtml(node.label)} / ${escapeHtml(node.venture)}</span>
+              <span class="connected-copy">${escapeHtml(node.description)}</span>
+            </a>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function selectedMetaMarkup(item) {
+      return [item.series, item.sizeBucket, item.price, codeFor(item)]
+        .filter(Boolean)
+        .map((value) => `<span class="pill">${escapeHtml(value)}</span>`)
+        .join("");
+    }
+
+    function setSelectedPiece(item) {
+      els.selectedPiece.classList.add("is-active");
+      els.selectedTitle.textContent = item.title;
+      els.selectedCopy.textContent = `${item.status} ${item.type.toLowerCase()} selected. Add placement, timing, and notes below so the claim can be reviewed before booking access is sent.`;
+      els.selectedMeta.innerHTML = selectedMetaMarkup(item);
+    }
+
+    function clearSelectedPiece() {
+      ["flash_title", "selected_series", "selected_size_bucket", "selected_price", "selected_design_code", "selected_status", "size"].forEach((id) => {
+        const field = document.getElementById(id);
+        if (field) field.value = "";
+      });
+      els.selectedPiece.classList.remove("is-active");
+      els.selectedTitle.textContent = "No piece selected yet.";
+      els.selectedCopy.textContent = "Open an available flash card and choose \"Use This in Claim Form\" to carry its title, code, series, size, and price into this request.";
+      els.selectedMeta.innerHTML = "";
     }
 
     function openModal(item) {
@@ -451,6 +569,7 @@
       els.modalType.textContent = item.type;
       els.modalCode.textContent = codeFor(item);
       els.modalMerch.innerHTML = merchMarkup(item);
+      els.modalConnected.innerHTML = connectedMarkup(item);
       els.modalClaim.disabled = !item.claimable;
       els.modalClaim.textContent = item.claimable ? "Use This in Claim Form" : "Archive Only";
       els.modalClaim.onclick = () => item.claimable && useInClaimForm(item);
@@ -482,10 +601,13 @@
       if (message && !message.value.trim()) {
         message.value = `I am interested in ${item.title} (${codeFor(item)}).`;
       }
+      setSelectedPiece(item);
       closeModal();
       document.getElementById("flash-claim").scrollIntoView({ behavior: "smooth", block: "start" });
       document.getElementById("placement").focus({ preventScroll: true });
     }
+
+    els.clearSelected.addEventListener("click", clearSelectedPiece);
 
     document.querySelectorAll("[data-modal-close]").forEach((control) => {
       control.addEventListener("click", closeModal);

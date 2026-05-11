@@ -150,6 +150,10 @@
     font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
   }
   .work-type,.tier { padding:36px 32px; }
+  .work-type.is-primary {
+    background:rgba(143,35,29,0.08);
+    box-shadow:inset 0 0 0 1px rgba(252,184,103,0.18);
+  }
   .work-type-label,.booking-cta-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.22em; text-transform:uppercase;
@@ -167,6 +171,48 @@
     transition:color var(--t-fast);
   }
   .work-type-action:hover { color:var(--accent); }
+  .node-bridge {
+    margin-top:48px;
+    border:5px solid var(--ring-faint);
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:1px;
+  }
+  .node-bridge a {
+    min-height:116px;
+    padding:24px 22px;
+    border-right:1px solid var(--ring-faint);
+    transition:background var(--t-fast);
+  }
+  .node-bridge a:last-child { border-right:none; }
+  .node-bridge a:hover { background:rgba(252,184,103,0.035); }
+  .node-bridge-label {
+    display:block;
+    font-family:var(--serif);
+    font-size:10px;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--signal);
+    opacity:0.72;
+    margin-bottom:12px;
+  }
+  .node-bridge-title {
+    display:block;
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:14px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:8px;
+  }
+  .node-bridge-copy {
+    display:block;
+    font-family:var(--serif);
+    font-size:12px;
+    line-height:1.6;
+    color:var(--text-mute);
+  }
   .tier-label {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
     text-transform:uppercase; color:var(--text-dim); margin-bottom:20px;
@@ -250,6 +296,9 @@
     .hero-right,.booking-cta-actions { align-items:flex-start; max-width:none; }
     .hero-desc,.hero-note,.booking-cta-note { text-align:left; }
     .pillars,.work-types,.pricing-tiers,.fit-columns { grid-template-columns:1fr; }
+    .node-bridge { grid-template-columns:1fr 1fr; }
+    .node-bridge a:nth-child(2n) { border-right:none; }
+    .node-bridge a:nth-child(-n+2) { border-bottom:1px solid var(--ring-faint); }
     .booking-cta { flex-direction:column; align-items:flex-start; padding:40px 32px; }
   }
   @media (max-width:640px) {
@@ -258,6 +307,9 @@
     main { padding:var(--s6) var(--s5); }
     .section { padding:48px 0; }
     .process-steps { grid-template-columns:1fr; }
+    .node-bridge { grid-template-columns:1fr; }
+    .node-bridge a,.node-bridge a:nth-child(2n),.node-bridge a:nth-child(-n+2) { border-right:none; border-bottom:1px solid var(--ring-faint); }
+    .node-bridge a:last-child { border-bottom:none; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 @media (max-width: 700px) {
@@ -330,11 +382,17 @@
     <section class="section" id="ways-to-work">
       <p class="section-label">Ways to Work</p>
       <h2 class="section-title">Flash, Custom &amp; Special Projects</h2>
-      <p class="section-body">Three paths in. All begin with an inquiry or application gate.</p>
+      <p class="section-body">Three paths in. Flash is the fastest way to enter the Art.Pill system: choose an available design, send a claim, then receive private booking access if placement and timing fit.</p>
       <div class="work-types">
-        <div class="work-type"><p class="work-type-label">Available Now</p><p class="work-type-title">Original Flash</p><p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog: symbolic, surreal, and built to place. Flash pieces are sized and refined to the right spot on your body.</p><a class="work-type-action" href="/tattoos/flash/">View flash &rarr;</a></div>
+        <div class="work-type is-primary"><p class="work-type-label">Available Now / First Path</p><p class="work-type-title">Original Flash</p><p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog: symbolic, surreal, and built to place. Open a card, review the connected nodes, then send a claim with the design metadata already attached.</p><a class="work-type-action" href="/tattoos/flash/">Browse claimable flash &rarr;</a></div>
         <div class="work-type"><p class="work-type-label">By Inquiry</p><p class="work-type-title">Custom Work</p><p class="work-type-body">Collaboratively designed pieces built around your concept, story, or symbol system. Custom sessions begin with a written inquiry and are accepted on a project-by-project basis.</p><a class="work-type-action" href="/tattoos/portfolio/">View portfolio &rarr;</a></div>
         <div class="work-type"><p class="work-type-label">Application Gate</p><p class="work-type-title">Special Projects</p><p class="work-type-body">Concept-driven, long-form, symbolic, collaborative, or experimental tattoo work. These projects require more thought, trust, time, and budget.</p><a class="work-type-action" href="/tattooing/special-projects/">View special projects &rarr;</a></div>
+      </div>
+      <div class="node-bridge" aria-label="Tattoo venture connections">
+        <a href="/art/"><span class="node-bridge-label">Art</span><span class="node-bridge-title">Source imagery</span><span class="node-bridge-copy">The drawing and painting language behind the tattoo work.</span></a>
+        <a href="/merch/?filter=art.pill"><span class="node-bridge-label">Merch</span><span class="node-bridge-title">Art.Pill supply</span><span class="node-bridge-copy">Objects, tools, and future flash-related drops.</span></a>
+        <a href="/#archive"><span class="node-bridge-label">Archive</span><span class="node-bridge-title">Process rooms</span><span class="node-bridge-copy">Sketches and symbolic studies that feed the wall.</span></a>
+        <a href="/#events"><span class="node-bridge-label">Events</span><span class="node-bridge-title">Open calls</span><span class="node-bridge-copy">Gatherings and studio paths for work that starts in person.</span></a>
       </div>
     </section>
     <section class="section" id="pricing">
@@ -350,10 +408,10 @@
     <section class="section" id="booking-process">
       <p class="section-label">How It Works</p>
       <h2 class="section-title">The Booking Process</h2>
-      <p class="section-body">This is not a walk-in shop. Every client begins with a project inquiry, and not every project is accepted.</p>
+      <p class="section-body">This is not a walk-in shop. Flash claims, custom inquiries, and Special Projects are reviewed before booking, and not every request is accepted.</p>
       <div class="process-steps">
-        <div class="step"><span class="step-num">01</span><p class="step-title">Submit Inquiry</p><p class="step-desc">Describe your project: concept, placement, size, and anything else that matters.</p></div>
-        <div class="step"><span class="step-num">02</span><p class="step-title">Project Review</p><p class="step-desc">Inquiries are reviewed individually. You’ll hear back within 1–2 weeks.</p></div>
+        <div class="step"><span class="step-num">01</span><p class="step-title">Choose a Path</p><p class="step-desc">Claim available flash, submit a custom inquiry, or apply for a Special Project.</p></div>
+        <div class="step"><span class="step-num">02</span><p class="step-title">Project Review</p><p class="step-desc">Flash claims and inquiries are reviewed individually. You’ll hear back within 1–2 weeks.</p></div>
         <div class="step"><span class="step-num">03</span><p class="step-title">Booking Link</p><p class="step-desc">Approved clients receive a private booking link that is not listed publicly.</p></div>
         <div class="step"><span class="step-num">04</span><p class="step-title">Deposit</p><p class="step-desc">A deposit secures your appointment date and is applied toward the final cost.</p></div>
         <div class="step"><span class="step-num">05</span><p class="step-title">Session</p><p class="step-desc">Your appointment. Design consultation is finalized and the work begins.</p></div>
@@ -389,5 +447,4 @@
   <script src="/js/construct-nav.js"></script>
 </body>
 </html>
-
 
