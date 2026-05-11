@@ -90,7 +90,7 @@
   justify-content: center;
   min-height: 48px;
   padding: 0 20px;
-  border: 5px solid rgba(109, 61, 21, 0.4);
+  border: 1px solid rgba(109, 61, 21, 0.4);
   font-family: var(--font-display);
   font-size: 11px;
   font-weight: 700;
@@ -134,10 +134,9 @@
 .tattoos-page .cta-panel,
 .tattoos-page .info-panel,
 .tattoos-page .process-list {
-  border: 5px solid rgba(109, 61, 21, 0.18);
-  background:
-    linear-gradient(180deg, rgba(143, 35, 29, 0.06), transparent 30%),
-    #111111;
+  border-top: 1px solid rgba(109, 61, 21, 0.28);
+  border-bottom: 1px solid rgba(109, 61, 21, 0.18);
+  background: transparent;
 }
 
 .tattoos-page .hero-panel,
@@ -193,7 +192,7 @@
 
 .tattoos-page .page-section + .page-section {
   padding-top: 64px;
-  border-top: 5px solid rgba(109, 61, 21, 0.18);
+  border-top: 1px solid rgba(109, 61, 21, 0.18);
 }
 
 .tattoos-page .section-head {
@@ -206,7 +205,7 @@
 }
 
 .tattoos-page .card-grid.three-up {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .tattoos-page .card-grid.two-up,
@@ -251,8 +250,9 @@
 
 .tattoos-page .price-card,
 .tattoos-page .fit-card {
-  border: 5px solid rgba(109, 61, 21, 0.18);
-  background: #111111;
+  border-top: 1px solid rgba(109, 61, 21, 0.28);
+  border-bottom: 1px solid rgba(109, 61, 21, 0.18);
+  background: transparent;
   padding: 24px;
 }
 
@@ -283,7 +283,7 @@
 
 .tattoos-page .process-step {
   padding: 24px;
-  border-right: 5px solid rgba(109, 61, 21, 0.18);
+  border-right: 1px solid rgba(109, 61, 21, 0.18);
 }
 
 .tattoos-page .process-step:last-child {
@@ -330,7 +330,7 @@
   align-items: flex-start;
   gap: 16px;
   padding-top: 64px;
-  border-top: 5px solid rgba(109, 61, 21, 0.4);
+  border-top: 1px solid rgba(109, 61, 21, 0.4);
 }
 
 .tattoos-page .footer-bottom p,
@@ -364,7 +364,7 @@
 
   .tattoos-page .process-step {
     border-right: 0;
-    border-bottom: 5px solid rgba(109, 61, 21, 0.18);
+    border-bottom: 1px solid rgba(109, 61, 21, 0.18);
   }
 
   .tattoos-page .process-step:last-child {

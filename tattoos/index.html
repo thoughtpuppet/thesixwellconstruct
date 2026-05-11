@@ -57,7 +57,7 @@
   .nav-inquire {
     font-family:var(--sans); font-weight:700; font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--signal); border:5px solid rgba(143,35,29,0.4);
+    color:var(--signal); border:1px solid rgba(143,35,29,0.4);
     padding:8px 16px;
     transition:background var(--t-fast), border-color var(--t-fast);
   }
@@ -97,7 +97,7 @@
     font-family:var(--sans); font-weight:700; font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
     color:var(--text-mute); background:transparent;
-    border:5px solid var(--ring-soft);
+    border:1px solid var(--ring-soft);
     padding:12px 24px;
     transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   }
@@ -109,7 +109,7 @@
   }
   .section {
     padding:72px 0;
-    border-top:5px solid var(--ring-faint);
+    border-top:1px solid var(--ring-faint);
   }
   .section:first-of-type { border-top:none; padding-top:0; }
   .section-label {
@@ -128,140 +128,236 @@
     line-height:1.8; color:var(--text); max-width:620px;
   }
   .section-body + .section-body { margin-top:16px; }
-  .pillars,.work-types,.pricing-tiers,.process-steps,.fit-columns {
-    gap:1px; background:transparent;
-    border:5px solid var(--ring-faint);
-    margin-top:48px;
+  .editorial-field {
+    display:grid;
+    grid-template-columns:minmax(0,0.9fr) minmax(280px,0.48fr);
+    gap:72px;
+    align-items:start;
+    margin-top:44px;
   }
-  .pillars { display:grid; grid-template-columns:repeat(3,1fr); }
-  .work-types { display:grid; grid-template-columns:repeat(3,1fr); }
-  .pricing-tiers,.fit-columns { display:grid; grid-template-columns:1fr 1fr; }
-  .process-steps { display:grid; grid-template-columns:repeat(5,1fr); }
-  .pillar,.work-type,.tier,.step,.fit-col { background:transparent; }
-  .pillar { padding:32px 28px; }
-  .pillar-title,.work-type-title,.tier-name,.step-title,.fit-col-title,.booking-cta-title {
+  .manifesto {
+    max-width:740px;
+  }
+  .manifesto-line {
+    font-family:var(--serif);
+    font-size:clamp(23px,3.1vw,46px);
+    line-height:1.18;
+    color:var(--text);
+    text-wrap:balance;
+  }
+  .manifesto-line + .manifesto-line { margin-top:28px; }
+  .side-notes {
+    border-left:1px solid var(--ring-faint);
+    padding-left:24px;
+    display:flex;
+    flex-direction:column;
+    gap:26px;
+  }
+  .note-title,.ledger-title,.path-title,.fit-title,.booking-cta-title {
     font-family:var(--sans);
   }
-  .pillar-title {
+  .note-title {
     font-weight:900; font-size:13px; letter-spacing:0.1em; text-transform:uppercase;
     color:var(--signal); margin-bottom:14px;
   }
-  .pillar-body,.work-type-body,.tier-desc,.step-desc,.booking-cta-body {
+  .note-body,.ledger-body,.path-body,.fit-body,.booking-cta-body {
     font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
   }
-  .work-type,.tier { padding:36px 32px; }
-  .work-type.is-primary {
-    background:rgba(143,35,29,0.08);
-    box-shadow:inset 0 0 0 1px rgba(252,184,103,0.18);
+  .ledger {
+    margin-top:48px;
+    border-top:1px solid var(--ring-faint);
   }
-  .work-type-label,.booking-cta-label {
+  .ledger-row {
+    display:grid;
+    grid-template-columns:72px minmax(160px,0.38fr) minmax(0,1fr) auto;
+    gap:24px;
+    align-items:center;
+    padding:28px 0;
+    border-bottom:1px solid var(--ring-faint);
+  }
+  .ledger-row.is-primary {
+    padding:36px 0;
+  }
+  .ledger-number {
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:clamp(32px,5vw,70px);
+    line-height:0.9;
+    letter-spacing:-0.05em;
+    color:var(--signal);
+    opacity:0.35;
+  }
+  .ledger-label,.booking-cta-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.22em; text-transform:uppercase;
     color:var(--signal); opacity:0.7; margin-bottom:12px;
   }
-  .work-type-title {
+  .ledger-title {
     font-weight:900; font-size:22px; letter-spacing:-0.02em;
     color:var(--accent); margin-bottom:16px;
   }
-  .work-type-action {
+  .ledger-status {
+    font-family:var(--sans);
+    font-weight:700;
+    font-size:10px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .ledger-action {
     display:inline-block; margin-top:22px;
     font-family:var(--sans); font-weight:700; font-size:10px;
     letter-spacing:0.16em; text-transform:uppercase;
     color:var(--text-dim);
     transition:color var(--t-fast);
   }
-  .work-type-action:hover { color:var(--accent); }
-  .node-bridge {
-    margin-top:48px;
-    border:5px solid var(--ring-faint);
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:1px;
+  .ledger-action:hover { color:var(--accent); }
+  .trace-row {
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px 16px;
+    margin-top:18px;
   }
-  .node-bridge a {
-    min-height:116px;
-    padding:24px 22px;
-    border-right:1px solid var(--ring-faint);
-    transition:background var(--t-fast);
-  }
-  .node-bridge a:last-child { border-right:none; }
-  .node-bridge a:hover { background:rgba(252,184,103,0.035); }
-  .node-bridge-label {
-    display:block;
+  .trace-row a {
     font-family:var(--serif);
     font-size:10px;
-    letter-spacing:0.22em;
+    letter-spacing:0.18em;
     text-transform:uppercase;
-    color:var(--signal);
-    opacity:0.72;
-    margin-bottom:12px;
+    color:var(--text-ghost);
+    border-bottom:1px solid transparent;
+    transition:color var(--t-fast), border-color var(--t-fast);
   }
-  .node-bridge-title {
-    display:block;
+  .trace-row a:hover {
+    color:var(--accent);
+    border-color:var(--ring-soft);
+  }
+  .ritual {
+    margin-top:96px;
+    display:grid;
+    grid-template-columns:minmax(220px,0.38fr) minmax(0,1fr);
+    gap:72px;
+    align-items:start;
+  }
+  .ritual-intro {
+    position:sticky;
+    top:104px;
+  }
+  .path-list {
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    gap:0;
+  }
+  .path-list::before {
+    content:"";
+    position:absolute;
+    top:16px;
+    bottom:16px;
+    left:35px;
+    width:1px;
+    background:var(--ring-faint);
+  }
+  .path-step {
+    position:relative;
+    display:grid;
+    grid-template-columns:72px minmax(0,1fr);
+    gap:28px;
+    padding:0 0 42px;
+  }
+  .path-step:last-child { padding-bottom:0; }
+  .path-mark {
+    position:relative;
+    z-index:2;
+    width:72px;
+    height:72px;
+    display:grid;
+    place-items:center;
+    background:var(--bg);
+    border:1px solid var(--ring-faint);
+    color:var(--signal);
+    font-family:var(--serif);
+    font-size:22px;
+    line-height:1;
+  }
+  .path-title {
+    font-weight:900;
+    font-size:15px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:10px;
+  }
+  .price-fit {
+    margin-top:96px;
+    border-top:1px solid var(--ring-faint);
+    border-bottom:1px solid var(--ring-faint);
+    display:grid;
+    grid-template-columns:minmax(0,0.72fr) minmax(0,1fr);
+    gap:64px;
+    padding:42px 0;
+  }
+  .rate-list,.fit-list {
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:22px;
+  }
+  .rate-list li {
+    display:grid;
+    grid-template-columns:minmax(110px,0.3fr) minmax(0,1fr);
+    gap:22px;
+    align-items:start;
+  }
+  .rate-figure {
     font-family:var(--sans);
     font-weight:900;
-    font-size:14px;
-    letter-spacing:0.1em;
+    font-size:clamp(32px,5vw,58px);
+    line-height:0.9;
+    letter-spacing:-0.04em;
+    color:var(--signal);
+  }
+  .rate-label,.fit-title {
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:12px;
+    letter-spacing:0.12em;
     text-transform:uppercase;
     color:var(--accent);
     margin-bottom:8px;
   }
-  .node-bridge-copy {
-    display:block;
-    font-family:var(--serif);
-    font-size:12px;
-    line-height:1.6;
-    color:var(--text-mute);
-  }
-  .tier-label {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
-    text-transform:uppercase; color:var(--text-dim); margin-bottom:20px;
-  }
-  .tier-price {
-    font-family:var(--sans); font-weight:900; font-size:clamp(40px,5vw,64px);
-    letter-spacing:-0.04em; line-height:1; color:var(--signal);
-  }
-  .tier-unit {
-    font-family:var(--serif); font-size:11px; color:var(--text-dim);
-    letter-spacing:0.14em; text-transform:uppercase; margin:4px 0 24px;
-  }
-  .tier-name {
-    font-weight:700; font-size:12px; letter-spacing:0.1em;
-    text-transform:uppercase; color:var(--accent); margin-bottom:12px;
-  }
-  .pricing-note {
+  .fine-print {
     margin-top:24px; font-family:var(--serif); font-size:12px;
     letter-spacing:0.04em; color:var(--text-dim); line-height:1.7; max-width:600px;
   }
-  .step {
-    padding:28px 22px; display:flex; flex-direction:column; gap:12px;
-  }
-  .step-num {
-    font-family:var(--sans); font-weight:900; font-size:36px;
-    letter-spacing:-0.04em; line-height:1; color:var(--signal); opacity:0.22;
-  }
-  .step-title,.fit-col-title {
-    font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
-  }
-  .step-title { color:var(--accent); }
-  .step-desc { font-size:12px; line-height:1.65; }
-  .fit-col { padding:32px 28px; }
-  .fit-col-title { margin-bottom:24px; }
-  .fit-col.good .fit-col-title { color:var(--signal); }
-  .fit-col.not .fit-col-title { color:var(--text-dim); }
-  .fit-list { list-style:none; display:flex; flex-direction:column; gap:12px; }
   .fit-list li {
-    font-family:var(--serif); font-size:13px; line-height:1.5; color:var(--text-mute);
-    padding-left:18px; position:relative;
+    display:grid;
+    grid-template-columns:14px minmax(0,1fr);
+    gap:14px;
+    font-family:var(--serif);
+    font-size:13px;
+    line-height:1.55;
+    color:var(--text-mute);
   }
   .fit-list li::before {
-    content:""; position:absolute; left:0; top:7px; width:4px; height:4px; border-radius:50%;
+    content:"";
+    width:4px;
+    height:4px;
+    border-radius:50%;
+    background:var(--signal);
+    margin-top:9px;
+    opacity:0.7;
   }
-  .fit-col.good .fit-list li::before { background:var(--signal); }
-  .fit-col.not .fit-list li::before { background:var(--text-ghost); }
+  .fit-list.secondary li::before { background:var(--text-ghost); }
   .booking-cta {
-    margin-top:80px; border:5px solid var(--ring-soft); background:transparent;
-    padding:64px 48px; display:flex; align-items:center; justify-content:space-between; gap:48px;
+    margin-top:96px;
+    border-top:1px solid var(--ring-soft);
+    border-bottom:1px solid var(--ring-soft);
+    background:transparent;
+    padding:48px 0;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:48px;
   }
   .booking-cta-left { max-width:480px; }
   .booking-cta-title {
@@ -277,7 +373,7 @@
   }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
-    padding:56px var(--s6); border-top:5px solid var(--ring-faint);
+    padding:56px var(--s6); border-top:1px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
   }
   footer.bottom p, footer.bottom a {
@@ -287,29 +383,31 @@
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:1024px) {
-    .process-steps { grid-template-columns:repeat(3,1fr); }
     main { padding:var(--s7) var(--s5) var(--s6); }
+    .editorial-field,.ritual,.price-fit { grid-template-columns:1fr; gap:44px; }
+    .ritual-intro { position:static; }
+    .ledger-row { grid-template-columns:56px minmax(0,1fr); }
+    .ledger-status,.ledger-action { grid-column:2; }
     footer.bottom { padding:48px var(--s5); }
   }
   @media (max-width:768px) {
     .hero { flex-direction:column; align-items:flex-start; gap:20px; }
     .hero-right,.booking-cta-actions { align-items:flex-start; max-width:none; }
     .hero-desc,.hero-note,.booking-cta-note { text-align:left; }
-    .pillars,.work-types,.pricing-tiers,.fit-columns { grid-template-columns:1fr; }
-    .node-bridge { grid-template-columns:1fr 1fr; }
-    .node-bridge a:nth-child(2n) { border-right:none; }
-    .node-bridge a:nth-child(-n+2) { border-bottom:1px solid var(--ring-faint); }
-    .booking-cta { flex-direction:column; align-items:flex-start; padding:40px 32px; }
+    .side-notes { border-left:none; padding-left:0; border-top:1px solid var(--ring-faint); padding-top:24px; }
+    .rate-list li { grid-template-columns:1fr; gap:10px; }
+    .booking-cta { grid-template-columns:1fr; align-items:flex-start; }
   }
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     .top-nav { display:none; }
     main { padding:var(--s6) var(--s5); }
     .section { padding:48px 0; }
-    .process-steps { grid-template-columns:1fr; }
-    .node-bridge { grid-template-columns:1fr; }
-    .node-bridge a,.node-bridge a:nth-child(2n),.node-bridge a:nth-child(-n+2) { border-right:none; border-bottom:1px solid var(--ring-faint); }
-    .node-bridge a:last-child { border-bottom:none; }
+    .ledger-row { grid-template-columns:1fr; gap:12px; }
+    .ledger-status,.ledger-action { grid-column:auto; }
+    .path-step { grid-template-columns:54px minmax(0,1fr); gap:18px; }
+    .path-list::before { left:26px; }
+    .path-mark { width:54px; height:54px; font-size:18px; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 @media (max-width: 700px) {
@@ -365,76 +463,158 @@
     <section class="section" id="the-work">
       <p class="section-label">The Work</p>
       <h2 class="section-title">Symbolic. Surreal. Mythic.</h2>
-      <p class="section-body">Every piece begins with a question: what are you carrying, and what do you want on your skin for the rest of your life? The work here is visually original and story-driven, not trend-sourced and not pulled from a reference folder.</p>
-      <p class="section-body">The imagery is drawn from mythology, dream logic, personal symbol systems, and the things people need to externalize. If you know what you need to say and are ready to trust a collaborator in saying it, this is the right place.</p>
-      <div class="pillars">
-        <div class="pillar"><p class="pillar-title">Symbolic</p><p class="pillar-body">Imagery that carries a private or archetypal meaning. Not decorative first, but anchored to something real in the person wearing it.</p></div>
-        <div class="pillar"><p class="pillar-title">Surreal</p><p class="pillar-body">Dream logic. Incongruous figures. Scenes that do not obey literal space but communicate something exact and felt.</p></div>
-        <div class="pillar"><p class="pillar-title">Mythic</p><p class="pillar-body">Figures, creatures, and archetypes drawn from personal mythology as much as collective ones. The work builds its own visual language over time.</p></div>
+      <div class="editorial-field">
+        <div class="manifesto">
+          <p class="manifesto-line">Every piece begins with a question: what are you carrying, and what do you want your skin to remember?</p>
+          <p class="manifesto-line">The work is visually original, story-driven, and shaped through shared meaning.</p>
+          <p class="manifesto-line">Myth, dream logic, private symbol systems, and lived pressure become marks built for the body carrying them.</p>
+        </div>
+        <aside class="side-notes" aria-label="Tattoo language notes">
+          <article>
+            <h3 class="note-title">Symbolic</h3>
+            <p class="note-body">Imagery with private or archetypal meaning, anchored to something real in the person wearing it.</p>
+          </article>
+          <article>
+            <h3 class="note-title">Surreal</h3>
+            <p class="note-body">Dream logic, incongruous figures, and scenes that bend literal space while communicating something exact and felt.</p>
+          </article>
+          <article>
+            <h3 class="note-title">Mythic</h3>
+            <p class="note-body">Figures, objects, and archetypes drawn from personal mythology as much as collective ones.</p>
+          </article>
+        </aside>
       </div>
     </section>
-    <section class="section" id="the-experience">
-      <p class="section-label">The Experience</p>
-      <h2 class="section-title">A Guided Creative Process</h2>
-      <p class="section-body">Working here is not placing an order. You bring what you need to say, the image, the feeling, the story, or just the intuition that something needs to be on your body, and together we shape it into something permanent.</p>
-      <p class="section-body">The process is intentional and unhurried. Every session is preceded by real consultation. The design you receive is original, drawn for you, and not pulled from a catalog.</p>
-    </section>
+
     <section class="section" id="ways-to-work">
-      <p class="section-label">Ways to Work</p>
-      <h2 class="section-title">Flash, Custom &amp; Special Projects</h2>
-      <p class="section-body">Three paths in. Flash is the fastest way to enter the Art.Pill system: choose an available design, send a claim, then receive private booking access if placement and timing fit.</p>
-      <div class="work-types">
-        <div class="work-type is-primary"><p class="work-type-label">Available Now / First Path</p><p class="work-type-title">Original Flash</p><p class="work-type-body">Pre-drawn designs from the Art.Pill flash catalog: symbolic, surreal, and built to place. Open a card, review the connected nodes, then send a claim with the design metadata already attached.</p><a class="work-type-action" href="/tattoos/flash/">Browse claimable flash &rarr;</a></div>
-        <div class="work-type"><p class="work-type-label">By Inquiry</p><p class="work-type-title">Custom Work</p><p class="work-type-body">Collaboratively designed pieces built around your concept, story, or symbol system. Custom sessions begin with a written inquiry and are accepted on a project-by-project basis.</p><a class="work-type-action" href="/tattoos/portfolio/">View portfolio &rarr;</a></div>
-        <div class="work-type"><p class="work-type-label">Application Gate</p><p class="work-type-title">Special Projects</p><p class="work-type-body">Concept-driven, long-form, symbolic, collaborative, or experimental tattoo work. These projects require more thought, trust, time, and budget.</p><a class="work-type-action" href="/tattooing/special-projects/">View special projects &rarr;</a></div>
-      </div>
-      <div class="node-bridge" aria-label="Tattoo venture connections">
-        <a href="/art/"><span class="node-bridge-label">Art</span><span class="node-bridge-title">Source imagery</span><span class="node-bridge-copy">The drawing and painting language behind the tattoo work.</span></a>
-        <a href="/merch/?filter=art.pill"><span class="node-bridge-label">Merch</span><span class="node-bridge-title">Art.Pill supply</span><span class="node-bridge-copy">Objects, tools, and future flash-related drops.</span></a>
-        <a href="/#archive"><span class="node-bridge-label">Archive</span><span class="node-bridge-title">Process rooms</span><span class="node-bridge-copy">Sketches and symbolic studies that feed the wall.</span></a>
-        <a href="/#events"><span class="node-bridge-label">Events</span><span class="node-bridge-title">Open calls</span><span class="node-bridge-copy">Gatherings and studio paths for work that starts in person.</span></a>
+      <p class="section-label">Entry Points</p>
+      <h2 class="section-title">Choose the door that already feels alive.</h2>
+      <p class="section-body">Flash is the fastest entry into Art.Pill. Custom work and Special Projects open more slowly, through concept, placement, trust, and review.</p>
+      <div class="ledger" aria-label="Tattoo entry paths">
+        <article class="ledger-row is-primary">
+          <span class="ledger-number">01</span>
+          <div>
+            <p class="ledger-label">Available now</p>
+            <h3 class="ledger-title">Flash</h3>
+          </div>
+          <div>
+            <p class="ledger-body">Pre-drawn symbolic, surreal, and mythic designs. Open a card, follow any traces that appear, then send a claim with the design metadata attached.</p>
+            <div class="trace-row" aria-label="Flash traces">
+              <a href="/art/">trace: art</a>
+              <a href="/merch/?filter=art.pill">trace: supply</a>
+              <a href="/#archive">trace: studies</a>
+            </div>
+          </div>
+          <div>
+            <p class="ledger-status">first path</p>
+            <a class="ledger-action" href="/tattoos/flash/">Browse flash &rarr;</a>
+          </div>
+        </article>
+        <article class="ledger-row">
+          <span class="ledger-number">02</span>
+          <div>
+            <p class="ledger-label">By inquiry</p>
+            <h3 class="ledger-title">Custom</h3>
+          </div>
+          <div>
+            <p class="ledger-body">Original work built around your concept, story, symbol system, placement, and the visual language of the project.</p>
+            <div class="trace-row" aria-label="Custom traces">
+              <a href="/tattoos/portfolio/">trace: portfolio</a>
+              <a href="/art/">trace: source imagery</a>
+            </div>
+          </div>
+          <div>
+            <p class="ledger-status">selective review</p>
+            <a class="ledger-action" href="/tattoos/inquire/">Start inquiry &rarr;</a>
+          </div>
+        </article>
+        <article class="ledger-row">
+          <span class="ledger-number">03</span>
+          <div>
+            <p class="ledger-label">Application gate</p>
+            <h3 class="ledger-title">Special Projects</h3>
+          </div>
+          <div>
+            <p class="ledger-body">Long-form symbolic, collaborative, multi-session, or experimental work that needs deeper concept, trust, time, or scale.</p>
+            <div class="trace-row" aria-label="Special project traces">
+              <a href="/tattooing/special-projects/">trace: studies</a>
+              <a href="/#events">trace: in person</a>
+              <a href="/#archive">trace: archive</a>
+            </div>
+          </div>
+          <div>
+            <p class="ledger-status">open calls</p>
+            <a class="ledger-action" href="/tattooing/special-projects/">View studies &rarr;</a>
+          </div>
+        </article>
       </div>
     </section>
-    <section class="section" id="pricing">
-      <p class="section-label">Pricing</p>
-      <h2 class="section-title">Transparent Rates</h2>
-      <p class="section-body">All sessions require a deposit, applied toward the total cost of your tattoo.</p>
-      <div class="pricing-tiers">
-        <div class="tier"><p class="tier-label">Standard Rate</p><p class="tier-price">$150</p><p class="tier-unit">per hour</p><p class="tier-name">Flash &amp; Standard Sessions</p><p class="tier-desc">Original flash, smaller custom pieces, and single-session work. Applies to most appointments.</p></div>
-        <div class="tier"><p class="tier-label">Premium Rate</p><p class="tier-price">$250</p><p class="tier-unit">per hour</p><p class="tier-name">Mythic &amp; Story-Driven Sessions</p><p class="tier-desc">Extended custom work, complex symbolic compositions, and larger narrative pieces that require deeper collaboration.</p></div>
-      </div>
-      <p class="pricing-note">Deposits are required to secure all appointments. Rates are confirmed at booking time and subject to change.</p>
-    </section>
+
     <section class="section" id="booking-process">
-      <p class="section-label">How It Works</p>
-      <h2 class="section-title">The Booking Process</h2>
-      <p class="section-body">This is not a walk-in shop. Flash claims, custom inquiries, and Special Projects are reviewed before booking, and not every request is accepted.</p>
-      <div class="process-steps">
-        <div class="step"><span class="step-num">01</span><p class="step-title">Choose a Path</p><p class="step-desc">Claim available flash, submit a custom inquiry, or apply for a Special Project.</p></div>
-        <div class="step"><span class="step-num">02</span><p class="step-title">Project Review</p><p class="step-desc">Flash claims and inquiries are reviewed individually. You’ll hear back within 1–2 weeks.</p></div>
-        <div class="step"><span class="step-num">03</span><p class="step-title">Booking Link</p><p class="step-desc">Approved clients receive a private booking link that is not listed publicly.</p></div>
-        <div class="step"><span class="step-num">04</span><p class="step-title">Deposit</p><p class="step-desc">A deposit secures your appointment date and is applied toward the final cost.</p></div>
-        <div class="step"><span class="step-num">05</span><p class="step-title">Session</p><p class="step-desc">Your appointment. Design consultation is finalized and the work begins.</p></div>
+      <div class="ritual">
+        <div class="ritual-intro">
+          <p class="section-label">How It Works</p>
+          <h2 class="section-title">A review path before the session.</h2>
+          <p class="section-body">Every path begins with review. Flash claims, custom inquiries, and Special Projects are considered for fit before a private booking link is sent.</p>
+        </div>
+        <div class="path-list" aria-label="Booking process">
+          <article class="path-step">
+            <span class="path-mark">I</span>
+            <div><h3 class="path-title">Choose a path</h3><p class="path-body">Claim available flash, submit a custom inquiry, or apply for a Special Project.</p></div>
+          </article>
+          <article class="path-step">
+            <span class="path-mark">II</span>
+            <div><h3 class="path-title">Project review</h3><p class="path-body">The request is reviewed for placement, scale, timing, concept, and fit.</p></div>
+          </article>
+          <article class="path-step">
+            <span class="path-mark">III</span>
+            <div><h3 class="path-title">Private booking</h3><p class="path-body">Approved clients receive a private scheduling and deposit link.</p></div>
+          </article>
+          <article class="path-step">
+            <span class="path-mark">IV</span>
+            <div><h3 class="path-title">Session</h3><p class="path-body">The design is finalized with the body in mind, and the work begins.</p></div>
+          </article>
+        </div>
       </div>
     </section>
+
     <section class="section" id="project-fit">
-      <p class="section-label">Project Fit</p>
-      <h2 class="section-title">Is This the Right Shop?</h2>
-      <p class="section-body">Not every project belongs here, and that is okay. The inquiry process exists to determine whether this is the right collaboration before either side commits.</p>
-      <div class="fit-columns">
-        <div class="fit-col good"><p class="fit-col-title">Good Fit</p><ul class="fit-list"><li>Symbolic and conceptually driven work</li><li>Surreal or dream-logic imagery</li><li>Mythic figures and archetypal compositions</li><li>Original flash from the Art.Pill catalog</li><li>Emotionally or narratively anchored pieces</li></ul></div>
-        <div class="fit-col not"><p class="fit-col-title">Not the Right Fit</p><ul class="fit-list"><li>Exact copies of another artist’s work</li><li>Trend-based or algorithm-sourced designs</li><li>Micro realism or hyper-photographic styles</li><li>Rushed timelines or last-minute appointments</li><li>Projects without a clear concept or direction</li></ul></div>
+      <div class="price-fit">
+        <div>
+          <p class="section-label">Rates</p>
+          <h2 class="section-title">Transparent Rates</h2>
+          <ul class="rate-list">
+            <li><span class="rate-figure">$150</span><div><p class="rate-label">Flash &amp; Standard Sessions</p><p class="fit-body">Original flash, smaller custom pieces, and single-session work. Applies to most appointments.</p></div></li>
+            <li><span class="rate-figure">$250</span><div><p class="rate-label">Mythic &amp; Story-Driven Sessions</p><p class="fit-body">Extended custom work, complex symbolic compositions, and larger narrative pieces that require deeper collaboration.</p></div></li>
+          </ul>
+          <p class="fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
+        </div>
+        <div>
+          <p class="section-label">Project Fit</p>
+          <h2 class="section-title">Where the Work Opens Best</h2>
+          <p class="section-body">The inquiry process helps find the strongest collaboration path. The best projects arrive with trust, meaning, and room for the image to become specific to the body.</p>
+          <ul class="fit-list">
+            <li>Symbolic and conceptually driven work</li>
+            <li>Surreal or dream-logic imagery</li>
+            <li>Mythic figures and archetypal compositions</li>
+            <li>Original flash from the Art.Pill catalog</li>
+            <li>Emotionally or narratively anchored pieces</li>
+          </ul>
+          <ul class="fit-list secondary">
+            <li>Reference-faithful reproduction requests, hyper-photographic realism priorities, and immediate scheduling needs may be better served through other good paths.</li>
+          </ul>
+        </div>
       </div>
     </section>
     <div class="booking-cta">
       <div class="booking-cta-left">
         <p class="booking-cta-label">Ready to Begin</p>
         <h2 class="booking-cta-title">Start With an Inquiry.</h2>
-        <p class="booking-cta-body">Describe your project and we’ll determine whether it is the right fit. No commitment required at this stage, just a conversation about what you want to put on your body and why.</p>
+        <p class="booking-cta-body">Describe your project and we’ll find the right path for it. This first stage is a conversation about what you want to put on your body and why.</p>
       </div>
       <div class="booking-cta-actions">
         <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
-        <p class="booking-cta-note">Not a direct booking. All projects are reviewed before a session is scheduled.</p>
+        <p class="booking-cta-note">Review comes before scheduling. Approved projects receive private booking access.</p>
       </div>
     </div>
   </main>
@@ -447,4 +627,3 @@
   <script src="/js/construct-nav.js"></script>
 </body>
 </html>
-

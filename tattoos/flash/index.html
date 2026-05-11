@@ -36,35 +36,34 @@
   .page-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:16px; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; }
   .hero-desc { font-size:14px; letter-spacing:0.03em; line-height:1.75; color:var(--text-mute); text-align:right; }
-  .filter-band { border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); padding:28px 0; margin-bottom:64px; display:grid; grid-template-columns:auto 1fr; gap:24px 36px; align-items:start; }
+  .filter-band { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:22px 0; margin-bottom:64px; display:grid; grid-template-columns:auto 1fr; gap:24px 36px; align-items:start; }
   .filter-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; padding-top:13px; }
   .filter-groups { display:flex; flex-wrap:wrap; gap:14px; }
   .filter-group { display:flex; flex-wrap:wrap; gap:6px; padding-right:14px; border-right:1px solid var(--ring-faint); }
   .filter-group:last-child { border-right:none; padding-right:0; }
   .filter-btn { min-height:40px; padding:0 14px; border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); cursor:pointer; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .filter-btn:hover,.filter-btn[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
-  .ecosystem-band { border:5px solid var(--ring-faint); margin-bottom:72px; display:grid; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr); gap:1px; }
-  .ecosystem-intro,.node-link { padding:30px 28px; }
+  .ecosystem-band { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); margin-bottom:72px; padding:22px 0; display:grid; grid-template-columns:minmax(0,0.74fr) minmax(0,1.26fr); gap:34px; align-items:start; }
+  .ecosystem-intro { padding:0; }
+  .node-link { padding:0 0 0 16px; }
   .ecosystem-kicker,.node-venture,.selected-kicker,.connected-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; }
-  .ecosystem-kicker,.selected-kicker,.connected-kicker { color:var(--signal); margin-bottom:12px; }
-  .ecosystem-title { font-family:var(--sans); font-weight:900; font-size:clamp(24px,3vw,42px); line-height:0.94; letter-spacing:-0.03em; color:var(--accent); text-transform:uppercase; margin-bottom:14px; }
+  .ecosystem-kicker,.selected-kicker,.connected-kicker { color:var(--signal); margin-bottom:12px; opacity:0.72; }
+  .ecosystem-title { font-family:var(--sans); font-weight:900; font-size:clamp(20px,2vw,30px); line-height:1; letter-spacing:-0.02em; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .ecosystem-copy,.node-copy,.selected-copy,.connected-copy { font-size:13px; line-height:1.7; color:var(--text-mute); }
-  .node-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; border-left:1px solid var(--ring-faint); }
-  .node-link { min-height:132px; border-bottom:1px solid var(--ring-faint); border-right:1px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast); }
-  .node-link:nth-child(2n) { border-right:none; }
-  .node-link:nth-last-child(-n+2) { border-bottom:none; }
-  .node-link:hover { background:rgba(252,184,103,0.035); }
-  .node-venture { display:block; color:var(--signal); margin-bottom:10px; }
-  .node-title { display:block; font-family:var(--sans); font-weight:900; font-size:15px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
-  .section { padding:72px 0; border-top:5px solid var(--ring-faint); }
+  .node-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
+  .node-link { min-height:0; border-left:1px solid var(--ring-faint); transition:border-color var(--t-fast), opacity var(--t-fast); opacity:0.72; }
+  .node-link:hover { border-color:var(--signal); opacity:1; }
+  .node-venture { display:block; color:var(--signal); margin-bottom:8px; }
+  .node-title { display:block; font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); margin-bottom:7px; }
+  .section { padding:72px 0; border-top:1px solid var(--ring-faint); }
   .section:first-of-type { border-top:none; padding-top:0; }
   .section-head { display:grid; grid-template-columns:minmax(0,640px) minmax(200px,1fr); gap:32px; align-items:end; margin-bottom:36px; }
   .section-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.68; margin-bottom:16px; }
   .section-title { font-family:var(--sans); font-weight:900; font-size:clamp(30px,5vw,68px); letter-spacing:-0.04em; line-height:0.92; color:var(--accent); text-transform:uppercase; }
   .section-body { font-size:15px; line-height:1.8; color:var(--text-mute); }
   .count-label { font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim); text-align:right; }
-  .sheet-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; border:5px solid var(--ring-faint); }
-  .catalog-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; border:5px solid var(--ring-faint); }
+  .sheet-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; border-top:1px solid var(--ring-faint); padding-top:18px; }
+  .catalog-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:18px; border-top:1px solid var(--ring-faint); padding-top:18px; }
   .flash-item { position:relative; min-height:420px; border:0; background:#0f0f0f; color:var(--text); text-align:left; cursor:pointer; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; }
   .flash-item::before { content:""; position:absolute; inset:18px; border:1px solid var(--ring-faint); z-index:2; pointer-events:none; }
   .flash-item:hover .item-image img { transform:scale(1.025); filter:saturate(1) contrast(1.05); }
@@ -82,20 +81,20 @@
   .item-code { font-size:10px; letter-spacing:0.2em; color:var(--text-dim); text-transform:uppercase; }
   .item-title { font-family:var(--sans); font-weight:900; font-size:clamp(20px,2.5vw,34px); line-height:0.95; letter-spacing:-0.03em; text-transform:uppercase; color:var(--text); transition:color var(--t-fast); }
   .item-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
-  .empty-state { border:5px solid var(--ring-faint); padding:40px; color:var(--text-dim); font-size:13px; letter-spacing:0.12em; text-transform:uppercase; }
-  .detail-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; border:5px solid var(--ring-faint); margin-top:48px; }
-  .detail { padding:32px 28px; }
+  .empty-state { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:34px 0; color:var(--text-dim); font-size:13px; letter-spacing:0.12em; text-transform:uppercase; }
+  .detail-grid { display:flex; flex-direction:column; border-top:1px solid var(--ring-faint); margin-top:48px; }
+  .detail { display:grid; grid-template-columns:minmax(160px,0.28fr) minmax(0,1fr); gap:28px; padding:24px 0; border-bottom:1px solid var(--ring-faint); }
   .detail-title { font-family:var(--sans); font-weight:900; font-size:13px; letter-spacing:0.1em; text-transform:uppercase; color:var(--signal); margin-bottom:14px; }
   .detail-body { font-size:13px; line-height:1.75; color:var(--text-mute); }
-  .cta-block,.claim-form { margin-top:80px; border:5px solid var(--ring-soft); background:transparent; }
-  .cta-block { padding:56px 48px; display:flex; justify-content:space-between; gap:48px; align-items:center; }
+  .cta-block,.claim-form { margin-top:80px; border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-soft); background:transparent; }
+  .cta-block { padding:42px 0; display:flex; justify-content:space-between; gap:48px; align-items:center; }
   .cta-title,.form-title { font-family:var(--sans); font-weight:900; line-height:0.94; color:var(--accent); text-transform:uppercase; }
   .cta-title { font-size:clamp(24px,3vw,42px); letter-spacing:-0.03em; margin-bottom:16px; }
   .cta-body,.form-note { font-size:13px; line-height:1.75; color:var(--text-mute); max-width:620px; }
-  .cta-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 28px; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); white-space:nowrap; cursor:pointer; }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); min-height:50px; padding:0 28px; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); white-space:nowrap; cursor:pointer; }
   .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
   .cta-primary[disabled] { opacity:0.45; cursor:not-allowed; }
-  .claim-form { padding:44px 38px; }
+  .claim-form { padding:44px 0; }
   .form-title { font-size:26px; letter-spacing:0; margin-bottom:12px; }
   .form-note { margin-bottom:28px; }
   .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
@@ -115,7 +114,7 @@
   .modal { position:fixed; inset:0; z-index:1000; display:none; }
   .modal[aria-hidden="false"] { display:block; }
   .modal-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.78); }
-  .modal-panel { position:absolute; top:50%; left:50%; width:min(1120px,calc(100vw - 64px)); max-height:calc(100vh - 64px); transform:translate(-50%,-50%); display:grid; grid-template-columns:minmax(0,0.72fr) minmax(340px,0.58fr); background:#0d0d0d; border:5px solid var(--ring-soft); overflow:hidden; }
+  .modal-panel { position:absolute; top:50%; left:50%; width:min(1120px,calc(100vw - 64px)); max-height:calc(100vh - 64px); transform:translate(-50%,-50%); display:grid; grid-template-columns:minmax(0,0.72fr) minmax(340px,0.58fr); background:#0d0d0d; border:1px solid var(--ring-soft); overflow:hidden; }
   .modal-image { min-height:0; max-height:calc(100vh - 74px); background:#111; display:grid; place-items:center; border-right:1px solid var(--ring-faint); }
   .modal-image img { width:auto; height:auto; max-width:100%; max-height:min(72vh,760px); object-fit:contain; padding:22px; }
   .modal-copy { padding:36px; overflow:auto; }
@@ -132,25 +131,26 @@
   .merch-row { border-left:1px solid var(--signal); padding:14px 0 14px 16px; margin-bottom:30px; }
   .merch-title { font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--signal); margin-bottom:8px; }
   .merch-copy { font-size:13px; line-height:1.65; color:var(--text-mute); }
-  .connected-row { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:22px 0 8px; margin-bottom:28px; }
-  .connected-grid { display:grid; grid-template-columns:1fr; gap:10px; }
-  .connected-link { display:block; border:1px solid var(--ring-soft); padding:13px 14px; transition:border-color var(--t-fast), background var(--t-fast); }
-  .connected-link:hover { border-color:var(--accent); background:rgba(252,184,103,0.035); }
-  .connected-title { display:block; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.13em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
+  .connected-row { border-top:1px solid var(--ring-faint); padding:18px 0 2px; margin-bottom:28px; }
+  .connected-grid { display:flex; flex-wrap:wrap; gap:10px; }
+  .connected-link { display:inline-flex; align-items:center; min-height:32px; border-bottom:1px solid var(--ring-soft); color:var(--text-dim); transition:border-color var(--t-fast), color var(--t-fast); }
+  .connected-link:hover { border-color:var(--accent); color:var(--accent); }
+  .connected-title { display:block; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.13em; text-transform:uppercase; }
+  .connected-link .connected-copy { display:none; }
   .selected-piece { display:none; grid-template-columns:minmax(0,1fr) auto; gap:22px; align-items:center; border:1px solid var(--ring-soft); background:rgba(143,35,29,0.08); padding:22px; margin-bottom:28px; }
   .selected-piece.is-active { display:grid; }
   .selected-title { font-family:var(--sans); font-weight:900; font-size:clamp(20px,3vw,32px); line-height:0.95; letter-spacing:-0.03em; color:var(--accent); text-transform:uppercase; margin-bottom:10px; }
   .selected-meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
   .selected-clear { min-height:42px; padding:0 14px; border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); cursor:pointer; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast); }
   .selected-clear:hover,.selected-clear:focus-visible { border-color:var(--accent); color:var(--accent); outline:none; }
-  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
+  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:1px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:1100px) {
     main { padding:var(--s7) var(--s5) var(--s6); }
     .catalog-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .sheet-grid,.detail-grid,.modal-panel { grid-template-columns:1fr; }
+    .sheet-grid,.modal-panel { grid-template-columns:1fr; }
     .modal-panel { width:min(760px,calc(100vw - 28px)); max-height:calc(100vh - 28px); overflow:auto; }
     .modal-image { min-height:0; max-height:46vh; border-right:none; border-bottom:1px solid var(--ring-faint); }
     .modal-image img { max-height:42vh; }
@@ -159,13 +159,13 @@
   @media (max-width:768px) {
     .hero,.section-head,.filter-band { grid-template-columns:1fr; }
     .ecosystem-band,.node-grid,.selected-piece.is-active { grid-template-columns:1fr; }
-    .node-grid { border-left:none; }
-    .node-link,.node-link:nth-child(2n),.node-link:nth-last-child(-n+2) { border-right:none; border-bottom:1px solid var(--ring-faint); }
-    .node-link:last-child { border-bottom:none; }
+    .node-grid { gap:12px; }
+    .node-link { border-left:1px solid var(--ring-faint); border-bottom:none; }
     .hero-desc,.count-label { text-align:left; }
     .filter-label { padding-top:0; }
     .filter-group { border-right:none; padding-right:0; }
     .cta-block { flex-direction:column; align-items:flex-start; padding:40px 32px; }
+    .detail { grid-template-columns:1fr; gap:10px; }
     .modal-panel { width:calc(100vw - 24px); max-height:calc(100vh - 24px); }
     .modal-image { max-height:38vh; }
     .modal-image img { max-height:34vh; padding:14px; }
@@ -231,17 +231,17 @@
       </div>
     </section>
 
-    <section class="ecosystem-band" aria-label="Connected construct nodes">
+    <section class="ecosystem-band" aria-label="Related construct threads">
       <div class="ecosystem-intro">
-        <p class="ecosystem-kicker">Connected Nodes</p>
-        <h2 class="ecosystem-title">Flash is the doorway.</h2>
-        <p class="ecosystem-copy">Art.Pill flash starts on paper, moves through archive and writing, becomes tattoo work, and can later branch into objects, supplies, and studio gatherings.</p>
+        <p class="ecosystem-kicker">Trace marks</p>
+        <h2 class="ecosystem-title">A few quiet paths out.</h2>
+        <p class="ecosystem-copy">Some designs carry small threads back into the larger construct: source images, objects, studies, or gatherings.</p>
       </div>
       <div class="node-grid">
-        <a class="node-link" href="/art/"><span class="node-venture">Art</span><span class="node-title">Source imagery</span><span class="node-copy">Painting, drawing, and symbolic language behind the flash wall.</span></a>
-        <a class="node-link" href="/merch/?filter=art.pill"><span class="node-venture">Merch</span><span class="node-title">Art.Pill supply</span><span class="node-copy">Materials, objects, and future drops connected to mark-making.</span></a>
-        <a class="node-link" href="/#archive"><span class="node-venture">Archive</span><span class="node-title">Studies &amp; process</span><span class="node-copy">Sketch rooms, abandoned routes, and visual fragments that feed new flash.</span></a>
-        <a class="node-link" href="/#events"><span class="node-venture">Events</span><span class="node-title">Open calls</span><span class="node-copy">Studio paths and gatherings where tattoo projects can begin in person.</span></a>
+        <a class="node-link" href="/art/"><span class="node-venture">Art</span><span class="node-title">Source imagery</span><span class="node-copy">Where the mark language begins.</span></a>
+        <a class="node-link" href="/merch/?filter=art.pill"><span class="node-venture">Merch</span><span class="node-title">Art.Pill supply</span><span class="node-copy">Objects that may carry the mark outward.</span></a>
+        <a class="node-link" href="/#archive"><span class="node-venture">Archive</span><span class="node-title">Studies</span><span class="node-copy">Fragments and process rooms.</span></a>
+        <a class="node-link" href="/#events"><span class="node-venture">Events</span><span class="node-title">In person</span><span class="node-copy">Where some projects begin as encounters.</span></a>
       </div>
     </section>
 
@@ -268,20 +268,20 @@
     </section>
 
     <section class="section">
-      <p class="section-label">Claiming Flash</p>
-      <h2 class="section-title">How It Works</h2>
+      <p class="section-label">Claim Path</p>
+      <h2 class="section-title">From wall to review.</h2>
       <p class="section-body">Flash is booked through review first. Available designs can be claimed, placement and scale are checked, then approved clients receive the private Acuity scheduling step.</p>
       <div class="detail-grid">
         <article class="detail">
-          <h3 class="detail-title">Available / Past</h3>
-          <p class="detail-body">Available work can be requested now. Past work remains visible as archive and direction, not as a promise that the exact design can be repeated.</p>
+          <h3 class="detail-title">I / Read the status</h3>
+          <p class="detail-body">Available work can be requested now. Past work remains visible as archive, direction, and a record of the visual language.</p>
         </article>
         <article class="detail">
-          <h3 class="detail-title">Small / Medium / Large</h3>
+          <h3 class="detail-title">II / Check scale</h3>
           <p class="detail-body">Size buckets keep browsing simple. Final pricing still depends on placement, scale, and whether the design needs fit adjustments.</p>
         </article>
         <article class="detail">
-          <h3 class="detail-title">Merch Links</h3>
+          <h3 class="detail-title">III / Follow traces</h3>
           <p class="detail-body">Series may show merch as coming soon. Individual standalone designs only show merch links when a product is actually available.</p>
         </article>
       </div>
@@ -289,7 +289,7 @@
 
     <div class="cta-block">
       <div>
-        <h2 class="cta-title">Want to Claim a Piece?</h2>
+        <h2 class="cta-title">Claim the piece that keeps calling.</h2>
         <p class="cta-body">Open a flash card, review the details, then send a claim request. The form will carry the selected title and catalog metadata into Formspree.</p>
       </div>
       <a class="cta-primary" href="#flash-claim">Claim flash</a>
@@ -301,7 +301,7 @@
       <div class="selected-piece" id="selectedPiece" aria-live="polite">
         <div>
           <p class="selected-kicker">Selected flash</p>
-          <h3 class="selected-title" id="selectedTitle">No piece selected yet.</h3>
+          <h3 class="selected-title" id="selectedTitle">Choose a piece to begin.</h3>
           <p class="selected-copy" id="selectedCopy">Open an available flash card and choose "Use This in Claim Form" to carry its title, code, series, size, and price into this request.</p>
           <div class="selected-meta" id="selectedMeta"></div>
         </div>
@@ -333,7 +333,7 @@
         <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this request is reviewed before private booking access is sent.</span></label>
         <div class="submit-row">
           <button class="cta-primary" type="submit">Submit Claim</button>
-          <p class="form-status">Inquiry received. This is not a booking confirmation.</p>
+          <p class="form-status">Inquiry received. Booking confirmation comes after review.</p>
         </div>
       </form>
     </section>
@@ -497,8 +497,8 @@
       const filtered = state.items.filter(matches);
       const sheets = filtered.filter((item) => item.type === "Sheet");
       const designs = filtered.filter((item) => item.type !== "Sheet");
-      renderList(els.sheetGrid, sheets, "No sheets match the current filters.");
-      renderList(els.catalogGrid, designs, "No individual designs match the current filters.");
+      renderList(els.sheetGrid, sheets, "Try another filter to open more sheets.");
+      renderList(els.catalogGrid, designs, "Try another filter to open more individual designs.");
       els.resultCount.textContent = `${designs.length} individual / ${sheets.length} sheet`;
     }
 
@@ -508,18 +508,18 @@
         return `<p class="merch-title">Related merch</p><p class="merch-copy"><a href="${item.merchUrl}">View related merch</a></p>`;
       }
       if (item.merchStatus === "coming soon" || seriesMeta?.merchStatus === "coming soon") {
-        return `<p class="merch-title">Merch coming soon</p><p class="merch-copy">${item.series} merch is planned but not live yet. This row is the placeholder pattern for future drops.</p>`;
+        return `<p class="merch-title">Merch trace forming</p><p class="merch-copy">${item.series} merch is planned for a future drop. This row holds the path for that connection.</p>`;
       }
-      return `<p class="merch-title">No merch link</p><p class="merch-copy">This design does not have related merch attached yet.</p>`;
+      return `<p class="merch-title">Merch trace pending</p><p class="merch-copy">A related object can be attached here when the design grows into merch.</p>`;
     }
 
     function connectedMarkup(item) {
       const nodes = connectedNodesFor(item);
       if (!nodes.length) {
-        return `<p class="connected-kicker">Connected nodes</p><p class="connected-copy">No connected construct nodes are attached yet.</p>`;
+        return `<p class="connected-kicker">Traces</p><p class="connected-copy">Quiet paths can be attached as the design finds more connections.</p>`;
       }
       return `
-        <p class="connected-kicker">Connected nodes</p>
+        <p class="connected-kicker">Traces</p>
         <div class="connected-grid">
           ${nodes.map((node) => `
             <a class="connected-link" href="${escapeHtml(node.url)}">
@@ -551,7 +551,7 @@
         if (field) field.value = "";
       });
       els.selectedPiece.classList.remove("is-active");
-      els.selectedTitle.textContent = "No piece selected yet.";
+      els.selectedTitle.textContent = "Choose a piece to begin.";
       els.selectedCopy.textContent = "Open an available flash card and choose \"Use This in Claim Form\" to carry its title, code, series, size, and price into this request.";
       els.selectedMeta.innerHTML = "";
     }

@@ -28,15 +28,15 @@
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
   main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
-  .layout { display:grid; grid-template-columns:minmax(0,0.8fr) minmax(380px,600px); gap:72px; align-items:start; }
+  .layout { display:grid; grid-template-columns:minmax(0,0.86fr) minmax(380px,600px); gap:72px; align-items:start; }
   .gate-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.7; margin-bottom:16px; }
   .gate-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--accent); text-transform:uppercase; margin-bottom:36px; }
   .gate-body { font-size:17px; line-height:1.8; color:var(--text); max-width:640px; }
   .gate-body + .gate-body { margin-top:20px; }
-  .review-panel { margin-top:48px; border-left:1px solid var(--signal); padding-left:22px; max-width:620px; }
+  .review-panel { margin-top:48px; border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint); padding:24px 0; max-width:620px; }
   .review-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:18px; }
   .review-copy { font-size:14px; line-height:1.8; color:var(--text-mute); }
-  .form-panel { border:5px solid var(--ring-soft); padding:42px 38px; background:transparent; }
+  .form-panel { border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint); padding:38px 0 44px; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
   .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
@@ -53,14 +53,14 @@
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
   .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
-  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
+  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:1px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } .breadcrumb { max-width:100%; overflow:hidden; justify-content:flex-end; font-size:10px; } main { padding:var(--s6) var(--s5); } .gate-title { font-size:clamp(38px,13vw,52px); overflow-wrap:break-word; } .form-panel { padding:30px 24px; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
+  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } .breadcrumb { max-width:100%; overflow:hidden; justify-content:flex-end; font-size:10px; } main { padding:var(--s6) var(--s5); } .gate-title { font-size:clamp(38px,13vw,52px); overflow-wrap:break-word; } .form-panel { padding:30px 0 34px; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
 </style>
 </head>
 <body data-venture="tattooing">
@@ -86,17 +86,17 @@
     <div class="layout">
       <section>
         <p class="gate-label">Special Projects</p>
-        <h1 class="gate-title">Application Gate.</h1>
+        <h1 class="gate-title">Application Path.</h1>
         <p class="gate-body">Special Projects applications are for concept-driven, long-form, symbolic, collaborative, and experimental tattoo work.</p>
-        <p class="gate-body">Special Projects are reviewed before booking. If approved, you will receive a private booking link and next steps.</p>
+        <p class="gate-body">Special Projects move through review before booking. If approved, you will receive a private booking link and next steps.</p>
         <div class="review-panel">
           <p class="review-label">Application Frame</p>
-          <p class="review-copy">This page is intentionally separate from standard tattoo booking. Share the project title, body placement, scale, conceptual direction, timeline, budget range, and references that describe feeling rather than final design.</p>
+          <p class="review-copy">This application gives larger symbolic projects room for review before booking. Share the project title, body placement, scale, conceptual direction, timeline, budget range, and references that describe feeling, source, or atmosphere.</p>
         </div>
       </section>
       <section class="form-panel" aria-label="Special Projects application form">
         <h2 class="form-title">Apply for Review</h2>
-        <p class="form-note">Applications are reviewed before any scheduling link is sent. This is not a casual booking form.</p>
+        <p class="form-note">Use this form for projects that need deeper concept, trust, time, or scale. Applications are reviewed before a private scheduling link is sent.</p>
         <form method="POST" action="https://formspree.io/f/mnjwvpeg" enctype="multipart/form-data">
           <input type="hidden" name="form_type" value="special_project_application">
           <input type="hidden" name="source_path" value="/tattooing/special-projects/apply/">
@@ -131,7 +131,7 @@
           <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand the final image is developed through shared symbolic direction while remaining rooted in the artist's existing body of work.</span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit">Submit Application</button>
-            <p class="form-status">Inquiry received. This is not a booking confirmation.</p>
+            <p class="form-status">Inquiry received. Booking confirmation comes after review.</p>
           </div>
         </form>
       </section>

@@ -51,7 +51,7 @@
   .private-badge {
     display:inline-flex; align-items:center; gap:8px;
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--signal); border:5px solid var(--ring-soft); padding:5px 12px; margin-bottom:36px;
+    color:var(--signal); border:1px solid var(--ring-soft); padding:5px 12px; margin-bottom:36px;
   }
   .badge-dot {
     width:5px; height:5px; border-radius:50%; background:var(--signal); flex-shrink:0;
@@ -69,7 +69,7 @@
     margin-bottom:56px; max-width:520px;
   }
   .booking-block {
-    border:5px solid var(--ring-soft); background:transparent; padding:48px 40px;
+    border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint); background:transparent; padding:42px 0 46px;
   }
   .booking-block-label {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
@@ -81,7 +81,7 @@
   .cta-primary {
     display:inline-flex; align-items:center; gap:8px;
     font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); padding:14px 28px;
+    color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); padding:14px 28px;
     transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   }
   .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
@@ -93,7 +93,7 @@
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
     main > * { max-width:none; }
-    .booking-block { padding:28px 24px; }
+    .booking-block { padding:30px 0 34px; }
   }
 @media (max-width: 700px) {
   header.top {
@@ -132,17 +132,15 @@
     <div class="private-badge"><span class="badge-dot"></span>Approved Clients Only</div>
     <p class="page-label">Art.Pill Tattoo House</p>
     <h1 class="page-title">Book Your Appointment.</h1>
-    <p class="page-body">Your project has been reviewed and accepted. Use the link below to select your session type, choose a date and time, and submit your deposit. The deposit is applied toward the total cost of your tattoo and is required to secure your appointment.</p>
+    <p class="page-body">Your project has been reviewed and accepted. Use the link below to select your session type, choose a date and time, and submit your deposit. The deposit is applied toward the total cost of your tattoo and secures your appointment.</p>
     <div class="booking-block">
       <p class="booking-block-label">Secure Scheduling</p>
       <p class="booking-block-note">Select the session type that matches your approved project, pick a date that works for you, and complete your deposit to lock in the appointment. If you have questions, reply directly to the email you received.</p>
       <a class="cta-primary" href="https://artpill.acuityscheduling.com/" target="_blank" rel="noopener noreferrer">Schedule &amp; Deposit &rarr;</a>
-      <p class="booking-disclaimer">This page is not publicly linked or indexed.<br>Sharing this link is at your discretion.</p>
+      <p class="booking-disclaimer">This private booking page is shared after review.<br>Sharing this link is at your discretion.</p>
     </div>
   </main>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
 </body>
 </html>
-
-

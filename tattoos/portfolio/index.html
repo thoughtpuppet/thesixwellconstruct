@@ -74,7 +74,7 @@
   }
   .section {
     padding:72px 0;
-    border-top:5px solid var(--ring-faint);
+    border-top:1px solid var(--ring-faint);
   }
   .section:first-of-type { border-top:none; padding-top:0; }
   .section-label {
@@ -89,49 +89,46 @@
     font-family:var(--serif); font-size:16px; line-height:1.8; color:var(--text);
     max-width:640px;
   }
-  .portfolio-grid {
-    display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:1px; border:5px solid var(--ring-faint); margin-top:48px;
+  .portfolio-ledger {
+    margin-top:48px;
+    border-top:1px solid var(--ring-faint);
   }
   .portfolio-piece {
-    min-height:420px; padding:24px; position:relative; overflow:hidden;
-    display:flex; flex-direction:column; justify-content:space-between;
-    background:
-      linear-gradient(145deg, rgba(143,35,29,0.12), transparent 42%),
-      radial-gradient(circle at 78% 22%, rgba(252,184,103,0.1), transparent 28%),
-      #0f0f0f;
+    display:grid;
+    grid-template-columns:72px minmax(180px,0.34fr) minmax(0,1fr) minmax(120px,0.18fr);
+    gap:24px;
+    align-items:center;
+    padding:30px 0;
+    border-bottom:1px solid var(--ring-faint);
   }
-  .portfolio-piece::before {
-    content:""; position:absolute; inset:24px; border:1px solid var(--ring-faint);
-    opacity:0.9;
+  .piece-number {
+    font-family:var(--sans); font-weight:900; font-size:clamp(34px,5vw,68px);
+    line-height:0.9; letter-spacing:-0.05em; color:var(--signal); opacity:0.34;
   }
-  .piece-mark {
-    position:absolute; inset:64px 44px 92px;
-    border:5px solid rgba(143,35,29,0.45);
-    transform:skewY(-7deg);
+  .piece-title {
+    font-family:var(--sans); font-weight:900; font-size:22px;
+    letter-spacing:-0.02em; line-height:1; color:var(--accent); text-transform:uppercase;
   }
-  .piece-mark::before,.piece-mark::after {
-    content:""; position:absolute; border:5px solid rgba(252,184,103,0.28);
-  }
-  .piece-mark::before { width:54%; height:54%; left:18%; top:18%; transform:rotate(24deg); }
-  .piece-mark::after { width:28%; height:72%; right:14%; top:12%; border-color:rgba(255,231,202,0.13); transform:rotate(-18deg); }
-  .piece-number,.piece-meta {
-    position:relative; z-index:2;
+  .piece-meta {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
     color:var(--text-dim);
   }
-  .piece-title {
-    position:relative; z-index:2;
-    font-family:var(--sans); font-weight:900; font-size:20px;
-    letter-spacing:0.02em; line-height:1; color:var(--accent); text-transform:uppercase;
-    max-width:220px;
+  .piece-note {
+    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
   }
   .study-grid {
-    display:grid; grid-template-columns:1fr 1fr; gap:1px;
-    border:5px solid var(--ring-faint); margin-top:48px;
+    display:flex;
+    flex-direction:column;
+    border-top:1px solid var(--ring-faint);
+    margin-top:48px;
   }
   .study {
-    padding:36px 32px; background:transparent;
+    display:grid;
+    grid-template-columns:minmax(160px,0.28fr) minmax(0,1fr);
+    gap:28px;
+    padding:24px 0;
+    border-bottom:1px solid var(--ring-faint);
+    background:transparent;
   }
   .study-label {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
@@ -145,8 +142,8 @@
     font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
   }
   .cta-block {
-    margin-top:80px; border:5px solid var(--ring-soft); background:transparent;
-    padding:56px 48px; display:flex; justify-content:space-between; gap:48px; align-items:center;
+    margin-top:80px; border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-soft); background:transparent;
+    padding:42px 0; display:flex; justify-content:space-between; gap:48px; align-items:center;
   }
   .cta-title {
     font-family:var(--sans); font-weight:900; font-size:clamp(24px,3vw,42px);
@@ -159,14 +156,14 @@
   .cta-primary {
     display:inline-flex; align-items:center; gap:8px;
     font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); padding:14px 28px;
+    color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); padding:14px 28px;
     transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
     white-space:nowrap;
   }
   .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
-    padding:56px var(--s6); border-top:5px solid var(--ring-faint);
+    padding:56px var(--s6); border-top:1px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
   }
   footer.bottom p, footer.bottom a {
@@ -176,22 +173,23 @@
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:1024px) {
-    .portfolio-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     main { padding:var(--s7) var(--s5) var(--s6); }
     footer.bottom { padding:48px var(--s5); }
   }
   @media (max-width:768px) {
     .hero { grid-template-columns:1fr; gap:20px; }
     .hero-desc { text-align:left; }
-    .study-grid { grid-template-columns:1fr; }
+    .portfolio-piece { grid-template-columns:56px minmax(0,1fr); }
+    .piece-note,.piece-meta { grid-column:2; }
+    .study { grid-template-columns:1fr; gap:10px; }
     .cta-block { flex-direction:column; align-items:flex-start; padding:40px 32px; }
   }
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
     .section { padding:48px 0; }
-    .portfolio-grid { grid-template-columns:1fr; }
-    .portfolio-piece { min-height:340px; }
+    .portfolio-piece { grid-template-columns:1fr; gap:12px; }
+    .piece-note,.piece-meta { grid-column:auto; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 @media (max-width: 700px) {
@@ -245,30 +243,33 @@
       <p class="section-label">Selected Work</p>
       <h2 class="section-title">Special Projects &amp; Finished Pieces</h2>
       <p class="section-body">Portfolio images are organized by the kind of thinking behind the work: symbolic marks, surreal scenes, mythic figures, and custom story-driven compositions.</p>
-      <div class="portfolio-grid" aria-label="Portfolio categories">
+      <div class="portfolio-ledger" aria-label="Portfolio categories">
         <article class="portfolio-piece">
-          <p class="piece-number">01</p>
-          <div class="piece-mark" aria-hidden="true"></div>
+          <span class="piece-number">01</span>
           <div>
             <h3 class="piece-title">Symbolic Marks</h3>
             <p class="piece-meta">small to medium work</p>
           </div>
+          <p class="piece-note">Compact marks, private signs, and image systems built to carry meaning with restraint.</p>
+          <p class="piece-meta">trace: flash / archive</p>
         </article>
         <article class="portfolio-piece">
-          <p class="piece-number">02</p>
-          <div class="piece-mark" aria-hidden="true"></div>
+          <span class="piece-number">02</span>
           <div>
             <h3 class="piece-title">Surreal Figures</h3>
             <p class="piece-meta">dream logic compositions</p>
           </div>
+          <p class="piece-note">Figures, bodies, and scenes that bend space while keeping the emotional center clear.</p>
+          <p class="piece-meta">trace: art / writing</p>
         </article>
         <article class="portfolio-piece">
-          <p class="piece-number">03</p>
-          <div class="piece-mark" aria-hidden="true"></div>
+          <span class="piece-number">03</span>
           <div>
             <h3 class="piece-title">Mythic Scenes</h3>
             <p class="piece-meta">narrative custom work</p>
           </div>
+          <p class="piece-note">Larger symbolic compositions where placement, negative space, and story move together.</p>
+          <p class="piece-meta">trace: special projects</p>
         </article>
       </div>
     </section>
@@ -280,7 +281,7 @@
         <article class="study">
           <p class="study-label">Custom</p>
           <h3 class="study-title">Built Around Meaning</h3>
-          <p class="study-body">Custom work starts with your concept and becomes a tattoo through drawing, placement, and restraint. Exact copies of other artists are not accepted.</p>
+          <p class="study-body">Custom work starts with your concept and becomes a tattoo through drawing, placement, and restraint. The strongest references point toward mood, symbolism, and placement while leaving room for an original drawing.</p>
         </article>
         <article class="study">
           <p class="study-label">Placement</p>
@@ -292,7 +293,7 @@
     <div class="cta-block">
       <div>
         <h2 class="cta-title">Have a Project in Mind?</h2>
-        <p class="cta-body">Send the concept, placement, rough size, and any references that help describe the feeling. The inquiry process determines whether the project is the right fit.</p>
+        <p class="cta-body">Send the concept, placement, rough size, and any references that help describe the feeling. The inquiry process helps find the strongest path for the project.</p>
       </div>
       <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
     </div>

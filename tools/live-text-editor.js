@@ -259,6 +259,7 @@
     var link = event.target.closest && event.target.closest('a');
     if (!link || isEditorNode(link)) return;
     event.preventDefault();
+    event.stopImmediatePropagation();
   }, true);
 
   document.addEventListener('keydown', function(event) {

@@ -85,7 +85,7 @@
     font-family:var(--sans); font-weight:700; font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
     color:var(--text-mute); background:transparent;
-    border:5px solid var(--ring-soft);
+    border:1px solid var(--ring-soft);
     min-height:48px; padding:0 26px;
     transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   }
@@ -99,10 +99,11 @@
   .archive-shell {
     display:grid; grid-template-columns:minmax(220px,320px) minmax(0,1fr);
     width:100%;
-    gap:1px; border:5px solid var(--ring-faint); background:transparent;
+    gap:48px; border-top:1px solid var(--ring-faint); background:transparent;
+    padding-top:28px;
   }
   .project-index {
-    border-right:5px solid var(--ring-faint);
+    border-right:1px solid var(--ring-faint);
     padding:26px 0;
   }
   .index-heading {
@@ -139,7 +140,7 @@
   .mobile-picker {
     display:none; width:100%; margin-bottom:24px;
     appearance:none; background:transparent;
-    border:5px solid var(--ring-faint);
+    border:1px solid var(--ring-faint);
     color:var(--text);
     padding:14px 18px;
     font-family:var(--sans); font-weight:900; font-size:12px;
@@ -147,7 +148,7 @@
   }
   .project-detail {
     min-width:0;
-    padding:48px;
+    padding:26px 0 0;
     min-height:720px;
   }
   .detail-kicker {
@@ -166,7 +167,7 @@
   }
   .image-grid {
     display:grid; grid-template-columns:1.2fr 0.8fr; grid-template-rows:220px 220px;
-    gap:1px; border:5px solid var(--ring-faint); margin-bottom:42px;
+    gap:18px; border-top:1px solid var(--ring-faint); padding-top:18px; margin-bottom:42px;
   }
   .archive-frame {
     position:relative; overflow:hidden; background:#0f0f0f;
@@ -197,9 +198,9 @@
   }
   .meta-grid {
     display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
-    gap:1px; border:5px solid var(--ring-faint); margin-bottom:42px;
+    gap:18px; border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:18px 0; margin-bottom:42px;
   }
-  .meta-item { padding:22px; }
+  .meta-item { padding:0 0 0 14px; border-left:1px solid var(--ring-faint); }
   .meta-label {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
     text-transform:uppercase; color:var(--text-dim); margin-bottom:10px;
@@ -209,7 +210,7 @@
     line-height:1.35; text-transform:uppercase; color:var(--text);
   }
   .intention {
-    max-width:760px; border-top:5px solid var(--ring-faint);
+    max-width:760px; border-top:1px solid var(--ring-faint);
     padding-top:34px;
   }
   .intention-title {
@@ -222,7 +223,7 @@
   }
   .application-row {
     display:flex; justify-content:space-between; align-items:center; gap:32px;
-    margin-top:48px; padding-top:36px; border-top:5px solid var(--ring-faint);
+    margin-top:48px; padding-top:36px; border-top:1px solid var(--ring-faint);
   }
   .application-copy {
     max-width:460px; font-family:var(--serif); font-size:12px;
@@ -230,7 +231,7 @@
   }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
-    padding:56px var(--s6); border-top:5px solid var(--ring-faint);
+    padding:56px var(--s6); border-top:1px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
   }
   footer.bottom p, footer.bottom a {
@@ -240,10 +241,10 @@
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:1100px) {
-    .archive-shell { grid-template-columns:1fr; border:none; }
+    .archive-shell { grid-template-columns:1fr; border:none; padding-top:0; }
     .project-index { display:none; }
     .mobile-picker { display:block; }
-    .project-detail { border:5px solid var(--ring-faint); min-height:auto; }
+    .project-detail { border-top:1px solid var(--ring-faint); min-height:auto; }
     .meta-grid { grid-template-columns:1fr 1fr; }
   }
   @media (max-width:768px) {
@@ -278,7 +279,7 @@
       width:100%;
       max-width:100%;
     }
-    .project-detail { padding:32px 24px; }
+    .project-detail { padding:32px 0; }
     .detail-title {
       font-size:clamp(32px,11vw,46px);
       overflow-wrap:break-word;
@@ -360,7 +361,7 @@
         </div>
         <section class="intention">
           <h3 class="intention-title">Intention</h3>
-          <p class="intention-body" id="projectIntention">This project is designed for clients who want a tattoo built from concept first, not reference first. The final image is developed through a shared symbolic direction, but the visual language remains rooted in my existing body of work.</p>
+          <p class="intention-body" id="projectIntention">This project is designed for clients who want a tattoo built from concept first, with references serving mood, symbolism, and atmosphere. The final image is developed through a shared symbolic direction, while the visual language remains rooted in my existing body of work.</p>
         </section>
         <div class="application-row">
           <p class="application-copy">Special Projects are reviewed before booking. If approved, you will receive a private booking link and next steps.</p>
@@ -384,7 +385,7 @@
         format: 'Multi-session',
         availability: 'By application only',
         frames: ['symbol map', 'placement study', 'body language'],
-        intention: 'This project is designed for clients who want a tattoo built from concept first, not reference first. The final image is developed through a shared symbolic direction, but the visual language remains rooted in my existing body of work.'
+        intention: 'This project is designed for clients who want a tattoo built from concept first, with references serving mood, symbolism, and atmosphere. The final image is developed through a shared symbolic direction, while the visual language remains rooted in my existing body of work.'
       },
       'mythic-body-studies': {
         kicker: '02 / Open',
@@ -395,7 +396,7 @@
         format: 'Single or multi-session',
         availability: 'Open call',
         frames: ['figure study', 'ritual object', 'placement system'],
-        intention: 'This study is for clients who are drawn to mythic imagery but want something personal rather than borrowed. The work can begin with an archetype, a dream, a figure, or a symbolic object, then develop into a tattoo that belongs to the body carrying it.'
+        intention: 'This study is for clients who are drawn to mythic imagery and want something personal. The work can begin with an archetype, a dream, a figure, or a symbolic object, then develop into a tattoo that belongs to the body carrying it.'
       },
       'hand-outline': {
         kicker: '03 / 2025-2026',
@@ -417,7 +418,7 @@
         format: 'Collaborative development',
         availability: 'Open call',
         frames: ['memory object', 'location mark', 'transfer field'],
-        intention: 'This study is for people carrying images that are not already images yet. The goal is not to recreate a photograph or reference, but to extract the symbolic charge of a memory and build a tattoo from that charge.'
+        intention: 'This study is for people carrying memories, places, or inherited objects that are ready to become images. The goal is to extract the symbolic charge of a memory and build a tattoo from that charge.'
       },
       'large-scale': {
         kicker: '05 / Open',

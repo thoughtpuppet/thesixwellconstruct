@@ -28,21 +28,26 @@
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
   main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
-  .layout { display:grid; grid-template-columns:minmax(0,0.82fr) minmax(360px,580px); gap:72px; align-items:start; }
+  .layout { display:grid; grid-template-columns:minmax(0,0.72fr) minmax(360px,580px); gap:72px; align-items:start; }
   .page-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:16px; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
   .include-label { margin-top:48px; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; }
-  .include-list { list-style:none; display:flex; flex-direction:column; gap:14px; max-width:620px; }
-  .include-list li { font-size:14px; line-height:1.6; color:var(--text-mute); padding-left:20px; position:relative; }
-  .include-list li::before { content:""; position:absolute; left:0; top:8px; width:4px; height:4px; border-radius:50%; background:var(--signal); opacity:0.55; }
-  .path-note { margin-top:34px; border:1px solid var(--ring-soft); padding:22px; max-width:620px; }
+  .include-list { list-style:none; display:flex; flex-direction:column; max-width:620px; border-top:1px solid var(--ring-faint); }
+  .include-list li { display:grid; grid-template-columns:42px minmax(0,1fr); gap:18px; font-size:14px; line-height:1.6; color:var(--text-mute); padding:16px 0; border-bottom:1px solid var(--ring-faint); }
+  .include-list li::before { color:var(--signal); opacity:0.72; font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.14em; }
+  .include-list li:nth-child(1)::before { content:"I"; }
+  .include-list li:nth-child(2)::before { content:"II"; }
+  .include-list li:nth-child(3)::before { content:"III"; }
+  .include-list li:nth-child(4)::before { content:"IV"; }
+  .include-list li:nth-child(5)::before { content:"V"; }
+  .path-note { margin-top:34px; border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-soft); padding:22px 0; max-width:620px; }
   .path-note-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
   .path-note-body { font-size:13px; line-height:1.7; color:var(--text-mute); margin-bottom:14px; }
   .path-note-link { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); transition:color var(--t-fast); }
   .path-note-link:hover { color:var(--accent); }
-  .form-panel { border:5px solid var(--ring-soft); padding:42px 38px; background:transparent; }
+  .form-panel { border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-soft); padding:42px 0; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
   .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
@@ -59,14 +64,14 @@
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
   .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
-  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
+  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:1px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 24px; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
+  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 0; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
 @media (max-width: 700px) {
   header.top {
     position: sticky;
@@ -102,8 +107,8 @@
       <section>
         <p class="page-label">Art.Pill Tattoo House</p>
         <h1 class="page-title">Project<br>Inquiry.</h1>
-        <p class="intro-body">Submitting an inquiry is not a booking. It begins a review process and not every project is accepted. If your project is a good fit, you will receive a private booking link and next steps.</p>
-        <p class="intro-body">Use this form for custom work or if your idea does not begin from a specific flash design. If you already know the flash piece you want, the flash claim form is the cleaner path because it carries the selected title, code, series, size, and price into review.</p>
+        <p class="intro-body">Submitting an inquiry begins the review process. If your project is a strong fit for the studio, you will receive a private booking link and next steps.</p>
+        <p class="intro-body">Use this form for custom work, early ideas, or projects that need a new drawing. If you already know the flash piece you want, the flash claim form is the cleaner path because it carries the selected title, code, series, size, and price into review.</p>
         <p class="include-label">What to Include</p>
         <ul class="include-list">
           <li>Concept, subject matter, and the meaning behind it</li>
@@ -142,10 +147,10 @@
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
             <div class="field full"><label for="message">Project notes</label><textarea id="message" name="message" required></textarea></div>
           </div>
-          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this is a review submission, not a confirmed appointment.</span></label>
+          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this submission begins review before an appointment is confirmed.</span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit">Submit for Review</button>
-            <p class="form-status">Inquiry received means only that your submission was captured. This is not a booking confirmation.</p>
+            <p class="form-status">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>
           </div>
         </form>
       </section>

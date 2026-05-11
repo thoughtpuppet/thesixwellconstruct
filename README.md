@@ -4,8 +4,8 @@ Pure static site for `thoughtpuppet/thesixwellconstruct`.
 
 ## Ecosystem-first site principle
 
-Every page is a node, never an island. The site should remind visitors that
-they are inside a living creative ecosystem at every turn.
+Every page is a node in a living creative ecosystem. The site should remind
+visitors of those relationships at every turn.
 
 When building, editing, or proposing any page, section, product flow, or
 venture surface, keep these questions active:
@@ -14,8 +14,7 @@ venture surface, keep these questions active:
 - Which other nodes or ventures should it naturally point toward?
 - Is the connection conceptual, commercial, archival, experiential, or
   biographical?
-- Does the connection deepen the experience without distracting from the main
-  action?
+- Does the connection deepen the experience while supporting the main action?
 - Does the page make the visitor feel the larger construct around it?
 
 Preferred connection patterns:
@@ -30,8 +29,26 @@ Preferred connection patterns:
   connective tissue.
 
 This principle should drive recommendations and implementation choices across
-all ventures. A conversion page can still stay focused, but it should usually
-include at least one intentional reminder of the wider construct.
+all ventures. These reminders should usually feel like discovery: quiet paths,
+traces, source threads, and optional doors that reward attention. A conversion
+page can stay focused while including at least one intentional, subtle reminder
+of the wider construct.
+
+## Generous language rule
+
+Describe what the work invites, offers, carries, and opens toward. Let each
+page, project, and venture be defined by positive intent and grounded
+specificity.
+
+Preferred phrasing:
+
+- "Best for," "drawn toward," "built for," "good entry point," and "opens into."
+- Warm boundaries that explain the path forward.
+- Process language that helps visitors understand how to enter well.
+
+Reserve boundary phrasing for operational clarity, such as booking status,
+private routes, legal requirements, or form confirmation. Even then, keep it
+plain and generous.
 
 ## Hosting
 
