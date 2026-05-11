@@ -305,12 +305,12 @@ const VENTURES=[
   {name:'FILM',          color:'#FFE7CA',angle:320, dist:250, fromDot:-1},
 ];
 
-const TRAVEL_END=0.85,XFADE_START=0.75,DRIFT_OPEN_DURATION=0.22;
+const TRAVEL_END=0.85,XFADE_START=0.60,DRIFT_OPEN_DURATION=0.22;
 const ARRIVE_AT=new Array(VENTURES.length).fill(TRAVEL_END);
 const DRIFTS=VENTURES.map((v,i)=>({ax:4.5+(i*1.7)%3.5,ay:3.5+(i*2.3)%3.5,px:18000+(i*3700)%9000,py:22000+(i*4100)%8000,ox:i*1.4,oy:i*2.1}));
 const HOVER_IN=0.0018,HOVER_OUT=0.0012,CURSOR_FOLLOW=0.055;
 function MAX_PULL(){return 38*scale;}
-const EXPAND_SPEED=0.00028,COLLAPSE_SPEED=0.00042;
+const EXPAND_SPEED=0.00042,COLLAPSE_SPEED=0.00055;
 const DOT_R=0xFC,DOT_G=0xB8,DOT_B=0x67;
 let dotStartX=new Array(VENTURES.length).fill(0),dotStartY=new Array(VENTURES.length).fill(0);
 

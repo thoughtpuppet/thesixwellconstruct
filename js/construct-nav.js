@@ -47,8 +47,8 @@
      All visual values live here. Adjust freely.
   ────────────────────────────────────────────────────────── */
   var CONFIG = {
-    dotSize:         14,     /* px — larger navigation dots for readability */
-    dotGap:          24,     /* px — space between dot centers */
+    dotSize:         17,     /* px — larger navigation dots for readability */
+    dotGap:          30,     /* px — space between dot centers */
     topInset:        38,     /* px — aligns the dot row closer to header center */
 
     /* Dot opacity states */
@@ -252,7 +252,7 @@
       nav.style.maxWidth       = (availableWidth - 20) + 'px';
       nav.style.flexWrap       = 'wrap';
 
-      var dotSize = w < TINY_BP ? 10 : 11;
+      var dotSize = w < TINY_BP ? 12 : 13;
 
       // Calculate gap so all 9 dots always fit on one line — no wrap ever
       var usableWidth = availableWidth - 16;
