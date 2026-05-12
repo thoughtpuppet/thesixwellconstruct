@@ -55,7 +55,7 @@
 }
 
 .media-card:hover {
-  border-color: var(--text-mute);
+  border-color: var(--venture-color);
 }
 
 .media-card.card--wide {
@@ -85,12 +85,6 @@
 .media-card:hover .card-image img {
   transform: scale(0.97);
   filter: brightness(0.45);
-}
-
-.card--contain .card-image img {
-  object-fit: contain;
-  padding: 30px;
-  background: #100f0e;
 }
 
 

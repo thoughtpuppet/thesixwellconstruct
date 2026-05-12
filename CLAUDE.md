@@ -31,7 +31,7 @@ Then use `var(--venture-color)` anywhere the venture accent appears:
 - Filter chip active state (dot + underline)
 - Section labels, kicker text
 - Status indicators, active UI states
-- Hover border colors
+- Hover border colors on media cards and interactive elements
 
 ## Shared CSS files
 

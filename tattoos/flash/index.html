@@ -74,11 +74,10 @@
   .sheet-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px; border-top:1px solid var(--ring-faint); padding-top:3px; }
   .catalog-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:3px; border-top:1px solid var(--ring-faint); padding-top:3px; }
   .flash-item { /* extends .media-card */ }
-  .sheet-item { aspect-ratio:3/2; }
-  .sheet-item .card-image img { object-fit:contain; padding:30px; background:#100f0e; }
+  .sheet-item { aspect-ratio:unset; }
   .pill { display:inline-flex; min-height:22px; align-items:center; border:1px solid var(--ring-soft); padding:0 8px; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:rgba(14,14,14,0.55); }
-  .pill.available { color:var(--venture-color); border-color:rgba(143,35,29,0.45); }
-  .pill.past { color:var(--text-dim); }
+  .pill.available { color:var(--text); border-color:rgba(255,231,202,0.28); }
+  .pill.past { color:var(--text-ghost); border-color:var(--ring-faint); }
   .empty-state { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:34px 0; color:var(--text-dim); font-size:13px; letter-spacing:0.12em; text-transform:uppercase; }
   .detail-grid { display:flex; flex-direction:column; border-top:1px solid var(--ring-faint); margin-top:48px; }
   .detail { display:grid; grid-template-columns:minmax(160px,0.28fr) minmax(0,1fr); gap:28px; padding:24px 0; border-bottom:1px solid var(--ring-faint); }
@@ -495,6 +494,7 @@
       button.type = "button";
       button.className = `media-card flash-item ${item.type === "Sheet" ? "sheet-item card--wide" : ""}`;
       button.dataset.itemId = item.id;
+      const isSheet = item.type === "Sheet";
       button.innerHTML = `
         <span class="card-image"><img src="${item.image}" alt="${item.title}" loading="lazy"></span>
         <span class="card-badge"><span class="pill ${slug(item.status)}">${item.status}</span></span>
@@ -503,6 +503,15 @@
           <span class="card-sub">${item.series} · ${codeFor(item)}</span>
         </span>
       `;
+      if (isSheet) {
+        const img = button.querySelector("img");
+        const setRatio = () => {
+          if (img.naturalWidth && img.naturalHeight) {
+            button.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+          }
+        };
+        img.complete ? setRatio() : img.addEventListener("load", setRatio);
+      }
       button.addEventListener("click", () => openModal(item));
       return button;
     }
