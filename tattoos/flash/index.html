@@ -36,13 +36,19 @@
   .page-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:16px; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; }
   .hero-desc { font-size:14px; letter-spacing:0.03em; line-height:1.75; color:var(--text-mute); text-align:right; }
-  .filter-band { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:22px 0; margin-bottom:64px; display:grid; grid-template-columns:auto 1fr; gap:24px 36px; align-items:start; }
-  .filter-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; padding-top:13px; }
-  .filter-groups { display:flex; flex-wrap:wrap; gap:14px; }
-  .filter-group { display:flex; flex-wrap:wrap; gap:6px; padding-right:14px; border-right:1px solid var(--ring-faint); }
-  .filter-group:last-child { border-right:none; padding-right:0; }
-  .filter-btn { min-height:40px; padding:0 14px; border:1px solid var(--ring-soft); background:transparent; color:var(--text-dim); cursor:pointer; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
-  .filter-btn:hover,.filter-btn[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
+  nav.filters { margin-bottom:var(--s6); }
+  .filter-row { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; padding-bottom:var(--s4); }
+  .filter-row + .filter-row { padding-top:var(--s2); padding-bottom:var(--s5); }
+  .filter-row--split { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; }
+  .filter-row--split > div { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; }
+  .filter-sep { width:1px; height:12px; background:var(--ring-soft); flex-shrink:0; align-self:center; }
+  .chip { position:relative; font-family:var(--sans); font-weight:500; font-size:13px; letter-spacing:0.04em; text-transform:lowercase; color:var(--text-mute); padding:var(--s2) 0; background:none; border:none; cursor:pointer; transition:color var(--t-fast); }
+  .chip:hover { color:var(--text); }
+  .chip.active { color:var(--text); }
+  .chip.active .chip-label::after { content:""; position:absolute; left:0; bottom:-1px; width:100%; height:2px; background:var(--signal); }
+  .chip.active::before { content:""; position:absolute; left:-10px; top:50%; width:4px; height:4px; border-radius:50%; background:var(--signal); transform:translateY(-50%); }
+  .chip-label { position:relative; }
+  .chip-count { font-family:var(--serif); font-size:10px; color:var(--text-dim); margin-left:2px; vertical-align:super; }
   .ecosystem-band { border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); margin-bottom:72px; padding:22px 0; display:grid; grid-template-columns:minmax(0,0.74fr) minmax(0,1.26fr); gap:34px; align-items:start; }
   .ecosystem-intro { padding:0; }
   .node-link { padding:0 0 0 16px; }
@@ -222,14 +228,16 @@
       <p class="hero-desc">Original pre-drawn designs, flash sheets, symbolic alphabets, MAZE studies, and standalone pieces. Browse the archive, open a sheet, then claim the design that fits.</p>
     </section>
 
-    <section class="filter-band" aria-label="Flash catalog filters">
-      <p class="filter-label">Catalog filters</p>
-      <div class="filter-groups">
-        <div class="filter-group" data-filter-group="series" aria-label="Filter by series"></div>
-        <div class="filter-group" data-filter-group="status" aria-label="Filter by status"></div>
-        <div class="filter-group" data-filter-group="sizeBucket" aria-label="Filter by size"></div>
+    <nav class="filters" aria-label="Flash catalog filters" role="tablist">
+      <div class="filter-row" data-filter-group="series" aria-label="Filter by series"></div>
+      <div class="filter-row filter-row--split" aria-label="Filter by type, status and size">
+        <div data-filter-group="type"></div>
+        <span class="filter-sep" aria-hidden="true"></span>
+        <div data-filter-group="status"></div>
+        <span class="filter-sep" aria-hidden="true"></span>
+        <div data-filter-group="sizeBucket"></div>
       </div>
-    </section>
+    </nav>
 
     <section class="ecosystem-band" aria-label="Related construct threads">
       <div class="ecosystem-intro">
@@ -372,9 +380,10 @@
       series: [],
       items: []
     };
-    const state = { series: "All", status: "All", sizeBucket: "All", items: [], seriesMeta: [] };
+    const state = { series: "All", type: "All", status: "All", sizeBucket: "All", items: [], seriesMeta: [] };
     const groups = {
-      series: ["All", "MAZE", "Sairoglyphs", "Standalones"],
+      series: ["All", "MAZE", "Sairoglyphs"],
+      type: ["All", "Series", "Standalone"],
       status: ["All", "Available", "Past"],
       sizeBucket: ["All", "Small", "Medium", "Large"]
     };
@@ -429,19 +438,24 @@
     }
 
     function matches(item) {
-      return ["series", "status", "sizeBucket"].every((key) => state[key] === "All" || item[key] === state[key]);
+      if (state.series !== "All" && item.series !== state.series) return false;
+      if (state.type === "Series" && item.series === "Standalones") return false;
+      if (state.type === "Standalone" && item.series !== "Standalones") return false;
+      if (state.status !== "All" && item.status !== state.status) return false;
+      if (state.sizeBucket !== "All" && item.sizeBucket !== state.sizeBucket) return false;
+      return true;
     }
 
     function createFilterButton(group, value) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "filter-btn";
-      button.textContent = value;
-      button.setAttribute("aria-pressed", String(state[group] === value));
+      button.setAttribute("role", "tab");
+      button.className = "chip" + (state[group] === value ? " active" : "");
+      button.innerHTML = `<span class="chip-label">${escapeHtml(value)}</span>`;
       button.addEventListener("click", () => {
         state[group] = value;
-        document.querySelectorAll(`[data-filter-group="${group}"] .filter-btn`).forEach((btn) => {
-          btn.setAttribute("aria-pressed", String(btn.textContent === value));
+        document.querySelectorAll(`[data-filter-group="${group}"] .chip`).forEach((btn) => {
+          btn.classList.toggle("active", btn.querySelector(".chip-label").textContent === value);
         });
         renderCatalog();
       });
