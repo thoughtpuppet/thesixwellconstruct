@@ -1,0 +1,150 @@
+/* ============================================================
+   media.css — the six.well construct
+   ============================================================
+   Shared media card and grid styles used across all ventures.
+
+   REQUIRED: each page must set --venture-color in its :root.
+   See CLAUDE.md for the full venture color map.
+
+   Example:
+     :root { --venture-color: var(--color-tattooing); }
+
+   Card HTML structure:
+     <div class="media-card">
+       <span class="card-image"><img src="" alt=""></span>
+       <span class="card-badge">...</span>
+       <span class="card-overlay">
+         <span class="card-title">Title</span>
+         <span class="card-sub">Sub · metadata</span>
+       </span>
+     </div>
+
+   Wide variant (sheets, landscapes): add .card--wide
+============================================================ */
+
+
+/* ── Grid ──────────────────────────────────────────────── */
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 3px;
+  border-top: 1px solid var(--ring-faint);
+  padding-top: 3px;
+}
+
+@media (max-width: 640px) {
+  .media-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* ── Card shell ─────────────────────────────────────────── */
+
+.media-card {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  cursor: pointer;
+  background: #0f0f0f;
+  border: 5px solid var(--ring-faint);
+  display: block;
+  color: var(--text);
+  transition: border-color 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.media-card:hover {
+  border-color: var(--text-mute);
+}
+
+.media-card.card--wide {
+  aspect-ratio: 3 / 2;
+}
+
+
+/* ── Image ──────────────────────────────────────────────── */
+
+.card-image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #111;
+}
+
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: brightness(0.9);
+  transition: transform 0.5s ease,
+              filter 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.media-card:hover .card-image img {
+  transform: scale(0.97);
+  filter: brightness(0.45);
+}
+
+.card--contain .card-image img {
+  object-fit: contain;
+  padding: 30px;
+  background: #100f0e;
+}
+
+
+/* ── Badge (always visible, top-left) ───────────────────── */
+
+.card-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+
+/* ── Overlay (hover reveal from bottom) ─────────────────── */
+
+.card-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  padding: 48px 16px 16px;
+  background: linear-gradient(to top, rgba(14, 14, 14, 0.92), transparent);
+  transform: translateY(6px);
+  opacity: 0;
+  transition: opacity 0.18s ease,
+              transform 0.18s ease;
+  pointer-events: none;
+}
+
+.media-card:hover .card-overlay {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+
+/* ── Overlay text ───────────────────────────────────────── */
+
+.card-title {
+  display: block;
+  font-family: var(--sans, 'Inter', sans-serif);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.card-sub {
+  display: block;
+  font-family: var(--serif, Georgia, serif);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-mute);
+  letter-spacing: 0.03em;
+}
