@@ -76,7 +76,41 @@ export const PRODUCT_PRESENTATION = {
     dimensions: "36 × 48 in",
     year: "2023",
   },
+  "maze-puffer-jacket": {
+    catalogNumber: "09",
+    pagePath: null,
+    sourceVenture: "art.pill",
+    productType: "apparel",
+    heroImage: "/assets/flash/IMG_8898.jpg",
+    heroImageAlt: "MAZE Puffer Jacket — placeholder",
+    editionText: "coming soon",
+    defaultColorway: "black",
+    swatchHexes: { black: "#1a1a1a" },
+  },
 };
+
+export const PLACEHOLDER_PRODUCTS = [
+  {
+    id: "placeholder-maze-puffer",
+    handle: "maze-puffer-jacket",
+    title: "MAZE Puffer Jacket",
+    tags: [],
+    productType: "apparel",
+    sourceVenture: "art.pill",
+    sourceLabel: "art.pill Tattoo Supply",
+    price: null,
+    availableForSale: false,
+    options: [{ name: "Color", values: ["Black"] }],
+    variants: [],
+    images: [],
+    heroImage: "/assets/flash/IMG_8898.jpg",
+    heroImageAlt: "MAZE Puffer Jacket — placeholder",
+    catalogNumber: "09",
+    editionText: "coming soon",
+    pagePath: null,
+    isPlaceholder: true,
+  },
+];
 
 function readTagValue(tags, prefixes) {
   for (const prefix of prefixes) {

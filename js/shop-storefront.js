@@ -1,6 +1,7 @@
 import {
   SOURCE_ORDER,
   SOURCES,
+  PLACEHOLDER_PRODUCTS,
   getColorHex,
   getPresentation,
   getTypeLabel,
@@ -611,9 +612,10 @@ export async function initMerchCatalogPage() {
             selectorsHtml += `<p class="size-required" id="req-${product.handle}">select a size</p>`;
           }
           selectorsHtml += optionMarkup(optionValues.finish, "finish", product.handle, selectedFinish, product.handle);
+          const ctaLabel = product.availableForSale ? "add to cart" : product.isPlaceholder ? "coming soon" : "sold out";
           ctaHtml = `
             <button class="card-add"${product.availableForSale ? "" : " disabled"} data-add="${product.handle}">
-              <span>${product.availableForSale ? "add to cart" : "sold out"}</span>
+              <span>${ctaLabel}</span>
               <span class="arrow">&rarr;</span>
             </button>
           `;
@@ -680,6 +682,10 @@ export async function initMerchCatalogPage() {
   try {
     grid.innerHTML = `<p class="drawer-empty">loading merch...</p>`;
     products = await loadCatalog();
+    const liveHandles = new Set(products.map((p) => p.handle));
+    for (const placeholder of PLACEHOLDER_PRODUCTS) {
+      if (!liveHandles.has(placeholder.handle)) products.push(placeholder);
+    }
     renderFilters();
     renderTypeFilters();
     renderGrid();
