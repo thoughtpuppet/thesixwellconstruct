@@ -16,6 +16,7 @@
     --signal: #8F231D;
     --ring: #6D3D15;
     --ring-soft: rgba(109,61,21,0.4);
+    --ring-faint: rgba(109,61,21,0.18);
     --text: #FFE7CA;
     --text-mute: rgba(255,231,202,0.6);
     --text-dim: rgba(255,231,202,0.35);
@@ -45,9 +46,10 @@
     padding:var(--s5) var(--s6); min-height:72px;
   }
   main {
-    position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7);
+    position:relative; z-index:2;
+    max-width:1440px; margin:0 auto;
+    padding:var(--s8) var(--s6) var(--s7);
   }
-  main > * { max-width:600px; }
   .private-badge {
     display:inline-flex; align-items:center; gap:8px;
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
@@ -62,48 +64,82 @@
   }
   .page-title {
     font-family:var(--sans); font-weight:900; font-size:clamp(36px,6vw,72px);
-    letter-spacing:-0.04em; line-height:0.9; color:var(--accent); margin-bottom:36px;
+    letter-spacing:-0.04em; line-height:0.9; color:var(--accent); margin-bottom:24px;
+    max-width:600px;
   }
   .page-body {
     font-family:var(--serif); font-size:15px; line-height:1.8; color:var(--text-mute);
     margin-bottom:56px; max-width:520px;
   }
-  .booking-block {
-    border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint); background:transparent; padding:42px 0 46px;
+
+  .picker-label {
+    font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.22em;
+    text-transform:uppercase; color:var(--text-dim); margin-bottom:4px;
   }
-  .booking-block-label {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-dim); margin-bottom:20px;
+  .picker-list {
+    list-style:none;
+    border-top:1px solid var(--ring-soft);
+    max-width:640px;
+    margin-bottom:32px;
   }
-  .booking-block-note {
-    font-family:var(--serif); font-size:14px; line-height:1.8; color:var(--text-mute); margin-bottom:32px;
+  .session-row {
+    display:grid;
+    grid-template-columns: 1fr auto auto;
+    align-items:center;
+    gap:32px;
+    border-bottom:1px solid var(--ring-faint);
+    padding:26px 0;
   }
-  .cta-primary {
+  .session-info { display:flex; flex-direction:column; gap:5px; }
+  .session-duration {
+    font-family:var(--sans); font-weight:900; font-size:17px;
+    letter-spacing:-0.02em; color:var(--text);
+  }
+  .session-length {
+    font-family:var(--serif); font-size:12px; color:var(--text-dim);
+    letter-spacing:0.06em;
+  }
+  .session-deposit {
+    font-family:var(--sans); font-weight:700; font-size:22px;
+    letter-spacing:-0.03em; color:var(--accent);
+    white-space:nowrap;
+  }
+  .session-deposit-label {
+    font-family:var(--serif); font-size:10px; color:var(--text-dim);
+    letter-spacing:0.1em; text-transform:uppercase; text-align:right; margin-top:3px;
+  }
+  .session-deposit-wrap { text-align:right; }
+  .session-cta {
     display:inline-flex; align-items:center; gap:8px;
-    font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); padding:14px 28px;
+    font-family:var(--sans); font-weight:700; font-size:10px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--text-mute); border:1px solid var(--ring-soft);
+    padding:12px 22px; white-space:nowrap;
     transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   }
-  .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
+  .session-cta:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
+
   .booking-disclaimer {
-    margin-top:20px; font-family:var(--serif); font-size:10px; letter-spacing:0.14em;
+    font-family:var(--serif); font-size:10px; letter-spacing:0.14em;
     text-transform:uppercase; color:var(--text-ghost); line-height:1.7;
+    max-width:520px;
   }
+
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
-    main > * { max-width:none; }
-    .booking-block { padding:30px 0 34px; }
+    .session-row {
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      gap:12px 16px;
+    }
+    .session-info { grid-column:1; grid-row:1; }
+    .session-deposit-wrap { grid-column:2; grid-row:1; }
+    .session-cta { grid-column:1 / -1; grid-row:2; justify-self:start; }
   }
-@media (max-width: 700px) {
-  header.top {
-    position: sticky;
-    padding: var(--s3) var(--s4);
-    min-height: 60px;
-    align-items: center;
+  @media (max-width:700px) {
+    header.top { position:sticky; padding:var(--s3) var(--s4); min-height:60px; align-items:center; }
   }
-}
-
 </style>
 </head>
 <body data-venture="tattooing">
@@ -131,14 +167,56 @@
   <main>
     <div class="private-badge"><span class="badge-dot"></span>Approved Clients Only</div>
     <p class="page-label">Art.Pill Tattoo House</p>
-    <h1 class="page-title">Book Your Appointment.</h1>
-    <p class="page-body">Your project has been reviewed and accepted. Use the link below to select your session type, choose a date and time, and submit your deposit. The deposit is applied toward the total cost of your tattoo and secures your appointment.</p>
-    <div class="booking-block">
-      <p class="booking-block-label">Secure Scheduling</p>
-      <p class="booking-block-note">Select the session type that matches your approved project, pick a date that works for you, and complete your deposit to lock in the appointment. If you have questions, reply directly to the email you received.</p>
-      <a class="cta-primary" href="https://artpill.acuityscheduling.com/" target="_blank" rel="noopener noreferrer">Schedule &amp; Deposit &rarr;</a>
-      <p class="booking-disclaimer">This private booking page is shared after review.<br>Sharing this link is at your discretion.</p>
-    </div>
+    <h1 class="page-title">Select Your Session.</h1>
+    <p class="page-body">Choose the session length that matches your approved project. Each option links directly to that appointment type — pick a date, complete your deposit, and your appointment is confirmed. The deposit applies toward the total cost of your tattoo.</p>
+
+    <p class="picker-label">Session &amp; Deposit</p>
+    <ul class="picker-list">
+      <li>
+        <div class="session-row">
+          <div class="session-info">
+            <span class="session-duration">Quarter Session</span>
+            <span class="session-length">approx. 1.5 hours</span>
+          </div>
+          <div class="session-deposit-wrap">
+            <div class="session-deposit">$50</div>
+            <div class="session-deposit-label">deposit</div>
+          </div>
+          <!-- Replace ACUITY_TYPE_QUARTER with your Acuity appointmentType ID -->
+          <a class="session-cta" href="https://artpill.acuityscheduling.com/schedule.php?appointmentType=ACUITY_TYPE_QUARTER" target="_blank" rel="noopener noreferrer">Book &rarr;</a>
+        </div>
+      </li>
+      <li>
+        <div class="session-row">
+          <div class="session-info">
+            <span class="session-duration">Half Session</span>
+            <span class="session-length">approx. 3 hours</span>
+          </div>
+          <div class="session-deposit-wrap">
+            <div class="session-deposit">$100</div>
+            <div class="session-deposit-label">deposit</div>
+          </div>
+          <!-- Replace ACUITY_TYPE_HALF with your Acuity appointmentType ID -->
+          <a class="session-cta" href="https://artpill.acuityscheduling.com/schedule.php?appointmentType=ACUITY_TYPE_HALF" target="_blank" rel="noopener noreferrer">Book &rarr;</a>
+        </div>
+      </li>
+      <li>
+        <div class="session-row">
+          <div class="session-info">
+            <span class="session-duration">Full Session</span>
+            <span class="session-length">up to 6 hours</span>
+          </div>
+          <div class="session-deposit-wrap">
+            <div class="session-deposit">$150</div>
+            <div class="session-deposit-label">deposit</div>
+          </div>
+          <!-- Replace ACUITY_TYPE_FULL with your Acuity appointmentType ID -->
+          <a class="session-cta" href="https://artpill.acuityscheduling.com/schedule.php?appointmentType=ACUITY_TYPE_FULL" target="_blank" rel="noopener noreferrer">Book &rarr;</a>
+        </div>
+      </li>
+    </ul>
+
+    <p class="booking-disclaimer">This private booking page is shared after project review.<br>If you have questions, reply to the email you received.</p>
   </main>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
