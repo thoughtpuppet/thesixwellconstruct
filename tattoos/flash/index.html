@@ -81,6 +81,11 @@
   .pill { display:inline-flex; min-height:22px; align-items:center; border:5px solid var(--ring-soft); padding:0 8px; font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:rgba(14,14,14,0.55); }
   .pill.available { color:var(--text); border-color:rgba(255,231,202,0.28); }
   .pill.past { color:var(--text-ghost); border-color:var(--ring-faint); }
+  .pill.placed { color:var(--signal); border-color:rgba(143,35,29,0.45); background:rgba(143,35,29,0.08); }
+  .placed-band { border-top:5px solid rgba(143,35,29,0.25); border-bottom:5px solid rgba(143,35,29,0.25); background:rgba(143,35,29,0.04); padding:22px 0; margin-bottom:var(--s6); display:none; }
+  .placed-band.is-visible { display:block; }
+  .placed-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:10px; }
+  .placed-body { font-size:14px; line-height:1.75; color:var(--text-mute); max-width:640px; }
   .empty-state { border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); padding:34px 0; color:var(--text-dim); font-size:13px; letter-spacing:0.12em; text-transform:uppercase; }
   .detail-grid { display:flex; flex-direction:column; border-top:5px solid var(--ring-faint); margin-top:48px; }
   .detail { display:grid; grid-template-columns:minmax(160px,0.28fr) minmax(0,1fr); gap:28px; padding:24px 0; border-bottom:5px solid var(--ring-faint); }
@@ -232,7 +237,7 @@
   </script>
   <div class="grain"></div>
   <header class="top">
-    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
+    <a class="nav-inquire" href="/tattoos/inquire/">Claim Flash</a>
   </header>
   <main>
     <section class="hero">
@@ -253,25 +258,16 @@
       </div>
     </nav>
 
-    <section class="ecosystem-band" aria-label="Related construct threads">
-      <div class="ecosystem-intro">
-        <p class="ecosystem-kicker">Trace marks</p>
-        <h2 class="ecosystem-title">A few quiet paths out.</h2>
-        <p class="ecosystem-copy">Some designs carry small threads back into the larger construct: source images, objects, studies, or gatherings.</p>
-      </div>
-      <div class="node-grid">
-        <a class="node-link" href="/art/"><span class="node-venture">Art</span><span class="node-title">Source imagery</span><span class="node-copy">Where the mark language begins.</span></a>
-        <a class="node-link" href="/merch/?filter=art.pill"><span class="node-venture">Merch</span><span class="node-title">Art.Pill supply</span><span class="node-copy">Objects that may carry the mark outward.</span></a>
-        <a class="node-link" href="/#archive"><span class="node-venture">Archive</span><span class="node-title">Studies</span><span class="node-copy">Fragments and process rooms.</span></a>
-        <a class="node-link" href="/#events"><span class="node-venture">Events</span><span class="node-title">In person</span><span class="node-copy">Where some projects begin as encounters.</span></a>
-      </div>
-    </section>
+    <div class="placed-band" id="placedBand" aria-live="polite">
+      <p class="placed-kicker">Placed Designs</p>
+      <p class="placed-body">Some flash is drawn directly onto a body placement — the composition already accounts for the curve, the bone, the muscle. These aren't general designs adapted to fit. They're site-specific studies built for a particular location from the start.</p>
+    </div>
 
     <section class="section">
       <div class="section-head">
         <div>
           <p class="section-label">Flash Sheets</p>
-          <h2 class="section-title">Shop Wall</h2>
+          <h2 class="section-title">Flash Sheets</h2>
         </div>
         <p class="section-body">Sheets collect multiple drawings into one old-shop style plate. Some sheets contain available designs, while others are kept as past studies so the visual language remains visible.</p>
       </div>
@@ -289,25 +285,6 @@
       <div class="catalog-grid" id="catalogGrid" aria-live="polite"></div>
     </section>
 
-    <section class="section">
-      <p class="section-label">Claim Path</p>
-      <h2 class="section-title">From wall to review.</h2>
-      <p class="section-body">Flash is booked through review first. Available designs can be claimed, placement and scale are checked, then approved clients receive the private Acuity scheduling step.</p>
-      <div class="detail-grid">
-        <article class="detail">
-          <h3 class="detail-title">I / Read the status</h3>
-          <p class="detail-body">Available work can be requested now. Past work remains visible as archive, direction, and a record of the visual language.</p>
-        </article>
-        <article class="detail">
-          <h3 class="detail-title">II / Check scale</h3>
-          <p class="detail-body">Size buckets keep browsing simple. Final pricing still depends on placement, scale, and whether the design needs fit adjustments.</p>
-        </article>
-        <article class="detail">
-          <h3 class="detail-title">III / Follow traces</h3>
-          <p class="detail-body">Series may show merch as coming soon. Individual standalone designs only show merch links when a product is actually available.</p>
-        </article>
-      </div>
-    </section>
 
   </main>
 
@@ -322,7 +299,7 @@
     };
     const state = { type: "All", series: "All", sizeBucket: "All", status: "All", items: [], seriesMeta: [] };
     const groups = {
-      type: ["All", "Series", "Standalone"],
+      type: ["All", "Series", "Standalone", "Placed"],
       series: ["All", "MAZE", "Sairoglyphs"],
       sizeBucket: ["All", "Small", "Medium", "Large"],
       status: ["All", "Available", "Past"]
@@ -352,21 +329,27 @@
 
 
     function matches(item) {
-      if (state.series !== "All" && item.series !== state.series) return false;
+      if (state.type === "Placed" && !item.placed) return false;
       if (state.type === "Series" && item.series === "Standalones") return false;
       if (state.type === "Standalone" && item.series !== "Standalones") return false;
-      if (state.status !== "All" && item.status !== state.status) return false;
-      if (state.sizeBucket !== "All" && item.sizeBucket !== state.sizeBucket) return false;
+      if (state.type !== "Placed") {
+        if (state.series !== "All" && item.series !== state.series) return false;
+        if (state.status !== "All" && item.status !== state.status) return false;
+        if (state.sizeBucket !== "All" && item.sizeBucket !== state.sizeBucket) return false;
+      }
       return true;
     }
 
     function updateCascade() {
       const seriesRow = document.getElementById("seriesRow");
       const qualifierRow = document.getElementById("qualifierRow");
+      const placedBand = document.getElementById("placedBand");
+      const isPlaced = state.type === "Placed";
       const showSeries = state.type === "Series";
       const showQualifier = state.type === "Standalone" || (state.type === "Series" && state.series !== "All");
-      seriesRow.classList.toggle("is-open", showSeries);
-      qualifierRow.classList.toggle("is-open", showQualifier);
+      seriesRow.classList.toggle("is-open", showSeries && !isPlaced);
+      qualifierRow.classList.toggle("is-open", showQualifier && !isPlaced);
+      placedBand.classList.toggle("is-visible", isPlaced);
     }
 
     function setChipsActive(group) {
@@ -391,6 +374,11 @@
           setChipsActive("series");
           setChipsActive("sizeBucket");
           setChipsActive("status");
+        }
+        if (group === "type" && value === "Placed") {
+          // collapse qualifier cascades when placed is active
+          document.getElementById("seriesRow").classList.remove("is-open");
+          document.getElementById("qualifierRow").classList.remove("is-open");
         }
         if (group === "series" && value === "All") {
           state.sizeBucket = "All";
@@ -421,7 +409,7 @@
       const isSheet = item.type === "Sheet";
       link.innerHTML = `
         <span class="card-image"><img src="${item.image}" alt="${item.title}" loading="lazy"></span>
-        <span class="card-badge"><span class="pill ${slug(item.status)}">${item.status}</span></span>
+        <span class="card-badge">${item.placed ? '<span class="pill placed">Placed</span>' : ''}<span class="pill ${slug(item.status)}">${item.status}</span></span>
         <span class="card-overlay">
           <span class="card-title">${item.title}</span>
           <span class="card-sub">${item.series} · ${codeFor(item)}</span>

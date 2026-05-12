@@ -1,0 +1,21 @@
+{
+  "note": "Walk-in windows are set weekly — check back or book a private consultation to guarantee your slot.",
+  "address": {
+    "line1": "123 Example St",
+    "line2": "",
+    "city": "Your City",
+    "state": "ST",
+    "zip": "00000",
+    "mapsUrl": "https://maps.google.com/?q=123+Example+St"
+  },
+  "windows": [
+    {
+      "day": "Tuesday",
+      "date": "",
+      "time": "2 – 6pm",
+      "type": "Walk-in",
+      "note": "Small flash and build sessions.",
+      "active": true
+    }
+  ]
+}

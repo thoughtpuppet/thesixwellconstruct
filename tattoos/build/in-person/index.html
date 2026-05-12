@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>In-Person Build · art.pill tattoo house</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --bg:#0e0e0e; --signal:#8F231D; --ring:#6D3D15;
+    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --accent:#FCB867; --text:#FFE7CA;
+    --text-mute:rgba(255,231,202,0.6); --text-dim:rgba(255,231,202,0.35); --text-ghost:rgba(255,231,202,0.12);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:40px;--s7:64px;--s8:96px;
+    --sans:'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif:Georgia,'Times New Roman',Times,serif;
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);font-family:var(--serif);min-height:100vh;overflow-x:clip;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;text-decoration:none;}
+  button,input,textarea,select{font:inherit;}
+
+  .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");}
+
+  /* ── HEADER ── */
+  header.top{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:flex-end;padding:var(--s5) var(--s6);min-height:72px;}
+  .nav-inquire{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(143,35,29,0.4);padding:8px 16px;transition:background var(--t-fast),border-color var(--t-fast);}
+  .nav-inquire:hover{background:rgba(143,35,29,0.06);border-color:var(--signal);}
+
+  /* ── MAIN ── */
+  main{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:var(--s8) var(--s6) var(--s7);}
+
+  /* ── LAYOUT ── */
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
+
+  /* ── LEFT COLUMN ── */
+  .page-label{font-family:var(--serif);font-size:15px;letter-spacing:0.32em;text-transform:uppercase;color:var(--accent);opacity:0.7;margin-bottom:-8px;}
+  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,140px);letter-spacing:-0.05em;line-height:0.88;color:var(--signal);text-transform:uppercase;margin-bottom:var(--s6);}
+  .page-body{font-size:16px;line-height:1.8;color:var(--text-mute);max-width:560px;}
+  .page-body+.page-body{margin-top:var(--s4);}
+
+  /* ── ADDRESS BLOCK ── */
+  .address-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
+  .block-kicker{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);opacity:0.68;margin-bottom:var(--s3);}
+  .address-lines{font-family:var(--serif);font-size:15px;line-height:1.85;color:var(--text-mute);}
+  .address-map-link{display:inline-flex;align-items:center;gap:6px;margin-top:var(--s3);font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--signal);opacity:0.75;border-bottom:1px solid rgba(143,35,29,0.3);padding-bottom:1px;transition:opacity var(--t-fast),border-color var(--t-fast);}
+  .address-map-link:hover{opacity:1;border-bottom-color:var(--signal);}
+
+  /* ── WALK-IN WINDOWS ── */
+  .windows-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
+  .windows-note{font-size:13px;line-height:1.7;color:var(--text-dim);margin-bottom:var(--s5);}
+  .window-list{display:flex;flex-direction:column;gap:var(--s2);}
+  .window-item{display:grid;grid-template-columns:minmax(100px,0.4fr) minmax(0,1fr);gap:var(--s4);align-items:start;padding:var(--s4);border:5px solid var(--ring-faint);}
+  .window-day{font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);}
+  .window-date{font-family:var(--serif);font-size:11px;color:var(--text-dim);margin-top:2px;}
+  .window-time{font-family:var(--serif);font-size:14px;color:var(--accent);margin-bottom:3px;}
+  .window-note{font-family:var(--serif);font-size:12px;color:var(--text-dim);}
+  .windows-empty{font-family:var(--serif);font-size:14px;line-height:1.75;color:var(--text-dim);padding:var(--s4);border:5px solid var(--ring-faint);}
+
+  /* ── RIGHT COLUMN — FORM ── */
+  .form-panel{border-top:5px solid var(--ring-soft);padding-top:var(--s6);}
+  .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(22px,3vw,34px);letter-spacing:-0.02em;line-height:0.94;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s3);}
+  .form-note{font-size:13px;line-height:1.75;color:var(--text-mute);margin-bottom:var(--s6);}
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
+  .field.full{grid-column:1 / -1;}
+  label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
+  input,textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;}
+  textarea{min-height:110px;resize:vertical;}
+  input:focus,textarea:focus,select:focus{outline:1px solid var(--signal);border-color:var(--signal);}
+  .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
+  .check{display:grid;grid-template-columns:18px 1fr;gap:12px;align-items:start;margin:6px 0 28px;}
+  .check input{width:18px;height:18px;accent-color:var(--signal);margin-top:2px;padding:0;}
+  .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
+  .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
+  .submit-btn{display:inline-flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
+  .submit-btn:hover{background:rgba(252,184,103,0.04);border-color:var(--accent);color:var(--accent);}
+  .submit-btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .form-status{font-size:12px;line-height:1.6;color:var(--text-dim);}
+  .payment-holding{padding:var(--s6) 0;}
+  .payment-holding-title{font-family:var(--sans);font-weight:900;font-size:18px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s3);}
+  .payment-holding-body{font-size:14px;line-height:1.75;color:var(--text-mute);}
+
+  /* ── FOOTER ── */
+  footer.bottom{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:56px var(--s6);border-top:5px solid var(--ring-faint);display:flex;justify-content:space-between;align-items:center;}
+  footer.bottom p,footer.bottom a{font-size:10px;letter-spacing:0.22em;color:var(--text-dim);text-transform:uppercase;}
+  footer.bottom a{color:var(--text-mute);transition:color var(--t-fast);}
+  footer.bottom a:hover{color:var(--accent);}
+
+  /* ── RESPONSIVE ── */
+  @media(max-width:1080px){
+    .layout{grid-template-columns:1fr;gap:48px;}
+    .form-panel{border-top:5px solid var(--ring-faint);}
+  }
+  @media(max-width:640px){
+    header.top{padding:var(--s4) var(--s5);}
+    main{padding:var(--s6) var(--s5) var(--s7);}
+    .page-title{font-size:clamp(52px,17vw,90px);}
+    .field-grid{grid-template-columns:1fr;}
+    footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
+  }
+  @media(max-width:700px){
+    header.top{position:sticky;padding:var(--s3) var(--s4);min-height:60px;align-items:center;}
+  }
+</style>
+</head>
+<body data-venture="tattooing">
+  <script>
+  (function(){
+    var o=document.createElement('div');o.id='construct-fade';
+    o.style.cssText='position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut(){requestAnimationFrame(function(){requestAnimationFrame(function(){o.style.opacity='0';o.style.pointerEvents='none';});});}
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fadeOut);else fadeOut();
+  })();
+  </script>
+  <div class="grain"></div>
+
+  <header class="top">
+    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
+  </header>
+
+  <main>
+    <div class="layout">
+
+      <!-- LEFT — INFO -->
+      <section>
+        <p class="page-label">art.pill · build your own</p>
+        <h1 class="page-title">In-Person.</h1>
+        <p class="page-body">The Build Your Own process can happen in the studio directly. Sit with the visual language, talk through what you want to carry, and build the brief together before a session is scheduled.</p>
+        <p class="page-body">In-person builds are available as private consultations or during open walk-in windows when they're set. Book a consultation below or check current walk-in availability.</p>
+
+        <!-- ADDRESS -->
+        <div class="address-block" id="addressBlock">
+          <p class="block-kicker">Studio Location</p>
+          <p class="address-lines" id="addressLines">Loading…</p>
+          <a class="address-map-link" id="addressMapLink" href="#" target="_blank" rel="noopener">Open in Maps →</a>
+        </div>
+
+        <!-- WALK-IN WINDOWS -->
+        <div class="windows-block">
+          <p class="block-kicker">Walk-In Windows</p>
+          <p class="windows-note" id="windowsNote">Loading availability…</p>
+          <div class="window-list" id="windowList"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT — FORM -->
+      <section class="form-panel" aria-label="Book an in-person build consultation">
+        <h2 class="form-title">Book a Build Consultation.</h2>
+        <p class="form-note">A private in-person session to walk through the symbol language and build your brief before a tattoo date is set. Not a tattoo appointment — a working conversation.<br><br>A $20 deposit is required to hold your slot. It goes toward your session if you book. After submitting your details below, you'll be taken to complete the deposit.</p>
+
+        <!-- STEP 1: FORM -->
+        <div id="formStep">
+          <form id="consultForm" novalidate>
+            <input type="hidden" name="form_type" value="inperson_build_consultation">
+            <input type="hidden" name="source_path" value="/tattoos/build/in-person/">
+            <input type="hidden" name="subject" value="New In-Person Build Consultation Request">
+            <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
+
+            <div class="field-grid">
+              <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+              <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+              <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+              <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" autocomplete="tel"></div>
+              <div class="field full">
+                <label for="preferred_times">Preferred days or times</label>
+                <input id="preferred_times" name="preferred_times" placeholder="e.g. weekday evenings, Saturday afternoons">
+              </div>
+              <div class="field full">
+                <label for="direction">Initial direction</label>
+                <textarea id="direction" name="direction" placeholder="What are you working toward? Even a vague sense of meaning, placement, or feeling is useful here."></textarea>
+              </div>
+            </div>
+
+            <label class="check">
+              <input type="checkbox" name="understand" value="yes" required>
+              <span class="check-label">I understand this is a build consultation, not a tattoo appointment. Scheduling a tattoo session follows after the brief is set.</span>
+            </label>
+
+            <div class="submit-row">
+              <button class="submit-btn" type="submit" id="submitBtn">Continue to Payment — $20</button>
+            </div>
+            <p class="form-status" id="formError" style="display:none;color:rgba(143,35,29,0.9);margin-top:14px;"></p>
+          </form>
+        </div>
+
+        <!-- STEP 2: PAYMENT REDIRECT (shown briefly after submit) -->
+        <div id="paymentStep" style="display:none;">
+          <div class="payment-holding">
+            <p class="payment-holding-title">Details saved.</p>
+            <p class="payment-holding-body">Taking you to complete the $20 deposit now…</p>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="bottom">
+    <a href="/tattoos/build/">&larr; back to Build Your Own</a>
+    <a href="/">the six.well construct</a>
+  </footer>
+
+  <script>
+  /* ─────────────────────────────────────────────
+     CONFIG — update these two values when ready
+  ───────────────────────────────────────────── */
+  const FORMSPREE_ID   = "REPLACE_WITH_FORMSPREE_ID";   // e.g. "mrejkpnl"
+  const STRIPE_PAYMENT_LINK = "REPLACE_WITH_STRIPE_PAYMENT_LINK"; // e.g. "https://buy.stripe.com/..."
+
+  /* ── Load studio availability from JSON ── */
+  async function loadAvailability() {
+    let data;
+    try {
+      const res = await fetch("/assets/studio-availability.json", { cache: "no-store" });
+      if (!res.ok) throw new Error("unavailable");
+      data = await res.json();
+    } catch {
+      document.getElementById("windowsNote").textContent = "Walk-in availability is updated regularly. Check back soon.";
+      document.getElementById("addressLines").textContent = "Contact for studio address.";
+      document.getElementById("addressMapLink").style.display = "none";
+      return;
+    }
+
+    /* Address */
+    const addr = data.address || {};
+    const lines = [addr.line1, addr.line2, [addr.city, addr.state, addr.zip].filter(Boolean).join(", ")].filter(Boolean);
+    document.getElementById("addressLines").innerHTML = lines.join("<br>");
+    if (addr.mapsUrl) {
+      document.getElementById("addressMapLink").href = addr.mapsUrl;
+    } else {
+      document.getElementById("addressMapLink").style.display = "none";
+    }
+
+    /* Walk-in note */
+    if (data.note) document.getElementById("windowsNote").textContent = data.note;
+
+    /* Windows */
+    const list = document.getElementById("windowList");
+    const active = (data.windows || []).filter(w => w.active);
+    if (!active.length) {
+      list.innerHTML = '<p class="windows-empty">No walk-in windows are currently set. Book a private consultation or check back soon.</p>';
+      return;
+    }
+    active.forEach(w => {
+      const item = document.createElement("div");
+      item.className = "window-item";
+      item.innerHTML = `
+        <div>
+          <p class="window-day">${w.day || ""}</p>
+          ${w.date ? `<p class="window-date">${w.date}</p>` : ""}
+        </div>
+        <div>
+          <p class="window-time">${w.time || ""}</p>
+          ${w.note ? `<p class="window-note">${w.note}</p>` : ""}
+        </div>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  loadAvailability();
+
+  /* ── Consultation form: AJAX submit → Stripe redirect ── */
+  const form      = document.getElementById("consultForm");
+  const submitBtn = document.getElementById("submitBtn");
+  const formError = document.getElementById("formError");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    /* Native validity check */
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+
+    /* Loading state */
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Submitting…";
+    formError.style.display = "none";
+
+    try {
+      const data = new FormData(form);
+      const res = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
+        method: "POST",
+        body: data,
+        headers: { Accept: "application/json" }
+      });
+
+      if (!res.ok) throw new Error("submit_failed");
+
+      /* Details saved — show holding state then redirect */
+      document.getElementById("formStep").style.display = "none";
+      document.getElementById("paymentStep").style.display = "block";
+
+      setTimeout(() => {
+        window.location.href = STRIPE_PAYMENT_LINK;
+      }, 1200);
+
+    } catch {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Continue to Payment — $20";
+      formError.textContent = "Something went wrong. Please try again or email us directly.";
+      formError.style.display = "block";
+    }
+  });
+  </script>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>
