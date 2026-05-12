@@ -169,7 +169,7 @@
   }
   .ledger-row {
     display:grid;
-    grid-template-columns:72px minmax(160px,0.38fr) minmax(0,1fr) auto;
+    grid-template-columns:minmax(160px,0.38fr) minmax(0,1fr) auto;
     gap:24px;
     align-items:center;
     padding:28px 0;
@@ -177,15 +177,6 @@
   }
   .ledger-row.is-primary {
     padding:36px 0;
-  }
-  .ledger-number {
-    font-family:var(--sans);
-    font-weight:900;
-    font-size:clamp(32px,5vw,70px);
-    line-height:0.9;
-    letter-spacing:-0.05em;
-    color:var(--signal);
-    opacity:0.35;
   }
   .ledger-label,.booking-cta-label {
     font-family:var(--serif); font-size:10px;
@@ -386,7 +377,7 @@
     main { padding:var(--s7) var(--s5) var(--s6); }
     .editorial-field,.ritual,.price-fit { grid-template-columns:1fr; gap:44px; }
     .ritual-intro { position:static; }
-    .ledger-row { grid-template-columns:56px minmax(0,1fr); }
+    .ledger-row { grid-template-columns:minmax(0,1fr) auto; }
     .ledger-status,.ledger-action { grid-column:2; }
     footer.bottom { padding:48px var(--s5); }
   }
@@ -469,13 +460,8 @@
     </section>
 
     <section class="section" id="ways-to-work">
-      <p class="section-label">Entry Points</p>
-      <h2 class="section-title">Choose the door that already feels alive.</h2>
-      <!-- CHANGE 2: Removed the section-body paragraph ("Flash is the fastest entry...") -->
       <div class="ledger" aria-label="Tattoo entry paths">
         <article class="ledger-row is-primary">
-          <!-- CHANGE 3: ledger-number spans emptied — numbers removed -->
-          <span class="ledger-number"></span>
           <div>
             <p class="ledger-label">Available now</p>
             <h3 class="ledger-title">Flash</h3>
@@ -494,7 +480,6 @@
           </div>
         </article>
         <article class="ledger-row">
-          <span class="ledger-number"></span>
           <div>
             <p class="ledger-label">By inquiry</p>
             <h3 class="ledger-title">Custom</h3>
@@ -512,7 +497,6 @@
           </div>
         </article>
         <article class="ledger-row">
-          <span class="ledger-number"></span>
           <div>
             <p class="ledger-label">Application gate</p>
             <h3 class="ledger-title">Special Projects</h3>
