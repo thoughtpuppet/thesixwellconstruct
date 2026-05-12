@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>edit links (mac) - the six.well construct</title>
+<style>
+  :root {
+    --bg:#0e0e0e;
+    --panel:#141414;
+    --text:#FFE7CA;
+    --muted:rgba(255,231,202,0.58);
+    --dim:rgba(255,231,202,0.34);
+    --accent:#FCB867;
+    --blue:#0581C1;
+    --ring:rgba(252,184,103,0.22);
+    --sans:Inter,"Helvetica Neue",Arial,sans-serif;
+    --serif:Georgia,"Times New Roman",Times,serif;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--serif);
+    padding:48px clamp(18px,4vw,56px);
+    overflow-x:hidden;
+  }
+  main {
+    max-width:1180px;
+    margin:0 auto;
+    min-width:0;
+  }
+  header {
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:24px;
+    padding-bottom:28px;
+    border-bottom:5px solid var(--ring);
+  }
+  h1 {
+    margin:0;
+    font-family:var(--sans);
+    font-size:clamp(42px,9vw,118px);
+    line-height:0.88;
+    letter-spacing:0;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  .meta {
+    max-width:280px;
+    margin:0 0 10px;
+    color:var(--muted);
+    font-size:11px;
+    line-height:1.55;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    text-align:right;
+  }
+  .port-row {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:6px;
+    justify-content:flex-end;
+  }
+  .port-row label {
+    font-family:var(--sans);
+    font-size:10px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--dim);
+  }
+  .port-row input {
+    width:70px;
+    background:#1a1a1a;
+    border:1px solid rgba(252,184,103,0.28);
+    color:var(--accent);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12px;
+    padding:4px 6px;
+    text-align:center;
+    outline:none;
+  }
+  .port-row input:focus {
+    border-color:var(--accent);
+  }
+  .grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));
+    gap:18px;
+    margin-top:28px;
+  }
+  section {
+    border:2px solid var(--ring);
+    background:var(--panel);
+    padding:18px;
+    min-width:0;
+  }
+  h2 {
+    margin:0 0 14px;
+    font-family:var(--sans);
+    font-size:13px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--blue);
+  }
+  ul {
+    list-style:none;
+    margin:0;
+    padding:0;
+    display:grid;
+    gap:8px;
+    min-width:0;
+  }
+  li {
+    min-width:0;
+  }
+  a {
+    display:block;
+    min-height:56px;
+    padding:10px 12px;
+    border:1px solid rgba(252,184,103,0.18);
+    color:var(--text);
+    text-decoration:none;
+    transition:border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+  }
+  a:hover,
+  a:focus-visible {
+    outline:none;
+    border-color:var(--accent);
+    background:rgba(252,184,103,0.06);
+    color:var(--accent);
+  }
+  .label {
+    display:block;
+    font-size:14px;
+    line-height:1.22;
+    min-width:0;
+    overflow-wrap:normal;
+    word-break:normal;
+  }
+  .path {
+    display:block;
+    margin-top:8px;
+    color:var(--dim);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:10px;
+    line-height:1.2;
+    min-width:0;
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    text-align:left;
+  }
+  @media (max-width:720px) {
+    body { padding:28px 14px; }
+    header { display:block; }
+    .meta { text-align:left; margin-top:18px; }
+    .port-row { justify-content:flex-start; }
+    section { padding:14px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>edit links</h1>
+    <div>
+      <p class="meta">localhost launcher for live text editing. each path opens with edit mode enabled.</p>
+      <div class="port-row">
+        <label for="port-input">port</label>
+        <input id="port-input" type="text" value="61746" maxlength="5">
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section>
+      <h2>Tools</h2>
+      <ul>
+        <li><a data-path="/tools/page-visibility.html"><span class="label">Page Visibility</span><span class="path">/tools/page-visibility.html</span></a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Core</h2>
+      <ul>
+        <li><a data-path="/?edit=1"><span class="label">Home</span><span class="path">/?edit=1</span></a></li>
+        <li><a data-path="/about/?edit=1"><span class="label">About</span><span class="path">/about/?edit=1</span></a></li>
+        <li><a data-path="/archive/?edit=1"><span class="label">Archive</span><span class="path">/archive/?edit=1</span></a></li>
+        <li><a data-path="/events/?edit=1"><span class="label">Events</span><span class="path">/events/?edit=1</span></a></li>
+        <li><a data-path="/film/?edit=1"><span class="label">Film</span><span class="path">/film/?edit=1</span></a></li>
+        <li><a data-path="/music/?edit=1"><span class="label">Music</span><span class="path">/music/?edit=1</span></a></li>
+        <li><a data-path="/writings/?edit=1"><span class="label">Writings</span><span class="path">/writings/?edit=1</span></a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Art</h2>
+      <ul>
+        <li><a data-path="/art/?edit=1"><span class="label">Art Index</span><span class="path">/art/?edit=1</span></a></li>
+        <li><a data-path="/art/acquisitioninquiry.html?edit=1"><span class="label">Acquisition Inquiry</span><span class="path">/art/acquisitioninquiry.html?edit=1</span></a></li>
+        <li><a data-path="/art/homelandsecuritypainting.html?edit=1"><span class="label">Homeland Security</span><span class="path">/art/homelandsecuritypainting.html?edit=1</span></a></li>
+        <li><a data-path="/art/lostmarblespainting.html?edit=1"><span class="label">Lost Marbles</span><span class="path">/art/lostmarblespainting.html?edit=1</span></a></li>
+        <li><a data-path="/art/lustpainting.html?edit=1"><span class="label">Lust</span><span class="path">/art/lustpainting.html?edit=1</span></a></li>
+        <li><a data-path="/art/paranoiafosteredtraumapainting.html?edit=1"><span class="label">Paranoia &amp; Fostered Trauma</span><span class="path">/art/paranoiafosteredtraumapainting.html?edit=1</span></a></li>
+        <li><a data-path="/art/slothpainting.html?edit=1"><span class="label">Sloth</span><span class="path">/art/slothpainting.html?edit=1</span></a></li>
+        <li><a data-path="/art/thefrustrationsofinnercharospainting.html?edit=1"><span class="label">The Frustrations Of Inner Chaos</span><span class="path">/art/thefrustrationsofinnercharospainting.html?edit=1</span></a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Merch</h2>
+      <ul>
+        <li><a data-path="/merch/?edit=1"><span class="label">Merch Index</span><span class="path">/merch/?edit=1</span></a></li>
+        <li><a data-path="/merch/am-i-losing-my-marbles.html?edit=1"><span class="label">Am I Losing My Marbles</span><span class="path">/merch/am-i-losing-my-marbles.html?edit=1</span></a></li>
+        <li><a data-path="/merch/lostmarbles-hoodie.html?edit=1"><span class="label">Lost Marbles Hoodie</span><span class="path">/merch/lostmarbles-hoodie.html?edit=1</span></a></li>
+        <li><a data-path="/merch/marbles-print.html?edit=1"><span class="label">Marbles Print</span><span class="path">/merch/marbles-print.html?edit=1</span></a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tattooing</h2>
+      <ul>
+        <li><a data-path="/tattooing/?edit=1"><span class="label">Tattooing Index</span><span class="path">/tattooing/?edit=1</span></a></li>
+        <li><a data-path="/tattooing/special-projects/?edit=1"><span class="label">Special Projects</span><span class="path">/tattooing/special-projects/?edit=1</span></a></li>
+        <li><a data-path="/tattooing/special-projects/apply/?edit=1"><span class="label">Special Projects Apply</span><span class="path">/tattooing/special-projects/apply/?edit=1</span></a></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Tattoos</h2>
+      <ul>
+        <li><a data-path="/tattoos/?edit=1"><span class="label">Tattoos Index</span><span class="path">/tattoos/?edit=1</span></a></li>
+        <li><a data-path="/tattoos/approved/?edit=1"><span class="label">Approved</span><span class="path">/tattoos/approved/?edit=1</span></a></li>
+        <li><a data-path="/tattoos/booking/?edit=1"><span class="label">Booking</span><span class="path">/tattoos/booking/?edit=1</span></a></li>
+        <li><a data-path="/tattoos/flash/?edit=1"><span class="label">Flash</span><span class="path">/tattoos/flash/?edit=1</span></a></li>
+        <li><a data-path="/tattoos/inquire/?edit=1"><span class="label">Inquire</span><span class="path">/tattoos/inquire/?edit=1</span></a></li>
+        <li><a data-path="/tattoos/portfolio/?edit=1"><span class="label">Portfolio</span><span class="path">/tattoos/portfolio/?edit=1</span></a></li>
+        <li><a data-path="/tattoos/submission-received/?edit=1"><span class="label">Submission Received</span><span class="path">/tattoos/submission-received/?edit=1</span></a></li>
+      </ul>
+    </section>
+  </div>
+</main>
+
+<script>
+  const input = document.getElementById('port-input');
+  const links = document.querySelectorAll('a[data-path]');
+
+  function updateLinks(port) {
+    const base = 'http://localhost:' + port;
+    links.forEach(a => {
+      a.href = base + a.dataset.path;
+    });
+  }
+
+  updateLinks(input.value);
+
+  input.addEventListener('input', () => updateLinks(input.value));
+</script>
+</body>
+</html>
