@@ -33,17 +33,17 @@
   .gate-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--accent); text-transform:uppercase; margin-bottom:36px; }
   .gate-body { font-size:17px; line-height:1.8; color:var(--text); max-width:640px; }
   .gate-body + .gate-body { margin-top:20px; }
-  .review-panel { margin-top:48px; border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint); padding:24px 0; max-width:620px; }
+  .review-panel { margin-top:48px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:24px 0; max-width:620px; }
   .review-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:18px; }
   .review-copy { font-size:14px; line-height:1.8; color:var(--text-mute); }
-  .form-panel { border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint); padding:38px 0 44px; background:transparent; }
+  .form-panel { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:38px 0 44px; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
   .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
   label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
-  input,textarea,select { width:100%; border:1px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
+  input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
   input[type="file"] { padding:11px 12px; color:var(--text-mute); }
   textarea { min-height:124px; resize:vertical; }
   input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
@@ -53,9 +53,9 @@
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
   .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
-  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:1px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
+  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
@@ -77,7 +77,7 @@
   <div class="grain"></div>
   <header class="top">
     <nav class="breadcrumb" aria-label="breadcrumb">
-      <a class="breadcrumb-link" href="/tattooing/special-projects/">special projects</a>
+      <a class="breadcrumb-link" href="/tattoos/special-projects/">special projects</a>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">apply</span>
     </nav>
@@ -99,7 +99,7 @@
         <p class="form-note">Use this form for projects that need deeper concept, trust, time, or scale. Applications are reviewed before a private scheduling link is sent.</p>
         <form method="POST" action="https://formspree.io/f/mnjwvpeg" enctype="multipart/form-data">
           <input type="hidden" name="form_type" value="special_project_application">
-          <input type="hidden" name="source_path" value="/tattooing/special-projects/apply/">
+          <input type="hidden" name="source_path" value="/tattoos/special-projects/apply/">
           <input type="hidden" name="project_category" value="special_projects">
           <input type="hidden" name="subject" value="New Art.Pill Special Projects application">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
@@ -112,9 +112,7 @@
               <label for="project_title">Project call or working title</label>
               <select id="project_title" name="project_title" required>
                 <option value="">Select one</option>
-                <option>Lost Marbles</option>
                 <option>Mythic Body Studies</option>
-                <option>The Hand / The Outline</option>
                 <option>Memory Transfer Studies</option>
                 <option>Large Scale Symbolic Work</option>
                 <option>Other symbolic commission</option>
@@ -138,7 +136,7 @@
     </div>
   </main>
   <footer class="bottom">
-    <a href="/tattooing/special-projects/">&larr; back to Special Projects</a>
+    <a href="/tattoos/special-projects/">&larr; back to Special Projects</a>
     <a href="/">the six.well construct</a>
   </footer>
   <script src="/js/transition.js"></script>

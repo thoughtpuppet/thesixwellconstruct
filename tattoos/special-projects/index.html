@@ -53,7 +53,7 @@
   .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
-  .nav-inquire { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); border:1px solid rgba(143,35,29,0.4); padding:8px 16px; transition:background var(--t-fast), border-color var(--t-fast); }
+  .nav-inquire { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); border:5px solid rgba(143,35,29,0.4); padding:8px 16px; transition:background var(--t-fast), border-color var(--t-fast); }
   .nav-inquire:hover { background:rgba(143,35,29,0.06); border-color:var(--signal); }
   main {
     position:relative; z-index:2;
@@ -66,8 +66,8 @@
     margin-bottom:72px;
   }
   .page-label {
-    font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--signal); opacity:0.7; margin-bottom:16px;
+    font-family:var(--serif); font-size:15px; letter-spacing:0.32em; text-transform:uppercase;
+    color:var(--accent); opacity:0.7; margin-bottom:-8px;
   }
   .page-title {
     font-family:var(--sans); font-weight:900; font-size:clamp(52px,8vw,118px);
@@ -87,7 +87,7 @@
     font-family:var(--sans); font-weight:700; font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
     color:var(--text-mute); background:transparent;
-    border:1px solid var(--ring-soft);
+    border:5px solid var(--ring-soft);
     min-height:48px; padding:0 26px;
     transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   }
@@ -101,11 +101,11 @@
   .archive-shell {
     display:grid; grid-template-columns:minmax(220px,320px) minmax(0,1fr);
     width:100%;
-    gap:48px; border-top:1px solid var(--ring-faint); background:transparent;
+    gap:48px; border-top:5px solid var(--ring-faint); background:transparent;
     padding-top:28px;
   }
   .project-index {
-    border-right:1px solid var(--ring-faint);
+    border-right:5px solid var(--ring-faint);
     padding:26px 0;
   }
   .index-heading {
@@ -116,7 +116,7 @@
   .index-button {
     width:100%; display:grid; grid-template-columns:42px minmax(0,1fr);
     gap:16px; text-align:left; padding:18px 26px 18px 25px;
-    border-left:1px solid transparent;
+    border-left:5px solid transparent;
     transition:background var(--t-fast), color var(--t-fast), padding-left var(--t-fast), border-color var(--t-fast);
   }
   .index-button:hover { background:rgba(255,231,202,0.025); }
@@ -142,7 +142,7 @@
   .mobile-picker {
     display:none; width:100%; margin-bottom:24px;
     appearance:none; background:transparent;
-    border:1px solid var(--ring-faint);
+    border:5px solid var(--ring-faint);
     color:var(--text);
     padding:14px 18px;
     font-family:var(--sans); font-weight:900; font-size:12px;
@@ -169,7 +169,7 @@
   }
   .image-grid {
     display:grid; grid-template-columns:1.2fr 0.8fr; grid-template-rows:220px 220px;
-    gap:18px; border-top:1px solid var(--ring-faint); padding-top:18px; margin-bottom:42px;
+    gap:18px; border-top:5px solid var(--ring-faint); padding-top:18px; margin-bottom:42px;
   }
   .archive-frame {
     position:relative; overflow:hidden; background:#0f0f0f;
@@ -177,7 +177,7 @@
   .archive-frame:first-child { grid-row:span 2; }
   .archive-frame::before {
     content:""; position:absolute; inset:22px;
-    border:1px solid rgba(109,61,21,0.36);
+    border:5px solid rgba(109,61,21,0.36);
   }
   .archive-frame::after {
     content:""; position:absolute; left:50%; top:50%;
@@ -200,9 +200,9 @@
   }
   .meta-grid {
     display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
-    gap:18px; border-top:1px solid var(--ring-faint); border-bottom:1px solid var(--ring-faint); padding:18px 0; margin-bottom:42px;
+    gap:18px; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); padding:18px 0; margin-bottom:42px;
   }
-  .meta-item { padding:0 0 0 14px; border-left:1px solid var(--ring-faint); }
+  .meta-item { padding:0 0 0 14px; border-left:5px solid var(--ring-faint); }
   .meta-label {
     font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
     text-transform:uppercase; color:var(--text-dim); margin-bottom:10px;
@@ -212,7 +212,7 @@
     line-height:1.35; text-transform:uppercase; color:var(--text);
   }
   .intention {
-    max-width:760px; border-top:1px solid var(--ring-faint);
+    max-width:760px; border-top:5px solid var(--ring-faint);
     padding-top:34px;
   }
   .intention-title {
@@ -225,7 +225,7 @@
   }
   .application-row {
     display:flex; justify-content:space-between; align-items:center; gap:32px;
-    margin-top:48px; padding-top:36px; border-top:1px solid var(--ring-faint);
+    margin-top:48px; padding-top:36px; border-top:5px solid var(--ring-faint);
   }
   .application-copy {
     max-width:460px; font-family:var(--serif); font-size:12px;
@@ -233,7 +233,7 @@
   }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
-    padding:56px var(--s6); border-top:1px solid var(--ring-faint);
+    padding:56px var(--s6); border-top:5px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
   }
   footer.bottom p, footer.bottom a {
@@ -246,7 +246,7 @@
     .archive-shell { grid-template-columns:1fr; border:none; padding-top:0; }
     .project-index { display:none; }
     .mobile-picker { display:block; }
-    .project-detail { border-top:1px solid var(--ring-faint); min-height:auto; }
+    .project-detail { border-top:5px solid var(--ring-faint); min-height:auto; }
     .meta-grid { grid-template-columns:1fr 1fr; }
   }
   @media (max-width:768px) {
@@ -329,46 +329,42 @@
       <h1 class="page-title">Special Projects</h1>
       <p class="page-subtitle">Special Projects by SAIEL DAUHN SOLEHMAN</p>
       <p class="intro-body">Special Projects are concept-driven tattoo works built through uniqueness and collaboration. These pieces may involve original imagery, multi-session development, or visual language connected to larger bodies of work.</p>
-      <a class="cta-primary" href="/tattooing/special-projects/apply/">Apply for a Special Project</a>
+      <a class="cta-primary" href="/tattoos/special-projects/apply/">Apply for a Special Project</a>
     </section>
     <select class="mobile-picker" id="projectSelect" aria-label="Select a tattoo study">
-      <option value="lost-marbles">01 LOST MARBLES / 2026</option>
-      <option value="mythic-body-studies">02 MYTHIC BODY STUDIES / OPEN</option>
-      <option value="hand-outline">03 THE HAND / THE OUTLINE / 2025-2026</option>
-      <option value="memory-transfer">04 MEMORY TRANSFER STUDIES / OPEN</option>
-      <option value="large-scale">05 LARGE SCALE SYMBOLIC WORK / OPEN</option>
+      <option value="mythic-body-studies">01 MYTHIC BODY STUDIES / OPEN</option>
+      <option value="memory-transfer">02 MEMORY TRANSFER STUDIES / OPEN</option>
+      <option value="large-scale">03 LARGE SCALE SYMBOLIC WORK / OPEN</option>
     </select>
     <section class="archive-shell" aria-label="Tattoo studies archive">
       <aside class="project-index" aria-label="Project index">
         <p class="index-heading">Project Index</p>
-        <button class="index-button is-active" type="button" data-project="lost-marbles"><span class="index-number">01</span><span><span class="index-title">Lost Marbles</span><span class="index-year">2026</span></span></button>
-        <button class="index-button" type="button" data-project="mythic-body-studies"><span class="index-number">02</span><span><span class="index-title">Mythic Body Studies</span><span class="index-year">Open</span></span></button>
-        <button class="index-button" type="button" data-project="hand-outline"><span class="index-number">03</span><span><span class="index-title">The Hand / The Outline</span><span class="index-year">2025-2026</span></span></button>
-        <button class="index-button" type="button" data-project="memory-transfer"><span class="index-number">04</span><span><span class="index-title">Memory Transfer Studies</span><span class="index-year">Open</span></span></button>
-        <button class="index-button" type="button" data-project="large-scale"><span class="index-number">05</span><span><span class="index-title">Large Scale Symbolic Work</span><span class="index-year">Open</span></span></button>
+        <button class="index-button is-active" type="button" data-project="mythic-body-studies"><span class="index-number">01</span><span><span class="index-title">Mythic Body Studies</span><span class="index-year">Open</span></span></button>
+        <button class="index-button" type="button" data-project="memory-transfer"><span class="index-number">02</span><span><span class="index-title">Memory Transfer Studies</span><span class="index-year">Open</span></span></button>
+        <button class="index-button" type="button" data-project="large-scale"><span class="index-number">03</span><span><span class="index-title">Large Scale Symbolic Work</span><span class="index-year">Open</span></span></button>
       </aside>
       <article class="project-detail" aria-live="polite">
-        <p class="detail-kicker" id="projectKicker">01 / 2026</p>
-        <h2 class="detail-title" id="projectTitle">Lost Marbles</h2>
-        <p class="detail-summary" id="projectSummary">A tattoo project exploring memory, concealment, and the question of whether what is lost is actually hidden.</p>
+        <p class="detail-kicker" id="projectKicker">01 / Open</p>
+        <h2 class="detail-title" id="projectTitle">Mythic Body Studies</h2>
+        <p class="detail-summary" id="projectSummary">An open call for tattoos built around figures, archetypes, ritual objects, and personal mythologies that need to live on the body with gravity.</p>
         <div class="image-grid" aria-label="Abstract archive frames for selected project">
-          <div class="archive-frame"><span class="frame-label" id="frameOne">symbol map</span></div>
-          <div class="archive-frame"><span class="frame-label" id="frameTwo">placement study</span></div>
-          <div class="archive-frame"><span class="frame-label" id="frameThree">body language</span></div>
+          <div class="archive-frame"><span class="frame-label" id="frameOne">figure study</span></div>
+          <div class="archive-frame"><span class="frame-label" id="frameTwo">ritual object</span></div>
+          <div class="archive-frame"><span class="frame-label" id="frameThree">placement system</span></div>
         </div>
         <div class="meta-grid">
           <div class="meta-item"><p class="meta-label">Medium</p><p class="meta-value" id="projectMedium">Tattoo</p></div>
-          <div class="meta-item"><p class="meta-label">Style</p><p class="meta-value" id="projectStyle">Blackwork / Symbolic / Surreal</p></div>
-          <div class="meta-item"><p class="meta-label">Format</p><p class="meta-value" id="projectFormat">Multi-session</p></div>
-          <div class="meta-item"><p class="meta-label">Availability</p><p class="meta-value" id="projectAvailability">By application only</p></div>
+          <div class="meta-item"><p class="meta-label">Style</p><p class="meta-value" id="projectStyle">Blackwork / Mythic / Figurative</p></div>
+          <div class="meta-item"><p class="meta-label">Format</p><p class="meta-value" id="projectFormat">Single or multi-session</p></div>
+          <div class="meta-item"><p class="meta-label">Availability</p><p class="meta-value" id="projectAvailability">Open call</p></div>
         </div>
         <section class="intention">
           <h3 class="intention-title">Intention</h3>
-          <p class="intention-body" id="projectIntention">This project is designed for clients who want a tattoo built from concept first, with references serving mood, symbolism, and atmosphere. The final image is developed through a shared symbolic direction, while the visual language remains rooted in my existing body of work.</p>
+          <p class="intention-body" id="projectIntention">This study is for clients who are drawn to mythic imagery and want something personal. The work can begin with an archetype, a dream, a figure, or a symbolic object, then develop into a tattoo that belongs to the body carrying it.</p>
         </section>
         <div class="application-row">
           <p class="application-copy">Special Projects are reviewed before booking. If approved, you will receive a private booking link and next steps.</p>
-          <a class="cta-primary" href="/tattooing/special-projects/apply/" id="projectApply">Apply for this project</a>
+          <a class="cta-primary" href="/tattoos/special-projects/apply/" id="projectApply">Apply for this project</a>
         </div>
       </article>
     </section>
@@ -379,19 +375,8 @@
   </footer>
   <script>
     var projects = {
-      'lost-marbles': {
-        kicker: '01 / 2026',
-        title: 'Lost Marbles',
-        summary: 'A tattoo project exploring memory, concealment, and the question of whether what is lost is actually hidden.',
-        medium: 'Tattoo',
-        style: 'Blackwork / Symbolic / Surreal',
-        format: 'Multi-session',
-        availability: 'By application only',
-        frames: ['symbol map', 'placement study', 'body language'],
-        intention: 'This project is designed for clients who want a tattoo built from concept first, with references serving mood, symbolism, and atmosphere. The final image is developed through a shared symbolic direction, while the visual language remains rooted in my existing body of work.'
-      },
       'mythic-body-studies': {
-        kicker: '02 / Open',
+        kicker: '01 / Open',
         title: 'Mythic Body Studies',
         summary: 'An open call for tattoos built around figures, archetypes, ritual objects, and personal mythologies that need to live on the body with gravity.',
         medium: 'Tattoo',
@@ -401,19 +386,8 @@
         frames: ['figure study', 'ritual object', 'placement system'],
         intention: 'This study is for clients who are drawn to mythic imagery and want something personal. The work can begin with an archetype, a dream, a figure, or a symbolic object, then develop into a tattoo that belongs to the body carrying it.'
       },
-      'hand-outline': {
-        kicker: '03 / 2025-2026',
-        title: 'The Hand / The Outline',
-        summary: 'A focused study of hands, marks, boundaries, and the charged space between contact and absence.',
-        medium: 'Tattoo',
-        style: 'Blackwork / Symbolic / Minimal Surreal',
-        format: 'Focused session series',
-        availability: 'By application only',
-        frames: ['gesture archive', 'outline system', 'negative space'],
-        intention: 'This project is built for clients interested in restraint, outline, and symbolic pressure. The hand is treated less as an anatomical reference and more as a sign of contact, refusal, touch, work, and memory.'
-      },
       'memory-transfer': {
-        kicker: '04 / Open',
+        kicker: '02 / Open',
         title: 'Memory Transfer Studies',
         summary: 'An open project for translating remembered places, inherited objects, and private emotional records into symbolic tattoo compositions.',
         medium: 'Tattoo',
@@ -424,7 +398,7 @@
         intention: 'This study is for people carrying memories, places, or inherited objects that are ready to become images. The goal is to extract the symbolic charge of a memory and build a tattoo from that charge.'
       },
       'large-scale': {
-        kicker: '05 / Open',
+        kicker: '03 / Open',
         title: 'Large Scale Symbolic Work',
         summary: 'An open call for larger symbolic compositions that need meaningful placement, stronger visual architecture, and more than one sitting to resolve.',
         medium: 'Tattoo',
@@ -451,7 +425,7 @@
     var buttons = Array.prototype.slice.call(document.querySelectorAll('.index-button'));
     var select = document.getElementById('projectSelect');
     function setProject(key) {
-      var project = projects[key] || projects['lost-marbles'];
+      var project = projects[key] || projects['mythic-body-studies'];
       fields.kicker.textContent = project.kicker;
       fields.title.textContent = project.title;
       fields.summary.textContent = project.summary;

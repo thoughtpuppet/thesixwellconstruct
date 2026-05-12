@@ -100,8 +100,10 @@ async function resolveFile(urlPath) {
   }
 }
 
+const showHidden = process.argv.includes("--show-hidden");
+
 const server = createServer(async (req, res) => {
-  if (isHiddenPublicRoute(req.url || "/")) {
+  if (!showHidden && isHiddenPublicRoute(req.url || "/")) {
     res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
     createReadStream(path.resolve(root, "404.html")).pipe(res);
     return;

@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Your Own · art.pill tattoo house</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --bg:#0e0e0e; --signal:#8F231D; --ring:#6D3D15;
+    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --accent:#FCB867; --text:#FFE7CA;
+    --text-mute:rgba(255,231,202,0.6); --text-dim:rgba(255,231,202,0.35); --text-ghost:rgba(255,231,202,0.12);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:40px;--s7:64px;--s8:96px;
+    --sans:'Inter','Helvetica Neue',Arial,sans-serif;
+    --serif:Georgia,'Times New Roman',Times,serif;
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+    --venture-color:#8F231D;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);font-family:var(--serif);min-height:100vh;overflow-x:clip;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;text-decoration:none;}
+  button,input,textarea,select{font:inherit;}
+  button{background:none;border:none;cursor:pointer;color:inherit;}
+
+  .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");}
+
+  /* ── HEADER ── */
+  header.top{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:var(--s5) var(--s6);min-height:72px;}
+  .breadcrumb{display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;}
+  .breadcrumb-link{color:var(--text-dim);transition:color var(--t-fast);}
+  .breadcrumb-link:hover{color:var(--accent);}
+  .breadcrumb-sep,.breadcrumb-current{color:var(--text-dim);}
+  .breadcrumb-current{color:var(--signal);opacity:0.8;}
+  .nav-inquire{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(143,35,29,0.4);padding:8px 16px;transition:background var(--t-fast),border-color var(--t-fast);}
+  .nav-inquire:hover{background:rgba(143,35,29,0.06);border-color:var(--signal);}
+
+  /* ── MAIN ── */
+  main{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:var(--s8) var(--s6) var(--s7);}
+
+  /* ── HERO ── */
+  .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,420px);gap:48px;align-items:end;margin-bottom:var(--s7);}
+  .page-label{font-family:var(--serif);font-size:15px;letter-spacing:0.32em;text-transform:uppercase;color:var(--accent);opacity:0.7;margin-bottom:-8px;}
+  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(64px,12vw,160px);letter-spacing:-0.05em;line-height:0.88;color:var(--signal);text-transform:uppercase;}
+  .hero-desc{font-size:14px;letter-spacing:0.03em;line-height:1.75;color:var(--text-mute);text-align:left;}
+
+  /* ── PROCESS STEPS ── */
+  .process{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;border:5px solid var(--ring-faint);margin-bottom:var(--s7);}
+  .process-step{padding:var(--s5) var(--s5);border-right:5px solid var(--ring-faint);}
+  .process-step:last-child{border-right:none;}
+  .step-num{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.6;margin-bottom:var(--s3);}
+  .step-title{font-family:var(--sans);font-weight:900;font-size:14px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s2);}
+  .step-body{font-size:13px;line-height:1.7;color:var(--text-mute);}
+
+  /* ── BUILDER WRAP ── */
+  .builder-wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;border-top:5px solid var(--ring-faint);}
+
+  /* ── SYMBOL COLUMN ── */
+  .symbol-col{padding:var(--s6) var(--s6) var(--s7) 0;border-right:5px solid var(--ring-faint);}
+
+  .filter-row{display:flex;align-items:center;gap:var(--s5);flex-wrap:wrap;margin-bottom:var(--s5);}
+  .chip{position:relative;font-family:var(--sans);font-weight:500;font-size:13px;letter-spacing:0.04em;text-transform:lowercase;color:var(--text-mute);padding:var(--s2) 0;background:none;border:none;cursor:pointer;transition:color var(--t-fast);}
+  .chip:hover{color:var(--text);}
+  .chip.active{color:var(--text);}
+  .chip.active .chip-label::after{content:"";position:absolute;left:0;bottom:-1px;width:100%;height:2px;background:var(--venture-color);}
+  .chip.active::before{content:"";position:absolute;left:-10px;top:50%;width:4px;height:4px;border-radius:50%;background:var(--venture-color);transform:translateY(-50%);}
+  .chip-label{position:relative;}
+
+  .symbol-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3);}
+
+  .symbol-card{text-align:left;padding:var(--s4);border:5px solid var(--ring-faint);background:transparent;transition:border-color var(--t-fast),background var(--t-fast);display:flex;flex-direction:column;gap:var(--s2);cursor:pointer;}
+  .symbol-card:hover{border-color:var(--ring-soft);background:rgba(143,35,29,0.03);}
+  .symbol-card.selected{border-color:var(--signal);background:rgba(143,35,29,0.07);}
+  .symbol-card[data-hidden="true"]{display:none;}
+  .symbol-cat{font-family:var(--sans);font-weight:700;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.65;}
+  .symbol-name{font-family:var(--sans);font-weight:900;font-size:14px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--text);}
+  .symbol-meaning{font-family:var(--serif);font-size:12px;line-height:1.65;color:var(--text-mute);flex:1;}
+  .symbol-indicator{display:flex;justify-content:flex-end;margin-top:var(--s2);}
+  .symbol-indicator span{font-size:20px;line-height:1;color:var(--ring-soft);transition:color var(--t-fast);}
+  .symbol-card.selected .symbol-indicator span{color:var(--signal);}
+  .symbol-card.selected .symbol-indicator span::before{content:"✓";}
+  .symbol-card:not(.selected) .symbol-indicator span::before{content:"+";}
+
+  /* ── BRIEF PANEL ── */
+  .brief-col{position:sticky;top:72px;height:calc(100vh - 72px);overflow-y:auto;padding:var(--s6);display:flex;flex-direction:column;gap:var(--s4);}
+
+  .brief-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:var(--s4);border-bottom:5px solid var(--ring-faint);}
+  .brief-heading{font-family:var(--serif);font-size:10px;letter-spacing:0.28em;text-transform:uppercase;color:var(--text-dim);}
+  .brief-count{font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.08em;color:var(--signal);}
+
+  .brief-empty{font-family:var(--serif);font-size:13px;line-height:1.75;color:var(--text-dim);padding:var(--s5) 0;}
+
+  .brief-items{list-style:none;display:flex;flex-direction:column;gap:var(--s2);}
+  .brief-item{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);padding:var(--s3);border:5px solid var(--ring-faint);}
+  .brief-item-left{display:flex;flex-direction:column;gap:3px;}
+  .brief-item-cat{font-family:var(--sans);font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--signal);opacity:0.65;}
+  .brief-item-name{font-family:var(--sans);font-weight:900;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--text);}
+  .brief-item-remove{font-size:18px;line-height:1;color:var(--text-dim);padding:2px 6px;transition:color var(--t-fast);flex-shrink:0;}
+  .brief-item-remove:hover{color:var(--signal);}
+
+  .brief-spacer{flex:1;}
+
+  .brief-limit{font-family:var(--serif);font-size:12px;line-height:1.6;color:var(--text-dim);padding:var(--s3);border:5px solid var(--ring-faint);display:none;}
+  .brief-limit.visible{display:block;}
+
+  .brief-begin{display:block;width:100%;text-align:center;padding:var(--s3) var(--s4);font-family:var(--serif);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);border:5px solid var(--signal);background:transparent;transition:background var(--t-fast),color var(--t-fast);}
+  .brief-begin:hover:not([disabled]){background:var(--signal);color:var(--bg);}
+  .brief-begin[disabled]{color:var(--text-dim);border-color:var(--ring-faint);cursor:default;}
+
+  /* ── FORM SECTION ── */
+  .build-form-section{border-top:5px solid var(--ring-faint);padding:var(--s7) 0 var(--s8);}
+  .form-header{margin-bottom:var(--s6);}
+  .form-kicker{font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.7;margin-bottom:var(--s3);}
+  .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(28px,4vw,52px);letter-spacing:-0.03em;line-height:0.94;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s4);}
+  .form-note{font-size:14px;line-height:1.75;color:var(--text-mute);max-width:640px;}
+
+  .selected-summary{background:rgba(143,35,29,0.06);border:5px solid rgba(143,35,29,0.3);padding:var(--s5);margin-bottom:var(--s6);display:none;}
+  .selected-summary.visible{display:block;}
+  .summary-label{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);margin-bottom:var(--s4);}
+  .summary-tags{display:flex;flex-wrap:wrap;gap:var(--s2);}
+  .summary-tag{font-family:var(--sans);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text);border:5px solid var(--ring-soft);padding:4px 10px;}
+
+  .field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+  .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
+  .field.full{grid-column:1 / -1;}
+  label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
+  input,textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;}
+  textarea{min-height:120px;resize:vertical;}
+  input:focus,textarea:focus,select:focus{outline:1px solid var(--signal);border-color:var(--signal);}
+  .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
+  .check{display:grid;grid-template-columns:18px 1fr;gap:12px;align-items:start;margin:6px 0 28px;}
+  .check input{width:18px;height:18px;accent-color:var(--signal);margin-top:2px;padding:0;}
+  .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
+  .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
+  .submit-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
+  .submit-btn:hover{background:rgba(252,184,103,0.04);border-color:var(--accent);color:var(--accent);}
+  .form-status{font-size:12px;line-height:1.6;color:var(--text-dim);}
+
+  /* ── FOOTER ── */
+  footer.bottom{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:56px var(--s6);border-top:5px solid var(--ring-faint);display:flex;justify-content:space-between;align-items:center;}
+  footer.bottom p,footer.bottom a{font-size:10px;letter-spacing:0.22em;color:var(--text-dim);text-transform:uppercase;}
+  footer.bottom a{color:var(--text-mute);transition:color var(--t-fast);}
+  footer.bottom a:hover{color:var(--accent);}
+
+  /* ── RESPONSIVE ── */
+  @media(max-width:1100px){
+    main{padding:var(--s7) var(--s5) var(--s6);}
+    .symbol-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+    footer.bottom{padding:48px var(--s5);}
+  }
+  @media(max-width:900px){
+    .hero,.process{grid-template-columns:1fr;}
+    .process-step{border-right:none;border-bottom:5px solid var(--ring-faint);}
+    .process-step:last-child{border-bottom:none;}
+    .builder-wrap{grid-template-columns:1fr;}
+    .symbol-col{padding:var(--s5) 0;border-right:none;border-bottom:5px solid var(--ring-faint);}
+    .brief-col{position:static;height:auto;border-top:5px solid var(--ring-faint);}
+    .hero-desc{text-align:left;}
+  }
+  @media(max-width:640px){
+    header.top{padding:var(--s4) var(--s5);}
+    main{padding:var(--s6) var(--s5);}
+    .page-title{font-size:clamp(56px,18vw,90px);}
+    .symbol-grid{grid-template-columns:1fr;}
+    .field-grid{grid-template-columns:1fr;}
+    footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
+  }
+  @media(max-width:700px){
+    header.top{position:sticky;padding:var(--s3) var(--s4);min-height:60px;align-items:center;}
+  }
+</style>
+</head>
+<body data-venture="tattooing">
+  <script>
+  (function(){
+    var o=document.createElement('div');o.id='construct-fade';
+    o.style.cssText='position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut(){requestAnimationFrame(function(){requestAnimationFrame(function(){o.style.opacity='0';o.style.pointerEvents='none';});});}
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fadeOut);else fadeOut();
+  })();
+  </script>
+
+  <div class="grain"></div>
+
+  <header class="top">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <a class="breadcrumb-link" href="/tattoos/">tattoos</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">build your own</span>
+    </nav>
+    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
+  </header>
+
+  <main>
+
+    <!-- HERO -->
+    <section class="hero">
+      <div>
+        <p class="page-label">Art.Pill Tattoo House</p>
+        <h1 class="page-title">Build<br>Yours.</h1>
+      </div>
+      <p class="hero-desc">Instead of arriving with a folder of references, you draw from the visual language of the work itself. Select the symbols and elements that carry meaning for you, build a brief, and submit it for review. The result is a design that speaks the same language as the paintings, the writings, and the archive.</p>
+    </section>
+
+    <!-- PROCESS -->
+    <div class="process" aria-label="How it works">
+      <div class="process-step">
+        <p class="step-num">I</p>
+        <h3 class="step-title">Browse the language</h3>
+        <p class="step-body">Explore the symbols, marks, and elements from the visual system. Each carries a meaning. Read them slowly.</p>
+      </div>
+      <div class="process-step">
+        <p class="step-num">II</p>
+        <h3 class="step-title">Select what fits</h3>
+        <p class="step-body">Choose up to six elements that feel right for what you want to carry. Your selections form the brief.</p>
+      </div>
+      <div class="process-step">
+        <p class="step-num">III</p>
+        <h3 class="step-title">Submit for review</h3>
+        <p class="step-body">Your brief goes into review with placement, intent, and timeline. If it fits, a private booking link follows.</p>
+      </div>
+    </div>
+
+    <!-- BUILDER -->
+    <div class="builder-wrap">
+
+      <!-- SYMBOL BROWSER -->
+      <div class="symbol-col">
+
+        <div class="filter-row" id="filterRow" role="group" aria-label="Filter by category"></div>
+
+        <div class="symbol-grid" id="symbolGrid" aria-label="Symbol library"></div>
+
+      </div>
+
+      <!-- BRIEF PANEL -->
+      <div class="brief-col" role="complementary" aria-label="Your build brief">
+        <div class="brief-header">
+          <span class="brief-heading">your build</span>
+          <span class="brief-count" id="briefCount">0 of 6</span>
+        </div>
+
+        <p class="brief-empty" id="briefEmpty">Select symbols from the library to begin building your brief. Each piece you choose carries its meaning into the design.</p>
+
+        <ul class="brief-items" id="briefItems" aria-live="polite"></ul>
+
+        <p class="brief-limit" id="briefLimit">Six elements selected. Remove one to add another, or proceed with this build.</p>
+
+        <div class="brief-spacer"></div>
+
+        <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form">
+          Build this brief →
+        </button>
+      </div>
+
+    </div><!-- /builder-wrap -->
+
+    <!-- FORM -->
+    <section class="build-form-section" id="build-form" aria-label="Build Your Own submission form">
+      <div class="form-header">
+        <p class="form-kicker">Submit your brief</p>
+        <h2 class="form-title">From the language<br>to the skin.</h2>
+        <p class="form-note">Your selected elements will carry into this form automatically. Add placement, intent, and contact details. Briefs are reviewed before a private booking link is sent.</p>
+      </div>
+
+      <!-- Selected symbols summary (shown when selections exist) -->
+      <div class="selected-summary" id="selectedSummary" aria-live="polite">
+        <p class="summary-label">Selected elements</p>
+        <div class="summary-tags" id="summaryTags"></div>
+      </div>
+
+      <form method="POST" action="https://formspree.io/f/mrejkpnl" enctype="multipart/form-data">
+        <input type="hidden" name="form_type" value="build_your_own">
+        <input type="hidden" name="source_path" value="/tattoos/build/">
+        <input type="hidden" name="project_category" value="build-your-own">
+        <input type="hidden" name="selected_elements" id="selectedElements">
+        <input type="hidden" name="subject" value="New Art.Pill Build Your Own brief">
+        <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
+
+        <div class="field-grid">
+          <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+          <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+          <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+          <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" autocomplete="tel"></div>
+          <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
+          <div class="field"><label for="scale">Approx. scale</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
+          <div class="field"><label for="timeline">Timeline</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
+          <div class="field"><label for="intent">Design intent</label><input id="intent" name="intent" placeholder="What should the piece carry or mean?"></div>
+          <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="form-status" style="margin-top:6px;">Optional. Body reference or placement images only — not mood boards.</p></div>
+          <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
+        </div>
+
+        <label class="check">
+          <input type="checkbox" name="review_consent" value="yes" required>
+          <span class="check-label">I understand this brief is reviewed before a private booking link is sent, and that submitting does not guarantee a session.</span>
+        </label>
+
+        <div class="submit-row">
+          <button class="submit-btn" type="submit">Submit Brief</button>
+          <p class="form-status">Reviewed within a few days. Booking access follows if it's a fit.</p>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+  <footer class="bottom">
+    <p>&copy; the six.well construct</p>
+    <a href="/tattoos/">← back to Art.Pill</a>
+  </footer>
+
+  <script>
+  /* ============================================================
+     SYMBOL LIBRARY
+     Add, edit, or reorder symbols here. Each entry becomes a
+     browsable, selectable card in the builder.
+  ============================================================ */
+  const SYMBOLS = [
+    // MAZE
+    { id: "maze-path",      category: "MAZE",        name: "The Path",      meaning: "A route that loops back. For those who return to the same place until the meaning shifts." },
+    { id: "maze-room",      category: "MAZE",        name: "The Room",      meaning: "An enclosed space. It holds something without releasing it." },
+    { id: "maze-exit",      category: "MAZE",        name: "The Exit",      meaning: "The way out that may or may not open when you reach it." },
+    { id: "maze-threshold", category: "MAZE",        name: "The Threshold", meaning: "The boundary between two states, made permanent on the body." },
+    // Sairoglyphs
+    { id: "sairo-origin",   category: "Sairoglyphs", name: "Origin Mark",   meaning: "First glyph in the private alphabet. Beginning. The first line drawn." },
+    { id: "sairo-double",   category: "Sairoglyphs", name: "The Double",    meaning: "Reflection or echo. Two things that are the same, seen from different sides." },
+    { id: "sairo-hold",     category: "Sairoglyphs", name: "The Hold",      meaning: "A binding mark. What keeps something close without crushing it." },
+    { id: "sairo-carry",    category: "Sairoglyphs", name: "The Carry",     meaning: "Movement across time. A thing brought from one place and held in another." },
+    // Figural
+    { id: "fig-eye",        category: "Figural",     name: "The Eye",       meaning: "Witness. Something that sees and keeps seeing long after the moment passes." },
+    { id: "fig-hand",       category: "Figural",     name: "The Hand",      meaning: "What makes. What holds. What releases. The mark of the maker." },
+    { id: "fig-figure",     category: "Figural",     name: "The Figure",    meaning: "A body moving through meaning. Not arrived — always in transit." },
+    { id: "fig-dissolve",   category: "Figural",     name: "Dissolution",   meaning: "The moment something stops being solid. Not loss — transformation." },
+    // Ritual
+    { id: "rit-dot",        category: "Ritual",      name: "The Dot",       meaning: "The smallest unit of presence. A mark that says: I was here." },
+    { id: "rit-thread",     category: "Ritual",      name: "The Thread",    meaning: "A line connecting two things across distance. Memory, or obligation." },
+    { id: "rit-vessel",     category: "Ritual",      name: "The Vessel",    meaning: "What holds without spilling. Container of the unnamed thing." },
+    { id: "rit-signal",     category: "Ritual",      name: "The Signal",    meaning: "What you send out, not knowing if it will return." },
+  ];
+
+  const MAX_SELECTIONS = 6;
+  const CATEGORIES = ["All", ...new Set(SYMBOLS.map(s => s.category))];
+
+  let selected = new Set();
+  let activeCategory = "All";
+
+  const filterRow   = document.getElementById("filterRow");
+  const symbolGrid  = document.getElementById("symbolGrid");
+  const briefItems  = document.getElementById("briefItems");
+  const briefEmpty  = document.getElementById("briefEmpty");
+  const briefCount  = document.getElementById("briefCount");
+  const briefLimit  = document.getElementById("briefLimit");
+  const briefBegin  = document.getElementById("briefBegin");
+  const selInput    = document.getElementById("selectedElements");
+  const selSummary  = document.getElementById("selectedSummary");
+  const summaryTags = document.getElementById("summaryTags");
+
+  /* ── FILTERS ── */
+  function buildFilters() {
+    CATEGORIES.forEach(cat => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip" + (cat === "All" ? " active" : "");
+      btn.innerHTML = `<span class="chip-label">${cat}</span>`;
+      btn.addEventListener("click", () => {
+        activeCategory = cat;
+        document.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.querySelector(".chip-label").textContent === cat));
+        filterSymbols();
+      });
+      filterRow.appendChild(btn);
+    });
+  }
+
+  function filterSymbols() {
+    document.querySelectorAll(".symbol-card").forEach(card => {
+      const show = activeCategory === "All" || card.dataset.category === activeCategory;
+      card.dataset.hidden = show ? "false" : "true";
+    });
+  }
+
+  /* ── SYMBOL CARDS ── */
+  function buildSymbols() {
+    SYMBOLS.forEach(sym => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "symbol-card";
+      card.dataset.id = sym.id;
+      card.dataset.category = sym.category;
+      card.dataset.name = sym.name;
+      card.dataset.hidden = "false";
+      card.setAttribute("aria-pressed", "false");
+      card.innerHTML = `
+        <span class="symbol-cat">${sym.category}</span>
+        <span class="symbol-name">${sym.name}</span>
+        <span class="symbol-meaning">${sym.meaning}</span>
+        <span class="symbol-indicator"><span></span></span>
+      `;
+      card.addEventListener("click", () => toggleSymbol(sym, card));
+      symbolGrid.appendChild(card);
+    });
+  }
+
+  /* ── SELECTION LOGIC ── */
+  function toggleSymbol(sym, card) {
+    if (selected.has(sym.id)) {
+      selected.delete(sym.id);
+      card.classList.remove("selected");
+      card.setAttribute("aria-pressed", "false");
+    } else {
+      if (selected.size >= MAX_SELECTIONS) return;
+      selected.add(sym.id);
+      card.classList.add("selected");
+      card.setAttribute("aria-pressed", "true");
+    }
+    updateBrief();
+  }
+
+  function removeSymbol(id) {
+    selected.delete(id);
+    const card = symbolGrid.querySelector(`[data-id="${id}"]`);
+    if (card) { card.classList.remove("selected"); card.setAttribute("aria-pressed", "false"); }
+    updateBrief();
+  }
+
+  function updateBrief() {
+    const count = selected.size;
+
+    // count label
+    briefCount.textContent = `${count} of ${MAX_SELECTIONS}`;
+
+    // empty state
+    briefEmpty.style.display = count === 0 ? "block" : "none";
+
+    // limit notice
+    briefLimit.classList.toggle("visible", count >= MAX_SELECTIONS);
+
+    // brief items
+    briefItems.innerHTML = "";
+    selected.forEach(id => {
+      const sym = SYMBOLS.find(s => s.id === id);
+      if (!sym) return;
+      const li = document.createElement("li");
+      li.className = "brief-item";
+      li.innerHTML = `
+        <div class="brief-item-left">
+          <span class="brief-item-cat">${sym.category}</span>
+          <span class="brief-item-name">${sym.name}</span>
+        </div>
+        <button class="brief-item-remove" type="button" aria-label="Remove ${sym.name}">×</button>
+      `;
+      li.querySelector(".brief-item-remove").addEventListener("click", () => removeSymbol(id));
+      briefItems.appendChild(li);
+    });
+
+    // begin button
+    briefBegin.disabled = count === 0;
+
+    // update form hidden input + summary
+    const names = [...selected].map(id => SYMBOLS.find(s => s.id === id)?.name).filter(Boolean);
+    selInput.value = names.join(", ");
+
+    // summary block in form
+    selSummary.classList.toggle("visible", count > 0);
+    summaryTags.innerHTML = names.map(n => `<span class="summary-tag">${n}</span>`).join("");
+  }
+
+  /* ── SCROLL TO FORM ── */
+  briefBegin.addEventListener("click", () => {
+    document.getElementById("build-form").scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => document.getElementById("firstName").focus({ preventScroll: true }), 600);
+  });
+
+  /* ── INIT ── */
+  buildFilters();
+  buildSymbols();
+  updateBrief();
+  </script>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>
