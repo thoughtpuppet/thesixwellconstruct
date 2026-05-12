@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MAZE Series Study · flash · art.pill tattoo house</title>
+<title>MAZE 001 · flash · art.pill tattoo house</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -45,6 +45,9 @@
   .flash-frame img{width:100%;height:100%;object-fit:contain;display:block;animation:revealIn 0.8s cubic-bezier(0.22,1,0.36,1) both;}
   @keyframes revealIn{from{opacity:0;transform:scale(0.98);}to{opacity:1;transform:scale(1);}}
   .flash-badge{position:absolute;bottom:var(--s4);left:0;font-family:var(--serif);font-size:9px;letter-spacing:0.28em;text-transform:uppercase;color:var(--venture);opacity:0.7;}
+  .series-link{display:block;margin-top:var(--s4);font-family:var(--serif);font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-dim);}
+  .series-link a{color:var(--venture);opacity:0.8;font-family:var(--sans);font-weight:900;border-bottom:1px solid rgba(143,35,29,0.35);padding-bottom:1px;transition:opacity var(--t-fast),border-color var(--t-fast);}
+  .series-link a:hover{opacity:1;border-bottom-color:var(--venture);}
   .split-content{padding:var(--s7) var(--s7) var(--s8) var(--s6);display:flex;flex-direction:column;gap:var(--s7);}
   .flash-header{display:flex;flex-direction:column;gap:var(--s3);}
   .venture-label{font-family:var(--serif);font-size:10px;letter-spacing:0.28em;text-transform:uppercase;color:var(--venture);opacity:0.75;}
@@ -105,19 +108,20 @@
     <a href="/">construct</a><span class="breadcrumb-sep">/</span>
     <a href="/tattoos/">tattoos</a><span class="breadcrumb-sep">/</span>
     <a href="/tattoos/flash/">flash</a><span class="breadcrumb-sep">/</span>
-    <span class="breadcrumb-current">MAZE Series Study</span>
+    <a href="/tattoos/flash/maze/">maze</a><span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">MAZE 001</span>
   </nav>
   <div class="split">
     <div class="split-image">
       <div class="flash-frame">
-        <img src="/assets/flash/IMG_8898.jpg" alt="MAZE Series Study — art.pill flash" loading="eager" />
+        <img src="/assets/flash/IMG_8898.jpg" alt="MAZE 001 — art.pill flash" loading="eager" />
         <span class="flash-badge">archive · large</span>
       </div>
     </div>
     <div class="split-content">
       <header class="flash-header">
         <span class="venture-label">art.pill tattoo house</span>
-        <h1 class="flash-title">MAZE Series Study</h1>
+        <h1 class="flash-title">MAZE 001</h1>
         <div class="flash-meta">
           <span class="meta-item">MAZE</span>
           <span class="meta-sep">·</span>
@@ -125,9 +129,10 @@
           <span class="meta-sep">·</span>
           <span class="meta-item">Individual</span>
         </div>
+        <span class="series-link">belongs to <a href="/tattoos/flash/maze/">MAZE. series</a></span>
       </header>
       <section class="statement-block">
-        <p class="block-label">description</p>
+        <p class="block-label">artist statement</p>
         <div class="statement-body">
           <p>A MAZE study used as a visual placeholder for the series language. Future MAZE flash and related merch will live here.</p>
         </div>
@@ -153,6 +158,13 @@
       <section class="related-block">
         <p class="block-label">related</p>
         <div class="related-items">
+          <a href="/tattoos/flash/maze/" class="related-item" style="--item-color:#8F231D">
+            <div class="related-left">
+              <span class="related-venture">flash · art.pill</span>
+              <span class="related-title">MAZE Series</span>
+            </div>
+            <span class="related-arrow">→</span>
+          </a>
           <a href="/merch/maze-puffer-jacket.html" class="related-item" style="--item-color:#F7A226">
             <div class="related-left">
               <span class="related-venture">merch · art.pill</span>
@@ -184,7 +196,7 @@
   </div>
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Full size flash design">
     <button class="lightbox-close" id="lightboxClose" aria-label="Close">✕</button>
-    <img src="/assets/flash/IMG_8898.jpg" alt="MAZE Series Study — art.pill flash" />
+    <img src="/assets/flash/IMG_8898.jpg" alt="MAZE 001 — art.pill flash" />
   </div>
   <script>
   (function(){var lb=document.getElementById('lightbox');var cl=document.getElementById('lightboxClose');document.querySelector('.flash-frame').addEventListener('click',function(){lb.classList.add('open');document.body.style.overflow='hidden';});function close(){lb.classList.remove('open');document.body.style.overflow='';}cl.addEventListener('click',close);lb.addEventListener('click',function(e){if(e.target===lb)close();});document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});})();
