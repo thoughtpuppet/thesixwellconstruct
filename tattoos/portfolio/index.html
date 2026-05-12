@@ -3,28 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Portfolio - Art.Pill Tattoo House</title>
+<title>Portfolio · Art.Pill Tattoo House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg: #0e0e0e;
-    --accent: #FCB867;
-    --signal: #8F231D;
-    --ring: #6D3D15;
-    --ring-soft: rgba(109,61,21,0.4);
+    --bg:         #0e0e0e;
+    --bg-raised:  #111111;
+
+    --accent:     #FCB867;
+    --venture-color: #8F231D;
+
+    --ring:       #6D3D15;
+    --ring-soft:  rgba(109,61,21,0.4);
     --ring-faint: rgba(109,61,21,0.18);
-    --text: #FFE7CA;
-    --text-mute: rgba(255,231,202,0.6);
-    --text-dim: rgba(255,231,202,0.35);
+
+    --text:       #FFE7CA;
+    --text-mute:  rgba(255,231,202,0.6);
+    --text-dim:   rgba(255,231,202,0.32);
     --text-ghost: rgba(255,231,202,0.12);
-    --sans: 'Inter','Helvetica Neue',Arial,sans-serif;
+
+    --sans:  'Inter','Helvetica Neue',Arial,sans-serif;
     --serif: Georgia,'Times New Roman',Times,serif;
-    --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px;
+    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+
     --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
+    --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
+    --t-slow: 0.5s  cubic-bezier(0.22,1,0.36,1);
+
+    --title-color: #8F231D;
   }
+
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
   html,body {
     background:var(--bg); color:var(--text);
@@ -34,176 +47,349 @@
     -moz-osx-font-smoothing:grayscale;
   }
   a { color:inherit; text-decoration:none; }
+  button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
+
   .grain {
     position:fixed; inset:0; z-index:1; pointer-events:none;
     opacity:0.035; mix-blend-mode:overlay;
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   }
+
+  /* ── Header ───────────────────────────────────────────────── */
   header.top {
     position:sticky; top:0; z-index:50;
-    display:flex; align-items:center; justify-content:flex-end;
-    padding:var(--s5) var(--s6); min-height:72px;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:var(--s5) var(--s6);
   }
   .breadcrumb {
     display:flex; align-items:center; gap:10px;
-    font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
   }
   .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
   .breadcrumb-link:hover { color:var(--accent); }
-  .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
+  .breadcrumb-sep, .breadcrumb-current { color:var(--text-dim); }
+  .nav-inquire {
+    font-family:var(--sans); font-weight:700; font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--venture-color); border:1px solid rgba(143,35,29,0.4);
+    padding:8px 16px;
+    transition:background var(--t-fast), border-color var(--t-fast);
+  }
+  .nav-inquire:hover { background:rgba(143,35,29,0.06); border-color:var(--venture-color); }
+
+  /* ── Main ─────────────────────────────────────────────────── */
   main {
     position:relative; z-index:2;
     max-width:1440px; margin:0 auto;
     padding:var(--s8) var(--s6) var(--s7);
   }
-  .hero {
-    display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,360px);
-    gap:48px; align-items:end; margin-bottom:80px;
+
+  /* ── Intro ────────────────────────────────────────────────── */
+  .intro {
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:var(--s6); margin-bottom:var(--s8);
   }
-  .page-label {
-    font-family:var(--serif); font-size:11px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--signal); opacity:0.7; margin-bottom:16px;
+  .intro-left {
+    display:flex; flex-direction:column; align-items:flex-start;
   }
-  .page-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(56px,10vw,148px);
-    letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase;
+  .intro h1 {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(80px,14vw,220px);
+    letter-spacing:-0.05em; line-height:0.88;
+    color:var(--title-color);
+    transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
   }
-  .hero-desc {
-    font-family:var(--serif); font-size:14px; letter-spacing:0.03em;
-    line-height:1.75; color:var(--text-mute); text-align:right;
+  .intro-desc {
+    font-family:var(--serif); font-size:12px;
+    letter-spacing:0.22em; text-transform:uppercase;
+    color:var(--text-mute); max-width:260px;
+    text-align:right; line-height:1.6;
+    padding-bottom:var(--s4);
+    transition:opacity 0.2s ease, color 0.3s ease;
   }
-  .section {
-    padding:72px 0;
-    border-top:1px solid var(--ring-faint);
+
+  /* ── Filters ──────────────────────────────────────────────── */
+  nav.filters { margin-bottom:var(--s6); }
+  .filter-row {
+    display:flex; align-items:center;
+    gap:var(--s5); flex-wrap:wrap;
+    padding-bottom:var(--s4);
   }
-  .section:first-of-type { border-top:none; padding-top:0; }
-  .section-label {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--signal); opacity:0.6; margin-bottom:16px;
+  .filter-row + .filter-row { padding-top:var(--s2); padding-bottom:var(--s5); }
+
+  .chip {
+    position:relative;
+    font-family:var(--sans); font-weight:500;
+    font-size:13px; letter-spacing:0.04em;
+    text-transform:lowercase; color:var(--text-mute);
+    padding:var(--s2) 0;
+    transition:color var(--t-fast);
   }
-  .section-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(28px,4vw,52px);
-    letter-spacing:-0.03em; line-height:0.94; color:var(--accent); margin-bottom:24px;
+  .chip:hover { color:var(--text); }
+  .chip.active { color:var(--text); }
+  .chip.active .chip-label::after {
+    content:"";
+    position:absolute; left:0; bottom:-1px;
+    width:100%; height:2px;
+    background:var(--venture-color);
   }
-  .section-body {
-    font-family:var(--serif); font-size:16px; line-height:1.8; color:var(--text);
-    max-width:640px;
+  .chip.active::before {
+    content:"";
+    position:absolute; left:-10px; top:50%;
+    width:4px; height:4px; border-radius:50%;
+    background:var(--venture-color);
+    transform:translateY(-50%);
   }
-  .portfolio-ledger {
-    margin-top:48px;
-    border-top:1px solid var(--ring-faint);
+  .chip-label { position:relative; }
+  .chip-count {
+    font-family:var(--serif); font-size:10px;
+    color:var(--text-dim); margin-left:2px;
+    vertical-align:super;
   }
-  .portfolio-piece {
+
+  /* ── Section heading ──────────────────────────────────────── */
+  .medium-heading {
+    font-family:var(--serif);
+    font-size:10px; letter-spacing:0.35em;
+    text-transform:uppercase; color:var(--text-dim);
+    margin-bottom:var(--s5);
+  }
+
+  /* ── Work grid ────────────────────────────────────────────── */
+  .work-grid {
     display:grid;
-    grid-template-columns:72px minmax(180px,0.34fr) minmax(0,1fr) minmax(120px,0.18fr);
-    gap:24px;
+    grid-template-columns:repeat(auto-fill, minmax(260px,1fr));
+    gap:3px;
+  }
+
+  .work-card {
+    position:relative;
+    aspect-ratio:4/5;
+    overflow:hidden;
+    cursor:pointer;
+    background:var(--bg-raised);
+    border:5px solid var(--ring-faint);
+    transition:border-color var(--t-med);
+  }
+  .work-card:hover { border-color:var(--venture-color); }
+
+  .work-card img {
+    width:100%; height:100%;
+    object-fit:cover; display:block;
+    transition:
+      transform var(--t-slow),
+      filter    var(--t-slow);
+    transform:scale(1);
+    filter:brightness(0.9);
+  }
+  .work-card:hover img {
+    transform:scale(0.97);
+    filter:brightness(0.45);
+  }
+
+  .work-badge {
+    position:absolute; top:var(--s3); left:var(--s3);
+    font-family:var(--serif);
+    font-size:9px; letter-spacing:0.2em;
+    text-transform:uppercase; color:var(--venture-color);
+    opacity:0;
+    transition:opacity var(--t-med);
+    pointer-events:none;
+  }
+  .work-card:hover .work-badge { opacity:0.85; }
+
+  .work-meta {
+    position:absolute; bottom:0; left:0; right:0;
+    padding:var(--s6) var(--s4) var(--s4);
+    background:linear-gradient(to top, rgba(14,14,14,0.92) 0%, transparent 100%);
+    transform:translateY(6px);
+    opacity:0;
+    transition:
+      opacity   var(--t-med),
+      transform var(--t-med);
+    pointer-events:none;
+  }
+  .work-card:hover .work-meta { opacity:1; transform:translateY(0); }
+
+  .work-title {
+    display:block;
+    font-family:var(--sans); font-weight:900;
+    font-size:13px; letter-spacing:-0.01em;
+    color:var(--text);
+    margin-bottom:var(--s1);
+  }
+  .work-info {
+    display:block;
+    font-family:var(--serif);
+    font-size:11px; font-style:italic;
+    color:var(--text-mute);
+    letter-spacing:0.03em;
+  }
+
+  /* placeholder card */
+  .work-card.placeholder {
+    cursor:default;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .work-card.placeholder:hover { border-color:var(--ring-soft); }
+  .work-card.placeholder img,
+  .work-card.placeholder .work-meta,
+  .work-card.placeholder .work-badge { display:none; }
+  .placeholder-label {
+    font-family:var(--serif);
+    font-size:10px; letter-spacing:0.3em;
+    text-transform:uppercase; color:var(--text-ghost);
+    font-style:italic; text-align:center; line-height:2;
+  }
+
+  .work-card.hidden { display:none; }
+
+  /* ── Overlay ──────────────────────────────────────────────── */
+  #work-overlay {
+    position:fixed; inset:0; z-index:200;
+    background:rgba(14,14,14,0.97);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none;
+    transition:opacity var(--t-slow);
+  }
+  #work-overlay.open { opacity:1; pointer-events:all; }
+
+  .overlay-close {
+    position:fixed; top:var(--s6); right:var(--s6);
+    font-family:var(--serif); font-size:20px;
+    color:var(--text-mute); z-index:201;
+    padding:var(--s2);
+    transition:color var(--t-fast);
+  }
+  .overlay-close:hover { color:var(--text); }
+
+  .overlay-inner {
+    display:grid;
+    grid-template-columns:1fr 360px;
+    gap:var(--s7);
+    width:88vw; max-width:1100px;
+    max-height:90vh;
     align-items:center;
-    padding:30px 0;
-    border-bottom:1px solid var(--ring-faint);
   }
-  .piece-number {
-    font-family:var(--sans); font-weight:900; font-size:clamp(34px,5vw,68px);
-    line-height:0.9; letter-spacing:-0.05em; color:var(--signal); opacity:0.34;
+  .overlay-image-wrap {
+    height:78vh; max-height:680px;
+    display:flex; align-items:center; justify-content:center;
   }
-  .piece-title {
-    font-family:var(--sans); font-weight:900; font-size:22px;
-    letter-spacing:-0.02em; line-height:1; color:var(--accent); text-transform:uppercase;
+  .overlay-image-wrap img {
+    max-width:100%; max-height:100%;
+    object-fit:contain; display:block;
+    transform:scale(0.97); opacity:0;
+    transition:
+      transform var(--t-slow) 0.1s,
+      opacity   var(--t-slow) 0.1s;
   }
-  .piece-meta {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-dim);
+  #work-overlay.open .overlay-image-wrap img {
+    transform:scale(1); opacity:1;
   }
-  .piece-note {
-    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
+  .overlay-details {
+    transform:translateX(10px); opacity:0;
+    transition:
+      transform var(--t-slow) 0.2s,
+      opacity   var(--t-slow) 0.2s;
   }
-  .study-grid {
-    display:flex;
-    flex-direction:column;
-    border-top:1px solid var(--ring-faint);
-    margin-top:48px;
+  #work-overlay.open .overlay-details {
+    transform:translateX(0); opacity:1;
   }
-  .study {
-    display:grid;
-    grid-template-columns:minmax(160px,0.28fr) minmax(0,1fr);
-    gap:28px;
-    padding:24px 0;
-    border-bottom:1px solid var(--ring-faint);
-    background:transparent;
+  .overlay-rule {
+    width:24px; height:2px;
+    background:var(--venture-color);
+    margin-bottom:var(--s5);
   }
-  .study-label {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--signal); opacity:0.7; margin-bottom:12px;
+  .overlay-title {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(28px,4vw,48px);
+    letter-spacing:-0.03em; line-height:0.92;
+    color:var(--text);
+    margin-bottom:var(--s4);
   }
-  .study-title {
-    font-family:var(--sans); font-weight:900; font-size:22px; letter-spacing:-0.02em;
-    color:var(--accent); margin-bottom:16px; text-transform:uppercase;
+  .overlay-subtitle {
+    font-family:var(--serif);
+    font-size:13px; font-style:italic;
+    color:var(--text-mute); letter-spacing:0.04em;
+    margin-bottom:var(--s5);
   }
-  .study-body {
-    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
+  .overlay-tags {
+    display:flex; flex-wrap:wrap; gap:var(--s2);
+    margin-bottom:var(--s5);
   }
-  .cta-block {
-    margin-top:80px; border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-soft); background:transparent;
-    padding:42px 0; display:flex; justify-content:space-between; gap:48px; align-items:center;
+  .overlay-tag {
+    font-family:var(--serif);
+    font-size:10px; letter-spacing:0.18em;
+    text-transform:uppercase; color:var(--venture-color);
+    border:5px solid rgba(143,35,29,0.3);
+    padding:var(--s1) var(--s3);
   }
-  .cta-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(24px,3vw,42px);
-    letter-spacing:-0.03em; line-height:0.94; color:var(--accent); margin-bottom:16px;
+  .overlay-fragment {
+    font-family:var(--serif);
+    font-size:14px; line-height:1.65; font-style:italic;
+    color:rgba(255,231,202,0.65);
+    border-left:5px solid rgba(143,35,29,0.35);
+    padding-left:var(--s4);
+    margin-bottom:var(--s6);
   }
-  .cta-body {
-    font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
-    max-width:500px;
+  .overlay-inquire-link {
+    display:inline-flex; align-items:center; gap:var(--s2);
+    font-family:var(--serif);
+    font-size:11px; letter-spacing:0.18em;
+    text-transform:uppercase; color:var(--venture-color);
+    opacity:0.75;
+    transition:opacity var(--t-fast);
   }
-  .cta-primary {
-    display:inline-flex; align-items:center; gap:8px;
-    font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-mute); background:transparent; border:1px solid var(--ring-soft); padding:14px 28px;
-    transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
-    white-space:nowrap;
-  }
-  .cta-primary:hover { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); }
+  .overlay-inquire-link::after { content:'→'; }
+  .overlay-inquire-link:hover { opacity:1; }
+
+  /* ── Footer ───────────────────────────────────────────────── */
   footer.bottom {
-    position:relative; z-index:2; max-width:1440px; margin:0 auto;
-    padding:56px var(--s6); border-top:1px solid var(--ring-faint);
+    position:relative; z-index:2;
+    padding:var(--s7) var(--s6);
+    border-top:5px solid var(--ring-faint);
     display:flex; justify-content:space-between; align-items:center;
+    margin-top:var(--s8);
   }
   footer.bottom p, footer.bottom a {
-    font-family:var(--serif); font-size:10px; letter-spacing:0.22em;
-    color:var(--text-dim); text-transform:uppercase;
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
   }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
-  @media (max-width:1024px) {
-    main { padding:var(--s7) var(--s5) var(--s6); }
-    footer.bottom { padding:48px var(--s5); }
-  }
-  @media (max-width:768px) {
-    .hero { grid-template-columns:1fr; gap:20px; }
-    .hero-desc { text-align:left; }
-    .portfolio-piece { grid-template-columns:56px minmax(0,1fr); }
-    .piece-note,.piece-meta { grid-column:2; }
-    .study { grid-template-columns:1fr; gap:10px; }
-    .cta-block { flex-direction:column; align-items:flex-start; padding:40px 32px; }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width:900px) {
+    main { padding:var(--s7) var(--s5); }
+    header.top { padding:var(--s4) var(--s5); }
+    .overlay-inner {
+      grid-template-columns:1fr;
+      overflow-y:auto;
+      gap:var(--s5);
+      padding:var(--s7) var(--s5) var(--s6);
+      align-items:flex-start;
+    }
+    .overlay-image-wrap {
+      height:55vw; min-height:200px; max-height:340px;
+    }
+    .work-grid {
+      grid-template-columns:repeat(auto-fill, minmax(160px,1fr));
+      gap:2px;
+    }
   }
   @media (max-width:640px) {
-    header.top { padding:var(--s4) var(--s5); }
-    main { padding:var(--s6) var(--s5); }
-    .section { padding:48px 0; }
-    .portfolio-piece { grid-template-columns:1fr; gap:12px; }
-    .piece-note,.piece-meta { grid-column:auto; }
-    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
+    .intro { flex-direction:column; align-items:flex-start; gap:var(--s4); }
+    .intro-desc { text-align:left; max-width:none; }
   }
-@media (max-width: 700px) {
-  header.top {
-    position: sticky;
-    padding: var(--s3) var(--s4);
-    min-height: 60px;
-    align-items: center;
+  @media (max-width:700px) {
+    header.top { padding:var(--s3) var(--s4); min-height:60px; }
   }
-}
-
 </style>
 </head>
+
 <body data-venture="tattooing">
+
   <script>
   (function(){
     var o = document.createElement('div');
@@ -223,87 +409,392 @@
     }
   })();
   </script>
+
   <div class="grain"></div>
+
   <header class="top">
     <nav class="breadcrumb" aria-label="breadcrumb">
       <a class="breadcrumb-link" href="/tattoos/">tattoos</a>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">portfolio</span>
     </nav>
+    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
   </header>
-  <main>
-    <section class="hero">
-      <div>
-        <p class="page-label">Art.Pill Tattoo House</p>
-        <h1 class="page-title">Portfolio.</h1>
+
+  <!-- EXPANDED WORK OVERLAY -->
+  <div id="work-overlay" role="dialog" aria-modal="true" aria-label="Work detail">
+    <button class="overlay-close" id="overlayCloseBtn" aria-label="Close">✕</button>
+    <div class="overlay-inner">
+      <div class="overlay-image-wrap">
+        <img id="overlayImg" src="" alt="" />
       </div>
-      <p class="hero-desc">A living record of symbolic, surreal, and mythic tattoo work. Built around weight, placement, and the private language each piece has to carry.</p>
-    </section>
-    <section class="section">
-      <p class="section-label">Selected Work</p>
-      <h2 class="section-title">Special Projects &amp; Finished Pieces</h2>
-      <p class="section-body">Portfolio images are organized by the kind of thinking behind the work: symbolic marks, surreal scenes, mythic figures, and custom story-driven compositions.</p>
-      <div class="portfolio-ledger" aria-label="Portfolio categories">
-        <article class="portfolio-piece">
-          <span class="piece-number">01</span>
-          <div>
-            <h3 class="piece-title">Symbolic Marks</h3>
-            <p class="piece-meta">small to medium work</p>
-          </div>
-          <p class="piece-note">Compact marks, private signs, and image systems built to carry meaning with restraint.</p>
-          <p class="piece-meta">trace: flash / archive</p>
-        </article>
-        <article class="portfolio-piece">
-          <span class="piece-number">02</span>
-          <div>
-            <h3 class="piece-title">Surreal Figures</h3>
-            <p class="piece-meta">dream logic compositions</p>
-          </div>
-          <p class="piece-note">Figures, bodies, and scenes that bend space while keeping the emotional center clear.</p>
-          <p class="piece-meta">trace: art / writing</p>
-        </article>
-        <article class="portfolio-piece">
-          <span class="piece-number">03</span>
-          <div>
-            <h3 class="piece-title">Mythic Scenes</h3>
-            <p class="piece-meta">narrative custom work</p>
-          </div>
-          <p class="piece-note">Larger symbolic compositions where placement, negative space, and story move together.</p>
-          <p class="piece-meta">trace: special projects</p>
-        </article>
+      <div class="overlay-details">
+        <div class="overlay-rule"></div>
+        <h2 class="overlay-title"    id="overlayTitle"></h2>
+        <p  class="overlay-subtitle" id="overlaySubtitle"></p>
+        <div class="overlay-tags"    id="overlayTags"></div>
+        <p  class="overlay-fragment" id="overlayFragment"></p>
+        <a  href="/tattoos/inquire/" class="overlay-inquire-link">inquire about this work</a>
       </div>
-    </section>
-    <section class="section">
-      <p class="section-label">The Work in Context</p>
-      <h2 class="section-title">What the Portfolio Is For</h2>
-      <p class="section-body">Use this page to understand the visual direction of the studio before sending an inquiry. The strongest projects usually share a clear symbol, a felt story, and enough trust to let the drawing become its own thing.</p>
-      <div class="study-grid">
-        <article class="study">
-          <p class="study-label">Custom</p>
-          <h3 class="study-title">Built Around Meaning</h3>
-          <p class="study-body">Custom work starts with your concept and becomes a tattoo through drawing, placement, and restraint. The strongest references point toward mood, symbolism, and placement while leaving room for an original drawing.</p>
-        </article>
-        <article class="study">
-          <p class="study-label">Placement</p>
-          <h3 class="study-title">Designed for Skin</h3>
-          <p class="study-body">The work is shaped around how it sits on the body, how it ages, and how much visual weight the piece should carry from a distance.</p>
-        </article>
-      </div>
-    </section>
-    <div class="cta-block">
-      <div>
-        <h2 class="cta-title">Have a Project in Mind?</h2>
-        <p class="cta-body">Send the concept, placement, rough size, and any references that help describe the feeling. The inquiry process helps find the strongest path for the project.</p>
-      </div>
-      <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry &rarr;</a>
     </div>
+  </div>
+
+  <main>
+
+    <section class="intro">
+      <div class="intro-left">
+        <h1>PORTFOLIO.</h1>
+      </div>
+      <p class="intro-desc" id="introDesc">tattoo work by Saiel Dauhn Solehman</p>
+    </section>
+
+    <nav class="filters" id="filters" role="tablist">
+      <div class="filter-row" id="typeRow"></div>
+      <div class="filter-row" id="modeRow"></div>
+    </nav>
+
+    <!-- TATTOO WORK -->
+    <section class="medium-section" id="sectionTattoo">
+      <p class="medium-heading">Tattoo work</p>
+      <div class="work-grid" id="gridTattoo">
+
+        <!--
+          CARD ANATOMY
+          ─────────────────────────────────────────────────────
+          data-type:     "symbolic" | "surreal" | "mythic" | "special"
+          data-mode:     "standalone" | "series"
+          data-series:   series slug or "" if standalone
+          data-id:       unique slug
+          data-title:    display title
+          data-year:     "2024" or "—"
+          data-placement: e.g. "forearm" or "—"
+          data-fragment: one or two lines shown in overlay
+
+          TO ADD A REAL TATTOO:
+            Set src on <img> to the actual image path.
+            Update all data-* attributes above.
+            Remove class="placeholder" — add real badge/meta content.
+        -->
+
+        <div class="work-card placeholder"
+             data-type="symbolic" data-mode="standalone" data-series=""
+             data-id="symbolic-01" data-title="SYMBOLIC 01"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="symbolic" data-mode="standalone" data-series=""
+             data-id="symbolic-02" data-title="SYMBOLIC 02"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="symbolic" data-mode="series" data-series="flash-series"
+             data-id="symbolic-03" data-title="SYMBOLIC 03"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="surreal" data-mode="standalone" data-series=""
+             data-id="surreal-01" data-title="SURREAL 01"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="surreal" data-mode="standalone" data-series=""
+             data-id="surreal-02" data-title="SURREAL 02"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="surreal" data-mode="series" data-series="body-studies"
+             data-id="surreal-03" data-title="SURREAL 03"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="mythic" data-mode="standalone" data-series=""
+             data-id="mythic-01" data-title="MYTHIC 01"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="mythic" data-mode="series" data-series="body-studies"
+             data-id="mythic-02" data-title="MYTHIC 02"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="special" data-mode="standalone" data-series=""
+             data-id="special-01" data-title="SPECIAL PROJECT 01"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+        <div class="work-card placeholder"
+             data-type="special" data-mode="standalone" data-series=""
+             data-id="special-02" data-title="SPECIAL PROJECT 02"
+             data-year="—" data-placement="—"
+             data-fragment="Placeholder — add a short note for this piece.">
+          <div class="placeholder-label">coming<br>soon</div>
+        </div>
+
+      </div><!-- /gridTattoo -->
+    </section>
+
   </main>
+
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/">the six.well construct</a>
   </footer>
+
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+
+  <script>
+  /* ============================================================
+     FILTER SYSTEM — mirrors art/index.html filter logic
+     Two rows: type (symbolic · surreal · mythic · special) + mode (standalone · series)
+     Row 2 scopes to series sub-options when "by series" is active.
+
+     TO ADD REAL WORK:
+       Remove class="placeholder" from the card.
+       Add real img src, badge text, and data-* attributes.
+       Work will automatically appear in filter counts.
+  ============================================================ */
+
+  const TYPES = [
+    { value:'symbolic', label:'symbolic',         descriptor:'symbolic marks — compact signs and private language' },
+    { value:'surreal',  label:'surreal',           descriptor:'surreal figures — dream logic and bent bodies' },
+    { value:'mythic',   label:'mythic',            descriptor:'mythic scenes — compositions built around weight and story' },
+    { value:'special',  label:'special projects',  descriptor:'special projects — concept-driven and multi-session work' },
+  ];
+
+  const SERIES = [
+    { value:'flash-series',  label:'flash series',  descriptor:'flash series — standing drawings made for the wall' },
+    { value:'body-studies',  label:'body studies',  descriptor:'body studies — ongoing figurative and placement research' },
+  ];
+
+  const DEFAULT_DESC = 'tattoo work by Saiel Dauhn Solehman';
+
+  const active = {
+    type:   null,   /* "symbolic" | "surreal" | "mythic" | "special" | null */
+    mode:   null,   /* "series" | "standalone" | null */
+    series: null,
+  };
+
+  const introDesc = document.getElementById('introDesc');
+  const row1      = document.getElementById('typeRow');
+  const row2      = document.getElementById('modeRow');
+
+  function makeChip(label, count, isActive) {
+    const btn = document.createElement('button');
+    btn.className = 'chip' + (isActive ? ' active' : '');
+    const countHtml = count !== null
+      ? `<span class="chip-count">${count}</span>`
+      : '';
+    btn.innerHTML = `<span class="chip-label">${label}</span>${countHtml}`;
+    return btn;
+  }
+
+  function countType(value) {
+    return document.querySelectorAll(`.work-card[data-type="${value}"]`).length;
+  }
+
+  function countInScope(filterFn) {
+    const sel = active.type
+      ? `.work-card:not(.placeholder)[data-type="${active.type}"]`
+      : '.work-card:not(.placeholder)';
+    return [...document.querySelectorAll(sel)].filter(filterFn).length;
+  }
+
+  /* total non-placeholder real cards */
+  function countAll() {
+    return document.querySelectorAll('.work-card').length;
+  }
+
+  function renderRow1() {
+    row1.innerHTML = '';
+
+    const allBtn = makeChip('all', countAll(), !active.type && !active.mode);
+    allBtn.addEventListener('click', () => setFilter('all', null));
+    row1.appendChild(allBtn);
+
+    TYPES.forEach(t => {
+      const count = countType(t.value);
+      if (!count) return;
+      const btn = makeChip(t.label, count, active.type === t.value && !active.mode);
+      btn.addEventListener('click', () => setFilter('type', t.value));
+      row1.appendChild(btn);
+    });
+
+    const seriesCount = countInScope(c => c.dataset.mode === 'series');
+    const seriesBtn = makeChip('by series', seriesCount, active.mode === 'series');
+    seriesBtn.addEventListener('click', () => setFilter('mode', 'series'));
+    row1.appendChild(seriesBtn);
+
+    const standaloneCount = countInScope(c => c.dataset.mode === 'standalone');
+    const standaloneBtn = makeChip('standalone', standaloneCount, active.mode === 'standalone');
+    standaloneBtn.addEventListener('click', () => setFilter('mode', 'standalone'));
+    row1.appendChild(standaloneBtn);
+  }
+
+  function renderRow2() {
+    row2.innerHTML = '';
+    if (active.mode !== 'series') return;
+
+    const allSeriesBtn = makeChip('all series', null, !active.series);
+    allSeriesBtn.addEventListener('click', () => setSeries(null));
+    row2.appendChild(allSeriesBtn);
+
+    SERIES.forEach(s => {
+      const count = countInScope(c => c.dataset.series === s.value);
+      if (!count) return;
+      const btn = makeChip(s.label, count, active.series === s.value);
+      btn.addEventListener('click', () => setSeries(s.value));
+      row2.appendChild(btn);
+    });
+  }
+
+  function applyFilters() {
+    document.querySelectorAll('.work-card:not(.placeholder)').forEach(card => {
+      let show = true;
+      if (active.type && card.dataset.type !== active.type) show = false;
+      if (active.mode === 'standalone' && card.dataset.mode !== 'standalone') show = false;
+      if (active.mode === 'series') {
+        if (card.dataset.mode !== 'series') show = false;
+        if (active.series && card.dataset.series !== active.series) show = false;
+      }
+      card.classList.toggle('hidden', !show);
+    });
+
+    /* placeholder cards: hide when a type filter is active and doesn't match */
+    document.querySelectorAll('.work-card.placeholder').forEach(card => {
+      let show = true;
+      if (active.type && card.dataset.type !== active.type) show = false;
+      if (active.mode === 'standalone' && card.dataset.mode !== 'standalone') show = false;
+      if (active.mode === 'series') {
+        if (card.dataset.mode !== 'series') show = false;
+        if (active.series && card.dataset.series !== active.series) show = false;
+      }
+      card.classList.toggle('hidden', !show);
+    });
+  }
+
+  function updateIntro() {
+    let desc = DEFAULT_DESC;
+
+    if (active.series) {
+      const s = SERIES.find(x => x.value === active.series);
+      if (s) desc = s.descriptor;
+    } else if (active.mode === 'standalone') {
+      desc = 'standalone — singular works not part of a series';
+    } else if (active.mode === 'series') {
+      desc = 'series — works made in relation to each other';
+    } else if (active.type) {
+      const t = TYPES.find(x => x.value === active.type);
+      if (t) desc = t.descriptor;
+    }
+
+    introDesc.style.opacity = '0';
+    setTimeout(() => {
+      introDesc.textContent = desc;
+      introDesc.style.opacity = '1';
+    }, 200);
+  }
+
+  function setFilter(type, value) {
+    if (type === 'all') {
+      active.type = null; active.mode = null; active.series = null;
+    } else if (type === 'type') {
+      active.type = active.type === value ? null : value;
+      active.series = null;
+    } else if (type === 'mode') {
+      if (active.mode === value) {
+        active.mode = null; active.series = null;
+      } else {
+        active.mode = value; active.series = null;
+      }
+    }
+    renderRow1(); renderRow2(); applyFilters(); updateIntro();
+  }
+
+  function setSeries(value) {
+    active.series = value;
+    renderRow1(); renderRow2(); applyFilters(); updateIntro();
+  }
+
+  renderRow1();
+  renderRow2();
+  applyFilters();
+
+
+  /* ============================================================
+     OVERLAY — opens when a non-placeholder card is clicked.
+     Placeholder cards are non-interactive.
+  ============================================================ */
+  const overlay      = document.getElementById('work-overlay');
+  const overlayImg   = document.getElementById('overlayImg');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlaySub   = document.getElementById('overlaySubtitle');
+  const overlayTags  = document.getElementById('overlayTags');
+  const overlayFrag  = document.getElementById('overlayFragment');
+  const closeBtn     = document.getElementById('overlayCloseBtn');
+
+  function openOverlay(card) {
+    const d = card.dataset;
+    overlayImg.src             = card.querySelector('img').src;
+    overlayImg.alt             = d.title;
+    overlayTitle.textContent   = d.title;
+    overlaySub.textContent     = [d.year, d.placement].filter(s => s && s !== '—').join(' · ') || '—';
+
+    overlayTags.innerHTML = '';
+    [d.type, d.mode, d.series].filter(Boolean).forEach(val => {
+      const t = document.createElement('span');
+      t.className = 'overlay-tag';
+      t.textContent = val;
+      overlayTags.appendChild(t);
+    });
+
+    overlayFrag.textContent = d.fragment || '';
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeOverlay() {
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.querySelectorAll('.work-card:not(.placeholder)').forEach(card => {
+    card.addEventListener('click', () => openOverlay(card));
+  });
+
+  closeBtn.addEventListener('click', closeOverlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeOverlay(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay();
+  });
+  </script>
+
 </body>
 </html>

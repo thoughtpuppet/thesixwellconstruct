@@ -43,7 +43,7 @@
   }
   header.top {
     position:sticky; top:0; z-index:50;
-    display:flex; align-items:center; justify-content:flex-end;
+    display:flex; align-items:center; justify-content:space-between;
     padding:var(--s5) var(--s6); min-height:72px;
   }
   .breadcrumb {
@@ -53,6 +53,8 @@
   .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
+  .nav-inquire { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); border:1px solid rgba(143,35,29,0.4); padding:8px 16px; transition:background var(--t-fast), border-color var(--t-fast); }
+  .nav-inquire:hover { background:rgba(143,35,29,0.06); border-color:var(--signal); }
   main {
     position:relative; z-index:2;
     width:100%;
@@ -319,6 +321,7 @@
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">special projects</span>
     </nav>
+    <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
   </header>
   <main>
     <section class="intro">
