@@ -16,7 +16,7 @@
     --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
     --panel:#0f0f0f; --sans:'Inter','Helvetica Neue',Arial,sans-serif;
     --serif:Georgia,'Times New Roman',Times,serif;
-    --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
@@ -38,10 +38,11 @@
   .hero-desc { font-size:14px; letter-spacing:0.03em; line-height:1.75; color:var(--text-mute); text-align:right; }
   nav.filters { margin-bottom:var(--s6); }
   .filter-row { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; padding-bottom:var(--s4); }
-  .filter-row + .filter-row { padding-top:var(--s2); padding-bottom:var(--s5); }
   .filter-row--split { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; }
   .filter-row--split > div { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; }
   .filter-sep { width:1px; height:12px; background:var(--ring-soft); flex-shrink:0; align-self:center; }
+  .filter-cascade { overflow:hidden; max-height:0; opacity:0; pointer-events:none; transition:max-height 0.24s cubic-bezier(0.2,0,0.2,1), opacity 0.2s ease, padding-bottom 0.24s; padding-bottom:0; }
+  .filter-cascade.is-open { max-height:80px; opacity:1; pointer-events:auto; padding-bottom:var(--s4); }
   .chip { position:relative; font-family:var(--sans); font-weight:500; font-size:13px; letter-spacing:0.04em; text-transform:lowercase; color:var(--text-mute); padding:var(--s2) 0; background:none; border:none; cursor:pointer; transition:color var(--t-fast); }
   .chip:hover { color:var(--text); }
   .chip.active { color:var(--text); }
@@ -228,14 +229,13 @@
       <p class="hero-desc">Original pre-drawn designs, flash sheets, symbolic alphabets, MAZE studies, and standalone pieces. Browse the archive, open a sheet, then claim the design that fits.</p>
     </section>
 
-    <nav class="filters" aria-label="Flash catalog filters" role="tablist">
-      <div class="filter-row" data-filter-group="series" aria-label="Filter by series"></div>
-      <div class="filter-row filter-row--split" aria-label="Filter by type, status and size">
-        <div data-filter-group="type"></div>
+    <nav class="filters" aria-label="Flash catalog filters">
+      <div class="filter-row" id="typeRow" data-filter-group="type"></div>
+      <div class="filter-row filter-cascade" id="seriesRow" data-filter-group="series"></div>
+      <div class="filter-row filter-cascade filter-row--split" id="qualifierRow">
+        <div data-filter-group="sizeBucket"></div>
         <span class="filter-sep" aria-hidden="true"></span>
         <div data-filter-group="status"></div>
-        <span class="filter-sep" aria-hidden="true"></span>
-        <div data-filter-group="sizeBucket"></div>
       </div>
     </nav>
 
@@ -380,12 +380,12 @@
       series: [],
       items: []
     };
-    const state = { series: "All", type: "All", status: "All", sizeBucket: "All", items: [], seriesMeta: [] };
+    const state = { type: "All", series: "All", sizeBucket: "All", status: "All", items: [], seriesMeta: [] };
     const groups = {
-      series: ["All", "MAZE", "Sairoglyphs"],
       type: ["All", "Series", "Standalone"],
-      status: ["All", "Available", "Past"],
-      sizeBucket: ["All", "Small", "Medium", "Large"]
+      series: ["All", "MAZE", "Sairoglyphs"],
+      sizeBucket: ["All", "Small", "Medium", "Large"],
+      status: ["All", "Available", "Past"]
     };
     const els = {
       sheetGrid: document.getElementById("sheetGrid"),
@@ -446,17 +446,45 @@
       return true;
     }
 
+    function updateCascade() {
+      const seriesRow = document.getElementById("seriesRow");
+      const qualifierRow = document.getElementById("qualifierRow");
+      const showSeries = state.type === "Series";
+      const showQualifier = state.type === "Standalone" || (state.type === "Series" && state.series !== "All");
+      seriesRow.classList.toggle("is-open", showSeries);
+      qualifierRow.classList.toggle("is-open", showQualifier);
+    }
+
+    function setChipsActive(group) {
+      document.querySelectorAll(`[data-filter-group="${group}"] .chip`).forEach((btn) => {
+        btn.classList.toggle("active", btn.querySelector(".chip-label").textContent.toLowerCase() === state[group].toLowerCase());
+      });
+    }
+
     function createFilterButton(group, value) {
       const button = document.createElement("button");
       button.type = "button";
-      button.setAttribute("role", "tab");
       button.className = "chip" + (state[group] === value ? " active" : "");
       button.innerHTML = `<span class="chip-label">${escapeHtml(value)}</span>`;
       button.addEventListener("click", () => {
         state[group] = value;
-        document.querySelectorAll(`[data-filter-group="${group}"] .chip`).forEach((btn) => {
-          btn.classList.toggle("active", btn.querySelector(".chip-label").textContent === value);
-        });
+        setChipsActive(group);
+        if (group === "type") {
+          // reset downstream state
+          state.series = "All";
+          state.sizeBucket = "All";
+          state.status = "All";
+          setChipsActive("series");
+          setChipsActive("sizeBucket");
+          setChipsActive("status");
+        }
+        if (group === "series" && value === "All") {
+          state.sizeBucket = "All";
+          state.status = "All";
+          setChipsActive("sizeBucket");
+          setChipsActive("status");
+        }
+        updateCascade();
         renderCatalog();
       });
       return button;
@@ -465,9 +493,11 @@
     function renderFilters() {
       Object.entries(groups).forEach(([group, values]) => {
         const container = document.querySelector(`[data-filter-group="${group}"]`);
+        if (!container) return;
         container.innerHTML = "";
         values.forEach((value) => container.appendChild(createFilterButton(group, value)));
       });
+      updateCascade();
     }
 
     function card(item) {
