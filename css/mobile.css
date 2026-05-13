@@ -1,0 +1,496 @@
+/* ============================================================
+   mobile.css — the six.well construct
+   ============================================================
+   Site-wide mobile / small-screen refinements.
+
+   Load AFTER all other stylesheets so these win:
+     <link rel="stylesheet" href="/css/mobile.css">
+
+   Scope: every viewport ≤ 900px. Targets the shared class names
+   used across art, merch, tattoos, special-projects, and form
+   pages. Per-page CSS still wins for unique components — this
+   file fixes the patterns that repeat everywhere.
+
+   Single source of truth for the mobile floor:
+     - hero titles never below the readable minimum
+     - section padding scales down without crushing rhythm
+     - intro stacks (title above, descriptor below, left-aligned)
+     - filter rows scroll-cluster instead of overflowing
+     - grids drop to 2 columns by 700px, 1 column at 380px
+     - footers stack
+     - all forms collapse to single column
+     - tap targets ≥ 44px wherever practical
+   ============================================================ */
+
+
+/* ── HORIZONTAL OVERFLOW SAFETY ─────────────────────────────
+   Catches any rogue 100vw element / inline width:1440 etc.
+   Applied at all sizes; cheap insurance.
+   The min-width:0 reset on grid containers is critical — without
+   it, grid items default to `min-width: auto` which equals their
+   intrinsic content width. An image with natural width > viewport
+   then refuses to shrink and the page scrolls horizontally.
+─────────────────────────────────────────────────────────── */
+html, body { overflow-x: clip; max-width: 100%; }
+
+/* Allow grid + flex children to shrink below their content's intrinsic size.
+   Targets the common containers used across the codebase, AND any direct or
+   descendant grid item (sections with display:contents flatten into the
+   parent grid, so their children become real grid items too). */
+main,
+main > *,
+main > * > *,
+main > * > * > *,
+.split, .split > *,
+.grid, .grid > *,
+.layout, .layout > *,
+.work-grid, .work-grid > *,
+.media-grid, .media-grid > *,
+.feature-grid, .feature-grid > *,
+.record-grid, .record-grid > *,
+.path-grid, .path-grid > *,
+.field-grid, .field-grid > *,
+.product-image, .product-details, .product-col, .painting-col,
+.split-image, .split-content,
+.product-hero, .product-hero > *,
+.product-gallery, .product-gallery > *,
+.product-gallery-shell, .product-image-main {
+  min-width: 0;
+}
+
+/* Images and media never exceed their container */
+img, video, iframe { max-width: 100%; }
+
+/* Global scrollbars + dropdowns
+   Matches the Build/In-Person time picker: dark track, amber thumb,
+   square ringed controls, no native rounded select chrome. */
+:root {
+  --global-ui-bg: #0d0d0d;
+  --global-ui-field-bg: rgba(14, 14, 14, 0.78);
+  --global-ui-ring: rgba(109, 61, 21, 0.4);
+  --global-ui-text: #FFE7CA;
+  --global-ui-accent: #FCB867;
+  --global-ui-signal: #7A1010;
+  --global-ui-serif: Georgia, "Times New Roman", Times, serif;
+  --global-ui-fast: 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--global-ui-accent) var(--global-ui-bg);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: var(--global-ui-bg);
+}
+
+::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb:hover {
+  background: var(--global-ui-accent);
+}
+
+select {
+  color-scheme: dark;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--global-ui-field-bg);
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='7' viewBox='0 0 10 7' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.25 5 5.25 9 1.25' fill='none' stroke='%23FFE7CA' stroke-opacity='.38' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 10px 7px;
+  color: var(--global-ui-text);
+  border: 5px solid var(--global-ui-ring);
+  border-radius: 0;
+  cursor: pointer;
+  padding-right: 42px;
+  transition:
+    background-color var(--global-ui-fast),
+    border-color var(--global-ui-fast),
+    color var(--global-ui-fast);
+}
+
+select:hover {
+  border-color: rgba(109, 61, 21, 0.72);
+}
+
+select:focus,
+select:focus-visible {
+  outline: 1px solid var(--global-ui-signal);
+  border-color: var(--global-ui-signal);
+}
+
+select option,
+select optgroup {
+  background: var(--global-ui-bg);
+  color: var(--global-ui-text);
+  font-family: var(--global-ui-serif);
+}
+
+select option:checked {
+  color: var(--global-ui-accent);
+}
+
+.time-panel,
+.custom-dropdown,
+.dropdown-panel,
+.dropdown-menu,
+[role="listbox"] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--global-ui-accent) var(--global-ui-bg);
+}
+
+.time-panel::-webkit-scrollbar,
+.custom-dropdown::-webkit-scrollbar,
+.dropdown-panel::-webkit-scrollbar,
+.dropdown-menu::-webkit-scrollbar,
+[role="listbox"]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.time-panel::-webkit-scrollbar-track,
+.custom-dropdown::-webkit-scrollbar-track,
+.dropdown-panel::-webkit-scrollbar-track,
+.dropdown-menu::-webkit-scrollbar-track,
+[role="listbox"]::-webkit-scrollbar-track {
+  background: var(--global-ui-bg);
+}
+
+.time-panel::-webkit-scrollbar-thumb,
+.custom-dropdown::-webkit-scrollbar-thumb,
+.dropdown-panel::-webkit-scrollbar-thumb,
+.dropdown-menu::-webkit-scrollbar-thumb,
+[role="listbox"]::-webkit-scrollbar-thumb {
+  background: var(--global-ui-accent);
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   ≤ 900 — tablet down
+   Major layouts collapse: 2-column heros, multi-column grids,
+   form layouts. Sectional spacing relaxes one notch.
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+
+  main { padding: 80px 24px 64px !important; }
+  header.top { padding: 16px 20px !important; }
+
+  /* Filter rows wrap with breathing room */
+  .filter-row {
+    gap: 18px !important;
+    row-gap: 12px !important;
+  }
+  .filter-row .chip {
+    font-size: 14px !important;
+    padding: 6px 0 !important;
+  }
+
+  /* Generic grids — drop to 2 columns */
+  .grid,
+  .work-grid,
+  .record-grid,
+  .path-grid,
+  .status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Field grids stack */
+  .field-grid {
+    grid-template-columns: 1fr !important;
+    gap: 22px !important;
+  }
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   ≤ 700 — phone
+   Intro stacks. Headers thin out. Section padding drops further.
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 700px) {
+
+  main { padding: 84px 18px 56px !important; }
+  header.top {
+    padding: 10px 16px !important;
+    min-height: 60px !important;
+    align-items: center !important;
+  }
+
+  /* ── Hero titles — readable mins ──────────────────────── */
+  .intro h1,
+  .hero-title,
+  .page-title,
+  .gate-title,
+  .series-title {
+    font-size: clamp(48px, 16vw, 84px) !important;
+    line-height: 0.92 !important;
+    letter-spacing: -0.04em !important;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* ── Intro section stacks ─────────────────────────────── */
+  .intro {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 16px !important;
+    margin-bottom: 40px !important;
+  }
+  .intro p,
+  .intro .intro-desc,
+  .intro-desc {
+    text-align: left !important;
+    padding-bottom: 0 !important;
+    max-width: 100% !important;
+    line-height: 1.55 !important;
+    font-size: 11px !important;
+    letter-spacing: 0.18em !important;
+  }
+  .intro-above {
+    margin-bottom: 4px !important;
+    font-size: 10px !important;
+    letter-spacing: 0.18em !important;
+    white-space: normal !important;
+    line-height: 1.4 !important;
+  }
+
+  /* ── Hero variant used on tattoos/index, special-projects ─ */
+  .hero {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 24px !important;
+  }
+  .hero-right,
+  .hero-left {
+    max-width: 100% !important;
+    align-items: flex-start !important;
+  }
+  .hero-desc,
+  .hero-note,
+  .hero-label {
+    text-align: left !important;
+  }
+
+  /* ── Filter rows — let them flex-wrap with comfortable touch targets ── */
+  nav.filters {
+    margin-bottom: 24px !important;
+  }
+  .filter-row {
+    gap: 16px !important;
+    row-gap: 10px !important;
+    padding-bottom: 12px !important;
+  }
+  .filter-row + .filter-row {
+    padding-top: 6px !important;
+    padding-bottom: 16px !important;
+  }
+  .filter-row .chip {
+    font-size: 13px !important;
+    padding: 8px 0 !important;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* ── Grids — 2 cols, tight gap ────────────────────────── */
+  .grid,
+  .work-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 2px !important;
+  }
+  .record-grid,
+  .path-grid,
+  .status-grid,
+  .feature-grid,
+  .media-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Section spacing ──────────────────────────────────── */
+  .section { padding: 48px 0 !important; }
+  .section-head {
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+    margin-bottom: 24px !important;
+  }
+  .section-title {
+    font-size: clamp(32px, 9vw, 56px) !important;
+    line-height: 0.94 !important;
+  }
+  .section-body,
+  .section-copy {
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+  }
+  .medium-section + .medium-section {
+    margin-top: 40px !important;
+    padding-top: 32px !important;
+  }
+
+  /* ── Hero variant titles inside tattoo flash, etc. ────── */
+  .flash-title,
+  .modal-title,
+  .modal-painting-title,
+  .selected-title {
+    font-size: clamp(26px, 7vw, 42px) !important;
+    line-height: 0.95 !important;
+  }
+
+  /* ── Ledger rows (tattoos/index) stack ────────────────── */
+  .ledger-row {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    padding: 24px 0 !important;
+  }
+  .ledger-status,
+  .ledger-action {
+    grid-column: auto !important;
+  }
+  .ledger-title {
+    font-size: clamp(24px, 6vw, 36px) !important;
+  }
+
+  /* ── Booking / form layouts ───────────────────────────── */
+  .layout,
+  .editorial-field,
+  .ritual,
+  .price-fit,
+  .booking-cta {
+    grid-template-columns: 1fr !important;
+    gap: 32px !important;
+  }
+  .ritual-intro { position: static !important; }
+  .side-notes {
+    border-left: none !important;
+    padding-left: 0 !important;
+    border-top: 5px solid var(--ring-faint, rgba(109,61,21,0.18)) !important;
+    padding-top: 24px !important;
+  }
+
+  /* ── Path step list — vertical timeline ───────────────── */
+  .path-step {
+    grid-template-columns: 48px minmax(0,1fr) !important;
+    gap: 16px !important;
+  }
+  .path-list::before { left: 23px !important; }
+  .path-mark {
+    width: 48px !important;
+    height: 48px !important;
+    font-size: 16px !important;
+  }
+
+  /* ── Footer stacks ───────────────────────────────────── */
+  footer.bottom,
+  .footer {
+    flex-direction: column !important;
+    gap: 14px !important;
+    align-items: flex-start !important;
+    padding: 32px 18px !important;
+  }
+  footer.bottom p,
+  footer.bottom a,
+  .footer p,
+  .footer a {
+    font-size: 10px !important;
+    letter-spacing: 0.18em !important;
+  }
+
+  /* ── Forms — comfortable touch targets ────────────────── */
+  .form-panel {
+    padding: 24px 0 32px !important;
+  }
+  .field input,
+  .field textarea,
+  .field select,
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="number"],
+  input[type="date"],
+  textarea,
+  select {
+    font-size: 16px !important;     /* prevents iOS zoom on focus */
+    min-height: 44px !important;
+    padding: 10px 12px !important;
+  }
+  select { padding-right: 42px !important; }
+  textarea { min-height: 96px !important; }
+
+  /* Submit / primary buttons floor */
+  button[type="submit"],
+  .btn,
+  .submit-btn,
+  .checkout-btn,
+  .primary-btn,
+  .booking-cta-action,
+  .nav-inquire,
+  .section-portfolio-link {
+    min-height: 44px;
+  }
+
+  /* ── Breadcrumb readability ───────────────────────────── */
+  .breadcrumb {
+    font-size: 10px !important;
+    letter-spacing: 0.16em !important;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* ── Overlay (work overlay, modal) ────────────────────── */
+  .overlay-inner {
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+    padding: 64px 16px 32px !important;
+  }
+  .overlay-image-wrap {
+    height: 55vw !important;
+    min-height: 180px !important;
+    max-height: 320px !important;
+  }
+  .overlay-title { font-size: clamp(28px, 7vw, 46px) !important; }
+
+  /* ── Timeline items ───────────────────────────────────── */
+  .timeline-item {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   ≤ 380 — small phone (iPhone SE, etc.)
+   Tighten a notch further. Headlines drop another step.
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 380px) {
+
+  main { padding: 78px 14px 48px !important; }
+  header.top { padding: 8px 12px !important; min-height: 56px !important; }
+
+  .intro h1,
+  .hero-title,
+  .page-title,
+  .gate-title,
+  .series-title {
+    font-size: clamp(40px, 14vw, 64px) !important;
+  }
+
+  .grid,
+  .work-grid {
+    grid-template-columns: 1fr !important;
+    gap: 3px !important;
+  }
+
+  .section-title {
+    font-size: clamp(28px, 8vw, 44px) !important;
+  }
+
+  .filter-row {
+    gap: 14px !important;
+  }
+}
