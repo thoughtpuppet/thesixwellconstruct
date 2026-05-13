@@ -33,6 +33,7 @@ const checkRoutes = [
   ["/writings/", 404],
   ["/archive/", 404],
   ["/tattoos/", 200],
+  ["/tattoos/special-projects/", 200],
   ["/merch/", 200],
   ["/art/", 200],
   ["/js/live-text-editor.js", 200],
