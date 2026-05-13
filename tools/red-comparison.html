@@ -181,11 +181,12 @@
 
 <script>
 const colors = [
-  { hex: "#8F231D", label: "Original",   rgb: "143,35,29"  },
-  { hex: "#950606", label: "Current",    rgb: "149,6,6"    },
-  { hex: "#960A0A", label: "Option A",   rgb: "150,10,10"  },
-  { hex: "#8E0707", label: "Option B",   rgb: "142,7,7"    },
-  { hex: "#920D0D", label: "Option C",   rgb: "146,13,13"  },
+  { hex: "#7A1010", label: "Current",          note: "clean / sharp",        rgb: "149,6,6"    },
+  { hex: "#7A1010", label: "Warmer A",          note: "brick · warmer",       rgb: "122,16,16"  },
+  { hex: "#821515", label: "Warmer B",          note: "brick · mid",          rgb: "130,21,21"  },
+  { hex: "#6E0404", label: "Deeper",            note: "dark · quiet",         rgb: "110,4,4"    },
+  { hex: "#8A2020", label: "Desaturated",       note: "dried blood · softer", rgb: "138,32,32"  },
+  { hex: "#8F231D", label: "Original",          note: "warm brick · old",     rgb: "143,35,29"  },
 ];
 
 const grid = document.getElementById("grid");
@@ -201,7 +202,10 @@ colors.forEach(c => {
     <!-- meta -->
     <div class="swatch-meta">
       <span class="swatch-hex" style="color:${c.hex};">${c.hex}</span>
-      <span class="swatch-tag">${c.label}</span>
+      <div style="text-align:right;">
+        <span class="swatch-tag" style="display:block;">${c.label}</span>
+        <span class="swatch-tag" style="opacity:0.5;font-weight:400;letter-spacing:0.08em;text-transform:none;">${c.note}</span>
+      </div>
     </div>
 
     <!-- big title like Flash. or Build. -->

@@ -32,7 +32,7 @@
      url:   destination when dot is clicked
   ────────────────────────────────────────────────────────── */
   var VENTURES = [
-    { key: 'tattooing', label: 'TATTOOING',  color: '#950606', url: '/tattoos/'   },
+    { key: 'tattooing', label: 'TATTOOING',  color: '#7A1010', url: '/tattoos/'   },
     { key: 'art',       label: 'ART MAKING', color: '#0581C1', url: '/art/'       },
     { key: 'merch',     label: 'MERCH',      color: '#F7A226', url: '/merch/'     },
     { key: 'about',     label: 'ABOUT',      color: '#FCB867', url: '/about/'     },

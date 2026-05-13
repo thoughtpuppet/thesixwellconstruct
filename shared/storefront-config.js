@@ -13,7 +13,7 @@ export const SOURCES = {
   },
   "art.pill": {
     label: "art.pill Tattoo Supply",
-    color: "#950606",
+    color: "#7A1010",
     statement: "materials behind the marks",
   },
 };
