@@ -237,12 +237,30 @@
     var w = window.innerWidth;
 
     if (w < MOBILE_BP) {
-      var ringRight = w < TINY_BP ? 68 : 72;
-      var cartWidth = w < TINY_BP ? 75 : 85;
-      var cartLeft  = w - cartWidth - (w < TINY_BP ? 12 : 16);
+      var corner = document.getElementById('construct-corner');
+      var cornerRect = corner ? corner.getBoundingClientRect() : null;
+      var ringRight = cornerRect ? cornerRect.right : (w < TINY_BP ? 68 : 72);
 
-      var availableWidth = cartLeft - ringRight;
-      var centerX        = ringRight + (availableWidth / 2);
+      var rightControls = Array.prototype.slice.call(document.querySelectorAll(
+        'header.top .cart-toggle, header.top .nav-inquire'
+      ));
+      var header = document.querySelector('header.top');
+      if (!rightControls.length && header) {
+        rightControls = Array.prototype.slice.call(header.querySelectorAll('a, button'));
+      }
+
+      var rightControlLeft = w - (w < TINY_BP ? 12 : 16);
+      rightControls.forEach(function(control) {
+        var rect = control.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          rightControlLeft = Math.min(rightControlLeft, rect.left);
+        }
+      });
+
+      var leftBoundary = ringRight + (w < TINY_BP ? 8 : 10);
+      var rightBoundary = rightControlLeft - (w < TINY_BP ? 8 : 10);
+      var availableWidth = Math.max(88, rightBoundary - leftBoundary);
+      var centerX        = leftBoundary + (availableWidth / 2);
 
       nav.style.position       = 'fixed';
       nav.style.top            = '30px';
@@ -252,12 +270,15 @@
       nav.style.maxWidth       = (availableWidth - 20) + 'px';
       nav.style.flexWrap       = 'wrap';
 
-      var dotSize = w < TINY_BP ? 12 : 13;
+      var dotSize = w < TINY_BP ? 10 : 12;
 
-      // Calculate gap so all 9 dots always fit on one line — no wrap ever
-      var usableWidth = availableWidth - 16;
+      // Calculate gap so all 9 dots fit between the real left ring and right CTA.
+      var usableWidth = availableWidth - 8;
+      if (usableWidth < dotSize * 9 + 4 * 8) {
+        dotSize = Math.max(8, Math.floor((usableWidth - 4 * 8) / 9));
+      }
       var maxGap = Math.floor((usableWidth - dotSize * 9) / 8);
-      var gapSize = Math.max(4, Math.min(maxGap, w < TINY_BP ? 9 : 11));
+      var gapSize = Math.max(3, Math.min(maxGap, w < TINY_BP ? 8 : 10));
 
       nav.style.gap     = gapSize + 'px';
       nav.style.flexWrap = 'nowrap';
