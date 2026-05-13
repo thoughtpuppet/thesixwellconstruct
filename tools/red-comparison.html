@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Red Comparison · art.pill</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --ring-faint: rgba(109,61,21,0.18);
+    --ring-soft: rgba(109,61,21,0.4);
+    --accent: #FCB867;
+    --text: #FFE7CA;
+    --text-mute: rgba(255,231,202,0.6);
+    --text-dim: rgba(255,231,202,0.35);
+    --sans: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    --serif: Georgia, 'Times New Roman', Times, serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--serif); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+  .page-header {
+    padding: 32px 24px 24px;
+    border-bottom: 1px solid var(--ring-faint);
+    margin-bottom: 32px;
+  }
+  .page-header h1 {
+    font-family: var(--sans);
+    font-weight: 900;
+    font-size: 13px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .page-header p {
+    font-size: 13px;
+    color: var(--text-mute);
+    line-height: 1.6;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 2px;
+    padding: 0 2px 2px;
+  }
+
+  .swatch {
+    background: #111;
+    padding: 28px 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Color label at top */
+  .swatch-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--ring-faint);
+  }
+  .swatch-hex {
+    font-family: var(--sans);
+    font-weight: 900;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+  }
+  .swatch-tag {
+    font-family: var(--sans);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* Simulated UI elements */
+  .ui-title {
+    font-family: var(--sans);
+    font-weight: 900;
+    font-size: clamp(42px, 10vw, 64px);
+    letter-spacing: -0.05em;
+    line-height: 0.88;
+    text-transform: uppercase;
+  }
+
+  .ui-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .ui-label {
+    font-family: var(--sans);
+    font-weight: 900;
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.68;
+  }
+
+  .ui-btn {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border-width: 5px;
+    border-style: solid;
+    background: transparent;
+    cursor: default;
+  }
+
+  .ui-dot-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ui-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .ui-chip-label {
+    font-family: var(--sans);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    position: relative;
+  }
+  .ui-chip-label::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    width: 100%;
+    height: 2px;
+  }
+
+  .ui-body {
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text-mute);
+  }
+
+  .ui-divider {
+    border: none;
+    border-top: 5px solid var(--ring-faint);
+  }
+
+  /* Dot swatch strip */
+  .dot-strip {
+    width: 100%;
+    height: 6px;
+    border-radius: 2px;
+  }
+
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    .page-header { padding: 24px 18px 18px; }
+    .swatch { padding: 22px 18px 26px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Red Comparison · art.pill tattoo</h1>
+  <p>Each column shows the same UI elements in a different red. Scroll to compare.</p>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const colors = [
+  { hex: "#8F231D", label: "Original",   rgb: "143,35,29"  },
+  { hex: "#950606", label: "Current",    rgb: "149,6,6"    },
+  { hex: "#960A0A", label: "Option A",   rgb: "150,10,10"  },
+  { hex: "#8E0707", label: "Option B",   rgb: "142,7,7"    },
+  { hex: "#920D0D", label: "Option C",   rgb: "146,13,13"  },
+];
+
+const grid = document.getElementById("grid");
+
+colors.forEach(c => {
+  const col = document.createElement("div");
+  col.className = "swatch";
+
+  col.innerHTML = `
+    <!-- dot strip -->
+    <div class="dot-strip" style="background:${c.hex};"></div>
+
+    <!-- meta -->
+    <div class="swatch-meta">
+      <span class="swatch-hex" style="color:${c.hex};">${c.hex}</span>
+      <span class="swatch-tag">${c.label}</span>
+    </div>
+
+    <!-- big title like Flash. or Build. -->
+    <div class="ui-title" style="color:${c.hex};">Flash.</div>
+
+    <!-- section label -->
+    <div class="ui-label" style="color:${c.hex};">Flash Series · art.pill</div>
+
+    <hr class="ui-divider">
+
+    <!-- filter chip with dot + underline -->
+    <div class="ui-dot-row">
+      <div class="ui-dot" style="background:${c.hex};"></div>
+      <span class="ui-chip-label">
+        series
+        <span style="position:absolute;left:0;bottom:-2px;width:100%;height:2px;background:${c.hex};display:block;"></span>
+      </span>
+    </div>
+
+    <!-- inquire button -->
+    <div class="ui-row">
+      <div class="ui-btn" style="color:${c.hex}; border-color:rgba(${c.rgb},0.45);">Claim Flash</div>
+      <div class="ui-btn" style="color:${c.hex}; border-color:rgba(${c.rgb},0.45);">Inquire</div>
+    </div>
+
+    <hr class="ui-divider">
+
+    <!-- body text context -->
+    <p class="ui-body">Original pre-drawn designs, flash sheets, symbolic alphabets, MAZE studies, and standalone pieces.</p>
+
+    <!-- pill -->
+    <div class="ui-row">
+      <div style="display:inline-flex;align-items:center;border:5px solid rgba(${c.rgb},0.45);background:rgba(${c.rgb},0.08);padding:0 8px;min-height:22px;font-family:var(--sans);font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:${c.hex};">Placed</div>
+      <div style="display:inline-flex;align-items:center;border:5px solid rgba(255,231,202,0.28);background:rgba(14,14,14,0.55);padding:0 8px;min-height:22px;font-family:var(--sans);font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text);">Available</div>
+    </div>
+  `;
+
+  grid.appendChild(col);
+});
+</script>
+</body>
+</html>
