@@ -21,6 +21,9 @@ const HIDDEN_PUBLIC_PATHS = [
   "/writings"
 ];
 
+const HIDE_PUBLIC_PAGES_EXCEPT_HOME = true;
+const PUBLIC_HOME_PATHS = new Set(["/", "/index.html"]);
+
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
 }
@@ -84,6 +87,26 @@ function isHiddenPublicPath(pathname) {
       normalizedPath.startsWith(`${normalizedHidden}/`)
     );
   });
+}
+
+function hasFileExtension(pathname) {
+  return /\/[^/]+\.[^/]+$/.test(pathname);
+}
+
+function isPublicPagePath(pathname) {
+  const normalizedPath = normalizePath(pathname);
+  return (
+    PUBLIC_HOME_PATHS.has(pathname) ||
+    normalizedPath === "/404" ||
+    pathname.endsWith(".html") ||
+    !hasFileExtension(pathname)
+  );
+}
+
+function isHiddenByHomeOnlyMode(pathname) {
+  if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
+  if (PUBLIC_HOME_PATHS.has(pathname)) return false;
+  return isPublicPagePath(pathname);
 }
 
 function lineInputs(lines = []) {
@@ -258,7 +281,10 @@ export default {
       return notFoundPage(request, env);
     }
 
-    if (!isLocalPreview(url) && isHiddenPublicPath(url.pathname)) {
+    if (
+      !isLocalPreview(url) &&
+      (isHiddenPublicPath(url.pathname) || isHiddenByHomeOnlyMode(url.pathname))
+    ) {
       return notFoundPage(request, env);
     }
 

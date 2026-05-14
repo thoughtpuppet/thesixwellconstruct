@@ -181,12 +181,13 @@
     <p class="meta">local-only controls for hiding or restoring deployed public pages.</p>
   </header>
 
-  <p class="unsupported">This tool needs Chrome or Edge on localhost so it can write the visibility file after you choose the site folder.</p>
+  <p class="unsupported">This tool needs the local dev server, or Chrome/Edge on localhost so it can write files after you choose the site folder.</p>
 
   <div class="toolbar">
     <div class="actions">
       <button class="primary" id="chooseFolder" type="button">Choose site folder</button>
       <button id="reloadState" type="button">Reload</button>
+      <button id="hideAllExceptHome" class="danger" type="button">Hide all except home</button>
       <button id="showAll" class="safe" type="button">Show all pages</button>
     </div>
     <p class="status" id="status">Choose the site folder to begin.</p>
@@ -200,6 +201,7 @@ const WORKER_PATH = ["_worker.js"];
 const NOT_FOUND_PATH = ["404.html"];
 const BACKUP_ROOT = ".hidden-pages";
 const WORKER_LIST_PATTERN = /const HIDDEN_PUBLIC_PATHS = \[[\s\S]*?\];/;
+const HOME_ONLY_PATTERN = /const HIDE_PUBLIC_PAGES_EXCEPT_HOME = (true|false);/;
 const DEFAULT_HIDDEN_PUBLIC_PATHS = [
   "/about",
   "/archive",
@@ -241,22 +243,22 @@ const pages = [
 ];
 
 const state = {
+  backend: null,
   folderHandle: null,
-  hiddenPaths: new Set(DEFAULT_HIDDEN_PUBLIC_PATHS.map(normalizePath))
+  hiddenPaths: new Set(DEFAULT_HIDDEN_PUBLIC_PATHS.map(normalizePath)),
+  homeOnly: false
 };
 
 const els = {
   chooseFolder: document.querySelector("#chooseFolder"),
   reloadState: document.querySelector("#reloadState"),
+  hideAllExceptHome: document.querySelector("#hideAllExceptHome"),
   showAll: document.querySelector("#showAll"),
   status: document.querySelector("#status"),
   pageGrid: document.querySelector("#pageGrid")
 };
 
-if (!("showDirectoryPicker" in window)) {
-  document.body.classList.add("no-file-system");
-  els.chooseFolder.disabled = true;
-}
+if (!("showDirectoryPicker" in window)) els.chooseFolder.disabled = true;
 
 function normalizePath(path) {
   let normalized = path || "/";
@@ -279,6 +281,36 @@ function serializeVisibility() {
   return `const HIDDEN_PUBLIC_PATHS = ${JSON.stringify(paths, null, 2)};`;
 }
 
+async function callToolApi(endpoint, body) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.error || `Tool helper failed with ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+async function connectLocalHelper() {
+  try {
+    await callToolApi("/__tools/read-file", { pathSegments: WORKER_PATH });
+    state.backend = "helper";
+    document.body.classList.remove("no-file-system");
+    els.chooseFolder.textContent = "Using local helper";
+    els.chooseFolder.disabled = true;
+    await loadVisibilityState();
+    setStatus("Connected to the local helper. Changes save directly on this Mac.");
+    render();
+  } catch {
+    if (!("showDirectoryPicker" in window)) document.body.classList.add("no-file-system");
+  }
+}
+
 async function getFileHandle(pathSegments, options = {}) {
   if (!state.folderHandle) throw new Error("Choose the site folder first.");
   let current = state.folderHandle;
@@ -289,6 +321,10 @@ async function getFileHandle(pathSegments, options = {}) {
 }
 
 async function readFile(pathSegments, options = {}) {
+  if (state.backend === "helper") {
+    const data = await callToolApi("/__tools/read-file", { pathSegments });
+    return data.content;
+  }
   const fileHandle = await getFileHandle(pathSegments, options);
   const file = await fileHandle.getFile();
   return file.text();
@@ -298,12 +334,20 @@ async function readOptionalFile(pathSegments) {
   try {
     return await readFile(pathSegments);
   } catch (error) {
-    if (error.name === "NotFoundError") return null;
+    if (error.name === "NotFoundError" || error.status === 404) return null;
     throw error;
   }
 }
 
 async function writeFile(pathSegments, content, options = {}) {
+  if (state.backend === "helper") {
+    await callToolApi("/__tools/write-file", {
+      pathSegments,
+      content,
+      createDirs: Boolean(options.createDirs)
+    });
+    return;
+  }
   const fileHandle = await getFileHandle(pathSegments, { create: true, createDirs: options.createDirs });
   const writable = await fileHandle.createWritable();
   await writable.write(content);
@@ -347,7 +391,11 @@ function updateWorker(content) {
   if (!WORKER_LIST_PATTERN.test(content)) {
     throw new Error("_worker.js is missing the HIDDEN_PUBLIC_PATHS list.");
   }
-  return content.replace(WORKER_LIST_PATTERN, serializeVisibility());
+  let next = content.replace(WORKER_LIST_PATTERN, serializeVisibility());
+  if (HOME_ONLY_PATTERN.test(next)) {
+    next = next.replace(HOME_ONLY_PATTERN, `const HIDE_PUBLIC_PAGES_EXCEPT_HOME = ${state.homeOnly};`);
+  }
+  return next;
 }
 
 function parseWorkerVisibility(content) {
@@ -364,10 +412,16 @@ function parseWorkerVisibility(content) {
   }
 }
 
+function parseHomeOnlyMode(content) {
+  const match = content.match(HOME_ONLY_PATTERN);
+  return match ? match[1] === "true" : false;
+}
+
 async function loadVisibilityState() {
   const worker = await readFile(WORKER_PATH);
   const parsed = parseWorkerVisibility(worker);
   if (parsed) state.hiddenPaths = parsed;
+  state.homeOnly = parseHomeOnlyMode(worker);
 }
 
 async function writeVisibilityFile() {
@@ -383,9 +437,12 @@ async function saveAndRender(message) {
 
 function render() {
   els.pageGrid.innerHTML = "";
+  els.hideAllExceptHome.disabled = state.homeOnly;
+  els.hideAllExceptHome.textContent = state.homeOnly ? "Home-only mode on" : "Hide all except home";
   pages.forEach((page) => {
     const path = normalizePath(page.path);
-    const isHidden = state.hiddenPaths.has(path);
+    const isHome = path === "/";
+    const isHidden = !isHome && (state.homeOnly || state.hiddenPaths.has(path));
     const card = document.createElement("article");
     card.className = `page-card${isHidden ? " hidden" : ""}`;
     card.innerHTML = `
@@ -400,6 +457,7 @@ function render() {
     `;
     card.querySelector(".label").textContent = page.label;
     card.querySelector(".path").textContent = displayPath(path);
+    if (isHome) card.querySelector("button").disabled = true;
     card.querySelector("button").addEventListener("click", async () => {
       if (isHidden) {
         await restorePageFile(path);
@@ -417,6 +475,7 @@ function render() {
 
 async function chooseFolder() {
   state.folderHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+  state.backend = "folder";
   await loadVisibilityState();
   await writeVisibilityFile();
   setStatus("Connected. Hide/show changes now save to _worker.js.");
@@ -425,17 +484,26 @@ async function chooseFolder() {
 
 async function showAllPages() {
   for (const path of Array.from(state.hiddenPaths)) {
-    await restorePageFile(path);
+    const backupContent = await readOptionalFile(backupFilePath(path));
+    if (backupContent !== null) await writeFile(pageFilePath(path), backupContent);
   }
   state.hiddenPaths.clear();
+  state.homeOnly = false;
   await saveAndRender("All pages will be public after the next deploy.");
+}
+
+async function hideAllExceptHome() {
+  state.homeOnly = true;
+  await saveAndRender("Only the home page will be public after the next deploy.");
 }
 
 els.chooseFolder.addEventListener("click", () => chooseFolder().catch((error) => setStatus(error.message)));
 els.reloadState.addEventListener("click", () => window.location.reload());
+els.hideAllExceptHome.addEventListener("click", () => hideAllExceptHome().catch((error) => setStatus(error.message)));
 els.showAll.addEventListener("click", () => showAllPages().catch((error) => setStatus(error.message)));
 
 render();
+connectLocalHelper();
 </script>
 </body>
 </html>

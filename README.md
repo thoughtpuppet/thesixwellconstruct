@@ -80,6 +80,10 @@ site folder when the browser asks, then use the Hide/Show buttons. The tool
 updates `_worker.js` and swaps the selected page files with the local 404
 fallback.
 
+On Mac, run `node tools/dev-server.mjs` and open `/page-visibility`. The local
+helper built into the dev server lets the tool save changes directly without
+using the browser folder picker.
+
 Hidden page source files are saved under `.hidden-pages/`, while the deployed
 Worker returns a 404 for those paths on the public site. Commit and push the
 updated visibility files for the change to go live.

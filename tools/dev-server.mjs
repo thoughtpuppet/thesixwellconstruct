@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,15 +27,16 @@ const checkRoutes = [
   ["/", 200],
   ["/edit-links.html", 200],
   ["/edit-links", 200],
+  ["/page-visibility", 200],
   ["/events/", 404],
   ["/music/", 404],
   ["/film/", 404],
   ["/writings/", 404],
   ["/archive/", 404],
-  ["/tattoos/", 200],
-  ["/tattoos/special-projects/", 200],
-  ["/merch/", 200],
-  ["/art/", 200],
+  ["/tattoos/", 404],
+  ["/tattoos/special-projects/", 404],
+  ["/merch/", 404],
+  ["/art/", 404],
   ["/js/live-text-editor.js", 200],
 ];
 
@@ -43,6 +44,9 @@ const localOnlyRoutes = new Map([
   ["/edit-links", "tools/edit-links.html"],
   ["/edit-links/", "tools/edit-links.html"],
   ["/edit-links.html", "tools/edit-links.html"],
+  ["/page-visibility", "tools/page-visibility.html"],
+  ["/page-visibility/", "tools/page-visibility.html"],
+  ["/page-visibility.html", "tools/page-visibility.html"],
   ["/js/live-text-editor.js", "tools/live-text-editor.js"],
 ]);
 
@@ -54,6 +58,8 @@ const hiddenPublicPaths = new Set([
   "/music",
   "/writings",
 ]);
+const hidePublicPagesExceptHome = true;
+const publicHomePaths = new Set(["/", "/index.html"]);
 
 function normalizeRoute(urlPath) {
   let normalized = decodeURIComponent(urlPath.split("?")[0].split("#")[0]) || "/";
@@ -63,7 +69,36 @@ function normalizeRoute(urlPath) {
   return normalized || "/";
 }
 
+function hasFileExtension(urlPath) {
+  return /\/[^/]+\.[^/]+$/.test(urlPath.split("?")[0].split("#")[0]);
+}
+
+function isLocalOnlyRoute(urlPath) {
+  const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
+  return localOnlyRoutes.has(decoded) || decoded.startsWith("/tools/");
+}
+
+function isPublicPageRoute(urlPath) {
+  const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
+  const normalized = normalizeRoute(urlPath);
+  return (
+    publicHomePaths.has(decoded) ||
+    normalized === "/404" ||
+    decoded.endsWith(".html") ||
+    !hasFileExtension(decoded)
+  );
+}
+
+function isHiddenByHomeOnlyMode(urlPath) {
+  if (!hidePublicPagesExceptHome) return false;
+  const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
+  if (publicHomePaths.has(decoded)) return false;
+  if (isLocalOnlyRoute(urlPath)) return false;
+  return isPublicPageRoute(urlPath);
+}
+
 function isHiddenPublicRoute(urlPath) {
+  if (isHiddenByHomeOnlyMode(urlPath)) return true;
   const normalized = normalizeRoute(urlPath);
   for (const hiddenPath of hiddenPublicPaths) {
     if (normalized === hiddenPath || normalized.startsWith(`${hiddenPath}/`)) return true;
@@ -80,6 +115,78 @@ function safePath(urlPath) {
   const resolved = path.resolve(root, "." + clean);
   if (!resolved.startsWith(root)) return null;
   return resolved;
+}
+
+function safeToolPath(pathSegments) {
+  if (!Array.isArray(pathSegments) || pathSegments.length === 0) return null;
+  if (!pathSegments.every((segment) => typeof segment === "string" && segment && !segment.includes("/") && segment !== "." && segment !== "..")) {
+    return null;
+  }
+  const resolved = path.resolve(root, ...pathSegments);
+  return resolved.startsWith(root) ? resolved : null;
+}
+
+async function readJson(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  if (chunks.length === 0) return {};
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+async function handleToolApi(req, res) {
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json; charset=utf-8", "Allow": "POST" });
+    res.end(JSON.stringify({ error: "Method not allowed." }));
+    return true;
+  }
+
+  let body;
+  try {
+    body = await readJson(req);
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: "Invalid JSON." }));
+    return true;
+  }
+
+  const filePath = safeToolPath(body.pathSegments);
+  if (!filePath) {
+    res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: "Invalid file path." }));
+    return true;
+  }
+
+  if (req.url === "/__tools/read-file") {
+    try {
+      const content = await readFile(filePath, "utf8");
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ content }));
+    } catch (error) {
+      res.writeHead(error.code === "ENOENT" ? 404 : 500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ error: error.code === "ENOENT" ? "Not found." : error.message }));
+    }
+    return true;
+  }
+
+  if (req.url === "/__tools/write-file") {
+    if (typeof body.content !== "string") {
+      res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ error: "Missing file content." }));
+      return true;
+    }
+    try {
+      if (body.createDirs) await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, body.content, "utf8");
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (error) {
+      res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+    return true;
+  }
+
+  return false;
 }
 
 async function resolveFile(urlPath) {
@@ -104,6 +211,10 @@ async function resolveFile(urlPath) {
 const showHidden = process.argv.includes("--show-hidden");
 
 const server = createServer(async (req, res) => {
+  if ((req.url || "").startsWith("/__tools/") && await handleToolApi(req, res)) {
+    return;
+  }
+
   if (!showHidden && isHiddenPublicRoute(req.url || "/")) {
     res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
     createReadStream(path.resolve(root, "404.html")).pipe(res);
