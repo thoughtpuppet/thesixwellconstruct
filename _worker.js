@@ -23,6 +23,7 @@ const HIDDEN_PUBLIC_PATHS = [
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = true;
 const PUBLIC_HOME_PATHS = new Set(["/", "/index.html"]);
+const PUBLIC_ERROR_PATHS = new Set(["/404", "/404.html"]);
 
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
@@ -37,6 +38,10 @@ async function notFoundPage(request, env) {
     status: 404,
     headers: response.headers,
   });
+}
+
+function redirectToNotFoundPage(request) {
+  return Response.redirect(new URL("/404.html", request.url), 302);
 }
 
 function methodNotAllowed(method, allowed) {
@@ -106,6 +111,9 @@ function isPublicPagePath(pathname) {
 function isHiddenByHomeOnlyMode(pathname) {
   if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
   if (PUBLIC_HOME_PATHS.has(pathname)) return false;
+  if (PUBLIC_ERROR_PATHS.has(normalizePath(pathname)) || PUBLIC_ERROR_PATHS.has(pathname)) {
+    return false;
+  }
   return isPublicPagePath(pathname);
 }
 
@@ -289,7 +297,7 @@ export default {
       !isLocalOnlyPath(url.pathname) &&
       (isHiddenPublicPath(url.pathname) || isHiddenByHomeOnlyMode(url.pathname))
     ) {
-      return notFoundPage(request, env);
+      return redirectToNotFoundPage(request);
     }
 
     return env.ASSETS.fetch(request);

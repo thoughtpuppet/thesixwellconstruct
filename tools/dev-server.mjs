@@ -60,6 +60,7 @@ const hiddenPublicPaths = new Set([
 ]);
 const hidePublicPagesExceptHome = true;
 const publicHomePaths = new Set(["/", "/index.html"]);
+const publicErrorPaths = new Set(["/404", "/404.html"]);
 
 function normalizeRoute(urlPath) {
   let normalized = decodeURIComponent(urlPath.split("?")[0].split("#")[0]) || "/";
@@ -93,6 +94,7 @@ function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
   if (publicHomePaths.has(decoded)) return false;
+  if (publicErrorPaths.has(decoded) || publicErrorPaths.has(normalizeRoute(urlPath))) return false;
   if (decoded.startsWith("/api/")) return false;
   if (isLocalOnlyRoute(urlPath)) return false;
   return isPublicPageRoute(urlPath);
@@ -217,8 +219,8 @@ const server = createServer(async (req, res) => {
   }
 
   if (!showHidden && isHiddenPublicRoute(req.url || "/")) {
-    res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
-    createReadStream(path.resolve(root, "404.html")).pipe(res);
+    res.writeHead(302, { "Location": "/404.html" });
+    res.end();
     return;
   }
 
