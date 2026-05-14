@@ -44,6 +44,17 @@ function redirectToNotFoundPage(request) {
   return Response.redirect(new URL("/404.html", request.url), 302);
 }
 
+function assetRequest(request, pathname) {
+  const url = new URL(request.url);
+  url.pathname = pathname;
+  url.search = "";
+  return new Request(url, request);
+}
+
+function isHomePath(pathname) {
+  return PUBLIC_HOME_PATHS.has(pathname);
+}
+
 function methodNotAllowed(method, allowed) {
   return json(
     { error: `Method ${method} not allowed.` },
@@ -291,6 +302,10 @@ export default {
 
     if (url.pathname.startsWith("/api/shop/")) {
       return handleShopApi(request, env);
+    }
+
+    if (isHomePath(url.pathname)) {
+      return env.ASSETS.fetch(assetRequest(request, "/index.html"));
     }
 
     if (
