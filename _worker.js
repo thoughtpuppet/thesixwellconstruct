@@ -281,15 +281,15 @@ export default {
       return notFoundPage(request, env);
     }
 
+    if (url.pathname.startsWith("/api/shop/")) {
+      return handleShopApi(request, env);
+    }
+
     if (
-      !isLocalPreview(url) &&
+      !isLocalOnlyPath(url.pathname) &&
       (isHiddenPublicPath(url.pathname) || isHiddenByHomeOnlyMode(url.pathname))
     ) {
       return notFoundPage(request, env);
-    }
-
-    if (url.pathname.startsWith("/api/shop/")) {
-      return handleShopApi(request, env);
     }
 
     return env.ASSETS.fetch(request);

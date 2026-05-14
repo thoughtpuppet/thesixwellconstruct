@@ -93,6 +93,7 @@ function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
   if (publicHomePaths.has(decoded)) return false;
+  if (decoded.startsWith("/api/")) return false;
   if (isLocalOnlyRoute(urlPath)) return false;
   return isPublicPageRoute(urlPath);
 }
