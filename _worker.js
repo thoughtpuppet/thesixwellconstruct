@@ -12,18 +12,13 @@ import {
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
 
-const HIDDEN_PUBLIC_PATHS = [
-  "/about",
-  "/archive",
-  "/events",
-  "/film",
-  "/music",
-  "/writings"
-];
+const HIDDEN_PUBLIC_PATHS = [];
 
-const HIDE_PUBLIC_PAGES_EXCEPT_HOME = true;
+const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_HOME_PATHS = new Set(["/", "/index.html"]);
 const PUBLIC_ERROR_PATHS = new Set(["/404", "/404.html"]);
+const PUBLIC_ARCHIVE_PATHS = new Set(["/archive", "/archive/", "/archive/index.html"]);
+const PUBLIC_CONSTRUCT_MAP_PATHS = new Set(["/construct-map", "/construct-map/", "/construct-map/index.html"]);
 
 function notFound(message = "Not found.") {
   return json({ error: message }, { status: 404 });
@@ -121,8 +116,11 @@ function isPublicPagePath(pathname) {
 
 function isHiddenByHomeOnlyMode(pathname) {
   if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
+  const normalizedPath = normalizePath(pathname);
   if (PUBLIC_HOME_PATHS.has(pathname)) return false;
-  if (PUBLIC_ERROR_PATHS.has(normalizePath(pathname)) || PUBLIC_ERROR_PATHS.has(pathname)) {
+  if (PUBLIC_ARCHIVE_PATHS.has(pathname) || normalizedPath === "/archive") return false;
+  if (PUBLIC_CONSTRUCT_MAP_PATHS.has(pathname) || normalizedPath === "/construct-map") return false;
+  if (PUBLIC_ERROR_PATHS.has(normalizedPath) || PUBLIC_ERROR_PATHS.has(pathname)) {
     return false;
   }
   return isPublicPagePath(pathname);

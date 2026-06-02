@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>architecture · the six.well construct</title>
+
+<!-- 
+  ============================================================
+  construct architecture — distributed sub-brand map
+  ============================================================
+  visual reference showing which sub-brands live under which
+  ventures in the distributed model.
+  
+  current distributed assignments:
+    MERCH  → six.well       (inherits #F7A226 orange)
+    ART    → thoughtpuppet  (inherits #0581C1 blue)
+  
+  remaining 7 ventures: no sub-brands shown (plenty of room 
+  to add them as the ecosystem grows)
+  ============================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg:         #0e0e0e;
+    --accent:     #FCB867;
+    --ring:       #6D3D15;
+    --text-mute:  rgba(252, 184, 103, 0.55);
+    --text-dim:   rgba(252, 184, 103, 0.30);
+    --sans:  'Inter', 'Helvetica Neue', Arial, sans-serif;
+    --serif: 'Times New Roman', Times, serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--accent);
+    font-family: var(--sans);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 64px 40px;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 40px;
+    margin-bottom: 48px;
+    border-bottom: 1px solid rgba(109, 61, 21, 0.18);
+  }
+
+  .wordmark {
+    font-family: var(--sans);
+    font-weight: 900;
+    font-size: 18px;
+    letter-spacing: -0.05em;
+    color: var(--accent);
+    opacity: 0.82;
+  }
+
+  .meta {
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-family: var(--sans);
+    font-weight: 900;
+    font-size: clamp(48px, 8vw, 96px);
+    letter-spacing: -0.05em;
+    line-height: 0.92;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  .subtitle {
+    font-family: var(--serif);
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-mute);
+    max-width: 520px;
+    margin-bottom: 80px;
+  }
+
+  /* diagram container — keep aspect ratio square-ish for the orbit */
+  .diagram-wrap {
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto 80px;
+  }
+
+  svg.diagram { width: 100%; height: auto; display: block; }
+
+  /* ============================================================ legend below diagram ============================================================ */
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 32px 48px;
+    padding-top: 40px;
+    border-top: 1px solid rgba(109, 61, 21, 0.18);
+  }
+
+  .legend-item {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  .legend-info { display: flex; flex-direction: column; gap: 4px; }
+
+  .legend-name {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .legend-sub {
+    font-family: var(--serif);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: var(--text-mute);
+  }
+
+  .legend-role {
+    font-family: var(--serif);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 640px) {
+    .page { padding: 40px 24px; }
+    .header { flex-direction: column; gap: 8px; align-items: flex-start; }
+    .legend { grid-template-columns: 1fr; gap: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <span class="wordmark">the six.well construct</span>
+    <span class="meta">architecture map · v1</span>
+  </header>
+
+  <h1>distributed.</h1>
+  <p class="subtitle">
+    Nine ventures radiate from the construct. Sub-brands live under the
+    venture that conceptually owns them — inheriting that venture's color
+    as structural signal. Scroll below for the legend.
+  </p>
+
+  <div class="diagram-wrap">
+
+    <!-- 
+      ====================================================
+      SVG DIAGRAM
+      center (340, 290). 9 ventures at radius 135.
+      sub-brands at radius 220 from center, along parent angle.
+      ====================================================
+    -->
+    <svg class="diagram" viewBox="0 0 680 600" xmlns="http://www.w3.org/2000/svg">
+      <!-- guide ring at venture radius -->
+      <circle cx="340" cy="290" r="135" fill="none" stroke="#6D3D15" stroke-width="0.5" opacity="0.3"/>
+
+      <!-- structural spokes: center → ventures (neutral ring color) -->
+      <line x1="340" y1="290" x2="475" y2="290" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="443" y2="377" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="363" y2="423" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="272" y2="407" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="213" y2="336" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="213" y2="244" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="272" y2="173" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="363" y2="157" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="340" y1="290" x2="443" y2="203" stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+
+      <!-- inheritance lines: venture → sub-brand, in the parent's brand color -->
+      <line x1="443" y1="377" x2="508" y2="431" stroke="#0581C1" stroke-width="1.25" opacity="0.85"/>
+      <line x1="363" y1="423" x2="378" y2="507" stroke="#F7A226" stroke-width="1.25" opacity="0.85"/>
+
+      <!-- center: the construct (echoes landing's amber ring + dot) -->
+      <circle cx="340" cy="290" r="22" fill="none" stroke="#FCB867" stroke-width="0.5" opacity="0.4"/>
+      <circle cx="340" cy="290" r="14" fill="none" stroke="#FCB867" stroke-width="0.5" opacity="0.7"/>
+      <circle cx="340" cy="290" r="5" fill="#FCB867"/>
+
+      <!-- 9 venture dots (r=11) -->
+      <circle cx="475" cy="290" r="11" fill="#8F231D"/>
+      <circle cx="443" cy="377" r="11" fill="#0581C1"/>
+      <circle cx="363" cy="423" r="11" fill="#F7A226"/>
+      <circle cx="272" cy="407" r="11" fill="#FCB867"/>
+      <circle cx="213" cy="336" r="11" fill="#55BA5A"/>
+      <circle cx="213" cy="244" r="11" fill="#A856A1"/>
+      <circle cx="272" cy="173" r="11" fill="#328C84"/>
+      <circle cx="363" cy="157" r="11" fill="#EC5E26"/>
+      <circle cx="443" cy="203" r="11" fill="#FFE7CA"/>
+
+      <!-- 2 sub-brand dots (r=7, same color as parent) -->
+      <circle cx="508" cy="431" r="7" fill="#0581C1"/>
+      <circle cx="378" cy="507" r="7" fill="#F7A226"/>
+
+      <!-- center label -->
+      <text x="340" y="340" text-anchor="middle" font-family="Times New Roman, serif"
+            font-size="10" letter-spacing="3" fill="#FCB867" opacity="0.6">THE CONSTRUCT</text>
+
+      <!-- venture labels (uppercase, like the landing node labels) -->
+      <text x="494" y="295" text-anchor="start" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">TATTOOING</text>
+      <text x="462" y="382" text-anchor="start" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">ART</text>
+      <text x="363" y="450" text-anchor="middle" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">MERCH</text>
+      <text x="256" y="412" text-anchor="end" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">ABOUT</text>
+      <text x="195" y="340" text-anchor="end" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">EVENTS</text>
+      <text x="195" y="248" text-anchor="end" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">MUSIC</text>
+      <text x="256" y="177" text-anchor="end" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">WRITINGS</text>
+      <text x="363" y="135" text-anchor="middle" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">ARCHIVE</text>
+      <text x="463" y="207" text-anchor="start" font-family="Inter, sans-serif"
+            font-size="12" font-weight="900" letter-spacing="-0.05em" fill="#FCB867">FILM</text>
+
+      <!-- sub-brand labels (lowercase, Times New Roman, colored in parent's brand) -->
+      <text x="522" y="436" text-anchor="start" font-family="Times New Roman, serif"
+            font-size="13" font-style="italic" fill="#0581C1">thoughtpuppet</text>
+      <text x="378" y="533" text-anchor="middle" font-family="Times New Roman, serif"
+            font-size="13" font-style="italic" fill="#F7A226">six.well</text>
+    </svg>
+  </div>
+
+  <!-- =====================================================
+       LEGEND — venture + sub-brand roll call with colors
+  ===================================================== -->
+  <div class="legend">
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#8F231D"></span>
+      <div class="legend-info">
+        <span class="legend-name">tattooing</span>
+        <span class="legend-role">venture &middot; no sub-brand yet</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#0581C1"></span>
+      <div class="legend-info">
+        <span class="legend-name">art</span>
+        <span class="legend-sub">→ thoughtpuppet</span>
+        <span class="legend-role">painting-derived artifacts</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#F7A226"></span>
+      <div class="legend-info">
+        <span class="legend-name">merch</span>
+        <span class="legend-sub">→ six.well</span>
+        <span class="legend-role">garments &middot; non-painting-derived</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#FCB867"></span>
+      <div class="legend-info">
+        <span class="legend-name">about</span>
+        <span class="legend-role">venture</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#55BA5A"></span>
+      <div class="legend-info">
+        <span class="legend-name">events</span>
+        <span class="legend-role">venture</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#A856A1"></span>
+      <div class="legend-info">
+        <span class="legend-name">music</span>
+        <span class="legend-role">venture</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#328C84"></span>
+      <div class="legend-info">
+        <span class="legend-name">writings</span>
+        <span class="legend-role">venture</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#EC5E26"></span>
+      <div class="legend-info">
+        <span class="legend-name">archive</span>
+        <span class="legend-role">venture</span>
+      </div>
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-swatch" style="background:#FFE7CA"></span>
+      <div class="legend-info">
+        <span class="legend-name">film</span>
+        <span class="legend-role">venture</span>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>

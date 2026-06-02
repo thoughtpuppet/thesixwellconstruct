@@ -28,15 +28,17 @@ const checkRoutes = [
   ["/edit-links.html", 200],
   ["/edit-links", 200],
   ["/page-visibility", 200],
-  ["/events/", 404],
-  ["/music/", 404],
-  ["/film/", 404],
-  ["/writings/", 404],
-  ["/archive/", 404],
-  ["/tattoos/", 404],
-  ["/tattoos/special-projects/", 404],
-  ["/merch/", 404],
-  ["/art/", 404],
+  ["/about/", 302],
+  ["/construct-map/", 200],
+  ["/events/", 302],
+  ["/music/", 302],
+  ["/film/", 302],
+  ["/writings/", 302],
+  ["/archive/", 200],
+  ["/tattoos/", 302],
+  ["/tattoos/special-projects/", 302],
+  ["/merch/", 302],
+  ["/art/", 302],
   ["/js/live-text-editor.js", 200],
 ];
 
@@ -52,7 +54,6 @@ const localOnlyRoutes = new Map([
 
 const hiddenPublicPaths = new Set([
   "/about",
-  "/archive",
   "/events",
   "/film",
   "/music",
@@ -61,6 +62,8 @@ const hiddenPublicPaths = new Set([
 const hidePublicPagesExceptHome = true;
 const publicHomePaths = new Set(["/", "/index.html"]);
 const publicErrorPaths = new Set(["/404", "/404.html"]);
+const publicArchivePaths = new Set(["/archive", "/archive/", "/archive/index.html"]);
+const publicConstructMapPaths = new Set(["/construct-map", "/construct-map/", "/construct-map/index.html"]);
 
 function normalizeRoute(urlPath) {
   let normalized = decodeURIComponent(urlPath.split("?")[0].split("#")[0]) || "/";
@@ -93,8 +96,11 @@ function isPublicPageRoute(urlPath) {
 function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
+  const normalized = normalizeRoute(urlPath);
   if (publicHomePaths.has(decoded)) return false;
-  if (publicErrorPaths.has(decoded) || publicErrorPaths.has(normalizeRoute(urlPath))) return false;
+  if (publicErrorPaths.has(decoded) || publicErrorPaths.has(normalized)) return false;
+  if (publicArchivePaths.has(decoded) || normalized === "/archive") return false;
+  if (publicConstructMapPaths.has(decoded) || normalized === "/construct-map") return false;
   if (decoded.startsWith("/api/")) return false;
   if (isLocalOnlyRoute(urlPath)) return false;
   return isPublicPageRoute(urlPath);
@@ -246,13 +252,13 @@ async function runCheck() {
 
   try {
     for (const [route, expectedStatus] of checkRoutes) {
-      const response = await fetch(`http://${host}:${testPort}${route}`);
+      const response = await fetch(`http://${host}:${testPort}${route}`, { redirect: "manual" });
       console.log(`${route} ${response.status}`);
       if (response.status !== expectedStatus) failed = true;
       await response.arrayBuffer();
     }
   } finally {
-    server.close();
+    await new Promise((resolve) => server.close(resolve));
   }
 
   if (failed) process.exit(1);

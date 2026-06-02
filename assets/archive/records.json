@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-05-17T21:05:07.024Z",
+  "source": "Obsidian: The Six Well Construct/Website/Archive/Records",
+  "publish_rule": "archive_publish must be true and visibility must be public",
+  "records": [
+    {
+      "archive_id": "process-archive-frame",
+      "title": "Public Archive Frame",
+      "node": "The Six.Well Construct",
+      "record_type": "process",
+      "room": "Process",
+      "date_or_period": "2026",
+      "timeline_period": "now",
+      "summary": "The first public archive structure turns process, residue, older forms, and cross-node evidence into a browsable record layer.",
+      "body": "The archive protects the leftovers from being treated like waste. Drafts, screenshots, old labels, process images, event traces, and abandoned structures become usable record instead of noise.\n\nThis first frame defines the archive as a browser for how the work became itself. It is not the whole vault. It is a selected public layer that can point back into active nodes, finished works, and future rooms.",
+      "body_html": "<p>The archive protects the leftovers from being treated like waste. Drafts, screenshots, old labels, process images, event traces, and abandoned structures become usable record instead of noise.</p><p>This first frame defines the archive as a browser for how the work became itself. It is not the whole vault. It is a selected public layer that can point back into active nodes, finished works, and future rooms.</p>",
+      "status": "active frame",
+      "visibility": "public",
+      "assets": [
+        "/assets/paintings/IMG_8905.jpg",
+        "/assets/paintings/PAINTING%20CONTAINER.JPG"
+      ],
+      "related_notes": [
+        "[[Website/Archive/README]]"
+      ],
+      "related_site_routes": [
+        "/archive/",
+        "/about/"
+      ],
+      "why_it_matters": "This record marks the point where the archive stops being a placeholder and becomes a repeatable publishing system.",
+      "source_note": "process-archive-frame.md"
+    },
+    {
+      "archive_id": "marbles-source-thread",
+      "title": "Marbles Source Thread",
+      "node": "Thoughtpuppet / Sai Solehman",
+      "record_type": "artwork",
+      "room": "Symbols",
+      "date_or_period": "2026",
+      "timeline_period": "now",
+      "summary": "A painting-source record for recurring symbolic logic: dots, outlined gestures, subconscious action, and the way one work can echo into another.",
+      "body": "This source thread tracks a symbolic relationship instead of treating each painting as an isolated object. Dots, outlined gestures, and implied subconscious action become a shared vocabulary that can travel through paintings, tattoos, writings, and future archive entries.\n\nThe public record should hold enough context for a visitor to understand the pattern while leaving the raw studio thinking in the vault.",
+      "body_html": "<p>This source thread tracks a symbolic relationship instead of treating each painting as an isolated object. Dots, outlined gestures, and implied subconscious action become a shared vocabulary that can travel through paintings, tattoos, writings, and future archive entries.</p><p>The public record should hold enough context for a visitor to understand the pattern while leaving the raw studio thinking in the vault.</p>",
+      "status": "source thread",
+      "visibility": "public",
+      "assets": [
+        "/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
+      ],
+      "related_notes": [
+        "[[03_Nodes/thoughtpuppet/Sai Solehman - Artist/Paintings/Am I Losing My Marbles Or Hiding Them]]",
+        "[[03_Nodes/thoughtpuppet/Sai Solehman - Artist/Paintings/MUMA]]"
+      ],
+      "related_site_routes": [
+        "/art/",
+        "/archive/"
+      ],
+      "why_it_matters": "This is the kind of record that lets the archive explain lineage without overexplaining the private studio process.",
+      "source_note": "marbles-source-thread.md"
+    },
+    {
+      "archive_id": "coparent-flash-residue",
+      "title": "Co-Parent Flash Residue",
+      "node": "Art.Pill Tattoo House",
+      "record_type": "tattoo-flash",
+      "room": "Works",
+      "date_or_period": "2026",
+      "timeline_period": "now",
+      "summary": "A flash record kept as evidence of symbolic tattoo language, availability state, and how a design can move between tattooing and archive.",
+      "body": "Co-Parent sits in the archive as a flash record and a source-language marker. It carries the practical surface of tattooing while also showing how a symbol can remain useful after its first public offer or availability state changes.\n\nThe archive version does not need to flatten the work into a product. It holds the design as evidence: what was shown, what node it belonged to, and what later paths it can still inform.",
+      "body_html": "<p>Co-Parent sits in the archive as a flash record and a source-language marker. It carries the practical surface of tattooing while also showing how a symbol can remain useful after its first public offer or availability state changes.</p><p>The archive version does not need to flatten the work into a product. It holds the design as evidence: what was shown, what node it belonged to, and what later paths it can still inform.</p>",
+      "status": "reference",
+      "visibility": "public",
+      "assets": [
+        "/assets/flash/COPARENT.png"
+      ],
+      "related_notes": [
+        "[[03_Nodes/art.pill Tattoo House/FLASH/Co-Parent]]"
+      ],
+      "related_site_routes": [
+        "/tattoos/",
+        "/tattoos/flash/",
+        "/archive/"
+      ],
+      "why_it_matters": "The record shows that tattoo flash can function as a live offer, a past reference, and a source-language artifact at the same time.",
+      "source_note": "coparent-flash-residue.md"
+    }
+  ],
+  "filters": {
+    "rooms": [
+      "Process",
+      "Symbols",
+      "Works"
+    ],
+    "nodes": [
+      "Art.Pill Tattoo House",
+      "The Six.Well Construct",
+      "Thoughtpuppet / Sai Solehman"
+    ],
+    "record_types": [
+      "artwork",
+      "process",
+      "tattoo-flash"
+    ],
+    "timeline_periods": [
+      "now"
+    ]
+  },
+  "stats": {
+    "published": 3,
+    "skipped": 0
+  }
+}

@@ -88,6 +88,23 @@ Hidden page source files are saved under `.hidden-pages/`, while the deployed
 Worker returns a 404 for those paths on the public site. Commit and push the
 updated visibility files for the change to go live.
 
+## Obsidian archive import
+
+The public `/archive/` page is generated from selected records in the Obsidian
+vault. The importer only publishes notes with:
+
+- `archive_publish: true`
+- `visibility: public`
+
+Run the importer from the repository root:
+
+```powershell
+node tools/build-archive.mjs
+```
+
+The generated public data lives at `assets/archive/records.json`. Private vault
+notes, draft records, and local-only paths are rejected or ignored by default.
+
 ## Shopify setup
 
 This repo now includes Shopify Storefront proxy routes under `/api/shop/*`.

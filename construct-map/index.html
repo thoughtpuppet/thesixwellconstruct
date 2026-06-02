@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>architecture - the six.well construct</title>
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<style>
+  :root {
+    --venture-accent: var(--color-about);
+    --venture-dim: var(--color-about-dim);
+    --venture-wash: rgba(252,184,103,0.10);
+    --bg:        var(--color-bg);
+    --accent:    var(--color-about);
+    --ring:      #6D3D15;
+    --mute:      rgba(252,184,103,0.55);
+    --dim:       rgba(252,184,103,0.30);
+    --ghost:     rgba(252,184,103,0.14);
+    --sans:      var(--font-display);
+    --serif:     var(--font-serif);
+    --t-med:     0.35s cubic-bezier(0.2,0,0.2,1);
+  }
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body {
+    background:var(--bg);
+    color:var(--accent);
+    font-family:var(--sans);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a { color:inherit; text-decoration:none; }
+  .venture-title {
+    font-size: clamp(58px, 10.8vw, 148px);
+  }
+
+  .page { max-width:960px; margin:0 auto; padding:0; }
+
+  .hd {
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding-bottom:32px; margin-bottom:48px;
+    border-bottom:1px solid rgba(109,61,21,0.18);
+  }
+  .wordmark {
+    font-family:var(--sans); font-weight:900;
+    font-size:18px; letter-spacing:-0.05em;
+    color:var(--accent); opacity:0.82;
+  }
+  .meta {
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.22em; color:var(--dim); text-transform:uppercase;
+  }
+
+  h1 {
+    font-family:var(--sans); font-weight:900;
+    font-size:clamp(48px,8vw,96px);
+    letter-spacing:-0.05em; line-height:0.92;
+    margin-bottom:16px;
+  }
+  .sub {
+    font-family:var(--serif); font-size:15px; line-height:1.65;
+    color:var(--mute); max-width:560px; margin-bottom:72px;
+  }
+
+  .wrap { width:100%; max-width:780px; margin:0 auto 72px; }
+  svg.d { width:100%; height:auto; display:block; }
+
+  .key {
+    padding-top:40px;
+    border-top:1px solid rgba(109,61,21,0.18);
+    margin-bottom:48px;
+  }
+  .key-head {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.28em; text-transform:uppercase;
+    color:var(--dim); margin-bottom:24px;
+  }
+  .key-rows { display:flex; flex-direction:column; gap:20px; }
+  .key-row { display:flex; align-items:flex-start; gap:16px; }
+  .kname {
+    font-family:var(--sans); font-weight:700;
+    font-size:13px; letter-spacing:0.04em;
+    text-transform:uppercase; color:var(--accent);
+  }
+  .krole {
+    font-family:var(--serif); font-size:10px;
+    letter-spacing:0.2em; text-transform:uppercase;
+    color:var(--dim); margin-top:2px;
+  }
+
+  .notes {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:32px 48px;
+    padding-top:40px;
+    border-top:1px solid rgba(109,61,21,0.18);
+  }
+  .note-head {
+    font-family:var(--sans); font-weight:700;
+    font-size:11px; letter-spacing:0.12em;
+    text-transform:uppercase; color:var(--accent);
+    margin-bottom:8px;
+  }
+  .note-body {
+    font-family:var(--serif); font-size:13px;
+    line-height:1.65; color:var(--mute);
+  }
+
+  @media (max-width:640px) {
+    .page { padding:40px 24px 60px; }
+    .hd { flex-direction:column; gap:8px; align-items:flex-start; }
+    .wrap { overflow-x:auto; }
+    svg.d { min-width:680px; }
+    .notes { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body class="venture-page" data-venture="about">
+<div class="venture-grain" aria-hidden="true"></div>
+<main class="venture-shell entrance-fade" id="construct">
+  <section class="venture-hero" aria-labelledby="page-title">
+    <div>
+      <span class="venture-kicker">public system map</span>
+      <h1 class="venture-title" id="page-title">Construct Map.</h1>
+    </div>
+    <div class="hero-copy">
+      <p class="hero-lede">A public architecture page for the nine ventures, the center construct, and the commerce flows that route sellable work into MERCH.</p>
+      <p class="hero-note">The diagram keeps the draft's sparse distributed-map language while this page stays governed by the site's shared page shell, navigation, transitions, and typography tokens.</p>
+      <div class="hero-actions">
+        <a class="venture-link" href="#construct-architecture">architecture</a>
+        <a class="venture-link" href="#construct-links">reading notes</a>
+        <a class="venture-link" href="/archive/">archive</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="construct-architecture" aria-labelledby="architecture-title">
+    <header class="section-head">
+      <div>
+        <span class="section-kicker">architecture - v2</span>
+        <h2 class="section-title" id="architecture-title">distributed.</h2>
+      </div>
+      <p class="section-copy">
+        Nine ventures radiate from the construct. MERCH is the commerce engine:
+        sellable things from any venture flow inward to it, not outward into
+        sub-brands. Source ventures are shown with arrows pointing at MERCH
+        to mark what currently feeds it.
+      </p>
+    </header>
+
+    <div class="page">
+      <header class="hd">
+        <span class="wordmark">the six.well construct</span>
+        <span class="meta">architecture - v2</span>
+      </header>
+
+      <h1>distributed.</h1>
+      <p class="sub">
+        Nine ventures radiate from the construct. MERCH is the commerce engine -
+        sellable things from any venture flow inward to it, not outward into
+        sub-brands. Source ventures are shown with arrows pointing at MERCH
+        to mark what currently feeds it.
+      </p>
+
+      <div class="wrap">
+    <svg class="d" viewBox="0 0 780 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="diagram-title diagram-desc">
+      <title id="diagram-title">Distributed construct architecture</title>
+      <desc id="diagram-desc">Nine ventures orbit the construct, with commerce flow arrows pointing into merch.</desc>
+
+      <circle cx="390" cy="300" r="150"
+              fill="none" stroke="#6D3D15" stroke-width="0.5" opacity="0.25"/>
+
+      <line x1="390" y1="300" x2="540" y2="300"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="505" y2="396"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="416" y2="448"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="315" y2="430"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="249" y2="351"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="249" y2="249"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="315" y2="170"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="416" y2="152"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+      <line x1="390" y1="300" x2="505" y2="204"
+            stroke="#6D3D15" stroke-width="0.5" opacity="0.5"/>
+
+      <defs>
+        <marker id="arr-art" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 2L8 5L2 8" fill="none" stroke="#0581C1"
+                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="arr-sw" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 2L8 5L2 8" fill="none" stroke="#F7A226"
+                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="arr-tat" viewBox="0 0 10 10" refX="8" refY="5"
+                markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M2 2L8 5L2 8" fill="none" stroke="#8F231D"
+                stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <line x1="498" y1="404" x2="426" y2="440"
+            stroke="#0581C1" stroke-width="1.5" stroke-dasharray="5 4"
+            marker-end="url(#arr-art)" opacity="0.9"/>
+
+      <line x1="393" y1="316" x2="413" y2="432"
+            stroke="#F7A226" stroke-width="1.5" stroke-dasharray="5 4"
+            marker-end="url(#arr-sw)" opacity="0.9"/>
+
+      <line x1="526" y1="308" x2="428" y2="440"
+            stroke="#8F231D" stroke-width="1" stroke-dasharray="4 5"
+            marker-end="url(#arr-tat)" opacity="0.35"/>
+
+      <circle cx="390" cy="300" r="24" fill="none"
+              stroke="#FCB867" stroke-width="0.5" opacity="0.35"/>
+      <circle cx="390" cy="300" r="15" fill="none"
+              stroke="#FCB867" stroke-width="0.5" opacity="0.65"/>
+      <circle cx="390" cy="300" r="5" fill="#FCB867"/>
+
+      <circle cx="540" cy="300" r="12" fill="#8F231D"/>
+      <circle cx="505" cy="396" r="12" fill="#0581C1"/>
+      <circle cx="315" cy="430" r="12" fill="#FCB867"/>
+      <circle cx="249" cy="351" r="12" fill="#55BA5A"/>
+      <circle cx="249" cy="249" r="12" fill="#A856A1"/>
+      <circle cx="315" cy="170" r="12" fill="#328C84"/>
+      <circle cx="416" cy="152" r="12" fill="#EC5E26"/>
+      <circle cx="505" cy="204" r="12" fill="#FFE7CA"/>
+
+      <circle cx="416" cy="448" r="20" fill="none"
+              stroke="#F7A226" stroke-width="0.75" opacity="0.5"/>
+      <circle cx="416" cy="448" r="14" fill="#F7A226"/>
+
+      <text x="558" y="304" text-anchor="start"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">TATTOOING</text>
+
+      <text x="522" y="400" text-anchor="start"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">ART</text>
+
+      <text x="416" y="485" text-anchor="middle"
+            font-family="Inter,sans-serif" font-size="15" font-weight="900"
+            letter-spacing="-0.04em" fill="#F7A226">MERCH</text>
+
+      <text x="298" y="434" text-anchor="end"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">ABOUT</text>
+
+      <text x="232" y="355" text-anchor="end"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">EVENTS</text>
+
+      <text x="232" y="253" text-anchor="end"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">MUSIC</text>
+
+      <text x="298" y="174" text-anchor="end"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">WRITINGS</text>
+
+      <text x="416" y="130" text-anchor="middle"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">ARCHIVE</text>
+
+      <text x="522" y="208" text-anchor="start"
+            font-family="Inter,sans-serif" font-size="13" font-weight="900"
+            letter-spacing="-0.04em" fill="#FCB867">FILM</text>
+
+      <text x="474" y="412" text-anchor="middle"
+            font-family="Times New Roman,serif" font-size="11"
+            font-style="italic" fill="#0581C1" opacity="0.9">thoughtpuppet artifacts</text>
+
+      <text x="365" y="385" text-anchor="end"
+            font-family="Times New Roman,serif" font-size="11"
+            font-style="italic" fill="#F7A226" opacity="0.9">six.well clothing</text>
+
+      <text x="502" y="362" text-anchor="middle"
+            font-family="Times New Roman,serif" font-size="10"
+            font-style="italic" fill="#8F231D" opacity="0.45">flash prints (future)</text>
+
+      <text x="390" y="338" text-anchor="middle"
+            font-family="Times New Roman,serif" font-size="10"
+            letter-spacing="3" fill="#FCB867" opacity="0.55">THE CONSTRUCT</text>
+    </svg>
+      </div>
+
+      <div class="key">
+        <p class="key-head">reading the diagram</p>
+        <div class="key-rows">
+      <div class="key-row">
+        <span style="width:32px;flex-shrink:0;margin-top:2px">
+          <svg width="32" height="10" viewBox="0 0 32 10">
+            <line x1="0" y1="5" x2="26" y2="5" stroke="#6D3D15" stroke-width="0.5"/>
+          </svg>
+        </span>
+        <div>
+          <p class="kname" style="text-transform:none;font-size:12px;">structural spoke</p>
+          <p class="krole">venture belongs to the construct</p>
+        </div>
+      </div>
+      <div class="key-row">
+        <span style="width:32px;flex-shrink:0;margin-top:2px">
+          <svg width="32" height="10" viewBox="0 0 32 10">
+            <line x1="0" y1="5" x2="26" y2="5" stroke="#F7A226"
+                  stroke-width="1.5" stroke-dasharray="4 3"/>
+            <path d="M22 2L28 5L22 8" fill="none" stroke="#F7A226"
+                  stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <div>
+          <p class="kname" style="text-transform:none;font-size:12px;">commerce flow</p>
+          <p class="krole">sellable product category flows into merch - color = source venture</p>
+        </div>
+      </div>
+      <div class="key-row">
+        <span style="width:32px;flex-shrink:0;margin-top:6px">
+          <svg width="32" height="16" viewBox="0 0 32 16">
+            <circle cx="10" cy="8" r="7" fill="#F7A226"/>
+            <circle cx="10" cy="8" r="11" fill="none"
+                    stroke="#F7A226" stroke-width="0.75" opacity="0.5"/>
+          </svg>
+        </span>
+        <div>
+          <p class="kname" style="text-transform:none;font-size:12px;">outer ring</p>
+          <p class="krole">merch is the aggregator - the ring marks it as distinct from the other 8 ventures</p>
+        </div>
+      </div>
+      <div class="key-row">
+        <span style="width:32px;flex-shrink:0;margin-top:2px">
+          <svg width="32" height="10" viewBox="0 0 32 10">
+            <line x1="0" y1="5" x2="26" y2="5" stroke="#8F231D"
+                  stroke-width="1" stroke-dasharray="4 4" opacity="0.4"/>
+          </svg>
+        </span>
+        <div>
+          <p class="kname" style="text-transform:none;font-size:12px;">dimmed flow arrow</p>
+          <p class="krole">planned but not yet built - flash prints from tattooing</p>
+        </div>
+      </div>
+        </div>
+      </div>
+
+      <div class="notes" id="construct-links">
+    <div>
+      <p class="note-head">conceptual home vs commercial home</p>
+      <p class="note-body">
+        Thoughtpuppet artifacts are conceptually born in ART - painting-derived,
+        painting-informed. But they sell through MERCH. The blue arrow marks that
+        relationship: origin in ART, destination in MERCH. Two homes, different purposes.
+      </p>
+    </div>
+    <div>
+      <p class="note-head">how MERCH grows</p>
+      <p class="note-body">
+        Every venture that produces something sellable adds a commerce-flow arrow
+        to MERCH. Flash prints from tattooing, zines from writings, releases from
+        music - all route here. MERCH doesn't belong to any one venture. It belongs
+        to the whole construct.
+      </p>
+    </div>
+    <div>
+      <p class="note-head">six.well clothing</p>
+      <p class="note-body">
+        Six.well clothing doesn't come from a specific venture - it comes from the
+        construct itself (Saiel's own ideas, not informed by the paintings). Its flow
+        arrow originates from the center node.
+      </p>
+    </div>
+    <div>
+      <p class="note-head">page structure implication</p>
+      <p class="note-body">
+        On /merch, categories are organized by source venture, not by sub-brand.
+        The filter reads: all - six.well - thoughtpuppet - tattooing flash - etc.
+        Each category carries its source venture's color as a visual signal.
+      </p>
+    </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <p>&copy; the six.well construct</p>
+    <div class="page-links">
+      <a href="/">return to construct</a>
+      <a href="/archive/">archive</a>
+      <a href="/merch/">merch</a>
+    </div>
+  </footer>
+
+</main>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

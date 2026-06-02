@@ -3,180 +3,118 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow">
-<title>Not found - the six.well construct</title>
+<title>writings - the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
 <style>
   :root {
-    --bg:#0e0e0e;
-    --text:#FFE7CA;
-    --muted:rgba(255,231,202,0.62);
-    --accent:#FCB867;
-    --sans:Inter,"Helvetica Neue",Arial,sans-serif;
-    --serif:Georgia,"Times New Roman",Times,serif;
-  }
-  * { box-sizing:border-box; }
-  body {
-    margin:0;
-    min-height:100vh;
-    display:grid;
-    place-items:center;
-    background:var(--bg);
-    color:var(--text);
-    font-family:var(--serif);
-    padding:32px;
-    overflow:hidden;
-  }
-  #bg {
-    position:fixed;
-    inset:0;
-    width:100%;
-    height:100%;
-    z-index:0;
-    pointer-events:none;
-    filter:brightness(0.20) saturate(2);
-  }
-  main {
-    width:100%;
-    position:relative;
-    z-index:1;
-  }
-  p {
-    margin:0 0 18px;
-    color:var(--muted);
-    font-size:14px;
-    line-height:1.6;
-    font-family:var(--serif);
-    text-transform:uppercase;
-    letter-spacing:0.35em;
-  }
-  h1 {
-    margin:0 0 20px;
-    font-family:var(--sans);
-    font-size:23vw;
-    line-height:0.88;
-    letter-spacing:-0.02em;
-    text-transform:uppercase;
-    color:var(--accent);
-  }
-  a {
-    display:inline-block;
-    background:#7B1A1A;
-    color:var(--accent);
-    font-family:var(--sans);
-    font-size:12px;
-    font-weight:800;
-    letter-spacing:0.14em;
-    text-transform:uppercase;
-    text-decoration:none;
-    padding:10px 14px;
-    border-radius:6px;
+    --venture-accent: var(--color-writings);
+    --venture-dim: var(--color-writings-dim);
+    --venture-wash: rgba(50, 140, 132, 0.1);
   }
 </style>
-<link rel="stylesheet" href="/css/mobile.css">
 </head>
-<body>
-<canvas id="bg"></canvas>
-<main>
-  <h1>Nope.</h1>
-  <p>Come back later.</p>
-  <a href="/">Return home</a>
-</main>
-<script>
-(function () {
-  const canvas = document.getElementById('bg');
-  const ctx = canvas.getContext('2d');
+<body class="venture-page" data-venture="writings">
+  <div class="venture-grain" aria-hidden="true"></div>
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">language node</span>
+        <h1 class="venture-title" id="page-title">Writings.</h1>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-lede">Letters, field notes, statements, frameworks, fragments, and public thinking for the construct.</p>
+        <p class="hero-note">This route now works as a reading room: featured texts, paths through the system, and places for drafts to become public records.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="/about/">about layer</a>
+          <a class="venture-link" href="/archive/">archive</a>
+        </div>
+      </div>
+    </section>
 
-  // Tile dimensions — set responsively, called before anything uses them
-  let TW, TH, EYE, OX, OY;
+    <section class="section" id="board" aria-label="writings visual board">
+      <div class="visual-board">
+        <span class="signal-mark" aria-hidden="true"></span>
+        <p class="visual-caption">Writing keeps the system legible without flattening it. This is where the construct can explain itself, argue with itself, and leave traces for people who arrive later.</p>
+        <div class="asset-strip" aria-hidden="true">
+          <div class="asset-tile" style="background-image:url('/assets/paintings/AM%20I%20LOSING%20MY%20MARBLES%20OR%20HIDING%20THEM%20(1).jpg')"></div>
+          <div class="asset-tile is-empty"><span>essay cover slot</span></div>
+          <div class="asset-tile" style="background-image:url('/assets/paintings/SLOTH.JPG')"></div>
+        </div>
+        <h2 class="visual-title">A reading room for the system's public thought.</h2>
+      </div>
+    </section>
 
-  function tileSize() {
-    const w = window.innerWidth;
-    if (w < 480)       { TW = 95;  TH = 85;  EYE = 65; }
-    else if (w < 768)  { TW = 120; TH = 108; EYE = 85; }
-    else if (w < 1200) { TW = 148; TH = 132; EYE = 100; }
-    else               { TW = 175; TH = 155; EYE = 115; }
-    OX = (TW - EYE) / 2;
-    OY = (TH - EYE) / 2;
-  }
+    <section class="section" id="featured">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">featured shelf</span>
+          <h2 class="section-title">Start Reading</h2>
+        </div>
+        <p class="section-copy">These are draft-ready entry types. They give the page shape now and can become real article links as finished texts are published.</p>
+      </header>
+      <div class="feature-grid">
+        <article class="feature-card is-large" style="--feature-image:url('/assets/paintings/THE%20FRUSTRATIONS%20OF%20INNER%20CHAOS.jpg')">
+          <span class="tile-kicker">construct note</span>
+          <h3>What the system is trying to hold</h3>
+          <p>A future orientation essay about nodes, containers, discipline, commerce, ritual, and why the work refuses to stay separated.</p>
+          <div class="meta-row">
+            <span class="meta-pill">draft path</span>
+            <span class="meta-pill">about linked</span>
+          </div>
+        </article>
+        <div class="status-grid">
+          <article class="status-card"><h3>Letters</h3><p>Direct notes, dispatches, public updates, and messages written from inside the building of the work.</p></article>
+          <article class="status-card"><h3>Statements</h3><p>Artwork statements, project framing, process records, and short texts that explain specific objects or rooms.</p></article>
+        </div>
+      </div>
+    </section>
 
-  tileSize(); // initialise before rowOffset/rowSpeed use TW
+    <section class="section" id="reading-paths">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">reading paths</span>
+          <h2 class="section-title">Ways Through</h2>
+        </div>
+        <p class="section-copy">Not every reader needs the same door. The writing node can guide people by need, not only by chronology.</p>
+      </header>
+      <div class="path-grid">
+        <article class="path-card"><h3>For context</h3><p>Start with system language, origin notes, and the map of how the ventures relate.</p></article>
+        <article class="path-card"><h3>For art</h3><p>Move through painting statements, object notes, and visual-language fragments.</p></article>
+        <article class="path-card"><h3>For process</h3><p>Read the work while it is still being decided, changed, documented, and revised.</p></article>
+        <article class="path-card"><h3>For record</h3><p>Follow dated updates, event notes, releases, and archive entries as they accumulate.</p></article>
+      </div>
+    </section>
 
-  const GLOBAL_DOWN = 0.10;
-  const BASE_SPEED  = 0.18;
-  const POOL        = 20;
+    <section class="section" id="text-containers">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">index types</span>
+          <h2 class="section-title">Text Containers</h2>
+        </div>
+        <p class="section-copy">A clean taxonomy keeps future writing from becoming a flat list.</p>
+      </header>
+      <div class="record-grid">
+        <article class="record-card"><h3>Essays</h3><p>Longer public arguments, frameworks, and reflections.</p></article>
+        <article class="record-card"><h3>Field notes</h3><p>Short records from process, events, studios, and active building.</p></article>
+        <article class="record-card"><h3>Fragments</h3><p>Loose lines, seeds, unfinished thoughts, and pieces that may later become essays.</p></article>
+      </div>
+    </section>
 
-  const rowOffset = new Array(POOL);
-  const rowSpeed  = new Array(POOL);
-  for (let r = 0; r < POOL; r++) {
-    const dir    = r % 2 === 0 ? 1 : -1;
-    rowOffset[r] = Math.random() * TW * 1000;
-    rowSpeed[r]  = dir * BASE_SPEED * (0.70 + Math.random() * 0.60);
-  }
-
-  let W, H;
-  let slotY   = 0;
-  let baseRow = 0;
-  let lastTime = 0;
-
-  const openImg   = new Image();
-  const closedImg = new Image();
-  let loaded = 0;
-
-  function resize() {
-    tileSize();
-    W = canvas.width  = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-  }
-
-  /* ---------- draw ---------- */
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-
-    const slots = Math.ceil(H / TH) + 2;
-    const cols  = Math.ceil(W / TW) + 3;
-
-    for (let i = 0; i < slots; i++) {
-      const logicalRow = baseRow + i;
-      const rowId  = ((logicalRow % POOL) + POOL) % POOL;
-      const isOdd  = ((logicalRow % 2) + 2) % 2 === 1;
-      const stagger = isOdd ? TW / 2 : 0;
-      const ox = ((rowOffset[rowId] + stagger) % TW + TW) % TW - TW;
-      const y  = i * TH + slotY - TH;
-
-      for (let c = 0; c < cols; c++) {
-        const parity = ((logicalRow + c) % 2 + 2) % 2;
-        ctx.drawImage(parity === 0 ? openImg : closedImg, c * TW + ox + OX, y + OY, EYE, EYE);
-      }
-    }
-  }
-
-  /* ---------- loop ---------- */
-  function loop(ts) {
-    const dt = Math.min(ts - lastTime, 50);
-    lastTime = ts;
-    const f = dt / 16.667;
-    slotY += GLOBAL_DOWN * f;
-    while (slotY >= TH) { slotY -= TH; baseRow--; }
-    for (let r = 0; r < POOL; r++) {
-      rowOffset[r] = (rowOffset[r] + rowSpeed[r] * f + TW * 10000) % (TW * 10000);
-    }
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  function onLoad() {
-    if (++loaded < 2) return;
-    resize();
-    window.addEventListener('resize', resize);
-    requestAnimationFrame(ts => { lastTime = ts; requestAnimationFrame(loop); });
-  }
-
-  openImg.onload   = onLoad;
-  closedImg.onload = onLoad;
-  openImg.src   = '/assets/eyes/openeye.png';
-  closedImg.src = '/assets/eyes/closedeye.png';
-})();
-</script>
+    <footer class="footer">
+      <p>&copy; the six.well construct</p>
+      <div class="page-links">
+        <a href="/">return to construct</a>
+        <a href="/archive/">archive</a>
+      </div>
+    </footer>
+  </main>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
 </body>
 </html>
