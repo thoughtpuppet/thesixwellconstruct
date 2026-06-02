@@ -51,6 +51,13 @@ function assetRequest(request, pathname) {
   return new Request(url, request);
 }
 
+function assetPathForRequest(pathname) {
+  if (pathname === "/") return "/index.html";
+  if (pathname.endsWith("/")) return `${pathname}index.html`;
+  if (!hasFileExtension(pathname)) return `${pathname}/index.html`;
+  return pathname;
+}
+
 function isHomePath(pathname) {
   return PUBLIC_HOME_PATHS.has(pathname);
 }
@@ -318,6 +325,6 @@ export default {
       return redirectToNotFoundPage(request);
     }
 
-    return env.ASSETS.fetch(request);
+    return env.ASSETS.fetch(assetRequest(request, assetPathForRequest(url.pathname)));
   },
 };
