@@ -12,7 +12,13 @@ import {
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
 
-const HIDDEN_PUBLIC_PATHS = [];
+const HIDDEN_PUBLIC_PATHS = [
+  "/archive",
+  "/events",
+  "/film",
+  "/music",
+  "/writings"
+];
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_HOME_PATHS = new Set(["/", "/index.html"]);
