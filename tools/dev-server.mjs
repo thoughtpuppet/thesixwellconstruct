@@ -28,17 +28,17 @@ const checkRoutes = [
   ["/edit-links.html", 200],
   ["/edit-links", 200],
   ["/page-visibility", 200],
-  ["/about/", 302],
+  ["/about/", 200],
   ["/construct-map/", 200],
   ["/events/", 302],
   ["/music/", 302],
   ["/film/", 302],
   ["/writings/", 302],
   ["/archive/", 200],
-  ["/tattoos/", 302],
-  ["/tattoos/special-projects/", 302],
-  ["/merch/", 302],
-  ["/art/", 302],
+  ["/tattoos/", 200],
+  ["/tattoos/special-projects/", 200],
+  ["/merch/", 200],
+  ["/art/", 200],
   ["/js/live-text-editor.js", 200],
 ];
 
@@ -53,13 +53,12 @@ const localOnlyRoutes = new Map([
 ]);
 
 const hiddenPublicPaths = new Set([
-  "/about",
   "/events",
   "/film",
   "/music",
   "/writings",
 ]);
-const hidePublicPagesExceptHome = true;
+const hidePublicPagesExceptHome = false;
 const publicHomePaths = new Set(["/", "/index.html"]);
 const publicErrorPaths = new Set(["/404", "/404.html"]);
 const publicArchivePaths = new Set(["/archive", "/archive/", "/archive/index.html"]);

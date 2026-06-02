@@ -13,11 +13,10 @@ import {
 } from "./functions/api/shop/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
-  "/archive",
   "/events",
   "/film",
   "/music",
-  "/writings"
+  "/writings",
 ];
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
