@@ -141,7 +141,7 @@ The configured Formspree endpoints are:
 The forms live at:
 
 - `/tattoos/inquire/`
-- `/tattoos/flash/`
+- `/tattoos/flash/claim/`
 - `/tattooing/special-projects/apply/`
 
 Each form uses `method="POST"` and `enctype="multipart/form-data"` so reference

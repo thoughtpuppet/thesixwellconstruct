@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claim Flash - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --bg:#0e0e0e; --accent:#FCB867; --signal:#7A1010; --ring:#6D3D15;
+    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --text:#FFE7CA; --text-mute:rgba(255,231,202,0.62);
+    --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
+    --sans:'Inter','Helvetica Neue',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
+    --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+  }
+  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+  html,body { background:var(--bg); color:var(--text); font-family:var(--serif); min-height:100vh; overflow-x:clip; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  a { color:inherit; text-decoration:none; }
+  button,input,textarea,select { font:inherit; }
+  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+  header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
+  .breadcrumb { display:flex; align-items:center; gap:10px; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
+  .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
+  .breadcrumb-link:hover { color:var(--accent); }
+  .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
+  main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
+  .layout { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(380px,560px); gap:72px; align-items:start; }
+  .page-label { font-family:var(--serif); font-size:15px; letter-spacing:0.32em; text-transform:uppercase; color:var(--accent); opacity:0.7; margin-bottom:-8px; }
+  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(50px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:38px; }
+  .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
+  .intro-body + .intro-body { margin-top:20px; }
+  .path-list { list-style:none; display:flex; flex-direction:column; max-width:620px; border-top:5px solid var(--ring-faint); margin-top:44px; }
+  .path-list li { display:grid; grid-template-columns:42px minmax(0,1fr); gap:18px; font-size:14px; line-height:1.6; color:var(--text-mute); padding:16px 0; border-bottom:5px solid var(--ring-faint); }
+  .path-list li::before { color:var(--signal); opacity:0.72; font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.14em; }
+  .path-list li:nth-child(1)::before { content:"I"; }
+  .path-list li:nth-child(2)::before { content:"II"; }
+  .path-list li:nth-child(3)::before { content:"III"; }
+  .selected-card { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:26px 0; margin-top:42px; display:grid; grid-template-columns:132px minmax(0,1fr); gap:22px; align-items:center; }
+  .selected-card.is-empty { display:none; }
+  .selected-card img { width:132px; height:132px; object-fit:contain; border:5px solid var(--ring-faint); background:rgba(0,0,0,0.18); }
+  .selected-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); margin-bottom:10px; }
+  .selected-title { font-family:var(--sans); font-weight:900; font-size:24px; line-height:0.98; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
+  .selected-meta { display:flex; flex-wrap:wrap; gap:8px; }
+  .selected-meta span { font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); border:5px solid var(--ring-faint); padding:4px 8px; }
+  .form-panel { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:42px 0; background:transparent; }
+  .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
+  .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
+  .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+  .field.full { grid-column:1 / -1; }
+  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
+  input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
+  input[type="file"] { padding:11px 12px; color:var(--text-mute); }
+  textarea { min-height:124px; resize:vertical; }
+  input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
+  .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+  .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
+  .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
+  .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; padding:0; }
+  .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
+  .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
+  .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
+  footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
+  footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
+  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
+  footer.bottom a:hover { color:var(--accent); }
+  @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } }
+  @media (max-width:640px) {
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s6) var(--s5); }
+    .page-title { font-size:clamp(54px,18vw,88px); }
+    .form-panel { padding:30px 0; }
+    .field-grid,.selected-card { grid-template-columns:1fr; }
+    .selected-card img { width:100%; height:220px; }
+    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
+  }
+  @media (max-width:700px) { header.top { position:sticky; padding:var(--s3) var(--s4); min-height:60px; align-items:center; } }
+</style>
+<link rel="stylesheet" href="/css/mobile.css">
+</head>
+<body data-venture="tattooing">
+  <script>
+  (function(){
+    var o = document.createElement('div');
+    o.id = 'construct-fade';
+    o.style.cssText = 'position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut() { requestAnimationFrame(function(){ requestAnimationFrame(function(){ o.style.opacity = '0'; o.style.pointerEvents = 'none'; });}); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fadeOut); else fadeOut();
+  })();
+  </script>
+  <div class="grain"></div>
+  <header class="top">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <a class="breadcrumb-link" href="/tattoos/flash/">Flash</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">Claim</span>
+    </nav>
+  </header>
+  <main>
+    <div class="layout">
+      <section>
+        <p class="page-label">Art.Pill Tattoo House</p>
+        <h1 class="page-title">Claim<br>Flash.</h1>
+        <p class="intro-body">Use this path when you already know the flash design you want. The selected title, code, series, size, and pricing note carry into review with your placement, timing, and bid.</p>
+        <p class="intro-body">Submitting does not book the appointment yet. It begins review for availability, placement, scale, and fit. Approved claims receive private booking and deposit instructions.</p>
+        <ul class="path-list">
+          <li>Choose the available flash design, or arrive here from an individual design page with it already selected.</li>
+          <li>Add placement, approximate scale, timing, and the amount or budget range you are prepared to commit.</li>
+          <li>If approved, the studio sends a private scheduling link and next steps.</li>
+        </ul>
+        <aside class="selected-card is-empty" id="selectedCard" aria-live="polite">
+          <img id="selectedImage" src="" alt="">
+          <div>
+            <p class="selected-kicker">Selected Flash</p>
+            <h2 class="selected-title" id="selectedTitle">Choose a design</h2>
+            <div class="selected-meta" id="selectedMeta"></div>
+          </div>
+        </aside>
+      </section>
+      <section class="form-panel" aria-label="Flash claim form">
+        <h2 class="form-title">Submit Claim</h2>
+        <p class="form-note">Available flash only. If you are looking for a custom variation, use the standard tattoo inquiry instead.</p>
+        <form method="POST" action="https://formspree.io/f/mrejkpnl" enctype="multipart/form-data">
+          <input type="hidden" name="form_type" value="flash_claim">
+          <input type="hidden" name="source_path" value="/tattoos/flash/claim/">
+          <input type="hidden" name="project_category" value="flash">
+          <input type="hidden" name="flash_id" id="flash_id">
+          <input type="hidden" name="flash_title" id="flash_title">
+          <input type="hidden" name="flash_code" id="flash_code">
+          <input type="hidden" name="flash_series" id="flash_series">
+          <input type="hidden" name="flash_size" id="flash_size">
+          <input type="hidden" name="flash_price_note" id="flash_price_note">
+          <input type="hidden" name="subject" id="subject" value="New Art.Pill flash claim">
+          <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
+          <div class="field-grid">
+            <div class="field full">
+              <label for="flashSelect">Available flash</label>
+              <select id="flashSelect" name="selected_flash" required>
+                <option value="">Loading available flash...</option>
+              </select>
+            </div>
+            <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+            <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+            <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" autocomplete="tel"></div>
+            <div class="field"><label for="instagram">Instagram</label><input id="instagram" name="instagram" placeholder="@"></div>
+            <div class="field"><label for="pronouns">Pronouns</label><input id="pronouns" name="pronouns"></div>
+            <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="Example: left forearm" required></div>
+            <div class="field"><label for="scale">Approx. scale</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
+            <div class="field"><label for="claim_bid">Bid / budget</label><input id="claim_bid" name="claim_bid" placeholder="Example: $300-$450" required></div>
+            <div class="field"><label for="timeline">Timeline</label><input id="timeline" name="timeline" placeholder="Example: no rush, June, weekend preferred"></div>
+            <div class="field full"><label for="sheet_code">Sheet letter/code</label><input id="sheet_code" name="sheet_code" placeholder="If claiming from a sheet, include the letter or code."></div>
+            <div class="field full"><label for="body_references">Body / placement uploads</label><input id="body_references" name="body_references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Optional. Helpful for placement, scale, or body-area context.</p></div>
+            <div class="field full"><label for="message">Claim notes</label><textarea id="message" name="message" placeholder="Anything the studio should know about placement, meaning, availability, or fit."></textarea></div>
+          </div>
+          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
+          <div class="submit-row">
+            <button class="cta-primary" type="submit">Submit Claim</button>
+            <p class="form-status">Flash claims are reviewed before private booking access is sent.</p>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+  <footer class="bottom">
+    <a href="/tattoos/flash/">&larr; back to flash</a>
+    <a href="/">the six.well construct</a>
+  </footer>
+  <script>
+    const els = {
+      select: document.getElementById("flashSelect"),
+      card: document.getElementById("selectedCard"),
+      image: document.getElementById("selectedImage"),
+      title: document.getElementById("selectedTitle"),
+      meta: document.getElementById("selectedMeta"),
+      subject: document.getElementById("subject"),
+      hidden: {
+        id: document.getElementById("flash_id"),
+        title: document.getElementById("flash_title"),
+        code: document.getElementById("flash_code"),
+        series: document.getElementById("flash_series"),
+        size: document.getElementById("flash_size"),
+        price: document.getElementById("flash_price_note")
+      }
+    };
+    let availableFlash = [];
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function codeFor(item) {
+      return item.sheetCode || item.designCode || item.id;
+    }
+
+    function optionLabel(item) {
+      return `${item.title} - ${codeFor(item)} - ${item.sizeBucket}`;
+    }
+
+    function selectedRequestId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("design") || params.get("flash") || params.get("id") || "";
+    }
+
+    function renderOptions(selectedId) {
+      els.select.innerHTML = '<option value="">Choose available flash</option>';
+      availableFlash.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = optionLabel(item);
+        option.selected = item.id === selectedId;
+        els.select.appendChild(option);
+      });
+    }
+
+    function updateSelected(id) {
+      const item = availableFlash.find((entry) => entry.id === id);
+      if (!item) {
+        els.card.classList.add("is-empty");
+        Object.values(els.hidden).forEach((input) => input.value = "");
+        els.subject.value = "New Art.Pill flash claim";
+        return;
+      }
+      const code = codeFor(item);
+      els.card.classList.remove("is-empty");
+      els.image.src = item.image;
+      els.image.alt = `${item.title} - selected flash`;
+      els.title.textContent = item.title;
+      els.meta.innerHTML = [item.series, item.sizeBucket, code, item.price]
+        .filter(Boolean)
+        .map((value) => `<span>${escapeHtml(value)}</span>`)
+        .join("");
+      els.hidden.id.value = item.id;
+      els.hidden.title.value = item.title;
+      els.hidden.code.value = code;
+      els.hidden.series.value = item.series || "";
+      els.hidden.size.value = item.sizeBucket || "";
+      els.hidden.price.value = item.price || "";
+      els.subject.value = `New Art.Pill flash claim - ${item.title}`;
+    }
+
+    async function init() {
+      try {
+        const response = await fetch("/assets/flash/flash-catalog.json", { cache: "no-store" });
+        if (!response.ok) throw new Error("Catalog unavailable");
+        const catalog = await response.json();
+        availableFlash = (catalog.items || []).filter((item) => item.claimable === true && item.status === "Available");
+      } catch {
+        availableFlash = [];
+      }
+      const requested = selectedRequestId();
+      renderOptions(requested);
+      updateSelected(requested);
+      if (!availableFlash.length) {
+        els.select.innerHTML = '<option value="">No available flash loaded</option>';
+      }
+      els.select.addEventListener("change", () => updateSelected(els.select.value));
+    }
+
+    init();
+  </script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>
