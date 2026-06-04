@@ -118,5 +118,5 @@ INSERT OR IGNORE INTO booking_types (
   (
     'tattoo_full', 'tattooing', 'Full Session',
     'Up to 6 hours for large approved work, special projects, or deeper sessions.',
-    360, 15000, 'USD', 1, 30, datetime('now'), datetime('now')
+    360, 20000, 'USD', 1, 30, datetime('now'), datetime('now')
   );

@@ -247,6 +247,18 @@
     updateStatus(isEnabled ? 'editing' : 'off');
   }
 
+  function refreshEditableElements() {
+    if (!isHydrated) return;
+    var wasEnabled = isEnabled;
+    editableElements.forEach(function(element) {
+      element.contentEditable = 'false';
+      element.removeAttribute('data-live-edit-id');
+    });
+    isHydrated = false;
+    hydrateSavedText();
+    if (wasEnabled) setEnabled(true);
+  }
+
   document.addEventListener('input', function(event) {
     if (!isEnabled) return;
     var element = event.target.closest && event.target.closest('[data-live-edit-id]');
@@ -274,6 +286,8 @@
       setEnabled(false);
     }
   });
+
+  window.addEventListener('sixwell:booking-rendered', refreshEditableElements);
 
   function init() {
     injectStyles();

@@ -22,19 +22,20 @@
   .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
   header { position:sticky; top:0; z-index:10; min-height:72px; display:flex; justify-content:flex-end; padding:24px 40px; }
   main { position:relative; z-index:2; max-width:980px; margin:0 auto; padding:72px 40px 80px; }
-  .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--accent); padding:5px 12px; margin-bottom:34px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
+  .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid rgba(122,16,16,0.4); color:var(--signal); padding:5px 12px; margin-bottom:34px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
   .badge.pending { color:var(--signal); }
   .badge-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
   .label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--dim); }
-  h1 { max-width:720px; margin:16px 0 28px; font-family:var(--sans); font-size:clamp(42px,7vw,82px); line-height:0.9; letter-spacing:0; color:var(--accent); }
+  h1 { max-width:720px; margin:16px 0 28px; font-family:var(--sans); font-size:clamp(42px,7vw,82px); line-height:0.9; letter-spacing:0; color:var(--signal); }
   .lead { max-width:620px; margin:0 0 44px; color:var(--muted); font-size:16px; line-height:1.8; }
   .detail-block { max-width:620px; border-top:5px solid var(--ring-soft); margin:36px 0; }
   .detail-row { display:grid; grid-template-columns:180px 1fr; gap:18px; border-bottom:5px solid var(--ring-faint); padding:16px 0; color:var(--muted); line-height:1.55; }
   .detail-key { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
   .cta-row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
   .cta-primary { display:inline-flex; align-items:center; min-height:48px; border:5px solid var(--ring-soft); padding:0 24px; color:var(--text); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
-  .cta-primary:hover { border-color:var(--accent); color:var(--accent); }
+  .cta-primary:hover { border-color:var(--signal); color:var(--signal); }
   .cta-ghost { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
+  #construct-corner span { color:var(--signal) !important; }
   @media (max-width:680px) {
     header { padding:18px 24px; min-height:60px; }
     main { padding:48px 24px 64px; }
@@ -58,7 +59,7 @@
 <header></header>
 <main>
   <div id="badge" class="badge"><span class="badge-dot"></span><span id="badgeText">Checking Deposit</span></div>
-  <p class="label">the six.well construct</p>
+  <p class="label">art.pill tattoo house - atlanta</p>
   <h1 id="title">Reading the booking record.</h1>
   <p id="lead" class="lead">Give this a moment. The system is checking the appointment and Square deposit state.</p>
   <div id="details" class="detail-block"></div>
