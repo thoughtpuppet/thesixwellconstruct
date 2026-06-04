@@ -13,6 +13,13 @@
     "run_worker_first": true,
     "html_handling": "none"
   },
+  "d1_databases": [
+    {
+      "binding": "SUBMISSIONS_DB",
+      "database_name": "swc-submissions",
+      "database_id": "ec619569-212f-43b7-9b8c-6ac3bfed85e5"
+    }
+  ],
   "vars": {
     "SHOPIFY_STORE_DOMAIN": "six-well-2.myshopify.com",
     "SHOPIFY_STOREFRONT_API_VERSION": "2025-07",

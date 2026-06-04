@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio Submissions - The Six Well Construct</title>
+<style>
+  :root {
+    --bg:#0e0e0e; --panel:#161616; --line:rgba(255,231,202,0.16);
+    --line-strong:rgba(255,231,202,0.32); --text:#FFE7CA;
+    --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.38);
+    --accent:#FCB867; --signal:#7A1010;
+    --sans:Inter,"Helvetica Neue",Arial,sans-serif; --serif:Georgia,"Times New Roman",Times,serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); }
+  button,input,textarea,select { font:inherit; }
+  button { cursor:pointer; }
+  .shell { min-height:100vh; display:grid; grid-template-rows:auto 1fr; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:22px 28px; border-bottom:1px solid var(--line); }
+  h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
+  .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .status { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.12em; text-transform:uppercase; }
+  .layout { display:grid; grid-template-columns:minmax(320px,440px) minmax(0,1fr); min-height:0; }
+  .list-pane { border-right:1px solid var(--line); min-height:0; overflow:auto; }
+  .detail-pane { min-height:0; overflow:auto; padding:28px; }
+  .toolbar { display:flex; gap:10px; padding:16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:2; }
+  select,input,textarea { width:100%; background:#101010; color:var(--text); border:1px solid var(--line-strong); padding:10px 12px; border-radius:0; }
+  textarea { min-height:160px; resize:vertical; line-height:1.5; }
+  .button { border:1px solid var(--line-strong); background:transparent; color:var(--text); min-height:38px; padding:0 14px; font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; }
+  .button:hover { border-color:var(--accent); color:var(--accent); }
+  .submission { width:100%; text-align:left; border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--text); padding:16px; display:grid; gap:8px; }
+  .submission:hover,.submission.active { background:rgba(252,184,103,0.045); }
+  .submission-top { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+  .name { font-family:var(--sans); font-size:13px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
+  .date,.meta,.empty { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
+  .pill { color:var(--accent); border:1px solid rgba(252,184,103,0.34); padding:3px 7px; font-family:var(--sans); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; white-space:nowrap; }
+  .detail-head { display:grid; gap:12px; padding-bottom:22px; border-bottom:1px solid var(--line); margin-bottom:22px; }
+  h2 { margin:0; font-family:var(--sans); font-size:34px; line-height:1; color:var(--accent); }
+  .contact { color:var(--muted); line-height:1.7; }
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-bottom:22px; }
+  .field { display:grid; gap:6px; }
+  label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; }
+  .value { min-height:42px; padding:12px; border:1px solid var(--line); color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .value.full { min-height:96px; }
+  .actions { display:grid; grid-template-columns:180px minmax(0,1fr) auto; gap:12px; align-items:start; margin-top:22px; }
+  .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
+  .token-card { width:min(520px,100%); border:1px solid var(--line-strong); padding:24px; background:var(--panel); display:grid; gap:14px; }
+  .token-card h2 { font-size:22px; }
+  .hidden { display:none; }
+  @media (max-width:900px) {
+    .layout { grid-template-columns:1fr; }
+    .list-pane { border-right:0; border-bottom:1px solid var(--line); max-height:42vh; }
+    .grid,.actions { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <h1>Studio Submissions</h1>
+    <div class="header-actions">
+      <span class="status" id="status">Locked</span>
+      <button class="button" id="refreshBtn" type="button">Refresh</button>
+      <button class="button" id="lockBtn" type="button">Lock</button>
+    </div>
+  </header>
+  <main class="layout">
+    <section class="list-pane">
+      <div class="toolbar">
+        <select id="statusFilter" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="new">New</option>
+          <option value="reviewing">Reviewing</option>
+          <option value="approved">Approved</option>
+          <option value="declined">Declined</option>
+          <option value="booked">Booked</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+      <div id="submissionList" class="empty" style="padding:16px;">Unlock to load submissions.</div>
+    </section>
+    <section class="detail-pane" id="detailPane">
+      <p class="empty">Select a submission to review details.</p>
+    </section>
+  </main>
+</div>
+
+<div class="token-modal" id="tokenModal">
+  <form class="token-card" id="tokenForm">
+    <h2>Admin Access</h2>
+    <p class="contact">Enter the submissions admin token. It is saved only in this browser's local storage.</p>
+    <input id="tokenInput" type="password" autocomplete="current-password" placeholder="Admin token" required>
+    <button class="button" type="submit">Unlock</button>
+  </form>
+</div>
+
+<script>
+(function(){
+  const tokenKey = "swc_submissions_admin_token";
+  const tokenModal = document.getElementById("tokenModal");
+  const tokenForm = document.getElementById("tokenForm");
+  const tokenInput = document.getElementById("tokenInput");
+  const statusEl = document.getElementById("status");
+  const listEl = document.getElementById("submissionList");
+  const detailEl = document.getElementById("detailPane");
+  const refreshBtn = document.getElementById("refreshBtn");
+  const lockBtn = document.getElementById("lockBtn");
+  const statusFilter = document.getElementById("statusFilter");
+  let token = localStorage.getItem(tokenKey) || "";
+  let submissions = [];
+  let activeId = "";
+
+  function api(path, options = {}) {
+    return fetch(path, {
+      ...options,
+      headers: {
+        "authorization": `Bearer ${token}`,
+        ...(options.headers || {}),
+      },
+    }).then(async (response) => {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Request failed.");
+      return payload;
+    });
+  }
+
+  function formatDate(value) {
+    if (!value) return "";
+    return new Date(value).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
+  }
+
+  function titleize(value) {
+    return String(value || "").replace(/_/g, " ");
+  }
+
+  function setStatus(message) {
+    statusEl.textContent = message;
+  }
+
+  function renderList() {
+    if (!submissions.length) {
+      listEl.innerHTML = '<p class="empty" style="padding:16px;">No submissions found.</p>';
+      return;
+    }
+
+    listEl.innerHTML = submissions.map((submission) => `
+      <button class="submission ${submission.id === activeId ? "active" : ""}" type="button" data-id="${submission.id}">
+        <span class="submission-top">
+          <span class="name">${escapeHtml(submission.contactName || "Unnamed")}</span>
+          <span class="pill">${escapeHtml(submission.status)}</span>
+        </span>
+        <span class="meta">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.contactEmail || "")}</span>
+        <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
+      </button>
+    `).join("");
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&":"&amp;",
+      "<":"&lt;",
+      ">":"&gt;",
+      '"':"&quot;",
+      "'":"&#039;",
+    }[char]));
+  }
+
+  function payloadValue(submission, key) {
+    const value = submission.payload?.[key];
+    if (Array.isArray(value)) return value.join(", ");
+    return value || "";
+  }
+
+  function renderDetail(submission) {
+    const files = submission.files || [];
+    detailEl.innerHTML = `
+      <div class="detail-head">
+        <span class="pill">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.status)}</span>
+        <h2>${escapeHtml(submission.contactName || "Unnamed")}</h2>
+        <p class="contact">
+          ${escapeHtml(submission.contactEmail || "")}<br>
+          ${escapeHtml(submission.contactPhone || "")}<br>
+          ${escapeHtml(formatDate(submission.createdAt))}
+        </p>
+      </div>
+      <div class="grid">
+        ${detailField("Placement", payloadValue(submission, "placement"))}
+        ${detailField("Size", payloadValue(submission, "size"))}
+        ${detailField("Budget", payloadValue(submission, "budget_range"))}
+        ${detailField("Timeline", payloadValue(submission, "timeline"))}
+        ${detailField("Instagram", payloadValue(submission, "instagram"))}
+        ${detailField("Source", submission.sourcePath || "")}
+      </div>
+      <div class="field">
+        <label>Project or Flash Title</label>
+        <div class="value">${escapeHtml(payloadValue(submission, "project_title"))}</div>
+      </div>
+      <div class="field" style="margin-top:16px;">
+        <label>Reference Links</label>
+        <div class="value full">${escapeHtml(payloadValue(submission, "reference_links"))}</div>
+      </div>
+      <div class="field" style="margin-top:16px;">
+        <label>Project Notes</label>
+        <div class="value full">${escapeHtml(payloadValue(submission, "message"))}</div>
+      </div>
+      <div class="field" style="margin-top:16px;">
+        <label>Files</label>
+        <div class="value">${escapeHtml(files.length ? files.map((file) => `${file.fileName} (${file.stored ? "stored" : "received only"})`).join("\\n") : "None")}</div>
+      </div>
+      <div class="actions">
+        <div class="field">
+          <label for="detailStatus">Status</label>
+          <select id="detailStatus">
+            ${["new","reviewing","approved","declined","booked","archived"].map((status) => `<option value="${status}" ${status === submission.status ? "selected" : ""}>${status}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label for="bookingUrl">Booking URL</label>
+          <input id="bookingUrl" value="${escapeHtml(submission.bookingUrl || "")}">
+        </div>
+        <button class="button" id="saveBtn" type="button">Save</button>
+      </div>
+      <div class="field" style="margin-top:16px;">
+        <label for="internalNotes">Internal Notes</label>
+        <textarea id="internalNotes">${escapeHtml(submission.internalNotes || "")}</textarea>
+      </div>
+    `;
+  }
+
+  function detailField(label, value) {
+    return `<div class="field"><label>${escapeHtml(label)}</label><div class="value">${escapeHtml(value)}</div></div>`;
+  }
+
+  async function loadSubmissions() {
+    if (!token) {
+      tokenModal.classList.remove("hidden");
+      setStatus("Locked");
+      return;
+    }
+
+    setStatus("Loading");
+    const query = statusFilter.value ? `?status=${encodeURIComponent(statusFilter.value)}` : "";
+    const payload = await api(`/api/admin/submissions${query}`);
+    submissions = payload.submissions || [];
+    setStatus(`${submissions.length} loaded`);
+    renderList();
+    if (activeId) {
+      const active = submissions.find((submission) => submission.id === activeId);
+      if (active) renderDetail(active);
+    }
+  }
+
+  tokenForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    token = tokenInput.value.trim();
+    localStorage.setItem(tokenKey, token);
+    tokenModal.classList.add("hidden");
+    try {
+      await loadSubmissions();
+    } catch (error) {
+      setStatus(error.message);
+      tokenModal.classList.remove("hidden");
+    }
+  });
+
+  listEl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-id]");
+    if (!button) return;
+    activeId = button.dataset.id;
+    const submission = submissions.find((item) => item.id === activeId);
+    if (submission) {
+      renderList();
+      renderDetail(submission);
+    }
+  });
+
+  detailEl.addEventListener("click", async (event) => {
+    if (event.target.id !== "saveBtn" || !activeId) return;
+    setStatus("Saving");
+    const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        status: document.getElementById("detailStatus").value,
+        bookingUrl: document.getElementById("bookingUrl").value,
+        internalNotes: document.getElementById("internalNotes").value,
+      }),
+    });
+    const index = submissions.findIndex((submission) => submission.id === activeId);
+    if (index >= 0) submissions[index] = payload.submission;
+    renderList();
+    renderDetail(payload.submission);
+    setStatus("Saved");
+  });
+
+  refreshBtn.addEventListener("click", () => loadSubmissions().catch((error) => setStatus(error.message)));
+  statusFilter.addEventListener("change", () => loadSubmissions().catch((error) => setStatus(error.message)));
+  lockBtn.addEventListener("click", () => {
+    token = "";
+    localStorage.removeItem(tokenKey);
+    tokenInput.value = "";
+    tokenModal.classList.remove("hidden");
+    setStatus("Locked");
+  });
+
+  if (token) {
+    tokenModal.classList.add("hidden");
+    loadSubmissions().catch((error) => {
+      setStatus(error.message);
+      tokenModal.classList.remove("hidden");
+    });
+  }
+})();
+</script>
+</body>
+</html>

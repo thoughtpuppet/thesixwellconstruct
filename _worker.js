@@ -11,6 +11,12 @@ import {
   serverError,
   updateCartLines,
 } from "./functions/api/shop/_lib.js";
+import {
+  handleCreateSubmission,
+  handleGetSubmission,
+  handleListSubmissions,
+  handleUpdateSubmission,
+} from "./functions/api/submissions/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/events",
@@ -303,6 +309,32 @@ async function handleShopApi(request, env) {
   return notFound("Unknown shop API route.");
 }
 
+async function handleSubmissionsApi(request, env) {
+  const url = new URL(request.url);
+  const { pathname } = url;
+  const { method } = request;
+
+  if (pathname === "/api/submissions") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleCreateSubmission(request, env);
+  }
+
+  if (pathname === "/api/admin/submissions") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleListSubmissions(request, env);
+  }
+
+  const match = pathname.match(/^\/api\/admin\/submissions\/([^/]+)$/);
+  if (match) {
+    const id = decodeURIComponent(match[1]);
+    if (method === "GET") return handleGetSubmission(request, env, id);
+    if (method === "PATCH") return handleUpdateSubmission(request, env, id);
+    return methodNotAllowed(method, ["GET", "PATCH"]);
+  }
+
+  return notFound("Unknown submissions API route.");
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -312,6 +344,13 @@ export default {
 
     if (url.pathname.startsWith("/api/shop/")) {
       return handleShopApi(request, env);
+    }
+
+    if (
+      url.pathname === "/api/submissions" ||
+      url.pathname.startsWith("/api/admin/submissions")
+    ) {
+      return handleSubmissionsApi(request, env);
     }
 
     if (isHomePath(url.pathname)) {

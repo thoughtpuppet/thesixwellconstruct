@@ -122,8 +122,8 @@
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <h2 class="form-title">Submit for Review</h2>
         <p class="form-note">Reviewed before booking. Approved projects receive a private Acuity scheduling link and next steps.</p>
-        <form method="POST" action="https://formspree.io/f/xqenbpoj" enctype="multipart/form-data">
-          <input type="hidden" name="form_type" value="standard_tattoo_inquiry">
+        <form id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+          <input type="hidden" name="type" value="tattoo_inquiry">
           <input type="hidden" name="source_path" value="/tattoos/inquire/">
           <input type="hidden" name="subject" value="New Art.Pill tattoo inquiry">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
@@ -145,8 +145,8 @@
           </div>
           <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this submission begins review before an appointment is confirmed.</span></label>
           <div class="submit-row">
-            <button class="cta-primary" type="submit">Submit for Review</button>
-            <p class="form-status">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>
+            <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
+            <p class="form-status" id="formStatus">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>
           </div>
         </form>
       </section>
@@ -159,5 +159,38 @@
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script>
+    (function(){
+      var form = document.getElementById("inquiryForm");
+      var submitBtn = document.getElementById("submitBtn");
+      var status = document.getElementById("formStatus");
+      if (!form || !submitBtn || !status) return;
+
+      form.addEventListener("submit", async function(event){
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Submitting...";
+        status.textContent = "Capturing your inquiry for review.";
+
+        try {
+          var response = await fetch(form.action, {
+            method: "POST",
+            body: new FormData(form),
+          });
+          var payload = await response.json().catch(function(){ return {}; });
+          if (!response.ok) {
+            throw new Error(payload.error || "Submission failed.");
+          }
+          window.location.href = "/tattoos/submission-received/";
+        } catch (error) {
+          status.textContent = error.message || "Submission failed. Please try again.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Submit for Review";
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
