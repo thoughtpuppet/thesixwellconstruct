@@ -275,8 +275,8 @@
         <div class="summary-tags" id="summaryTags"></div>
       </div>
 
-      <form method="POST" action="https://formspree.io/f/mrejkpnl" enctype="multipart/form-data">
-        <input type="hidden" name="form_type" value="build_your_own">
+      <form id="buildBriefForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+        <input type="hidden" name="type" value="build_brief">
         <input type="hidden" name="source_path" value="/tattoos/build/">
         <input type="hidden" name="project_category" value="build-your-own">
         <input type="hidden" name="selected_elements" id="selectedElements">
@@ -302,8 +302,8 @@
         </label>
 
         <div class="submit-row">
-          <button class="submit-btn" type="submit">Submit Brief</button>
-          <p class="form-status">Reviewed within a few days. Booking access follows if it's a fit.</p>
+          <button class="submit-btn" type="submit" id="submitBtn">Submit Brief</button>
+          <p class="form-status" id="formStatus">Reviewed within a few days. Booking access follows if it's a fit.</p>
         </div>
       </form>
     </section>
@@ -480,6 +480,39 @@
   buildFilters();
   buildSymbols();
   updateBrief();
+  </script>
+  <script>
+  (function(){
+    var form = document.getElementById("buildBriefForm");
+    var submitBtn = document.getElementById("submitBtn");
+    var status = document.getElementById("formStatus");
+    if (!form || !submitBtn || !status) return;
+
+    form.addEventListener("submit", async function(event){
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Submitting...";
+      status.textContent = "Capturing your brief for review.";
+
+      try {
+        var response = await fetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+        });
+        var payload = await response.json().catch(function(){ return {}; });
+        if (!response.ok) {
+          throw new Error(payload.error || "Submission failed.");
+        }
+        window.location.href = "/tattoos/submission-received/";
+      } catch (error) {
+        status.textContent = error.message || "Submission failed. Please try again.";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Brief";
+      }
+    });
+  })();
   </script>
 
   <script src="/js/transition.js"></script>

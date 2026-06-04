@@ -93,8 +93,8 @@
       <section class="form-panel" aria-label="Special Projects application form">
         <h2 class="form-title">Apply for Review</h2>
         <p class="form-note">Use this form for projects that need deeper concept, trust, time, or scale. Applications are reviewed before a private scheduling link is sent.</p>
-        <form method="POST" action="https://formspree.io/f/mnjwvpeg" enctype="multipart/form-data">
-          <input type="hidden" name="form_type" value="special_project_application">
+        <form id="specialProjectForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+          <input type="hidden" name="type" value="special_project">
           <input type="hidden" name="source_path" value="/tattoos/special-projects/apply/">
           <input type="hidden" name="project_category" value="special_projects">
           <input type="hidden" name="subject" value="New Art.Pill Special Projects application">
@@ -124,8 +124,8 @@
           </div>
           <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand the final image is developed through shared symbolic direction while remaining rooted in the artist's existing body of work.</span></label>
           <div class="submit-row">
-            <button class="cta-primary" type="submit">Submit Application</button>
-            <p class="form-status">Inquiry received. Booking confirmation comes after review.</p>
+            <button class="cta-primary" type="submit" id="submitBtn">Submit Application</button>
+            <p class="form-status" id="formStatus">Inquiry received. Booking confirmation comes after review.</p>
           </div>
         </form>
       </section>
@@ -138,5 +138,38 @@
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script>
+    (function(){
+      var form = document.getElementById("specialProjectForm");
+      var submitBtn = document.getElementById("submitBtn");
+      var status = document.getElementById("formStatus");
+      if (!form || !submitBtn || !status) return;
+
+      form.addEventListener("submit", async function(event){
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Submitting...";
+        status.textContent = "Capturing your application for review.";
+
+        try {
+          var response = await fetch(form.action, {
+            method: "POST",
+            body: new FormData(form),
+          });
+          var payload = await response.json().catch(function(){ return {}; });
+          if (!response.ok) {
+            throw new Error(payload.error || "Submission failed.");
+          }
+          window.location.href = "/tattoos/submission-received/";
+        } catch (error) {
+          status.textContent = error.message || "Submission failed. Please try again.";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Submit Application";
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

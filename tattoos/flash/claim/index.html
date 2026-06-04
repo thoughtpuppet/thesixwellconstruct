@@ -53,6 +53,7 @@
   .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
+  .field.is-hidden { display:none; }
   label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
   input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
   input[type="file"] { padding:11px 12px; color:var(--text-mute); }
@@ -156,7 +157,7 @@
             <div class="field"><label for="scale">Approx. scale</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
             <div class="field"><label for="claim_bid">Bid / budget</label><input id="claim_bid" name="claim_bid" placeholder="Example: $300-$450" required></div>
             <div class="field"><label for="timeline">Timeline</label><input id="timeline" name="timeline" placeholder="Example: no rush, June, weekend preferred"></div>
-            <div class="field full"><label for="sheet_code">Sheet letter/code</label><input id="sheet_code" name="sheet_code" placeholder="If claiming from a sheet, include the letter or code."></div>
+            <div class="field full is-hidden" id="sheetCodeField" aria-hidden="true"><label for="sheet_code">Specific design code on sheet</label><input id="sheet_code" name="sheet_code" placeholder="Example: A, B3, AP-01-C"><p class="file-note">Use this when the selected flash is a sheet and you want one exact item from it.</p></div>
             <div class="field full"><label for="body_references">Body / placement uploads</label><input id="body_references" name="body_references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Optional. Helpful for placement, scale, or body-area context.</p></div>
             <div class="field full"><label for="message">Claim notes</label><textarea id="message" name="message" placeholder="Anything the studio should know about placement, meaning, availability, or fit."></textarea></div>
           </div>
@@ -181,6 +182,8 @@
       title: document.getElementById("selectedTitle"),
       meta: document.getElementById("selectedMeta"),
       subject: document.getElementById("subject"),
+      sheetCodeField: document.getElementById("sheetCodeField"),
+      sheetCodeInput: document.getElementById("sheet_code"),
       hidden: {
         id: document.getElementById("flash_id"),
         title: document.getElementById("flash_title"),
@@ -229,6 +232,7 @@
       const item = availableFlash.find((entry) => entry.id === id);
       if (!item) {
         els.card.classList.add("is-empty");
+        revealSheetCode(false);
         Object.values(els.hidden).forEach((input) => input.value = "");
         els.subject.value = "New Art.Pill flash claim";
         return;
@@ -249,6 +253,13 @@
       els.hidden.size.value = item.sizeBucket || "";
       els.hidden.price.value = item.price || "";
       els.subject.value = `New Art.Pill flash claim - ${item.title}`;
+      revealSheetCode(item.type === "Sheet");
+    }
+
+    function revealSheetCode(shouldReveal) {
+      els.sheetCodeField.classList.toggle("is-hidden", !shouldReveal);
+      els.sheetCodeField.setAttribute("aria-hidden", shouldReveal ? "false" : "true");
+      if (!shouldReveal) els.sheetCodeInput.value = "";
     }
 
     async function init() {

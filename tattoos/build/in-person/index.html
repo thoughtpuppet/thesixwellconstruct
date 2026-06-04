@@ -212,7 +212,7 @@
         <!-- STEP 1: FORM -->
         <div id="formStep">
           <form id="consultForm" novalidate>
-            <input type="hidden" name="form_type" value="inperson_build_consultation">
+            <input type="hidden" name="type" value="consultation">
             <input type="hidden" name="source_path" value="/tattoos/build/in-person/">
             <input type="hidden" name="subject" value="New In-Person Build Consultation Request">
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
@@ -297,7 +297,6 @@
   /* ─────────────────────────────────────────────
      CONFIG — update these two values when ready
   ───────────────────────────────────────────── */
-  const FORMSPREE_ID   = "REPLACE_WITH_FORMSPREE_ID";   // e.g. "mrejkpnl"
   const STRIPE_PAYMENT_LINK = "REPLACE_WITH_STRIPE_PAYMENT_LINK"; // e.g. "https://buy.stripe.com/..."
 
   /* ── Load studio availability from JSON ── */
@@ -622,20 +621,26 @@
 
     try {
       const data = new FormData(form);
-      const res = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
+      const res = await fetch("/api/submissions", {
         method: "POST",
-        body: data,
-        headers: { Accept: "application/json" }
+        body: data
       });
 
-      if (!res.ok) throw new Error("submit_failed");
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "submit_failed");
+      }
 
       /* Details saved — show holding state then redirect */
       document.getElementById("formStep").style.display = "none";
       document.getElementById("paymentStep").style.display = "block";
 
       setTimeout(() => {
-        window.location.href = STRIPE_PAYMENT_LINK;
+        if (STRIPE_PAYMENT_LINK && !STRIPE_PAYMENT_LINK.includes("REPLACE_WITH")) {
+          window.location.href = STRIPE_PAYMENT_LINK;
+        } else {
+          window.location.href = "/tattoos/submission-received/";
+        }
       }, 1200);
 
     } catch {

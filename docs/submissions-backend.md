@@ -51,14 +51,15 @@ Optional file storage uses R2. If the `SUBMISSION_FILES` binding exists, uploade
 ]
 ```
 
-## First migrated form
+## Migrated forms
 
-`/tattoos/inquire/` now submits to `/api/submissions` with `type=tattoo_inquiry`.
+The website submission paths now submit to `/api/submissions` with a `type` field:
 
-The remaining forms can migrate to the same endpoint by setting their `type` field:
+- `/tattoos/inquire/` uses `tattoo_inquiry`
+- `/tattoos/flash/claim/` uses `flash_claim`
+- `/tattoos/build/` uses `build_brief`
+- `/tattoos/special-projects/apply/` uses `special_project`
+- `/tattoos/build/in-person/` uses `consultation`
+- `/art/acquisitioninquiry.html` uses `art_acquisition`
 
-- `flash_claim`
-- `special_project`
-- `build_brief`
-- `art_acquisition`
-- `consultation`
+The review console utility form at `/studio/submissions/` is not a submission path. It only collects the admin token in the browser so the console can read protected admin endpoints.

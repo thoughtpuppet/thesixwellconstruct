@@ -155,7 +155,7 @@ function normalizeSubmission(payload, request) {
   const name =
     asOptionalString(payload.name) ||
     [firstName, lastName].filter(Boolean).join(" ").trim();
-  const email = normalizeEmail(payload.email);
+  const email = normalizeEmail(payload.email || payload.from_email);
   const phone = asOptionalString(payload.phone);
 
   return {

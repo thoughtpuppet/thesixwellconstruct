@@ -730,6 +730,11 @@
     /* build template params for EmailJS */
     const locationVal = document.querySelector("input[name='location']:checked");
     const templateParams = {
+      type:             "art_acquisition",
+      source_path:      "/art/acquisitioninquiry.html",
+      subject:          "New art acquisition inquiry",
+      first_name:       firstName,
+      last_name:        lastName,
       from_name:        `${firstName} ${lastName}`,
       from_email:       emailVal,
       reply_to:         emailVal,
@@ -775,11 +780,27 @@
     /* ============================================================
        PROTOTYPE RESPONSE — remove this block when EmailJS is live
     ============================================================ */
-    console.log("INQUIRY:", templateParams);
+    const submitBtn = document.getElementById("submitBtn");
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = "0.4";
     status.className = "form-status success";
-    status.textContent = "inquiry received. Saiel will be in touch within 48 hours.";
-    document.getElementById("submitBtn").disabled = true;
-    document.getElementById("submitBtn").style.opacity = "0.4";
+    status.textContent = "capturing inquiry...";
+
+    fetch("/api/submissions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(templateParams)
+    }).then(async (response) => {
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "submission failed.");
+      status.className = "form-status success";
+      status.textContent = "inquiry received. Saiel will be in touch within 48 hours.";
+    }).catch((error) => {
+      status.className = "form-status error";
+      status.textContent = error.message || "something went wrong. please email directly.";
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = "1";
+    });
   });
   </script>
 
