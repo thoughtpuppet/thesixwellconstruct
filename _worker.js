@@ -17,6 +17,19 @@ import {
   handleListSubmissions,
   handleUpdateSubmission,
 } from "./functions/api/submissions/_lib.js";
+import {
+  handleAdminCreateAvailability,
+  handleAdminCreateBookingToken,
+  handleAdminListAppointments,
+  handleAdminListAvailability,
+  handleAdminRevokeBookingToken,
+  handleAdminRevokeSubmissionBookingTokens,
+  handleAdminUpdateAvailability,
+  handleBookingContext,
+  handleConfirmBooking,
+  handleCreateBookingCheckout,
+  handleCreateBookingHold,
+} from "./functions/api/booking/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/events",
@@ -335,6 +348,67 @@ async function handleSubmissionsApi(request, env) {
   return notFound("Unknown submissions API route.");
 }
 
+async function handleBookingApi(request, env) {
+  const url = new URL(request.url);
+  const { pathname } = url;
+  const { method } = request;
+
+  if (pathname === "/api/booking/context") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleBookingContext(request, env);
+  }
+
+  if (pathname === "/api/booking/hold") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleCreateBookingHold(request, env);
+  }
+
+  if (pathname === "/api/booking/checkout") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleCreateBookingCheckout(request, env);
+  }
+
+  if (pathname === "/api/booking/confirm") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleConfirmBooking(request, env);
+  }
+
+  if (pathname === "/api/admin/booking/tokens") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminCreateBookingToken(request, env);
+  }
+
+  if (pathname === "/api/admin/booking/tokens/revoke-submission") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminRevokeSubmissionBookingTokens(request, env);
+  }
+
+  const tokenMatch = pathname.match(/^\/api\/admin\/booking\/tokens\/([^/]+)$/);
+  if (tokenMatch) {
+    if (method !== "PATCH") return methodNotAllowed(method, ["PATCH"]);
+    return handleAdminRevokeBookingToken(request, env, decodeURIComponent(tokenMatch[1]));
+  }
+
+  if (pathname === "/api/admin/booking/availability") {
+    if (method === "GET") return handleAdminListAvailability(request, env);
+    if (method === "POST") return handleAdminCreateAvailability(request, env);
+    return methodNotAllowed(method, ["GET", "POST"]);
+  }
+
+  const availabilityMatch = pathname.match(/^\/api\/admin\/booking\/availability\/([^/]+)$/);
+  if (availabilityMatch) {
+    if (method !== "PATCH") return methodNotAllowed(method, ["PATCH"]);
+    return handleAdminUpdateAvailability(request, env, decodeURIComponent(availabilityMatch[1]));
+  }
+
+  if (pathname === "/api/admin/booking/appointments") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAdminListAppointments(request, env);
+  }
+
+  return notFound("Unknown booking API route.");
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -344,6 +418,13 @@ export default {
 
     if (url.pathname.startsWith("/api/shop/")) {
       return handleShopApi(request, env);
+    }
+
+    if (
+      url.pathname.startsWith("/api/booking/") ||
+      url.pathname.startsWith("/api/admin/booking/")
+    ) {
+      return handleBookingApi(request, env);
     }
 
     if (

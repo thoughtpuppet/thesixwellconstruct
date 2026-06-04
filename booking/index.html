@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Private Booking - the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --bg:#0e0e0e; --accent:#FCB867; --signal:#7A1010;
+    --ring:#6D3D15; --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --text:#FFE7CA; --muted:rgba(255,231,202,0.64); --dim:rgba(255,231,202,0.38);
+    --ghost:rgba(255,231,202,0.14); --sans:Inter,"Helvetica Neue",Arial,sans-serif;
+    --serif:Georgia,"Times New Roman",Times,serif; --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); overflow-x:hidden; }
+  button,select { font:inherit; }
+  button { cursor:pointer; }
+  a { color:inherit; text-decoration:none; }
+  .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+  header { position:sticky; top:0; z-index:10; min-height:72px; display:flex; justify-content:flex-end; padding:24px 40px; }
+  main { position:relative; z-index:2; max-width:1180px; margin:0 auto; padding:72px 40px 80px; }
+  .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--accent); padding:5px 12px; margin-bottom:34px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
+  .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--accent); }
+  .label,.section-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--dim); }
+  h1 { max-width:720px; margin:16px 0 24px; font-family:var(--sans); font-size:clamp(42px,7vw,88px); line-height:0.88; letter-spacing:0; color:var(--accent); }
+  .lead { max-width:600px; margin:0 0 48px; color:var(--muted); font-size:16px; line-height:1.8; }
+  .status { max-width:720px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:22px 0; color:var(--muted); line-height:1.7; }
+  .booking-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:56px; align-items:start; }
+  .section { display:grid; gap:14px; margin-bottom:36px; }
+  .session-list,.window-list { display:grid; gap:10px; }
+  .choice { width:100%; display:grid; grid-template-columns:1fr auto; gap:16px; text-align:left; background:transparent; color:var(--text); border:5px solid var(--ring-faint); padding:18px; transition:border-color var(--t-fast), background var(--t-fast); }
+  .choice:hover,.choice.active { border-color:var(--accent); background:rgba(252,184,103,0.045); }
+  .choice-title { display:block; font-family:var(--sans); font-size:15px; font-weight:900; letter-spacing:0; color:var(--text); }
+  .choice-meta { display:block; margin-top:6px; color:var(--dim); font-size:12px; line-height:1.45; }
+  .price { font-family:var(--sans); font-size:22px; font-weight:900; color:var(--accent); white-space:nowrap; }
+  .panel { border-top:5px solid var(--ring-soft); padding-top:20px; position:sticky; top:100px; }
+  .panel-row { display:flex; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:5px solid var(--ring-faint); color:var(--muted); font-size:13px; line-height:1.5; }
+  .panel-key { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
+  .checkout { width:100%; min-height:52px; margin-top:22px; border:5px solid var(--ring-soft); background:transparent; color:var(--text); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .checkout:enabled:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
+  .checkout:disabled { opacity:0.45; cursor:not-allowed; }
+  .fine { margin-top:14px; color:var(--dim); font-size:11px; line-height:1.7; }
+  .hidden { display:none; }
+  @media (max-width:820px) {
+    header { padding:18px 24px; min-height:60px; }
+    main { padding:48px 24px 64px; }
+    .booking-grid { grid-template-columns:1fr; gap:24px; }
+    .panel { position:static; }
+  }
+</style>
+<link rel="stylesheet" href="/css/mobile.css">
+</head>
+<body data-venture="tattooing">
+<script>
+(function(){
+  var o = document.createElement("div");
+  o.id = "construct-fade";
+  o.style.cssText = "position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);";
+  document.body.appendChild(o);
+  function fadeOut(){ requestAnimationFrame(function(){ requestAnimationFrame(function(){ o.style.opacity = "0"; o.style.pointerEvents = "none"; }); }); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fadeOut); else fadeOut();
+})();
+</script>
+<div class="grain"></div>
+<header></header>
+<main>
+  <div class="badge"><span class="badge-dot"></span>Private Booking</div>
+  <p class="label">the six.well construct</p>
+  <h1>Choose the session that fits the work.</h1>
+  <p class="lead">This booking link opens after review. Select an approved session window, complete the deposit through Square, and return here for confirmation.</p>
+  <div id="status" class="status">Loading private booking access.</div>
+
+  <div id="bookingApp" class="booking-grid hidden">
+    <div>
+      <section class="section">
+        <p class="section-label">Session &amp; Deposit</p>
+        <div id="sessionList" class="session-list"></div>
+      </section>
+      <section class="section">
+        <p class="section-label">Available Windows</p>
+        <div id="windowList" class="window-list"></div>
+      </section>
+    </div>
+    <aside class="panel">
+      <div class="panel-row"><span class="panel-key">Client</span><span id="clientValue">-</span></div>
+      <div class="panel-row"><span class="panel-key">Session</span><span id="sessionValue">Select a session</span></div>
+      <div class="panel-row"><span class="panel-key">Window</span><span id="windowValue">Select a time</span></div>
+      <div class="panel-row"><span class="panel-key">Deposit</span><span id="depositValue">-</span></div>
+      <button id="checkoutBtn" class="checkout" type="button" disabled>Continue to Square</button>
+      <p id="checkoutNote" class="fine">Deposit is applied toward the appointment total. Square handles the secure payment step.</p>
+    </aside>
+  </div>
+</main>
+<script>
+(function(){
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token") || "";
+  const statusEl = document.getElementById("status");
+  const appEl = document.getElementById("bookingApp");
+  const sessionListEl = document.getElementById("sessionList");
+  const windowListEl = document.getElementById("windowList");
+  const clientValue = document.getElementById("clientValue");
+  const sessionValue = document.getElementById("sessionValue");
+  const windowValue = document.getElementById("windowValue");
+  const depositValue = document.getElementById("depositValue");
+  const checkoutBtn = document.getElementById("checkoutBtn");
+  const checkoutNote = document.getElementById("checkoutNote");
+  let context = null;
+  let selectedType = null;
+  let selectedWindow = null;
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;",
+    }[char]));
+  }
+
+  function formatDate(value) {
+    if (!value) return "";
+    return new Date(value).toLocaleString([], { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+  }
+
+  function minutesLabel(minutes) {
+    if (minutes >= 60) {
+      const hours = minutes / 60;
+      return Number.isInteger(hours) ? `${hours} hours` : `${hours.toFixed(1)} hours`;
+    }
+    return `${minutes} minutes`;
+  }
+
+  function render() {
+    const types = context.bookingTypes || [];
+    const windows = context.availabilityWindows || [];
+    sessionListEl.innerHTML = types.map((type) => `
+      <button class="choice ${selectedType?.id === type.id ? "active" : ""}" type="button" data-type="${escapeHtml(type.id)}">
+        <span>
+          <span class="choice-title">${escapeHtml(type.label)}</span>
+          <span class="choice-meta">${escapeHtml(minutesLabel(type.durationMinutes))} / ${escapeHtml(type.description)}</span>
+        </span>
+        <span class="price">${escapeHtml(type.depositLabel)}</span>
+      </button>
+    `).join("");
+
+    const visibleWindows = windows.filter((windowItem) => {
+      return !selectedType || !windowItem.bookingTypeId || windowItem.bookingTypeId === selectedType.id;
+    });
+    windowListEl.innerHTML = visibleWindows.length ? visibleWindows.map((windowItem) => `
+      <button class="choice ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
+        <span>
+          <span class="choice-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
+          <span class="choice-meta">Ends ${escapeHtml(formatDate(windowItem.endAt))}${windowItem.note ? " / " + escapeHtml(windowItem.note) : ""}</span>
+        </span>
+      </button>
+    `).join("") : '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
+
+    clientValue.textContent = context.client?.name || context.client?.email || "-";
+    sessionValue.textContent = selectedType ? selectedType.label : "Select a session";
+    windowValue.textContent = selectedWindow ? formatDate(selectedWindow.startAt) : "Select a time";
+    depositValue.textContent = selectedType ? selectedType.depositLabel : "-";
+    checkoutBtn.disabled = !selectedType || !selectedWindow;
+  }
+
+  async function loadContext() {
+    if (!token) {
+      statusEl.textContent = "A private booking link is required. Approved clients receive this after review.";
+      return;
+    }
+    const response = await fetch(`/api/booking/context?token=${encodeURIComponent(token)}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Unable to load booking access.");
+    context = payload;
+    selectedType = context.bookingTypes[0] || null;
+    selectedWindow = null;
+    statusEl.classList.add("hidden");
+    appEl.classList.remove("hidden");
+    render();
+  }
+
+  sessionListEl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-type]");
+    if (!button) return;
+    selectedType = context.bookingTypes.find((type) => type.id === button.dataset.type) || null;
+    if (selectedWindow?.bookingTypeId && selectedWindow.bookingTypeId !== selectedType?.id) selectedWindow = null;
+    render();
+  });
+
+  windowListEl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-window]");
+    if (!button) return;
+    selectedWindow = context.availabilityWindows.find((windowItem) => windowItem.id === button.dataset.window) || null;
+    render();
+  });
+
+  checkoutBtn.addEventListener("click", async () => {
+    if (!selectedType || !selectedWindow) return;
+    checkoutBtn.disabled = true;
+    checkoutNote.textContent = "Creating Square checkout.";
+    const response = await fetch("/api/booking/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token,
+        bookingTypeId: selectedType.id,
+        availabilityWindowId: selectedWindow.id,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      checkoutNote.textContent = payload.error || "Unable to create checkout.";
+      checkoutBtn.disabled = false;
+      return;
+    }
+    window.location.href = payload.checkoutUrl;
+  });
+
+  loadContext().catch((error) => {
+    statusEl.textContent = error.message;
+  });
+})();
+</script>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+</body>
+</html>

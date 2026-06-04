@@ -44,6 +44,10 @@
   .value { min-height:42px; padding:12px; border:1px solid var(--line); color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
   .value.full { min-height:96px; }
   .actions { display:grid; grid-template-columns:180px minmax(0,1fr) auto; gap:12px; align-items:start; margin-top:22px; }
+  .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+  .availability-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
+  .availability-list { display:grid; gap:10px; }
+  .availability-item { border:1px solid var(--line); padding:12px; display:grid; gap:8px; }
   .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
   .token-card { width:min(520px,100%); border:1px solid var(--line-strong); padding:24px; background:var(--panel); display:grid; gap:14px; }
   .token-card h2 { font-size:22px; }
@@ -61,6 +65,7 @@
     <h1>Studio Submissions</h1>
     <div class="header-actions">
       <span class="status" id="status">Locked</span>
+      <button class="button" id="availabilityBtn" type="button">Availability</button>
       <button class="button" id="refreshBtn" type="button">Refresh</button>
       <button class="button" id="lockBtn" type="button">Lock</button>
     </div>
@@ -106,6 +111,7 @@
   const detailEl = document.getElementById("detailPane");
   const refreshBtn = document.getElementById("refreshBtn");
   const lockBtn = document.getElementById("lockBtn");
+  const availabilityBtn = document.getElementById("availabilityBtn");
   const statusFilter = document.getElementById("statusFilter");
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
@@ -218,6 +224,11 @@
         <div class="field">
           <label for="bookingUrl">Booking URL</label>
           <input id="bookingUrl" value="${escapeHtml(submission.bookingUrl || "")}">
+          <div class="booking-actions">
+            <button class="button" id="generateBookingBtn" type="button">${submission.bookingUrl ? "Regenerate Link" : "Generate Link"}</button>
+            <button class="button" id="copyBookingBtn" type="button">Copy</button>
+            <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
+          </div>
         </div>
         <button class="button" id="saveBtn" type="button">Save</button>
       </div>
@@ -226,6 +237,89 @@
         <textarea id="internalNotes">${escapeHtml(submission.internalNotes || "")}</textarea>
       </div>
     `;
+  }
+
+  function localDateTimeToIso(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return date.toString() === "Invalid Date" ? "" : date.toISOString();
+  }
+
+  function formatDateTimeLocal(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return date.toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
+  }
+
+  async function renderAvailabilityManager() {
+    detailEl.innerHTML = `
+      <div class="detail-head">
+        <span class="pill">Booking / Availability</span>
+        <h2>Availability Windows</h2>
+        <p class="contact">Create exact bookable windows for approved private booking links. Blackout windows are kept here for later expansion.</p>
+      </div>
+      <form id="availabilityForm" class="availability-form">
+        <div class="field">
+          <label for="availabilityStart">Start</label>
+          <input id="availabilityStart" type="datetime-local" required>
+        </div>
+        <div class="field">
+          <label for="availabilityEnd">End</label>
+          <input id="availabilityEnd" type="datetime-local" required>
+        </div>
+        <div class="field">
+          <label for="availabilityType">Session Type</label>
+          <select id="availabilityType">
+            <option value="">Any tattoo session</option>
+            <option value="tattoo_quarter">Quarter Session</option>
+            <option value="tattoo_half">Half Session</option>
+            <option value="tattoo_full">Full Session</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="availabilityCapacity">Capacity</label>
+          <input id="availabilityCapacity" type="number" min="1" step="1" value="1">
+        </div>
+        <div class="field">
+          <label for="bufferBefore">Buffer Before</label>
+          <input id="bufferBefore" type="number" min="0" step="5" value="0">
+        </div>
+        <div class="field">
+          <label for="bufferAfter">Buffer After</label>
+          <input id="bufferAfter" type="number" min="0" step="5" value="0">
+        </div>
+        <div class="field">
+          <label for="availabilityNote">Note</label>
+          <input id="availabilityNote" placeholder="Optional studio note">
+        </div>
+        <div class="field">
+          <label for="availabilityBlackout">Mode</label>
+          <select id="availabilityBlackout">
+            <option value="0">Bookable</option>
+            <option value="1">Blackout</option>
+          </select>
+        </div>
+        <button class="button" type="submit">Add Window</button>
+      </form>
+      <div id="availabilityList" class="availability-list"><p class="empty">Loading availability.</p></div>
+    `;
+    await loadAvailability();
+  }
+
+  async function loadAvailability() {
+    const list = document.getElementById("availabilityList");
+    if (!list) return;
+    const payload = await api("/api/admin/booking/availability");
+    const windows = payload.availabilityWindows || [];
+    list.innerHTML = windows.length ? windows.map((windowItem) => `
+      <div class="availability-item">
+        <span class="pill">${windowItem.isBlackout ? "blackout" : "bookable"} / ${windowItem.active ? "active" : "inactive"}</span>
+        <div class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startAt))} - ${escapeHtml(formatDateTimeLocal(windowItem.endAt))}</div>
+        <div class="meta">${escapeHtml(windowItem.bookingTypeId || "any tattoo session")} / capacity ${escapeHtml(windowItem.capacity)} / buffer ${escapeHtml(windowItem.bufferBeforeMinutes)} before, ${escapeHtml(windowItem.bufferAfterMinutes)} after</div>
+        <div class="meta">${escapeHtml(windowItem.note || "")}</div>
+        <button class="button" type="button" data-toggle-window="${escapeHtml(windowItem.id)}" data-active="${windowItem.active ? "0" : "1"}">${windowItem.active ? "Disable" : "Enable"}</button>
+      </div>
+    `).join("") : '<p class="empty">No availability windows yet.</p>';
   }
 
   function detailField(label, value) {
@@ -276,6 +370,67 @@
   });
 
   detailEl.addEventListener("click", async (event) => {
+    if (event.target.id === "generateBookingBtn" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      if (submission?.status !== "approved") {
+        setStatus("Approve first");
+        return;
+      }
+      setStatus("Generating link");
+      const payload = await api("/api/admin/booking/tokens", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ submissionId: activeId, revokeExisting: true }),
+      });
+      document.getElementById("bookingUrl").value = payload.token.path;
+      await navigator.clipboard?.writeText(payload.token.bookingUrl).catch(() => {});
+      await loadSubmissions();
+      setStatus("Booking link copied");
+      return;
+    }
+
+    if (event.target.id === "copyBookingBtn") {
+      const value = document.getElementById("bookingUrl")?.value || "";
+      if (value) await navigator.clipboard?.writeText(new URL(value, window.location.origin).toString()).catch(() => {});
+      setStatus(value ? "Copied" : "No booking URL");
+      return;
+    }
+
+    if (event.target.id === "revokeBookingBtn" && activeId) {
+      setStatus("Revoking links");
+      await api("/api/admin/booking/tokens/revoke-submission", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ submissionId: activeId }),
+      });
+      document.getElementById("bookingUrl").value = "";
+      await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: document.getElementById("detailStatus").value,
+          bookingUrl: "",
+          internalNotes: document.getElementById("internalNotes").value,
+        }),
+      });
+      await loadSubmissions();
+      setStatus("Links revoked");
+      return;
+    }
+
+    const toggle = event.target.closest("[data-toggle-window]");
+    if (toggle) {
+      setStatus("Updating window");
+      await api(`/api/admin/booking/availability/${encodeURIComponent(toggle.dataset.toggleWindow)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ active: toggle.dataset.active === "1" }),
+      });
+      await loadAvailability();
+      setStatus("Availability updated");
+      return;
+    }
+
     if (event.target.id !== "saveBtn" || !activeId) return;
     setStatus("Saving");
     const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
@@ -294,7 +449,35 @@
     setStatus("Saved");
   });
 
+  detailEl.addEventListener("submit", async (event) => {
+    if (event.target.id !== "availabilityForm") return;
+    event.preventDefault();
+    setStatus("Adding window");
+    await api("/api/admin/booking/availability", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        venture: "tattooing",
+        startAt: localDateTimeToIso(document.getElementById("availabilityStart").value),
+        endAt: localDateTimeToIso(document.getElementById("availabilityEnd").value),
+        bookingTypeId: document.getElementById("availabilityType").value,
+        capacity: document.getElementById("availabilityCapacity").value,
+        bufferBeforeMinutes: document.getElementById("bufferBefore").value,
+        bufferAfterMinutes: document.getElementById("bufferAfter").value,
+        note: document.getElementById("availabilityNote").value,
+        isBlackout: document.getElementById("availabilityBlackout").value === "1",
+      }),
+    });
+    event.target.reset();
+    document.getElementById("availabilityCapacity").value = "1";
+    document.getElementById("bufferBefore").value = "0";
+    document.getElementById("bufferAfter").value = "0";
+    await loadAvailability();
+    setStatus("Window added");
+  });
+
   refreshBtn.addEventListener("click", () => loadSubmissions().catch((error) => setStatus(error.message)));
+  availabilityBtn.addEventListener("click", () => renderAvailabilityManager().catch((error) => setStatus(error.message)));
   statusFilter.addEventListener("change", () => loadSubmissions().catch((error) => setStatus(error.message)));
   lockBtn.addEventListener("click", () => {
     token = "";

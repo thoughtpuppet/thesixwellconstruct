@@ -40,6 +40,16 @@ Set the admin token:
 wrangler secret put SUBMISSIONS_ADMIN_TOKEN
 ```
 
+Set Square secrets before enabling deposit checkout:
+
+```sh
+wrangler secret put SQUARE_ACCESS_TOKEN
+wrangler secret put SQUARE_LOCATION_ID
+wrangler secret put SQUARE_WEBHOOK_SIGNATURE_KEY
+```
+
+Use `SQUARE_ENVIRONMENT=sandbox` while testing and `SQUARE_ENVIRONMENT=production` for live deposits.
+
 Optional file storage uses R2. If the `SUBMISSION_FILES` binding exists, uploaded reference files are stored under `submissions/{submissionId}/...`. If it does not exist, the backend still records file metadata, but it cannot preserve the file contents.
 
 ```jsonc
@@ -63,3 +73,18 @@ The website submission paths now submit to `/api/submissions` with a `type` fiel
 - `/art/acquisitioninquiry.html` uses `art_acquisition`
 
 The review console utility form at `/studio/submissions/` is not a submission path. It only collects the admin token in the browser so the console can read protected admin endpoints.
+
+## Booking and deposits
+
+The branded booking flow starts at `/booking/`. Tattoo clients need a private token link generated from an approved submission in `/studio/submissions/`.
+
+- Admin creates availability windows from the submissions console.
+- Admin approves a submission, then generates a booking link.
+- Client chooses a session and window.
+- `POST /api/booking/checkout` creates a pending appointment and Square hosted checkout link.
+- `/booking/confirmed/` verifies the Square order when possible and shows confirmed or pending deposit state.
+
+The old tattoo booking paths redirect into the system booking flow:
+
+- `/tattoos/booking/` -> `/booking/`
+- `/tattoos/booking/confirmed/` -> `/booking/confirmed/`

@@ -3,3 +3,7 @@ SHOPIFY_STOREFRONT_ACCESS_TOKEN=your-storefront-access-token
 SHOPIFY_STOREFRONT_API_VERSION=2025-07
 SHOPIFY_MERCH_QUERY=tag:construct-merch
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
+SQUARE_ACCESS_TOKEN=replace-with-your-square-access-token
+SQUARE_LOCATION_ID=replace-with-your-square-location-id
+SQUARE_ENVIRONMENT=sandbox
+SQUARE_WEBHOOK_SIGNATURE_KEY=replace-with-your-square-webhook-signature-key
