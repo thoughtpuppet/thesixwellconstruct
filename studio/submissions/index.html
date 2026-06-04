@@ -48,6 +48,10 @@
   .availability-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
   .availability-list { display:grid; gap:10px; }
   .availability-item { border:1px solid var(--line); padding:12px; display:grid; gap:8px; }
+  .schedule-section { border-top:1px solid var(--line); padding-top:18px; margin-top:18px; }
+  .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
+  .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:1px solid var(--line); padding:12px 0; }
+  .day-name { color:var(--accent); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; padding-bottom:12px; }
   .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
   .token-card { width:min(520px,100%); border:1px solid var(--line-strong); padding:24px; background:var(--panel); display:grid; gap:14px; }
   .token-card h2 { font-size:22px; }
@@ -256,15 +260,61 @@
       <div class="detail-head">
         <span class="pill">Booking / Availability</span>
         <h2>Availability Windows</h2>
-        <p class="contact">Create exact bookable windows for approved private booking links. Blackout windows are kept here for later expansion.</p>
+        <p class="contact">Set recurring weekly hours once. Use exceptions only for extra days, closed days, or unusual blocks.</p>
       </div>
-      <form id="availabilityForm" class="availability-form">
+      <form id="scheduleForm">
+        <div class="schedule-section">
+          <span class="pill">Booking Rules</span>
+          <div class="schedule-grid">
+            <div class="field">
+              <label for="settingTimezone">Timezone</label>
+              <input id="settingTimezone" value="America/New_York">
+            </div>
+            <div class="field">
+              <label for="settingHorizon">Booking Horizon Days</label>
+              <input id="settingHorizon" type="number" min="1" max="180" value="60">
+            </div>
+            <div class="field">
+              <label for="settingNotice">Minimum Notice Hours</label>
+              <input id="settingNotice" type="number" min="0" step="1" value="48">
+            </div>
+            <div class="field">
+              <label for="settingInterval">Slot Interval Minutes</label>
+              <input id="settingInterval" type="number" min="15" step="15" value="30">
+            </div>
+            <div class="field">
+              <label for="settingMaxDay">Max Bookings Per Day</label>
+              <input id="settingMaxDay" type="number" min="1" step="1" value="1">
+            </div>
+            <div class="field">
+              <label for="settingCapacity">Default Capacity</label>
+              <input id="settingCapacity" type="number" min="1" step="1" value="1">
+            </div>
+            <div class="field">
+              <label for="settingBufferBefore">Default Buffer Before</label>
+              <input id="settingBufferBefore" type="number" min="0" step="5" value="30">
+            </div>
+            <div class="field">
+              <label for="settingBufferAfter">Default Buffer After</label>
+              <input id="settingBufferAfter" type="number" min="0" step="5" value="30">
+            </div>
+          </div>
+        </div>
+        <div class="schedule-section">
+          <span class="pill">Weekly Schedule</span>
+          <div id="weeklyRules"></div>
+        </div>
+        <button class="button" type="submit">Save Schedule</button>
+      </form>
+      <div class="schedule-section">
+        <span class="pill">Exceptions</span>
+        <form id="availabilityForm" class="availability-form" style="margin-top:14px;">
         <div class="field">
-          <label for="availabilityStart">Start</label>
+          <label for="availabilityStart">Exception Start</label>
           <input id="availabilityStart" type="datetime-local" required>
         </div>
         <div class="field">
-          <label for="availabilityEnd">End</label>
+          <label for="availabilityEnd">Exception End</label>
           <input id="availabilityEnd" type="datetime-local" required>
         </div>
         <div class="field">
@@ -295,15 +345,68 @@
         <div class="field">
           <label for="availabilityBlackout">Mode</label>
           <select id="availabilityBlackout">
-            <option value="0">Bookable</option>
-            <option value="1">Blackout</option>
+            <option value="1">Closed / Blackout</option>
+            <option value="0">Extra Bookable Block</option>
           </select>
         </div>
-        <button class="button" type="submit">Add Window</button>
+        <button class="button" type="submit">Add Exception</button>
       </form>
+      </div>
       <div id="availabilityList" class="availability-list"><p class="empty">Loading availability.</p></div>
     `;
+    await loadSchedule();
     await loadAvailability();
+  }
+
+  async function loadSchedule() {
+    const payload = await api("/api/admin/booking/schedule");
+    const settings = payload.settings || {};
+    const rules = payload.rules || [];
+    document.getElementById("settingTimezone").value = settings.timezone || "America/New_York";
+    document.getElementById("settingHorizon").value = settings.bookingHorizonDays || 60;
+    document.getElementById("settingNotice").value = settings.minimumNoticeHours || 48;
+    document.getElementById("settingInterval").value = settings.slotIntervalMinutes || 30;
+    document.getElementById("settingMaxDay").value = settings.maxBookingsPerDay || 1;
+    document.getElementById("settingCapacity").value = settings.defaultCapacity || 1;
+    document.getElementById("settingBufferBefore").value = settings.defaultBufferBeforeMinutes || 30;
+    document.getElementById("settingBufferAfter").value = settings.defaultBufferAfterMinutes || 30;
+    const names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    document.getElementById("weeklyRules").innerHTML = rules.map((rule) => `
+      <div class="day-row" data-rule-id="${escapeHtml(rule.id)}">
+        <div class="day-name">${escapeHtml(names[rule.dayOfWeek] || "Day")}</div>
+        <div class="field">
+          <label>Open</label>
+          <select data-rule-field="active">
+            <option value="0" ${rule.active ? "" : "selected"}>Closed</option>
+            <option value="1" ${rule.active ? "selected" : ""}>Open</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Start</label>
+          <input data-rule-field="startTime" type="time" value="${escapeHtml(rule.startTime || "12:00")}">
+        </div>
+        <div class="field">
+          <label>End</label>
+          <input data-rule-field="endTime" type="time" value="${escapeHtml(rule.endTime || "18:00")}">
+        </div>
+        <div class="field">
+          <label>Capacity</label>
+          <input data-rule-field="capacity" type="number" min="1" step="1" value="${escapeHtml(rule.capacity || 1)}">
+        </div>
+        <div class="field">
+          <label>Buffer Before</label>
+          <input data-rule-field="bufferBeforeMinutes" type="number" min="0" step="5" value="${escapeHtml(rule.bufferBeforeMinutes || 0)}">
+        </div>
+        <div class="field">
+          <label>Buffer After</label>
+          <input data-rule-field="bufferAfterMinutes" type="number" min="0" step="5" value="${escapeHtml(rule.bufferAfterMinutes || 0)}">
+        </div>
+        <div class="field">
+          <label>Note</label>
+          <input data-rule-field="note" value="${escapeHtml(rule.note || "")}">
+        </div>
+      </div>
+    `).join("");
   }
 
   async function loadAvailability() {
@@ -313,13 +416,13 @@
     const windows = payload.availabilityWindows || [];
     list.innerHTML = windows.length ? windows.map((windowItem) => `
       <div class="availability-item">
-        <span class="pill">${windowItem.isBlackout ? "blackout" : "bookable"} / ${windowItem.active ? "active" : "inactive"}</span>
+        <span class="pill">${windowItem.isBlackout ? "exception blackout" : "extra bookable block"} / ${windowItem.active ? "active" : "inactive"}</span>
         <div class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startAt))} - ${escapeHtml(formatDateTimeLocal(windowItem.endAt))}</div>
         <div class="meta">${escapeHtml(windowItem.bookingTypeId || "any tattoo session")} / capacity ${escapeHtml(windowItem.capacity)} / buffer ${escapeHtml(windowItem.bufferBeforeMinutes)} before, ${escapeHtml(windowItem.bufferAfterMinutes)} after</div>
         <div class="meta">${escapeHtml(windowItem.note || "")}</div>
         <button class="button" type="button" data-toggle-window="${escapeHtml(windowItem.id)}" data-active="${windowItem.active ? "0" : "1"}">${windowItem.active ? "Disable" : "Enable"}</button>
       </div>
-    `).join("") : '<p class="empty">No availability windows yet.</p>';
+    `).join("") : '<p class="empty">No exceptions yet. Weekly schedule rules will generate booking times automatically.</p>';
   }
 
   function detailField(label, value) {
@@ -450,9 +553,47 @@
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    if (event.target.id === "scheduleForm") {
+      event.preventDefault();
+      setStatus("Saving schedule");
+      const rules = [...document.querySelectorAll("[data-rule-id]")].map((row) => {
+        const fields = Object.fromEntries([...row.querySelectorAll("[data-rule-field]")].map((field) => [field.dataset.ruleField, field.value]));
+        return {
+          id: row.dataset.ruleId,
+          active: fields.active === "1",
+          startTime: fields.startTime,
+          endTime: fields.endTime,
+          capacity: fields.capacity,
+          bufferBeforeMinutes: fields.bufferBeforeMinutes,
+          bufferAfterMinutes: fields.bufferAfterMinutes,
+          note: fields.note,
+        };
+      });
+      await api("/api/admin/booking/schedule", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            timezone: document.getElementById("settingTimezone").value,
+            bookingHorizonDays: document.getElementById("settingHorizon").value,
+            minimumNoticeHours: document.getElementById("settingNotice").value,
+            slotIntervalMinutes: document.getElementById("settingInterval").value,
+            maxBookingsPerDay: document.getElementById("settingMaxDay").value,
+            defaultCapacity: document.getElementById("settingCapacity").value,
+            defaultBufferBeforeMinutes: document.getElementById("settingBufferBefore").value,
+            defaultBufferAfterMinutes: document.getElementById("settingBufferAfter").value,
+          },
+          rules,
+        }),
+      });
+      await loadSchedule();
+      setStatus("Schedule saved");
+      return;
+    }
+
     if (event.target.id !== "availabilityForm") return;
     event.preventDefault();
-    setStatus("Adding window");
+    setStatus("Adding exception");
     await api("/api/admin/booking/availability", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -473,7 +614,7 @@
     document.getElementById("bufferBefore").value = "0";
     document.getElementById("bufferAfter").value = "0";
     await loadAvailability();
-    setStatus("Window added");
+    setStatus("Exception added");
   });
 
   refreshBtn.addEventListener("click", () => loadSubmissions().catch((error) => setStatus(error.message)));

@@ -97,6 +97,35 @@ function normalizeWindow(row) {
   };
 }
 
+function normalizeSettings(row) {
+  return {
+    venture: row.venture,
+    timezone: row.timezone || "America/New_York",
+    bookingHorizonDays: row.booking_horizon_days,
+    minimumNoticeHours: row.minimum_notice_hours,
+    slotIntervalMinutes: row.slot_interval_minutes,
+    maxBookingsPerDay: row.max_bookings_per_day,
+    defaultCapacity: row.default_capacity,
+    defaultBufferBeforeMinutes: row.default_buffer_before_minutes,
+    defaultBufferAfterMinutes: row.default_buffer_after_minutes,
+  };
+}
+
+function normalizeRule(row) {
+  return {
+    id: row.id,
+    venture: row.venture,
+    dayOfWeek: row.day_of_week,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    active: Boolean(row.active),
+    capacity: row.capacity,
+    bufferBeforeMinutes: row.buffer_before_minutes,
+    bufferAfterMinutes: row.buffer_after_minutes,
+    note: row.note || "",
+  };
+}
+
 function normalizeAppointment(row) {
   return {
     id: row.id,
@@ -141,6 +170,56 @@ function intervalsOverlap(a, b) {
 function isBlockedByBlackout(windowRow, blackoutRows) {
   const windowInterval = intervalWithBuffer(windowRow);
   return blackoutRows.some((blackout) => intervalsOverlap(windowInterval, intervalWithBuffer(blackout)));
+}
+
+function datePartsInZone(date, timezone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    year: Number(value.year),
+    month: Number(value.month),
+    day: Number(value.day),
+    dayOfWeek: dayMap[value.weekday],
+  };
+}
+
+function parseTime(value) {
+  const [hour = 0, minute = 0] = String(value || "00:00").split(":").map(Number);
+  return { hour, minute };
+}
+
+function zonedLocalToUtcIso(timezone, year, month, day, hour, minute) {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  const local = datePartsInZone(new Date(utcGuess), timezone);
+  const localMinutes = Date.UTC(local.year, local.month - 1, local.day, hour, minute);
+  const desiredMinutes = Date.UTC(year, month - 1, day, hour, minute);
+  const offset = localMinutes - desiredMinutes;
+  return new Date(utcGuess - offset).toISOString();
+}
+
+function addMinutes(iso, minutes) {
+  return new Date(new Date(iso).getTime() + minutes * 60 * 1000).toISOString();
+}
+
+function generatedWindowId(ruleId, bookingTypeId, startAt) {
+  return `gen:${ruleId}:${bookingTypeId}:${new Date(startAt).getTime()}`;
+}
+
+function parseGeneratedWindowId(id) {
+  const parts = String(id || "").split(":");
+  if (parts.length !== 4 || parts[0] !== "gen") return null;
+  return {
+    ruleId: parts[1],
+    bookingTypeId: parts[2],
+    startMs: Number(parts[3]),
+  };
 }
 
 function authTokenFromRequest(request) {
@@ -233,7 +312,7 @@ async function listPublicWindows(db, bookingTypes) {
   const ids = bookingTypes.map((type) => type.id);
   if (!ids.length) return [];
   const placeholders = ids.map(() => "?").join(", ");
-  const result = await db
+  const manualResult = await db
     .prepare(
       `SELECT aw.*,
         (
@@ -244,6 +323,7 @@ async function listPublicWindows(db, bookingTypes) {
        FROM availability_windows aw
        WHERE aw.active = 1
          AND aw.is_blackout = 0
+         AND aw.id NOT LIKE 'gen:%'
          AND aw.start_at > ?
          AND (aw.booking_type_id IS NULL OR aw.booking_type_id IN (${placeholders}))
        ORDER BY aw.start_at ASC`
@@ -260,10 +340,113 @@ async function listPublicWindows(db, bookingTypes) {
     .all();
   const blackouts = blackoutResult.results || [];
 
-  return (result.results || [])
+  const manualWindows = (manualResult.results || [])
     .filter((row) => Number(row.appointment_count || 0) < Number(row.capacity || 1))
     .filter((row) => !isBlockedByBlackout(row, blackouts))
     .map(normalizeWindow);
+
+  const generatedWindows = await listGeneratedWindows(db, bookingTypes, blackouts);
+  return [...manualWindows, ...generatedWindows]
+    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
+    .slice(0, 120);
+}
+
+async function listGeneratedWindows(db, bookingTypes, blackouts) {
+  const settingsRow = await db
+    .prepare("SELECT * FROM booking_settings WHERE venture = ?")
+    .bind("tattooing")
+    .first();
+  if (!settingsRow) return [];
+  const settings = normalizeSettings(settingsRow);
+  const rulesResult = await db
+    .prepare(
+      `SELECT * FROM availability_rules
+       WHERE venture = ? AND active = 1
+       ORDER BY day_of_week ASC`
+    )
+    .bind("tattooing")
+    .all();
+  const rules = rulesResult.results || [];
+  if (!rules.length) return [];
+
+  const now = new Date();
+  const earliest = new Date(now.getTime() + settings.minimumNoticeHours * 60 * 60 * 1000);
+  const days = Math.max(1, Math.min(settings.bookingHorizonDays || 60, 180));
+  const generated = [];
+  const bookingsByDay = await loadBookingsByLocalDay(db, settings.timezone, earliest.toISOString());
+  const appointmentCounts = await loadAppointmentCounts(db);
+
+  for (let offset = 0; offset <= days; offset += 1) {
+    const cursor = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
+    const local = datePartsInZone(cursor, settings.timezone);
+    const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+    if (Number(bookingsByDay.get(localKey) || 0) >= settings.maxBookingsPerDay) continue;
+
+    for (const rule of rules.filter((item) => Number(item.day_of_week) === local.dayOfWeek)) {
+      const startParts = parseTime(rule.start_time);
+      const endParts = parseTime(rule.end_time);
+      const ruleStart = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, startParts.hour, startParts.minute);
+      const ruleEnd = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, endParts.hour, endParts.minute);
+      if (new Date(ruleEnd).getTime() <= new Date(ruleStart).getTime()) continue;
+
+      for (const bookingType of bookingTypes) {
+        let slotStart = ruleStart;
+        while (new Date(addMinutes(slotStart, bookingType.durationMinutes)).getTime() <= new Date(ruleEnd).getTime()) {
+          const slotEnd = addMinutes(slotStart, bookingType.durationMinutes);
+          const row = {
+            id: generatedWindowId(rule.id, bookingType.id, slotStart),
+            venture: rule.venture,
+            booking_type_id: bookingType.id,
+            start_at: slotStart,
+            end_at: slotEnd,
+            capacity: rule.capacity || settings.defaultCapacity,
+            buffer_before_minutes: rule.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes,
+            buffer_after_minutes: rule.buffer_after_minutes ?? settings.defaultBufferAfterMinutes,
+            is_blackout: 0,
+            active: 1,
+            note: rule.note || "Generated from weekly schedule",
+          };
+          if (
+            new Date(slotStart).getTime() >= earliest.getTime() &&
+            Number(appointmentCounts.get(row.id) || 0) < Number(row.capacity || 1) &&
+            !isBlockedByBlackout(row, blackouts)
+          ) {
+            generated.push(normalizeWindow(row));
+          }
+          slotStart = addMinutes(slotStart, settings.slotIntervalMinutes || 30);
+        }
+      }
+    }
+  }
+  return generated;
+}
+
+async function loadBookingsByLocalDay(db, timezone, afterIso) {
+  const result = await db
+    .prepare(
+      `SELECT start_at FROM appointments
+       WHERE start_at > ? AND status IN ('pending_deposit', 'deposit_pending', 'confirmed')`
+    )
+    .bind(afterIso)
+    .all();
+  const map = new Map();
+  for (const row of result.results || []) {
+    const parts = datePartsInZone(new Date(row.start_at), timezone);
+    const key = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+    map.set(key, Number(map.get(key) || 0) + 1);
+  }
+  return map;
+}
+
+async function loadAppointmentCounts(db) {
+  const result = await db
+    .prepare(
+      `SELECT availability_window_id, COUNT(*) AS count FROM appointments
+       WHERE status IN ('pending_deposit', 'deposit_pending', 'confirmed')
+       GROUP BY availability_window_id`
+    )
+    .all();
+  return new Map((result.results || []).map((row) => [row.availability_window_id, Number(row.count || 0)]));
 }
 
 export async function handleBookingContext(request, env) {
@@ -299,10 +482,15 @@ export async function handleBookingContext(request, env) {
 }
 
 async function ensureAvailable(db, windowId, bookingTypeId) {
-  const window = await db
+  let window = await db
     .prepare("SELECT * FROM availability_windows WHERE id = ? AND active = 1")
     .bind(windowId)
     .first();
+  if (!window) {
+    const materialized = await materializeGeneratedWindow(db, windowId, bookingTypeId);
+    if (materialized.error) return materialized;
+    window = materialized.window;
+  }
   if (!window || window.is_blackout) return { error: "That appointment time is unavailable." };
   if (window.booking_type_id && window.booking_type_id !== bookingTypeId) {
     return { error: "That appointment time does not match the selected session." };
@@ -329,6 +517,87 @@ async function ensureAvailable(db, windowId, bookingTypeId) {
   if (isBlockedByBlackout(window, blackoutResult.results || [])) {
     return { error: "That appointment time is blocked out." };
   }
+  return { window };
+}
+
+async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
+  const parsed = parseGeneratedWindowId(windowId);
+  if (!parsed || parsed.bookingTypeId !== bookingTypeId || !Number.isFinite(parsed.startMs)) {
+    return { error: "That appointment time is unavailable." };
+  }
+
+  const bookingType = await db
+    .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(bookingTypeId)
+    .first();
+  if (!bookingType) return { error: "Unknown booking type." };
+
+  const rule = await db
+    .prepare("SELECT * FROM availability_rules WHERE id = ? AND active = 1")
+    .bind(parsed.ruleId)
+    .first();
+  if (!rule) return { error: "That appointment time is no longer available." };
+
+  const settingsRow = await db
+    .prepare("SELECT * FROM booking_settings WHERE venture = ?")
+    .bind(rule.venture)
+    .first();
+  if (!settingsRow) return { error: "Booking settings are not configured." };
+  const settings = normalizeSettings(settingsRow);
+
+  const startAt = new Date(parsed.startMs).toISOString();
+  const endAt = addMinutes(startAt, bookingType.duration_minutes);
+  const local = datePartsInZone(new Date(startAt), settings.timezone);
+  if (local.dayOfWeek !== Number(rule.day_of_week)) {
+    return { error: "That appointment time is outside the current weekly schedule." };
+  }
+
+  const startParts = parseTime(rule.start_time);
+  const endParts = parseTime(rule.end_time);
+  const ruleStart = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, startParts.hour, startParts.minute);
+  const ruleEnd = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, endParts.hour, endParts.minute);
+  const earliest = new Date(Date.now() + settings.minimumNoticeHours * 60 * 60 * 1000);
+  if (
+    new Date(startAt).getTime() < earliest.getTime() ||
+    new Date(startAt).getTime() < new Date(ruleStart).getTime() ||
+    new Date(endAt).getTime() > new Date(ruleEnd).getTime()
+  ) {
+    return { error: "That appointment time is no longer available." };
+  }
+
+  const dayBookings = await loadBookingsByLocalDay(db, settings.timezone, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+  if (Number(dayBookings.get(localKey) || 0) >= settings.maxBookingsPerDay) {
+    return { error: "That day has reached its booking limit." };
+  }
+
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO availability_windows (
+        id, venture, booking_type_id, start_at, end_at, capacity,
+        buffer_before_minutes, buffer_after_minutes, is_blackout,
+        active, note, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      windowId,
+      rule.venture,
+      bookingTypeId,
+      startAt,
+      endAt,
+      rule.capacity || settings.defaultCapacity,
+      rule.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes,
+      rule.buffer_after_minutes ?? settings.defaultBufferAfterMinutes,
+      0,
+      1,
+      rule.note || "Generated from weekly schedule",
+      now,
+      now
+    )
+    .run();
+
+  const window = await db.prepare("SELECT * FROM availability_windows WHERE id = ?").bind(windowId).first();
   return { window };
 }
 
@@ -750,6 +1019,100 @@ export async function handleAdminRevokeBookingToken(request, env, id) {
   }
 }
 
+export async function handleAdminGetSchedule(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const settings = await db
+      .prepare("SELECT * FROM booking_settings WHERE venture = ?")
+      .bind("tattooing")
+      .first();
+    const rules = await db
+      .prepare(
+        `SELECT * FROM availability_rules
+         WHERE venture = ?
+         ORDER BY day_of_week ASC`
+      )
+      .bind("tattooing")
+      .all();
+    return json({
+      settings: settings ? normalizeSettings(settings) : null,
+      rules: (rules.results || []).map(normalizeRule),
+    });
+  } catch (error) {
+    return errorResponse("Unable to load schedule.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminUpdateSchedule(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const now = new Date().toISOString();
+    const settings = body.settings || {};
+    await db
+      .prepare(
+        `UPDATE booking_settings
+         SET timezone = ?, booking_horizon_days = ?, minimum_notice_hours = ?,
+             slot_interval_minutes = ?, max_bookings_per_day = ?,
+             default_capacity = ?, default_buffer_before_minutes = ?,
+             default_buffer_after_minutes = ?, updated_at = ?
+         WHERE venture = ?`
+      )
+      .bind(
+        asString(settings.timezone) || "America/New_York",
+        Math.max(1, Math.min(asPositiveInteger(settings.bookingHorizonDays, 60), 180)),
+        Math.max(0, asPositiveInteger(settings.minimumNoticeHours, 48)),
+        Math.max(15, asPositiveInteger(settings.slotIntervalMinutes, 30)),
+        Math.max(1, asPositiveInteger(settings.maxBookingsPerDay, 1)),
+        Math.max(1, asPositiveInteger(settings.defaultCapacity, 1)),
+        asPositiveInteger(settings.defaultBufferBeforeMinutes, 30),
+        asPositiveInteger(settings.defaultBufferAfterMinutes, 30),
+        now,
+        "tattooing"
+      )
+      .run();
+
+    for (const rule of Array.isArray(body.rules) ? body.rules : []) {
+      await db
+        .prepare(
+          `UPDATE availability_rules
+           SET start_time = ?, end_time = ?, active = ?, capacity = ?,
+               buffer_before_minutes = ?, buffer_after_minutes = ?,
+               note = ?, updated_at = ?
+           WHERE id = ? AND venture = ?`
+        )
+        .bind(
+          asString(rule.startTime) || "12:00",
+          asString(rule.endTime) || "18:00",
+          rule.active ? 1 : 0,
+          Math.max(1, asPositiveInteger(rule.capacity, settings.defaultCapacity || 1)),
+          asPositiveInteger(rule.bufferBeforeMinutes, settings.defaultBufferBeforeMinutes || 30),
+          asPositiveInteger(rule.bufferAfterMinutes, settings.defaultBufferAfterMinutes || 30),
+          asString(rule.note),
+          now,
+          asString(rule.id),
+          "tattooing"
+        )
+        .run();
+    }
+
+    return handleAdminGetSchedule(request, env);
+  } catch (error) {
+    return errorResponse("Unable to update schedule.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
 export async function handleAdminListAvailability(request, env) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
@@ -759,6 +1122,7 @@ export async function handleAdminListAvailability(request, env) {
     const result = await db
       .prepare(
         `SELECT * FROM availability_windows
+         WHERE id NOT LIKE 'gen:%'
          ORDER BY start_at DESC
          LIMIT 100`
       )

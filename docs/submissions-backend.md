@@ -78,7 +78,8 @@ The review console utility form at `/studio/submissions/` is not a submission pa
 
 The branded booking flow starts at `/booking/`. Tattoo clients need a private token link generated from an approved submission in `/studio/submissions/`.
 
-- Admin creates availability windows from the submissions console.
+- Admin sets recurring weekly availability from the submissions console.
+- Admin uses exceptions for closed dates, extra bookable blocks, or unusual days.
 - Admin approves a submission, then generates a booking link.
 - Client chooses a session and window.
 - `POST /api/booking/checkout` creates a pending appointment and Square hosted checkout link.
@@ -88,3 +89,13 @@ The old tattoo booking paths redirect into the system booking flow:
 
 - `/tattoos/booking/` -> `/booking/`
 - `/tattoos/booking/confirmed/` -> `/booking/confirmed/`
+
+## Availability model
+
+Booking availability is now managed as a weekly schedule, not one block at a time.
+
+- `booking_settings` controls timezone, booking horizon, minimum notice, slot interval, buffers, capacity, and max bookings per day.
+- `availability_rules` stores recurring weekly hours for each day.
+- `availability_windows` is now for exceptions and generated/materialized booking slots.
+- Blackout exceptions block generated weekly slots.
+- Extra bookable exceptions can still be added for unusual days outside the weekly template.
