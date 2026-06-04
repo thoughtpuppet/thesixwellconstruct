@@ -408,7 +408,7 @@ function updateParticles(dt,t){
   ctx.globalAlpha=1;
 }
 
-let state='idle',logoHover=false,hoveredNode=-1,expandProgress=0,collapseProgress=0;
+let state='idle',logoHover=false,logoHoverP=0,hoveredNode=-1,expandProgress=0,collapseProgress=0;
 let time=0,lastT=null,slowOrbit=0,mouseX=0,mouseY=0;
 const nodeHP=new Array(VENTURES.length).fill(0);
 const nodeX=new Array(VENTURES.length).fill(0);
@@ -607,14 +607,20 @@ function drawRing(){
   const rt = ringTransform();
   ctx.save();ctx.translate(rt.x,rt.y);ctx.scale(rt.s,rt.s);
   const ro=RING_OUTER(), ri=RING_INNER();
-  if(logoHover&&expandProgress<0.08){ctx.beginPath();ctx.arc(0,0,ro+14*scale,0,Math.PI*2);ctx.arc(0,0,ro+3*scale,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();}
-  ctx.beginPath();ctx.arc(0,0,ro,0,Math.PI*2);ctx.arc(0,0,ri,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();ctx.restore();
+  const hp=easeOutSoft(logoHoverP);
+  const outer=ro+5*scale*hp, inner=ri+3.5*scale*hp;
+  if(hp>0){
+    ctx.shadowColor=`rgba(252,184,103,${0.26*hp})`;
+    ctx.shadowBlur=22*scale*hp;
+  }
+  ctx.beginPath();ctx.arc(0,0,outer,0,Math.PI*2);ctx.arc(0,0,inner,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();ctx.restore();
 }
 function drawDots(alpha){
   if(alpha<=0)return;const orbitT=time*0.003;
   const _rt = ringTransform();
   ctx.save();ctx.translate(_rt.x - cx, _rt.y - cy);ctx.translate(cx,cy);ctx.scale(_rt.s,_rt.s);ctx.translate(-cx,-cy);
-  BASE_DOT_POSITIONS.forEach((d0,i)=>{const d=[d0[0]*scale,d0[1]*scale];const angle=Math.atan2(d[1],d[0])+orbitT;const dist=Math.hypot(d[0],d[1])+Math.sin(time*0.025+i*1.1)*1.5*scale;ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(cx+Math.cos(angle)*dist,cy+Math.sin(angle)*dist,DOT_RADIUS(),0,Math.PI*2);ctx.fillStyle=DOT_COLOR;ctx.fill();});ctx.globalAlpha=1;
+  const dotHoverScale=1+0.08*easeOutSoft(logoHoverP);
+  BASE_DOT_POSITIONS.forEach((d0,i)=>{const d=[d0[0]*scale*dotHoverScale,d0[1]*scale*dotHoverScale];const angle=Math.atan2(d[1],d[0])+orbitT;const dist=Math.hypot(d[0],d[1])+Math.sin(time*0.025+i*1.1)*1.5*scale;ctx.globalAlpha=alpha;ctx.beginPath();ctx.arc(cx+Math.cos(angle)*dist,cy+Math.sin(angle)*dist,DOT_RADIUS()*(1+0.04*easeOutSoft(logoHoverP)),0,Math.PI*2);ctx.fillStyle=DOT_COLOR;ctx.fill();});ctx.globalAlpha=1;
   ctx.restore();
 }
 function drawTravelingDots(prog){
@@ -1012,6 +1018,8 @@ function drawSubNodes(){
 
 function tick(ts){
   if(!lastT)lastT=ts;const dt=Math.min(ts-lastT,50);lastT=ts;time+=dt;slowOrbit+=dt;
+  const logoHoverTarget=(logoHover&&expandProgress<0.08)?1:0;
+  logoHoverP=logoHoverTarget>logoHoverP?Math.min(logoHoverP+dt*0.004,1):Math.max(logoHoverP-dt*0.003,0);
 
   // ── Main state machine ──
   if(state==='expanding'){expandProgress=Math.min(expandProgress+dt*EXPAND_SPEED,1);if(expandProgress>=1)state='expanded';}
