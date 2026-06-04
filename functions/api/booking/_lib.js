@@ -172,6 +172,17 @@ function isBlockedByBlackout(windowRow, blackoutRows) {
   return blackoutRows.some((blackout) => intervalsOverlap(windowInterval, intervalWithBuffer(blackout)));
 }
 
+function overlappingAppointmentCount(windowRow, appointmentRows) {
+  const windowInterval = intervalWithBuffer(windowRow);
+  return appointmentRows.filter((appointment) =>
+    intervalsOverlap(windowInterval, intervalWithBuffer(appointment))
+  ).length;
+}
+
+function hasSlotCapacity(windowRow, appointmentRows) {
+  return overlappingAppointmentCount(windowRow, appointmentRows) < Number(windowRow.capacity || 1);
+}
+
 function datePartsInZone(date, timezone) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -339,19 +350,21 @@ async function listPublicWindows(db, bookingTypes) {
     .bind(new Date().toISOString())
     .all();
   const blackouts = blackoutResult.results || [];
+  const activeAppointments = await loadActiveAppointments(db, new Date().toISOString());
 
   const manualWindows = (manualResult.results || [])
     .filter((row) => Number(row.appointment_count || 0) < Number(row.capacity || 1))
     .filter((row) => !isBlockedByBlackout(row, blackouts))
+    .filter((row) => hasSlotCapacity(row, activeAppointments))
     .map(normalizeWindow);
 
-  const generatedWindows = await listGeneratedWindows(db, bookingTypes, blackouts);
+  const generatedWindows = await listGeneratedWindows(db, bookingTypes, blackouts, activeAppointments);
   return [...manualWindows, ...generatedWindows]
     .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
     .slice(0, 120);
 }
 
-async function listGeneratedWindows(db, bookingTypes, blackouts) {
+async function listGeneratedWindows(db, bookingTypes, blackouts, activeAppointments) {
   const settingsRow = await db
     .prepare("SELECT * FROM booking_settings WHERE venture = ?")
     .bind("tattooing")
@@ -409,6 +422,7 @@ async function listGeneratedWindows(db, bookingTypes, blackouts) {
           if (
             new Date(slotStart).getTime() >= earliest.getTime() &&
             Number(appointmentCounts.get(row.id) || 0) < Number(row.capacity || 1) &&
+            hasSlotCapacity(row, activeAppointments) &&
             !isBlockedByBlackout(row, blackouts)
           ) {
             generated.push(normalizeWindow(row));
@@ -436,6 +450,22 @@ async function loadBookingsByLocalDay(db, timezone, afterIso) {
     map.set(key, Number(map.get(key) || 0) + 1);
   }
   return map;
+}
+
+async function loadActiveAppointments(db, afterIso) {
+  const result = await db
+    .prepare(
+      `SELECT a.start_at, a.end_at,
+              COALESCE(aw.buffer_before_minutes, 0) AS buffer_before_minutes,
+              COALESCE(aw.buffer_after_minutes, 0) AS buffer_after_minutes
+       FROM appointments a
+       LEFT JOIN availability_windows aw ON aw.id = a.availability_window_id
+       WHERE a.end_at > ?
+         AND a.status IN ('pending_deposit', 'deposit_pending', 'confirmed')`
+    )
+    .bind(afterIso)
+    .all();
+  return result.results || [];
 }
 
 async function loadAppointmentCounts(db) {
@@ -517,6 +547,10 @@ async function ensureAvailable(db, windowId, bookingTypeId) {
   if (isBlockedByBlackout(window, blackoutResult.results || [])) {
     return { error: "That appointment time is blocked out." };
   }
+  const activeAppointments = await loadActiveAppointments(db, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  if (!hasSlotCapacity(window, activeAppointments)) {
+    return { error: "That appointment time overlaps another booking." };
+  }
   return { window };
 }
 
@@ -569,6 +603,18 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
   const localKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
   if (Number(dayBookings.get(localKey) || 0) >= settings.maxBookingsPerDay) {
     return { error: "That day has reached its booking limit." };
+  }
+
+  const candidateWindow = {
+    start_at: startAt,
+    end_at: endAt,
+    buffer_before_minutes: rule.buffer_before_minutes ?? settings.defaultBufferBeforeMinutes,
+    buffer_after_minutes: rule.buffer_after_minutes ?? settings.defaultBufferAfterMinutes,
+    capacity: rule.capacity || settings.defaultCapacity,
+  };
+  const activeAppointments = await loadActiveAppointments(db, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  if (!hasSlotCapacity(candidateWindow, activeAppointments)) {
+    return { error: "That appointment time overlaps another booking." };
   }
 
   const now = new Date().toISOString();

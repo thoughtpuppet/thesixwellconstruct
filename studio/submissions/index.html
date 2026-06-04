@@ -283,11 +283,11 @@
               <input id="settingInterval" type="number" min="15" step="15" value="30">
             </div>
             <div class="field">
-              <label for="settingMaxDay">Max Bookings Per Day</label>
-              <input id="settingMaxDay" type="number" min="1" step="1" value="1">
+              <label for="settingMaxDay">Max Sessions Per Day</label>
+              <input id="settingMaxDay" type="number" min="1" step="1" value="4">
             </div>
             <div class="field">
-              <label for="settingCapacity">Default Capacity</label>
+              <label for="settingCapacity">Same-Time Capacity</label>
               <input id="settingCapacity" type="number" min="1" step="1" value="1">
             </div>
             <div class="field">
@@ -327,7 +327,7 @@
           </select>
         </div>
         <div class="field">
-          <label for="availabilityCapacity">Capacity</label>
+          <label for="availabilityCapacity">Same-Time Capacity</label>
           <input id="availabilityCapacity" type="number" min="1" step="1" value="1">
         </div>
         <div class="field">
@@ -366,7 +366,7 @@
     document.getElementById("settingHorizon").value = settings.bookingHorizonDays || 60;
     document.getElementById("settingNotice").value = settings.minimumNoticeHours || 48;
     document.getElementById("settingInterval").value = settings.slotIntervalMinutes || 30;
-    document.getElementById("settingMaxDay").value = settings.maxBookingsPerDay || 1;
+    document.getElementById("settingMaxDay").value = settings.maxBookingsPerDay || 4;
     document.getElementById("settingCapacity").value = settings.defaultCapacity || 1;
     document.getElementById("settingBufferBefore").value = settings.defaultBufferBeforeMinutes || 30;
     document.getElementById("settingBufferAfter").value = settings.defaultBufferAfterMinutes || 30;
@@ -390,7 +390,7 @@
           <input data-rule-field="endTime" type="time" value="${escapeHtml(rule.endTime || "18:00")}">
         </div>
         <div class="field">
-          <label>Capacity</label>
+          <label>Same-Time Capacity</label>
           <input data-rule-field="capacity" type="number" min="1" step="1" value="${escapeHtml(rule.capacity || 1)}">
         </div>
         <div class="field">

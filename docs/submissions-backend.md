@@ -94,8 +94,9 @@ The old tattoo booking paths redirect into the system booking flow:
 
 Booking availability is now managed as a weekly schedule, not one block at a time.
 
-- `booking_settings` controls timezone, booking horizon, minimum notice, slot interval, buffers, capacity, and max bookings per day.
+- `booking_settings` controls timezone, booking horizon, minimum notice, slot interval, buffers, same-time capacity, and max sessions per day.
 - `availability_rules` stores recurring weekly hours for each day.
 - `availability_windows` is now for exceptions and generated/materialized booking slots.
 - Blackout exceptions block generated weekly slots.
 - Extra bookable exceptions can still be added for unusual days outside the weekly template.
+- Capacity means simultaneous capacity for a single time slot. Multiple non-overlapping sessions can happen on the same day until the max sessions per day limit is reached.
