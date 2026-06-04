@@ -101,6 +101,7 @@
 (function(){
   const params = new URLSearchParams(window.location.search);
   const token = params.get("token") || "";
+  const previewMode = params.get("preview") === "1";
   const statusEl = document.getElementById("status");
   const appEl = document.getElementById("bookingApp");
   const sessionListEl = document.getElementById("sessionList");
@@ -114,6 +115,60 @@
   let context = null;
   let selectedType = null;
   let selectedWindow = null;
+
+  function previewContext() {
+    const now = new Date();
+    function futureDate(days, hour, minute, durationMinutes) {
+      const start = new Date(now);
+      start.setDate(now.getDate() + days);
+      start.setHours(hour, minute, 0, 0);
+      const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+      return { startAt: start.toISOString(), endAt: end.toISOString() };
+    }
+    const first = futureDate(3, 12, 0, 90);
+    const second = futureDate(3, 14, 0, 90);
+    const third = futureDate(5, 13, 0, 180);
+    const fourth = futureDate(8, 11, 0, 360);
+    return {
+      client: { name: "Preview Client", email: "client@example.com", phone: "" },
+      submission: { id: "preview", type: "tattoo_inquiry" },
+      bookingTypes: [
+        {
+          id: "tattoo_quarter",
+          label: "Quarter Session",
+          description: "Approx. 1.5 hours for small approved projects, flash, or focused work.",
+          durationMinutes: 90,
+          depositCents: 5000,
+          depositLabel: "$50",
+          currency: "USD",
+        },
+        {
+          id: "tattoo_half",
+          label: "Half Session",
+          description: "Approx. 3 hours for medium approved projects or developed symbolic work.",
+          durationMinutes: 180,
+          depositCents: 10000,
+          depositLabel: "$100",
+          currency: "USD",
+        },
+        {
+          id: "tattoo_full",
+          label: "Full Session",
+          description: "Up to 6 hours for large approved work, special projects, or deeper sessions.",
+          durationMinutes: 360,
+          depositCents: 15000,
+          depositLabel: "$150",
+          currency: "USD",
+        },
+      ],
+      availabilityWindows: [
+        { id: "preview-1", bookingTypeId: "tattoo_quarter", note: "Generated from weekly schedule", ...first },
+        { id: "preview-2", bookingTypeId: "tattoo_quarter", note: "Generated from weekly schedule", ...second },
+        { id: "preview-3", bookingTypeId: "tattoo_half", note: "Generated from weekly schedule", ...third },
+        { id: "preview-4", bookingTypeId: "tattoo_full", note: "Generated from weekly schedule", ...fourth },
+      ],
+    };
+  }
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -167,6 +222,17 @@
   }
 
   async function loadContext() {
+    if (previewMode) {
+      context = previewContext();
+      selectedType = context.bookingTypes[0] || null;
+      selectedWindow = null;
+      statusEl.classList.add("hidden");
+      appEl.classList.remove("hidden");
+      checkoutBtn.textContent = "Preview Checkout";
+      checkoutNote.textContent = "Preview mode only. Real clients continue to Square after selecting a time.";
+      render();
+      return;
+    }
     if (!token) {
       statusEl.textContent = "A private booking link is required. Approved clients receive this after review.";
       return;
@@ -199,6 +265,10 @@
 
   checkoutBtn.addEventListener("click", async () => {
     if (!selectedType || !selectedWindow) return;
+    if (previewMode) {
+      checkoutNote.textContent = "Preview selected: " + selectedType.label + " / " + formatDate(selectedWindow.startAt);
+      return;
+    }
     checkoutBtn.disabled = true;
     checkoutNote.textContent = "Creating Square checkout.";
     const response = await fetch("/api/booking/checkout", {
