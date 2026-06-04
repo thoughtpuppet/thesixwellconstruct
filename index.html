@@ -98,7 +98,7 @@
   <div id="node-labels"></div>
   <div id="node-descs"></div>
   <div id="sub-node-labels"></div>
-  <div id="hint">HOVER THE CONSTRUCT</div>
+  <div id="hint"></div>
   <button id="back-btn" aria-label="Return to ventures" type="button">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     <span>return</span>
@@ -1023,7 +1023,7 @@ function tick(ts){
 
   // ── Main state machine ──
   if(state==='expanding'){expandProgress=Math.min(expandProgress+dt*EXPAND_SPEED,1);if(expandProgress>=1)state='expanded';}
-  if(state==='collapsing'){collapseProgress=Math.min(collapseProgress+dt*COLLAPSE_SPEED,1);if(collapseProgress>=1){state='idle';expandProgress=0;collapseProgress=0;nodePosInit=false;nodeHP.fill(0);hint.style.opacity='1';hint.style.color='#FCB86733';hint.textContent='HOVER THE CONSTRUCT';}}
+  if(state==='collapsing'){collapseProgress=Math.min(collapseProgress+dt*COLLAPSE_SPEED,1);if(collapseProgress>=1){state='idle';expandProgress=0;collapseProgress=0;nodePosInit=false;nodeHP.fill(0);hint.style.opacity='1';hint.style.color='#FCB86733';hint.textContent='';}}
   // Descriptor fades in once expansion is well underway, out on collapse
   wordmarkDesc.style.opacity = String(easeOutSoft(clamp01((expandProgress-0.5)/0.5)) * (1-collapseProgress) * 0.55);
   VENTURES.forEach((v,i)=>{const target=hoveredNode===i?1:0;nodeHP[i]=target>nodeHP[i]?Math.min(nodeHP[i]+dt*HOVER_IN,1):Math.max(nodeHP[i]-dt*HOVER_OUT,0);});
