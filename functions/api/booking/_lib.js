@@ -388,8 +388,7 @@ async function listPublicWindows(db, bookingTypes) {
 
   const generatedWindows = await listGeneratedWindows(db, bookingTypes, blackouts, activeAppointments);
   return [...manualWindows, ...generatedWindows]
-    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
-    .slice(0, 120);
+    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 }
 
 async function listGeneratedWindows(db, bookingTypes, blackouts, activeAppointments) {
