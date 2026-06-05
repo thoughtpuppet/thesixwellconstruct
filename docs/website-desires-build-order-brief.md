@@ -169,12 +169,12 @@ The site is a static site deployed on Cloudflare Workers with static assets and 
 
 Important existing systems:
 
-- `README.md` contains the ecosystem-first principle, hosting notes, Shopify setup, and Formspree form setup.
+- `README.md` contains the ecosystem-first principle, hosting notes, Shopify setup, and live submissions/booking setup.
 - `CLAUDE.md` contains venture color rules and shared CSS reminders.
 - `css/tokens.css`, `css/transitions.css`, `css/media.css`, and `css/venture-pages.css` are shared style foundations.
 - `js/construct-nav.js` controls the venture-dot navigation.
 - `js/transition.js` controls page fade transitions.
-- Forms submit to Formspree.
+- Forms submit to the Worker submissions backend at `/api/submissions`.
 - Shopify Storefront API is proxied through Cloudflare Worker routes under `/api/shop/*`.
 
 ## Build-Order Advice Needed

@@ -251,6 +251,7 @@
           <label for="bookingUrl">Booking URL</label>
           <input id="bookingUrl" value="${escapeHtml(submission.bookingUrl || "")}">
           <div class="booking-actions">
+            <button class="button" id="previewBookingBtn" type="button">Preview Client Flow</button>
             <button class="button" id="generateBookingBtn" type="button">${submission.bookingUrl ? "Regenerate Link" : "Generate Link"}</button>
             <button class="button" id="copyBookingBtn" type="button">Copy</button>
             <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
@@ -611,6 +612,14 @@
   });
 
   detailEl.addEventListener("click", async (event) => {
+    if (event.target.id === "previewBookingBtn") {
+      const previewUrl = new URL("/booking/", window.location.origin);
+      previewUrl.searchParams.set("preview", "1");
+      window.open(previewUrl.toString(), "_blank", "noopener,noreferrer");
+      setStatus("Preview opened");
+      return;
+    }
+
     if (event.target.id === "generateBookingBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
       if (submission?.status !== "approved") {

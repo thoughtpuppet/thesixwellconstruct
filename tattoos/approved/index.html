@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Approved Booking · Art.Pill Tattoo House</title>
+<title>Approved Booking - Art.Pill Tattoo House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
@@ -25,16 +25,17 @@
       <div class="hero-copy entrance-fade">
         <span class="eyebrow">Approved booking</span>
         <h1>Private booking access</h1>
-        <p class="hero-lead">
-          If you were sent to this page, your project has already been reviewed and approved.
+        <p class="hero-lead" id="approvedLead">
+          Approved projects move through the private booking link generated from your reviewed submission.
         </p>
-        <p class="hero-note">
-          Use the booking link below to secure the session. Flash claims have already been
-          checked for availability and placement fit; custom work has already passed review.
+        <p class="hero-note" id="approvedNote">
+          Flash claims have already been checked for availability and placement fit; custom work has already passed review.
+          Use the token link from your approval message to choose a session, place the deposit, and confirm the appointment.
           Deposits are required and go toward the final tattoo price.
         </p>
         <div class="action-row">
-          <a class="tattoos-button" href="https://acuityscheduling.com/placeholder-approved-booking" target="_blank" rel="noopener noreferrer">Open approved booking</a>
+          <a class="tattoos-button" id="bookingLink" href="/booking/">Open private booking</a>
+          <a class="tattoos-button-secondary" href="/tattoos/inquire/">Start a submission</a>
         </div>
       </div>
 
@@ -42,9 +43,8 @@
         <span class="panel-label">Private route</span>
         <h2 class="panel-title">Shared only after review</h2>
         <p>
-          This page is shared privately with clients who have already been invited into
-          the booking stage after a flash claim, custom inquiry, or Special Projects
-          application.
+          Booking access is created in the submissions console after approval. The live
+          link includes a private token and opens the studio booking and deposit flow.
         </p>
       </aside>
     </section>
@@ -58,5 +58,33 @@
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script>
+    (function(){
+      var params = new URLSearchParams(window.location.search);
+      var token = params.get("token") || "";
+      var bookingLink = document.getElementById("bookingLink");
+      var lead = document.getElementById("approvedLead");
+      var note = document.getElementById("approvedNote");
+      if (!bookingLink) return;
+
+      if (token) {
+        var bookingPath = "/booking/?token=" + encodeURIComponent(token);
+        bookingLink.href = bookingPath;
+        bookingLink.textContent = "Continue to booking";
+        if (lead) lead.textContent = "Your approved submission is ready for private booking.";
+        if (note) {
+          note.textContent = "Choose a session window, complete the deposit through Square, and return to the confirmation page. This link is private to your approved submission.";
+        }
+        window.location.replace(bookingPath);
+      } else {
+        bookingLink.addEventListener("click", function(event){
+          event.preventDefault();
+          if (note) {
+            note.textContent = "A private booking token is required. Use the generated link from your approval message, or reply to the studio if you need it resent.";
+          }
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

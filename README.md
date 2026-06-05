@@ -126,32 +126,35 @@ page-specific presentation details living in `shared/storefront-config.js`.
 In Cloudflare, add the same four values under the Worker project's
 `Settings > Variables and secrets`.
 
-## Art.Pill form setup
+## Art.Pill submissions and booking setup
 
-Tattoo inquiry, flash claim, and Special Projects application forms are static
-HTML forms that submit directly to Formspree. There is no custom form backend,
-database, Worker route, or submission secret in this repository.
-
-The configured Formspree endpoints are:
-
-- Standard tattoo inquiry: `https://formspree.io/f/xqenbpoj`
-- Flash claim: `https://formspree.io/f/mrejkpnl`
-- Special Projects application: `https://formspree.io/f/mnjwvpeg`
+Tattoo inquiry, flash claim, Build Your Own, in-person consultation, and
+Special Projects application forms submit to the live Worker backend at
+`/api/submissions`. Submissions are stored in D1, reviewed privately at
+`/studio/submissions/`, and approved tattoo clients receive a generated
+token link into `/booking/?token=...`.
 
 The forms live at:
 
 - `/tattoos/inquire/`
 - `/tattoos/flash/claim/`
-- `/tattooing/special-projects/apply/`
+- `/tattoos/build/`
+- `/tattoos/build/in-person/`
+- `/tattoos/special-projects/apply/`
 
 Each form uses `method="POST"` and `enctype="multipart/form-data"` so reference
-uploads can be captured by Formspree. File uploads require a Formspree plan that
-supports attachments. The forms include Formspree's `_gotcha` honeypot field.
+uploads can be captured by the submissions backend. If the optional
+`SUBMISSION_FILES` R2 binding is configured, uploaded file contents are stored
+under `submissions/{submissionId}/...`; otherwise the backend still records file
+metadata. The forms include a `_gotcha` honeypot field.
 
-Recommended Formspree settings:
+Recommended review flow:
 
-- Send notification emails to the studio inbox.
-- Store submissions in Formspree Inbox for review.
-- Set the thank-you redirect to `/tattoos/submission-received/`.
-- Keep Acuity as the manual final scheduling and deposit step for approved
-  submissions.
+- Set `SUBMISSIONS_DB` and `SUBMISSIONS_ADMIN_TOKEN` for the Worker.
+- Review captured submissions in `/studio/submissions/`.
+- Mark the chosen submission `approved`.
+- Generate the booking token from the submission detail panel.
+- Send the generated private booking URL to the client for session selection,
+  Square deposit checkout, and `/booking/confirmed/` confirmation.
+
+See `docs/submissions-backend.md` for D1, R2, Square, and booking setup details.
