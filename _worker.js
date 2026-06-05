@@ -20,6 +20,7 @@ import {
 import {
   handleAdminCreateAvailability,
   handleAdminCreateBookingToken,
+  handleAdminGetAvailabilityPreview,
   handleAdminGetSchedule,
   handleAdminListAppointments,
   handleAdminListAvailability,
@@ -395,6 +396,11 @@ async function handleBookingApi(request, env) {
     if (method === "GET") return handleAdminListAvailability(request, env);
     if (method === "POST") return handleAdminCreateAvailability(request, env);
     return methodNotAllowed(method, ["GET", "POST"]);
+  }
+
+  if (pathname === "/api/admin/booking/availability-preview") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAdminGetAvailabilityPreview(request, env);
   }
 
   if (pathname === "/api/admin/booking/schedule") {

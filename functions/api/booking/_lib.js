@@ -206,10 +206,38 @@ function parseTime(value) {
   return { hour, minute };
 }
 
+function isValidTime(value) {
+  const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
+  if (!match) return false;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+function minutesFromTime(value) {
+  const { hour, minute } = parseTime(value);
+  return hour * 60 + minute;
+}
+
 function zonedLocalToUtcIso(timezone, year, month, day, hour, minute) {
   const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
-  const local = datePartsInZone(new Date(utcGuess), timezone);
-  const localMinutes = Date.UTC(local.year, local.month - 1, local.day, hour, minute);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(utcGuess));
+  const local = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const localMinutes = Date.UTC(
+    Number(local.year),
+    Number(local.month) - 1,
+    Number(local.day),
+    Number(local.hour),
+    Number(local.minute)
+  );
   const desiredMinutes = Date.UTC(year, month - 1, day, hour, minute);
   const offset = localMinutes - desiredMinutes;
   return new Date(utcGuess - offset).toISOString();
@@ -450,6 +478,12 @@ async function loadBookingsByLocalDay(db, timezone, afterIso) {
     map.set(key, Number(map.get(key) || 0) + 1);
   }
   return map;
+}
+
+function bookedDaysFromMap(map) {
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
 }
 
 async function loadActiveAppointments(db, afterIso) {
@@ -1128,6 +1162,15 @@ export async function handleAdminUpdateSchedule(request, env) {
       .run();
 
     for (const rule of Array.isArray(body.rules) ? body.rules : []) {
+      const startTime = asString(rule.startTime) || "12:00";
+      const endTime = asString(rule.endTime) || "18:00";
+      if (!isValidTime(startTime) || !isValidTime(endTime)) {
+        return errorResponse("Schedule start and end times must use HH:MM format.", 400);
+      }
+      if (minutesFromTime(endTime) <= minutesFromTime(startTime)) {
+        return errorResponse("Schedule end time must be after start time.", 400);
+      }
+
       await db
         .prepare(
           `UPDATE availability_rules
@@ -1137,8 +1180,8 @@ export async function handleAdminUpdateSchedule(request, env) {
            WHERE id = ? AND venture = ?`
         )
         .bind(
-          asString(rule.startTime) || "12:00",
-          asString(rule.endTime) || "18:00",
+          startTime,
+          endTime,
           rule.active ? 1 : 0,
           Math.max(1, asPositiveInteger(rule.capacity, settings.defaultCapacity || 1)),
           asPositiveInteger(rule.bufferBeforeMinutes, settings.defaultBufferBeforeMinutes || 30),
@@ -1165,13 +1208,18 @@ export async function handleAdminListAvailability(request, env) {
 
   try {
     const db = requireBookingDb(env);
+    const now = new Date().toISOString();
     const result = await db
       .prepare(
         `SELECT * FROM availability_windows
-         WHERE id NOT LIKE 'gen:%'
-         ORDER BY start_at DESC
+         WHERE venture = ? AND id NOT LIKE 'gen:%'
+         ORDER BY
+           CASE WHEN end_at >= ? THEN 0 ELSE 1 END ASC,
+           CASE WHEN end_at >= ? THEN start_at END ASC,
+           CASE WHEN end_at < ? THEN start_at END DESC
          LIMIT 100`
       )
+      .bind("tattooing", now, now, now)
       .all();
     return json({ availabilityWindows: (result.results || []).map(normalizeWindow) });
   } catch (error) {
@@ -1199,6 +1247,7 @@ export async function handleAdminCreateAvailability(request, env) {
   try {
     const db = requireBookingDb(env);
     const now = new Date().toISOString();
+    const venture = asString(body.venture) || "tattooing";
     const candidate = {
       start_at: new Date(startAt).toISOString(),
       end_at: new Date(endAt).toISOString(),
@@ -1211,7 +1260,7 @@ export async function handleAdminCreateAvailability(request, env) {
           `SELECT * FROM availability_windows
            WHERE active = 1 AND is_blackout = 0 AND venture = ?`
         )
-        .bind(asString(body.venture) || "tattooing")
+        .bind(venture)
         .all();
       const candidateInterval = intervalWithBuffer(candidate);
       const conflicts = (existing.results || []).some((row) =>
@@ -1232,7 +1281,7 @@ export async function handleAdminCreateAvailability(request, env) {
       )
       .bind(
         id,
-        asString(body.venture) || "tattooing",
+        venture,
         asOptionalString(body.bookingTypeId),
         candidate.start_at,
         candidate.end_at,
@@ -1250,6 +1299,36 @@ export async function handleAdminCreateAvailability(request, env) {
     return json({ availabilityWindow: normalizeWindow(row) });
   } catch (error) {
     return errorResponse("Unable to create availability.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminGetAvailabilityPreview(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const settingsRow = await db
+      .prepare("SELECT * FROM booking_settings WHERE venture = ?")
+      .bind("tattooing")
+      .first();
+    const settings = settingsRow ? normalizeSettings(settingsRow) : null;
+    const bookingTypes = await listBookingTypes(db, []);
+    const availabilityWindows = await listPublicWindows(db, bookingTypes);
+    const bookedDays = settings
+      ? bookedDaysFromMap(await loadBookingsByLocalDay(db, settings.timezone, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()))
+      : [];
+
+    return json({
+      settings,
+      bookingTypes,
+      availabilityWindows,
+      bookedDays,
+    });
+  } catch (error) {
+    return errorResponse("Unable to load availability preview.", 500, {
       detail: error.message,
     });
   }

@@ -48,6 +48,27 @@
   .availability-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
   .availability-list { display:grid; gap:10px; }
   .availability-item { border:1px solid var(--line); padding:12px; display:grid; gap:8px; }
+  .availability-overview { display:grid; grid-template-columns:minmax(220px,320px) minmax(0,1fr); gap:18px; align-items:start; margin-top:14px; }
+  .mini-calendar { border:1px solid var(--line); padding:12px; display:grid; gap:10px; }
+  .calendar-tools { display:grid; grid-template-columns:38px minmax(0,1fr) 38px; gap:8px; align-items:center; }
+  .icon-button { width:38px; min-height:38px; padding:0; display:grid; place-items:center; }
+  .calendar-weekdays,.calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
+  .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-align:center; }
+  .day-button { aspect-ratio:1; min-height:0; border:1px solid var(--line); background:#101010; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
+  .day-button.blank { visibility:hidden; }
+  .day-button.booked-one { background:rgba(122,16,16,0.72); border-color:rgba(252,184,103,0.34); color:var(--text); }
+  .day-button.booked-two { background:rgba(255,231,202,0.18); border-color:rgba(255,231,202,0.22); color:var(--text); }
+  .day-button.booked-many { background:rgba(255,231,202,0.09); border-color:rgba(255,231,202,0.14); color:var(--muted); }
+  .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; }
+  .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
+  .legend-dot { width:10px; height:10px; border:1px solid var(--line); display:inline-block; }
+  .legend-dot.one { background:rgba(122,16,16,0.72); }
+  .legend-dot.two { background:rgba(255,231,202,0.18); }
+  .legend-dot.many { background:rgba(255,231,202,0.09); }
+  .slot-preview { border:1px solid var(--line); padding:12px; display:grid; gap:10px; }
+  .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
+  .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  .slot-preview-item:last-child { border-bottom:0; padding-bottom:0; }
   .schedule-section { border-top:1px solid var(--line); padding-top:18px; margin-top:18px; }
   .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
   .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:1px solid var(--line); padding:12px 0; }
@@ -59,7 +80,7 @@
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
     .list-pane { border-right:0; border-bottom:1px solid var(--line); max-height:42vh; }
-    .grid,.actions { grid-template-columns:1fr; }
+    .grid,.actions,.availability-overview { grid-template-columns:1fr; }
   }
 </style>
 </head>
@@ -120,6 +141,7 @@
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
   let activeId = "";
+  let availabilityPreviewMonth = "";
 
   function api(path, options = {}) {
     return fetch(path, {
@@ -255,6 +277,99 @@
     return date.toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
   }
 
+  function monthKey(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function monthLabel(key) {
+    if (!key) return "";
+    const [year, month] = key.split("-").map(Number);
+    return new Date(year, month - 1, 1).toLocaleString([], { month:"long", year:"numeric" });
+  }
+
+  function dayKey(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  function bookedClass(count) {
+    if (count >= 3) return "booked-many";
+    if (count === 2) return "booked-two";
+    if (count === 1) return "booked-one";
+    return "";
+  }
+
+  function renderBookedCalendar(monthKeyValue, bookedByDay) {
+    const calendar = document.getElementById("bookedCalendar");
+    if (!calendar || !monthKeyValue) return;
+    const [year, month] = monthKeyValue.split("-").map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const cells = [];
+    for (let blank = 0; blank < firstDay.getDay(); blank += 1) {
+      cells.push('<button class="day-button blank" type="button" tabindex="-1" aria-hidden="true"></button>');
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const key = `${monthKeyValue}-${String(day).padStart(2, "0")}`;
+      const count = Number(bookedByDay.get(key) || 0);
+      const label = count === 1 ? "1 appointment" : `${count} appointments`;
+      cells.push(`
+        <button class="day-button ${bookedClass(count)}" type="button" aria-label="${escapeHtml(`${key}: ${label}`)}" title="${escapeHtml(label)}">
+          ${day}
+        </button>
+      `);
+    }
+    calendar.innerHTML = `
+      <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div class="calendar-grid">${cells.join("")}</div>
+    `;
+  }
+
+  function renderSlotPreview(windows) {
+    const list = document.getElementById("slotPreviewList");
+    const count = document.getElementById("slotPreviewCount");
+    if (!list || !count) return;
+    const visible = [...windows]
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
+      .slice(0, 12);
+    count.textContent = `${windows.length} client-visible slots`;
+    list.innerHTML = visible.length ? visible.map((windowItem) => `
+      <div class="slot-preview-item">
+        <span class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startAt))}</span>
+        <span class="meta">${escapeHtml(windowItem.bookingTypeId || "any session")}</span>
+      </div>
+    `).join("") : '<p class="empty">No client-visible slots generated yet.</p>';
+  }
+
+  async function loadAvailabilityPreview() {
+    const calendar = document.getElementById("bookedCalendar");
+    if (!calendar) return;
+    const payload = await api("/api/admin/booking/availability-preview");
+    const windows = payload.availabilityWindows || [];
+    const bookedDays = payload.bookedDays || [];
+    const bookedByDay = new Map(bookedDays.map((item) => [item.date, Number(item.count || 0)]));
+    const monthKeys = [...new Set([
+      ...windows.map((windowItem) => monthKey(windowItem.startAt)).filter(Boolean),
+      ...bookedDays.map((item) => String(item.date || "").slice(0, 7)).filter(Boolean),
+    ])].sort();
+    if (!monthKeys.length) monthKeys.push(monthKey(new Date().toISOString()));
+    if (!monthKeys.includes(availabilityPreviewMonth)) availabilityPreviewMonth = monthKeys[0];
+
+    const monthSelect = document.getElementById("previewMonthSelect");
+    const prevButton = document.getElementById("previewPrevMonth");
+    const nextButton = document.getElementById("previewNextMonth");
+    const index = monthKeys.indexOf(availabilityPreviewMonth);
+    monthSelect.innerHTML = monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("");
+    monthSelect.value = availabilityPreviewMonth;
+    prevButton.disabled = index <= 0;
+    nextButton.disabled = index < 0 || index >= monthKeys.length - 1;
+    renderBookedCalendar(availabilityPreviewMonth, bookedByDay);
+    renderSlotPreview(windows);
+  }
+
   async function renderAvailabilityManager() {
     detailEl.innerHTML = `
       <div class="detail-head">
@@ -307,6 +422,28 @@
         <button class="button" type="submit">Save Schedule</button>
       </form>
       <div class="schedule-section">
+        <span class="pill">Client Calendar Preview</span>
+        <div class="availability-overview">
+          <div class="mini-calendar">
+            <div class="calendar-tools">
+              <button class="button icon-button" id="previewPrevMonth" type="button" aria-label="Previous month">&lt;</button>
+              <select id="previewMonthSelect" aria-label="Preview month"></select>
+              <button class="button icon-button" id="previewNextMonth" type="button" aria-label="Next month">&gt;</button>
+            </div>
+            <div id="bookedCalendar"></div>
+            <div class="calendar-legend" aria-label="Booked day legend">
+              <span class="legend-item"><span class="legend-dot one"></span>1 booked</span>
+              <span class="legend-item"><span class="legend-dot two"></span>2 booked</span>
+              <span class="legend-item"><span class="legend-dot many"></span>3+ booked</span>
+            </div>
+          </div>
+          <div class="slot-preview">
+            <span class="pill" id="slotPreviewCount">Loading slots</span>
+            <div id="slotPreviewList" class="slot-preview-list"><p class="empty">Loading generated availability.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="schedule-section">
         <span class="pill">Exceptions</span>
         <form id="availabilityForm" class="availability-form" style="margin-top:14px;">
         <div class="field">
@@ -355,6 +492,7 @@
       <div id="availabilityList" class="availability-list"><p class="empty">Loading availability.</p></div>
     `;
     await loadSchedule();
+    await loadAvailabilityPreview();
     await loadAvailability();
   }
 
@@ -530,7 +668,20 @@
         body: JSON.stringify({ active: toggle.dataset.active === "1" }),
       });
       await loadAvailability();
+      await loadAvailabilityPreview();
       setStatus("Availability updated");
+      return;
+    }
+
+    if (event.target.id === "previewPrevMonth" || event.target.id === "previewNextMonth") {
+      const select = document.getElementById("previewMonthSelect");
+      const options = Array.from(select?.options || []).map((option) => option.value);
+      const current = options.indexOf(availabilityPreviewMonth);
+      const next = event.target.id === "previewPrevMonth" ? current - 1 : current + 1;
+      if (options[next]) {
+        availabilityPreviewMonth = options[next];
+        await loadAvailabilityPreview();
+      }
       return;
     }
 
@@ -587,6 +738,7 @@
         }),
       });
       await loadSchedule();
+      await loadAvailabilityPreview();
       setStatus("Schedule saved");
       return;
     }
@@ -614,12 +766,18 @@
     document.getElementById("bufferBefore").value = "0";
     document.getElementById("bufferAfter").value = "0";
     await loadAvailability();
+    await loadAvailabilityPreview();
     setStatus("Exception added");
   });
 
   refreshBtn.addEventListener("click", () => loadSubmissions().catch((error) => setStatus(error.message)));
   availabilityBtn.addEventListener("click", () => renderAvailabilityManager().catch((error) => setStatus(error.message)));
   statusFilter.addEventListener("change", () => loadSubmissions().catch((error) => setStatus(error.message)));
+  detailEl.addEventListener("change", (event) => {
+    if (event.target.id !== "previewMonthSelect") return;
+    availabilityPreviewMonth = event.target.value;
+    loadAvailabilityPreview().catch((error) => setStatus(error.message));
+  });
   lockBtn.addEventListener("click", () => {
     token = "";
     localStorage.removeItem(tokenKey);
