@@ -42,6 +42,15 @@
   .month-button:disabled { opacity:0.32; cursor:not-allowed; }
   .month-select { min-height:34px; max-width:220px; border:5px solid var(--ring-faint); background:var(--bg); color:#FFE7CA; padding:0 32px 0 10px; font-family:var(--sans); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; }
   .month-count { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
+  .calendar { display:grid; gap:8px; margin:4px 0 4px; }
+  .calendar-weekdays,.calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
+  .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-align:center; text-transform:uppercase; }
+  .day-button { aspect-ratio:1; min-width:0; border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); font-family:var(--sans); font-size:12px; font-weight:900; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .day-button.open { color:#FFE7CA; border-color:var(--ring-soft); }
+  .day-button.open:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.045); }
+  .day-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(122,16,16,0.12); }
+  .day-button.closed { cursor:not-allowed; }
+  .day-button.blank { visibility:hidden; }
   .choice { width:100%; display:grid; grid-template-columns:1fr auto; gap:16px; text-align:left; background:transparent; color:var(--text); border:5px solid var(--ring-faint); padding:18px; transition:border-color var(--t-fast), background var(--t-fast); }
   .choice:hover { border-color:var(--accent); background:rgba(252,184,103,0.045); }
   .choice.active { border-color:var(--signal); background:rgba(122,16,16,0.12); }
@@ -107,6 +116,7 @@
           </div>
           <span id="monthCount" class="month-count"></span>
         </div>
+        <div id="calendar" class="calendar hidden" data-live-edit-ignore="true"></div>
         <div id="windowList" class="window-list"></div>
       </section>
     </div>
@@ -115,8 +125,8 @@
       <div class="panel-row"><span class="panel-key">Session</span><span id="sessionValue">Select a session</span></div>
       <div class="panel-row"><span class="panel-key">Window</span><span id="windowValue">Select a time</span></div>
       <div class="panel-row"><span class="panel-key">Deposit</span><span id="depositValue">-</span></div>
-      <button id="checkoutBtn" class="checkout" type="button" disabled>Continue to Square</button>
-      <p id="checkoutNote" class="fine">Deposit is applied toward the appointment total. Square handles the secure payment step.</p>
+      <button id="checkoutBtn" class="checkout" type="button" disabled>Continue to Pay Deposit</button>
+      <p id="checkoutNote" class="fine">Deposit is applied toward the appointment total. You will be transferred to Square to pay your deposit.</p>
     </aside>
   </div>
 </main>
@@ -135,6 +145,7 @@
   const prevMonthBtn = document.getElementById("prevMonthBtn");
   const nextMonthBtn = document.getElementById("nextMonthBtn");
   const monthCountEl = document.getElementById("monthCount");
+  const calendarEl = document.getElementById("calendar");
   const clientValue = document.getElementById("clientValue");
   const sessionValue = document.getElementById("sessionValue");
   const windowValue = document.getElementById("windowValue");
@@ -145,6 +156,7 @@
   let selectedType = null;
   let selectedWindow = null;
   let selectedMonthKey = "";
+  let selectedDayKey = "";
   if (previewMode && editMode) document.body.classList.add("local-edit-preview");
 
   function previewContext() {
@@ -195,12 +207,12 @@
         },
       ],
       availabilityWindows: [
-        { id: "preview-1", bookingTypeId: "tattoo_quarter", note: "Generated from weekly schedule", ...first },
-        { id: "preview-2", bookingTypeId: "tattoo_quarter", note: "Generated from weekly schedule", ...second },
-        { id: "preview-3", bookingTypeId: "tattoo_half", note: "Generated from weekly schedule", ...third },
-        { id: "preview-4", bookingTypeId: "tattoo_full", note: "Generated from weekly schedule", ...fourth },
-        { id: "preview-5", bookingTypeId: "tattoo_quarter", note: "Generated from weekly schedule", ...fifth },
-        { id: "preview-6", bookingTypeId: "tattoo_half", note: "Generated from weekly schedule", ...sixth },
+        { id: "preview-1", bookingTypeId: "tattoo_quarter", note: "", ...first },
+        { id: "preview-2", bookingTypeId: "tattoo_quarter", note: "", ...second },
+        { id: "preview-3", bookingTypeId: "tattoo_half", note: "", ...third },
+        { id: "preview-4", bookingTypeId: "tattoo_full", note: "", ...fourth },
+        { id: "preview-5", bookingTypeId: "tattoo_quarter", note: "", ...fifth },
+        { id: "preview-6", bookingTypeId: "tattoo_half", note: "", ...sixth },
       ],
     };
   }
@@ -228,8 +240,57 @@
     return new Date(year, month - 1, 1).toLocaleString([], { month:"long", year:"numeric" });
   }
 
+  function dayKey(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
   function sortedWindows(windows) {
     return [...windows].sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+  }
+
+  function renderWindowButton(windowItem, metaPrefix = "") {
+    const meta = `${metaPrefix ? metaPrefix + " / " : ""}Ends ${escapeHtml(formatDate(windowItem.endAt))}`;
+    return `
+      <button class="choice ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
+        <span>
+          <span class="choice-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
+          <span class="choice-meta">${meta}</span>
+        </span>
+      </button>
+    `;
+  }
+
+  function renderCalendar(monthKeyValue, monthWindows) {
+    if (!monthKeyValue) {
+      calendarEl.classList.add("hidden");
+      calendarEl.innerHTML = "";
+      return;
+    }
+
+    const [year, month] = monthKeyValue.split("-").map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const openDays = new Set(monthWindows.map((windowItem) => dayKey(windowItem.startAt)));
+    const cells = [];
+    for (let blank = 0; blank < firstDay.getDay(); blank += 1) {
+      cells.push('<button class="day-button blank" type="button" tabindex="-1" aria-hidden="true"></button>');
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const key = `${monthKeyValue}-${String(day).padStart(2, "0")}`;
+      const isOpen = openDays.has(key);
+      cells.push(`
+        <button class="day-button ${isOpen ? "open" : "closed"} ${selectedDayKey === key ? "active" : ""}" type="button" data-day="${escapeHtml(key)}" ${isOpen ? "" : "disabled"} aria-label="${escapeHtml(key)} ${isOpen ? "open" : "closed"}">
+          ${day}
+        </button>
+      `);
+    }
+    calendarEl.classList.remove("hidden");
+    calendarEl.innerHTML = `
+      <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div class="calendar-grid">${cells.join("")}</div>
+    `;
   }
 
   function minutesLabel(minutes) {
@@ -257,26 +318,33 @@
       return !selectedType || !windowItem.bookingTypeId || windowItem.bookingTypeId === selectedType.id;
     }));
     const monthKeys = [...new Set(visibleWindows.map((windowItem) => monthKey(windowItem.startAt)).filter(Boolean))];
-    if (!monthKeys.includes(selectedMonthKey)) selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : monthKeys[0] || "";
-    if (!monthKeys.includes(selectedMonthKey)) selectedMonthKey = monthKeys[0] || "";
+    if (selectedWindow && !selectedMonthKey) selectedMonthKey = monthKey(selectedWindow.startAt);
+    if (!monthKeys.includes(selectedMonthKey)) {
+      selectedMonthKey = "";
+      selectedDayKey = "";
+      selectedWindow = null;
+    }
     const monthIndex = monthKeys.indexOf(selectedMonthKey);
     const monthWindows = visibleWindows.filter((windowItem) => monthKey(windowItem.startAt) === selectedMonthKey);
+    const dayWindows = monthWindows.filter((windowItem) => dayKey(windowItem.startAt) === selectedDayKey);
 
     windowToolsEl.classList.toggle("hidden", !monthKeys.length);
-    monthSelectEl.innerHTML = monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("");
+    monthSelectEl.innerHTML = `<option value="">Choose a month</option>${monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("")}`;
     monthSelectEl.value = selectedMonthKey;
     prevMonthBtn.disabled = monthIndex <= 0;
     nextMonthBtn.disabled = monthIndex < 0 || monthIndex >= monthKeys.length - 1;
-    monthCountEl.textContent = monthWindows.length ? `${monthWindows.length} open` : "";
+    monthCountEl.textContent = selectedMonthKey && monthWindows.length ? `${monthWindows.length} open` : "";
+    renderCalendar(selectedMonthKey, monthWindows);
 
-    windowListEl.innerHTML = monthWindows.length ? monthWindows.map((windowItem) => `
-      <button class="choice ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
-        <span>
-          <span class="choice-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
-          <span class="choice-meta">Ends ${escapeHtml(formatDate(windowItem.endAt))}</span>
-        </span>
-      </button>
-    `).join("") : '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
+    if (!visibleWindows.length) {
+      windowListEl.innerHTML = '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
+    } else if (!selectedMonthKey) {
+      windowListEl.innerHTML = renderWindowButton(visibleWindows[0], "Next available");
+    } else if (!selectedDayKey) {
+      windowListEl.innerHTML = '<div class="status">Select a bright day on the calendar to see open time slots.</div>';
+    } else {
+      windowListEl.innerHTML = dayWindows.length ? dayWindows.map((windowItem) => renderWindowButton(windowItem)).join("") : '<div class="status">No open time slots remain for that day.</div>';
+    }
 
     clientValue.textContent = context.client?.name || context.client?.email || "-";
     sessionValue.textContent = selectedType ? selectedType.label : "Select a session";
@@ -319,39 +387,53 @@
     selectedType = context.bookingTypes.find((type) => type.id === button.dataset.type) || null;
     if (selectedWindow?.bookingTypeId && selectedWindow.bookingTypeId !== selectedType?.id) selectedWindow = null;
     selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : "";
+    selectedDayKey = selectedWindow ? dayKey(selectedWindow.startAt) : "";
     render();
   });
 
   monthSelectEl.addEventListener("change", () => {
     selectedMonthKey = monthSelectEl.value;
-    if (selectedWindow && monthKey(selectedWindow.startAt) !== selectedMonthKey) selectedWindow = null;
+    selectedDayKey = "";
+    selectedWindow = null;
     render();
   });
 
   prevMonthBtn.addEventListener("click", () => {
-    const options = Array.from(monthSelectEl.options).map((option) => option.value);
+    const options = Array.from(monthSelectEl.options).map((option) => option.value).filter(Boolean);
     const index = options.indexOf(selectedMonthKey);
     if (index > 0) {
       selectedMonthKey = options[index - 1];
-      if (selectedWindow && monthKey(selectedWindow.startAt) !== selectedMonthKey) selectedWindow = null;
+      selectedDayKey = "";
+      selectedWindow = null;
       render();
     }
   });
 
   nextMonthBtn.addEventListener("click", () => {
-    const options = Array.from(monthSelectEl.options).map((option) => option.value);
+    const options = Array.from(monthSelectEl.options).map((option) => option.value).filter(Boolean);
     const index = options.indexOf(selectedMonthKey);
     if (index >= 0 && index < options.length - 1) {
       selectedMonthKey = options[index + 1];
-      if (selectedWindow && monthKey(selectedWindow.startAt) !== selectedMonthKey) selectedWindow = null;
+      selectedDayKey = "";
+      selectedWindow = null;
       render();
     }
+  });
+
+  calendarEl.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-day]");
+    if (!button || button.disabled) return;
+    selectedDayKey = button.dataset.day;
+    selectedWindow = null;
+    render();
   });
 
   windowListEl.addEventListener("click", (event) => {
     const button = event.target.closest("[data-window]");
     if (!button) return;
     selectedWindow = context.availabilityWindows.find((windowItem) => windowItem.id === button.dataset.window) || null;
+    selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : selectedMonthKey;
+    selectedDayKey = selectedWindow ? dayKey(selectedWindow.startAt) : selectedDayKey;
     render();
   });
 
@@ -362,7 +444,7 @@
       return;
     }
     checkoutBtn.disabled = true;
-    checkoutNote.textContent = "Creating Square checkout.";
+    checkoutNote.textContent = "Preparing your Square deposit checkout.";
     const response = await fetch("/api/booking/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -374,7 +456,7 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      checkoutNote.textContent = payload.error || "Unable to create checkout.";
+      checkoutNote.textContent = payload.error || "Unable to prepare deposit checkout.";
       checkoutBtn.disabled = false;
       return;
     }
