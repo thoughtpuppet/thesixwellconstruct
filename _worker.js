@@ -20,6 +20,7 @@ import {
 import {
   handleAdminCreateAvailability,
   handleAdminCreateBookingToken,
+  handleAdminDeleteAvailability,
   handleAdminGetAvailabilityPreview,
   handleAdminGetSchedule,
   handleAdminListAppointments,
@@ -411,7 +412,8 @@ async function handleBookingApi(request, env) {
 
   const availabilityMatch = pathname.match(/^\/api\/admin\/booking\/availability\/([^/]+)$/);
   if (availabilityMatch) {
-    if (method !== "PATCH") return methodNotAllowed(method, ["PATCH"]);
+    if (method === "DELETE") return handleAdminDeleteAvailability(request, env, decodeURIComponent(availabilityMatch[1]));
+    if (method !== "PATCH") return methodNotAllowed(method, ["PATCH", "DELETE"]);
     return handleAdminUpdateAvailability(request, env, decodeURIComponent(availabilityMatch[1]));
   }
 

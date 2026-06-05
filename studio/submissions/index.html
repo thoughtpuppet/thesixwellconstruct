@@ -10,6 +10,8 @@
     --line-strong:rgba(255,231,202,0.32); --text:#FFE7CA;
     --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.38);
     --accent:#FCB867; --signal:#7A1010;
+    --ring:#6D3D15; --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --ghost:rgba(252,184,103,0.14); --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --sans:Inter,"Helvetica Neue",Arial,sans-serif; --serif:Georgia,"Times New Roman",Times,serif;
   }
   * { box-sizing:border-box; }
@@ -73,6 +75,44 @@
   .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
   .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:1px solid var(--line); padding:12px 0; }
   .day-name { color:var(--accent); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; padding-bottom:12px; }
+  .availability-manager { color:var(--accent); }
+  .availability-manager .detail-head { border-bottom:5px solid var(--ring-faint); }
+  .availability-manager .detail-head h2 { color:var(--signal); font-size:clamp(42px,7vw,72px); line-height:0.9; letter-spacing:0; }
+  .availability-manager .contact { color:rgba(255,231,202,0.62); }
+  .availability-manager .pill { border:5px solid var(--ring-soft); color:var(--ring); padding:5px 12px; }
+  .availability-manager select,
+  .availability-manager input,
+  .availability-manager textarea { border:5px solid var(--ring-faint); color:#FFE7CA; background:var(--bg); transition:border-color var(--t-fast), background var(--t-fast); }
+  .availability-manager select:focus,
+  .availability-manager input:focus,
+  .availability-manager textarea:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
+  .availability-manager .button { border:5px solid var(--ring-faint); color:#FFE7CA; min-height:44px; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .availability-manager .button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.045); }
+  .availability-manager .schedule-section { border:5px solid var(--ring-faint); padding:0; margin-top:16px; }
+  .availability-manager .section-toggle { width:100%; min-height:58px; border:0; border-bottom:5px solid var(--ring-faint); background:transparent; color:var(--accent); padding:0 16px; display:flex; align-items:center; justify-content:space-between; gap:14px; font-family:var(--sans); font-size:11px; font-weight:900; letter-spacing:0.18em; text-transform:uppercase; text-align:left; }
+  .availability-manager .section-toggle:hover { color:#FFE7CA; }
+  .availability-manager .section-toggle::after { content:"-"; color:var(--signal); font-size:18px; line-height:1; }
+  .availability-manager .schedule-section:not(.is-open) .section-toggle { border-bottom:0; }
+  .availability-manager .schedule-section:not(.is-open) .section-toggle::after { content:"+"; color:var(--accent); }
+  .availability-manager .section-body { display:grid; gap:14px; padding:16px; }
+  .availability-manager .schedule-section:not(.is-open) .section-body { display:none; }
+  .availability-manager .schedule-grid { margin:0; grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .availability-manager .day-row { grid-template-columns:110px repeat(3,minmax(0,1fr)); border-bottom:5px solid var(--ring-faint); padding:14px 0; }
+  .availability-manager .day-row:last-child { border-bottom:0; padding-bottom:0; }
+  .availability-manager .availability-edit-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border-top:5px solid var(--ring-faint); padding-top:14px; }
+  .availability-manager .availability-edit-form.hidden { display:none; }
+  .availability-manager .wide-field { grid-column:1 / -1; }
+  .availability-manager .danger-button { border-color:rgba(122,16,16,0.72); color:#FFE7CA; }
+  .availability-manager .danger-button:hover { border-color:var(--signal); color:var(--signal); background:rgba(122,16,16,0.12); }
+  .availability-manager .mini-calendar,
+  .availability-manager .slot-preview,
+  .availability-manager .availability-item { border:5px solid var(--ring-faint); background:transparent; }
+  .availability-manager .day-button { border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .availability-manager .day-button.booked-one { background:rgba(122,16,16,0.12); border-color:var(--signal); color:#FFE7CA; }
+  .availability-manager .day-button.booked-two { background:rgba(122,16,16,0.2); border-color:rgba(122,16,16,0.72); color:#FFE7CA; }
+  .availability-manager .day-button.booked-many { background:rgba(122,16,16,0.28); border-color:rgba(122,16,16,0.88); color:#FFE7CA; }
+  .availability-manager .slot-preview-item { border-bottom:5px solid var(--ring-faint); }
+  .availability-manager .save-schedule { width:100%; margin-top:16px; }
   .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
   .token-card { width:min(520px,100%); border:1px solid var(--line-strong); padding:24px; background:var(--panel); display:grid; gap:14px; }
   .token-card h2 { font-size:22px; }
@@ -81,6 +121,11 @@
     .layout { grid-template-columns:1fr; }
     .list-pane { border-right:0; border-bottom:1px solid var(--line); max-height:42vh; }
     .grid,.actions,.availability-overview { grid-template-columns:1fr; }
+    .availability-manager .schedule-grid,
+    .availability-manager .availability-form,
+    .availability-manager .availability-edit-form,
+    .availability-manager .day-row { grid-template-columns:1fr; }
+    .availability-manager .wide-field { grid-column:auto; }
   }
 </style>
 </head>
@@ -310,6 +355,29 @@
     return date.toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
   }
 
+  function formatDateTimeInput(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (date.toString() === "Invalid Date") return "";
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  }
+
+  function editAvailabilityPayload(form) {
+    const fields = Object.fromEntries([...form.querySelectorAll("[data-edit-field]")].map((field) => [field.dataset.editField, field.value]));
+    return {
+      startAt: localDateTimeToIso(fields.startAt),
+      endAt: localDateTimeToIso(fields.endAt),
+      bookingTypeId: fields.bookingTypeId || "",
+      capacity: fields.capacity,
+      bufferBeforeMinutes: fields.bufferBeforeMinutes,
+      bufferAfterMinutes: fields.bufferAfterMinutes,
+      note: fields.note || "",
+      isBlackout: fields.isBlackout === "1",
+      active: fields.active === "1",
+    };
+  }
+
   function monthKey(value) {
     if (!value) return "";
     const date = new Date(value);
@@ -405,14 +473,16 @@
 
   async function renderAvailabilityManager() {
     detailEl.innerHTML = `
-      <div class="detail-head">
-        <span class="pill">Booking / Availability</span>
-        <h2>Availability Windows</h2>
-        <p class="contact">Set recurring weekly hours once. Use exceptions only for extra days, closed days, or unusual blocks.</p>
-      </div>
+      <div class="availability-manager">
+        <div class="detail-head">
+          <span class="pill">Booking / Availability</span>
+          <h2>Availability Windows</h2>
+          <p class="contact">Set recurring weekly hours once. Use exceptions only for extra days, closed days, or unusual blocks.</p>
+        </div>
       <form id="scheduleForm">
-        <div class="schedule-section">
-          <span class="pill">Booking Rules</span>
+        <section class="schedule-section is-open" data-collapse-section>
+          <button class="section-toggle" type="button">Booking Rules</button>
+          <div class="section-body">
           <div class="schedule-grid">
             <div class="field">
               <label for="settingTimezone">Timezone</label>
@@ -447,15 +517,19 @@
               <input id="settingBufferAfter" type="number" min="0" step="5" value="30">
             </div>
           </div>
-        </div>
-        <div class="schedule-section">
-          <span class="pill">Weekly Schedule</span>
+          </div>
+        </section>
+        <section class="schedule-section is-open" data-collapse-section>
+          <button class="section-toggle" type="button">Weekly Schedule</button>
+          <div class="section-body">
           <div id="weeklyRules"></div>
-        </div>
-        <button class="button" type="submit">Save Schedule</button>
+          <button class="button save-schedule" type="submit">Save Schedule</button>
+          </div>
+        </section>
       </form>
-      <div class="schedule-section">
-        <span class="pill">Client Calendar Preview</span>
+      <section class="schedule-section is-open" data-collapse-section>
+        <button class="section-toggle" type="button">Client Calendar Preview</button>
+        <div class="section-body">
         <div class="availability-overview">
           <div class="mini-calendar">
             <div class="calendar-tools">
@@ -475,10 +549,12 @@
             <div id="slotPreviewList" class="slot-preview-list"><p class="empty">Loading generated availability.</p></div>
           </div>
         </div>
-      </div>
-      <div class="schedule-section">
-        <span class="pill">Exceptions</span>
-        <form id="availabilityForm" class="availability-form" style="margin-top:14px;">
+        </div>
+      </section>
+      <section class="schedule-section is-open" data-collapse-section>
+        <button class="section-toggle" type="button">Exceptions</button>
+        <div class="section-body">
+        <form id="availabilityForm" class="availability-form">
         <div class="field">
           <label for="availabilityStart">Exception Start</label>
           <input id="availabilityStart" type="datetime-local" required>
@@ -521,8 +597,10 @@
         </div>
         <button class="button" type="submit">Add Exception</button>
       </form>
-      </div>
       <div id="availabilityList" class="availability-list"><p class="empty">Loading availability.</p></div>
+        </div>
+      </section>
+      </div>
     `;
     await loadSchedule();
     await loadAvailabilityPreview();
@@ -586,12 +664,69 @@
     const payload = await api("/api/admin/booking/availability");
     const windows = payload.availabilityWindows || [];
     list.innerHTML = windows.length ? windows.map((windowItem) => `
-      <div class="availability-item">
+      <div class="availability-item" data-availability-item="${escapeHtml(windowItem.id)}">
         <span class="pill">${windowItem.isBlackout ? "exception blackout" : "extra bookable block"} / ${windowItem.active ? "active" : "inactive"}</span>
         <div class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startAt))} - ${escapeHtml(formatDateTimeLocal(windowItem.endAt))}</div>
         <div class="meta">${escapeHtml(windowItem.bookingTypeId || "any tattoo session")} / capacity ${escapeHtml(windowItem.capacity)} / buffer ${escapeHtml(windowItem.bufferBeforeMinutes)} before, ${escapeHtml(windowItem.bufferAfterMinutes)} after</div>
         <div class="meta">${escapeHtml(windowItem.note || "")}</div>
-        <button class="button" type="button" data-toggle-window="${escapeHtml(windowItem.id)}" data-active="${windowItem.active ? "0" : "1"}">${windowItem.active ? "Disable" : "Enable"}</button>
+        <div class="booking-actions">
+          <button class="button" type="button" data-edit-window="${escapeHtml(windowItem.id)}">Edit</button>
+          <button class="button" type="button" data-toggle-window="${escapeHtml(windowItem.id)}" data-active="${windowItem.active ? "0" : "1"}">${windowItem.active ? "Disable" : "Enable"}</button>
+          <button class="button danger-button" type="button" data-delete-window="${escapeHtml(windowItem.id)}">Delete</button>
+        </div>
+        <form class="availability-edit-form hidden" data-edit-form="${escapeHtml(windowItem.id)}">
+          <div class="field">
+            <label>Exception Start</label>
+            <input data-edit-field="startAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(windowItem.startAt))}" required>
+          </div>
+          <div class="field">
+            <label>Exception End</label>
+            <input data-edit-field="endAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(windowItem.endAt))}" required>
+          </div>
+          <div class="field">
+            <label>Session Type</label>
+            <select data-edit-field="bookingTypeId">
+              <option value="" ${windowItem.bookingTypeId ? "" : "selected"}>Any tattoo session</option>
+              <option value="tattoo_quarter" ${windowItem.bookingTypeId === "tattoo_quarter" ? "selected" : ""}>Quarter Session</option>
+              <option value="tattoo_half" ${windowItem.bookingTypeId === "tattoo_half" ? "selected" : ""}>Half Session</option>
+              <option value="tattoo_full" ${windowItem.bookingTypeId === "tattoo_full" ? "selected" : ""}>Full Session</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Same-Time Capacity</label>
+            <input data-edit-field="capacity" type="number" min="1" step="1" value="${escapeHtml(windowItem.capacity || 1)}">
+          </div>
+          <div class="field">
+            <label>Buffer Before</label>
+            <input data-edit-field="bufferBeforeMinutes" type="number" min="0" step="5" value="${escapeHtml(windowItem.bufferBeforeMinutes || 0)}">
+          </div>
+          <div class="field">
+            <label>Buffer After</label>
+            <input data-edit-field="bufferAfterMinutes" type="number" min="0" step="5" value="${escapeHtml(windowItem.bufferAfterMinutes || 0)}">
+          </div>
+          <div class="field">
+            <label>Mode</label>
+            <select data-edit-field="isBlackout">
+              <option value="1" ${windowItem.isBlackout ? "selected" : ""}>Closed / Blackout</option>
+              <option value="0" ${windowItem.isBlackout ? "" : "selected"}>Extra Bookable Block</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Active</label>
+            <select data-edit-field="active">
+              <option value="1" ${windowItem.active ? "selected" : ""}>Active</option>
+              <option value="0" ${windowItem.active ? "" : "selected"}>Inactive</option>
+            </select>
+          </div>
+          <div class="field wide-field">
+            <label>Note</label>
+            <input data-edit-field="note" value="${escapeHtml(windowItem.note || "")}">
+          </div>
+          <div class="booking-actions wide-field">
+            <button class="button" type="submit">Save Exception</button>
+            <button class="button" type="button" data-cancel-edit="${escapeHtml(windowItem.id)}">Cancel</button>
+          </div>
+        </form>
       </div>
     `).join("") : '<p class="empty">No exceptions yet. Weekly schedule rules will generate booking times automatically.</p>';
   }
@@ -644,6 +779,37 @@
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const sectionToggle = event.target.closest(".section-toggle");
+    if (sectionToggle) {
+      sectionToggle.closest("[data-collapse-section]")?.classList.toggle("is-open");
+      return;
+    }
+
+    const editButton = event.target.closest("[data-edit-window]");
+    if (editButton) {
+      const form = editButton.closest("[data-availability-item]")?.querySelector("[data-edit-form]");
+      form?.classList.toggle("hidden");
+      return;
+    }
+
+    const cancelEdit = event.target.closest("[data-cancel-edit]");
+    if (cancelEdit) {
+      cancelEdit.closest("[data-availability-item]")?.querySelector("[data-edit-form]")?.classList.add("hidden");
+      return;
+    }
+
+    const deleteButton = event.target.closest("[data-delete-window]");
+    if (deleteButton) {
+      const id = deleteButton.dataset.deleteWindow;
+      if (!window.confirm("Delete this exception from availability?")) return;
+      setStatus("Deleting exception");
+      await api(`/api/admin/booking/availability/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadAvailability();
+      await loadAvailabilityPreview();
+      setStatus("Exception deleted");
+      return;
+    }
+
     if (event.target.id === "previewBookingBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
       if (!submission) return;
@@ -748,6 +914,22 @@
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const editForm = event.target.closest("[data-edit-form]");
+    if (editForm) {
+      event.preventDefault();
+      const id = editForm.dataset.editForm;
+      setStatus("Saving exception");
+      await api(`/api/admin/booking/availability/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(editAvailabilityPayload(editForm)),
+      });
+      await loadAvailability();
+      await loadAvailabilityPreview();
+      setStatus("Exception saved");
+      return;
+    }
+
     if (event.target.id === "scheduleForm") {
       event.preventDefault();
       setStatus("Saving schedule");

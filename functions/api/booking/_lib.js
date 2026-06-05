@@ -1344,16 +1344,64 @@ export async function handleAdminUpdateAvailability(request, env, id) {
     const current = await db.prepare("SELECT * FROM availability_windows WHERE id = ?").bind(id).first();
     if (!current) return errorResponse("Availability window not found.", 404);
     const now = new Date().toISOString();
+    const startAt = body.startAt === undefined ? current.start_at : asString(body.startAt);
+    const endAt = body.endAt === undefined ? current.end_at : asString(body.endAt);
+    if (!startAt || !endAt || new Date(startAt).toString() === "Invalid Date" || new Date(endAt).toString() === "Invalid Date") {
+      return errorResponse("Valid startAt and endAt are required.", 400);
+    }
+    if (new Date(endAt).getTime() <= new Date(startAt).getTime()) {
+      return errorResponse("endAt must be after startAt.", 400);
+    }
+    const next = {
+      venture: current.venture || "tattooing",
+      booking_type_id: body.bookingTypeId === undefined ? current.booking_type_id : asOptionalString(body.bookingTypeId),
+      start_at: new Date(startAt).toISOString(),
+      end_at: new Date(endAt).toISOString(),
+      capacity: Math.max(1, asPositiveInteger(body.capacity, current.capacity || 1)),
+      buffer_before_minutes: body.bufferBeforeMinutes === undefined
+        ? current.buffer_before_minutes
+        : asPositiveInteger(body.bufferBeforeMinutes, 0),
+      buffer_after_minutes: body.bufferAfterMinutes === undefined
+        ? current.buffer_after_minutes
+        : asPositiveInteger(body.bufferAfterMinutes, 0),
+      is_blackout: body.isBlackout === undefined ? current.is_blackout : body.isBlackout ? 1 : 0,
+      active: body.active === undefined ? current.active : body.active ? 1 : 0,
+      note: body.note === undefined ? current.note : asString(body.note),
+    };
+    if (!next.is_blackout && next.active) {
+      const existing = await db
+        .prepare(
+          `SELECT * FROM availability_windows
+           WHERE active = 1 AND is_blackout = 0 AND venture = ? AND id != ?`
+        )
+        .bind(next.venture, id)
+        .all();
+      const candidateInterval = intervalWithBuffer(next);
+      const conflicts = (existing.results || []).some((row) =>
+        intervalsOverlap(candidateInterval, intervalWithBuffer(row))
+      );
+      if (conflicts) {
+        return errorResponse("That window overlaps an existing active window or buffer.", 400);
+      }
+    }
     await db
       .prepare(
         `UPDATE availability_windows
-         SET active = ?, is_blackout = ?, note = ?, updated_at = ?
+         SET booking_type_id = ?, start_at = ?, end_at = ?, capacity = ?,
+             buffer_before_minutes = ?, buffer_after_minutes = ?,
+             active = ?, is_blackout = ?, note = ?, updated_at = ?
          WHERE id = ?`
       )
       .bind(
-        body.active === undefined ? current.active : body.active ? 1 : 0,
-        body.isBlackout === undefined ? current.is_blackout : body.isBlackout ? 1 : 0,
-        body.note === undefined ? current.note : asString(body.note),
+        next.booking_type_id,
+        next.start_at,
+        next.end_at,
+        next.capacity,
+        next.buffer_before_minutes,
+        next.buffer_after_minutes,
+        next.active,
+        next.is_blackout,
+        next.note,
         now,
         id
       )
@@ -1362,6 +1410,25 @@ export async function handleAdminUpdateAvailability(request, env, id) {
     return json({ availabilityWindow: normalizeWindow(row) });
   } catch (error) {
     return errorResponse("Unable to update availability.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminDeleteAvailability(request, env, id) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const result = await db
+      .prepare("DELETE FROM availability_windows WHERE id = ? AND id NOT LIKE 'gen:%'")
+      .bind(id)
+      .run();
+    if (!result.meta?.changes) return errorResponse("Availability window not found.", 404);
+    return json({ ok: true, deletedId: id });
+  } catch (error) {
+    return errorResponse("Unable to delete availability.", 500, {
       detail: error.message,
     });
   }
