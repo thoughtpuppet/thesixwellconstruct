@@ -62,7 +62,7 @@ reminder email defaults are:
 
 - `NOTIFICATION_FROM_EMAIL=saisolehamn@artpilltattoohouse.com`
 - `NOTIFICATION_REPLY_TO=saisolehamn@artpilltattoohouse.com`
-- `NOTIFICATION_FROM_NAME=Art.Pill Tattoo House`
+- `NOTIFICATION_FROM_NAME=art.pill TATTOO HOUSE`
 
 Cloudflare must be allowed to send mail for `artpilltattoohouse.com`; otherwise
 the code records skipped or failed deliveries in `notification_deliveries`.

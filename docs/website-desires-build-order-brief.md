@@ -78,7 +78,7 @@ The site should avoid generic SaaS/portfolio polish. It should feel specific, au
 
 Current venture nodes:
 
-- **Tattooing / Art.Pill Tattoo House**: permanent symbolic mark-making, client intake, flash, custom work, special projects, booking review.
+- **Tattooing / art.pill TATTOO HOUSE**: permanent symbolic mark-making, client intake, flash, custom work, special projects, booking review.
 - **Art Making**: paintings and objects, source image language, statements, acquisition pathway.
 - **Merch**: commerce engine for objects from the whole construct, organized by source venture.
 - **About**: biographical and construct context. Currently a placeholder/not found page.
@@ -98,7 +98,7 @@ The homepage is an interactive construct map with the wordmark, node labels, eye
 
 Tattooing is the most developed operational venture. It includes:
 
-- Main Art.Pill Tattoo House page.
+- Main art.pill TATTOO HOUSE page.
 - Portfolio grid.
 - Flash wall.
 - Individual flash pages.

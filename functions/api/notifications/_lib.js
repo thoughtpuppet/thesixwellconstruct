@@ -1,5 +1,5 @@
 const DEFAULT_FROM_ADDRESS = "saisolehamn@artpilltattoohouse.com";
-const DEFAULT_FROM_NAME = "Art.Pill Tattoo House";
+const DEFAULT_FROM_NAME = "art.pill TATTOO HOUSE";
 const DEFAULT_REPLY_TO = "saisolehamn@artpilltattoohouse.com";
 const DEFAULT_TIMEZONE = "America/New_York";
 
@@ -198,18 +198,18 @@ export async function notifySubmissionReceived(env, submission) {
   const text = [
     `Hi ${normalized.contactName || "there"},`,
     "",
-    "Your Art.Pill inquiry has been received.",
+    "Your art.pill TATTOO HOUSE inquiry has been received.",
     "The studio will review the project notes, placement, scale, references, and timing before sending any booking access.",
     "",
     "If the project is approved, you will receive a private booking link for scheduling and deposit.",
     "",
     "Thank you,",
-    "Art.Pill Tattoo House",
+    "art.pill TATTOO HOUSE",
   ].join("\n");
 
   return sendTransactionalEmail(env, {
     to: normalized.contactEmail,
-    subject: "Art.Pill inquiry received",
+    subject: "art.pill TATTOO HOUSE inquiry received",
     text,
     templateKey: "submission_received",
     relatedType: "submission",
@@ -228,7 +228,7 @@ export async function notifyBookingLinkCreated(env, request, submission, token) 
   const text = [
     `Hi ${normalized.contactName || "there"},`,
     "",
-    "Your Art.Pill project has been approved for booking.",
+    "Your art.pill TATTOO HOUSE project has been approved for booking.",
     "Use the private link below to choose an available session and complete the deposit:",
     "",
     bookingUrl,
@@ -236,12 +236,12 @@ export async function notifyBookingLinkCreated(env, request, submission, token) 
     "This link is private to your project. If the available times do not work, reply to this email and the studio can help.",
     "",
     "Thank you,",
-    "Art.Pill Tattoo House",
+    "art.pill TATTOO HOUSE",
   ].join("\n");
 
   return sendTransactionalEmail(env, {
     to: normalized.contactEmail,
-    subject: "Your private Art.Pill booking link",
+    subject: "Your private art.pill TATTOO HOUSE booking link",
     text,
     templateKey: "booking_link_created",
     relatedType: "submission",
@@ -258,7 +258,7 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
   const text = [
     `Hi ${appointment.clientName || "there"},`,
     "",
-    "Your Art.Pill appointment is confirmed.",
+    "Your art.pill TATTOO HOUSE appointment is confirmed.",
     "",
     `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     `Session: ${appointment.bookingTypeLabel}`,
@@ -269,12 +269,12 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
     "The studio may follow up directly with prep notes or adjustments before your appointment.",
     "",
     "Thank you,",
-    "Art.Pill Tattoo House",
+    "art.pill TATTOO HOUSE",
   ].join("\n");
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: "Your Art.Pill appointment is confirmed",
+    subject: "Your art.pill TATTOO HOUSE appointment is confirmed",
     text,
     templateKey: "appointment_confirmed",
     relatedType: "appointment",
@@ -314,18 +314,18 @@ export async function sendDueAppointmentReminders(env) {
       const text = [
         `Hi ${appointment.clientName || "there"},`,
         "",
-        "Reminder: your Art.Pill appointment is tomorrow.",
+        "Reminder: your art.pill TATTOO HOUSE appointment is tomorrow.",
         "",
         `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
         `Session: ${appointment.bookingTypeLabel}`,
         "",
         "Reply to the studio email thread if anything needs attention before your session.",
         "",
-        "Art.Pill Tattoo House",
+        "art.pill TATTOO HOUSE",
       ].join("\n");
       const delivery = await sendTransactionalEmail(env, {
         to: appointment.clientEmail,
-        subject: "Reminder: your Art.Pill appointment is tomorrow",
+        subject: "Reminder: your art.pill TATTOO HOUSE appointment is tomorrow",
         text,
         templateKey: "appointment_reminder_24h",
         relatedType: "appointment",

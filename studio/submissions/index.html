@@ -300,12 +300,12 @@
     const name = submission.contactName || payloadValue(submission, "name") || "there";
     const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
     if (bookingUrl && submission.status === "approved") {
-      return `Hi ${name}, this is Art.Pill Tattoo House. Your project has been approved for booking. You can choose your session and place the deposit here: ${bookingUrl}`;
+      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project has been approved for booking. You can choose your session and place the deposit here: ${bookingUrl}`;
     }
     if (bookingUrl && submission.status === "booked") {
-      return `Hi ${name}, this is Art.Pill Tattoo House. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
+      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
     }
-    return `Hi ${name}, this is Art.Pill Tattoo House. We received your inquiry and will review the project details before sending booking access. Thank you.`;
+    return `Hi ${name}, this is art.pill TATTOO HOUSE. We received your inquiry and will review the project details before sending booking access. Thank you.`;
   }
 
   function renderDetail(submission) {

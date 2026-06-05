@@ -33,7 +33,7 @@
   "vars": {
     "PUBLIC_SITE_URL": "https://thesixwellconstruct.com",
     "NOTIFICATION_FROM_EMAIL": "saisolehamn@artpilltattoohouse.com",
-    "NOTIFICATION_FROM_NAME": "Art.Pill Tattoo House",
+    "NOTIFICATION_FROM_NAME": "art.pill TATTOO HOUSE",
     "NOTIFICATION_REPLY_TO": "saisolehamn@artpilltattoohouse.com",
     "SHOPIFY_STORE_DOMAIN": "six-well-2.myshopify.com",
     "SHOPIFY_STOREFRONT_API_VERSION": "2025-07",

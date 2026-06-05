@@ -609,10 +609,6 @@ function drawRing(){
   const ro=RING_OUTER(), ri=RING_INNER();
   const hp=easeOutSoft(logoHoverP);
   const outer=ro+5*scale*hp, inner=ri+3.5*scale*hp;
-  if(hp>0){
-    ctx.shadowColor=`rgba(252,184,103,${0.26*hp})`;
-    ctx.shadowBlur=22*scale*hp;
-  }
   ctx.beginPath();ctx.arc(0,0,outer,0,Math.PI*2);ctx.arc(0,0,inner,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();ctx.restore();
 }
 function drawDots(alpha){

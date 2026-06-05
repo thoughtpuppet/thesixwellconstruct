@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/submissions-backend.md",
+                "file": "docs/email-templates/appointment-confirmed.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "submissions-backend"
+              "title": "appointment-confirmed"
             }
           }
         ]
@@ -184,5 +184,7 @@
     }
   },
   "active": "d5d64711ee53c5a1",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "docs/submissions-backend.md"
+  ]
 }
