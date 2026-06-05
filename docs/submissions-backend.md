@@ -50,6 +50,25 @@ wrangler secret put SQUARE_WEBHOOK_SIGNATURE_KEY
 
 Use `SQUARE_ENVIRONMENT=sandbox` while testing and `SQUARE_ENVIRONMENT=production` for live deposits.
 
+Set up transactional email before enabling client confirmations and reminders:
+
+```sh
+wrangler email sending enable artpilltattoohouse.com
+wrangler d1 migrations apply swc-submissions
+```
+
+The Worker uses the `EMAIL` send binding in `wrangler.jsonc`. Confirmation and
+reminder email defaults are:
+
+- `NOTIFICATION_FROM_EMAIL=saisolehamn@artpilltattoohouse.com`
+- `NOTIFICATION_REPLY_TO=saisolehamn@artpilltattoohouse.com`
+- `NOTIFICATION_FROM_NAME=Art.Pill Tattoo House`
+
+Cloudflare must be allowed to send mail for `artpilltattoohouse.com`; otherwise
+the code records skipped or failed deliveries in `notification_deliveries`.
+The cron trigger checks hourly for confirmed appointments about 24 hours away
+and sends one reminder per appointment.
+
 Optional file storage uses R2. If the `SUBMISSION_FILES` binding exists, uploaded reference files are stored under `submissions/{submissionId}/...`. If it does not exist, the backend still records file metadata, but it cannot preserve the file contents.
 
 ```jsonc

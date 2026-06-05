@@ -51,6 +51,8 @@
   .value.full { min-height:96px; }
   .actions { display:grid; grid-template-columns:180px minmax(0,1fr) auto; gap:12px; align-items:start; margin-top:22px; }
   .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+  .assist-panel { border:5px solid var(--ring-faint); padding:14px; margin-top:16px; display:grid; gap:10px; }
+  .assist-panel textarea { min-height:112px; }
   .availability-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
   .availability-list { display:grid; gap:10px; }
   .availability-item { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:8px; }
@@ -285,6 +287,27 @@
     };
   }
 
+  function absoluteUrl(pathOrUrl) {
+    if (!pathOrUrl) return "";
+    try {
+      return new URL(pathOrUrl, window.location.origin).toString();
+    } catch {
+      return pathOrUrl;
+    }
+  }
+
+  function textReminderCopy(submission) {
+    const name = submission.contactName || payloadValue(submission, "name") || "there";
+    const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
+    if (bookingUrl && submission.status === "approved") {
+      return `Hi ${name}, this is Art.Pill Tattoo House. Your project has been approved for booking. You can choose your session and place the deposit here: ${bookingUrl}`;
+    }
+    if (bookingUrl && submission.status === "booked") {
+      return `Hi ${name}, this is Art.Pill Tattoo House. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
+    }
+    return `Hi ${name}, this is Art.Pill Tattoo House. We received your inquiry and will review the project details before sending booking access. Thank you.`;
+  }
+
   function renderDetail(submission) {
     const files = submission.files || [];
     detailEl.innerHTML = `
@@ -342,6 +365,14 @@
       </div>
       <div class="booking-actions" style="margin-top:16px;">
         <button class="button danger-button" id="deleteSubmissionBtn" type="button">Delete Entry</button>
+      </div>
+      <div class="assist-panel">
+        <label for="textAssist">Manual Text Assist</label>
+        <textarea id="textAssist">${escapeHtml(textReminderCopy(submission))}</textarea>
+        <div class="booking-actions">
+          <button class="button" id="refreshTextAssistBtn" type="button">Refresh Text</button>
+          <button class="button" id="copyTextAssistBtn" type="button">Copy Text</button>
+        </div>
       </div>
       <div class="field" style="margin-top:16px;">
         <label for="internalNotes">Internal Notes</label>
@@ -841,9 +872,38 @@
         body: JSON.stringify({ submissionId: activeId, revokeExisting: true }),
       });
       document.getElementById("bookingUrl").value = payload.token.path;
+      const textAssist = document.getElementById("textAssist");
+      if (textAssist) {
+        textAssist.value = textReminderCopy({
+          ...submission,
+          bookingUrl: payload.token.path,
+          status: "approved",
+        });
+      }
       await navigator.clipboard?.writeText(payload.token.bookingUrl).catch(() => {});
       await loadSubmissions();
       setStatus("Booking link copied");
+      return;
+    }
+
+    if (event.target.id === "refreshTextAssistBtn" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      const textAssist = document.getElementById("textAssist");
+      if (submission && textAssist) {
+        textAssist.value = textReminderCopy({
+          ...submission,
+          bookingUrl: document.getElementById("bookingUrl")?.value || submission.bookingUrl,
+          status: document.getElementById("detailStatus")?.value || submission.status,
+        });
+      }
+      setStatus("Text refreshed");
+      return;
+    }
+
+    if (event.target.id === "copyTextAssistBtn") {
+      const value = document.getElementById("textAssist")?.value || "";
+      if (value) await navigator.clipboard?.writeText(value).catch(() => {});
+      setStatus(value ? "Text copied" : "No text");
       return;
     }
 

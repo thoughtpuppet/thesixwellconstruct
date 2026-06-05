@@ -35,6 +35,7 @@ import {
   handleCreateBookingCheckout,
   handleCreateBookingHold,
 } from "./functions/api/booking/_lib.js";
+import { sendDueAppointmentReminders } from "./functions/api/notifications/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/events",
@@ -464,5 +465,8 @@ export default {
     }
 
     return env.ASSETS.fetch(assetRequest(request, assetPathForRequest(url.pathname)));
+  },
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(sendDueAppointmentReminders(env));
   },
 };

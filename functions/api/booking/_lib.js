@@ -1,3 +1,8 @@
+import {
+  notifyAppointmentConfirmed,
+  notifyBookingLinkCreated,
+} from "../notifications/_lib.js";
+
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
   "deposit_pending",
@@ -974,6 +979,16 @@ export async function handleConfirmBooking(request, env) {
         .run();
       const updated = await db.prepare("SELECT * FROM appointments WHERE id = ?").bind(appointment.id).first();
       appointment = normalizeAppointment(updated);
+      const appointmentWithType = await db
+        .prepare(
+          `SELECT a.*, bt.label AS booking_type_label
+           FROM appointments a
+           LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+           WHERE a.id = ?`
+        )
+        .bind(appointment.id)
+        .first();
+      await notifyAppointmentConfirmed(env, request, appointmentWithType || updated);
     }
 
     return json({ ok: true, appointment, depositStatus: paid ? "paid" : "pending" });
@@ -1035,6 +1050,14 @@ export async function handleAdminCreateBookingToken(request, env) {
       .prepare("UPDATE submissions SET booking_url = ?, updated_at = ? WHERE id = ?")
       .bind(bookingUrl.pathname + bookingUrl.search, now, submissionId)
       .run();
+
+    await notifyBookingLinkCreated(env, request, submission, {
+      id,
+      bookingUrl: bookingUrl.toString(),
+      path: bookingUrl.pathname + bookingUrl.search,
+      expiresAt,
+      allowedBookingTypes: allowed,
+    });
 
     return json({
       ok: true,

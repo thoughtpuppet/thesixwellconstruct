@@ -1,3 +1,5 @@
+import { notifySubmissionReceived } from "../notifications/_lib.js";
+
 const VALID_STATUSES = new Set([
   "new",
   "reviewing",
@@ -364,6 +366,12 @@ export async function handleCreateSubmission(request, env) {
       )
       .bind(crypto.randomUUID(), id, "created", "system", null, now)
       .run();
+
+    await notifySubmissionReceived(env, {
+      id,
+      ...submission,
+      files: savedFiles,
+    });
 
     return json({
       ok: true,

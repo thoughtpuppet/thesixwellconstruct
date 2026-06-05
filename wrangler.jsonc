@@ -20,7 +20,21 @@
       "database_id": "ec619569-212f-43b7-9b8c-6ac3bfed85e5"
     }
   ],
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "0 * * * *"
+    ]
+  },
   "vars": {
+    "PUBLIC_SITE_URL": "https://thesixwellconstruct.com",
+    "NOTIFICATION_FROM_EMAIL": "saisolehamn@artpilltattoohouse.com",
+    "NOTIFICATION_FROM_NAME": "Art.Pill Tattoo House",
+    "NOTIFICATION_REPLY_TO": "saisolehamn@artpilltattoohouse.com",
     "SHOPIFY_STORE_DOMAIN": "six-well-2.myshopify.com",
     "SHOPIFY_STOREFRONT_API_VERSION": "2025-07",
     "SHOPIFY_MERCH_QUERY": "tag:construct-merch"
