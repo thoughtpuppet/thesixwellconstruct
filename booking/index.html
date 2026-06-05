@@ -262,7 +262,7 @@
     const monthIndex = monthKeys.indexOf(selectedMonthKey);
     const monthWindows = visibleWindows.filter((windowItem) => monthKey(windowItem.startAt) === selectedMonthKey);
 
-    windowToolsEl.classList.toggle("hidden", monthKeys.length <= 1);
+    windowToolsEl.classList.toggle("hidden", !monthKeys.length);
     monthSelectEl.innerHTML = monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("");
     monthSelectEl.value = selectedMonthKey;
     prevMonthBtn.disabled = monthIndex <= 0;
@@ -273,7 +273,7 @@
       <button class="choice ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
         <span>
           <span class="choice-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
-          <span class="choice-meta">Ends ${escapeHtml(formatDate(windowItem.endAt))}${windowItem.note ? " / " + escapeHtml(windowItem.note) : ""}</span>
+          <span class="choice-meta">Ends ${escapeHtml(formatDate(windowItem.endAt))}</span>
         </span>
       </button>
     `).join("") : '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
