@@ -137,6 +137,7 @@
   const token = params.get("token") || "";
   const previewMode = params.get("preview") === "1";
   const editMode = params.get("edit") === "1";
+  const bookingPreviewKey = "swc_booking_admin_preview";
   const statusEl = document.getElementById("status");
   const appEl = document.getElementById("bookingApp");
   const sessionListEl = document.getElementById("sessionList");
@@ -215,6 +216,29 @@
         { id: "preview-5", bookingTypeId: "tattoo_quarter", note: "", ...fifth },
         { id: "preview-6", bookingTypeId: "tattoo_half", note: "", ...sixth },
       ],
+    };
+  }
+
+  function adminPreviewContext() {
+    let payload = null;
+    try {
+      payload = JSON.parse(localStorage.getItem(bookingPreviewKey) || "null");
+    } catch (error) {
+      payload = null;
+    }
+    if (!payload || typeof payload !== "object") return null;
+    const ageMs = Date.now() - Number(payload.createdAt || 0);
+    if (!Number.isFinite(ageMs) || ageMs > 10 * 60 * 1000) {
+      localStorage.removeItem(bookingPreviewKey);
+      return null;
+    }
+    if (!Array.isArray(payload.bookingTypes) || !Array.isArray(payload.availabilityWindows)) return null;
+    return {
+      client: payload.client || { name: "Preview Client", email: "", phone: "" },
+      submission: payload.submission || { id: "preview", type: "tattoo_inquiry" },
+      settings: payload.settings || null,
+      bookingTypes: payload.bookingTypes,
+      availabilityWindows: payload.availabilityWindows,
     };
   }
 
@@ -384,7 +408,7 @@
 
   async function loadContext() {
     if (previewMode) {
-      context = previewContext();
+      context = adminPreviewContext() || previewContext();
       selectedType = context.bookingTypes[0] || null;
       selectedWindow = null;
       statusEl.classList.add("hidden");

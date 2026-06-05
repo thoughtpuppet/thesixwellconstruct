@@ -138,6 +138,7 @@
   const lockBtn = document.getElementById("lockBtn");
   const availabilityBtn = document.getElementById("availabilityBtn");
   const statusFilter = document.getElementById("statusFilter");
+  const bookingPreviewKey = "swc_booking_admin_preview";
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
   let activeId = "";
@@ -202,6 +203,37 @@
     const value = submission.payload?.[key];
     if (Array.isArray(value)) return value.join(", ");
     return value || "";
+  }
+
+  function previewUrl() {
+    const path = window.location.protocol === "file:"
+      ? "../../booking/index.html"
+      : "/booking/";
+    const url = new URL(path, window.location.href);
+    url.searchParams.set("preview", "1");
+    url.searchParams.set("source", "admin");
+    return url;
+  }
+
+  function clientPreviewContext(submission, payload) {
+    const clientName = submission.contactName || payloadValue(submission, "name") || "Preview Client";
+    return {
+      createdAt: Date.now(),
+      client: {
+        name: clientName,
+        email: submission.contactEmail || "",
+        phone: submission.contactPhone || "",
+      },
+      submission: {
+        id: submission.id || "preview",
+        type: submission.type || "tattoo_inquiry",
+        status: submission.status || "",
+        sourcePath: submission.sourcePath || "",
+      },
+      settings: payload.settings || null,
+      bookingTypes: payload.bookingTypes || [],
+      availabilityWindows: payload.availabilityWindows || [],
+    };
   }
 
   function renderDetail(submission) {
@@ -612,11 +644,14 @@
   });
 
   detailEl.addEventListener("click", async (event) => {
-    if (event.target.id === "previewBookingBtn") {
-      const previewUrl = new URL("/booking/", window.location.origin);
-      previewUrl.searchParams.set("preview", "1");
-      window.open(previewUrl.toString(), "_blank", "noopener,noreferrer");
-      setStatus("Preview opened");
+    if (event.target.id === "previewBookingBtn" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      if (!submission) return;
+      setStatus("Building preview");
+      const payload = await api("/api/admin/booking/availability-preview");
+      localStorage.setItem(bookingPreviewKey, JSON.stringify(clientPreviewContext(submission, payload)));
+      window.open(previewUrl().toString(), "_blank", "noopener,noreferrer");
+      setStatus("Real-data preview opened");
       return;
     }
 
