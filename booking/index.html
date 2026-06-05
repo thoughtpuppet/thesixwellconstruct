@@ -25,8 +25,8 @@
   .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
   header { position:sticky; top:0; z-index:10; min-height:72px; display:flex; justify-content:flex-end; padding:24px 40px; }
   main { position:relative; z-index:2; max-width:1180px; margin:0 auto; padding:72px 40px 80px; }
-  .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid rgba(122,16,16,0.4); color:var(--signal); padding:5px 12px; margin-bottom:34px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
-  .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--signal); }
+  .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--ring); padding:5px 12px; margin-bottom:34px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
+  .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--ring); }
   .label,.section-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--dim); }
   .label { color:var(--accent); }
   h1 { max-width:720px; margin:16px 0 24px; font-family:var(--sans); font-size:clamp(42px,7vw,88px); line-height:0.88; letter-spacing:0; color:var(--signal); }
@@ -55,7 +55,6 @@
   .hidden { display:none; }
   .local-edit-note { display:none; margin:0 0 22px; max-width:720px; border:1px solid var(--ring-soft); padding:12px 14px; color:var(--muted); font-size:12px; line-height:1.6; }
   body.local-edit-preview .local-edit-note { display:block; }
-  #construct-corner span { color:var(--signal) !important; }
   @media (max-width:820px) {
     header { padding:18px 24px; min-height:60px; }
     main { padding:48px 24px 64px; }

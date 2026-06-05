@@ -15,9 +15,18 @@
   var STORAGE_PREFIX = 'sixwell:liveText:';
   var ENABLED_KEY = STORAGE_PREFIX + 'enabled';
   var EDITOR_ID = 'live-text-editor';
+  var COLOR_PALETTE = [
+    { name: 'Cream', value: '#FFE7CA' },
+    { name: 'Amber', value: '#FCB867' },
+    { name: 'Faint Amber', value: 'rgba(252,184,103,0.64)' },
+    { name: 'Node Red', value: '#7A1010' },
+    { name: 'Brown', value: '#3a2418' },
+    { name: 'Muted', value: 'rgba(255,231,202,0.62)' }
+  ];
   var editableElements = [];
   var isEnabled = false;
   var isHydrated = false;
+  var activeElement = null;
 
   var TEXT_SELECTOR = [
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -127,6 +136,9 @@
       if (saved[id] && typeof saved[id].html === 'string') {
         element.innerHTML = saved[id].html;
       }
+      if (saved[id] && typeof saved[id].color === 'string') {
+        element.style.color = saved[id].color;
+      }
     });
 
     isHydrated = true;
@@ -139,10 +151,62 @@
     var saved = getSavedCopy();
     saved[id] = {
       text: element.textContent.trim(),
-      html: element.innerHTML
+      html: element.innerHTML,
+      color: element.style.color || ''
     };
     setSavedCopy(saved);
     updateStatus('saved');
+  }
+
+  function getEditableFromSelection() {
+    var selection = window.getSelection && window.getSelection();
+    if (!selection || !selection.rangeCount) return activeElement;
+
+    var node = selection.anchorNode;
+    if (!node) return activeElement;
+    var element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return element && element.closest ? element.closest('[data-live-edit-id]') || activeElement : activeElement;
+  }
+
+  function selectionIsInside(element) {
+    var selection = window.getSelection && window.getSelection();
+    if (!selection || !selection.rangeCount || selection.isCollapsed) return false;
+    var range = selection.getRangeAt(0);
+    return element.contains(range.commonAncestorContainer);
+  }
+
+  function colorSelection(element, color) {
+    var selection = window.getSelection && window.getSelection();
+    if (!selection || !selection.rangeCount || selection.isCollapsed) return false;
+
+    var range = selection.getRangeAt(0);
+    if (!element.contains(range.commonAncestorContainer)) return false;
+
+    var span = document.createElement('span');
+    span.style.color = color;
+    span.appendChild(range.extractContents());
+    range.insertNode(span);
+    selection.removeAllRanges();
+    range.selectNodeContents(span);
+    selection.addRange(range);
+    return true;
+  }
+
+  function applyColorToElement(element, color) {
+    if (!element) {
+      updateStatus('select text');
+      return;
+    }
+
+    if (selectionIsInside(element) && color) {
+      colorSelection(element, color);
+    } else {
+      element.focus();
+      element.style.color = color || '';
+    }
+
+    saveElement(element);
+    updateStatus(color ? 'colored' : 'default');
   }
 
   function injectStyles() {
@@ -158,6 +222,10 @@
       '#live-text-editor button{min-height:30px;border:1px solid rgba(252,184,103,.26);background:transparent;color:inherit;padding:0 10px;font:inherit;font-weight:700;text-transform:uppercase;letter-spacing:0;cursor:pointer;}',
       '#live-text-editor button:hover,#live-text-editor button:focus-visible{border-color:#FCB867;color:#FCB867;outline:none;}',
       '#live-text-editor .is-active{background:#FCB867;color:#0e0e0e;border-color:#FCB867;}',
+      '#live-text-editor .color-group{display:flex;align-items:center;gap:5px;padding-left:4px;border-left:1px solid rgba(252,184,103,.22);}',
+      '#live-text-editor .color-swatch{width:26px;min-height:26px;padding:0;border-radius:50%;border-color:rgba(255,231,202,.28);background:var(--swatch,transparent);color:transparent;overflow:hidden;}',
+      '#live-text-editor .color-swatch:hover,#live-text-editor .color-swatch:focus-visible{border-color:#FFE7CA;box-shadow:0 0 0 3px rgba(252,184,103,.12);color:transparent;}',
+      '#live-text-editor .color-reset{width:26px;min-height:26px;padding:0;border-radius:50%;color:rgba(255,231,202,.62);font-size:16px;line-height:1;}',
       '#live-text-editor-status{min-width:52px;color:rgba(255,231,202,.62);font-family:Georgia,Times New Roman,serif;text-transform:lowercase;}',
       '#live-text-export{position:fixed;right:18px;bottom:68px;z-index:2147483647;width:min(520px,calc(100vw - 36px));min-height:180px;padding:12px;border:1px solid rgba(252,184,103,.32);background:#0e0e0e;color:#FFE7CA;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;}'
     ].join('\n');
@@ -204,11 +272,45 @@
       window.location.reload();
     });
 
+    var colorGroup = document.createElement('div');
+    colorGroup.className = 'color-group';
+
+    COLOR_PALETTE.forEach(function(color) {
+      var swatch = document.createElement('button');
+      swatch.type = 'button';
+      swatch.className = 'color-swatch';
+      swatch.title = color.name;
+      swatch.setAttribute('aria-label', color.name);
+      swatch.style.setProperty('--swatch', color.value);
+      swatch.addEventListener('mousedown', function(event) {
+        event.preventDefault();
+      });
+      swatch.addEventListener('click', function() {
+        applyColorToElement(getEditableFromSelection(), color.value);
+      });
+      colorGroup.appendChild(swatch);
+    });
+
+    var clearColor = document.createElement('button');
+    clearColor.type = 'button';
+    clearColor.className = 'color-reset';
+    clearColor.title = 'Default color';
+    clearColor.setAttribute('aria-label', 'Default color');
+    clearColor.textContent = 'x';
+    clearColor.addEventListener('mousedown', function(event) {
+      event.preventDefault();
+    });
+    clearColor.addEventListener('click', function() {
+      applyColorToElement(getEditableFromSelection(), '');
+    });
+    colorGroup.appendChild(clearColor);
+
     var status = document.createElement('span');
     status.id = 'live-text-editor-status';
     status.textContent = 'off';
 
     toolbar.appendChild(toggle);
+    toolbar.appendChild(colorGroup);
     toolbar.appendChild(exportButton);
     toolbar.appendChild(reset);
     toolbar.appendChild(status);
@@ -254,6 +356,7 @@
       element.contentEditable = 'false';
       element.removeAttribute('data-live-edit-id');
     });
+    activeElement = null;
     isHydrated = false;
     hydrateSavedText();
     if (wasEnabled) setEnabled(true);
@@ -263,7 +366,19 @@
     if (!isEnabled) return;
     var element = event.target.closest && event.target.closest('[data-live-edit-id]');
     if (!element) return;
+    activeElement = element;
     saveElement(element);
+  });
+
+  document.addEventListener('focusin', function(event) {
+    var element = event.target.closest && event.target.closest('[data-live-edit-id]');
+    if (element) activeElement = element;
+  });
+
+  document.addEventListener('selectionchange', function() {
+    if (!isEnabled) return;
+    var element = getEditableFromSelection();
+    if (element) activeElement = element;
   });
 
   document.addEventListener('click', function(event) {
