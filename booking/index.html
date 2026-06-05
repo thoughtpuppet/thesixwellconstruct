@@ -251,7 +251,7 @@
     return [...windows].sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
   }
 
-  function countOpenBlocks(windows) {
+  function countOpenSlots(windows) {
     const byDay = new Map();
     windows.forEach((windowItem) => {
       const key = dayKey(windowItem.startAt);
@@ -265,11 +265,13 @@
 
     let count = 0;
     byDay.forEach((blocks) => {
-      const sorted = blocks.sort((a, b) => a.start - b.start);
-      let currentEnd = -Infinity;
+      const sorted = blocks.sort((a, b) => a.end - b.end || a.start - b.start);
+      let lastEnd = -Infinity;
       sorted.forEach((block) => {
-        if (block.start > currentEnd) count += 1;
-        currentEnd = Math.max(currentEnd, block.end);
+        if (block.start >= lastEnd) {
+          count += 1;
+          lastEnd = block.end;
+        }
       });
     });
     return count;
@@ -359,7 +361,7 @@
     monthSelectEl.value = selectedMonthKey;
     prevMonthBtn.disabled = monthIndex <= 0;
     nextMonthBtn.disabled = monthIndex < 0 || monthIndex >= monthKeys.length - 1;
-    monthCountEl.textContent = selectedMonthKey && monthWindows.length ? `${countOpenBlocks(monthWindows)} open` : "";
+    monthCountEl.textContent = selectedMonthKey && monthWindows.length ? `${countOpenSlots(monthWindows)} open` : "";
     renderCalendar(selectedMonthKey, monthWindows);
 
     if (!visibleWindows.length) {
