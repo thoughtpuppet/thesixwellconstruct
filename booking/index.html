@@ -57,6 +57,7 @@
   .choice.active .price { color:var(--signal); }
   .choice-title { display:block; font-family:var(--sans); font-size:15px; font-weight:900; letter-spacing:0; color:#FFE7CA; }
   .choice-meta { display:block; margin-top:6px; color:var(--dim); font-size:12px; line-height:1.45; }
+  .next-tag { align-self:start; color:var(--signal); font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; white-space:nowrap; }
   .price-wrap { text-align:right; white-space:nowrap; }
   .price { display:block; font-family:var(--sans); font-size:22px; font-weight:900; color:var(--accent); }
   .price-label { display:block; margin-top:4px; color:rgba(252,184,103,0.42); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
@@ -250,14 +251,39 @@
     return [...windows].sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
   }
 
-  function renderWindowButton(windowItem, metaPrefix = "") {
-    const meta = `${metaPrefix ? metaPrefix + " / " : ""}Ends ${escapeHtml(formatDate(windowItem.endAt))}`;
+  function countOpenBlocks(windows) {
+    const byDay = new Map();
+    windows.forEach((windowItem) => {
+      const key = dayKey(windowItem.startAt);
+      if (!key) return;
+      const block = {
+        start: new Date(windowItem.startAt).getTime(),
+        end: new Date(windowItem.endAt).getTime(),
+      };
+      byDay.set(key, [...(byDay.get(key) || []), block]);
+    });
+
+    let count = 0;
+    byDay.forEach((blocks) => {
+      const sorted = blocks.sort((a, b) => a.start - b.start);
+      let currentEnd = -Infinity;
+      sorted.forEach((block) => {
+        if (block.start > currentEnd) count += 1;
+        currentEnd = Math.max(currentEnd, block.end);
+      });
+    });
+    return count;
+  }
+
+  function renderWindowButton(windowItem, options = {}) {
+    const meta = `Ends ${escapeHtml(formatDate(windowItem.endAt))}`;
     return `
       <button class="choice ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
         <span>
           <span class="choice-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
           <span class="choice-meta">${meta}</span>
         </span>
+        ${options.next ? '<span class="next-tag">Next Available</span>' : ""}
       </button>
     `;
   }
@@ -333,15 +359,15 @@
     monthSelectEl.value = selectedMonthKey;
     prevMonthBtn.disabled = monthIndex <= 0;
     nextMonthBtn.disabled = monthIndex < 0 || monthIndex >= monthKeys.length - 1;
-    monthCountEl.textContent = selectedMonthKey && monthWindows.length ? `${monthWindows.length} open` : "";
+    monthCountEl.textContent = selectedMonthKey && monthWindows.length ? `${countOpenBlocks(monthWindows)} open` : "";
     renderCalendar(selectedMonthKey, monthWindows);
 
     if (!visibleWindows.length) {
       windowListEl.innerHTML = '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
     } else if (!selectedMonthKey) {
-      windowListEl.innerHTML = renderWindowButton(visibleWindows[0], "Next available");
+      windowListEl.innerHTML = renderWindowButton(visibleWindows[0], { next: true });
     } else if (!selectedDayKey) {
-      windowListEl.innerHTML = '<div class="status">Select a bright day on the calendar to see open time slots.</div>';
+      windowListEl.innerHTML = '<div class="status">Select a day on the calendar to see open time slots.</div>';
     } else {
       windowListEl.innerHTML = dayWindows.length ? dayWindows.map((windowItem) => renderWindowButton(windowItem)).join("") : '<div class="status">No open time slots remain for that day.</div>';
     }
