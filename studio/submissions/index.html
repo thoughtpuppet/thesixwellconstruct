@@ -19,61 +19,65 @@
   button,input,textarea,select { font:inherit; }
   button { cursor:pointer; }
   .shell { min-height:100vh; display:grid; grid-template-rows:auto 1fr; }
-  header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:22px 28px; border-bottom:1px solid var(--line); }
-  h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
+  header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:22px 28px; border-bottom:5px solid var(--ring-faint); }
+  h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
   .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .status { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.12em; text-transform:uppercase; }
   .layout { display:grid; grid-template-columns:minmax(320px,440px) minmax(0,1fr); min-height:0; }
-  .list-pane { border-right:1px solid var(--line); min-height:0; overflow:auto; }
+  .list-pane { border-right:5px solid var(--ring-faint); min-height:0; overflow:auto; }
   .detail-pane { min-height:0; overflow:auto; padding:28px; }
-  .toolbar { display:flex; gap:10px; padding:16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:2; }
-  select,input,textarea { width:100%; background:#101010; color:var(--text); border:1px solid var(--line-strong); padding:10px 12px; border-radius:0; }
+  .toolbar { display:flex; gap:10px; padding:16px; border-bottom:5px solid var(--ring-faint); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:2; }
+  select,input,textarea { width:100%; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; transition:border-color var(--t-fast), background var(--t-fast); }
+  select:focus,input:focus,textarea:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
   textarea { min-height:160px; resize:vertical; line-height:1.5; }
-  .button { border:1px solid var(--line-strong); background:transparent; color:var(--text); min-height:38px; padding:0 14px; font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; }
-  .button:hover { border-color:var(--accent); color:var(--accent); }
-  .submission { width:100%; text-align:left; border:0; border-bottom:1px solid var(--line); background:transparent; color:var(--text); padding:16px; display:grid; gap:8px; }
+  .button { border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; min-height:44px; padding:0 14px; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.045); }
+  .button:disabled { opacity:0.42; cursor:not-allowed; }
+  .danger-button { border-color:rgba(122,16,16,0.72); }
+  .danger-button:hover:not(:disabled) { border-color:var(--signal); color:var(--signal); background:rgba(122,16,16,0.12); }
+  .submission { width:100%; text-align:left; border:0; border-bottom:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:16px; display:grid; gap:8px; }
   .submission:hover,.submission.active { background:rgba(252,184,103,0.045); }
   .submission-top { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
   .name { font-family:var(--sans); font-size:13px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
   .date,.meta,.empty { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
-  .pill { color:var(--accent); border:1px solid rgba(252,184,103,0.34); padding:3px 7px; font-family:var(--sans); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; white-space:nowrap; }
-  .detail-head { display:grid; gap:12px; padding-bottom:22px; border-bottom:1px solid var(--line); margin-bottom:22px; }
-  h2 { margin:0; font-family:var(--sans); font-size:34px; line-height:1; color:var(--accent); }
+  .pill { color:var(--ring); border:5px solid var(--ring-soft); padding:5px 12px; font-family:var(--sans); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; white-space:nowrap; }
+  .detail-head { display:grid; gap:12px; padding-bottom:22px; border-bottom:5px solid var(--ring-faint); margin-bottom:22px; }
+  h2 { margin:0; font-family:var(--sans); font-size:clamp(42px,7vw,72px); line-height:0.9; letter-spacing:0; color:var(--signal); }
   .contact { color:var(--muted); line-height:1.7; }
   .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-bottom:22px; }
   .field { display:grid; gap:6px; }
   label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; }
-  .value { min-height:42px; padding:12px; border:1px solid var(--line); color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .value { min-height:42px; padding:12px; border:5px solid var(--ring-faint); color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
   .value.full { min-height:96px; }
   .actions { display:grid; grid-template-columns:180px minmax(0,1fr) auto; gap:12px; align-items:start; margin-top:22px; }
   .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
   .availability-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
   .availability-list { display:grid; gap:10px; }
-  .availability-item { border:1px solid var(--line); padding:12px; display:grid; gap:8px; }
+  .availability-item { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:8px; }
   .availability-overview { display:grid; grid-template-columns:minmax(220px,320px) minmax(0,1fr); gap:18px; align-items:start; margin-top:14px; }
-  .mini-calendar { border:1px solid var(--line); padding:12px; display:grid; gap:10px; }
+  .mini-calendar { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .calendar-tools { display:grid; grid-template-columns:38px minmax(0,1fr) 38px; gap:8px; align-items:center; }
   .icon-button { width:38px; min-height:38px; padding:0; display:grid; place-items:center; }
   .calendar-weekdays,.calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
   .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-align:center; }
-  .day-button { aspect-ratio:1; min-height:0; border:1px solid var(--line); background:#101010; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
+  .day-button { aspect-ratio:1; min-height:0; border:5px solid var(--ring-faint); background:transparent; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
   .day-button.blank { visibility:hidden; }
   .day-button.booked-one { background:rgba(122,16,16,0.76); border-color:rgba(252,184,103,0.34); color:var(--text); }
   .day-button.booked-two { background:rgba(122,16,16,0.52); border-color:rgba(122,16,16,0.68); color:var(--text); }
   .day-button.booked-many { background:rgba(122,16,16,0.34); border-color:rgba(122,16,16,0.52); color:var(--muted); }
   .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; }
   .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
-  .legend-dot { width:10px; height:10px; border:1px solid var(--line); display:inline-block; }
+  .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
   .legend-dot.one { background:rgba(122,16,16,0.76); }
   .legend-dot.two { background:rgba(122,16,16,0.52); }
   .legend-dot.many { background:rgba(122,16,16,0.34); }
-  .slot-preview { border:1px solid var(--line); padding:12px; display:grid; gap:10px; }
+  .slot-preview { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
-  .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:5px solid var(--ring-faint); padding-bottom:8px; }
   .slot-preview-item:last-child { border-bottom:0; padding-bottom:0; }
-  .schedule-section { border-top:1px solid var(--line); padding-top:18px; margin-top:18px; }
+  .schedule-section { border-top:5px solid var(--ring-faint); padding-top:18px; margin-top:18px; }
   .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
-  .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:1px solid var(--line); padding:12px 0; }
+  .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:5px solid var(--ring-faint); padding:12px 0; }
   .day-name { color:var(--accent); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; padding-bottom:12px; }
   .availability-manager { color:var(--accent); }
   .availability-manager .detail-head { border-bottom:5px solid var(--ring-faint); }
@@ -119,7 +123,7 @@
   .hidden { display:none; }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
-    .list-pane { border-right:0; border-bottom:1px solid var(--line); max-height:42vh; }
+    .list-pane { border-right:0; border-bottom:5px solid var(--ring-faint); max-height:42vh; }
     .grid,.actions,.availability-overview { grid-template-columns:1fr; }
     .availability-manager .schedule-grid,
     .availability-manager .availability-form,
@@ -335,6 +339,9 @@
           </div>
         </div>
         <button class="button" id="saveBtn" type="button">Save</button>
+      </div>
+      <div class="booking-actions" style="margin-top:16px;">
+        <button class="button danger-button" id="deleteSubmissionBtn" type="button">Delete Entry</button>
       </div>
       <div class="field" style="margin-top:16px;">
         <label for="internalNotes">Internal Notes</label>
@@ -866,6 +873,20 @@
       });
       await loadSubmissions();
       setStatus("Links revoked");
+      return;
+    }
+
+    if (event.target.id === "deleteSubmissionBtn" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      const label = submission?.contactName || submission?.contactEmail || "this entry";
+      if (!window.confirm(`Delete ${label}? This removes the submission record and any booking tokens for it.`)) return;
+      setStatus("Deleting entry");
+      await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, { method: "DELETE" });
+      submissions = submissions.filter((item) => item.id !== activeId);
+      activeId = "";
+      renderList();
+      detailEl.innerHTML = '<p class="empty">Select a submission to review details.</p>';
+      setStatus("Entry deleted");
       return;
     }
 

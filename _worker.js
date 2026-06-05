@@ -13,6 +13,7 @@ import {
 } from "./functions/api/shop/_lib.js";
 import {
   handleCreateSubmission,
+  handleDeleteSubmission,
   handleGetSubmission,
   handleListSubmissions,
   handleUpdateSubmission,
@@ -346,7 +347,8 @@ async function handleSubmissionsApi(request, env) {
     const id = decodeURIComponent(match[1]);
     if (method === "GET") return handleGetSubmission(request, env, id);
     if (method === "PATCH") return handleUpdateSubmission(request, env, id);
-    return methodNotAllowed(method, ["GET", "PATCH"]);
+    if (method === "DELETE") return handleDeleteSubmission(request, env, id);
+    return methodNotAllowed(method, ["GET", "PATCH", "DELETE"]);
   }
 
   return notFound("Unknown submissions API route.");

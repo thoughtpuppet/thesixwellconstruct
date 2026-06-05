@@ -503,3 +503,24 @@ export async function handleUpdateSubmission(request, env, id) {
     });
   }
 }
+
+export async function handleDeleteSubmission(request, env, id) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireSubmissionDb(env);
+    const current = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
+    if (!current) return errorResponse("Submission not found.", 404);
+
+    await db.prepare("DELETE FROM booking_tokens WHERE submission_id = ?").bind(id).run();
+    await db.prepare("DELETE FROM submission_events WHERE submission_id = ?").bind(id).run();
+    await db.prepare("DELETE FROM submissions WHERE id = ?").bind(id).run();
+
+    return json({ ok: true, deletedId: id });
+  } catch (error) {
+    return errorResponse("Unable to delete submission.", 500, {
+      detail: error.message,
+    });
+  }
+}
