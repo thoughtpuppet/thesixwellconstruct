@@ -35,6 +35,13 @@
   .booking-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:56px; align-items:start; }
   .section { display:grid; gap:14px; margin-bottom:36px; }
   .session-list,.window-list { display:grid; gap:10px; }
+  .window-tools { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:2px; }
+  .month-nav { display:flex; align-items:center; gap:8px; }
+  .month-button { width:34px; min-height:34px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:14px; font-weight:900; line-height:1; transition:border-color var(--t-fast), color var(--t-fast); }
+  .month-button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  .month-button:disabled { opacity:0.32; cursor:not-allowed; }
+  .month-select { min-height:34px; max-width:220px; border:5px solid var(--ring-faint); background:var(--bg); color:#FFE7CA; padding:0 32px 0 10px; font-family:var(--sans); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; }
+  .month-count { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
   .choice { width:100%; display:grid; grid-template-columns:1fr auto; gap:16px; text-align:left; background:transparent; color:var(--text); border:5px solid var(--ring-faint); padding:18px; transition:border-color var(--t-fast), background var(--t-fast); }
   .choice:hover { border-color:var(--accent); background:rgba(252,184,103,0.045); }
   .choice.active { border-color:var(--signal); background:rgba(122,16,16,0.12); }
@@ -92,6 +99,14 @@
       </section>
       <section class="section">
         <p class="section-label">Available Windows</p>
+        <div id="windowTools" class="window-tools hidden" data-live-edit-ignore="true">
+          <div class="month-nav">
+            <button id="prevMonthBtn" class="month-button" type="button" aria-label="Previous month">&lt;</button>
+            <select id="monthSelect" class="month-select" aria-label="Available month"></select>
+            <button id="nextMonthBtn" class="month-button" type="button" aria-label="Next month">&gt;</button>
+          </div>
+          <span id="monthCount" class="month-count"></span>
+        </div>
         <div id="windowList" class="window-list"></div>
       </section>
     </div>
@@ -115,6 +130,11 @@
   const appEl = document.getElementById("bookingApp");
   const sessionListEl = document.getElementById("sessionList");
   const windowListEl = document.getElementById("windowList");
+  const windowToolsEl = document.getElementById("windowTools");
+  const monthSelectEl = document.getElementById("monthSelect");
+  const prevMonthBtn = document.getElementById("prevMonthBtn");
+  const nextMonthBtn = document.getElementById("nextMonthBtn");
+  const monthCountEl = document.getElementById("monthCount");
   const clientValue = document.getElementById("clientValue");
   const sessionValue = document.getElementById("sessionValue");
   const windowValue = document.getElementById("windowValue");
@@ -124,6 +144,7 @@
   let context = null;
   let selectedType = null;
   let selectedWindow = null;
+  let selectedMonthKey = "";
   if (previewMode && editMode) document.body.classList.add("local-edit-preview");
 
   function previewContext() {
@@ -139,6 +160,8 @@
     const second = futureDate(3, 14, 0, 90);
     const third = futureDate(5, 13, 0, 180);
     const fourth = futureDate(8, 11, 0, 360);
+    const fifth = futureDate(35, 12, 0, 90);
+    const sixth = futureDate(63, 14, 0, 180);
     return {
       client: { name: "Preview Client", email: "client@example.com", phone: "" },
       submission: { id: "preview", type: "tattoo_inquiry" },
@@ -176,6 +199,8 @@
         { id: "preview-2", bookingTypeId: "tattoo_quarter", note: "Generated from weekly schedule", ...second },
         { id: "preview-3", bookingTypeId: "tattoo_half", note: "Generated from weekly schedule", ...third },
         { id: "preview-4", bookingTypeId: "tattoo_full", note: "Generated from weekly schedule", ...fourth },
+        { id: "preview-5", bookingTypeId: "tattoo_quarter", note: "Generated from weekly schedule", ...fifth },
+        { id: "preview-6", bookingTypeId: "tattoo_half", note: "Generated from weekly schedule", ...sixth },
       ],
     };
   }
@@ -189,6 +214,22 @@
   function formatDate(value) {
     if (!value) return "";
     return new Date(value).toLocaleString([], { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+  }
+
+  function monthKey(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function monthLabel(key) {
+    if (!key) return "";
+    const [year, month] = key.split("-").map(Number);
+    return new Date(year, month - 1, 1).toLocaleString([], { month:"long", year:"numeric" });
+  }
+
+  function sortedWindows(windows) {
+    return [...windows].sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
   }
 
   function minutesLabel(minutes) {
@@ -212,10 +253,23 @@
       </button>
     `).join("");
 
-    const visibleWindows = windows.filter((windowItem) => {
+    const visibleWindows = sortedWindows(windows.filter((windowItem) => {
       return !selectedType || !windowItem.bookingTypeId || windowItem.bookingTypeId === selectedType.id;
-    });
-    windowListEl.innerHTML = visibleWindows.length ? visibleWindows.map((windowItem) => `
+    }));
+    const monthKeys = [...new Set(visibleWindows.map((windowItem) => monthKey(windowItem.startAt)).filter(Boolean))];
+    if (!monthKeys.includes(selectedMonthKey)) selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : monthKeys[0] || "";
+    if (!monthKeys.includes(selectedMonthKey)) selectedMonthKey = monthKeys[0] || "";
+    const monthIndex = monthKeys.indexOf(selectedMonthKey);
+    const monthWindows = visibleWindows.filter((windowItem) => monthKey(windowItem.startAt) === selectedMonthKey);
+
+    windowToolsEl.classList.toggle("hidden", monthKeys.length <= 1);
+    monthSelectEl.innerHTML = monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("");
+    monthSelectEl.value = selectedMonthKey;
+    prevMonthBtn.disabled = monthIndex <= 0;
+    nextMonthBtn.disabled = monthIndex < 0 || monthIndex >= monthKeys.length - 1;
+    monthCountEl.textContent = monthWindows.length ? `${monthWindows.length} open` : "";
+
+    windowListEl.innerHTML = monthWindows.length ? monthWindows.map((windowItem) => `
       <button class="choice ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
         <span>
           <span class="choice-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
@@ -264,7 +318,34 @@
     if (!button) return;
     selectedType = context.bookingTypes.find((type) => type.id === button.dataset.type) || null;
     if (selectedWindow?.bookingTypeId && selectedWindow.bookingTypeId !== selectedType?.id) selectedWindow = null;
+    selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : "";
     render();
+  });
+
+  monthSelectEl.addEventListener("change", () => {
+    selectedMonthKey = monthSelectEl.value;
+    if (selectedWindow && monthKey(selectedWindow.startAt) !== selectedMonthKey) selectedWindow = null;
+    render();
+  });
+
+  prevMonthBtn.addEventListener("click", () => {
+    const options = Array.from(monthSelectEl.options).map((option) => option.value);
+    const index = options.indexOf(selectedMonthKey);
+    if (index > 0) {
+      selectedMonthKey = options[index - 1];
+      if (selectedWindow && monthKey(selectedWindow.startAt) !== selectedMonthKey) selectedWindow = null;
+      render();
+    }
+  });
+
+  nextMonthBtn.addEventListener("click", () => {
+    const options = Array.from(monthSelectEl.options).map((option) => option.value);
+    const index = options.indexOf(selectedMonthKey);
+    if (index >= 0 && index < options.length - 1) {
+      selectedMonthKey = options[index + 1];
+      if (selectedWindow && monthKey(selectedWindow.startAt) !== selectedMonthKey) selectedWindow = null;
+      render();
+    }
   });
 
   windowListEl.addEventListener("click", (event) => {
