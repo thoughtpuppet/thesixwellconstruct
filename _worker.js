@@ -108,6 +108,10 @@ function isLocalOnlyPath(pathname) {
     pathname === "/edit-links/" ||
     pathname === "/edit-links.html" ||
     pathname === "/tools/edit-links.html" ||
+    pathname === "/edit-links-mac" ||
+    pathname === "/edit-links-mac/" ||
+    pathname === "/edit-links-mac.html" ||
+    pathname === "/tools/edit-links-mac.html" ||
     pathname === "/page-visibility" ||
     pathname === "/page-visibility/" ||
     pathname === "/page-visibility.html" ||
