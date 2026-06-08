@@ -101,10 +101,10 @@
   <main>
     <div class="layout">
       <section>
-        <p class="page-label">Art.Pill Tattoo House</p>
-        <h1 class="page-title">Project<br>Inquiry.</h1>
-        <p class="intro-body">Submitting an inquiry begins the live review process. If your project is a strong fit for the studio, you will receive a private token booking link and next steps.</p>
-        <p class="intro-body">Use this form for custom work, early ideas, or projects that need a new drawing. If you already know the flash piece you want, the flash claim form is the cleaner path because it carries the selected title, code, series, size, and price into review.</p>
+        <p class="page-label" data-copy-id="inquiry-page-label">Art.Pill Tattoo House</p>
+        <h1 class="page-title" data-copy-id="inquiry-page-title">Project<br>Inquiry.</h1>
+        <p class="intro-body" data-copy-id="inquiry-intro-primary">Submitting an inquiry begins the live review process. If your project is a strong fit for the studio, you will receive a private token booking link and next steps.</p>
+        <p class="intro-body" data-copy-id="inquiry-intro-secondary">Use this form for custom work, early ideas, or projects that need a new drawing. If you already know the flash piece you want, the flash claim form is the cleaner path because it carries the selected title, code, series, size, and price into review.</p>
         <p class="include-label">What to Include</p>
         <ul class="include-list">
           <li>Concept, subject matter, and the meaning behind it</li>
@@ -114,14 +114,14 @@
           <li>Your timing, budget range, and any context that shapes the project</li>
         </ul>
         <div class="path-note">
-          <p class="path-note-title">Claiming flash?</p>
-          <p class="path-note-body">Start on the flash wall first. Available designs can prefill the claim form so the review arrives with the right catalog metadata attached.</p>
+          <p class="path-note-title" data-copy-id="inquiry-flash-note-title">Claiming flash?</p>
+          <p class="path-note-body" data-copy-id="inquiry-flash-note-body">Start on the flash wall first. Available designs can prefill the claim form so the review arrives with the right catalog metadata attached.</p>
           <a class="path-note-link" href="/tattoos/flash/claim/">Open flash claim form &rarr;</a>
         </div>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
-        <h2 class="form-title">Submit for Review</h2>
-        <p class="form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow.</p>
+        <h2 class="form-title" data-copy-id="inquiry-form-title">Submit for Review</h2>
+        <p class="form-note" data-copy-id="inquiry-form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow.</p>
         <form id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="tattoo_inquiry">
           <input type="hidden" name="source_path" value="/tattoos/inquire/">
