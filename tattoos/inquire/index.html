@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
+<html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Choose Inquiry Path - Art.Pill Tattoo House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
@@ -30,7 +29,7 @@
   main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .intro { max-width:780px; margin-bottom:64px; }
   .page-label { font-family:var(--serif); font-size:15px; letter-spacing:0.32em; text-transform:uppercase; color:var(--accent); opacity:0.7; margin-bottom:-8px; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(48px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:34px; }
+  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(38px,7vw,96px); letter-spacing:-0.06em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:34px; white-space:nowrap; }
   .intro-body { font-size:17px; line-height:1.8; color:var(--text); max-width:660px; }
   .fit-guide { display:grid; grid-template-columns:minmax(190px,0.32fr) minmax(0,1fr); gap:40px; align-items:start; margin-bottom:56px; padding:34px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
   .fit-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
@@ -61,6 +60,7 @@
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
     .intro { margin-bottom:42px; }
+    .page-title { font-size:clamp(30px,10vw,58px); }
     .fit-guide { grid-template-columns:1fr; gap:24px; margin-bottom:42px; padding:26px 0; }
     .fit-row { grid-template-columns:1fr; }
     .fit-row > * + * { border-left:none; border-top:1px solid var(--ring-faint); }
@@ -95,13 +95,13 @@
   <main>
     <section class="intro">
       <p class="page-label" data-copy-id="inquire-chooser-label">Art.Pill Tattoo House</p>
-      <h1 class="page-title" data-copy-id="inquire-chooser-title">Choose<br>Your Path.</h1>
+      <h1 class="page-title" data-copy-id="inquire-chooser-title">Choose<br>Your Pathway.</h1>
       <p class="intro-body" data-copy-id="inquire-chooser-intro">Each form carries a different kind of request into review. Choose the path closest to what you want, then submit the details there.</p>
     </section>
     <section class="fit-guide" aria-labelledby="fit-guide-title">
       <div>
         <p class="fit-kicker">best fit</p>
-        <h2 class="fit-title" id="fit-guide-title">Which path should you use?</h2>
+        <h2 class="fit-title" id="fit-guide-title">Which pathway should you use?</h2>
       </div>
       <div class="fit-list">
         <article class="fit-row">
@@ -115,12 +115,12 @@
           <a class="fit-link" href="/tattoos/inquire/custom/">Custom inquiry</a>
         </article>
         <article class="fit-row">
-          <h3 class="fit-question">I want to choose from the visual language.</h3>
+          <h3 class="fit-question">I want to choose from the visual language to create my own unique design.</h3>
           <p class="fit-answer">Use Build Your Own when you want to select symbols and marks from the practice to form a guided brief.</p>
           <a class="fit-link" href="/tattoos/build/">Build yours</a>
         </article>
         <article class="fit-row">
-          <h3 class="fit-question">I want a larger or deeper project.</h3>
+          <h3 class="fit-question">I want to participate in an installation, experiemtnal or deeper project.</h3>
           <p class="fit-answer">Use Special Projects for long-form, symbolic, collaborative, multi-session, or experimental tattoo work.</p>
           <a class="fit-link" href="/tattoos/special-projects/apply/">Apply</a>
         </article>
@@ -133,7 +133,7 @@
           <h2 class="path-title">Claim<br>Flash</h2>
           <p class="path-body">Use this when you already know the flash design you want, or you arrived from an individual flash page.</p>
         </div>
-        <span class="path-action">Open flash claim &rarr;</span>
+        <span class="path-action">Open flash claim →</span>
       </a>
       <a class="path-card" href="/tattoos/inquire/custom/">
         <p class="path-kicker">custom request</p>
@@ -141,7 +141,7 @@
           <h2 class="path-title">Custom<br>Inquiry</h2>
           <p class="path-body">Use this for original work built around your concept, story, placement, references, and timing.</p>
         </div>
-        <span class="path-action">Open custom form &rarr;</span>
+        <span class="path-action">Open custom form →</span>
       </a>
       <a class="path-card" href="/tattoos/build/">
         <p class="path-kicker">guided brief</p>
@@ -149,7 +149,7 @@
           <h2 class="path-title">Build<br>Your Own</h2>
           <p class="path-body">Choose symbols and marks from the practice's visual language, then send that brief into review.</p>
         </div>
-        <span class="path-action">Start builder &rarr;</span>
+        <span class="path-action">Start builder →</span>
       </a>
       <a class="path-card" href="/tattoos/special-projects/apply/">
         <p class="path-kicker">larger work</p>
@@ -157,16 +157,19 @@
           <h2 class="path-title">Special<br>Projects</h2>
           <p class="path-body">Use this for long-form, symbolic, multi-session, collaborative, or experimental tattoo work.</p>
         </div>
-        <span class="path-action">Open application &rarr;</span>
+        <span class="path-action">Open application →</span>
       </a>
     </section>
   </main>
   <footer class="bottom">
-    <a href="/tattoos/">&larr; back to Art.Pill</a>
+    <a href="/tattoos/">← back to Art.Pill</a>
     <a href="/">the six.well construct</a>
   </footer>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
-</body>
-</html>
+
+
+
+
+</body></html>
