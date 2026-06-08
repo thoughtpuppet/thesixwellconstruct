@@ -488,16 +488,8 @@ export async function initMerchCatalogPage() {
     return button;
   }
 
-  function setHeroState(key) {
-    const color = key === "all" ? "#F7A226" : SOURCES[key]?.color || "#F7A226";
-    document.documentElement.style.setProperty("--title-color", color);
-    const sixWellState = key === "all" || key === "six.well";
-    if (merchWord) {
-      merchWord.innerHTML = sixWellState
-        ? '<span class="sixwell-letter-six">six.</span><span class="sixwell-letter-we">we</span><span class="sixwell-letter-ll">ll</span>'
-        : "MERCH";
-    }
-    if (merchDot) merchDot.textContent = sixWellState ? "" : ".";
+  function setHeroState(_key) {
+    // title is static "MERCH." in merch yellow — no dynamic toggling
   }
 
   function renderFilters() {

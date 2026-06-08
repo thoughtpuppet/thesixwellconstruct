@@ -673,6 +673,46 @@
     align-items: center;
   }
 }
+  .brand-band {
+    display:grid;
+    grid-template-columns:minmax(180px,0.32fr) minmax(0,0.68fr);
+    gap:48px;
+    align-items:start;
+    padding:36px;
+    margin-top:-40px;
+    margin-bottom:18px;
+    background:#171717;
+  }
+  .brand-kicker {
+    font-family:var(--serif);
+    font-size:10px;
+    letter-spacing:0.24em;
+    text-transform:uppercase;
+    color:var(--accent);
+    opacity:0.72;
+  }
+  .brand-title {
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:clamp(28px,4vw,56px);
+    letter-spacing:-0.03em;
+    line-height:0.96;
+    margin-top:12px;
+  }
+  .brand-copy {
+    font-family:var(--serif);
+    font-size:clamp(17px,2.2vw,28px);
+    line-height:1.34;
+    color:var(--text-mute);
+    max-width:860px;
+    text-wrap:balance;
+  }
+  @media (max-width:1024px) {
+    .brand-band { grid-template-columns:1fr; gap:24px; margin-top:-24px; padding:24px; }
+  }
+  @media (max-width:768px) {
+    .brand-copy { font-size:17px; line-height:1.5; text-wrap:auto; }
+  }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 </head>
@@ -712,10 +752,18 @@
     <section class="intro">
       <div class="intro-left">
         <p class="intro-above" id="introAbove" data-copy-id="merch-intro-above">everything sellable from the construct</p>
-        <h1 data-copy-id="merch-hero-title"><span id="merchWord"><span class="sixwell-letter-six">six.</span><span class="sixwell-letter-we">we</span><span class="sixwell-letter-ll">ll</span></span><span class="merch-dot" id="merchDot"></span></h1>
+        <h1 data-copy-id="merch-hero-title">MERCH.</h1>
       </div>
       <!-- REWRITE: default descriptor shown when "all" is selected -->
       <p id="introDesc" data-copy-id="merch-intro-desc">everything sellable from the construct</p>
+    </section>
+
+    <section class="brand-band" aria-labelledby="sixwell-brand-title">
+      <div>
+        <p class="brand-kicker">construct commerce / atlanta</p>
+        <h2 class="brand-title" id="sixwell-brand-title"><span class="sixwell-letter-six">six.</span><span class="sixwell-letter-we">we</span><span class="sixwell-letter-ll">ll</span></h2>
+      </div>
+      <p class="brand-copy">everything sellable from the construct — garments, prints, and objects rooted in the mediums of the practice.</p>
     </section>
 
     <!-- filter rows — row 1: source medium, row 2: type (only when source active) -->

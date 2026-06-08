@@ -1252,8 +1252,10 @@
   }
 
   function applyRecordToElement(element, record) {
-    var safeHtml = sanitizeHtml(record.html || record.text || '');
-    if (safeHtml) element.innerHTML = safeHtml;
+    var newHtml = record.html || '';
+    if (newHtml && newHtml !== element.innerHTML) {
+      element.innerHTML = newHtml;
+    }
     applyElementStyles(element, record.styles);
   }
 
@@ -1267,6 +1269,7 @@
     Array.prototype.slice.call(doc.querySelectorAll(TEXT_SELECTOR)).forEach(function(element) {
       if (element.closest('script, style, noscript, svg, canvas, input, textarea, select')) return;
       if (element.closest('[data-live-edit-ignore]')) return;
+      if (element.closest('#construct-fade, #construct-corner, #construct-nav')) return;
       if (!hasDirectText(element)) return;
       if (!element.textContent || !element.textContent.trim()) return;
       for (var j = 0; j < generatedCandidates.length; j += 1) {
@@ -1300,10 +1303,12 @@
     var pathSegments = pageFilePath();
     callToolApi('/__tools/read-file', { pathSegments: pathSegments })
       .then(function(data) {
+        var rawContent = data.content || '';
         var parser = new DOMParser();
-        var doc = parser.parseFromString(data.content || '', 'text/html');
+        var doc = parser.parseFromString(rawContent, 'text/html');
         var applied = 0;
         var skipped = 0;
+        var nextContent = rawContent;
 
         entries.forEach(function(entry) {
           var target = findSourceElement(doc, entry.id);
@@ -1311,13 +1316,24 @@
             skipped += 1;
             return;
           }
+          var originalOuterHTML = target.outerHTML;
           applyRecordToElement(target, entry.record);
-          applied += 1;
+          var modifiedOuterHTML = target.outerHTML;
+          if (modifiedOuterHTML === originalOuterHTML) {
+            applied += 1;
+            return;
+          }
+          var idx = nextContent.indexOf(originalOuterHTML);
+          if (idx !== -1) {
+            nextContent = nextContent.slice(0, idx) + modifiedOuterHTML + nextContent.slice(idx + originalOuterHTML.length);
+            applied += 1;
+          } else {
+            skipped += 1;
+          }
         });
 
         if (!applied) throw new Error('No stable data-copy-id matches found in source.');
 
-        var nextContent = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
         return callToolApi('/__tools/write-file', {
           pathSegments: pathSegments,
           content: nextContent

@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "Static dev server",
-      "runtimeExecutable": "/Users/mecsaielsolehman/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
       "runtimeArgs": ["tools/dev-server.mjs"],
       "port": 4173,
       "autoPort": true
