@@ -17,15 +17,27 @@ Your private art.pill TATTOO HOUSE booking link
 
 Hi {{client_name}},
 
-Your art.pill TATTOO HOUSE project has been approved for booking.
+Your tattoo project has been approved for booking.
 
-Use the private link below to choose an available session and complete the
+Approved session options:
+
+{{session_options}}
+
+Deposit due to book: {{deposit_amount}}
+
+Before booking, please review:
+
+- Terms & Conditions: {{booking_terms_url}}
+- Day-of / session prep: {{day_of_instructions_url}}
+
+Use the private link below to choose an available session and pay the
 deposit:
 
 {{booking_url}}
 
-This link is private to your project. If the available times do not work, reply
-to this email and the studio can help.
+This link is private to your project. Deposits are non-refundable and go toward
+the final cost of your tattoo. If the available times do not work, reply to
+this email and the studio can help.
 
 Thank you,
 art.pill TATTOO HOUSE
@@ -36,9 +48,14 @@ art.pill TATTOO HOUSE
 - `{{booking_url}}`
 - `{{booking_link_expires_at}}`
 - `{{allowed_booking_types}}`
+- `{{session_options}}`
+- `{{deposit_amount}}`
+- `{{booking_terms_url}}`
+- `{{day_of_instructions_url}}`
 - `{{submission_id}}`
 
 ## Optional Notes For Codex
 
 This is the first email that should clearly tell the client they are approved
-to book. Keep the private-link boundary clear.
+to book. Include session/price basics and policy links, but keep the full terms
+on the website or PDF rather than embedding the whole policy in the email.

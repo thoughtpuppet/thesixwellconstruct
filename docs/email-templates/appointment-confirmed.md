@@ -24,12 +24,15 @@ Session: {{booking_type_label}}
 Deposit: {{deposit_amount}} received
 
 Confirmation page: {{confirmation_url}}
+Day-of instructions: {{day_of_instructions_url}}
+Location & parking: {{location_parking_url}}
 
-The studio may follow up directly with prep notes or adjustments before your
-appointment.
+I may follow up directly with prep notes or adjustments before your
+appointment, if needed.
 
 Thank you,
-art.pill TATTOO HOUSE
+Saiel Solehman 
+[art.pill TATTOO HOUSE]
 
 ## Variables Needed
 
@@ -39,9 +42,12 @@ art.pill TATTOO HOUSE
 - `{{booking_type_label}}`
 - `{{deposit_amount}}`
 - `{{confirmation_url}}`
+- `{{day_of_instructions_url}}`
+- `{{location_parking_url}}`
 - `{{appointment_id}}`
 
 ## Optional Notes For Codex
 
 This email should feel final and clear. It should not over-explain the Square
-payment process once the deposit is confirmed.
+payment process once the deposit is confirmed. Include location and day-of
+links here because this is the client's practical reference email.

@@ -409,7 +409,7 @@ function updateParticles(dt,t){
 }
 
 let state='idle',logoHover=false,logoHoverP=0,hoveredNode=-1,expandProgress=0,collapseProgress=0;
-let time=0,lastT=null,slowOrbit=0,mouseX=0,mouseY=0;
+let time=0,lastT=null,slowOrbit=0,dotOrbit=0,mouseX=0,mouseY=0;
 const nodeHP=new Array(VENTURES.length).fill(0);
 const nodeX=new Array(VENTURES.length).fill(0);
 const nodeY=new Array(VENTURES.length).fill(0);
@@ -612,7 +612,7 @@ function drawRing(){
   ctx.beginPath();ctx.arc(0,0,outer,0,Math.PI*2);ctx.arc(0,0,inner,0,Math.PI*2,true);ctx.fillStyle=RING_COLOR;ctx.fill();ctx.restore();
 }
 function drawDots(alpha){
-  if(alpha<=0)return;const orbitT=time*0.003;
+  if(alpha<=0)return;const orbitT=dotOrbit;
   const _rt = ringTransform();
   ctx.save();ctx.translate(_rt.x - cx, _rt.y - cy);ctx.translate(cx,cy);ctx.scale(_rt.s,_rt.s);ctx.translate(-cx,-cy);
   const dotHoverScale=1+0.08*easeOutSoft(logoHoverP);
@@ -1016,6 +1016,7 @@ function tick(ts){
   if(!lastT)lastT=ts;const dt=Math.min(ts-lastT,50);lastT=ts;time+=dt;slowOrbit+=dt;
   const logoHoverTarget=(logoHover&&expandProgress<0.08)?1:0;
   logoHoverP=logoHoverTarget>logoHoverP?Math.min(logoHoverP+dt*0.004,1):Math.max(logoHoverP-dt*0.003,0);
+  dotOrbit+=dt*(0.003+0.0022*easeOutSoft(logoHoverP));
 
   // ── Main state machine ──
   if(state==='expanding'){expandProgress=Math.min(expandProgress+dt*EXPAND_SPEED,1);if(expandProgress>=1)state='expanded';}

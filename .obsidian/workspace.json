@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/email-templates/appointment-confirmed.md",
+                "file": "docs/email-templates/client-resource-pages.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "appointment-confirmed"
+              "title": "client-resource-pages"
             }
           }
         ]
@@ -185,6 +185,13 @@
   },
   "active": "d5d64711ee53c5a1",
   "lastOpenFiles": [
+    "docs/email-templates/appointment-reminder-24h.md",
+    "docs/email-templates/appointment-confirmed.md",
+    "docs/email-templates/private-booking-link.md",
+    "docs/email-templates/manual-text-assist.md",
+    "docs/email-templates/client-resource-pages.md",
+    "docs/email-templates/README.md",
+    "docs/email-templates/submission-received.md",
     "docs/submissions-backend.md"
   ]
 }

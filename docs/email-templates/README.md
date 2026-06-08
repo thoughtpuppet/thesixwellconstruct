@@ -26,6 +26,22 @@ then hand the docs back to Codex for implementation.
 - If a template needs a new variable, add it under **Variables Needed**.
 - If you want a template to trigger at a different moment, update
   **Trigger Moment**.
+- Keep full policies and detailed directions on hosted website pages or PDFs,
+  then link to them from emails. This keeps one source of truth.
+
+## Client Resource Links
+
+These should be created as website pages first, with optional PDF downloads:
+
+- Booking terms and conditions: `{{booking_terms_url}}`
+- Day-of / session prep instructions: `{{day_of_instructions_url}}`
+- Location and parking instructions: `{{location_parking_url}}`
+
+Recommended public paths:
+
+- `/tattoos/policies/`
+- `/tattoos/day-of/`
+- `/tattoos/location-parking/`
 
 ## Implementation Notes
 

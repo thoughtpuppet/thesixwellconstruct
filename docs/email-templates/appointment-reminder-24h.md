@@ -10,21 +10,27 @@ Send once for confirmed appointments that are about 24 hours away.
 
 ## Subject
 
-Reminder: your art.pill TATTOO HOUSE appointment is tomorrow
+Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow
 
 ## Plain Text Body
 
 Hi {{client_name}},
 
-Reminder: your art.pill TATTOO HOUSE appointment is tomorrow.
+Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow.
 
 When: {{appointment_start}} - {{appointment_end}}
 Session: {{booking_type_label}}
 
-Reply to the studio email thread if anything needs attention before your
+Please review before arriving:
+
+- Day-of instructions: {{day_of_instructions_url}}
+- Location & parking: {{location_parking_url}}
+
+Reply to this thread if you have any questions or concerns before your
 session.
 
-art.pill TATTOO HOUSE
+-Saiel Solehman
+[art.pill TATTOO HOUSE]
 
 ## Variables Needed
 
@@ -32,9 +38,11 @@ art.pill TATTOO HOUSE
 - `{{appointment_start}}`
 - `{{appointment_end}}`
 - `{{booking_type_label}}`
+- `{{day_of_instructions_url}}`
+- `{{location_parking_url}}`
 - `{{appointment_id}}`
 
 ## Optional Notes For Codex
 
-This should remain short. If prep instructions are added later, consider a
-separate prep email or a linked prep page instead of making this reminder long.
+This should remain short and practical. Repeat the location/parking link here
+because clients will likely check this email from their phone before arrival.
