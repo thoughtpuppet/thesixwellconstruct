@@ -488,8 +488,9 @@ export async function initMerchCatalogPage() {
     return button;
   }
 
-  function setHeroState(_key) {
-    // title is static "MERCH." in merch yellow — no dynamic toggling
+  function setHeroState(key) {
+    const color = key === "all" ? "#F7A226" : SOURCES[key]?.color || "#F7A226";
+    document.documentElement.style.setProperty("--title-color", color);
   }
 
   function renderFilters() {
