@@ -472,6 +472,7 @@ export async function initMerchCatalogPage() {
   const grid = document.getElementById("productGrid");
   const introDesc = document.getElementById("introDesc");
   const introAbove = document.getElementById("introAbove");
+  const merchWord = document.getElementById("merchWord");
 
   const selections = {};
   let products = [];
@@ -486,9 +487,10 @@ export async function initMerchCatalogPage() {
     return button;
   }
 
-  function setTitleColor(key) {
+  function setHeroState(key) {
     const color = key === "all" ? "#F7A226" : SOURCES[key]?.color || "#F7A226";
     document.documentElement.style.setProperty("--title-color", color);
+    if (merchWord) merchWord.textContent = key === "all" || key === "six.well" ? "SIX.WELL" : "MERCH";
   }
 
   function renderFilters() {
@@ -532,7 +534,7 @@ export async function initMerchCatalogPage() {
   function setFilter(key) {
     activeFilter = key;
     activeTypeFilter = "all";
-    setTitleColor(key);
+    setHeroState(key);
     if (key === "all") {
       introAbove.classList.remove("visible");
       introDesc.textContent = "everything sellable from the construct";
@@ -689,7 +691,7 @@ export async function initMerchCatalogPage() {
     renderFilters();
     renderTypeFilters();
     renderGrid();
-    setTitleColor("all");
+    setHeroState("all");
     const initFilter = new URLSearchParams(window.location.search).get("filter");
     if (initFilter && SOURCES[initFilter]) setFilter(initFilter);
   } catch (error) {

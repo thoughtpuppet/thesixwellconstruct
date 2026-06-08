@@ -39,6 +39,13 @@ export const COLOR_SWATCHS = {
 };
 
 export const PRODUCT_PRESENTATION = {
+  "six-well-clothing": {
+    catalogNumber: "01",
+    pagePath: null,
+    sourceVenture: "six.well",
+    productType: "apparel",
+    editionText: "coming soon",
+  },
   "lostmarbles-hoodie": {
     catalogNumber: "05",
     pagePath: "/merch/lostmarbles-hoodie.html",
@@ -90,6 +97,24 @@ export const PRODUCT_PRESENTATION = {
 };
 
 export const PLACEHOLDER_PRODUCTS = [
+  {
+    id: "placeholder-six-well-clothing",
+    handle: "six-well-clothing",
+    title: "SIX.WELL CLOTHING",
+    tags: [],
+    productType: "apparel",
+    sourceVenture: "six.well",
+    sourceLabel: "six.well clothing",
+    price: null,
+    availableForSale: false,
+    options: [],
+    variants: [],
+    images: [],
+    catalogNumber: "01",
+    editionText: "coming soon",
+    pagePath: null,
+    isPlaceholder: true,
+  },
   {
     id: "placeholder-maze-puffer",
     handle: "maze-puffer-jacket",
