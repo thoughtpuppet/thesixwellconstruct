@@ -105,11 +105,10 @@
     grid-template-columns:minmax(180px,0.32fr) minmax(0,0.68fr);
     gap:48px;
     align-items:start;
-    padding:40px 0 56px;
+    padding:36px;
     margin-top:-40px;
-    margin-bottom:24px;
-    border-top:5px solid var(--ring-faint);
-    border-bottom:5px solid var(--ring-faint);
+    margin-bottom:18px;
+    background:#171717;
   }
   .brand-kicker {
     font-family:var(--serif);
@@ -163,13 +162,19 @@
   }
   .section-body + .section-body { margin-top:16px; }
   .section-portfolio-link {
-    display:inline-block; margin-top:28px;
+    display:inline-block;
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--accent);
+    color:var(--text);
     transition:color var(--t-fast);
   }
   .section-portfolio-link:hover { color:var(--signal); }
+  #the-work {
+    display:flex;
+    justify-content:flex-end;
+    padding:0 0 25px;
+    border-top:none;
+  }
   #the-work .section-body { max-width:none; }
   .editorial-field {
     display:grid;
@@ -208,27 +213,44 @@
   }
   .ledger {
     margin-top:32px;
+    border:5px solid var(--ring-faint);
   }
   .ledger-row:last-child { border-bottom:none; }
   .ledger-row {
     display:grid;
-    grid-template-columns:minmax(160px,0.38fr) minmax(0,1fr) auto;
-    gap:24px;
+    grid-template-columns:minmax(230px,0.44fr) minmax(0,1fr) minmax(160px,0.22fr);
+    gap:0;
     align-items:center;
-    padding:28px 0;
     border-bottom:5px solid var(--ring-faint);
   }
   .ledger-row.is-primary {
-    padding:36px 0;
+    padding:0;
   }
+  .ledger-row > div {
+    align-self:stretch;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    padding:28px 24px;
+  }
+  .ledger-row.is-primary > div { padding-top:36px; padding-bottom:36px; }
+  .ledger-row > div + div { border-left:5px solid var(--ring-faint); }
   .ledger-label,.booking-cta-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.22em; text-transform:uppercase;
     color:var(--accent); opacity:0.7; margin-bottom:12px;
   }
+  .ledger-row > div:first-child {
+    justify-self:end;
+    text-align:right;
+  }
   .ledger-title {
-    font-weight:900; font-size:22px; letter-spacing:-0.02em;
-    color:var(--signal); margin-bottom:16px;
+    font-weight:900;
+    font-size:clamp(34px,4.8vw,72px);
+    letter-spacing:-0.05em;
+    line-height:0.88;
+    color:var(--signal);
+    margin-bottom:0;
   }
   .ledger-status {
     font-family:var(--sans);
@@ -425,9 +447,9 @@
     main { padding:var(--s7) var(--s5) var(--s6); }
     .editorial-field,.ritual,.price-fit { grid-template-columns:1fr; gap:44px; }
     .ritual-intro { position:static; }
-    .brand-band { grid-template-columns:1fr; gap:24px; margin-top:-24px; padding:32px 0 44px; }
-    .ledger-row { grid-template-columns:minmax(0,1fr) auto; }
-    .ledger-status,.ledger-action { grid-column:2; }
+    .brand-band { grid-template-columns:1fr; gap:24px; margin-top:-24px; padding:24px; }
+    .ledger-row { grid-template-columns:minmax(210px,0.42fr) minmax(0,1fr) minmax(150px,0.24fr); }
+    .ledger-status,.ledger-action { grid-column:auto; }
     footer.bottom { padding:48px var(--s5); }
   }
   @media (max-width:768px) {
@@ -445,6 +467,11 @@
     main { padding:var(--s6) var(--s5); }
     .section { padding:32px 0; }
     .ledger-row { grid-template-columns:1fr; gap:12px; }
+    .ledger-row > div { padding:20px 0; }
+    .ledger-row > div + div { border-left:none; border-top:1px solid var(--ring-faint); }
+    .ledger-row.is-primary > div { padding-top:20px; padding-bottom:20px; }
+    .ledger-row > div:first-child { justify-self:start; text-align:left; }
+    .ledger-title { font-size:clamp(34px,13vw,56px); }
     .ledger-status,.ledger-action { grid-column:auto; }
     .path-step { grid-template-columns:54px minmax(0,1fr); gap:18px; }
     .path-list::before { left:26px; }
@@ -520,7 +547,7 @@
             <p class="ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 18px"><span style="font-size: 16px">Pre-drawn symbolic, surreal, and mythic designs. Open a card, follow any traces that appear, then send a claim with the design metadata attached.</span></span></span></p>
           </div>
           <div>
-            <p class="ledger-status">first path</p>
+            <p class="ledger-status" style="color: rgb(255, 231, 202); opacity: 1;"><br></p>
             <a class="ledger-action" href="/tattoos/flash/">Browse flash →</a>
           </div>
         </article>
@@ -534,7 +561,7 @@
           </div>
           <div>
             <p class="ledger-status">selective review</p>
-            <a class="ledger-action" href="/tattoos/inquire/">Start inquiry →</a>
+            <a class="ledger-action" href="/tattoos/inquire/custom/">Start inquiry →</a>
           </div>
         </article>
         <article class="ledger-row">
@@ -576,7 +603,7 @@
         <div class="path-list" aria-label="Booking process">
           <article class="path-step">
             <span class="path-mark">I</span>
-            <div><h3 class="path-title">Choose a path</h3><p class="path-body"><span style="color: rgba(252, 184, 103, 0.64)">Claim available flash, submit a custom inquiry, build your own brief, or apply for a Special Project.</span></p></div>
+            <div><h3 class="path-title">Choose a COLLABORATION path</h3><p class="path-body"><span style="color: rgba(252, 184, 103, 0.64)">Claim available flash, submit a custom inquiry, build your own design online or in-person, or apply to participate in a&nbsp; Special Project.</span></p></div>
           </article>
           <article class="path-step">
             <span class="path-mark">II</span>
@@ -627,6 +654,7 @@
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+
 
 
 </body></html>

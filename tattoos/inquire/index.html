@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inquire - Art.Pill Tattoo House</title>
+<title>Choose Inquiry Path - Art.Pill Tattoo House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -28,59 +28,48 @@
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
   main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
-  .layout { display:grid; grid-template-columns:minmax(0,0.72fr) minmax(360px,580px); gap:72px; align-items:start; }
+  .intro { max-width:780px; margin-bottom:64px; }
   .page-label { font-family:var(--serif); font-size:15px; letter-spacing:0.32em; text-transform:uppercase; color:var(--accent); opacity:0.7; margin-bottom:-8px; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); margin-bottom:38px; }
-  .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
-  .intro-body + .intro-body { margin-top:20px; }
-  .include-label { margin-top:48px; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; }
-  .include-list { list-style:none; display:flex; flex-direction:column; max-width:620px; border-top:5px solid var(--ring-faint); }
-  .include-list li { display:grid; grid-template-columns:42px minmax(0,1fr); gap:18px; font-size:14px; line-height:1.6; color:var(--text-mute); padding:16px 0; border-bottom:5px solid var(--ring-faint); }
-  .include-list li::before { color:var(--signal); opacity:0.72; font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.14em; }
-  .include-list li:nth-child(1)::before { content:"I"; }
-  .include-list li:nth-child(2)::before { content:"II"; }
-  .include-list li:nth-child(3)::before { content:"III"; }
-  .include-list li:nth-child(4)::before { content:"IV"; }
-  .include-list li:nth-child(5)::before { content:"V"; }
-  .path-note { margin-top:34px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:22px 0; max-width:620px; }
-  .path-note-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
-  .path-note-body { font-size:13px; line-height:1.7; color:var(--text-mute); margin-bottom:14px; }
-  .path-note-link { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); transition:color var(--t-fast); }
-  .path-note-link:hover { color:var(--accent); }
-  .form-panel { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:42px 0; background:transparent; }
-  .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
-  .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
-  .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-  .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
-  .field.full { grid-column:1 / -1; }
-  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
-  input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
-  input[type="file"] { padding:11px 12px; color:var(--text-mute); }
-  textarea { min-height:132px; resize:vertical; }
-  input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
-  .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
-  .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
-  .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
-  .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
-  .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
-  .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
-  .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
+  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(48px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:34px; }
+  .intro-body { font-size:17px; line-height:1.8; color:var(--text); max-width:660px; }
+  .fit-guide { display:grid; grid-template-columns:minmax(190px,0.32fr) minmax(0,1fr); gap:40px; align-items:start; margin-bottom:56px; padding:34px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
+  .fit-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
+  .fit-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; }
+  .fit-list { display:grid; border:5px solid var(--ring-faint); }
+  .fit-row { display:grid; grid-template-columns:minmax(150px,0.28fr) minmax(0,1fr) minmax(120px,0.18fr); border-bottom:5px solid var(--ring-faint); }
+  .fit-row:last-child { border-bottom:none; }
+  .fit-row > * { padding:18px; }
+  .fit-row > * + * { border-left:5px solid var(--ring-faint); }
+  .fit-question { font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text); }
+  .fit-answer { font-size:14px; line-height:1.65; color:var(--text-mute); }
+  .fit-link { align-self:stretch; display:flex; align-items:center; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); transition:color var(--t-fast), background var(--t-fast); }
+  .fit-link:hover,.fit-link:focus-visible { color:var(--text); background:rgba(109,61,21,0.16); outline:none; }
+  .path-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
+  .path-card { display:grid; grid-template-rows:auto 1fr auto; gap:22px; min-height:280px; padding:30px; border-right:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast); }
+  .path-card:nth-child(2n) { border-right:none; }
+  .path-card:nth-last-child(-n+2) { border-bottom:none; }
+  .path-card:hover,.path-card:focus-visible { background:rgba(109,61,21,0.18); outline:none; }
+  .path-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
+  .path-title { font-family:var(--sans); font-weight:900; font-size:clamp(30px,4vw,58px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); text-transform:uppercase; }
+  .path-body { font-size:14px; line-height:1.75; color:var(--text-mute); max-width:520px; }
+  .path-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text); }
   footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
-  @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 0; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
-@media (max-width: 700px) {
-  header.top {
-    position: sticky;
-    padding: var(--s3) var(--s4);
-    min-height: 60px;
-    align-items: center;
+  @media (max-width:780px) {
+    header.top { padding:var(--s4) var(--s5); }
+    main { padding:var(--s6) var(--s5); }
+    .intro { margin-bottom:42px; }
+    .fit-guide { grid-template-columns:1fr; gap:24px; margin-bottom:42px; padding:26px 0; }
+    .fit-row { grid-template-columns:1fr; }
+    .fit-row > * + * { border-left:none; border-top:1px solid var(--ring-faint); }
+    .fit-link { min-height:52px; }
+    .path-grid { grid-template-columns:1fr; }
+    .path-card,.path-card:nth-child(2n),.path-card:nth-last-child(-n+2) { border-right:none; border-bottom:5px solid var(--ring-faint); }
+    .path-card:last-child { border-bottom:none; }
+    footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
-}
-
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 </head>
@@ -97,60 +86,80 @@
   </script>
   <div class="grain"></div>
   <header class="top">
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <a class="breadcrumb-link" href="/tattoos/">Art.Pill</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">Inquire</span>
+    </nav>
   </header>
   <main>
-    <div class="layout">
-      <section>
-        <p class="page-label" data-copy-id="inquiry-page-label">Art.Pill Tattoo House</p>
-        <h1 class="page-title" data-copy-id="inquiry-page-title">Project<br>Inquiry.</h1>
-        <p class="intro-body" data-copy-id="inquiry-intro-primary">Submitting an inquiry begins the live review process. If your project is a strong fit for the studio, you will receive a private token booking link and next steps.</p>
-        <p class="intro-body" data-copy-id="inquiry-intro-secondary">Use this form for custom work, early ideas, or projects that need a new drawing. If you already know the flash piece you want, the flash claim form is the cleaner path because it carries the selected title, code, series, size, and price into review.</p>
-        <p class="include-label">What to Include</p>
-        <ul class="include-list">
-          <li>Concept, subject matter, and the meaning behind it</li>
-          <li>Body placement and approximate size</li>
-          <li>Whether this is custom work, a Special Project direction, or a flash-adjacent idea</li>
-          <li>Helpful reference images or links for mood and aesthetic</li>
-          <li>Your timing, budget range, and any context that shapes the project</li>
-        </ul>
-        <div class="path-note">
-          <p class="path-note-title" data-copy-id="inquiry-flash-note-title">Claiming flash?</p>
-          <p class="path-note-body" data-copy-id="inquiry-flash-note-body">Start on the flash wall first. Available designs can prefill the claim form so the review arrives with the right catalog metadata attached.</p>
-          <a class="path-note-link" href="/tattoos/flash/claim/">Open flash claim form &rarr;</a>
+    <section class="intro">
+      <p class="page-label" data-copy-id="inquire-chooser-label">Art.Pill Tattoo House</p>
+      <h1 class="page-title" data-copy-id="inquire-chooser-title">Choose<br>Your Path.</h1>
+      <p class="intro-body" data-copy-id="inquire-chooser-intro">Each form carries a different kind of request into review. Choose the path closest to what you want, then submit the details there.</p>
+    </section>
+    <section class="fit-guide" aria-labelledby="fit-guide-title">
+      <div>
+        <p class="fit-kicker">best fit</p>
+        <h2 class="fit-title" id="fit-guide-title">Which path should you use?</h2>
+      </div>
+      <div class="fit-list">
+        <article class="fit-row">
+          <h3 class="fit-question">I already picked a flash design.</h3>
+          <p class="fit-answer">Use the flash claim form. It is built for available pre-drawn work and can carry design details into review.</p>
+          <a class="fit-link" href="/tattoos/flash/claim/">Claim flash</a>
+        </article>
+        <article class="fit-row">
+          <h3 class="fit-question">I have my own idea or concept.</h3>
+          <p class="fit-answer">Use the custom inquiry form for original work based on your story, references, placement, and timeline.</p>
+          <a class="fit-link" href="/tattoos/inquire/custom/">Custom inquiry</a>
+        </article>
+        <article class="fit-row">
+          <h3 class="fit-question">I want to choose from the visual language.</h3>
+          <p class="fit-answer">Use Build Your Own when you want to select symbols and marks from the practice to form a guided brief.</p>
+          <a class="fit-link" href="/tattoos/build/">Build yours</a>
+        </article>
+        <article class="fit-row">
+          <h3 class="fit-question">I want a larger or deeper project.</h3>
+          <p class="fit-answer">Use Special Projects for long-form, symbolic, collaborative, multi-session, or experimental tattoo work.</p>
+          <a class="fit-link" href="/tattoos/special-projects/apply/">Apply</a>
+        </article>
+      </div>
+    </section>
+    <section class="path-grid" aria-label="Tattoo inquiry forms">
+      <a class="path-card" href="/tattoos/flash/claim/">
+        <p class="path-kicker">available design</p>
+        <div>
+          <h2 class="path-title">Claim<br>Flash</h2>
+          <p class="path-body">Use this when you already know the flash design you want, or you arrived from an individual flash page.</p>
         </div>
-      </section>
-      <section class="form-panel" aria-label="Tattoo inquiry form">
-        <h2 class="form-title" data-copy-id="inquiry-form-title">Submit for Review</h2>
-        <p class="form-note" data-copy-id="inquiry-form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow.</p>
-        <form id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
-          <input type="hidden" name="type" value="tattoo_inquiry">
-          <input type="hidden" name="source_path" value="/tattoos/inquire/">
-          <input type="hidden" name="subject" value="New Art.Pill tattoo inquiry">
-          <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
-          <div class="field-grid">
-            <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
-            <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
-            <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
-            <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" autocomplete="tel"></div>
-            <div class="field"><label for="instagram">Instagram</label><input id="instagram" name="instagram" placeholder="@"></div>
-            <div class="field"><label for="pronouns">Pronouns</label><input id="pronouns" name="pronouns"></div>
-            <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" required></div>
-            <div class="field"><label for="size">Approx. size</label><input id="size" name="size" placeholder="Example: 4-6 in"></div>
-            <div class="field"><label for="budget_range">Budget range</label><input id="budget_range" name="budget_range"></div>
-            <div class="field"><label for="timeline">Timeline</label><input id="timeline" name="timeline"></div>
-            <div class="field full"><label for="project_title">Project or flash title</label><input id="project_title" name="project_title"></div>
-            <div class="field full"><label for="reference_links">Reference links</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
-            <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
-            <div class="field full"><label for="message">Project notes</label><textarea id="message" name="message" required></textarea></div>
-          </div>
-          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this submission begins review before an appointment is confirmed.</span></label>
-          <div class="submit-row">
-            <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
-            <p class="form-status" id="formStatus">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>
-          </div>
-        </form>
-      </section>
-    </div>
+        <span class="path-action">Open flash claim &rarr;</span>
+      </a>
+      <a class="path-card" href="/tattoos/inquire/custom/">
+        <p class="path-kicker">custom request</p>
+        <div>
+          <h2 class="path-title">Custom<br>Inquiry</h2>
+          <p class="path-body">Use this for original work built around your concept, story, placement, references, and timing.</p>
+        </div>
+        <span class="path-action">Open custom form &rarr;</span>
+      </a>
+      <a class="path-card" href="/tattoos/build/">
+        <p class="path-kicker">guided brief</p>
+        <div>
+          <h2 class="path-title">Build<br>Your Own</h2>
+          <p class="path-body">Choose symbols and marks from the practice's visual language, then send that brief into review.</p>
+        </div>
+        <span class="path-action">Start builder &rarr;</span>
+      </a>
+      <a class="path-card" href="/tattoos/special-projects/apply/">
+        <p class="path-kicker">larger work</p>
+        <div>
+          <h2 class="path-title">Special<br>Projects</h2>
+          <p class="path-body">Use this for long-form, symbolic, multi-session, collaborative, or experimental tattoo work.</p>
+        </div>
+        <span class="path-action">Open application &rarr;</span>
+      </a>
+    </section>
   </main>
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
@@ -159,38 +168,5 @@
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
-  <script>
-    (function(){
-      var form = document.getElementById("inquiryForm");
-      var submitBtn = document.getElementById("submitBtn");
-      var status = document.getElementById("formStatus");
-      if (!form || !submitBtn || !status) return;
-
-      form.addEventListener("submit", async function(event){
-        event.preventDefault();
-        if (!form.reportValidity()) return;
-
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Submitting...";
-        status.textContent = "Capturing your inquiry for review.";
-
-        try {
-          var response = await fetch(form.action, {
-            method: "POST",
-            body: new FormData(form),
-          });
-          var payload = await response.json().catch(function(){ return {}; });
-          if (!response.ok) {
-            throw new Error(payload.error || "Submission failed.");
-          }
-          window.location.href = "/tattoos/submission-received/";
-        } catch (error) {
-          status.textContent = error.message || "Submission failed. Please try again.";
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Submit for Review";
-        }
-      });
-    })();
-  </script>
 </body>
 </html>
