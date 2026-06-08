@@ -1,10 +1,10 @@
 /* ============================================================
    transition.js — the six.well construct
    ============================================================
-   Handles fade-to-black page transitions across all ventures.
+   Handles fade-to-black page transitions across all mediums.
 
    HOW TO USE:
-   Add this script to the bottom of every venture page's
+   Add this script to the bottom of every medium page's
    <body>, after transitions.css is loaded:
      <script src="/js/transition.js"></script>
 
@@ -31,7 +31,7 @@
 
 
   /* ── OVERLAY SETUP ────────────────────────────────────────
-     The overlay may already exist — venture pages include a
+     The overlay may already exist — medium pages include a
      tiny inline script right after <body> opens that creates
      it immediately (before any content renders) to prevent
      the blink on page entry.

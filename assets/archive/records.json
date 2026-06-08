@@ -11,9 +11,9 @@
       "room": "Process",
       "date_or_period": "2026",
       "timeline_period": "now",
-      "summary": "The first public archive structure turns process, residue, older forms, and cross-node evidence into a browsable record layer.",
-      "body": "The archive protects the leftovers from being treated like waste. Drafts, screenshots, old labels, process images, event traces, and abandoned structures become usable record instead of noise.\n\nThis first frame defines the archive as a browser for how the work became itself. It is not the whole vault. It is a selected public layer that can point back into active nodes, finished works, and future rooms.",
-      "body_html": "<p>The archive protects the leftovers from being treated like waste. Drafts, screenshots, old labels, process images, event traces, and abandoned structures become usable record instead of noise.</p><p>This first frame defines the archive as a browser for how the work became itself. It is not the whole vault. It is a selected public layer that can point back into active nodes, finished works, and future rooms.</p>",
+      "summary": "The first public archive structure turns process, residue, older forms, and cross-medium evidence into a browsable record layer.",
+      "body": "The archive protects the leftovers from being treated like waste. Drafts, screenshots, old labels, process images, event traces, and abandoned structures become usable record instead of noise.\n\nThis first frame defines the archive as a browser for how the work became itself. It is not the whole vault. It is a selected public layer that can point back into active mediums, finished works, and future rooms.",
+      "body_html": "<p>The archive protects the leftovers from being treated like waste. Drafts, screenshots, old labels, process images, event traces, and abandoned structures become usable record instead of noise.</p><p>This first frame defines the archive as a browser for how the work became itself. It is not the whole vault. It is a selected public layer that can point back into active mediums, finished works, and future rooms.</p>",
       "status": "active frame",
       "visibility": "public",
       "assets": [
@@ -66,8 +66,8 @@
       "date_or_period": "2026",
       "timeline_period": "now",
       "summary": "A flash record kept as evidence of symbolic tattoo language, availability state, and how a design can move between tattooing and archive.",
-      "body": "Co-Parent sits in the archive as a flash record and a source-language marker. It carries the practical surface of tattooing while also showing how a symbol can remain useful after its first public offer or availability state changes.\n\nThe archive version does not need to flatten the work into a product. It holds the design as evidence: what was shown, what node it belonged to, and what later paths it can still inform.",
-      "body_html": "<p>Co-Parent sits in the archive as a flash record and a source-language marker. It carries the practical surface of tattooing while also showing how a symbol can remain useful after its first public offer or availability state changes.</p><p>The archive version does not need to flatten the work into a product. It holds the design as evidence: what was shown, what node it belonged to, and what later paths it can still inform.</p>",
+      "body": "Co-Parent sits in the archive as a flash record and a source-language marker. It carries the practical surface of tattooing while also showing how a symbol can remain useful after its first public offer or availability state changes.\n\nThe archive version does not need to flatten the work into a product. It holds the design as evidence: what was shown, what medium it belonged to, and what later paths it can still inform.",
+      "body_html": "<p>Co-Parent sits in the archive as a flash record and a source-language marker. It carries the practical surface of tattooing while also showing how a symbol can remain useful after its first public offer or availability state changes.</p><p>The archive version does not need to flatten the work into a product. It holds the design as evidence: what was shown, what medium it belonged to, and what later paths it can still inform.</p>",
       "status": "reference",
       "visibility": "public",
       "assets": [

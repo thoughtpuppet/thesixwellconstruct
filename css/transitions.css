@@ -2,14 +2,14 @@
    transitions.css — the six.well construct
    ============================================================
    Handles the fade-to-black page transition overlay.
-   Import this on every venture page alongside tokens.css:
+   Import this on every medium page alongside tokens.css:
      @import url('/css/tokens.css');
      @import url('/css/transitions.css');
 
    How it works:
    1. A full-screen overlay div sits on top of all content.
    2. On page load it fades OUT (revealing the page beneath).
-   3. When a venture link is clicked, transition.js fades it
+   3. When a medium link is clicked, transition.js fades it
       back IN before navigating — creating the seamless
       fade-to-black between pages.
 
@@ -32,7 +32,7 @@
   position: fixed;
   inset: 0;                          /* covers full viewport */
   background: #0e0e0e;               /* matches --color-bg exactly */
-  z-index: 9999;                     /* above all venture content */
+  z-index: 9999;                     /* above all medium content */
   pointer-events: none;              /* invisible = non-blocking */
 
   /* The actual fade is driven by opacity transitions */
@@ -149,7 +149,7 @@ body.entrance-active .entrance-delay-5 { transition-delay: 400ms; }
 
 
 /* ──────────────────────────────────────────────────────────
-   VENTURE DOT NAV
+   MEDIUM DOT NAV
    Injected by construct-nav.js. Styles live here so they
    load before the script runs and there's no flash of
    unstyled dots on slower connections.

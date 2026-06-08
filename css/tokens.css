@@ -2,7 +2,7 @@
    tokens.css — the six.well construct
    ============================================================
    Single source of truth for all brand values.
-   Import this at the top of every venture page's CSS:
+   Import this at the top of every medium page's CSS:
      @import url('/css/tokens.css');
 
    Then reference variables like:
@@ -15,7 +15,7 @@
 
   /* ──────────────────────────────────────────────────────────
      COLORS — BASE
-     The foundation every venture page is built on.
+     The foundation every medium page is built on.
   ────────────────────────────────────────────────────────── */
 
   --color-bg:         #0e0e0e;   /* site background — near black */
@@ -25,8 +25,8 @@
 
 
   /* ──────────────────────────────────────────────────────────
-     COLORS — VENTURE NODES
-     Each venture has a full-strength signal color and a
+     COLORS — MEDIUMS
+     Each medium has a full-strength signal color and a
      dimmed variant for subtle UI use (borders, hover states,
      section dividers, background washes).
 
@@ -91,7 +91,7 @@
   ────────────────────────────────────────────────────────── */
 
   --text-2xs:  9px;    /* hint text, tiny labels */
-  --text-xs:   11px;   /* sub-node labels, metadata */
+  --text-xs:   11px;   /* pathway labels, metadata */
   --text-sm:   13px;   /* small body, captions */
   --text-base: 16px;   /* primary body copy */
   --text-md:   20px;   /* lead text, short descriptors */
@@ -178,7 +178,7 @@
 /* ──────────────────────────────────────────────────────────
    BASE RESETS
    Minimal resets applied globally when tokens.css is loaded.
-   Venture pages don't need to repeat these.
+   Medium pages don't need to repeat these.
 ────────────────────────────────────────────────────────── */
 
 *, *::before, *::after {

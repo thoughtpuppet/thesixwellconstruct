@@ -19,7 +19,7 @@
     { name: 'Cream', value: '#FFE7CA' },
     { name: 'Amber', value: '#FCB867' },
     { name: 'Faint Amber', value: 'rgba(252,184,103,0.64)' },
-    { name: 'Node Red', value: '#7A1010' },
+    { name: 'Medium Red', value: '#7A1010' },
     { name: 'Brown', value: '#3a2418' },
     { name: 'Muted', value: 'rgba(255,231,202,0.62)' }
   ];

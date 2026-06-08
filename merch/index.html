@@ -12,8 +12,8 @@
   
   ARCHITECTURE:
     MERCH is the commerce engine for the whole construct.
-    Products are organized by SOURCE VENTURE, not by sub-brand.
-    Each source venture's color is carried through the UI:
+    Products are organized by SOURCE MEDIUM, not by sub-brand.
+    Each source medium's color is carried through the UI:
       - filter chip active state
       - product card border on hover
       - category dot + label on each card
@@ -58,7 +58,7 @@
     --bg-drawer: #0a0a0a;
 
     --accent:    #FCB867;            /* wordmark amber */
-    --accent-hot:#F7A226;            /* MERCH node color — title + six.well source */
+    --accent-hot:#F7A226;            /* MERCH medium color — title + six.well source */
 
     --ring:      #6D3D15;
     --ring-soft: rgba(109,61,21,0.4);
@@ -79,7 +79,7 @@
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
 
-    /* driven by JS — switches to the active filter's venture color.
+    /* driven by JS — switches to the active filter's medium color.
        defaults to MERCH hot orange for the "all" state. */
     --title-color: #F7A226;
   }
@@ -213,7 +213,7 @@
   }
 
   /* ============================================================
-     FILTER BAR — two rows: source venture then type.
+     FILTER BAR — two rows: source medium then type.
      Copied exactly from art/index.html chip system.
      Row 1: source. Row 2: type (only when source active).
      Row 2 collapses naturally when empty.
@@ -332,7 +332,7 @@
 
   /* ============================================================
      PRODUCT CARD
-     border-color on hover = source venture color via --src-color
+     border-color on hover = source medium color via --src-color
      set inline on each card by JS
   ============================================================ */
   .card { display:flex; flex-direction:column; }
@@ -345,7 +345,7 @@
     overflow:hidden;
     transition:border-color var(--t-med);
   }
-  /* hover border uses venture color */
+  /* hover border uses medium color */
   .card:hover .card-frame {
     border-color:var(--src-color, var(--accent));
   }
@@ -429,7 +429,7 @@
   /* paste Shopify embed <div> inside .card-frame.
      delete .card-plaque + .card-number when real product art goes in. */
 
-  /* category row — colored dot + label in venture color */
+  /* category row — colored dot + label in medium color */
   .card-cat {
     display:flex; align-items:center; gap:var(--s2);
     padding:var(--s4) 0 var(--s2);
@@ -441,7 +441,7 @@
   .cat-label {
     font-family:var(--serif); font-size:10px;
     letter-spacing:0.22em; text-transform:uppercase;
-    /* color set inline by JS in venture color */
+    /* color set inline by JS in medium color */
   }
 
   .card-meta {
@@ -459,7 +459,7 @@
     white-space:nowrap;
   }
 
-  /* add-to-cart: hover uses venture color */
+  /* add-to-cart: hover uses medium color */
   .card-add {
     display:flex; align-items:center; justify-content:space-between;
     padding:var(--s3) 0;
@@ -566,7 +566,7 @@
     font-family:var(--sans); font-weight:700; font-size:12px;
     letter-spacing:0.04em; text-transform:uppercase; color:var(--text);
   }
-  /* category tag in drawer: inline dot + label in venture color */
+  /* category tag in drawer: inline dot + label in medium color */
   .drawer-item-cat {
     display:flex; align-items:center; gap:var(--s1);
     font-family:var(--serif); font-size:10px;
@@ -715,7 +715,7 @@
       <p id="introDesc">everything sellable from the construct</p>
     </section>
 
-    <!-- filter rows — row 1: source venture, row 2: type (only when source active) -->
+    <!-- filter rows — row 1: source medium, row 2: type (only when source active) -->
     <nav class="filters" id="filters" role="tablist">
       <div class="filter-row" id="sourceRow"></div>
       <div class="filter-row" id="typeRow"></div>

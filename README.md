@@ -4,14 +4,14 @@ Pure static site for `thoughtpuppet/thesixwellconstruct`.
 
 ## Ecosystem-first site principle
 
-Every page is a node in a living creative ecosystem. The site should remind
+Every page is a medium in a living creative ecosystem. The site should remind
 visitors of those relationships at every turn.
 
 When building, editing, or proposing any page, section, product flow, or
-venture surface, keep these questions active:
+medium surface, keep these questions active:
 
 - What is the page's primary action or purpose?
-- Which other nodes or ventures should it naturally point toward?
+- Which other mediums should it naturally point toward?
 - Is the connection conceptual, commercial, archival, experiential, or
   biographical?
 - Does the connection deepen the experience while supporting the main action?
@@ -19,7 +19,7 @@ venture surface, keep these questions active:
 
 Preferred connection patterns:
 
-- Related node bands linking meaningful ventures.
+- Related medium bands linking meaningful practices.
 - Source lineage that shows where an idea, image, object, or ritual came from.
 - Object pathways that show how work can move between art, tattooing, merch,
   writing, film, music, events, and archive.
@@ -29,15 +29,30 @@ Preferred connection patterns:
   connective tissue.
 
 This principle should drive recommendations and implementation choices across
-all ventures. These reminders should usually feel like discovery: quiet paths,
+all mediums. These reminders should usually feel like discovery: quiet paths,
 traces, source threads, and optional doors that reward attention. A conversion
 page can stay focused while including at least one intentional, subtle reminder
 of the wider construct.
 
+## Construct language
+
+Use **medium** for the top-level practice areas formerly called nodes or
+ventures: tattooing, art making, merch, about, events, music, writings, archive,
+and film.
+
+Use **pathway** for the internal routes that used to be called subnodes. A
+pathway is an entry route inside a medium, such as flash, portfolio, inquiry,
+acquisition, field notes, rooms, or process.
+
+Some implementation keys still use the older `venture` name for compatibility,
+including `body[data-venture]`, Shopify `venture:` tags, and existing JS/CSS
+selectors. Treat those as legacy technical identifiers unless a dedicated
+migration is being performed.
+
 ## Generous language rule
 
 Describe what the work invites, offers, carries, and opens toward. Let each
-page, project, and venture be defined by positive intent and grounded
+page, project, and medium be defined by positive intent and grounded
 specificity.
 
 Preferred phrasing:
@@ -119,8 +134,8 @@ Create a local `.dev.vars` from `.dev.vars.example` and set:
 - `SHOPIFY_MERCH_QUERY`
 
 The default catalog query expects Shopify products to be tagged with
-`construct-merch`. Source venture and merch type metadata can come from
-Shopify tags such as `venture:thoughtpuppet` and `merch:type:print`, with
+`construct-merch`. Source medium and merch type metadata can come from
+legacy Shopify tags such as `venture:thoughtpuppet` and `merch:type:print`, with
 page-specific presentation details living in `shared/storefront-config.js`.
 
 In Cloudflare, add the same four values under the Worker project's

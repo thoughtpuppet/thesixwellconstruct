@@ -2,7 +2,7 @@
    construct-corner.js — the six.well construct
    ============================================================
    Renders the construct return lockup in the top-left corner
-   of every inner venture page:
+   of every inner medium page:
 
      [ring + 6 dots] [the six.well construct]
 
@@ -18,7 +18,7 @@
    Clicking anywhere on the lockup fades to / via transition.js.
 
    HOW TO USE:
-   Add after transition.js, before </body> on every venture page:
+   Add after transition.js, before </body> on every medium page:
      <script src="/js/transition.js"></script>
      <script src="/js/construct-corner.js"></script>
 
@@ -185,7 +185,7 @@
 
 
   /* ── FADE IN ──────────────────────────────────────────────
-     Delay lets the venture page's own entrance animation
+     Delay lets the medium page's own entrance animation
      complete before the corner element appears.
   ────────────────────────────────────────────────────────── */
   setTimeout(function() {

@@ -1,12 +1,14 @@
 # the six.well construct — Claude reference
 
-## Venture accent color rule
+## Medium accent color rule
 
-**Every venture page must use its venture node color as the accent.**
-Never use the global amber (`#FCB867`) as the primary signal color on a venture page.
+**Every medium page must use its medium color as the accent.**
+Never use the global amber (`#FCB867`) as the primary signal color on a medium page.
 Set `--venture-color` in the page's `:root` using the matching token from `tokens.css`.
 
-| Venture    | CSS token                  | Hex       |
+The CSS custom property is still named `--venture-color` for compatibility.
+
+| Medium     | CSS token                  | Hex       |
 |------------|----------------------------|-----------|
 | tattooing  | `var(--color-tattooing)`   | `#8F231D` |
 | art        | `var(--color-art)`         | `#0581C1` |
@@ -23,11 +25,11 @@ The single source of truth for these values is `css/tokens.css` and `js/construc
 **How to apply:**
 ```css
 :root {
-  --venture-color: var(--color-tattooing); /* set to this venture's node color */
+  --venture-color: var(--color-tattooing); /* set to this medium's color */
 }
 ```
 
-Then use `var(--venture-color)` anywhere the venture accent appears:
+Then use `var(--venture-color)` anywhere the medium accent appears:
 - Filter chip active state (dot + underline)
 - Section labels, kicker text
 - Status indicators, active UI states
@@ -40,17 +42,17 @@ Then use `var(--venture-color)` anywhere the venture accent appears:
 | `css/tokens.css`        | Single source of truth — colors, type, spacing, timing |
 | `css/transitions.css`   | Page fade transition system |
 | `css/media.css`         | Global media card and grid styles (`.media-card`, `.media-grid`) |
-| `css/venture-pages.css` | Shared venture page shell styles |
+| `css/venture-pages.css` | Shared medium page shell styles |
 
 ## Media card system (`css/media.css`)
 
-Use `.media-card` and `.media-grid` for all image/card grids across ventures.
+Use `.media-card` and `.media-grid` for all image/card grids across mediums.
 The card style matches the art index: `4/5` aspect ratio, `5px` border, hover darkens + scales down, title overlay slides up.
 
 **Required page setup:**
 ```css
 :root {
-  --venture-color: var(--color-tattooing); /* venture's node color */
+  --venture-color: var(--color-tattooing); /* medium color */
 }
 ```
 
@@ -70,7 +72,9 @@ Sheet variants (wider format): add `.card--wide` for `aspect-ratio: 3/2`.
 
 ## Key design reminders
 
-- The `body[data-venture]` attribute must always be set to the correct venture key.
+- Use **medium** for the top-level practice areas formerly called nodes or ventures.
+- Use **pathway** for the internal routes formerly called subnodes.
+- The `body[data-venture]` attribute must always be set to the correct medium key. The attribute name is legacy and should remain unchanged unless the whole navigation system is migrated.
 - Never push — user always pushes manually.
 - Always work directly on the main repo (no worktrees).
 - Read `README.md` for ecosystem-first site principle, hosting, and form setup.

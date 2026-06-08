@@ -11,7 +11,7 @@
   ============================================================
 
   ARCHITECTURE:
-    /art is the portfolio index for ART MAKING venture.
+    /art is the portfolio index for ART MAKING medium.
     Works are browseable by medium and type.
     Clicking a work expands it in-place (overlay).
     Individual work pages and statement pages live at
@@ -22,7 +22,7 @@
     wood       — placeholder, coming later
 
   TOKENS:
-    Accent color: #0581C1 (ART MAKING node color)
+    Accent color: #0581C1 (ART MAKING medium color)
     All other tokens match the shared construct system.
 
   TYPE:
@@ -85,7 +85,7 @@ statement:    —
     --bg-raised: #111111;
 
     --accent:    #FCB867;             /* construct amber — wordmark, corner */
-    --accent-hot:#0581C1;             /* ART MAKING node color — title + active states */
+    --accent-hot:#0581C1;             /* ART MAKING medium color — title + active states */
 
     --ring:      #6D3D15;
     --ring-soft: rgba(109,61,21,0.4);
@@ -97,7 +97,7 @@ statement:    —
     --text-dim:  rgba(252,184,103,0.30);
     --text-ghost:rgba(252,184,103,0.13);
 
-    /* body copy color on venture pages */
+    /* body copy color on medium pages */
     --body-text: #FFE7CA;
 
     --s1:4px; --s2:8px; --s3:12px; --s4:16px;
@@ -111,7 +111,7 @@ statement:    —
     --t-slow:0.5s  cubic-bezier(0.22,1,0.36,1);
 
     /* driven by JS — switches to active filter's color on chip click.
-       defaults to ART node blue for the "all" state. */
+       defaults to ART medium blue for the "all" state. */
     --title-color: #0581C1;
   }
 
@@ -180,7 +180,7 @@ statement:    —
     transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
   }
 
-  /* dot inherits h1 color — same venture color as title */
+  /* dot inherits h1 color — same medium color as title */
   .art-dot { /* inherits color from h1 — no override needed */ }
 
   /* descriptor — Times, uppercase, right-aligned — matches merch .intro p */

@@ -1,10 +1,10 @@
 /* ============================================================
    media.css — the six.well construct
    ============================================================
-   Shared media card and grid styles used across all ventures.
+   Shared media card and grid styles used across all mediums.
 
    REQUIRED: each page must set --venture-color in its :root.
-   See CLAUDE.md for the full venture color map.
+   See CLAUDE.md for the full medium color map.
 
    Example:
      :root { --venture-color: var(--color-tattooing); }

@@ -1,13 +1,13 @@
 /* ============================================================
    construct-nav.js — the six.well construct
    ============================================================
-   Renders a row of 9 colored dots, one per venture, fixed
-   at the top of every inner venture page.
+   Renders a row of 9 colored dots, one per medium, fixed
+   at the top of every inner medium page.
 
-   - Current venture dot: full opacity in its color
+   - Current medium dot: full opacity in its color
    - Other dots: dimmed to 0.2 opacity
-   - Hover: dot brightens, venture name fades in above it
-   - Click: fades to that venture's URL via transition.js
+   - Hover: dot brightens, medium name fades in above it
+   - Click: fades to that medium's URL via transition.js
 
    HOW TO USE:
    1. Add data-venture="[key]" to the <body> tag of each page.
@@ -24,11 +24,11 @@
 
 (function() {
 
-  /* ── VENTURE REGISTRY ─────────────────────────────────────
-     Single source of truth for all 9 ventures.
+  /* ── MEDIUM REGISTRY ─────────────────────────────────────
+     Single source of truth for all 9 mediums.
      key:   must match the data-venture attribute on <body>
      label: shown in the hover tooltip
-     color: venture's node color from the landing system
+     color: medium color from the landing system
      url:   destination when dot is clicked
   ────────────────────────────────────────────────────────── */
   var VENTURES = [
@@ -52,8 +52,8 @@
     topInset:        38,     /* px — aligns the dot row closer to header center */
 
     /* Dot opacity states */
-    opacityActive:   1.0,    /* current venture */
-    opacityInactive: 0.22,   /* all other ventures */
+    opacityActive:   1.0,    /* current medium */
+    opacityInactive: 0.22,   /* all other mediums */
     opacityHover:    1.0,    /* any dot on hover */
 
     /* Label (tooltip above dot) */
@@ -70,7 +70,7 @@
     zIndex:          999,    /* just below corner element (1000) */
   };
 
-  /* ── READ CURRENT VENTURE ─────────────────────────────────
+  /* ── READ CURRENT MEDIUM ─────────────────────────────────
      Reads data-venture from <body>.
      If missing or unrecognised, no dot is highlighted.
   ────────────────────────────────────────────────────────── */
@@ -78,14 +78,14 @@
 
 
   /* ── BUILD NAV ────────────────────────────────────────────
-     Structure per venture:
+     Structure per medium:
        .cnav-item              — wrapper, position:relative
          .cnav-label           — tooltip text, above dot
          .cnav-dot             — the colored circle
   ────────────────────────────────────────────────────────── */
   var nav = document.createElement('nav');
   nav.id = 'construct-nav';
-  nav.setAttribute('aria-label', 'venture navigation');
+  nav.setAttribute('aria-label', 'medium navigation');
 
   /* Nav is fixed, horizontally centered, vertically aligned
      with the corner element. Uses pointer-events:none on the
@@ -194,9 +194,9 @@
     });
 
 
-    /* ── Click: fade to venture URL ─── */
+    /* ── Click: fade to medium URL ─── */
     dot.addEventListener('click', function() {
-      /* Don't navigate if already on this venture */
+      /* Don't navigate if already on this medium */
       if (isCurrent) return;
 
       if (typeof window._constructFade === 'function') {
@@ -226,7 +226,7 @@
   /* ── RESPONSIVE ───────────────────────────────────────────
      <700px: position nav inside the header band, centered in the
              space between the corner ring (left) and cart button
-             (right). Tighter gaps. Current venture dot rendered
+             (right). Tighter gaps. Current medium dot rendered
              as an open ring so it reads at small size.
      <380px: shrink dots + reduce gaps further so all 9 fit.
   ────────────────────────────────────────────────────────── */
