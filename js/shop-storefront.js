@@ -473,6 +473,7 @@ export async function initMerchCatalogPage() {
   const introDesc = document.getElementById("introDesc");
   const introAbove = document.getElementById("introAbove");
   const merchWord = document.getElementById("merchWord");
+  const merchDot = document.getElementById("merchDot");
 
   const selections = {};
   let products = [];
@@ -490,7 +491,13 @@ export async function initMerchCatalogPage() {
   function setHeroState(key) {
     const color = key === "all" ? "#F7A226" : SOURCES[key]?.color || "#F7A226";
     document.documentElement.style.setProperty("--title-color", color);
-    if (merchWord) merchWord.textContent = key === "all" || key === "six.well" ? "SIX.WELL" : "MERCH";
+    const sixWellState = key === "all" || key === "six.well";
+    if (merchWord) {
+      merchWord.innerHTML = sixWellState
+        ? '<span class="sixwell-letter-six">six.</span><span class="sixwell-letter-we">we</span><span class="sixwell-letter-ll">ll</span>'
+        : "MERCH";
+    }
+    if (merchDot) merchDot.textContent = sixWellState ? "" : ".";
   }
 
   function renderFilters() {
