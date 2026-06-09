@@ -36,6 +36,8 @@ import {
   handleConfirmBooking,
   handleCreateBookingCheckout,
   handleCreateBookingHold,
+  handlePublicConsultationCheckout,
+  handlePublicConsultationContext,
   handleSquareWebhook,
 } from "./functions/api/booking/_lib.js";
 import { sendDueAppointmentReminders } from "./functions/api/notifications/_lib.js";
@@ -392,6 +394,16 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/booking/checkout") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleCreateBookingCheckout(request, env);
+  }
+
+  if (pathname === "/api/booking/public-consultation/context") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handlePublicConsultationContext(request, env);
+  }
+
+  if (pathname === "/api/booking/public-consultation/checkout") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handlePublicConsultationCheckout(request, env);
   }
 
   if (pathname === "/api/booking/confirm") {

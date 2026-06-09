@@ -18,6 +18,35 @@ const PUBLIC_TYPES = new Set([
   "consultation",
 ]);
 
+const REQUIRED_FIELDS_BY_TYPE = {
+  tattoo_inquiry: [
+    ["placement", "Placement is required."],
+    ["message", "Project notes are required."],
+    ["review_consent", "Review consent is required.", "yes"],
+  ],
+  flash_claim: [
+    ["selected_flash", "Available flash selection is required."],
+    ["placement", "Placement is required."],
+    ["claim_bid", "Bid / budget is required."],
+    ["review_consent", "Review consent is required.", "yes"],
+  ],
+  build_brief: [
+    ["placement", "Placement is required."],
+    ["review_consent", "Review consent is required.", "yes"],
+  ],
+  special_project: [
+    ["project_title", "Project call or working title is required."],
+    ["placement", "Placement is required."],
+    ["budget_range", "Budget range is required."],
+    ["message", "Concept direction is required."],
+    ["review_consent", "Review consent is required.", "yes"],
+  ],
+  art_acquisition: [
+    ["painting", "Painting title is required."],
+    ["inquiry_type", "Inquiry type is required."],
+  ],
+};
+
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     headers: {
@@ -203,17 +232,14 @@ function validateSubmission(submission, payload) {
     return { error: "A valid email is required.", status: 400 };
   }
 
-  if (submission.type === "tattoo_inquiry") {
-    if (!asString(payload.placement)) {
-      return { error: "Placement is required.", status: 400 };
-    }
-
-    if (!asString(payload.message)) {
-      return { error: "Project notes are required.", status: 400 };
-    }
-
-    if (payload.review_consent !== "yes") {
-      return { error: "Review consent is required.", status: 400 };
+  const requiredFields = REQUIRED_FIELDS_BY_TYPE[submission.type] || [];
+  for (const [field, message, exactValue] of requiredFields) {
+    if (exactValue !== undefined) {
+      if (payload[field] !== exactValue) {
+        return { error: message, status: 400 };
+      }
+    } else if (!asString(payload[field])) {
+      return { error: message, status: 400 };
     }
   }
 

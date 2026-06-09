@@ -15,9 +15,8 @@
       1. Purchase interest (original painting)
       2. Delivery + hanging service (local or shipping)
 
-  EMAILJS INTEGRATION:
-    Form sends directly from browser via EmailJS.
-    No backend required. Free tier = 200 emails/month.
+  SUBMISSION FLOW:
+    Form posts to /api/submissions and is reviewed in the studio console.
 
     TO ACTIVATE:
       1. Create account at emailjs.com
@@ -470,7 +469,12 @@
       <!-- ======================================================
            FORM
       ====================================================== -->
-      <div class="form-section">
+      <form class="form-section" id="artAcquisitionForm" method="POST" action="/api/submissions">
+        <input type="hidden" name="type" value="art_acquisition">
+        <input type="hidden" name="source_path" value="/art/acquisitioninquiry.html">
+        <input type="hidden" name="subject" value="New art acquisition inquiry">
+        <input type="hidden" name="inquiry_type" id="inquiryType">
+        <input type="text" name="_gotcha" style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;" tabindex="-1" autocomplete="off">
 
         <!-- BLOCK 1: YOUR INFO -->
         <div class="form-block">
@@ -600,14 +604,14 @@
 
         <!-- SUBMIT -->
         <div>
-          <button type="button" class="submit-btn" id="submitBtn">
+          <button type="submit" class="submit-btn" id="submitBtn">
             <span>send inquiry</span>
             <span class="arrow">&rarr;</span>
           </button>
           <div class="form-status" id="formStatus"></div>
         </div>
 
-      </div>
+      </form>
 
       <!-- ======================================================
            CONTACT INFO PANEL
@@ -666,14 +670,11 @@
   const cityField     = document.getElementById("city-field");
   const addressField  = document.getElementById("address-field");
 
-  /* tile click toggles selected state */
-  tilePurchase.addEventListener("click", () => {
-    chkPurchase.checked = !chkPurchase.checked;
+  chkPurchase.addEventListener("change", () => {
     tilePurchase.classList.toggle("selected", chkPurchase.checked);
   });
 
-  tileDelivery.addEventListener("click", () => {
-    chkDelivery.checked = !chkDelivery.checked;
+  chkDelivery.addEventListener("change", () => {
     tileDelivery.classList.toggle("selected", chkDelivery.checked);
     /* show/hide delivery conditional fields */
     deliveryFields.classList.toggle("visible", chkDelivery.checked);
@@ -698,14 +699,16 @@
   /* ============================================================
      FORM VALIDATION + SUBMISSION
   ============================================================ */
-  document.getElementById("submitBtn").addEventListener("click", () => {
+  document.getElementById("artAcquisitionForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
     const firstName = document.getElementById("first-name").value.trim();
     const lastName  = document.getElementById("last-name").value.trim();
-    const email     = document.getElementById("from_email") ||
-                      document.getElementById("email");
+    const email     = document.getElementById("email");
     const emailVal  = email ? email.value.trim() : "";
     const painting  = document.getElementById("painting").value;
     const status    = document.getElementById("formStatus");
+    const submitBtn = document.getElementById("submitBtn");
 
     /* basic validation */
     if (!firstName || !lastName || !emailVal || !painting) {
@@ -780,21 +783,19 @@
     /* ============================================================
        PROTOTYPE RESPONSE — remove this block when EmailJS is live
     ============================================================ */
-    const submitBtn = document.getElementById("submitBtn");
+    document.getElementById("inquiryType").value = templateParams.inquiry_type;
     submitBtn.disabled = true;
     submitBtn.style.opacity = "0.4";
     status.className = "form-status success";
     status.textContent = "capturing inquiry...";
 
-    fetch("/api/submissions", {
+    fetch(form.action, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(templateParams)
+      body: new FormData(form)
     }).then(async (response) => {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "submission failed.");
-      status.className = "form-status success";
-      status.textContent = "inquiry received. Saiel will be in touch within 48 hours.";
+      window.location.href = "/tattoos/submission-received/";
     }).catch((error) => {
       status.className = "form-status error";
       status.textContent = error.message || "something went wrong. please email directly.";

@@ -47,6 +47,8 @@
   .date,.meta,.empty { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
   .pill { color:var(--ring); border:5px solid var(--ring-soft); padding:5px 12px; font-family:var(--sans); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; white-space:nowrap; }
   .detail-head { display:grid; gap:12px; padding-bottom:22px; border-bottom:5px solid var(--ring-faint); margin-bottom:22px; }
+  .review-card { border:5px solid var(--ring-faint); padding:16px; margin-bottom:22px; }
+  .review-card-header { font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); margin-bottom:16px; padding-bottom:10px; border-bottom:3px solid var(--ring-faint); }
   h2 { margin:0; font-family:var(--sans); font-size:clamp(42px,7vw,72px); line-height:0.9; letter-spacing:0; color:var(--signal); }
   .contact { color:var(--muted); line-height:1.7; }
   .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-bottom:22px; }
@@ -204,7 +206,7 @@
           <option value="">ALL TYPES</option>
           <option value="tattoo_inquiry">TATTOO INQUIRY</option>
           <option value="flash_claim">FLASH CLAIM</option>
-          <option value="build_your_own">BUILD YOUR OWN</option>
+          <option value="build_brief">BUILD YOUR OWN</option>
           <option value="consultation">CONSULTATION</option>
           <option value="special_project">SPECIAL PROJECT</option>
           <option value="art_acquisition">ART ACQUISITION</option>
@@ -261,13 +263,23 @@
     return `<span class="next-action na-needs-review">Needs Review</span>`;
   }
 
+  function requiresInPersonConsult(submission) {
+    const p = submission.payload || {};
+    return p.project_type === "large_cover_up" || p.consult_required === "yes";
+  }
+
   function typeFields(submission) {
     const t = submission.type || "";
     const p = (key) => payloadValue(submission, key);
     const field = (label, value) => value ? detailField(label, value) : "";
+    const card = (label, inner) => `
+      <div class="review-card">
+        <div class="review-card-header">${escapeHtml(label)}</div>
+        ${inner}
+      </div>`;
 
     if (t === "flash_claim") {
-      return `
+      return card("Flash Claim", `
         <div class="grid">
           ${field("Flash Title", p("flash_title"))}
           ${field("Flash Code", p("flash_code"))}
@@ -280,11 +292,11 @@
         </div>
         ${p("sheet_code") ? `<div class="field"><label>Specific Sheet Code</label><div class="value">${escapeHtml(p("sheet_code"))}</div></div>` : ""}
         <div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
-      `;
+      `);
     }
 
-    if (t === "build_your_own" || t === "byo") {
-      return `
+    if (t === "build_brief" || t === "build_your_own" || t === "byo") {
+      return card("Build Your Own", `
         <div class="grid">
           ${field("Placement", p("placement"))}
           ${field("Size / Scale", p("size") || p("scale"))}
@@ -296,11 +308,11 @@
         ${p("selected_elements") ? `<div class="field" style="margin-top:16px;"><label>Selected Elements</label><div class="value full">${escapeHtml(p("selected_elements"))}</div></div>` : ""}
         <div class="field" style="margin-top:16px;"><label>Brief / Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
-      `;
+      `);
     }
 
     if (t === "consultation" || t === "in_person_consultation") {
-      return `
+      return card("Consultation", `
         <div class="grid">
           ${field("Preferred Slots", p("preferred_slots"))}
           ${field("Direction", p("direction"))}
@@ -310,11 +322,11 @@
         </div>
         <div class="field" style="margin-top:16px;"><label>Project Brief</label><div class="value full">${escapeHtml(p("message"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
-      `;
+      `);
     }
 
     if (t === "art_acquisition" || t === "art_inquiry") {
-      return `
+      return card("Art Acquisition", `
         <div class="grid">
           ${field("Painting", p("painting"))}
           ${field("Inquiry Type", p("inquiry_type"))}
@@ -323,11 +335,11 @@
           ${field("Phone", p("phone"))}
         </div>
         <div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
-      `;
+      `);
     }
 
     if (t === "special_project") {
-      return `
+      return card("Special Project", `
         <div class="grid">
           ${field("Placement", p("placement"))}
           ${field("Size", p("size"))}
@@ -339,11 +351,12 @@
         <div class="field" style="margin-top:16px;"><label>Project Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
-      `;
+      `);
     }
 
-    return `
+    return card("Tattoo Inquiry", `
       <div class="grid">
+        ${field("Project Type", p("project_type"))}
         ${field("Placement", p("placement"))}
         ${field("Size", p("size"))}
         ${field("Budget", p("budget_range"))}
@@ -354,7 +367,7 @@
       <div class="field" style="margin-top:16px;"><label>Project or Flash Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
       <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
       <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
-    `;
+    `);
   }
 
   function renderFiles(submission) {
@@ -588,6 +601,9 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     const name = submission.contactName || payloadValue(submission, "name") || "there";
     const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
     if (bookingUrl && submission.status === "approved") {
+      if (requiresInPersonConsult(submission)) {
+        return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: ${bookingUrl}`;
+      }
       return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project has been approved for booking. You can choose your session and place the deposit here: ${bookingUrl}`;
     }
     if (bookingUrl && submission.status === "booked") {
@@ -603,6 +619,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <span class="pill">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.status)}</span>
           ${nextActionBadge(submission)}
+          ${requiresInPersonConsult(submission) ? `<span class="pill" style="color:#FCB867;border-color:rgba(252,184,103,0.5);">IN-PERSON CONSULT REQUIRED</span>` : ""}
         </div>
         <h2>${escapeHtml(submission.contactName || "Unnamed")}</h2>
         <p class="contact">
@@ -923,8 +940,10 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         <div class="field">
           <label for="availabilityType">Session Type</label>
           <select id="availabilityType">
-            <option value="">Any tattoo session</option>
-            <option value="tattoo_quarter">Quarter Session</option>
+              <option value="">Any tattoo session</option>
+              <option value="consult_in_person">In-Person Consultation</option>
+              <option value="build_in_person">In-Person Build Session</option>
+              <option value="tattoo_quarter">Quarter Session</option>
             <option value="tattoo_half">Half Session</option>
             <option value="tattoo_full">Full Session</option>
           </select>
@@ -1044,6 +1063,8 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
             <label>Session Type</label>
             <select data-edit-field="bookingTypeId">
               <option value="" ${windowItem.bookingTypeId ? "" : "selected"}>Any tattoo session</option>
+              <option value="consult_in_person" ${windowItem.bookingTypeId === "consult_in_person" ? "selected" : ""}>In-Person Consultation</option>
+              <option value="build_in_person" ${windowItem.bookingTypeId === "build_in_person" ? "selected" : ""}>In-Person Build Session</option>
               <option value="tattoo_quarter" ${windowItem.bookingTypeId === "tattoo_quarter" ? "selected" : ""}>Quarter Session</option>
               <option value="tattoo_half" ${windowItem.bookingTypeId === "tattoo_half" ? "selected" : ""}>Half Session</option>
               <option value="tattoo_full" ${windowItem.bookingTypeId === "tattoo_full" ? "selected" : ""}>Full Session</option>

@@ -11,6 +11,8 @@ const BOOKING_STATUSES = new Set([
   "archived",
 ]);
 
+const PUBLIC_IN_PERSON_BOOKING_TYPE_IDS = ["consult_in_person", "build_in_person"];
+
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     headers: {
@@ -784,6 +786,233 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
   return { appointment: normalizeAppointment(appointment), bookingType: normalizeBookingType(bookingType) };
 }
 
+async function publicInPersonBookingTypes(db) {
+  const placeholders = PUBLIC_IN_PERSON_BOOKING_TYPE_IDS.map(() => "?").join(", ");
+  const result = await db
+    .prepare(
+      `SELECT * FROM booking_types
+       WHERE id IN (${placeholders}) AND active = 1
+       ORDER BY sort_order ASC, label ASC`
+    )
+    .bind(...PUBLIC_IN_PERSON_BOOKING_TYPE_IDS)
+    .all();
+  return (result.results || []).map(normalizeBookingType);
+}
+
+export async function handlePublicConsultationContext(request, env) {
+  try {
+    const db = requireBookingDb(env);
+    const bookingTypes = await publicInPersonBookingTypes(db);
+    if (!bookingTypes.length) {
+      return errorResponse("Public in-person booking is not configured.", 503);
+    }
+    const windows = await listPublicWindows(db, bookingTypes);
+    return json({
+      ok: true,
+      bookingType: bookingTypes[0],
+      bookingTypes,
+      availabilityWindows: windows,
+    });
+  } catch (error) {
+    return errorResponse("Unable to load consultation availability.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+function publicClientFromBody(body) {
+  const firstName = asString(body.firstName || body.first_name);
+  const lastName = asString(body.lastName || body.last_name);
+  const name = asString(body.name) || [firstName, lastName].filter(Boolean).join(" ").trim();
+  return {
+    name,
+    email: asString(body.email).toLowerCase(),
+    phone: asOptionalString(body.phone),
+    direction: asOptionalString(body.direction),
+    understand: asString(body.understand),
+  };
+}
+
+function validatePublicConsultation(body) {
+  if (asString(body._gotcha)) return { spam: true };
+  const client = publicClientFromBody(body);
+  if (!client.name) return { error: "Name is required." };
+  if (!client.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client.email)) {
+    return { error: "A valid email is required." };
+  }
+  if (client.understand !== "yes") {
+    return { error: "Consultation acknowledgement is required." };
+  }
+  if (!PUBLIC_IN_PERSON_BOOKING_TYPE_IDS.includes(asString(body.bookingTypeId))) {
+    return { error: "Please select a public in-person session type." };
+  }
+  if (!asString(body.availabilityWindowId)) {
+    return { error: "Please select an available consultation time." };
+  }
+  return { client };
+}
+
+function submissionRequiresConsultation(submission) {
+  const payload = parseJsonField(submission.payload_json, {});
+  return payload.project_type === "large_cover_up" || payload.consult_required === "yes";
+}
+
+async function createPublicConsultationAppointment(db, body) {
+  const bookingTypeId = asString(body.bookingTypeId);
+  const bookingType = await db
+    .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(bookingTypeId)
+    .first();
+  if (!bookingType || !PUBLIC_IN_PERSON_BOOKING_TYPE_IDS.includes(bookingType.id)) {
+    return { error: "Public in-person booking is not configured." };
+  }
+
+  const validation = validatePublicConsultation(body);
+  if (validation.spam) return { spam: true };
+  if (validation.error) return validation;
+
+  const windowId = asString(body.availabilityWindowId);
+  const existingForClient = await db
+    .prepare(
+      `SELECT * FROM appointments
+       WHERE booking_type_id = ?
+         AND availability_window_id = ?
+         AND lower(client_email) = ?
+         AND status IN ('pending_deposit', 'deposit_pending')
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .bind(bookingType.id, windowId, validation.client.email)
+    .first();
+  if (existingForClient) {
+    return {
+      appointment: normalizeAppointment(existingForClient),
+      bookingType: normalizeBookingType(bookingType),
+      existing: true,
+    };
+  }
+
+  const availability = await ensureAvailable(db, windowId, bookingType.id);
+  if (availability.error) return availability;
+
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  await db
+    .prepare(
+      `INSERT INTO appointments (
+        id, submission_id, booking_token_id, booking_type_id, availability_window_id,
+        status, client_name, client_email, client_phone, start_at, end_at,
+        deposit_cents, tip_cents, currency, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      null,
+      null,
+      bookingType.id,
+      availability.window.id,
+      "pending_deposit",
+      validation.client.name,
+      validation.client.email,
+      validation.client.phone,
+      availability.window.start_at,
+      availability.window.end_at,
+      bookingType.deposit_cents,
+      0,
+      bookingType.currency || "USD",
+      now,
+      now
+    )
+    .run();
+
+  const appointment = await db.prepare("SELECT * FROM appointments WHERE id = ?").bind(id).first();
+  return { appointment: normalizeAppointment(appointment), bookingType: normalizeBookingType(bookingType) };
+}
+
+export async function handlePublicConsultationCheckout(request, env) {
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const result = await createPublicConsultationAppointment(db, body);
+    if (result.spam) return json({ ok: true, spam: true });
+    if (result.error) return errorResponse(result.error, 400);
+    if (result.existing && result.appointment.squareCheckoutUrl) {
+      return json({
+        ok: true,
+        checkoutUrl: result.appointment.squareCheckoutUrl,
+        appointmentId: result.appointment.id,
+      });
+    }
+
+    let paymentLink;
+    try {
+      paymentLink = await createSquarePaymentLink(request, env, result.appointment, result.bookingType);
+    } catch (error) {
+      await db
+        .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
+        .bind("deposit_pending", new Date().toISOString(), result.appointment.id)
+        .run();
+      return errorResponse("Deposit checkout is not configured yet.", 503, {
+        detail: error.message,
+        appointment: result.appointment,
+      });
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `UPDATE appointments
+         SET status = ?, square_order_id = ?, square_payment_link_id = ?,
+             square_checkout_url = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        "deposit_pending",
+        paymentLink.order_id || null,
+        paymentLink.id || null,
+        paymentLink.url,
+        now,
+        result.appointment.id
+      )
+      .run();
+
+    await db
+      .prepare(
+        `INSERT INTO deposit_payments (
+          id, appointment_id, provider, provider_checkout_id, provider_order_id,
+          amount_cents, tip_cents, currency, status, raw_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        result.appointment.id,
+        "square",
+        paymentLink.id || null,
+        paymentLink.order_id || null,
+        result.appointment.depositCents,
+        0,
+        result.appointment.currency,
+        "pending",
+        JSON.stringify(paymentLink),
+        now,
+        now
+      )
+      .run();
+
+    return json({
+      ok: true,
+      checkoutUrl: paymentLink.url,
+      appointmentId: result.appointment.id,
+    });
+  } catch (error) {
+    return errorResponse("Unable to start consultation checkout.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
 export async function handleCreateBookingHold(request, env) {
   const body = await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
@@ -1204,7 +1433,9 @@ export async function handleAdminCreateBookingToken(request, env) {
     const expiresAt = asOptionalString(body.expiresAt) || new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString();
     const allowed = Array.isArray(body.allowedBookingTypes) && body.allowedBookingTypes.length
       ? body.allowedBookingTypes.map(asString).filter(Boolean)
-      : ["tattoo_quarter", "tattoo_half", "tattoo_full"];
+      : submissionRequiresConsultation(submission)
+        ? ["consult_in_person"]
+        : ["tattoo_quarter", "tattoo_half", "tattoo_full"];
 
     const id = crypto.randomUUID();
     if (body.revokeExisting !== false) {
