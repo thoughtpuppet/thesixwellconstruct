@@ -440,9 +440,20 @@ export async function handleGetSubmission(request, env, id) {
       .bind(id)
       .all();
 
+    const notifications = await db
+      .prepare(
+        `SELECT id, channel, template_key, recipient, subject, status, error, sent_at, created_at
+         FROM notification_deliveries
+         WHERE related_type = 'submission' AND related_id = ?
+         ORDER BY created_at DESC`
+      )
+      .bind(id)
+      .all();
+
     return json({
       submission: normalizeRow(row),
       events: events.results || [],
+      notifications: notifications.results || [],
     });
   } catch (error) {
     return errorResponse("Unable to load submission.", 500, {
@@ -530,5 +541,40 @@ export async function handleDeleteSubmission(request, env, id) {
     return errorResponse("Unable to delete submission.", 500, {
       detail: error.message,
     });
+  }
+}
+
+export async function handleGetSubmissionFile(request, env, submissionId, fileId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireSubmissionDb(env);
+    const row = await db
+      .prepare("SELECT files_json FROM submissions WHERE id = ?")
+      .bind(submissionId)
+      .first();
+    if (!row) return errorResponse("Submission not found.", 404);
+
+    const files = parseJsonField(row.files_json, []);
+    const file = files.find((f) => f.id === fileId);
+    if (!file) return errorResponse("File not found.", 404);
+    if (!file.storageKey) return errorResponse("File was not stored in R2.", 404);
+
+    const bucket = env.SUBMISSION_FILES;
+    if (!bucket) return errorResponse("File storage not configured.", 503);
+
+    const object = await bucket.get(file.storageKey);
+    if (!object) return errorResponse("File not found in storage.", 404);
+
+    return new Response(object.body, {
+      headers: {
+        "content-type": file.contentType || "application/octet-stream",
+        "content-disposition": `attachment; filename="${String(file.fileName || "file").replace(/"/g, '\\"')}"`,
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    return errorResponse("Unable to retrieve file.", 500, { detail: error.message });
   }
 }

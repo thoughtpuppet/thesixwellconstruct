@@ -15,6 +15,7 @@ import {
   handleCreateSubmission,
   handleDeleteSubmission,
   handleGetSubmission,
+  handleGetSubmissionFile,
   handleListSubmissions,
   handleUpdateSubmission,
 } from "./functions/api/submissions/_lib.js";
@@ -26,6 +27,7 @@ import {
   handleAdminGetSchedule,
   handleAdminListAppointments,
   handleAdminListAvailability,
+  handleAdminListSubmissionTokens,
   handleAdminRevokeBookingToken,
   handleAdminRevokeSubmissionBookingTokens,
   handleAdminUpdateSchedule,
@@ -346,6 +348,18 @@ async function handleSubmissionsApi(request, env) {
   if (pathname === "/api/admin/submissions") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleListSubmissions(request, env);
+  }
+
+  const fileMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/files\/([^/]+)$/);
+  if (fileMatch) {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleGetSubmissionFile(request, env, decodeURIComponent(fileMatch[1]), decodeURIComponent(fileMatch[2]));
+  }
+
+  const submissionTokensMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/tokens$/);
+  if (submissionTokensMatch) {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAdminListSubmissionTokens(request, env, decodeURIComponent(submissionTokensMatch[1]));
   }
 
   const match = pathname.match(/^\/api\/admin\/submissions\/([^/]+)$/);

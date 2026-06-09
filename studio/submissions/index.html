@@ -6,6 +6,7 @@
 <title>Studio Submissions - The Six Well Construct</title>
 <style>
   :root {
+    color-scheme: dark;
     --bg:#0e0e0e; --panel:#161616; --line:rgba(255,231,202,0.16);
     --line-strong:rgba(255,231,202,0.32); --text:#FFE7CA;
     --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.38);
@@ -28,6 +29,7 @@
   .detail-pane { min-height:0; overflow:auto; padding:28px; }
   .toolbar { display:flex; gap:10px; padding:16px; border-bottom:5px solid var(--ring-faint); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:2; }
   select,input,textarea { width:100%; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; transition:border-color var(--t-fast), background var(--t-fast); }
+  select { -webkit-appearance:none; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
   select:focus,input:focus,textarea:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
   textarea { min-height:160px; resize:vertical; line-height:1.5; }
   .button { border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; min-height:44px; padding:0 14px; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
@@ -362,7 +364,10 @@
           ${files.map((file) => `
             <div class="file-item">
               <span class="file-name">${escapeHtml(file.fileName)}</span>
-              <span class="file-badge ${file.stored ? "stored" : ""}">${file.stored ? "stored" : "received only"}</span>
+              <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <span class="file-badge ${file.stored ? "stored" : ""}">${file.stored ? "stored" : "received only"}</span>
+                ${file.stored ? `<button class="button" type="button" style="min-height:32px;padding:0 10px;font-size:10px;" data-download-file="${escapeHtml(file.id)}" data-download-name="${escapeHtml(file.fileName)}" data-submission-id="${escapeHtml(submission.id)}">Download</button>` : ""}
+              </span>
             </div>
           `).join("")}
         </div>
@@ -371,23 +376,64 @@
   }
 
   async function renderEventHistory(submissionId) {
-    const container = document.getElementById("eventHistoryBody");
-    if (!container) return;
+    const evContainer = document.getElementById("eventHistoryBody");
+    const notifContainer = document.getElementById("notificationsBody");
+    if (!evContainer && !notifContainer) return;
     try {
       const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}`);
+
       const events = payload.events || [];
-      if (!events.length) {
-        container.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events recorded.</p>';
+      if (evContainer) {
+        evContainer.innerHTML = events.length ? `<div class="event-list">${events.map((ev) => `
+          <div class="event-item">
+            <span class="event-time">${escapeHtml(formatDate(ev.created_at || ev.createdAt))}</span>
+            <span class="event-text">${escapeHtml(titleize(ev.event_type || ev.eventType || ""))}${ev.note ? ` — ${ev.note}` : ""}${ev.actor && ev.actor !== "system" ? ` (${ev.actor})` : ""}</span>
+          </div>
+        `).join("")}</div>`
+        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events recorded.</p>';
+      }
+
+      const notifications = payload.notifications || [];
+      if (notifContainer) {
+        notifContainer.innerHTML = notifications.length ? `<div class="event-list">${notifications.map((n) => `
+          <div class="event-item">
+            <span class="event-time">${escapeHtml(formatDate(n.sent_at || n.created_at))}</span>
+            <span class="event-text" style="${n.status === "failed" ? "color:var(--signal);" : ""}">
+              ${escapeHtml(n.channel || "")} · ${escapeHtml(n.template_key || "")} → ${escapeHtml(n.recipient || "")}
+              · <strong>${escapeHtml(n.status || "")}</strong>
+              ${n.error ? ` — ${escapeHtml(n.error)}` : ""}
+            </span>
+          </div>
+        `).join("")}</div>`
+        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No notifications recorded.</p>';
+      }
+    } catch {
+      if (evContainer) evContainer.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load events.</p>';
+      if (notifContainer) notifContainer.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load notifications.</p>';
+    }
+  }
+
+  async function renderTokenState(submissionId) {
+    const container = document.getElementById("tokenStateInfo");
+    if (!container) return;
+    try {
+      const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}/tokens`);
+      const tokens = payload.tokens || [];
+      if (!tokens.length) {
+        container.textContent = "No tokens generated";
         return;
       }
-      container.innerHTML = `<div class="event-list">${events.map((ev) => `
-        <div class="event-item">
-          <span class="event-time">${escapeHtml(formatDate(ev.created_at || ev.createdAt))}</span>
-          <span class="event-text">${escapeHtml(titleize(ev.event_type || ev.eventType || ""))}${ev.note ? ` — ${ev.note}` : ""}${ev.actor && ev.actor !== "system" ? ` (${ev.actor})` : ""}</span>
-        </div>
-      `).join("")}</div>`;
+      const active = tokens.find((t) => t.state === "active");
+      const counts = tokens.reduce((acc, t) => { acc[t.state] = (acc[t.state] || 0) + 1; return acc; }, {});
+      const parts = [];
+      if (active) parts.push(`Active token${active.expiresAt ? ` · expires ${formatDate(active.expiresAt)}` : ""}`);
+      if (counts.used) parts.push(`${counts.used} used`);
+      if (counts.revoked) parts.push(`${counts.revoked} revoked`);
+      if (counts.expired) parts.push(`${counts.expired} expired`);
+      container.textContent = parts.join(" · ") || "No active tokens";
+      container.style.color = active ? "var(--accent)" : "var(--dim)";
     } catch {
-      container.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load events.</p>';
+      container.textContent = "Could not load token state";
     }
   }
 
@@ -583,6 +629,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
             <button class="button" id="copyBookingBtn" type="button">Copy</button>
             <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
           </div>
+          <div id="tokenStateInfo" style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:6px;">Loading token state…</div>
         </div>
         <button class="button" id="saveBtn" type="button">Save</button>
       </div>
@@ -612,8 +659,16 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
           <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading...</p>
         </div>
       </div>
+
+      <div class="detail-section">
+        <button class="detail-section-toggle" type="button" data-section-toggle>Notifications</button>
+        <div class="detail-section-body" id="notificationsBody">
+          <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading...</p>
+        </div>
+      </div>
     `;
     renderEventHistory(submission.id);
+    renderTokenState(submission.id);
   }
 
   function localDateTimeToIso(value) {
@@ -1251,6 +1306,36 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       renderList();
       detailEl.innerHTML = '<p class="empty">Select a submission to review details.</p>';
       setStatus("Entry deleted");
+      return;
+    }
+
+    const downloadBtn = event.target.closest("[data-download-file]");
+    if (downloadBtn) {
+      const fileId = downloadBtn.dataset.downloadFile;
+      const fileName = downloadBtn.dataset.downloadName || "file";
+      const submissionId = downloadBtn.dataset.submissionId;
+      if (!fileId || !submissionId) return;
+      const token = localStorage.getItem("adminToken") || "";
+      setStatus("Downloading…");
+      try {
+        const res = await fetch(
+          `/api/admin/submissions/${encodeURIComponent(submissionId)}/files/${encodeURIComponent(fileId)}`,
+          { headers: { authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) { setStatus(`Download failed (${res.status})`); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setStatus("Downloaded");
+      } catch (err) {
+        setStatus(`Download error: ${err.message}`);
+      }
       return;
     }
 

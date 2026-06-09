@@ -1657,3 +1657,37 @@ export async function handleAdminListAppointments(request, env) {
     });
   }
 }
+
+export async function handleAdminListSubmissionTokens(request, env, submissionId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const now = new Date().toISOString();
+    const result = await db
+      .prepare(
+        `SELECT id, created_at, expires_at, revoked_at, used_at, updated_at
+         FROM booking_tokens WHERE submission_id = ? ORDER BY created_at DESC`
+      )
+      .bind(submissionId)
+      .all();
+
+    const tokens = (result.results || []).map((t) => ({
+      id: t.id,
+      createdAt: t.created_at,
+      expiresAt: t.expires_at,
+      revokedAt: t.revoked_at,
+      usedAt: t.used_at,
+      updatedAt: t.updated_at,
+      state: t.used_at ? "used"
+        : t.revoked_at ? "revoked"
+        : (t.expires_at && t.expires_at < now) ? "expired"
+        : "active",
+    }));
+
+    return json({ tokens });
+  } catch (error) {
+    return errorResponse("Unable to list submission tokens.", 500, { detail: error.message });
+  }
+}
