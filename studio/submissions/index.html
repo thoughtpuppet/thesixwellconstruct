@@ -31,6 +31,8 @@
   select,input,textarea { width:100%; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; transition:border-color var(--t-fast), background var(--t-fast); }
   select { -webkit-appearance:none; appearance:none; color-scheme:dark; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
   option { background:var(--bg); color:#FFE7CA; }
+  #statusFilter, #typeFilter, #detailStatus { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
+  #statusFilter option, #typeFilter option, #detailStatus option { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
   select:focus,input:focus,textarea:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
   textarea { min-height:160px; resize:vertical; line-height:1.5; }
   .button { border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; min-height:44px; padding:0 14px; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
@@ -190,22 +192,22 @@
     <section class="list-pane">
       <div class="toolbar">
         <select id="statusFilter" aria-label="Filter by status">
-          <option value="">All statuses</option>
-          <option value="new">New</option>
-          <option value="reviewing">Reviewing</option>
-          <option value="approved">Approved</option>
-          <option value="declined">Declined</option>
-          <option value="booked">Booked</option>
-          <option value="archived">Archived</option>
+          <option value="">ALL STATUSES</option>
+          <option value="new">NEW</option>
+          <option value="reviewing">REVIEWING</option>
+          <option value="approved">APPROVED</option>
+          <option value="declined">DECLINED</option>
+          <option value="booked">BOOKED</option>
+          <option value="archived">ARCHIVED</option>
         </select>
         <select id="typeFilter" aria-label="Filter by type">
-          <option value="">All types</option>
-          <option value="tattoo_inquiry">Tattoo Inquiry</option>
-          <option value="flash_claim">Flash Claim</option>
-          <option value="build_your_own">Build Your Own</option>
-          <option value="consultation">Consultation</option>
-          <option value="special_project">Special Project</option>
-          <option value="art_acquisition">Art Acquisition</option>
+          <option value="">ALL TYPES</option>
+          <option value="tattoo_inquiry">TATTOO INQUIRY</option>
+          <option value="flash_claim">FLASH CLAIM</option>
+          <option value="build_your_own">BUILD YOUR OWN</option>
+          <option value="consultation">CONSULTATION</option>
+          <option value="special_project">SPECIAL PROJECT</option>
+          <option value="art_acquisition">ART ACQUISITION</option>
         </select>
       </div>
       <div id="submissionList" class="empty" style="padding:16px;">Unlock to load submissions.</div>
@@ -618,7 +620,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         <div class="field">
           <label for="detailStatus">Status</label>
           <select id="detailStatus">
-            ${["new","reviewing","approved","declined","booked","archived"].map((status) => `<option value="${status}" ${status === submission.status ? "selected" : ""}>${status}</option>`).join("")}
+            ${["new","reviewing","approved","declined","booked","archived"].map((status) => `<option value="${status}" ${status === submission.status ? "selected" : ""}>${status.toUpperCase()}</option>`).join("")}
           </select>
         </div>
         <div class="field">
@@ -631,8 +633,8 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
             <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
           </div>
           <div id="tokenStateInfo" style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:6px;">Loading token state…</div>
+          <button class="button" id="saveBtn" type="button" style="margin-top:10px;width:100%;border-color:#4caf50;">Save</button>
         </div>
-        <button class="button" id="saveBtn" type="button">Save</button>
       </div>
       <div class="booking-actions" style="margin-top:16px;">
         ${isProtected
@@ -1316,7 +1318,6 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       const fileName = downloadBtn.dataset.downloadName || "file";
       const submissionId = downloadBtn.dataset.submissionId;
       if (!fileId || !submissionId) return;
-      const token = localStorage.getItem("adminToken") || "";
       setStatus("Downloading…");
       try {
         const res = await fetch(
