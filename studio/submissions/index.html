@@ -77,6 +77,17 @@
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
   .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:5px solid var(--ring-faint); padding-bottom:8px; }
   .slot-preview-item:last-child { border-bottom:0; padding-bottom:0; }
+  .appt-day-panel { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; min-width:0; }
+  .appt-day-header { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .appt-day-label { color:var(--accent); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; }
+  .appt-day-count { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
+  .appt-day-list { display:grid; gap:8px; max-height:360px; overflow:auto; }
+  .appt-item { border:5px solid var(--ring-faint); padding:10px 12px; display:grid; gap:4px; }
+  .appt-item-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .appt-name { font-family:var(--sans); font-size:12px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; color:var(--text); }
+  .appt-time { color:var(--accent); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; white-space:nowrap; }
+  .appt-meta { color:var(--muted); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; }
+  .day-button.selected { outline:3px solid var(--accent); outline-offset:-3px; }
   .schedule-section { border-top:5px solid var(--ring-faint); padding-top:18px; margin-top:18px; }
   .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
   .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:5px solid var(--ring-faint); padding:12px 0; }
@@ -231,6 +242,7 @@
   let appointments = [];
   let activeId = "";
   let availabilityPreviewMonth = "";
+  let selectedCalendarDay = "";
 
   function nextActionBadge(submission) {
     const s = submission.status;
@@ -678,8 +690,9 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       const key = `${monthKeyValue}-${String(day).padStart(2, "0")}`;
       const count = Number(bookedByDay.get(key) || 0);
       const label = count === 1 ? "1 appointment" : `${count} appointments`;
+      const isSelected = key === selectedCalendarDay;
       cells.push(`
-        <button class="day-button ${bookedClass(count)}" type="button" aria-label="${escapeHtml(`${key}: ${label}`)}" title="${escapeHtml(label)}">
+        <button class="day-button ${bookedClass(count)}${isSelected ? " selected" : ""}" type="button" data-day="${escapeHtml(key)}" aria-label="${escapeHtml(`${key}: ${label}`)}" title="${escapeHtml(label)}">
           ${day}
         </button>
       `);
@@ -690,32 +703,54 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     `;
   }
 
-  function renderSlotPreview(windows) {
-    const list = document.getElementById("slotPreviewList");
-    const count = document.getElementById("slotPreviewCount");
-    if (!list || !count) return;
-    const visible = [...windows]
-      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
-      .slice(0, 12);
-    count.textContent = `${windows.length} client-visible slots`;
-    list.innerHTML = visible.length ? visible.map((windowItem) => `
-      <div class="slot-preview-item">
-        <span class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startAt))}</span>
-        <span class="meta">${escapeHtml(windowItem.bookingTypeId || "any session")}</span>
-      </div>
-    `).join("") : '<p class="empty">No client-visible slots generated yet.</p>';
+  function renderDayAppointments(dayFilter) {
+    const panel = document.getElementById("apptDayList");
+    const label = document.getElementById("apptDayLabel");
+    const countEl = document.getElementById("apptDayCount");
+    if (!panel) return;
+
+    const filtered = dayFilter
+      ? appointments.filter((a) => dayKey(a.startAt) === dayFilter)
+      : [...appointments].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+
+    if (label) {
+      label.textContent = dayFilter
+        ? new Date(dayFilter + "T12:00:00").toLocaleDateString([], { weekday:"long", month:"long", day:"numeric" })
+        : "All Appointments";
+    }
+    if (countEl) countEl.textContent = `${filtered.length} appointment${filtered.length !== 1 ? "s" : ""}`;
+
+    if (!filtered.length) {
+      panel.innerHTML = `<p class="empty" style="font-family:var(--sans);font-size:11px;">${dayFilter ? "No appointments on this day." : "No appointments found."}</p>`;
+      return;
+    }
+
+    panel.innerHTML = filtered.map((a) => {
+      const start = a.startAt ? new Date(a.startAt).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) : "";
+      const end = a.endAt ? new Date(a.endAt).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) : "";
+      const dateStr = a.startAt ? new Date(a.startAt).toLocaleDateString([], { month:"short", day:"numeric" }) : "";
+      const deposit = a.depositCents ? money(a.depositCents, a.currency || "USD") : "";
+      return `
+        <div class="appt-item">
+          <div class="appt-item-top">
+            <span class="appt-name">${escapeHtml(a.clientName || "Unnamed")}</span>
+            <span class="appt-time">${escapeHtml(dayFilter ? `${start} – ${end}` : `${dateStr} ${start}`)}</span>
+          </div>
+          <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))}${deposit ? ` · ${deposit} deposit` : ""}${a.status ? ` · ${a.status}` : ""}</span>
+        </div>
+      `;
+    }).join("");
   }
 
   async function loadAvailabilityPreview() {
     const calendar = document.getElementById("bookedCalendar");
     if (!calendar) return;
     const payload = await api("/api/admin/booking/availability-preview");
-    const windows = payload.availabilityWindows || [];
     const bookedDays = payload.bookedDays || [];
     const bookedByDay = new Map(bookedDays.map((item) => [item.date, Number(item.count || 0)]));
     const monthKeys = [...new Set([
-      ...windows.map((windowItem) => monthKey(windowItem.startAt)).filter(Boolean),
       ...bookedDays.map((item) => String(item.date || "").slice(0, 7)).filter(Boolean),
+      ...appointments.map((a) => monthKey(a.startAt)).filter(Boolean),
     ])].sort();
     if (!monthKeys.length) monthKeys.push(monthKey(new Date().toISOString()));
     if (!monthKeys.includes(availabilityPreviewMonth)) availabilityPreviewMonth = monthKeys[0];
@@ -729,7 +764,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     prevButton.disabled = index <= 0;
     nextButton.disabled = index < 0 || index >= monthKeys.length - 1;
     renderBookedCalendar(availabilityPreviewMonth, bookedByDay);
-    renderSlotPreview(windows);
+    renderDayAppointments(selectedCalendarDay);
   }
 
   async function renderAvailabilityManager() {
@@ -789,7 +824,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         </section>
       </form>
       <section class="schedule-section is-open" data-collapse-section>
-        <button class="section-toggle" type="button">Client Calendar Preview</button>
+        <button class="section-toggle" type="button">Appointments</button>
         <div class="section-body">
         <div class="availability-overview">
           <div class="mini-calendar">
@@ -805,9 +840,12 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
               <span class="legend-item"><span class="legend-dot many"></span>3+ booked</span>
             </div>
           </div>
-          <div class="slot-preview">
-            <span class="pill" id="slotPreviewCount">Loading slots</span>
-            <div id="slotPreviewList" class="slot-preview-list"><p class="empty">Loading generated availability.</p></div>
+          <div class="appt-day-panel">
+            <div class="appt-day-header">
+              <span class="appt-day-label" id="apptDayLabel">All Appointments</span>
+              <span class="appt-day-count" id="apptDayCount"></span>
+            </div>
+            <div id="apptDayList" class="appt-day-list"><p class="empty" style="font-family:var(--sans);font-size:11px;">Loading appointments.</p></div>
           </div>
         </div>
         </div>
@@ -1236,6 +1274,16 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       return;
     }
 
+    const dayBtn = event.target.closest("[data-day]");
+    if (dayBtn && document.getElementById("bookedCalendar")?.contains(dayBtn)) {
+      const clicked = dayBtn.dataset.day;
+      selectedCalendarDay = selectedCalendarDay === clicked ? "" : clicked;
+      const bookedCells = document.querySelectorAll("#bookedCalendar [data-day]");
+      bookedCells.forEach((btn) => btn.classList.toggle("selected", btn.dataset.day === selectedCalendarDay));
+      renderDayAppointments(selectedCalendarDay);
+      return;
+    }
+
     if (event.target.id === "previewPrevMonth" || event.target.id === "previewNextMonth") {
       const select = document.getElementById("previewMonthSelect");
       const options = Array.from(select?.options || []).map((option) => option.value);
@@ -1243,6 +1291,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       const next = event.target.id === "previewPrevMonth" ? current - 1 : current + 1;
       if (options[next]) {
         availabilityPreviewMonth = options[next];
+        selectedCalendarDay = "";
         await loadAvailabilityPreview();
       }
       return;
@@ -1356,6 +1405,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
   detailEl.addEventListener("change", (event) => {
     if (event.target.id !== "previewMonthSelect") return;
     availabilityPreviewMonth = event.target.value;
+    selectedCalendarDay = "";
     loadAvailabilityPreview().catch((error) => setStatus(error.message));
   });
   lockBtn.addEventListener("click", () => {
