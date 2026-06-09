@@ -31,6 +31,15 @@
   select,input,textarea { width:100%; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; transition:border-color var(--t-fast), background var(--t-fast); }
   select { -webkit-appearance:none; appearance:none; color-scheme:dark; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
   option { background:var(--bg); color:#FFE7CA; }
+  input[type="date"],input[type="time"],input[type="datetime-local"],input[type="month"],input[type="week"] { color-scheme:dark; }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="week"]::-webkit-calendar-picker-indicator {
+    filter: invert(75%) sepia(48%) saturate(657%) hue-rotate(337deg) brightness(101%) contrast(101%);
+    cursor: pointer;
+  }
   #statusFilter, #typeFilter, #detailStatus { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
   #statusFilter option, #typeFilter option, #detailStatus option { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
   select:focus,input:focus,textarea:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
@@ -71,15 +80,15 @@
   .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-align:center; }
   .day-button { aspect-ratio:1; min-height:0; border:5px solid var(--ring-faint); background:transparent; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
   .day-button.blank { visibility:hidden; }
-  .day-button.booked-bright { background:#e0352b; border-color:#e0352b; color:#1a0000; }
-  .day-button.booked-medium { background:#a8291f; border-color:#a8291f; color:#FFE7CA; }
-  .day-button.booked-dark { background:#521611; border-color:#521611; color:#FFE7CA; }
+  .day-button.booked-bright { background:#BE1919; border-color:#BE1919; color:#1a0000; }
+  .day-button.booked-medium { background:#7A1010; border-color:#7A1010; color:#FFE7CA; }
+  .day-button.booked-dark { background:#3F0808; border-color:#3F0808; color:#FFE7CA; }
   .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; }
   .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
   .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
-  .legend-dot.bright { background:#e0352b; }
-  .legend-dot.medium { background:#a8291f; }
-  .legend-dot.dark { background:#521611; }
+  .legend-dot.bright { background:#BE1919; }
+  .legend-dot.medium { background:#7A1010; }
+  .legend-dot.dark { background:#3F0808; }
   .slot-preview { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
   .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:5px solid var(--ring-faint); padding-bottom:8px; }
@@ -132,9 +141,9 @@
   .availability-manager .slot-preview,
   .availability-manager .availability-item { border:5px solid var(--ring-faint); background:transparent; }
   .availability-manager .day-button { border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
-  .availability-manager .day-button.booked-bright { background:#e0352b; border-color:#e0352b; color:#1a0000; }
-  .availability-manager .day-button.booked-medium { background:#a8291f; border-color:#a8291f; color:#FFE7CA; }
-  .availability-manager .day-button.booked-dark { background:#521611; border-color:#521611; color:#FFE7CA; }
+  .availability-manager .day-button.booked-bright { background:#BE1919; border-color:#BE1919; color:#1a0000; }
+  .availability-manager .day-button.booked-medium { background:#7A1010; border-color:#7A1010; color:#FFE7CA; }
+  .availability-manager .day-button.booked-dark { background:#3F0808; border-color:#3F0808; color:#FFE7CA; }
   .availability-manager .slot-preview-item { border-bottom:5px solid var(--ring-faint); }
   .availability-manager .save-schedule { width:100%; margin-top:16px; }
   .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
