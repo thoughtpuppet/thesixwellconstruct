@@ -115,6 +115,20 @@ function normalizeWindow(row) {
   };
 }
 
+function normalizeWalkInWindow(row) {
+  return {
+    id: row.id,
+    venture: row.venture || "tattooing",
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    title: row.title || "Walk-in Window",
+    note: row.note || "",
+    active: Boolean(row.active),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function normalizeSettings(row) {
   return {
     venture: row.venture,
@@ -799,6 +813,19 @@ async function publicInPersonBookingTypes(db) {
   return (result.results || []).map(normalizeBookingType);
 }
 
+async function listPublicWalkInWindows(db) {
+  const result = await db
+    .prepare(
+      `SELECT * FROM walk_in_windows
+       WHERE venture = ? AND active = 1 AND ends_at > ?
+       ORDER BY starts_at ASC
+       LIMIT 25`
+    )
+    .bind("tattooing", new Date().toISOString())
+    .all();
+  return (result.results || []).map(normalizeWalkInWindow);
+}
+
 export async function handlePublicConsultationContext(request, env) {
   try {
     const db = requireBookingDb(env);
@@ -807,11 +834,13 @@ export async function handlePublicConsultationContext(request, env) {
       return errorResponse("Public in-person booking is not configured.", 503);
     }
     const windows = await listPublicWindows(db, bookingTypes);
+    const walkInWindows = await listPublicWalkInWindows(db);
     return json({
       ok: true,
       bookingType: bookingTypes[0],
       bookingTypes,
       availabilityWindows: windows,
+      walkInWindows,
     });
   } catch (error) {
     return errorResponse("Unable to load consultation availability.", 500, {
@@ -857,6 +886,79 @@ function submissionRequiresConsultation(submission) {
   return payload.project_type === "large_cover_up" || payload.consult_required === "yes";
 }
 
+async function createPublicConsultationSubmission(db, body, client, bookingType) {
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const payload = {
+    type: "consultation",
+    source_path: "/tattoos/build/in-person/",
+    subject: "New In-Person Build Consultation Request",
+    firstName: asString(body.firstName || body.first_name),
+    lastName: asString(body.lastName || body.last_name),
+    name: client.name,
+    email: client.email,
+    phone: client.phone || "",
+    direction: client.direction || "",
+    preferred_slots: asString(body.preferred_slots || body.preferredSlots),
+    availability_window_id: asString(body.availabilityWindowId),
+    booking_type_id: bookingType.id,
+    booking_type_label: bookingType.label,
+    deposit_label: formatMoney(bookingType.deposit_cents, bookingType.currency || "USD"),
+    understand: client.understand,
+  };
+  const contact = {
+    name: client.name,
+    email: client.email,
+    phone: client.phone || "",
+  };
+
+  await db
+    .prepare(
+      `INSERT INTO submissions (
+        id, type, status, source_path, subject, contact_name, contact_email,
+        contact_phone, contact_json, payload_json, request_meta_json,
+        files_json, internal_notes, booking_url, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      "consultation",
+      "approved",
+      "/tattoos/build/in-person/",
+      payload.subject,
+      client.name,
+      client.email,
+      client.phone || null,
+      JSON.stringify(contact),
+      JSON.stringify(payload),
+      JSON.stringify({ publicBooking: true }),
+      "[]",
+      client.direction || "",
+      "",
+      now,
+      now
+    )
+    .run();
+
+  await db
+    .prepare(
+      `INSERT INTO submission_events (
+        id, submission_id, event_type, actor, note, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      crypto.randomUUID(),
+      id,
+      "created",
+      "system",
+      "Created from public in-person checkout.",
+      now
+    )
+    .run();
+
+  return id;
+}
+
 async function createPublicConsultationAppointment(db, body) {
   const bookingTypeId = asString(body.bookingTypeId);
   const bookingType = await db
@@ -897,6 +999,12 @@ async function createPublicConsultationAppointment(db, body) {
 
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
+  const submissionId = await createPublicConsultationSubmission(
+    db,
+    body,
+    validation.client,
+    bookingType
+  );
   await db
     .prepare(
       `INSERT INTO appointments (
@@ -907,7 +1015,7 @@ async function createPublicConsultationAppointment(db, body) {
     )
     .bind(
       id,
-      null,
+      submissionId,
       null,
       bookingType.id,
       availability.window.id,
@@ -1661,6 +1769,127 @@ export async function handleAdminListAvailability(request, env) {
     return json({ availabilityWindows: (result.results || []).map(normalizeWindow) });
   } catch (error) {
     return errorResponse("Unable to load availability.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminListWalkIns(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const now = new Date().toISOString();
+    const result = await db
+      .prepare(
+        `SELECT * FROM walk_in_windows
+         WHERE venture = ?
+         ORDER BY
+           CASE WHEN ends_at >= ? THEN 0 ELSE 1 END ASC,
+           CASE WHEN ends_at >= ? THEN starts_at END ASC,
+           CASE WHEN ends_at < ? THEN starts_at END DESC
+         LIMIT 100`
+      )
+      .bind("tattooing", now, now, now)
+      .all();
+    return json({ walkInWindows: (result.results || []).map(normalizeWalkInWindow) });
+  } catch (error) {
+    return errorResponse("Unable to load walk-in windows.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+function validateWalkInWindowBody(body, current = null) {
+  const startsAt = body.startsAt === undefined ? current?.starts_at : asString(body.startsAt);
+  const endsAt = body.endsAt === undefined ? current?.ends_at : asString(body.endsAt);
+  if (!startsAt || !endsAt || new Date(startsAt).toString() === "Invalid Date" || new Date(endsAt).toString() === "Invalid Date") {
+    return { error: "Valid startsAt and endsAt are required." };
+  }
+  if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    return { error: "endsAt must be after startsAt." };
+  }
+  return {
+    startsAt: new Date(startsAt).toISOString(),
+    endsAt: new Date(endsAt).toISOString(),
+    title: body.title === undefined ? current?.title || "Walk-in Window" : asString(body.title) || "Walk-in Window",
+    note: body.note === undefined ? current?.note || "" : asString(body.note),
+    active: body.active === undefined ? current?.active ?? 1 : body.active ? 1 : 0,
+  };
+}
+
+export async function handleAdminCreateWalkIn(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  const next = validateWalkInWindowBody(body);
+  if (next.error) return errorResponse(next.error, 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    await db
+      .prepare(
+        `INSERT INTO walk_in_windows (
+          id, venture, starts_at, ends_at, title, note, active, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(id, "tattooing", next.startsAt, next.endsAt, next.title, next.note, next.active, now, now)
+      .run();
+    const row = await db.prepare("SELECT * FROM walk_in_windows WHERE id = ?").bind(id).first();
+    return json({ walkInWindow: normalizeWalkInWindow(row) });
+  } catch (error) {
+    return errorResponse("Unable to create walk-in window.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminUpdateWalkIn(request, env, id) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const current = await db.prepare("SELECT * FROM walk_in_windows WHERE id = ?").bind(id).first();
+    if (!current) return errorResponse("Walk-in window not found.", 404);
+    const next = validateWalkInWindowBody(body, current);
+    if (next.error) return errorResponse(next.error, 400);
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `UPDATE walk_in_windows
+         SET starts_at = ?, ends_at = ?, title = ?, note = ?, active = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(next.startsAt, next.endsAt, next.title, next.note, next.active, now, id)
+      .run();
+    const row = await db.prepare("SELECT * FROM walk_in_windows WHERE id = ?").bind(id).first();
+    return json({ walkInWindow: normalizeWalkInWindow(row) });
+  } catch (error) {
+    return errorResponse("Unable to update walk-in window.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminDeleteWalkIn(request, env, id) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const result = await db.prepare("DELETE FROM walk_in_windows WHERE id = ?").bind(id).run();
+    if (!result.meta?.changes) return errorResponse("Walk-in window not found.", 404);
+    return json({ ok: true, deletedId: id });
+  } catch (error) {
+    return errorResponse("Unable to delete walk-in window.", 500, {
       detail: error.message,
     });
   }

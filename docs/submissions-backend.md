@@ -126,8 +126,11 @@ The website submission paths now submit to `/api/submissions` with a `type` fiel
 - `/tattoos/flash/claim/` uses `flash_claim`
 - `/tattoos/build/` uses `build_brief`
 - `/tattoos/special-projects/apply/` uses `special_project`
-- `/tattoos/build/in-person/` uses `consultation`
 - `/art/acquisitioninquiry.html` uses `art_acquisition`
+
+`/tattoos/build/in-person/` is different: it uses the public in-person booking
+routes, creates a linked `consultation` submission for review context, and then
+sends the client to Square for the consultation/build-session deposit.
 
 The review console utility form at `/studio/submissions/` is not a submission path. It only collects the admin token in the browser so the console can read protected admin endpoints.
 
@@ -137,6 +140,8 @@ The branded booking flow starts at `/booking/`. Tattoo clients need a private to
 
 - Admin sets recurring weekly availability from the submissions console.
 - Admin uses exceptions for closed dates, extra bookable blocks, or unusual days.
+- Admin manages daily walk-in windows separately under the weekly schedule; these
+  appear on `/tattoos/build/in-person/` but do not create deposit-bookable slots.
 - Admin approves a submission, then generates a booking link.
 - Client chooses a session and window.
 - Client can choose no tip, `$10`, `$20`, `$50`, or a custom optional tip before Square.
@@ -144,6 +149,16 @@ The branded booking flow starts at `/booking/`. Tattoo clients need a private to
 - Only one pending appointment can exist per booking token. If the client needs a different time after starting checkout, revoke/regenerate the booking link or help them manually.
 - `/api/square/webhook` confirms paid Square orders even if the client does not return from Square, and Square retry events are safe to process repeatedly.
 - `/booking/confirmed/` also verifies the Square order when possible and shows confirmed or pending deposit state.
+
+Public in-person consultation/build sessions use:
+
+- `GET /api/booking/public-consultation/context` for public session types,
+  bookable windows, and walk-in windows.
+- `POST /api/booking/public-consultation/checkout` to create a linked
+  `consultation` submission, create the appointment, and start Square checkout.
+
+Apply migrations through `0009_walk_in_windows.sql` before using this in
+production so tips, public in-person booking types, and walk-in windows exist in D1.
 
 The old tattoo booking paths redirect into the system booking flow:
 
@@ -157,6 +172,8 @@ Booking availability is now managed as a weekly schedule, not one block at a tim
 - `booking_settings` controls timezone, booking horizon, minimum notice, slot interval, buffers, same-time capacity, and max sessions per day.
 - `availability_rules` stores recurring weekly hours for each day.
 - `availability_windows` is now for exceptions and generated/materialized booking slots.
+- `walk_in_windows` stores daily public walk-in windows separately from bookable
+  appointment/deposit windows.
 - Blackout exceptions block generated weekly slots.
 - Extra bookable exceptions can still be added for unusual days outside the weekly template.
 - Capacity means simultaneous capacity for a single time slot. Multiple non-overlapping sessions can happen on the same day until the max sessions per day limit is reached.

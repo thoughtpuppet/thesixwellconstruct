@@ -558,6 +558,14 @@ export async function handleDeleteSubmission(request, env, id) {
     const current = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
     if (!current) return errorResponse("Submission not found.", 404);
 
+    const appointmentCount = await db
+      .prepare("SELECT COUNT(*) AS count FROM appointments WHERE submission_id = ?")
+      .bind(id)
+      .first();
+    if (Number(appointmentCount?.count || 0) > 0) {
+      return errorResponse("Submission has appointment history. Archive it instead of deleting.", 409);
+    }
+
     await db.prepare("DELETE FROM booking_tokens WHERE submission_id = ?").bind(id).run();
     await db.prepare("DELETE FROM submission_events WHERE submission_id = ?").bind(id).run();
     await db.prepare("DELETE FROM submissions WHERE id = ?").bind(id).run();

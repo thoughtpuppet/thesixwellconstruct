@@ -28,8 +28,12 @@ import {
   handleAdminListAppointments,
   handleAdminListAvailability,
   handleAdminListSubmissionTokens,
+  handleAdminListWalkIns,
   handleAdminRevokeBookingToken,
   handleAdminRevokeSubmissionBookingTokens,
+  handleAdminCreateWalkIn,
+  handleAdminDeleteWalkIn,
+  handleAdminUpdateWalkIn,
   handleAdminUpdateSchedule,
   handleAdminUpdateAvailability,
   handleBookingContext,
@@ -436,6 +440,19 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/admin/booking/availability-preview") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleAdminGetAvailabilityPreview(request, env);
+  }
+
+  if (pathname === "/api/admin/booking/walk-ins") {
+    if (method === "GET") return handleAdminListWalkIns(request, env);
+    if (method === "POST") return handleAdminCreateWalkIn(request, env);
+    return methodNotAllowed(method, ["GET", "POST"]);
+  }
+
+  const walkInMatch = pathname.match(/^\/api\/admin\/booking\/walk-ins\/([^/]+)$/);
+  if (walkInMatch) {
+    if (method === "DELETE") return handleAdminDeleteWalkIn(request, env, decodeURIComponent(walkInMatch[1]));
+    if (method !== "PATCH") return methodNotAllowed(method, ["PATCH", "DELETE"]);
+    return handleAdminUpdateWalkIn(request, env, decodeURIComponent(walkInMatch[1]));
   }
 
   if (pathname === "/api/admin/booking/schedule") {

@@ -71,15 +71,17 @@
   .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-align:center; }
   .day-button { aspect-ratio:1; min-height:0; border:5px solid var(--ring-faint); background:transparent; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
   .day-button.blank { visibility:hidden; }
-  .day-button.booked-one { background:rgba(122,16,16,0.76); border-color:rgba(252,184,103,0.34); color:var(--text); }
-  .day-button.booked-two { background:rgba(122,16,16,0.52); border-color:rgba(122,16,16,0.68); color:var(--text); }
-  .day-button.booked-many { background:rgba(122,16,16,0.34); border-color:rgba(122,16,16,0.52); color:var(--muted); }
+  .day-button.booked-bright { background:#ff3b30; border-color:#ff6b60; color:#1a0000; }
+  .day-button.booked-medium { background:#b3261e; border-color:#d23a30; color:#FFE7CA; }
+  .day-button.booked-dark { background:#5c1410; border-color:#7a2018; color:#FFE7CA; }
+  .day-button.has-consult { box-shadow:inset 0 0 0 3px #FFD23F; }
   .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; }
   .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
   .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
-  .legend-dot.one { background:rgba(122,16,16,0.76); }
-  .legend-dot.two { background:rgba(122,16,16,0.52); }
-  .legend-dot.many { background:rgba(122,16,16,0.34); }
+  .legend-dot.bright { background:#ff3b30; }
+  .legend-dot.medium { background:#b3261e; }
+  .legend-dot.dark { background:#5c1410; }
+  .legend-dot.consult { background:transparent; box-shadow:inset 0 0 0 3px #FFD23F; }
   .slot-preview { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
   .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:5px solid var(--ring-faint); padding-bottom:8px; }
@@ -132,9 +134,10 @@
   .availability-manager .slot-preview,
   .availability-manager .availability-item { border:5px solid var(--ring-faint); background:transparent; }
   .availability-manager .day-button { border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
-  .availability-manager .day-button.booked-one { background:rgba(122,16,16,0.12); border-color:var(--signal); color:#FFE7CA; }
-  .availability-manager .day-button.booked-two { background:rgba(122,16,16,0.2); border-color:rgba(122,16,16,0.72); color:#FFE7CA; }
-  .availability-manager .day-button.booked-many { background:rgba(122,16,16,0.28); border-color:rgba(122,16,16,0.88); color:#FFE7CA; }
+  .availability-manager .day-button.booked-bright { background:#ff3b30; border-color:#ff6b60; color:#1a0000; }
+  .availability-manager .day-button.booked-medium { background:#b3261e; border-color:#d23a30; color:#FFE7CA; }
+  .availability-manager .day-button.booked-dark { background:#5c1410; border-color:#7a2018; color:#FFE7CA; }
+  .availability-manager .day-button.has-consult { box-shadow:inset 0 0 0 3px #FFD23F; }
   .availability-manager .slot-preview-item { border-bottom:5px solid var(--ring-faint); }
   .availability-manager .save-schedule { width:100%; margin-top:16px; }
   .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
@@ -744,14 +747,32 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
-  function bookedClass(count) {
-    if (count >= 3) return "booked-many";
-    if (count === 2) return "booked-two";
-    if (count === 1) return "booked-one";
-    return "";
+  function dayStatsFromAppointments() {
+    const stats = new Map();
+    for (const a of appointments) {
+      if (!a.startAt) continue;
+      const key = dayKey(a.startAt);
+      const hours = a.endAt ? Math.max(0, (new Date(a.endAt) - new Date(a.startAt)) / 3600000) : 0;
+      const entry = stats.get(key) || { hours: 0, count: 0, hasConsult: false };
+      entry.hours += hours;
+      entry.count += 1;
+      if (a.bookingTypeId === "consult_in_person") entry.hasConsult = true;
+      stats.set(key, entry);
+    }
+    return stats;
   }
 
-  function renderBookedCalendar(monthKeyValue, bookedByDay) {
+  function dayClass(entry) {
+    if (!entry) return "";
+    const classes = [];
+    if (entry.hours > 5) classes.push("booked-dark");
+    else if (entry.hours > 2) classes.push("booked-medium");
+    else if (entry.hours > 0) classes.push("booked-bright");
+    if (entry.hasConsult) classes.push("has-consult");
+    return classes.join(" ");
+  }
+
+  function renderBookedCalendar(monthKeyValue, dayStats) {
     const calendar = document.getElementById("bookedCalendar");
     if (!calendar || !monthKeyValue) return;
     const [year, month] = monthKeyValue.split("-").map(Number);
@@ -763,11 +784,13 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     }
     for (let day = 1; day <= daysInMonth; day += 1) {
       const key = `${monthKeyValue}-${String(day).padStart(2, "0")}`;
-      const count = Number(bookedByDay.get(key) || 0);
-      const label = count === 1 ? "1 appointment" : `${count} appointments`;
+      const entry = dayStats.get(key);
+      const count = entry?.count || 0;
+      const hours = entry?.hours || 0;
+      const label = `${count === 1 ? "1 appointment" : `${count} appointments`}${count ? ` · ${hours.toFixed(1)}h booked` : ""}${entry?.hasConsult ? " · in-person consultation" : ""}`;
       const isSelected = key === selectedCalendarDay;
       cells.push(`
-        <button class="day-button ${bookedClass(count)}${isSelected ? " selected" : ""}" type="button" data-day="${escapeHtml(key)}" aria-label="${escapeHtml(`${key}: ${label}`)}" title="${escapeHtml(label)}">
+        <button class="day-button ${dayClass(entry)}${isSelected ? " selected" : ""}" type="button" data-day="${escapeHtml(key)}" aria-label="${escapeHtml(`${key}: ${label}`)}" title="${escapeHtml(label)}">
           ${day}
         </button>
       `);
@@ -822,7 +845,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     if (!calendar) return;
     const payload = await api("/api/admin/booking/availability-preview");
     const bookedDays = payload.bookedDays || [];
-    const bookedByDay = new Map(bookedDays.map((item) => [item.date, Number(item.count || 0)]));
+    const dayStats = dayStatsFromAppointments();
     const monthKeys = [...new Set([
       ...bookedDays.map((item) => String(item.date || "").slice(0, 7)).filter(Boolean),
       ...appointments.map((a) => monthKey(a.startAt)).filter(Boolean),
@@ -838,7 +861,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     monthSelect.value = availabilityPreviewMonth;
     prevButton.disabled = index <= 0;
     nextButton.disabled = index < 0 || index >= monthKeys.length - 1;
-    renderBookedCalendar(availabilityPreviewMonth, bookedByDay);
+    renderBookedCalendar(availabilityPreviewMonth, dayStats);
     renderDayAppointments(selectedCalendarDay);
   }
 
@@ -899,6 +922,31 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         </section>
       </form>
       <section class="schedule-section" data-collapse-section>
+        <button class="section-toggle" type="button">Walk-In Windows</button>
+        <div class="section-body">
+          <form id="walkInForm" class="availability-form">
+            <div class="field">
+              <label for="walkInStart">Start</label>
+              <input id="walkInStart" type="datetime-local" required>
+            </div>
+            <div class="field">
+              <label for="walkInEnd">End</label>
+              <input id="walkInEnd" type="datetime-local" required>
+            </div>
+            <div class="field">
+              <label for="walkInTitle">Title</label>
+              <input id="walkInTitle" value="Walk-in Window">
+            </div>
+            <div class="field">
+              <label for="walkInNote">Note</label>
+              <input id="walkInNote" placeholder="Small flash, build consults, or studio note">
+            </div>
+            <button class="button" type="submit">Add Walk-In Window</button>
+          </form>
+          <div id="walkInList" class="availability-list"><p class="empty">Loading walk-in windows.</p></div>
+        </div>
+      </section>
+      <section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Appointments</button>
         <div class="section-body">
         <div class="availability-overview">
@@ -910,9 +958,10 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
             </div>
             <div id="bookedCalendar"></div>
             <div class="calendar-legend" aria-label="Booked day legend">
-              <span class="legend-item"><span class="legend-dot one"></span>1 booked</span>
-              <span class="legend-item"><span class="legend-dot two"></span>2 booked</span>
-              <span class="legend-item"><span class="legend-dot many"></span>3+ booked</span>
+              <span class="legend-item"><span class="legend-dot bright"></span>0–2h booked</span>
+              <span class="legend-item"><span class="legend-dot medium"></span>2–5h booked</span>
+              <span class="legend-item"><span class="legend-dot dark"></span>5h+ booked</span>
+              <span class="legend-item"><span class="legend-dot consult"></span>In-person consult</span>
             </div>
           </div>
           <div class="appt-day-panel">
@@ -979,6 +1028,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       </div>
     `;
     await loadSchedule();
+    await loadWalkIns();
     await loadAvailabilityPreview();
     await loadAvailability();
   }
@@ -1107,6 +1157,25 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         </form>
       </div>
     `).join("") : '<p class="empty">No exceptions yet. Weekly schedule rules will generate booking times automatically.</p>';
+  }
+
+  async function loadWalkIns() {
+    const list = document.getElementById("walkInList");
+    if (!list) return;
+    const payload = await api("/api/admin/booking/walk-ins");
+    const windows = payload.walkInWindows || [];
+    list.innerHTML = windows.length ? windows.map((windowItem) => `
+      <div class="availability-item" data-walk-in-item="${escapeHtml(windowItem.id)}">
+        <span class="pill">${escapeHtml(windowItem.active ? "active" : "inactive")}</span>
+        <div class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startsAt))} - ${escapeHtml(formatDateTimeLocal(windowItem.endsAt))}</div>
+        <div class="meta">${escapeHtml(windowItem.title || "Walk-in Window")}</div>
+        <div class="meta">${escapeHtml(windowItem.note || "")}</div>
+        <div class="booking-actions">
+          <button class="button" type="button" data-toggle-walk-in="${escapeHtml(windowItem.id)}" data-active="${windowItem.active ? "0" : "1"}">${windowItem.active ? "Disable" : "Enable"}</button>
+          <button class="button danger-button" type="button" data-delete-walk-in="${escapeHtml(windowItem.id)}">Delete</button>
+        </div>
+      </div>
+    `).join("") : '<p class="empty">No walk-in windows yet. Add daily windows as they become available.</p>';
   }
 
   function detailField(label, value) {
@@ -1382,6 +1451,29 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       return;
     }
 
+    const walkInToggle = event.target.closest("[data-toggle-walk-in]");
+    if (walkInToggle) {
+      setStatus("Updating walk-in");
+      await api(`/api/admin/booking/walk-ins/${encodeURIComponent(walkInToggle.dataset.toggleWalkIn)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ active: walkInToggle.dataset.active === "1" }),
+      });
+      await loadWalkIns();
+      setStatus("Walk-in updated");
+      return;
+    }
+
+    const walkInDelete = event.target.closest("[data-delete-walk-in]");
+    if (walkInDelete) {
+      if (!window.confirm("Delete this walk-in window?")) return;
+      setStatus("Deleting walk-in");
+      await api(`/api/admin/booking/walk-ins/${encodeURIComponent(walkInDelete.dataset.deleteWalkIn)}`, { method: "DELETE" });
+      await loadWalkIns();
+      setStatus("Walk-in deleted");
+      return;
+    }
+
     const dayBtn = event.target.closest("[data-day]");
     if (dayBtn && document.getElementById("bookedCalendar")?.contains(dayBtn)) {
       const clicked = dayBtn.dataset.day;
@@ -1476,6 +1568,27 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       await loadSchedule();
       await loadAvailabilityPreview();
       setStatus("Schedule saved");
+      return;
+    }
+
+    if (event.target.id === "walkInForm") {
+      event.preventDefault();
+      setStatus("Adding walk-in");
+      await api("/api/admin/booking/walk-ins", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          startsAt: localDateTimeToIso(document.getElementById("walkInStart").value),
+          endsAt: localDateTimeToIso(document.getElementById("walkInEnd").value),
+          title: document.getElementById("walkInTitle").value,
+          note: document.getElementById("walkInNote").value,
+          active: true,
+        }),
+      });
+      event.target.reset();
+      document.getElementById("walkInTitle").value = "Walk-in Window";
+      await loadWalkIns();
+      setStatus("Walk-in added");
       return;
     }
 

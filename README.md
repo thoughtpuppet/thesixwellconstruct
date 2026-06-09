@@ -143,11 +143,17 @@ In Cloudflare, add the same four values under the Worker project's
 
 ## Art.Pill submissions and booking setup
 
-Tattoo inquiry, flash claim, Build Your Own, in-person consultation, and
-Special Projects application forms submit to the live Worker backend at
+Tattoo inquiry, flash claim, Build Your Own, Special Projects application, and
+art acquisition forms submit to the live Worker backend at
 `/api/submissions`. Submissions are stored in D1, reviewed privately at
 `/studio/submissions/`, and approved tattoo clients receive a generated
 token link into `/booking/?token=...`.
+
+The in-person Build/Consultation page uses the owned public booking flow instead
+of a plain submission form: it loads public in-person availability from
+`/api/booking/public-consultation/context`, creates a linked `consultation`
+submission for review context, then starts Square checkout through
+`/api/booking/public-consultation/checkout`.
 
 The forms live at:
 
@@ -168,12 +174,16 @@ Recommended review flow:
 - Set `SUBMISSIONS_DB` and `SUBMISSIONS_ADMIN_TOKEN` for the Worker.
 - Create/configure the `SUBMISSION_FILES` R2 bucket if reference upload contents
   should be preserved.
+- Apply all D1 migrations through `0009_walk_in_windows.sql` before enabling
+  public in-person booking and walk-in windows.
 - Production deploys use `SQUARE_ENVIRONMENT=production`; keep local `.dev.vars`
   on `sandbox` for test payments.
 - Configure the Square webhook notification URL at
   `/api/square/webhook` with `SQUARE_WEBHOOK_SIGNATURE_KEY`, subscribed to
   `payment.created`, `payment.updated`, `order.created`, and `order.updated`.
 - Review captured submissions in `/studio/submissions/`.
+- Manage daily public walk-in windows in the Availability view under the weekly
+  schedule.
 - Mark the chosen submission `approved`.
 - Generate the booking token from the submission detail panel.
 - Send the generated private booking URL to the client for session selection,

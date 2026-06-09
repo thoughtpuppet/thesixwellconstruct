@@ -301,365 +301,6 @@
   </footer>
 
   <script>
-  /* ─────────────────────────────────────────────
-     CONFIG — update these two values when ready
-  ───────────────────────────────────────────── */
-  const LEGACY_PAYMENT_LINK_DISABLED = "";
-
-  /* ── Load studio availability from JSON ── */
-  async function loadAvailability() {
-    let data;
-    try {
-      const res = await fetch("/assets/studio-availability.json", { cache: "no-store" });
-      if (!res.ok) throw new Error("unavailable");
-      data = await res.json();
-    } catch {
-      document.getElementById("windowsNote").textContent = "Walk-in availability is updated regularly. Check back soon.";
-      document.getElementById("addressLines").textContent = "Contact for studio address.";
-      document.getElementById("addressMapLink").style.display = "none";
-      return;
-    }
-
-    /* Address */
-    const addr = data.address || {};
-    const lines = [addr.line1, addr.line2, [addr.city, addr.state, addr.zip].filter(Boolean).join(", ")].filter(Boolean);
-    document.getElementById("addressLines").innerHTML = lines.join("<br>");
-    if (addr.mapsUrl) {
-      document.getElementById("addressMapLink").href = addr.mapsUrl;
-    } else {
-      document.getElementById("addressMapLink").style.display = "none";
-    }
-
-    /* Walk-in note */
-    if (data.note) document.getElementById("windowsNote").textContent = data.note;
-
-    /* Windows */
-    const list = document.getElementById("windowList");
-    const active = (data.windows || []).filter(w => w.active);
-    if (!active.length) {
-      list.innerHTML = '<p class="windows-empty">No walk-in windows are currently set. Book a private consultation or check back soon.</p>';
-      return;
-    }
-    active.forEach(w => {
-      const item = document.createElement("div");
-      item.className = "window-item";
-      item.innerHTML = `
-        <div>
-          <p class="window-day">${w.day || ""}</p>
-          ${w.date ? `<p class="window-date">${w.date}</p>` : ""}
-        </div>
-        <div>
-          <p class="window-time">${w.time || ""}</p>
-          ${w.note ? `<p class="window-note">${w.note}</p>` : ""}
-        </div>
-      `;
-      list.appendChild(item);
-    });
-  }
-
-  loadAvailability();
-
-  /* ── SLOT PICKER CALENDAR ── */
-  const MAX_SLOTS = 3;
-  const slots = []; // [{date: Date, time: "2:00 PM"}]
-
-  let calDate = new Date();         // month being viewed
-  let pickedDate = null;            // date user tapped in calendar
-
-  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const DAYS   = ["Su","Mo","Tu","We","Th","Fr","Sa"];
-
-  /* ── Custom time dropdown ── */
-  let selectedTime = null;
-  let dropdownOpen = false;
-
-  const trigger     = document.getElementById("timeTrigger");
-  const trigLabel   = document.getElementById("timeTriggerLabel");
-  const panel       = document.getElementById("timePanel");
-
-  function closeDropdown() {
-    dropdownOpen = false;
-    panel.style.display = "none";
-    trigger.classList.remove("open");
-    trigger.setAttribute("aria-expanded", "false");
-  }
-
-  function openDropdown() {
-    dropdownOpen = true;
-    panel.style.display = "block";
-    trigger.classList.add("open");
-    trigger.setAttribute("aria-expanded", "true");
-  }
-
-  trigger.addEventListener("click", (e) => {
-    e.stopPropagation();
-    dropdownOpen ? closeDropdown() : openDropdown();
-  });
-
-  document.addEventListener("click", () => closeDropdown());
-  panel.addEventListener("click", (e) => e.stopPropagation());
-
-  function setSelectedTime(val) {
-    selectedTime = val;
-    trigLabel.textContent = val || "Pick a time";
-    trigger.classList.toggle("has-value", !!val);
-    /* mark selected option */
-    panel.querySelectorAll(".time-option").forEach(o => {
-      o.classList.toggle("selected", o.dataset.value === val);
-    });
-    document.getElementById("timeAddBtn").disabled = !val;
-    closeDropdown();
-  }
-
-  /* Generate time options 8 AM – 9 PM in 30-min steps */
-  function buildTimeOptions() {
-    panel.innerHTML = "";
-    let lastPeriod = null;
-    for (let h = 8; h <= 21; h++) {
-      [0, 30].forEach(m => {
-        if (h === 21 && m === 30) return;
-        const ampm  = h < 12 ? "AM" : "PM";
-        const h12   = h % 12 === 0 ? 12 : h % 12;
-        const mm    = m === 0 ? "00" : "30";
-        const label = `${h12}:${mm} ${ampm}`;
-
-        /* AM / PM section divider */
-        if (ampm !== lastPeriod) {
-          const div = document.createElement("span");
-          div.className = "time-divider";
-          div.textContent = ampm;
-          panel.appendChild(div);
-          lastPeriod = ampm;
-        }
-
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "time-option" + (ampm === "AM" ? " is-am" : "");
-        btn.dataset.value = label;
-        btn.textContent = label;
-        btn.setAttribute("role", "option");
-        btn.addEventListener("click", () => setSelectedTime(label));
-        panel.appendChild(btn);
-      });
-    }
-  }
-
-  function dateKey(d) {
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  }
-
-  function slotDateKey(s) {
-    return dateKey(s.date);
-  }
-
-  function formatDate(d) {
-    return `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
-  }
-
-  function renderCalendar() {
-    const label    = document.getElementById("calMonthLabel");
-    const grid     = document.getElementById("calGrid");
-    const prevBtn  = document.getElementById("calPrev");
-    const fullNote = document.getElementById("calFullNote");
-    const timeRow  = document.getElementById("timeRow");
-
-    const today = new Date();
-    today.setHours(0,0,0,0);
-
-    label.textContent = `${MONTHS[calDate.getMonth()]} ${calDate.getFullYear()}`;
-
-    /* Disable prev if we're already in the current month */
-    const firstOfMonth = new Date(calDate.getFullYear(), calDate.getMonth(), 1);
-    const firstOfToday = new Date(today.getFullYear(), today.getMonth(), 1);
-    prevBtn.disabled = firstOfMonth <= firstOfToday;
-
-    grid.innerHTML = "";
-
-    const firstDay = new Date(calDate.getFullYear(), calDate.getMonth(), 1).getDay();
-    const daysInMonth = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 0).getDate();
-
-    /* Empty leading cells */
-    for (let i = 0; i < firstDay; i++) {
-      const blank = document.createElement("button");
-      blank.type = "button";
-      blank.className = "cal-day empty";
-      grid.appendChild(blank);
-    }
-
-    /* Day cells */
-    for (let d = 1; d <= daysInMonth; d++) {
-      const btn  = document.createElement("button");
-      btn.type   = "button";
-      btn.textContent = d;
-      const thisDate = new Date(calDate.getFullYear(), calDate.getMonth(), d);
-
-      const isPast   = thisDate < today;
-      const isToday  = thisDate.getTime() === today.getTime();
-      const key      = dateKey(thisDate);
-      const isBooked = slots.some(s => slotDateKey(s) === key);
-      const isActive = pickedDate && dateKey(pickedDate) === key;
-
-      btn.className = "cal-day" +
-        (isPast   ? " past"   : "") +
-        (isToday  ? " today"  : "") +
-        (isBooked ? " booked" : "") +
-        (isActive && !isBooked ? " active" : "");
-
-      if (!isPast) {
-        btn.addEventListener("click", () => {
-          if (slots.length >= MAX_SLOTS) return;
-          pickedDate = thisDate;
-          timeRow.style.display = "";
-          selectedTime = null;
-          trigLabel.textContent = "Pick a time";
-          trigger.classList.remove("has-value");
-          panel.querySelectorAll(".time-option").forEach(o => o.classList.remove("selected"));
-          document.getElementById("timeAddBtn").disabled = true;
-          renderCalendar();
-        });
-      }
-
-      grid.appendChild(btn);
-    }
-
-    /* Full note */
-    fullNote.style.display = slots.length >= MAX_SLOTS ? "" : "none";
-    if (slots.length >= MAX_SLOTS) {
-      timeRow.style.display = "none";
-      pickedDate = null;
-    }
-  }
-
-  function renderSlots() {
-    const container = document.getElementById("slotSelected");
-    container.innerHTML = "";
-    slots.forEach((s, i) => {
-      const row = document.createElement("div");
-      row.className = "slot-item";
-      row.innerHTML = `
-        <span class="slot-item-text"><span class="slot-item-num">${i + 1} ·</span> ${formatDate(s.date)} at ${s.time}</span>
-        <button type="button" class="slot-item-remove" aria-label="Remove slot ${i + 1}">×</button>
-      `;
-      row.querySelector(".slot-item-remove").addEventListener("click", () => {
-        slots.splice(i, 1);
-        if (pickedDate === null && slots.length < MAX_SLOTS) {
-          /* re-show calendar controls */
-          renderCalendar();
-        }
-        renderSlots();
-        renderCalendar();
-        syncHiddenInput();
-      });
-      container.appendChild(row);
-    });
-    syncHiddenInput();
-  }
-
-  function syncHiddenInput() {
-    const val = slots.map((s, i) => `Option ${i+1}: ${formatDate(s.date)} at ${s.time}`).join(" | ");
-    document.getElementById("preferredSlots").value = val;
-  }
-
-  /* Add slot button */
-  document.getElementById("timeAddBtn").addEventListener("click", () => {
-    const time = selectedTime;
-    if (!pickedDate || !time) return;
-    if (slots.length >= MAX_SLOTS) return;
-
-    /* Prevent duplicate day+time combos */
-    const key = dateKey(pickedDate);
-    const dup = slots.find(s => slotDateKey(s) === key && s.time === time);
-    if (dup) return;
-
-    slots.push({ date: new Date(pickedDate), time });
-    pickedDate = null;
-    selectedTime = null;
-    trigLabel.textContent = "Pick a time";
-    trigger.classList.remove("has-value");
-    document.getElementById("timeRow").style.display = "none";
-    renderSlots();
-    renderCalendar();
-  });
-
-  /* Month navigation */
-  document.getElementById("calPrev").addEventListener("click", () => {
-    calDate.setMonth(calDate.getMonth() - 1);
-    pickedDate = null;
-    document.getElementById("timeRow").style.display = "none";
-    renderCalendar();
-  });
-  document.getElementById("calNext").addEventListener("click", () => {
-    calDate.setMonth(calDate.getMonth() + 1);
-    pickedDate = null;
-    document.getElementById("timeRow").style.display = "none";
-    renderCalendar();
-  });
-
-  /* Init calendar */
-  buildTimeOptions();
-  renderCalendar();
-
-  /* ── Consultation form: AJAX submit → Stripe redirect ── */
-  const form      = document.getElementById("consultForm");
-  const submitBtn = document.getElementById("submitBtn");
-  const formError = document.getElementById("formError");
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    /* Native validity check */
-    if (!form.checkValidity()) {
-      form.reportValidity();
-      return;
-    }
-
-    /* Require at least one time slot */
-    if (slots.length === 0) {
-      formError.textContent = "Please select at least one preferred time before continuing.";
-      formError.style.display = "block";
-      document.getElementById("calWrap").scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
-
-    /* Loading state */
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Submitting…";
-    formError.style.display = "none";
-
-    try {
-      const data = new FormData(form);
-      const res = await fetch("/api/submissions", {
-        method: "POST",
-        body: data
-      });
-
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        throw new Error(payload.error || "submit_failed");
-      }
-
-      /* Details saved — show holding state then redirect */
-      document.getElementById("formStep").style.display = "none";
-      document.getElementById("paymentStep").style.display = "block";
-
-      setTimeout(() => {
-        if (LEGACY_PAYMENT_LINK_DISABLED) {
-          window.location.href = LEGACY_PAYMENT_LINK_DISABLED;
-        } else {
-          window.location.href = "/tattoos/submission-received/";
-        }
-      }, 1200);
-
-    } catch {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Continue to Square";
-      formError.textContent = "Something went wrong. Please try again or email us directly.";
-      formError.style.display = "block";
-    }
-  });
-  </script>
-
-  <script>
   (function(){
     const form = document.getElementById("consultForm");
     const submitBtn = document.getElementById("submitBtn");
@@ -831,6 +472,49 @@
       }
     }
 
+    function escapeHtml(value) {
+      return String(value || "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[char]));
+    }
+
+    function renderWalkInWindows(walkInWindows) {
+      const list = document.getElementById("windowList");
+      const note = document.getElementById("windowsNote");
+      const address = document.getElementById("addressLines");
+      const mapLink = document.getElementById("addressMapLink");
+      address.textContent = "Studio address is shared with confirmed clients.";
+      mapLink.style.display = "none";
+      if (!list || !note) return;
+      note.textContent = "Walk-in windows are updated from the studio availability console.";
+      if (!walkInWindows.length) {
+        list.innerHTML = '<p class="windows-empty">No walk-in windows are currently set. Book a private consultation or check back soon.</p>';
+        return;
+      }
+      list.innerHTML = walkInWindows.map((windowItem) => {
+        const start = new Date(windowItem.startsAt);
+        const end = new Date(windowItem.endsAt);
+        const title = escapeHtml(windowItem.title || "Walk-in Window");
+        const noteText = escapeHtml(windowItem.note || "");
+        return `
+          <div class="window-item">
+            <div>
+              <p class="window-day">${start.toLocaleDateString([], { weekday:"long" })}</p>
+              <p class="window-date">${start.toLocaleDateString([], { month:"short", day:"numeric" })}</p>
+            </div>
+            <div>
+              <p class="window-time">${start.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })} - ${end.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })}</p>
+              <p class="window-note">${title}${noteText ? ` - ${noteText}` : ""}</p>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
     async function loadContext() {
       try {
         const response = await fetch("/api/booking/public-consultation/context", { cache: "no-store" });
@@ -839,6 +523,7 @@
         bookingType = payload.bookingType || null;
         bookingTypes = payload.bookingTypes || (bookingType ? [bookingType] : []);
         windows = payload.availabilityWindows || [];
+        renderWalkInWindows(payload.walkInWindows || []);
         bookingTypeSelect.innerHTML = bookingTypes.map((type) => (
           `<option value="${type.id}">${type.label} - ${type.depositLabel} / ${type.durationMinutes} min</option>`
         )).join("");
@@ -846,6 +531,7 @@
         if (bookingType) submitBtn.textContent = `Continue to Square - ${bookingType.depositLabel}`;
         renderCalendar();
       } catch (error) {
+        renderWalkInWindows([]);
         formError.textContent = error.message || "Unable to load consultation times.";
         formError.style.display = "block";
         renderCalendar();
