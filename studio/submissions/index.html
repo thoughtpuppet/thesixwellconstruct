@@ -1216,9 +1216,9 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       return;
     }
 
-    const sectionToggle = event.target.closest("[data-section-toggle]");
-    if (sectionToggle) {
-      sectionToggle.closest(".detail-section")?.classList.toggle("is-open");
+    const detailSectionToggle = event.target.closest("[data-section-toggle]");
+    if (detailSectionToggle) {
+      detailSectionToggle.closest(".detail-section")?.classList.toggle("is-open");
       return;
     }
 
