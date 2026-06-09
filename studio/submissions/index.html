@@ -74,14 +74,14 @@
   .day-button.booked-bright { background:#ff3b30; border-color:#ff3b30; color:#1a0000; }
   .day-button.booked-medium { background:#b3261e; border-color:#b3261e; color:#FFE7CA; }
   .day-button.booked-dark { background:#5c1410; border-color:#5c1410; color:#FFE7CA; }
-  .day-button.has-consult { box-shadow:inset 0 0 0 3px #FFD23F; }
+  .day-button.has-consult { outline:3px solid #FFD23F; outline-offset:-2px; }
   .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; }
   .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
   .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
   .legend-dot.bright { background:#ff3b30; }
   .legend-dot.medium { background:#b3261e; }
   .legend-dot.dark { background:#5c1410; }
-  .legend-dot.consult { background:transparent; box-shadow:inset 0 0 0 3px #FFD23F; }
+  .legend-dot.consult { background:transparent; outline:3px solid #FFD23F; outline-offset:-2px; }
   .slot-preview { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
   .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:5px solid var(--ring-faint); padding-bottom:8px; }
