@@ -653,7 +653,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         <textarea id="internalNotes">${escapeHtml(submission.internalNotes || "")}</textarea>
       </div>
 
-      <div class="detail-section is-open">
+      <div class="detail-section">
         <button class="detail-section-toggle" type="button" data-section-toggle>Event History</button>
         <div class="detail-section-body" id="eventHistoryBody">
           <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading...</p>
@@ -831,7 +831,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
           <p class="contact">Set recurring weekly hours once. Use exceptions only for extra days, closed days, or unusual blocks.</p>
         </div>
       <form id="scheduleForm">
-        <section class="schedule-section is-open" data-collapse-section>
+        <section class="schedule-section" data-collapse-section>
           <button class="section-toggle" type="button">Booking Rules</button>
           <div class="section-body">
           <div class="schedule-grid">
@@ -870,7 +870,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
           </div>
           </div>
         </section>
-        <section class="schedule-section is-open" data-collapse-section>
+        <section class="schedule-section" data-collapse-section>
           <button class="section-toggle" type="button">Weekly Schedule</button>
           <div class="section-body">
           <div id="weeklyRules"></div>
@@ -878,7 +878,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
           </div>
         </section>
       </form>
-      <section class="schedule-section is-open" data-collapse-section>
+      <section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Appointments</button>
         <div class="section-body">
         <div class="availability-overview">
@@ -905,7 +905,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         </div>
         </div>
       </section>
-      <section class="schedule-section is-open" data-collapse-section>
+      <section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Exceptions</button>
         <div class="section-body">
         <form id="availabilityForm" class="availability-form">
