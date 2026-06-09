@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar legend preview</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#0e0e0e; --panel:#161616; --line:rgba(255,231,202,0.16);
+    --text:#FFE7CA; --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.42);
+    --accent:#FCB867; --signal:#FCB867; --ring:#FFE7CA; --ring-soft:rgba(255,231,202,0.4); --ring-faint:rgba(255,231,202,0.16);
+    --sans: Arial, sans-serif; --serif: Georgia, serif;
+  }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); padding:32px; }
+  h1 { font-family:var(--sans); font-size:14px; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); }
+  h2 { font-family:var(--sans); font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:var(--dim); margin-top:32px; }
+
+  /* Calendar */
+  .calendar-weekdays,.calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; max-width:420px; }
+  .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-align:center; }
+  .day-button { aspect-ratio:1; min-height:0; border:5px solid var(--ring-faint); background:transparent; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
+  .day-button.blank { visibility:hidden; }
+  .day-button.booked-bright { background:#c1503f; border-color:#c1503f; color:#1a0000; }
+  .day-button.booked-medium { background:#8f231d; border-color:#8f231d; color:#FFE7CA; }
+  .day-button.booked-dark { background:#4a1410; border-color:#4a1410; color:#FFE7CA; }
+  .day-button.has-consult { outline:3px solid #FFD23F; outline-offset:-2px; }
+  .day-button.selected { outline:3px solid var(--accent); outline-offset:-3px; }
+  .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
+  .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
+  .legend-dot.bright { background:#c1503f; }
+  .legend-dot.medium { background:#8f231d; }
+  .legend-dot.dark { background:#4a1410; }
+  .legend-dot.consult { background:transparent; outline:3px solid #FFD23F; outline-offset:-2px; }
+
+  /* Dropdowns */
+  select,input,textarea { font:inherit; width:100%; max-width:260px; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; }
+  select { -webkit-appearance:none; appearance:none; color-scheme:dark; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
+  option { background:var(--bg); color:#FFE7CA; }
+  #statusFilter, #typeFilter, #detailStatus { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
+  #statusFilter option, #typeFilter option, #detailStatus option { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
+
+  /* Review card */
+  .review-card { border:5px solid var(--ring-faint); padding:16px; margin-bottom:22px; max-width:520px; }
+  .review-card-header { font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); margin-bottom:16px; padding-bottom:10px; border-bottom:3px solid var(--ring-faint); }
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-bottom:0; }
+  .field { display:grid; gap:6px; }
+  label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; }
+  .value { min-height:42px; padding:12px; border:5px solid var(--ring-faint); color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
+
+  /* Save button */
+  .button { font:inherit; cursor:pointer; background:var(--bg); color:var(--text); border:5px solid var(--ring-faint); padding:10px 14px; }
+  .booking-row { max-width:420px; }
+</style>
+</head>
+<body>
+  <h1>Appointment Calendar — Booked Hours + In-Person Consult Marker</h1>
+  <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+  <div class="calendar-grid">
+    <button class="day-button blank" tabindex="-1"></button>
+    <button class="day-button" type="button">1</button>
+    <button class="day-button booked-bright" type="button">2</button>
+    <button class="day-button booked-medium" type="button">3</button>
+    <button class="day-button booked-dark" type="button">4</button>
+    <button class="day-button booked-bright has-consult" type="button">5</button>
+    <button class="day-button" type="button">6</button>
+    <button class="day-button" type="button">7</button>
+    <button class="day-button booked-medium has-consult" type="button">8</button>
+    <button class="day-button booked-dark has-consult" type="button">9</button>
+    <button class="day-button" type="button">10</button>
+    <button class="day-button booked-bright selected" type="button">11</button>
+    <button class="day-button" type="button">12</button>
+    <button class="day-button" type="button">13</button>
+    <button class="day-button" type="button">14</button>
+  </div>
+  <div class="calendar-legend">
+    <span class="legend-item"><span class="legend-dot bright"></span>0–2h booked</span>
+    <span class="legend-item"><span class="legend-dot medium"></span>2–5h booked</span>
+    <span class="legend-item"><span class="legend-dot dark"></span>5h+ booked</span>
+    <span class="legend-item"><span class="legend-dot consult"></span>In-person consult</span>
+  </div>
+
+  <h2>Dropdowns — bold, all-caps, light amber</h2>
+  <select id="statusFilter">
+    <option value="">ALL STATUSES</option>
+    <option value="new">NEW</option>
+    <option value="reviewing">REVIEWING</option>
+    <option value="approved">APPROVED</option>
+  </select>
+  <br><br>
+  <select id="typeFilter">
+    <option value="">ALL TYPES</option>
+    <option value="tattoo_inquiry">TATTOO INQUIRY</option>
+    <option value="flash_claim">FLASH CLAIM</option>
+  </select>
+
+  <h2>Review Card — type-specific fields</h2>
+  <div class="review-card">
+    <div class="review-card-header">Flash Claim</div>
+    <div class="grid">
+      <div class="field"><label>Flash Title</label><div class="value">Moth &amp; Moon</div></div>
+      <div class="field"><label>Placement</label><div class="value">Forearm</div></div>
+      <div class="field"><label>Bid / Budget</label><div class="value">$300</div></div>
+      <div class="field"><label>Timeline</label><div class="value">Within 2 weeks</div></div>
+    </div>
+  </div>
+
+  <h2>Save Button — green border, aligned to Booking URL field</h2>
+  <div class="booking-row field">
+    <label for="bookingUrl">Booking URL</label>
+    <input id="bookingUrl" value="/book/abc123">
+    <button class="button" id="saveBtn" type="button" style="margin-top:10px;width:100%;border-color:#4caf50;">Save</button>
+  </div>
+</body>
+</html>
