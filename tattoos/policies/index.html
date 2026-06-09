@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Booking Policies - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/tattoos.css">
+<style>
+  :root {
+    --venture-accent: var(--color-tattooing);
+    --venture-accent-dim: var(--color-tattooing-dim);
+  }
+  .resource-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+    gap: 48px;
+    align-items: start;
+  }
+  .resource-list {
+    display: grid;
+    gap: 14px;
+    padding-left: 20px;
+    color: rgba(232, 228, 220, 0.82);
+    line-height: 1.65;
+  }
+  .resource-nav {
+    position: sticky;
+    top: 32px;
+  }
+  @media (max-width: 900px) {
+    .resource-layout { grid-template-columns: 1fr; }
+    .resource-nav { position: static; }
+  }
+</style>
+<link rel="stylesheet" href="/css/mobile.css">
+</head>
+<body class="tattoos-page" data-venture="tattooing">
+  <main class="tattoos-shell">
+    <section class="hero">
+      <div class="hero-copy entrance-fade">
+        <span class="eyebrow">Client resources</span>
+        <h1>Booking policies</h1>
+        <p class="hero-lead">Terms and expectations for booking with art.pill TATTOO HOUSE.</p>
+        <p class="hero-note">Please review these before choosing a session and placing a deposit. Booking confirms that you understand the studio policies below.</p>
+      </div>
+      <aside class="hero-panel entrance-fade entrance-delay-1">
+        <span class="panel-label">Resource packet</span>
+        <h2 class="panel-title">For approved clients</h2>
+        <p>These policies are linked from the private booking and confirmation emails so the practical details stay in one place.</p>
+      </aside>
+    </section>
+
+    <section class="page-section resource-layout">
+      <div>
+        <div class="section-head">
+          <span class="section-kicker">Before booking</span>
+          <h2 class="section-title">Review access, design, and fit.</h2>
+        </div>
+        <ul class="resource-list">
+          <li>Consultations are not mandatory, but they are available if needed in person or by video.</li>
+          <li>Clients must be at least 18 years old with valid ID. No exceptions.</li>
+          <li>Designs are shown on the day of the tattoo appointment unless a consultation has been requested, approved, and paid for.</li>
+          <li>Work is created in Saiel's own style. Exact copies or duplicates are not offered.</li>
+        </ul>
+
+        <div class="page-section">
+          <div class="section-head">
+            <span class="section-kicker">After booking</span>
+            <h2 class="section-title">Deposits, timing, and day-of boundaries.</h2>
+          </div>
+          <ul class="resource-list">
+            <li>Clients have a 15-minute grace period. Arrival later than 15 minutes may require cancellation, rescheduling, and a new deposit.</li>
+            <li>Deposits are non-refundable and go toward the final tattoo cost.</li>
+            <li>One reschedule is allowed if requested at least 48 hours in advance.</li>
+            <li>Rescheduling within 48 hours requires a new deposit.</li>
+            <li>Final payment is due at the appointment.</li>
+            <li>Preferred payment is cash. Other options may include Cash App, Apple Pay, or credit/debit card.</li>
+            <li>Card transactions may include a processing fee.</li>
+            <li>Major last-minute design changes may require rescheduling and a new deposit.</li>
+            <li>No-shows forfeit the deposit and may not be rebooked.</li>
+            <li>Guests should be approved before the appointment.</li>
+            <li>The studio may refuse service if the client arrives visibly under the influence, unwell, or with active rashes, infections, or open wounds near the tattoo area.</li>
+          </ul>
+        </div>
+      </div>
+
+      <aside class="info-panel resource-nav">
+        <span class="mini-label">Also review</span>
+        <ul>
+          <li><a href="/tattoos/day-of/">Day-of / session prep</a></li>
+          <li><a href="/tattoos/location-parking/">Location and parking</a></li>
+          <li><a href="/tattoos/">Art.Pill Tattoo House</a></li>
+        </ul>
+      </aside>
+    </section>
+
+    <footer class="footer-bottom">
+      <p>art.pill TATTOO HOUSE / client resource packet</p>
+      <a href="/tattoos/">Return to Art.Pill Tattoo House</a>
+    </footer>
+  </main>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

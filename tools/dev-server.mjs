@@ -44,6 +44,9 @@ const checkRoutes = [
   ["/tattoos/flash/claim/", 200],
   ["/tattoos/build/", 200],
   ["/tattoos/special-projects/apply/", 200],
+  ["/tattoos/policies/", 200],
+  ["/tattoos/day-of/", 200],
+  ["/tattoos/location-parking/", 200],
   ["/merch/", 200],
   ["/art/", 200],
   ["/js/live-text-editor.js", 200],
@@ -124,8 +127,17 @@ function isHiddenPublicRoute(urlPath) {
   return false;
 }
 
+function requestPathname(urlPath) {
+  return decodeURIComponent((urlPath || "/").split("?")[0].split("#")[0]) || "/";
+}
+
+function shouldSkipCache(urlPath, ext) {
+  const pathname = requestPathname(urlPath);
+  return ext === ".html" || ext === ".js" || pathname.startsWith("/__tools/");
+}
+
 function safePath(urlPath) {
-  const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
+  const decoded = requestPathname(urlPath);
   const localOnlyFile = localOnlyRoutes.get(decoded);
   if (localOnlyFile) return path.resolve(root, localOnlyFile);
 
@@ -247,9 +259,13 @@ const server = createServer(async (req, res) => {
   }
 
   const ext = path.extname(file).toLowerCase();
-  res.writeHead(200, {
+  const headers = {
     "Content-Type": types.get(ext) || "application/octet-stream",
-  });
+  };
+  if (shouldSkipCache(req.url || "/", ext)) {
+    headers["Cache-Control"] = "no-store";
+  }
+  res.writeHead(200, headers);
   createReadStream(file).pipe(res);
 });
 

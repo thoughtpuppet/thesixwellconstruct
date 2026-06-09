@@ -202,13 +202,12 @@
   var isLocalHost = (
     window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1' ||
-    window.location.hostname === '::1' ||
-    window.location.hostname === ''
+    window.location.hostname === '::1'
   );
 
   if (isLocalHost && !document.querySelector('script[data-live-text-editor]')) {
     var liveTextEditor = document.createElement('script');
-    liveTextEditor.src = '/js/live-text-editor.js';
+    liveTextEditor.src = '/js/live-text-editor.js?v=' + Date.now();
     liveTextEditor.defer = true;
     liveTextEditor.setAttribute('data-live-text-editor', 'true');
     document.body.appendChild(liveTextEditor);

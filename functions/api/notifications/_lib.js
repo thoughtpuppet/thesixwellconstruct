@@ -2,6 +2,29 @@ const DEFAULT_FROM_ADDRESS = "saisolehamn@artpilltattoohouse.com";
 const DEFAULT_FROM_NAME = "art.pill TATTOO HOUSE";
 const DEFAULT_REPLY_TO = "saisolehamn@artpilltattoohouse.com";
 const DEFAULT_TIMEZONE = "America/New_York";
+const DEFAULT_BOOKING_TYPES = {
+  tattoo_quarter: {
+    label: "Quarter Session",
+    description: "Approx. 1.5 hours for small approved projects, flash, or focused work.",
+    durationMinutes: 90,
+    depositCents: 5000,
+    currency: "USD",
+  },
+  tattoo_half: {
+    label: "Half Session",
+    description: "Approx. 3 hours for medium approved projects or developed symbolic work.",
+    durationMinutes: 180,
+    depositCents: 10000,
+    currency: "USD",
+  },
+  tattoo_full: {
+    label: "Full Session",
+    description: "Up to 6 hours for large approved work, special projects, or deeper sessions.",
+    durationMinutes: 360,
+    depositCents: 20000,
+    currency: "USD",
+  },
+};
 
 function notificationDb(env) {
   return env.SUBMISSIONS_DB || null;
@@ -26,6 +49,18 @@ function publicBaseUrl(env, request) {
     return `${url.protocol}//${url.host}`;
   }
   return "https://thesixwellconstruct.com";
+}
+
+function publicUrl(env, request, path) {
+  return `${publicBaseUrl(env, request)}${path}`;
+}
+
+function clientResourceUrls(env, request) {
+  return {
+    bookingTermsUrl: publicUrl(env, request, "/tattoos/policies/"),
+    dayOfInstructionsUrl: publicUrl(env, request, "/tattoos/day-of/"),
+    locationParkingUrl: publicUrl(env, request, "/tattoos/location-parking/"),
+  };
 }
 
 function asString(value) {
@@ -72,6 +107,95 @@ function formatMoney(cents, currency = "USD") {
     currency,
     maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(Number(cents || 0) / 100);
+}
+
+function formatDuration(minutes) {
+  const total = Number(minutes || 0);
+  if (!total) return "";
+  const hours = Math.floor(total / 60);
+  const remainingMinutes = total % 60;
+  if (!hours) return `${remainingMinutes} minutes`;
+  if (!remainingMinutes) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  return `${hours} ${hours === 1 ? "hour" : "hours"} ${remainingMinutes} minutes`;
+}
+
+function normalizeBookingType(row) {
+  return {
+    id: row.id,
+    label: row.label,
+    description: row.description || "",
+    durationMinutes: row.duration_minutes ?? row.durationMinutes ?? 0,
+    depositCents: row.deposit_cents ?? row.depositCents ?? 0,
+    currency: row.currency || "USD",
+  };
+}
+
+function fallbackBookingTypes(allowedIds) {
+  return (allowedIds || [])
+    .map((id) => DEFAULT_BOOKING_TYPES[id] ? normalizeBookingType({ id, ...DEFAULT_BOOKING_TYPES[id] }) : null)
+    .filter(Boolean);
+}
+
+async function bookingTypesForToken(env, token) {
+  const allowedIds = Array.isArray(token?.allowedBookingTypes)
+    ? token.allowedBookingTypes.map(asString).filter(Boolean)
+    : [];
+  if (Array.isArray(token?.bookingTypes) && token.bookingTypes.length) {
+    return token.bookingTypes.map(normalizeBookingType);
+  }
+  if (!allowedIds.length) return [];
+
+  const db = notificationDb(env);
+  if (!db) return fallbackBookingTypes(allowedIds);
+
+  try {
+    const placeholders = allowedIds.map(() => "?").join(", ");
+    const result = await db
+      .prepare(
+        `SELECT id, label, description, duration_minutes, deposit_cents, currency
+         FROM booking_types
+         WHERE active = 1 AND id IN (${placeholders})`
+      )
+      .bind(...allowedIds)
+      .all();
+    const byId = new Map((result.results || []).map((row) => [row.id, normalizeBookingType(row)]));
+    const fallbackById = new Map(fallbackBookingTypes(allowedIds).map((type) => [type.id, type]));
+    return allowedIds.map((id) => byId.get(id) || fallbackById.get(id)).filter(Boolean);
+  } catch (error) {
+    console.warn("Unable to load booking type details for notification.", error.message);
+    return fallbackBookingTypes(allowedIds);
+  }
+}
+
+function sessionOptionsText(bookingTypes) {
+  if (!bookingTypes.length) {
+    return "Available session options are shown on your private booking page.";
+  }
+  return bookingTypes.map((type) => {
+    const duration = formatDuration(type.durationMinutes);
+    const deposit = formatMoney(type.depositCents, type.currency);
+    const details = [duration, type.description].filter(Boolean).join(" - ");
+    return `- ${type.label}${details ? `: ${details}` : ""} Deposit: ${deposit}.`;
+  }).join("\n");
+}
+
+function depositAmountText(bookingTypes) {
+  const deposits = bookingTypes
+    .filter((type) => Number(type.depositCents) > 0)
+    .map((type) => `${type.depositCents}:${type.currency || "USD"}`);
+  const uniqueDeposits = [...new Set(deposits)];
+  if (!uniqueDeposits.length) return "Shown on the private booking page";
+  if (uniqueDeposits.length === 1) {
+    const [cents, currency] = uniqueDeposits[0].split(":");
+    return formatMoney(Number(cents), currency);
+  }
+  const values = uniqueDeposits.map((entry) => {
+    const [cents, currency] = entry.split(":");
+    return { cents: Number(cents), currency };
+  });
+  const currency = values.every((value) => value.currency === values[0].currency) ? values[0].currency : "USD";
+  const cents = values.map((value) => value.cents).sort((a, b) => a - b);
+  return `${formatMoney(cents[0], currency)}-${formatMoney(cents[cents.length - 1], currency)}, depending on selected session`;
 }
 
 function textToHtml(text) {
@@ -187,6 +311,8 @@ function normalizeAppointment(row) {
     startAt: row.start_at || row.startAt,
     endAt: row.end_at || row.endAt,
     depositCents: row.deposit_cents ?? row.depositCents ?? 0,
+    tipCents: row.tip_cents ?? row.tipCents ?? 0,
+    totalDueCents: (row.deposit_cents ?? row.depositCents ?? 0) + (row.tip_cents ?? row.tipCents ?? 0),
     currency: row.currency || "USD",
   };
 }
@@ -222,18 +348,32 @@ export async function notifyBookingLinkCreated(env, request, submission, token) 
   const normalized = normalizeSubmission(submission);
   if (!normalized.contactEmail || !token?.bookingUrl) return { ok: false, skipped: true };
 
+  const resources = clientResourceUrls(env, request);
+  const bookingTypes = await bookingTypesForToken(env, token);
   const bookingUrl = token.bookingUrl.startsWith("http")
     ? token.bookingUrl
     : `${publicBaseUrl(env, request)}${token.bookingUrl}`;
   const text = [
     `Hi ${normalized.contactName || "there"},`,
     "",
-    "Your art.pill TATTOO HOUSE project has been approved for booking.",
-    "Use the private link below to choose an available session and complete the deposit:",
+    "Your tattoo project has been approved for booking.",
+    "",
+    "Approved session options:",
+    "",
+    sessionOptionsText(bookingTypes),
+    "",
+    `Deposit due to book: ${depositAmountText(bookingTypes)}`,
+    "",
+    "Before booking, please review:",
+    "",
+    `- Terms & Conditions: ${resources.bookingTermsUrl}`,
+    `- Day-of / session prep: ${resources.dayOfInstructionsUrl}`,
+    "",
+    "Use the private link below to choose an available session and pay the deposit:",
     "",
     bookingUrl,
     "",
-    "This link is private to your project. If the available times do not work, reply to this email and the studio can help.",
+    "This link is private to your project. Deposits are non-refundable and go toward the final cost of your tattoo. If the available times do not work, reply to this email and the studio can help.",
     "",
     "Thank you,",
     "art.pill TATTOO HOUSE",
@@ -254,6 +394,7 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
   const appointment = normalizeAppointment(appointmentRow);
   if (!appointment.clientEmail) return { ok: false, skipped: true };
 
+  const resources = clientResourceUrls(env, request);
   const confirmationUrl = `${publicBaseUrl(env, request)}/booking/confirmed/?appointment=${encodeURIComponent(appointment.id)}`;
   const text = [
     `Hi ${appointment.clientName || "there"},`,
@@ -263,18 +404,23 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
     `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     `Session: ${appointment.bookingTypeLabel}`,
     `Deposit: ${formatMoney(appointment.depositCents, appointment.currency)} received`,
+    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
+    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
     "",
     `Confirmation page: ${confirmationUrl}`,
+    `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
+    `Location & parking: ${resources.locationParkingUrl}`,
     "",
-    "The studio may follow up directly with prep notes or adjustments before your appointment.",
+    "I may follow up directly with prep notes or adjustments before your appointment, if needed.",
     "",
     "Thank you,",
-    "art.pill TATTOO HOUSE",
+    "Saiel Solehman",
+    "[art.pill TATTOO HOUSE]",
   ].join("\n");
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: "Your art.pill TATTOO HOUSE appointment is confirmed",
+    subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
     text,
     templateKey: "appointment_confirmed",
     relatedType: "appointment",
@@ -311,21 +457,28 @@ export async function sendDueAppointmentReminders(env) {
     let failed = 0;
     for (const row of result.results || []) {
       const appointment = normalizeAppointment(row);
+      const resources = clientResourceUrls(env);
       const text = [
         `Hi ${appointment.clientName || "there"},`,
         "",
-        "Reminder: your art.pill TATTOO HOUSE appointment is tomorrow.",
+        "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow.",
         "",
         `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
         `Session: ${appointment.bookingTypeLabel}`,
         "",
-        "Reply to the studio email thread if anything needs attention before your session.",
+        "Please review before arriving:",
         "",
-        "art.pill TATTOO HOUSE",
+        `- Day-of instructions: ${resources.dayOfInstructionsUrl}`,
+        `- Location & parking: ${resources.locationParkingUrl}`,
+        "",
+        "Reply to this thread if you have any questions or concerns before your session.",
+        "",
+        "-Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
       ].join("\n");
       const delivery = await sendTransactionalEmail(env, {
         to: appointment.clientEmail,
-        subject: "Reminder: your art.pill TATTOO HOUSE appointment is tomorrow",
+        subject: "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow",
         text,
         templateKey: "appointment_reminder_24h",
         relatedType: "appointment",

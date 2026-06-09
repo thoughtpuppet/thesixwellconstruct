@@ -53,6 +53,17 @@ function asPositiveInteger(value, fallback) {
   return Math.round(parsed);
 }
 
+function parseTipCents(value) {
+  if (value === undefined || value === null || value === "") return { tipCents: 0 };
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return { error: "Tip must be a whole dollar-and-cent amount." };
+  }
+  if (parsed < 0) return { error: "Tip cannot be negative." };
+  if (parsed > 50000) return { error: "Tip cannot be more than $500." };
+  return { tipCents: parsed };
+}
+
 async function readJsonBody(request) {
   try {
     const body = await request.json();
@@ -145,6 +156,8 @@ function normalizeAppointment(row) {
     startAt: row.start_at,
     endAt: row.end_at,
     depositCents: row.deposit_cents,
+    tipCents: row.tip_cents || 0,
+    totalDueCents: row.deposit_cents + (row.tip_cents || 0),
     currency: row.currency || "USD",
     squareOrderId: row.square_order_id || "",
     squarePaymentLinkId: row.square_payment_link_id || "",
@@ -685,7 +698,7 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
   return { window };
 }
 
-async function createPendingAppointment(db, tokenContext, bookingTypeId, windowId) {
+async function createPendingAppointment(db, tokenContext, bookingTypeId, windowId, tipCents = 0) {
   const bookingType = await db
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
     .bind(bookingTypeId)
@@ -697,7 +710,7 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     return { error: "This booking link does not include that session type." };
   }
 
-  const existing = await db
+  const existingForSelection = await db
     .prepare(
       `SELECT * FROM appointments
        WHERE booking_token_id = ?
@@ -709,11 +722,28 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     )
     .bind(tokenContext.token.id, bookingType.id, windowId)
     .first();
-  if (existing) {
+  if (existingForSelection) {
     return {
-      appointment: normalizeAppointment(existing),
+      appointment: normalizeAppointment(existingForSelection),
       bookingType: normalizeBookingType(bookingType),
       existing: true,
+    };
+  }
+
+  const existingForToken = await db
+    .prepare(
+      `SELECT * FROM appointments
+       WHERE booking_token_id = ?
+         AND status IN ('pending_deposit', 'deposit_pending')
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .bind(tokenContext.token.id)
+    .first();
+  if (existingForToken) {
+    return {
+      error: "This booking link already has a pending appointment. Continue with the existing Square checkout link or reply to the studio if you need a different time.",
+      appointment: normalizeAppointment(existingForToken),
     };
   }
 
@@ -727,8 +757,8 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
       `INSERT INTO appointments (
         id, submission_id, booking_token_id, booking_type_id, availability_window_id,
         status, client_name, client_email, client_phone, start_at, end_at,
-        deposit_cents, currency, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        deposit_cents, tip_cents, currency, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
@@ -743,6 +773,7 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
       availability.window.start_at,
       availability.window.end_at,
       bookingType.deposit_cents,
+      tipCents,
       bookingType.currency || "USD",
       now,
       now
@@ -788,6 +819,65 @@ function squareConfigured(env) {
   return Boolean(env.SQUARE_ACCESS_TOKEN && env.SQUARE_LOCATION_ID);
 }
 
+function squareWebhookNotificationUrl(request, env) {
+  return asString(env.SQUARE_WEBHOOK_NOTIFICATION_URL) || `${baseUrlFromRequest(request)}/api/square/webhook`;
+}
+
+function timingSafeEqual(left, right) {
+  const a = String(left || "");
+  const b = String(right || "");
+  let diff = a.length ^ b.length;
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    diff |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
+  }
+  return diff === 0;
+}
+
+async function squareWebhookSignature(rawBody, signatureKey, notificationUrl) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(signatureKey),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`${notificationUrl}${rawBody}`)
+  );
+  let binary = "";
+  for (const byte of new Uint8Array(signature)) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function verifySquareWebhookRequest(request, env, rawBody) {
+  const signatureKey = asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY);
+  if (!signatureKey) return { ok: false, status: 503, error: "Square webhook is not configured." };
+  const squareSignature = request.headers.get("x-square-hmacsha256-signature") || "";
+  const expected = await squareWebhookSignature(rawBody, signatureKey, squareWebhookNotificationUrl(request, env));
+  if (!timingSafeEqual(expected, squareSignature)) {
+    return { ok: false, status: 403, error: "Invalid Square webhook signature." };
+  }
+  return { ok: true };
+}
+
+function squareMoney(amount, currency) {
+  return {
+    amount,
+    currency,
+  };
+}
+
+function squareLineItem(name, amount, currency) {
+  return {
+    name,
+    quantity: "1",
+    base_price_money: squareMoney(amount, currency),
+  };
+}
+
 async function createSquarePaymentLink(request, env, appointment, bookingType) {
   if (!squareConfigured(env)) {
     throw new Error("Square is not configured.");
@@ -805,13 +895,14 @@ async function createSquarePaymentLink(request, env, appointment, bookingType) {
     },
     body: JSON.stringify({
       idempotency_key: appointment.id,
-      quick_pay: {
-        name: `${bookingType.label} Deposit`,
-        price_money: {
-          amount: appointment.depositCents,
-          currency: appointment.currency,
-        },
+      order: {
         location_id: env.SQUARE_LOCATION_ID,
+        line_items: [
+          squareLineItem(`${bookingType.label} Deposit`, appointment.depositCents, appointment.currency),
+          ...(appointment.tipCents > 0
+            ? [squareLineItem("Optional Artist Tip", appointment.tipCents, appointment.currency)]
+            : []),
+        ],
       },
       checkout_options: {
         redirect_url: redirectUrl.toString(),
@@ -837,11 +928,15 @@ export async function handleCreateBookingCheckout(request, env) {
     if (!context) return errorResponse("A private booking link is required.", 401);
     if (context.invalid) return errorResponse(context.invalid, 403);
 
+    const tip = parseTipCents(body.tipCents);
+    if (tip.error) return errorResponse(tip.error, 400);
+
     const result = await createPendingAppointment(
       db,
       context,
       asString(body.bookingTypeId),
-      asString(body.availabilityWindowId)
+      asString(body.availabilityWindowId),
+      tip.tipCents
     );
     if (result.error) return errorResponse(result.error, 400);
     if (result.existing && result.appointment.squareCheckoutUrl) {
@@ -888,8 +983,8 @@ export async function handleCreateBookingCheckout(request, env) {
       .prepare(
         `INSERT INTO deposit_payments (
           id, appointment_id, provider, provider_checkout_id, provider_order_id,
-          amount_cents, currency, status, raw_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          amount_cents, tip_cents, currency, status, raw_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         crypto.randomUUID(),
@@ -897,7 +992,8 @@ export async function handleCreateBookingCheckout(request, env) {
         "square",
         paymentLink.id || null,
         paymentLink.order_id || null,
-        result.appointment.depositCents,
+        result.appointment.depositCents + result.appointment.tipCents,
+        result.appointment.tipCents,
         result.appointment.currency,
         "pending",
         JSON.stringify(paymentLink),
@@ -937,6 +1033,58 @@ function orderLooksPaid(order) {
   return order.state === "COMPLETED" || netDue <= 0 || Boolean(order.tenders?.length);
 }
 
+async function confirmPaidAppointment(db, env, request, appointmentRow, order, paymentId = "") {
+  let appointment = normalizeAppointment(appointmentRow);
+  const now = new Date().toISOString();
+  const wasConfirmed = appointment.status === "confirmed";
+
+  await db
+    .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
+    .bind("confirmed", now, appointment.id)
+    .run();
+  await db
+    .prepare(
+      `UPDATE deposit_payments
+       SET status = ?, provider_payment_id = COALESCE(?, provider_payment_id),
+           raw_json = ?, updated_at = ?
+       WHERE appointment_id = ?`
+    )
+    .bind("paid", paymentId || null, JSON.stringify(order || {}), now, appointment.id)
+    .run();
+  if (appointment.bookingTokenId) {
+    await db
+      .prepare("UPDATE booking_tokens SET used_at = COALESCE(used_at, ?), updated_at = ? WHERE id = ?")
+      .bind(now, now, appointment.bookingTokenId)
+      .run();
+  }
+  if (appointment.submissionId) {
+    await db
+      .prepare(
+        `UPDATE submissions
+         SET status = ?, booking_url = ?, updated_at = ?
+         WHERE id = ? AND status IN ('approved', 'booked')`
+      )
+      .bind("booked", `/booking/confirmed/?appointment=${appointment.id}`, now, appointment.submissionId)
+      .run();
+  }
+
+  if (!wasConfirmed) {
+    const appointmentWithType = await db
+      .prepare(
+        `SELECT a.*, bt.label AS booking_type_label
+         FROM appointments a
+         LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+         WHERE a.id = ?`
+      )
+      .bind(appointment.id)
+      .first();
+    await notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow);
+  }
+
+  const updated = await db.prepare("SELECT * FROM appointments WHERE id = ?").bind(appointment.id).first();
+  return normalizeAppointment(updated || appointmentRow);
+}
+
 export async function handleConfirmBooking(request, env) {
   try {
     const db = requireBookingDb(env);
@@ -949,51 +1097,87 @@ export async function handleConfirmBooking(request, env) {
 
     let appointment = normalizeAppointment(appointmentRow);
     const order = await fetchSquareOrder(env, appointment.squareOrderId);
-    const now = new Date().toISOString();
     const paid = orderLooksPaid(order);
 
-    if (paid && appointment.status !== "confirmed") {
-      await db
-        .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
-        .bind("confirmed", now, appointment.id)
-        .run();
-      await db
-        .prepare(
-          `UPDATE deposit_payments
-           SET status = ?, raw_json = ?, updated_at = ?
-           WHERE appointment_id = ?`
-        )
-        .bind("paid", JSON.stringify(order), now, appointment.id)
-        .run();
-      await db
-        .prepare("UPDATE booking_tokens SET used_at = ?, updated_at = ? WHERE id = ?")
-        .bind(now, now, appointment.bookingTokenId)
-        .run();
-      await db
-        .prepare(
-          `UPDATE submissions
-           SET status = ?, booking_url = ?, updated_at = ?
-           WHERE id = ? AND status = ?`
-        )
-        .bind("booked", `/booking/confirmed/?appointment=${appointment.id}`, now, appointment.submissionId, "approved")
-        .run();
-      const updated = await db.prepare("SELECT * FROM appointments WHERE id = ?").bind(appointment.id).first();
-      appointment = normalizeAppointment(updated);
-      const appointmentWithType = await db
-        .prepare(
-          `SELECT a.*, bt.label AS booking_type_label
-           FROM appointments a
-           LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
-           WHERE a.id = ?`
-        )
-        .bind(appointment.id)
-        .first();
-      await notifyAppointmentConfirmed(env, request, appointmentWithType || updated);
-    }
+    if (paid) appointment = await confirmPaidAppointment(db, env, request, appointmentRow, order);
 
     return json({ ok: true, appointment, depositStatus: paid ? "paid" : "pending" });
   } catch (error) {
     return errorResponse("Unable to confirm booking.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+function webhookOrderId(payload) {
+  const object = payload?.data?.object || {};
+  return (
+    asString(object.payment?.order_id) ||
+    asString(object.payment?.orderId) ||
+    asString(object.order?.id) ||
+    asString(object.order_updated?.order_id) ||
+    asString(object.order_updated?.orderId) ||
+    asString(object.order_created?.order_id) ||
+    asString(object.order_created?.orderId) ||
+    asString(object.order_id) ||
+    asString(object.orderId) ||
+    asString(payload?.order_id)
+  );
+}
+
+function webhookPaymentId(payload) {
+  const object = payload?.data?.object || {};
+  return asString(object.payment?.id) || asString(object.payment_id) || "";
+}
+
+function webhookLooksPaid(payload, order) {
+  const payment = payload?.data?.object?.payment;
+  return orderLooksPaid(order) || payment?.status === "COMPLETED";
+}
+
+export async function handleSquareWebhook(request, env) {
+  let rawBody = "";
+  try {
+    rawBody = await request.text();
+    const signature = await verifySquareWebhookRequest(request, env, rawBody);
+    if (!signature.ok) return errorResponse(signature.error, signature.status);
+
+    const payload = JSON.parse(rawBody || "{}");
+    const orderId = webhookOrderId(payload);
+    if (!orderId) return json({ ok: true, ignored: true, reason: "No Square order id." });
+
+    const db = requireBookingDb(env);
+    const appointmentRow = await db
+      .prepare("SELECT * FROM appointments WHERE square_order_id = ? ORDER BY created_at DESC LIMIT 1")
+      .bind(orderId)
+      .first();
+    if (!appointmentRow) return json({ ok: true, ignored: true, reason: "No matching appointment." });
+
+    const order = await fetchSquareOrder(env, orderId);
+    if (!webhookLooksPaid(payload, order)) {
+      await db
+        .prepare(
+          `UPDATE deposit_payments
+           SET status = ?, provider_payment_id = COALESCE(?, provider_payment_id),
+               raw_json = ?, updated_at = ?
+           WHERE appointment_id = ?`
+        )
+        .bind("pending", webhookPaymentId(payload) || null, JSON.stringify(order || payload), new Date().toISOString(), appointmentRow.id)
+        .run();
+      return json({ ok: true, paid: false, appointmentId: appointmentRow.id });
+    }
+
+    const appointment = await confirmPaidAppointment(
+      db,
+      env,
+      request,
+      appointmentRow,
+      order || payload,
+      webhookPaymentId(payload)
+    );
+    return json({ ok: true, paid: true, appointmentId: appointment.id });
+  } catch (error) {
+    return errorResponse("Unable to process Square webhook.", 500, {
       detail: error.message,
     });
   }

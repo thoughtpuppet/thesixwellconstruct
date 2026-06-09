@@ -73,7 +73,7 @@ plus a Worker entrypoint for runtime routes.
 - Production branch: `main`
 - Root directory: repository root
 - Build command: `None`
-- Deploy command: `npx wrangler deploy`
+- Deploy command: `npx.cmd wrangler@latest deploy`
 
 Because the site uses root-relative asset and page paths such as `/css/transitions.css`
 and `/art/`, it should be deployed at the domain root rather than under a subpath.
@@ -84,7 +84,7 @@ and `/art/`, it should be deployed at the domain root rather than under a subpat
 2. Select `main` as the production branch.
 3. Leave the root directory at the repository root.
 4. Leave the build command as `None`.
-5. Keep the deploy command as `npx wrangler deploy`.
+5. Keep the deploy command as `npx.cmd wrangler@latest deploy` for Windows/PowerShell.
 
 No bundler, package install, or framework build step is required.
 
@@ -166,6 +166,13 @@ metadata. The forms include a `_gotcha` honeypot field.
 Recommended review flow:
 
 - Set `SUBMISSIONS_DB` and `SUBMISSIONS_ADMIN_TOKEN` for the Worker.
+- Create/configure the `SUBMISSION_FILES` R2 bucket if reference upload contents
+  should be preserved.
+- Production deploys use `SQUARE_ENVIRONMENT=production`; keep local `.dev.vars`
+  on `sandbox` for test payments.
+- Configure the Square webhook notification URL at
+  `/api/square/webhook` with `SQUARE_WEBHOOK_SIGNATURE_KEY`, subscribed to
+  `payment.created`, `payment.updated`, `order.created`, and `order.updated`.
 - Review captured submissions in `/studio/submissions/`.
 - Mark the chosen submission `approved`.
 - Generate the booking token from the submission detail panel.

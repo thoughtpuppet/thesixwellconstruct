@@ -123,6 +123,32 @@
   .token-card { width:min(520px,100%); border:1px solid var(--line-strong); padding:24px; background:var(--panel); display:grid; gap:14px; }
   .token-card h2 { font-size:22px; }
   .hidden { display:none; }
+  .next-action { display:inline-block; padding:3px 8px; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; border:3px solid; }
+  .na-needs-review { border-color:rgba(252,184,103,0.5); color:var(--accent); }
+  .na-no-link { border-color:rgba(85,186,90,0.5); color:#55BA5A; }
+  .na-link-sent { border-color:rgba(85,186,90,0.72); color:#55BA5A; }
+  .na-deposit-pending { border-color:rgba(252,184,103,0.72); color:var(--accent); }
+  .na-booked { border-color:rgba(122,16,16,0.72); color:var(--signal); }
+  .na-email-warn { border-color:rgba(236,94,38,0.72); color:#EC5E26; }
+  .na-declined { border-color:rgba(255,231,202,0.22); color:var(--dim); }
+  .na-archived { border-color:rgba(255,231,202,0.16); color:var(--dim); }
+  .detail-section { border-top:5px solid var(--ring-faint); margin-top:22px; }
+  .detail-section-toggle { width:100%; min-height:48px; border:0; background:transparent; color:var(--dim); padding:0; display:flex; align-items:center; justify-content:space-between; gap:12px; font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; text-align:left; cursor:pointer; }
+  .detail-section-toggle:hover { color:var(--text); }
+  .detail-section-toggle::after { content:"+"; color:var(--accent); font-size:16px; }
+  .detail-section.is-open .detail-section-toggle::after { content:"-"; }
+  .detail-section-body { display:none; padding-bottom:14px; }
+  .detail-section.is-open .detail-section-body { display:grid; gap:12px; }
+  .event-list { display:grid; gap:6px; }
+  .event-item { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:baseline; }
+  .event-time { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; white-space:nowrap; }
+  .event-text { color:var(--muted); font-family:var(--sans); font-size:11px; }
+  .file-list { display:grid; gap:6px; }
+  .file-item { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 12px; border:5px solid var(--ring-faint); }
+  .file-name { color:var(--muted); font-family:var(--sans); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-badge { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; white-space:nowrap; }
+  .file-badge.stored { color:#55BA5A; }
+  .type-tag { display:inline-block; padding:2px 7px; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; border:3px solid rgba(255,231,202,0.22); color:var(--dim); margin-left:6px; }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
     .list-pane { border-right:0; border-bottom:5px solid var(--ring-faint); max-height:42vh; }
@@ -158,6 +184,15 @@
           <option value="booked">Booked</option>
           <option value="archived">Archived</option>
         </select>
+        <select id="typeFilter" aria-label="Filter by type">
+          <option value="">All types</option>
+          <option value="tattoo_inquiry">Tattoo Inquiry</option>
+          <option value="flash_claim">Flash Claim</option>
+          <option value="build_your_own">Build Your Own</option>
+          <option value="consultation">Consultation</option>
+          <option value="special_project">Special Project</option>
+          <option value="art_acquisition">Art Acquisition</option>
+        </select>
       </div>
       <div id="submissionList" class="empty" style="padding:16px;">Unlock to load submissions.</div>
     </section>
@@ -189,11 +224,160 @@
   const lockBtn = document.getElementById("lockBtn");
   const availabilityBtn = document.getElementById("availabilityBtn");
   const statusFilter = document.getElementById("statusFilter");
+  const typeFilter = document.getElementById("typeFilter");
   const bookingPreviewKey = "swc_booking_admin_preview";
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
+  let appointments = [];
   let activeId = "";
   let availabilityPreviewMonth = "";
+
+  function nextActionBadge(submission) {
+    const s = submission.status;
+    const hasUrl = !!(submission.bookingUrl);
+    if (s === "declined") return `<span class="next-action na-declined">Declined</span>`;
+    if (s === "archived") return `<span class="next-action na-archived">Archived</span>`;
+    if (s === "booked") return `<span class="next-action na-booked">Booked</span>`;
+    if (s === "approved" && hasUrl) return `<span class="next-action na-link-sent">Link Sent</span>`;
+    if (s === "approved" && !hasUrl) return `<span class="next-action na-no-link">Approved — No Link</span>`;
+    if (s === "reviewing") return `<span class="next-action na-needs-review">In Review</span>`;
+    return `<span class="next-action na-needs-review">Needs Review</span>`;
+  }
+
+  function typeFields(submission) {
+    const t = submission.type || "";
+    const p = (key) => payloadValue(submission, key);
+    const field = (label, value) => value ? detailField(label, value) : "";
+
+    if (t === "flash_claim") {
+      return `
+        <div class="grid">
+          ${field("Flash Title", p("flash_title"))}
+          ${field("Flash Code", p("flash_code"))}
+          ${field("Series", p("flash_series"))}
+          ${field("Flash Size", p("flash_size"))}
+          ${field("Placement", p("placement"))}
+          ${field("Scale", p("scale"))}
+          ${field("Bid / Budget", p("claim_bid"))}
+          ${field("Timeline", p("timeline"))}
+        </div>
+        ${p("sheet_code") ? `<div class="field"><label>Specific Sheet Code</label><div class="value">${escapeHtml(p("sheet_code"))}</div></div>` : ""}
+        <div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+      `;
+    }
+
+    if (t === "build_your_own" || t === "byo") {
+      return `
+        <div class="grid">
+          ${field("Placement", p("placement"))}
+          ${field("Size / Scale", p("size") || p("scale"))}
+          ${field("Budget", p("budget_range"))}
+          ${field("Timeline", p("timeline"))}
+          ${field("Instagram", p("instagram"))}
+          ${field("Direction", p("direction"))}
+        </div>
+        ${p("selected_elements") ? `<div class="field" style="margin-top:16px;"><label>Selected Elements</label><div class="value full">${escapeHtml(p("selected_elements"))}</div></div>` : ""}
+        <div class="field" style="margin-top:16px;"><label>Brief / Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+        <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
+      `;
+    }
+
+    if (t === "consultation" || t === "in_person_consultation") {
+      return `
+        <div class="grid">
+          ${field("Preferred Slots", p("preferred_slots"))}
+          ${field("Direction", p("direction"))}
+          ${field("Budget", p("budget_range"))}
+          ${field("Timeline", p("timeline"))}
+          ${field("Instagram", p("instagram"))}
+        </div>
+        <div class="field" style="margin-top:16px;"><label>Project Brief</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+        <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
+      `;
+    }
+
+    if (t === "art_acquisition" || t === "art_inquiry") {
+      return `
+        <div class="grid">
+          ${field("Painting", p("painting"))}
+          ${field("Inquiry Type", p("inquiry_type"))}
+          ${field("Location", p("location"))}
+          ${field("City", p("city"))}
+          ${field("Phone", p("phone"))}
+        </div>
+        <div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+      `;
+    }
+
+    if (t === "special_project") {
+      return `
+        <div class="grid">
+          ${field("Placement", p("placement"))}
+          ${field("Size", p("size"))}
+          ${field("Budget", p("budget_range"))}
+          ${field("Timeline", p("timeline"))}
+          ${field("Instagram", p("instagram"))}
+          ${field("Source", submission.sourcePath || "")}
+        </div>
+        <div class="field" style="margin-top:16px;"><label>Project Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
+        <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
+        <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+      `;
+    }
+
+    return `
+      <div class="grid">
+        ${field("Placement", p("placement"))}
+        ${field("Size", p("size"))}
+        ${field("Budget", p("budget_range"))}
+        ${field("Timeline", p("timeline"))}
+        ${field("Instagram", p("instagram"))}
+        ${field("Source", submission.sourcePath || "")}
+      </div>
+      <div class="field" style="margin-top:16px;"><label>Project or Flash Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
+      <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
+      <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+    `;
+  }
+
+  function renderFiles(submission) {
+    const files = submission.files || [];
+    if (!files.length) return `<div class="field" style="margin-top:16px;"><label>Files</label><div class="value">None</div></div>`;
+    return `
+      <div class="field" style="margin-top:16px;">
+        <label>Files</label>
+        <div class="file-list">
+          ${files.map((file) => `
+            <div class="file-item">
+              <span class="file-name">${escapeHtml(file.fileName)}</span>
+              <span class="file-badge ${file.stored ? "stored" : ""}">${file.stored ? "stored" : "received only"}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  async function renderEventHistory(submissionId) {
+    const container = document.getElementById("eventHistoryBody");
+    if (!container) return;
+    try {
+      const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}`);
+      const events = payload.events || [];
+      if (!events.length) {
+        container.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events recorded.</p>';
+        return;
+      }
+      container.innerHTML = `<div class="event-list">${events.map((ev) => `
+        <div class="event-item">
+          <span class="event-time">${escapeHtml(formatDate(ev.created_at || ev.createdAt))}</span>
+          <span class="event-text">${escapeHtml(titleize(ev.event_type || ev.eventType || ""))}${ev.note ? ` — ${ev.note}` : ""}${ev.actor && ev.actor !== "system" ? ` (${ev.actor})` : ""}</span>
+        </div>
+      `).join("")}</div>`;
+    } catch {
+      container.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load events.</p>';
+    }
+  }
 
   function api(path, options = {}) {
     return fetch(path, {
@@ -214,6 +398,15 @@
     return new Date(value).toLocaleString([], { dateStyle:"medium", timeStyle:"short" });
   }
 
+  function money(cents, currency = "USD") {
+    const amount = Number(cents || 0);
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: amount % 100 === 0 ? 0 : 2,
+    }).format(amount / 100);
+  }
+
   function titleize(value) {
     return String(value || "").replace(/_/g, " ");
   }
@@ -223,19 +416,25 @@
   }
 
   function renderList() {
-    if (!submissions.length) {
+    const typeVal = typeFilter.value;
+    const visible = typeVal ? submissions.filter((s) => s.type === typeVal) : submissions;
+
+    if (!visible.length) {
       listEl.innerHTML = '<p class="empty" style="padding:16px;">No submissions found.</p>';
       return;
     }
 
-    listEl.innerHTML = submissions.map((submission) => `
+    listEl.innerHTML = visible.map((submission) => `
       <button class="submission ${submission.id === activeId ? "active" : ""}" type="button" data-id="${submission.id}">
         <span class="submission-top">
           <span class="name">${escapeHtml(submission.contactName || "Unnamed")}</span>
           <span class="pill">${escapeHtml(submission.status)}</span>
         </span>
         <span class="meta">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.contactEmail || "")}</span>
-        <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
+        <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
+          ${nextActionBadge(submission)}
+        </span>
       </button>
     `).join("");
   }
@@ -254,6 +453,34 @@
     const value = submission.payload?.[key];
     if (Array.isArray(value)) return value.join(", ");
     return value || "";
+  }
+
+  function latestAppointmentFor(submissionId) {
+    return appointments
+      .filter((appointment) => appointment.submissionId === submissionId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
+  }
+
+  function renderPaymentSummary(submission) {
+    const appointment = latestAppointmentFor(submission.id);
+    if (!appointment) return "";
+    const currency = appointment.currency || "USD";
+    const depositCents = Number(appointment.depositCents || 0);
+    const tipCents = Number(appointment.tipCents || 0);
+    const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
+    return `
+      <div class="field" style="margin-top:16px;">
+        <label>Appointment Payment</label>
+        <div class="value">
+Status: ${escapeHtml(titleize(appointment.status))}
+When: ${escapeHtml(formatDate(appointment.startAt))}
+Deposit: ${escapeHtml(money(depositCents, currency))}
+Optional tip: ${escapeHtml(money(tipCents, currency))}
+Total due today: ${escapeHtml(money(totalCents, currency))}
+Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
+        </div>
+      </div>
+    `;
   }
 
   function previewUrl() {
@@ -309,10 +536,13 @@
   }
 
   function renderDetail(submission) {
-    const files = submission.files || [];
+    const isProtected = submission.status === "booked" || submission.status === "paid";
     detailEl.innerHTML = `
       <div class="detail-head">
-        <span class="pill">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.status)}</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="pill">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.status)}</span>
+          ${nextActionBadge(submission)}
+        </div>
         <h2>${escapeHtml(submission.contactName || "Unnamed")}</h2>
         <p class="contact">
           ${escapeHtml(submission.contactEmail || "")}<br>
@@ -320,30 +550,11 @@
           ${escapeHtml(formatDate(submission.createdAt))}
         </p>
       </div>
-      <div class="grid">
-        ${detailField("Placement", payloadValue(submission, "placement"))}
-        ${detailField("Size", payloadValue(submission, "size"))}
-        ${detailField("Budget", payloadValue(submission, "budget_range"))}
-        ${detailField("Timeline", payloadValue(submission, "timeline"))}
-        ${detailField("Instagram", payloadValue(submission, "instagram"))}
-        ${detailField("Source", submission.sourcePath || "")}
-      </div>
-      <div class="field">
-        <label>Project or Flash Title</label>
-        <div class="value">${escapeHtml(payloadValue(submission, "project_title"))}</div>
-      </div>
-      <div class="field" style="margin-top:16px;">
-        <label>Reference Links</label>
-        <div class="value full">${escapeHtml(payloadValue(submission, "reference_links"))}</div>
-      </div>
-      <div class="field" style="margin-top:16px;">
-        <label>Project Notes</label>
-        <div class="value full">${escapeHtml(payloadValue(submission, "message"))}</div>
-      </div>
-      <div class="field" style="margin-top:16px;">
-        <label>Files</label>
-        <div class="value">${escapeHtml(files.length ? files.map((file) => `${file.fileName} (${file.stored ? "stored" : "received only"})`).join("\\n") : "None")}</div>
-      </div>
+
+      ${typeFields(submission)}
+      ${renderFiles(submission)}
+      ${renderPaymentSummary(submission)}
+
       <div class="actions">
         <div class="field">
           <label for="detailStatus">Status</label>
@@ -364,7 +575,11 @@
         <button class="button" id="saveBtn" type="button">Save</button>
       </div>
       <div class="booking-actions" style="margin-top:16px;">
-        <button class="button danger-button" id="deleteSubmissionBtn" type="button">Delete Entry</button>
+        ${isProtected
+          ? `<button class="button" id="archiveSubmissionBtn" type="button">Archive Entry</button>
+             <button class="button danger-button" id="deleteSubmissionBtn" type="button" disabled title="Cannot delete a booked or paid submission — archive instead">Delete Entry</button>`
+          : `<button class="button danger-button" id="deleteSubmissionBtn" type="button">Delete Entry</button>`
+        }
       </div>
       <div class="assist-panel">
         <label for="textAssist">Manual Text Assist</label>
@@ -378,7 +593,15 @@
         <label for="internalNotes">Internal Notes</label>
         <textarea id="internalNotes">${escapeHtml(submission.internalNotes || "")}</textarea>
       </div>
+
+      <div class="detail-section is-open">
+        <button class="detail-section-toggle" type="button" data-section-toggle>Event History</button>
+        <div class="detail-section-body" id="eventHistoryBody">
+          <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading...</p>
+        </div>
+      </div>
     `;
+    renderEventHistory(submission.id);
   }
 
   function localDateTimeToIso(value) {
@@ -783,7 +1006,9 @@
     setStatus("Loading");
     const query = statusFilter.value ? `?status=${encodeURIComponent(statusFilter.value)}` : "";
     const payload = await api(`/api/admin/submissions${query}`);
+    const appointmentPayload = await api("/api/admin/booking/appointments");
     submissions = payload.submissions || [];
+    appointments = appointmentPayload.appointments || [];
     setStatus(`${submissions.length} loaded`);
     renderList();
     if (activeId) {
@@ -861,9 +1086,24 @@
 
     if (event.target.id === "generateBookingBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
+      const currentSelectStatus = document.getElementById("detailStatus")?.value;
+      if (submission?.status !== "approved" && currentSelectStatus !== "approved") {
+        setStatus("Setting status to approved first");
+        document.getElementById("detailStatus").value = "approved";
+      }
       if (submission?.status !== "approved") {
-        setStatus("Approve first");
-        return;
+        setStatus("Saving as approved");
+        const saved = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            status: "approved",
+            bookingUrl: document.getElementById("bookingUrl")?.value || submission?.bookingUrl || "",
+            internalNotes: document.getElementById("internalNotes")?.value || submission?.internalNotes || "",
+          }),
+        });
+        const index = submissions.findIndex((s) => s.id === activeId);
+        if (index >= 0) submissions[index] = saved.submission;
       }
       setStatus("Generating link");
       const payload = await api("/api/admin/booking/tokens", {
@@ -875,7 +1115,7 @@
       const textAssist = document.getElementById("textAssist");
       if (textAssist) {
         textAssist.value = textReminderCopy({
-          ...submission,
+          ...(submissions.find((s) => s.id === activeId) || submission),
           bookingUrl: payload.token.path,
           status: "approved",
         });
@@ -936,10 +1176,36 @@
       return;
     }
 
-    if (event.target.id === "deleteSubmissionBtn" && activeId) {
+    if (event.target.id === "archiveSubmissionBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
       const label = submission?.contactName || submission?.contactEmail || "this entry";
-      if (!window.confirm(`Delete ${label}? This removes the submission record and any booking tokens for it.`)) return;
+      if (!window.confirm(`Archive ${label}? The record will be preserved but hidden from active views.`)) return;
+      setStatus("Archiving entry");
+      const saved = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: "archived",
+          bookingUrl: submission?.bookingUrl || "",
+          internalNotes: document.getElementById("internalNotes")?.value || submission?.internalNotes || "",
+        }),
+      });
+      const index = submissions.findIndex((s) => s.id === activeId);
+      if (index >= 0) submissions[index] = saved.submission;
+      renderList();
+      renderDetail(saved.submission);
+      setStatus("Entry archived");
+      return;
+    }
+
+    if (event.target.id === "deleteSubmissionBtn" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      if (submission?.status === "booked" || submission?.status === "paid") {
+        setStatus("Cannot delete — archive instead");
+        return;
+      }
+      const label = submission?.contactName || submission?.contactEmail || "this entry";
+      if (!window.confirm(`Delete ${label}? This permanently removes the submission record and any booking tokens. This cannot be undone.`)) return;
       setStatus("Deleting entry");
       await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, { method: "DELETE" });
       submissions = submissions.filter((item) => item.id !== activeId);
@@ -947,6 +1213,12 @@
       renderList();
       detailEl.innerHTML = '<p class="empty">Select a submission to review details.</p>';
       setStatus("Entry deleted");
+      return;
+    }
+
+    const sectionToggle = event.target.closest("[data-section-toggle]");
+    if (sectionToggle) {
+      sectionToggle.closest(".detail-section")?.classList.toggle("is-open");
       return;
     }
 
@@ -1080,6 +1352,7 @@
   refreshBtn.addEventListener("click", () => loadSubmissions().catch((error) => setStatus(error.message)));
   availabilityBtn.addEventListener("click", () => renderAvailabilityManager().catch((error) => setStatus(error.message)));
   statusFilter.addEventListener("change", () => loadSubmissions().catch((error) => setStatus(error.message)));
+  typeFilter.addEventListener("change", () => { renderList(); if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); } });
   detailEl.addEventListener("change", (event) => {
     if (event.target.id !== "previewMonthSelect") return;
     availabilityPreviewMonth = event.target.value;

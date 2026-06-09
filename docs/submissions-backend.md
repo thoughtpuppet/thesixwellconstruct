@@ -13,7 +13,7 @@ This site now has a first-pass studio submissions backend:
 Create the D1 database:
 
 ```sh
-wrangler d1 create swc-submissions
+npx.cmd wrangler@latest d1 create swc-submissions
 ```
 
 Add the returned binding to `wrangler.jsonc`:
@@ -31,30 +31,62 @@ Add the returned binding to `wrangler.jsonc`:
 Apply the schema:
 
 ```sh
-wrangler d1 migrations apply swc-submissions
+npx.cmd wrangler@latest d1 migrations apply swc-submissions
 ```
 
 Set the admin token:
 
 ```sh
-wrangler secret put SUBMISSIONS_ADMIN_TOKEN
+npx.cmd wrangler@latest secret put SUBMISSIONS_ADMIN_TOKEN
 ```
 
 Set Square secrets before enabling deposit checkout:
 
 ```sh
-wrangler secret put SQUARE_ACCESS_TOKEN
-wrangler secret put SQUARE_LOCATION_ID
-wrangler secret put SQUARE_WEBHOOK_SIGNATURE_KEY
+npx.cmd wrangler@latest secret put SQUARE_ACCESS_TOKEN
+npx.cmd wrangler@latest secret put SQUARE_LOCATION_ID
+npx.cmd wrangler@latest secret put SQUARE_WEBHOOK_SIGNATURE_KEY
 ```
 
-Use `SQUARE_ENVIRONMENT=sandbox` while testing and `SQUARE_ENVIRONMENT=production` for live deposits.
+Use `SQUARE_ENVIRONMENT=sandbox` while testing and `SQUARE_ENVIRONMENT=production` for live deposits. Production is the deploy default in `wrangler.jsonc`; use `.dev.vars` for local sandbox testing.
+Set the Square webhook notification URL to:
+
+```text
+https://thesixwellconstruct.com/api/square/webhook
+```
+
+Subscribe it to payment/order events that fire after checkout payment changes:
+`payment.created`, `payment.updated`, `order.created`, and `order.updated` are
+the useful production set.
+The Worker validates Square's `x-square-hmacsha256-signature` header with
+`SQUARE_WEBHOOK_SIGNATURE_KEY`, then marks the matching appointment `confirmed`
+and the approved submission `booked` when the Square order or payment is paid. The return page at
+`/booking/confirmed/` still performs the same confirmation check as a fallback.
+
+### Switching Square from sandbox to production
+
+1. In the Square Developer Dashboard, switch the app from Sandbox to Production.
+2. Copy the production access token and location ID.
+3. Set Worker secrets:
+
+```sh
+npx.cmd wrangler@latest secret put SQUARE_ACCESS_TOKEN
+npx.cmd wrangler@latest secret put SQUARE_LOCATION_ID
+npx.cmd wrangler@latest secret put SQUARE_WEBHOOK_SIGNATURE_KEY
+```
+
+4. Confirm `wrangler.jsonc` has `"SQUARE_ENVIRONMENT": "production"`.
+5. In the production Square app, create/update the webhook subscription:
+   - Notification URL: `https://thesixwellconstruct.com/api/square/webhook`
+   - Events: `payment.created`, `payment.updated`, `order.created`, `order.updated`.
+6. Deploy the Worker.
+7. Run one low-dollar live checkout, then confirm the appointment moves from `deposit_pending` to `confirmed` and the related submission moves from `approved` to `booked` in `/studio/submissions/`.
 
 Set up transactional email before enabling client confirmations and reminders:
 
 ```sh
-wrangler email sending enable artpilltattoohouse.com
-wrangler d1 migrations apply swc-submissions
+npx.cmd wrangler@latest email sending enable artpilltattoohouse.com
+npx.cmd wrangler@latest d1 migrations apply swc-submissions
 ```
 
 The Worker uses the `EMAIL` send binding in `wrangler.jsonc`. Confirmation and
@@ -70,6 +102,12 @@ The cron trigger checks hourly for confirmed appointments about 24 hours away
 and sends one reminder per appointment.
 
 Optional file storage uses R2. If the `SUBMISSION_FILES` binding exists, uploaded reference files are stored under `submissions/{submissionId}/...`. If it does not exist, the backend still records file metadata, but it cannot preserve the file contents.
+
+Create the bucket before deploying the `r2_buckets` binding:
+
+```sh
+npx.cmd wrangler@latest r2 bucket create swc-submission-files
+```
 
 ```jsonc
 "r2_buckets": [
@@ -101,8 +139,11 @@ The branded booking flow starts at `/booking/`. Tattoo clients need a private to
 - Admin uses exceptions for closed dates, extra bookable blocks, or unusual days.
 - Admin approves a submission, then generates a booking link.
 - Client chooses a session and window.
-- `POST /api/booking/checkout` creates a pending appointment and Square hosted checkout link.
-- `/booking/confirmed/` verifies the Square order when possible and shows confirmed or pending deposit state.
+- Client can choose no tip, `$10`, `$20`, `$50`, or a custom optional tip before Square.
+- `POST /api/booking/checkout` creates a pending appointment and Square hosted checkout link with itemized deposit and optional tip rows.
+- Only one pending appointment can exist per booking token. If the client needs a different time after starting checkout, revoke/regenerate the booking link or help them manually.
+- `/api/square/webhook` confirms paid Square orders even if the client does not return from Square, and Square retry events are safe to process repeatedly.
+- `/booking/confirmed/` also verifies the Square order when possible and shows confirmed or pending deposit state.
 
 The old tattoo booking paths redirect into the system booking flow:
 

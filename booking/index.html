@@ -19,7 +19,7 @@
   }
   * { box-sizing:border-box; }
   body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); overflow-x:hidden; }
-  button,select { font:inherit; }
+  button,select,input { font:inherit; }
   button { cursor:pointer; }
   a { color:inherit; text-decoration:none; }
   .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
@@ -64,6 +64,13 @@
   .panel { border-top:5px solid var(--ring-soft); padding-top:20px; position:sticky; top:100px; }
   .panel-row { display:flex; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:5px solid var(--ring-faint); color:var(--muted); font-size:13px; line-height:1.5; }
   .panel-key { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
+  .tip-control { display:grid; gap:10px; padding:18px 0; border-bottom:5px solid var(--ring-faint); }
+  .tip-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+  .tip-button { min-height:38px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .tip-button:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
+  .tip-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(122,16,16,0.12); }
+  .custom-tip { width:100%; min-height:42px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; padding:0 12px; font-family:var(--sans); font-size:13px; }
+  .custom-tip:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
   .checkout { width:100%; min-height:52px; margin-top:22px; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .checkout:enabled:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
   .checkout:disabled { opacity:0.45; cursor:not-allowed; }
@@ -126,8 +133,20 @@
       <div class="panel-row"><span class="panel-key">Session</span><span id="sessionValue">Select a session</span></div>
       <div class="panel-row"><span class="panel-key">Window</span><span id="windowValue">Select a time</span></div>
       <div class="panel-row"><span class="panel-key">Deposit</span><span id="depositValue">-</span></div>
-      <button id="checkoutBtn" class="checkout" type="button" disabled>Continue to Pay Deposit</button>
-      <p id="checkoutNote" class="fine">Deposit is applied toward the appointment total. You will be transferred to Square to pay your deposit.</p>
+      <div class="tip-control">
+        <span class="panel-key">Optional Tip</span>
+        <div class="tip-options" role="group" aria-label="Optional tip amount">
+          <button class="tip-button active" type="button" data-tip-cents="0">None</button>
+          <button class="tip-button" type="button" data-tip-cents="1000">$10</button>
+          <button class="tip-button" type="button" data-tip-cents="2000">$20</button>
+          <button class="tip-button" type="button" data-tip-cents="5000">$50</button>
+        </div>
+        <input id="customTipInput" class="custom-tip" type="number" min="0" max="500" step="0.01" inputmode="decimal" placeholder="Custom tip">
+      </div>
+      <div class="panel-row"><span class="panel-key">Tip</span><span id="tipValue">$0</span></div>
+      <div class="panel-row"><span class="panel-key">Total Due Today</span><span id="totalValue">-</span></div>
+      <button id="checkoutBtn" class="checkout" type="button" disabled>Continue to Square</button>
+      <p id="checkoutNote" class="fine">Deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.</p>
     </aside>
   </div>
 </main>
@@ -152,6 +171,9 @@
   const sessionValue = document.getElementById("sessionValue");
   const windowValue = document.getElementById("windowValue");
   const depositValue = document.getElementById("depositValue");
+  const tipValue = document.getElementById("tipValue");
+  const totalValue = document.getElementById("totalValue");
+  const customTipInput = document.getElementById("customTipInput");
   const checkoutBtn = document.getElementById("checkoutBtn");
   const checkoutNote = document.getElementById("checkoutNote");
   let context = null;
@@ -159,6 +181,7 @@
   let selectedWindow = null;
   let selectedMonthKey = "";
   let selectedDayKey = "";
+  let selectedTipCents = 0;
   if (previewMode && editMode) document.body.classList.add("local-edit-preview");
 
   function previewContext() {
@@ -251,6 +274,29 @@
   function formatDate(value) {
     if (!value) return "";
     return new Date(value).toLocaleString([], { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+  }
+
+  function money(cents, currency = "USD") {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    }).format(cents / 100);
+  }
+
+  function customTipCents() {
+    const value = Number(customTipInput.value || 0);
+    if (!Number.isFinite(value) || value < 0) return 0;
+    return Math.round(value * 100);
+  }
+
+  function setTip(cents, fromCustom = false) {
+    selectedTipCents = Math.max(0, Math.round(Number(cents) || 0));
+    document.querySelectorAll("[data-tip-cents]").forEach((button) => {
+      button.classList.toggle("active", !fromCustom && Number(button.dataset.tipCents) === selectedTipCents);
+    });
+    if (!fromCustom) customTipInput.value = "";
+    render();
   }
 
   function monthKey(value) {
@@ -402,6 +448,8 @@
     sessionValue.textContent = selectedType ? selectedType.label : "Select a session";
     windowValue.textContent = selectedWindow ? formatDate(selectedWindow.startAt) : "Select a time";
     depositValue.textContent = selectedType ? selectedType.depositLabel : "-";
+    tipValue.textContent = money(selectedTipCents, selectedType?.currency || "USD");
+    totalValue.textContent = selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
     checkoutBtn.disabled = !selectedType || !selectedWindow;
     window.dispatchEvent(new CustomEvent("sixwell:booking-rendered"));
   }
@@ -489,6 +537,12 @@
     render();
   });
 
+  document.querySelectorAll("[data-tip-cents]").forEach((button) => {
+    button.addEventListener("click", () => setTip(Number(button.dataset.tipCents || 0)));
+  });
+
+  customTipInput.addEventListener("input", () => setTip(customTipCents(), true));
+
   checkoutBtn.addEventListener("click", async () => {
     if (!selectedType || !selectedWindow) return;
     if (previewMode) {
@@ -504,6 +558,7 @@
         token,
         bookingTypeId: selectedType.id,
         availabilityWindowId: selectedWindow.id,
+        tipCents: selectedTipCents,
       }),
     });
     const payload = await response.json().catch(() => ({}));

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Location And Parking - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/tattoos.css">
+<style>
+  :root {
+    --venture-accent: var(--color-tattooing);
+    --venture-accent-dim: var(--color-tattooing-dim);
+  }
+  .arrival-list {
+    display: grid;
+    gap: 32px;
+  }
+  .arrival-item {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 32px;
+    padding: 24px 0;
+    border-top: 1px solid rgba(109, 61, 21, 0.22);
+  }
+  .arrival-item h2 {
+    color: var(--venture-accent);
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .arrival-item p {
+    color: rgba(232, 228, 220, 0.78);
+    line-height: 1.65;
+  }
+  @media (max-width: 700px) {
+    .arrival-item { grid-template-columns: 1fr; gap: 10px; }
+  }
+</style>
+<link rel="stylesheet" href="/css/mobile.css">
+</head>
+<body class="tattoos-page" data-venture="tattooing">
+  <main class="tattoos-shell">
+    <section class="hero">
+      <div class="hero-copy entrance-fade">
+        <span class="eyebrow">Client resources</span>
+        <h1>Location &amp; parking</h1>
+        <p class="hero-lead">Arrival notes for confirmed art.pill TATTOO HOUSE appointments.</p>
+        <p class="hero-note">The studio is in Castleberry Hill, Atlanta. Use your confirmation email and studio thread for any private arrival details that are not published here.</p>
+      </div>
+      <aside class="hero-panel entrance-fade entrance-delay-1">
+        <span class="panel-label">Before arrival</span>
+        <h2 class="panel-title">Check your confirmation thread.</h2>
+        <p>If you are lost, delayed, or unsure where to enter, reply to the email thread before your appointment time.</p>
+      </aside>
+    </section>
+
+    <section class="page-section arrival-list">
+      <div class="arrival-item">
+        <h2>Studio area</h2>
+        <p>art.pill TATTOO HOUSE is based in Castleberry Hill, Atlanta. Any private address, suite, or entry details should be checked against your confirmation thread before arrival.</p>
+      </div>
+      <div class="arrival-item">
+        <h2>Parking</h2>
+        <p>Plan extra time for neighborhood parking and walking to the studio. If the studio sends a specific parking note for your appointment, follow that message first.</p>
+      </div>
+      <div class="arrival-item">
+        <h2>Entrance</h2>
+        <p>Use the arrival instructions in your confirmation thread for the building entrance and any access notes. Do not enter restricted areas or interrupt another appointment.</p>
+      </div>
+      <div class="arrival-item">
+        <h2>Late or lost</h2>
+        <p>Reply to the studio email thread if you are running late or cannot find the entrance. There is a 15-minute grace period; later arrival may require rescheduling and a new deposit.</p>
+      </div>
+      <div class="arrival-item">
+        <h2>Accessibility</h2>
+        <p>If you have accessibility needs, mobility concerns, or questions about the space, reply before your session so the studio can confirm what is possible.</p>
+      </div>
+    </section>
+
+    <section class="page-section">
+      <div class="action-row">
+        <a class="tattoos-button" href="/tattoos/day-of/">Day-of prep</a>
+        <a class="tattoos-button-secondary" href="/tattoos/policies/">Booking policies</a>
+      </div>
+    </section>
+
+    <footer class="footer-bottom">
+      <p>art.pill TATTOO HOUSE / client resource packet</p>
+      <a href="/tattoos/">Return to Art.Pill Tattoo House</a>
+    </footer>
+  </main>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

@@ -6,4 +6,5 @@ SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
 SQUARE_ACCESS_TOKEN=replace-with-your-square-access-token
 SQUARE_LOCATION_ID=replace-with-your-square-location-id
 SQUARE_ENVIRONMENT=sandbox
+SQUARE_WEBHOOK_NOTIFICATION_URL=https://thesixwellconstruct.com/api/square/webhook
 SQUARE_WEBHOOK_SIGNATURE_KEY=replace-with-your-square-webhook-signature-key

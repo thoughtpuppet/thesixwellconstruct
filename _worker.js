@@ -34,6 +34,7 @@ import {
   handleConfirmBooking,
   handleCreateBookingCheckout,
   handleCreateBookingHold,
+  handleSquareWebhook,
 } from "./functions/api/booking/_lib.js";
 import { sendDueAppointmentReminders } from "./functions/api/notifications/_lib.js";
 
@@ -432,6 +433,19 @@ async function handleBookingApi(request, env) {
   return notFound("Unknown booking API route.");
 }
 
+async function handleSquareApi(request, env) {
+  const url = new URL(request.url);
+  const { pathname } = url;
+  const { method } = request;
+
+  if (pathname === "/api/square/webhook") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleSquareWebhook(request, env);
+  }
+
+  return notFound("Unknown Square API route.");
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -441,6 +455,10 @@ export default {
 
     if (url.pathname.startsWith("/api/shop/")) {
       return handleShopApi(request, env);
+    }
+
+    if (url.pathname.startsWith("/api/square/")) {
+      return handleSquareApi(request, env);
     }
 
     if (

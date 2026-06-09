@@ -20,6 +20,12 @@
       "database_id": "ec619569-212f-43b7-9b8c-6ac3bfed85e5"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "SUBMISSION_FILES",
+      "bucket_name": "swc-submission-files"
+    }
+  ],
   "send_email": [
     {
       "name": "EMAIL"
@@ -32,6 +38,8 @@
   },
   "vars": {
     "PUBLIC_SITE_URL": "https://thesixwellconstruct.com",
+    "SQUARE_ENVIRONMENT": "production",
+    "SQUARE_WEBHOOK_NOTIFICATION_URL": "https://thesixwellconstruct.com/api/square/webhook",
     "NOTIFICATION_FROM_EMAIL": "saisolehamn@artpilltattoohouse.com",
     "NOTIFICATION_FROM_NAME": "art.pill TATTOO HOUSE",
     "NOTIFICATION_REPLY_TO": "saisolehamn@artpilltattoohouse.com",

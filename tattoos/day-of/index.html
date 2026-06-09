@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day-Of Session Prep - Art.Pill Tattoo House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/tattoos.css">
+<style>
+  :root {
+    --venture-accent: var(--color-tattooing);
+    --venture-accent-dim: var(--color-tattooing-dim);
+  }
+  .resource-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 40px;
+  }
+  @media (max-width: 760px) {
+    .resource-grid { grid-template-columns: 1fr; }
+  }
+</style>
+<link rel="stylesheet" href="/css/mobile.css">
+</head>
+<body class="tattoos-page" data-venture="tattooing">
+  <main class="tattoos-shell">
+    <section class="hero">
+      <div class="hero-copy entrance-fade">
+        <span class="eyebrow">Client resources</span>
+        <h1>Day-of prep</h1>
+        <p class="hero-lead">A practical checklist for arriving ready for your tattoo session.</p>
+        <p class="hero-note">Use this as your quick reference before coming in. If anything changes or needs attention, reply to the studio email thread before your appointment.</p>
+      </div>
+      <aside class="hero-panel entrance-fade entrance-delay-1">
+        <span class="panel-label">Session day</span>
+        <h2 class="panel-title">Come fed, rested, and on time.</h2>
+        <p>The goal is a focused session with enough room for design review, placement, tattooing, final payment, and aftercare notes.</p>
+      </aside>
+    </section>
+
+    <section class="page-section">
+      <div class="resource-grid">
+        <article class="section-card">
+          <span class="mini-label">Bring</span>
+          <h3>Valid ID and essentials</h3>
+          <p>Bring a valid government-issued ID, any agreed reference notes, water, and anything you need for comfort during the session.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Wear</span>
+          <h3>Easy access clothing</h3>
+          <p>Wear clean, comfortable clothing that gives clear access to the tattoo area and can safely be marked or stained.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Prepare</span>
+          <h3>Food, water, and rest</h3>
+          <p>Eat a real meal before arriving, hydrate, and avoid coming in exhausted. Do not arrive under the influence.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Guests</span>
+          <h3>Ask before bringing someone</h3>
+          <p>Guests should be approved before the appointment. The studio may limit guests to protect the focus and safety of the session.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Design</span>
+          <h3>Review happens at the appointment</h3>
+          <p>Designs are shown on the day of the tattoo appointment unless a consultation has been requested, approved, and paid for.</p>
+        </article>
+        <article class="section-card">
+          <span class="mini-label">Balance</span>
+          <h3>Final payment is due at the session</h3>
+          <p>Your deposit goes toward the final tattoo cost. Preferred final payment is cash; other options may include Cash App, Apple Pay, or card.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="page-section">
+      <div class="info-panel">
+        <span class="mini-label">Arrival window</span>
+        <p>There is a 15-minute grace period. Arrival later than 15 minutes may require cancellation, rescheduling, and a new deposit.</p>
+      </div>
+      <div class="action-row">
+        <a class="tattoos-button" href="/tattoos/location-parking/">Location and parking</a>
+        <a class="tattoos-button-secondary" href="/tattoos/policies/">Booking policies</a>
+      </div>
+    </section>
+
+    <footer class="footer-bottom">
+      <p>art.pill TATTOO HOUSE / client resource packet</p>
+      <a href="/tattoos/">Return to Art.Pill Tattoo House</a>
+    </footer>
+  </main>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

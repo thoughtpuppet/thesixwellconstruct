@@ -112,6 +112,8 @@
       renderRow("Client", appointment.clientName),
       renderRow("When", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
       renderRow("Deposit", `${money(appointment.depositCents, appointment.currency)} / ${paid ? "received" : "pending"}`),
+      renderRow("Optional Tip", money(appointment.tipCents || 0, appointment.currency)),
+      renderRow("Total Paid Today", money(appointment.totalDueCents || appointment.depositCents || 0, appointment.currency)),
       renderRow("Status", appointment.status.replace(/_/g, " ")),
     ].join("");
   }

@@ -90,6 +90,7 @@
   var controlSelectionRange = null;
 
   var TEXT_SELECTOR = [
+    '[data-copy-id]',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'p', 'li',
     'figcaption', 'blockquote',
@@ -137,16 +138,26 @@
     return text.slice(0, 40).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'text';
   }
 
-  function buildElementId(element, index) {
+  function buildElementId(element, index, root) {
     var existing = element.getAttribute('data-copy-id') || element.id;
     if (existing) return existing;
-    return buildGeneratedElementId(element, index);
+    return buildGeneratedElementId(element, index, root);
   }
 
-  function buildGeneratedElementId(element, index) {
+  function copyIdForElement(element) {
+    return element ? element.getAttribute('data-copy-id') || '' : '';
+  }
+
+  // The optional `root` parameter sets the ancestor to stop at when building the CSS
+  // path. It defaults to `document.body` for live-DOM elements. Pass `doc.body` (the
+  // DOMParser document's <body>) when working on a parsed source document — otherwise
+  // the walk never reaches the live body, overshoots into <html>, and the path gains
+  // two extra unwanted segments that break generated-ID matching.
+  function buildGeneratedElementId(element, index, root) {
+    root = root || document.body;
     var parts = [];
     var node = element;
-    while (node && node.nodeType === 1 && node !== document.body && parts.length < 5) {
+    while (node && node.nodeType === 1 && node !== root && parts.length < 5) {
       var part = node.tagName.toLowerCase();
       if (node.className && typeof node.className === 'string') {
         part += '.' + node.className.trim().split(/\s+/).slice(0, 2).join('.');
@@ -158,8 +169,8 @@
     return parts.join('>') + ':' + textSignature(element) + ':' + index;
   }
 
-  function buildLegacyElementId(element, index) {
-    return element.id || buildGeneratedElementId(element, index);
+  function buildLegacyElementId(element, index, root) {
+    return element.id || buildGeneratedElementId(element, index, root);
   }
 
   function getSavedCopy() {
@@ -185,6 +196,12 @@
     return segments;
   }
 
+  function isSourceApplyContext() {
+    var protocol = window.location.protocol;
+    var host = window.location.hostname;
+    return (protocol === 'http:' || protocol === 'https:') && (host === 'localhost' || host === '127.0.0.1' || host === '::1');
+  }
+
   function callToolApi(endpoint, body) {
     return window.fetch(endpoint, {
       method: 'POST',
@@ -199,14 +216,21 @@
   }
 
   function detectHelper() {
+    if (!isSourceApplyContext()) {
+      helperAvailable = false;
+      updateSourceButton();
+      return Promise.resolve(false);
+    }
     return callToolApi('/__tools/read-file', { pathSegments: pageFilePath() })
       .then(function() {
         helperAvailable = true;
         updateSourceButton();
+        return true;
       })
       .catch(function() {
         helperAvailable = false;
         updateSourceButton();
+        return false;
       });
   }
 
@@ -362,12 +386,13 @@
     var collected = [];
 
     candidates.forEach(function(element) {
+      var hasStableCopyId = Boolean(copyIdForElement(element));
       if (isEditorNode(element)) return;
       if (element.closest('script, style, noscript, svg, canvas, input, textarea, select')) return;
       if (element.closest('#construct-fade, #construct-corner, #construct-nav')) return;
       if (element.closest('[data-live-edit-ignore]')) return;
-      if (!hasDirectText(element)) return;
       if (!element.textContent || !element.textContent.trim()) return;
+      if (!hasStableCopyId && !hasDirectText(element)) return;
       if (hasEditableParent(element)) return;
 
       element.setAttribute('data-live-edit-id', buildElementId(element, collected.length));
@@ -383,8 +408,10 @@
     editableElements = collectEditableElements();
 
     var migrated = false;
+    var currentIds = {};
     editableElements.forEach(function(element, index) {
       var id = element.getAttribute('data-live-edit-id');
+      if (id) currentIds[id] = true;
       var legacyId = buildLegacyElementId(element, index);
       if (legacyId && legacyId !== id && saved[legacyId] && !saved[id]) {
         saved[id] = saved[legacyId];
@@ -403,6 +430,18 @@
         applyElementStyles(element, record.styles);
       }
     });
+
+    var stale = {};
+    Object.keys(saved).forEach(function(id) {
+      if (currentIds[id]) return;
+      stale[id] = saved[id];
+      delete saved[id];
+      migrated = true;
+    });
+
+    if (Object.keys(stale).length) {
+      window.localStorage.setItem(pageKey() + ':stale-backup', JSON.stringify(stale));
+    }
 
     if (migrated) setSavedCopy(saved);
 
@@ -1144,9 +1183,17 @@
 
   function savedEntries() {
     var saved = getSavedCopy();
+    var currentIds = {};
+    var sourceBackedIds = {};
+    editableElements.forEach(function(element) {
+      var id = element.getAttribute('data-live-edit-id');
+      if (id) currentIds[id] = true;
+      if (id && copyIdForElement(element)) sourceBackedIds[id] = true;
+    });
     return Object.keys(saved).map(function(id) {
-      return { id: id, record: normalizeRecord(saved[id]) };
+      return { id: id, record: normalizeRecord(saved[id]), sourceBacked: Boolean(sourceBackedIds[id]) };
     }).filter(function(entry) {
+      if (editableElements.length && !currentIds[entry.id]) return false;
       return entry.record.html || entry.record.text || hasMeaningfulStyles(entry.record.styles);
     });
   }
@@ -1172,11 +1219,11 @@
       return;
     }
 
-    var targetPath = pageFilePath().join('/');
+    var targetPath = isSourceApplyContext() ? pageFilePath().join('/') : 'preview only - open via localhost to apply source';
     body.innerHTML = '<p class="review-path">target: ' + escapeText(targetPath) + '</p>' + entries.map(function(entry) {
       return [
         '<article class="review-item">',
-        '<div class="review-id">' + escapeText(entry.id) + '</div>',
+        '<div class="review-id">' + escapeText(entry.id) + ' - ' + (entry.sourceBacked ? 'source-backed' : 'preview-only') + '</div>',
         originalRecords[entry.id] ? '<pre>old: ' + escapeText(originalRecords[entry.id].html) + '</pre>' : '',
         '<pre>new: ' + escapeText(entry.record.html || entry.record.text) + '</pre>',
         hasMeaningfulStyles(entry.record.styles) ? '<pre>styles: ' + escapeText(JSON.stringify(entry.record.styles)) + '</pre>' : '',
@@ -1252,7 +1299,7 @@
   }
 
   function applyRecordToElement(element, record) {
-    var newHtml = record.html || '';
+    var newHtml = sanitizeHtml(record.html || '');
     if (newHtml && newHtml !== element.innerHTML) {
       element.innerHTML = newHtml;
     }
@@ -1260,34 +1307,118 @@
   }
 
   function findSourceElement(doc, id) {
-    var candidates = Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id], [id]'));
+    var candidates = Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]'));
     for (var i = 0; i < candidates.length; i += 1) {
-      if (candidates[i].getAttribute('data-copy-id') === id || candidates[i].id === id) return candidates[i];
+      if (candidates[i].getAttribute('data-copy-id') === id) return candidates[i];
     }
+    return null;
+  }
 
-    var generatedCandidates = [];
-    Array.prototype.slice.call(doc.querySelectorAll(TEXT_SELECTOR)).forEach(function(element) {
-      if (element.closest('script, style, noscript, svg, canvas, input, textarea, select')) return;
-      if (element.closest('[data-live-edit-ignore]')) return;
-      if (element.closest('#construct-fade, #construct-corner, #construct-nav')) return;
-      if (!hasDirectText(element)) return;
-      if (!element.textContent || !element.textContent.trim()) return;
-      for (var j = 0; j < generatedCandidates.length; j += 1) {
-        if (generatedCandidates[j].contains(element)) return;
+  function sourceEditableIds(doc) {
+    return Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]')).map(function(element) {
+      return element.getAttribute('data-copy-id') || '';
+    }).filter(Boolean);
+  }
+
+  function sampleIds(ids) {
+    return ids.slice(0, 4).join(', ');
+  }
+
+  // Strip the current origin (e.g. "http://localhost:4173") from href/src/action/srcset
+  // attribute values in a serialized HTML string. DOMParser absolutizes all relative URLs
+  // when it serializes outerHTML, so "href="/tattoos/"" becomes
+  // "href="http://localhost:4173/tattoos/"". Without this normalization, indexOf searches
+  // against the raw source file (which has relative URLs) always fail for link elements.
+  function deabsolutizeHtml(html) {
+    var origin = window.location.origin;
+    if (!origin || origin === 'null') return html;
+    var escaped = origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return html.replace(
+      new RegExp('((?:href|src|action|srcset)=")' + escaped, 'g'),
+      '$1'
+    );
+  }
+
+  // Find an element in the raw HTML source string by its stable data-copy-id
+  // attribute, then replace its entire span (opening tag through closing tag) with
+  // `replacement`. Returns the updated source string, or null if the element cannot
+  // be located. This avoids the DOMParser-to-outerHTML roundtrip that causes
+  // serialization mismatches (e.g. trailing semicolons on inline style values).
+  function replaceSourceElement(source, element, replacement) {
+    var copyId = element.getAttribute('data-copy-id') || '';
+    var tagName = element.tagName.toLowerCase();
+
+    var searches = [];
+    if (copyId) {
+      searches.push('data-copy-id="' + copyId + '"');
+      searches.push("data-copy-id='" + copyId + "'");
+    }
+    if (!searches.length) return null;
+
+    for (var si = 0; si < searches.length; si += 1) {
+      var attrPos = source.indexOf(searches[si]);
+      if (attrPos === -1) continue;
+
+      // Walk backward from the attribute to find the '<' that opens this tag.
+      var tagStart = source.lastIndexOf('<', attrPos);
+      if (tagStart === -1) continue;
+
+      // Confirm the tag name at this position matches (case-insensitive).
+      var nameSlice = source.slice(tagStart + 1, tagStart + 1 + tagName.length);
+      if (nameSlice.toLowerCase() !== tagName) continue;
+      var boundaryChar = source[tagStart + 1 + tagName.length];
+      if (!boundaryChar || !/[\s>\/]/.test(boundaryChar)) continue;
+
+      // Find the end '>' of the opening tag.
+      var openEnd = source.indexOf('>', tagStart);
+      if (openEnd === -1) continue;
+
+      // Void elements and explicit self-closing tags have no children or closing tag.
+      var VOID = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
+      if (VOID[tagName] || source[openEnd - 1] === '/') {
+        return source.slice(0, tagStart) + replacement + source.slice(openEnd + 1);
       }
-      generatedCandidates.push(element);
-    });
 
-    for (var k = 0; k < generatedCandidates.length; k += 1) {
-      var generated = buildElementId(generatedCandidates[k], k);
-      var legacy = buildLegacyElementId(generatedCandidates[k], k);
-      if (generated === id || legacy === id) return generatedCandidates[k];
+      // Walk forward to find the matching closing tag, tracking nesting depth.
+      var pos = openEnd + 1;
+      var depth = 1;
+      var openPat = '<' + tagName;
+      var closePat = '</' + tagName;
+
+      while (depth > 0 && pos < source.length) {
+        var nc = source.indexOf(closePat, pos);
+        if (nc === -1) break; // malformed HTML — bail and try next search pattern
+
+        var no = source.indexOf(openPat, pos);
+        if (no !== -1 && no < nc) {
+          var c = source[no + openPat.length];
+          // Confirm this is an actual opening tag, not a prefix match (e.g. <paragraph vs <p).
+          if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '>' || c === '/') {
+            depth += 1;
+            pos = no + 1;
+            continue;
+          }
+        }
+
+        var ce = source.indexOf('>', nc);
+        if (ce === -1) break;
+        depth -= 1;
+        if (depth === 0) {
+          return source.slice(0, tagStart) + replacement + source.slice(ce + 1);
+        }
+        pos = ce + 1;
+      }
     }
 
     return null;
   }
 
   function applyToSource() {
+    if (!isSourceApplyContext()) {
+      updateStatus('localhost only');
+      return;
+    }
+
     if (!helperAvailable) {
       updateStatus('no helper');
       detectHelper();
@@ -1297,6 +1428,13 @@
     var entries = savedEntries();
     if (!entries.length) {
       updateStatus('no edits');
+      return;
+    }
+    var sourceEntries = entries.filter(function(entry) {
+      return entry.sourceBacked;
+    });
+    if (!sourceEntries.length) {
+      updateStatus('preview only');
       return;
     }
 
@@ -1310,29 +1448,50 @@
         var skipped = 0;
         var nextContent = rawContent;
 
-        entries.forEach(function(entry) {
+        sourceEntries.forEach(function(entry) {
           var target = findSourceElement(doc, entry.id);
           if (!target) {
             skipped += 1;
             return;
           }
-          var originalOuterHTML = target.outerHTML;
+          // Deabsolutize immediately: DOMParser converts relative URLs (href="/tattoos/")
+          // to absolute ones (href="http://localhost:4173/tattoos/") when serializing
+          // outerHTML. Strip the origin prefix so comparisons against raw source work.
+          var originalOuterHTML = deabsolutizeHtml(target.outerHTML);
           applyRecordToElement(target, entry.record);
-          var modifiedOuterHTML = target.outerHTML;
+          var modifiedOuterHTML = deabsolutizeHtml(target.outerHTML);
           if (modifiedOuterHTML === originalOuterHTML) {
             applied += 1;
             return;
           }
+
+          // Primary path: locate the element in the raw source by its stable data-copy-id
+          // and replace its full span. This is immune to DOMParser serialization differences
+          // (trailing semicolons on inline styles, attribute-order shifts, etc.) that make
+          // outerHTML string matching unreliable.
+          var replaced = replaceSourceElement(nextContent, target, modifiedOuterHTML);
+          if (replaced !== null) {
+            nextContent = replaced;
+            applied += 1;
+            return;
+          }
+
+          // Fallback: outerHTML string match after deabsolutizing relative URLs.
           var idx = nextContent.indexOf(originalOuterHTML);
           if (idx !== -1) {
             nextContent = nextContent.slice(0, idx) + modifiedOuterHTML + nextContent.slice(idx + originalOuterHTML.length);
             applied += 1;
-          } else {
-            skipped += 1;
+            return;
           }
+
+          skipped += 1;
         });
 
-        if (!applied) throw new Error('No stable data-copy-id matches found in source.');
+        if (!applied) {
+          var savedIds = sourceEntries.map(function(entry) { return entry.id; });
+          var sourceIds = sourceEditableIds(doc);
+          throw new Error('No IDs matched ' + pathSegments.join('/') + '. Saved: ' + (sampleIds(savedIds) || 'none') + '. Source: ' + (sampleIds(sourceIds) || 'none') + '.');
+        }
 
         return callToolApi('/__tools/write-file', {
           pathSegments: pathSegments,
