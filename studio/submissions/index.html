@@ -71,17 +71,15 @@
   .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-align:center; }
   .day-button { aspect-ratio:1; min-height:0; border:5px solid var(--ring-faint); background:transparent; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
   .day-button.blank { visibility:hidden; }
-  .day-button.booked-bright { background:#c1503f; border-color:#c1503f; color:#1a0000; }
-  .day-button.booked-medium { background:#8f231d; border-color:#8f231d; color:#FFE7CA; }
-  .day-button.booked-dark { background:#4a1410; border-color:#4a1410; color:#FFE7CA; }
-  .day-button.has-consult { outline:3px solid #FFD23F; outline-offset:-2px; }
+  .day-button.booked-bright { background:#e0352b; border-color:#e0352b; color:#1a0000; }
+  .day-button.booked-medium { background:#a8291f; border-color:#a8291f; color:#FFE7CA; }
+  .day-button.booked-dark { background:#521611; border-color:#521611; color:#FFE7CA; }
   .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; }
   .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
   .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
-  .legend-dot.bright { background:#c1503f; }
-  .legend-dot.medium { background:#8f231d; }
-  .legend-dot.dark { background:#4a1410; }
-  .legend-dot.consult { background:transparent; outline:3px solid #FFD23F; outline-offset:-2px; }
+  .legend-dot.bright { background:#e0352b; }
+  .legend-dot.medium { background:#a8291f; }
+  .legend-dot.dark { background:#521611; }
   .slot-preview { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
   .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:5px solid var(--ring-faint); padding-bottom:8px; }
@@ -96,7 +94,7 @@
   .appt-name { font-family:var(--sans); font-size:12px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; color:var(--text); }
   .appt-time { color:var(--accent); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; white-space:nowrap; }
   .appt-meta { color:var(--muted); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; }
-  .day-button.selected { outline:3px solid var(--accent); outline-offset:-3px; }
+  .day-button.selected { outline:3px solid #FFE7CA; outline-offset:-3px; }
   .schedule-section { border-top:5px solid var(--ring-faint); padding-top:18px; margin-top:18px; }
   .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
   .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:5px solid var(--ring-faint); padding:12px 0; }
@@ -134,10 +132,9 @@
   .availability-manager .slot-preview,
   .availability-manager .availability-item { border:5px solid var(--ring-faint); background:transparent; }
   .availability-manager .day-button { border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
-  .availability-manager .day-button.booked-bright { background:#c1503f; border-color:#c1503f; color:#1a0000; }
-  .availability-manager .day-button.booked-medium { background:#8f231d; border-color:#8f231d; color:#FFE7CA; }
-  .availability-manager .day-button.booked-dark { background:#4a1410; border-color:#4a1410; color:#FFE7CA; }
-  .availability-manager .day-button.has-consult { box-shadow:inset 0 0 0 3px #FFD23F; }
+  .availability-manager .day-button.booked-bright { background:#e0352b; border-color:#e0352b; color:#1a0000; }
+  .availability-manager .day-button.booked-medium { background:#a8291f; border-color:#a8291f; color:#FFE7CA; }
+  .availability-manager .day-button.booked-dark { background:#521611; border-color:#521611; color:#FFE7CA; }
   .availability-manager .slot-preview-item { border-bottom:5px solid var(--ring-faint); }
   .availability-manager .save-schedule { width:100%; margin-top:16px; }
   .token-modal { position:fixed; inset:0; display:grid; place-items:center; padding:24px; background:rgba(14,14,14,0.92); z-index:10; }
@@ -753,10 +750,9 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       if (!a.startAt) continue;
       const key = dayKey(a.startAt);
       const hours = a.endAt ? Math.max(0, (new Date(a.endAt) - new Date(a.startAt)) / 3600000) : 0;
-      const entry = stats.get(key) || { hours: 0, count: 0, hasConsult: false };
+      const entry = stats.get(key) || { hours: 0, count: 0 };
       entry.hours += hours;
       entry.count += 1;
-      if (a.bookingTypeId === "consult_in_person") entry.hasConsult = true;
       stats.set(key, entry);
     }
     return stats;
@@ -764,12 +760,10 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
 
   function dayClass(entry) {
     if (!entry) return "";
-    const classes = [];
-    if (entry.hours > 5) classes.push("booked-dark");
-    else if (entry.hours > 2) classes.push("booked-medium");
-    else if (entry.hours > 0) classes.push("booked-bright");
-    if (entry.hasConsult) classes.push("has-consult");
-    return classes.join(" ");
+    if (entry.hours > 5) return "booked-dark";
+    if (entry.hours > 2) return "booked-medium";
+    if (entry.hours > 0) return "booked-bright";
+    return "";
   }
 
   function renderBookedCalendar(monthKeyValue, dayStats) {
@@ -787,7 +781,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       const entry = dayStats.get(key);
       const count = entry?.count || 0;
       const hours = entry?.hours || 0;
-      const label = `${count === 1 ? "1 appointment" : `${count} appointments`}${count ? ` · ${hours.toFixed(1)}h booked` : ""}${entry?.hasConsult ? " · in-person consultation" : ""}`;
+      const label = `${count === 1 ? "1 appointment" : `${count} appointments`}${count ? ` · ${hours.toFixed(1)}h booked` : ""}`;
       const isSelected = key === selectedCalendarDay;
       cells.push(`
         <button class="day-button ${dayClass(entry)}${isSelected ? " selected" : ""}" type="button" data-day="${escapeHtml(key)}" aria-label="${escapeHtml(`${key}: ${label}`)}" title="${escapeHtml(label)}">
@@ -961,7 +955,6 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
               <span class="legend-item"><span class="legend-dot bright"></span>0–2h booked</span>
               <span class="legend-item"><span class="legend-dot medium"></span>2–5h booked</span>
               <span class="legend-item"><span class="legend-dot dark"></span>5h+ booked</span>
-              <span class="legend-item"><span class="legend-dot consult"></span>In-person consult</span>
             </div>
           </div>
           <div class="appt-day-panel">

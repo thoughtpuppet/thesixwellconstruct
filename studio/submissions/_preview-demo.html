@@ -20,18 +20,16 @@
   .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-align:center; }
   .day-button { aspect-ratio:1; min-height:0; border:5px solid var(--ring-faint); background:transparent; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
   .day-button.blank { visibility:hidden; }
-  .day-button.booked-bright { background:#c1503f; border-color:#c1503f; color:#1a0000; }
-  .day-button.booked-medium { background:#8f231d; border-color:#8f231d; color:#FFE7CA; }
-  .day-button.booked-dark { background:#4a1410; border-color:#4a1410; color:#FFE7CA; }
-  .day-button.has-consult { outline:3px solid #FFD23F; outline-offset:-2px; }
-  .day-button.selected { outline:3px solid var(--accent); outline-offset:-3px; }
+  .day-button.booked-bright { background:#e0352b; border-color:#e0352b; color:#1a0000; }
+  .day-button.booked-medium { background:#a8291f; border-color:#a8291f; color:#FFE7CA; }
+  .day-button.booked-dark { background:#521611; border-color:#521611; color:#FFE7CA; }
+  .day-button.selected { outline:3px solid #FFE7CA; outline-offset:-3px; }
   .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
   .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
   .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
-  .legend-dot.bright { background:#c1503f; }
-  .legend-dot.medium { background:#8f231d; }
-  .legend-dot.dark { background:#4a1410; }
-  .legend-dot.consult { background:transparent; outline:3px solid #FFD23F; outline-offset:-2px; }
+  .legend-dot.bright { background:#e0352b; }
+  .legend-dot.medium { background:#a8291f; }
+  .legend-dot.dark { background:#521611; }
 
   /* Dropdowns */
   select,input,textarea { font:inherit; width:100%; max-width:260px; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; }
@@ -54,7 +52,7 @@
 </style>
 </head>
 <body>
-  <h1>Appointment Calendar — Booked Hours + In-Person Consult Marker</h1>
+  <h1>Appointment Calendar — Booked Hours</h1>
   <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
   <div class="calendar-grid">
     <button class="day-button blank" tabindex="-1"></button>
@@ -62,11 +60,11 @@
     <button class="day-button booked-bright" type="button">2</button>
     <button class="day-button booked-medium" type="button">3</button>
     <button class="day-button booked-dark" type="button">4</button>
-    <button class="day-button booked-bright has-consult" type="button">5</button>
+    <button class="day-button booked-bright" type="button">5</button>
     <button class="day-button" type="button">6</button>
     <button class="day-button" type="button">7</button>
-    <button class="day-button booked-medium has-consult" type="button">8</button>
-    <button class="day-button booked-dark has-consult" type="button">9</button>
+    <button class="day-button booked-medium" type="button">8</button>
+    <button class="day-button booked-dark" type="button">9</button>
     <button class="day-button" type="button">10</button>
     <button class="day-button booked-bright selected" type="button">11</button>
     <button class="day-button" type="button">12</button>
@@ -77,7 +75,6 @@
     <span class="legend-item"><span class="legend-dot bright"></span>0–2h booked</span>
     <span class="legend-item"><span class="legend-dot medium"></span>2–5h booked</span>
     <span class="legend-item"><span class="legend-dot dark"></span>5h+ booked</span>
-    <span class="legend-item"><span class="legend-dot consult"></span>In-person consult</span>
   </div>
 
   <h2>Dropdowns — bold, all-caps, light amber</h2>
