@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg:#0e0e0e; --accent:#FCB867; --signal:#7A1010;
@@ -106,6 +107,12 @@
   <h1 data-copy-id="booking-title">BOOKING.</h1>
   <p class="lead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
   <p class="local-edit-note" data-live-edit-ignore="true">Preview editing is local only. Use the toolbar at bottom right, then export the changes for source-file updates.</p>
+
+  <section class="section">
+    <p class="section-label">Walk-In Windows</p>
+    <div id="walkInCards"></div>
+  </section>
+
   <div id="status" class="status">Loading private booking access.</div>
 
   <div id="bookingApp" class="booking-grid hidden">
@@ -585,6 +592,10 @@
     statusEl.textContent = error.message;
   });
 })();
+</script>
+<script src="/js/walk-in-windows.js"></script>
+<script>
+  loadWalkInCards("walkInCards", { emptyMessage: "No walk-in windows are currently set. Reply to your approval email if you need help." });
 </script>
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>

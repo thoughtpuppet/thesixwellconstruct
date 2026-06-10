@@ -173,7 +173,46 @@
       fullNote.style.display = dayWindows.length ? "none" : "";
     }
 
+    function nextAvailableWindow() {
+      const selectedTypeId = bookingTypeSelect.value;
+      const now = Date.now();
+      return windows
+        .filter((item) => (!item.bookingTypeId || item.bookingTypeId === selectedTypeId) && new Date(item.startAt).getTime() >= now)
+        .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())[0] || null;
+    }
+
+    function renderNextAvailable() {
+      const container = document.getElementById("calNextAvailable");
+      if (!container) return;
+      if (selectedWindow) {
+        container.innerHTML = "";
+        return;
+      }
+      const next = nextAvailableWindow();
+      if (!next) {
+        container.innerHTML = "";
+        return;
+      }
+      container.innerHTML = `
+        <button type="button" class="cal-next-btn">
+          <span>
+            <span class="cal-next-title">${escapeHtml(formatDate(new Date(next.startAt)))}</span>
+            <span class="cal-next-meta">${escapeHtml(formatTime(next))}</span>
+          </span>
+          <span class="cal-next-tag">Next Available</span>
+        </button>
+      `;
+      container.querySelector(".cal-next-btn").addEventListener("click", () => {
+        const date = new Date(next.startAt);
+        calendarDate = new Date(date.getFullYear(), date.getMonth(), 1);
+        pickedDate = date;
+        renderTimeOptions(date);
+        setSelectedWindow(next);
+      });
+    }
+
     function renderCalendar() {
+      renderNextAvailable();
       const todayKey = dateKey(new Date());
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -203,6 +242,7 @@
         const isPicked = pickedDate && dateKey(pickedDate) === key;
         button.className = "cal-day" +
           (key < todayKey || !hasTimes ? " past" : "") +
+          (key >= todayKey && hasTimes ? " open" : "") +
           (key === todayKey ? " today" : "") +
           (isSelected ? " booked" : "") +
           (isPicked ? " active" : "");
@@ -224,31 +264,7 @@
       if (address) address.textContent = "Studio address is shared with confirmed clients.";
       if (!list || !note) return;
       note.textContent = "Walk-in windows are updated from the studio availability console.";
-      if (!items.length) {
-        list.innerHTML = `<p class="windows-empty">${escapeHtml(walkInEmptyMessage)}</p>`;
-        return;
-      }
-      list.innerHTML = items.map((windowItem) => {
-        const start = new Date(windowItem.startsAt);
-        const end = new Date(windowItem.endsAt);
-        const title = escapeHtml(windowItem.title || "Walk-in Window");
-        const noteText = escapeHtml(windowItem.note || "");
-        const fmt = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, hour: "numeric", minute: "2-digit" });
-        const dayFmt = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, weekday: "long" });
-        const dateFmt = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, month: "short", day: "numeric" });
-        return `
-          <div class="window-item">
-            <div>
-              <p class="window-day">${dayFmt.format(start)}</p>
-              <p class="window-date">${dateFmt.format(start)}</p>
-            </div>
-            <div>
-              <p class="window-time">${fmt.format(start)} - ${fmt.format(end)} ET</p>
-              <p class="window-note">${title}${noteText ? ` - ${noteText}` : ""}</p>
-            </div>
-          </div>
-        `;
-      }).join("");
+      global.renderWalkInCards(list, items, { emptyMessage: walkInEmptyMessage });
     }
 
     async function loadContext() {

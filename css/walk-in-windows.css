@@ -1,0 +1,12 @@
+/* Shared walk-in window card grid.
+   Relies on the host page's :root tokens (--ring-faint, --accent, --signal, --text/--text-mute, --text-dim, --sans, --serif, --t-fast). */
+.walkin-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+.walkin-card{border:5px solid var(--ring-faint);padding:18px;display:flex;flex-direction:column;gap:4px;transition:border-color var(--t-fast),background var(--t-fast);}
+.walkin-card:hover{border-color:var(--accent);background:rgba(252,184,103,0.045);}
+.walkin-card-day{font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);}
+.walkin-card-date{font-family:var(--serif);font-size:12px;color:var(--text-dim,var(--dim));margin-top:-2px;}
+.walkin-card-time{font-family:var(--serif);font-size:18px;color:var(--text);margin-top:8px;}
+.walkin-card-note{font-family:var(--serif);font-size:12px;line-height:1.5;color:var(--text-dim,var(--dim));margin-top:4px;}
+.walkin-card-meta{font-family:var(--sans);font-size:9px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-ghost,var(--dim));margin-top:8px;}
+.walkin-cards-empty{font-family:var(--serif);font-size:14px;line-height:1.75;color:var(--text-dim,var(--dim));padding:18px;border:5px solid var(--ring-faint);}
+.walkin-cards-loading{font-family:var(--serif);font-size:13px;color:var(--text-dim,var(--dim));}

@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg: #0e0e0e;
@@ -524,6 +525,11 @@
         <p class="hero-desc" data-copy-id="tattoos-hero-desc">The ink &amp; skin <span style="color: rgb(109, 61, 21)">medium</span> of <span style="color: rgb(252, 184, 103)">saiel dauhn solehman</span><span style="color: rgb(252, 184, 103)">. <span style="color: rgba(252, 184, 103, 0.64)">Original, collaborative and experimental works that push the boundards of what it means to be a tattoo</span></span> <span style="color: rgb(5, 129, 193)">artist</span>.</p>
       </div>
     </section>
+    <section class="section" id="walk-in-windows">
+      <p class="section-label">Walk-In Availability</p>
+      <h2 class="section-title">Walk-In Windows</h2>
+      <div id="walkInCards"></div>
+    </section>
     <section class="brand-band" aria-labelledby="tattoo-house-title">
       <div>
         <p class="brand-kicker" data-copy-id="tattoos-brand-kicker">Private Studio / Artist-led / poc centered</p>
@@ -651,6 +657,10 @@
     <p>© Art.Pill Tattoo House · the six.well construct</p>
     <a href="/">return to construct</a>
   </footer>
+  <script src="/js/walk-in-windows.js"></script>
+  <script>
+    loadWalkInCards("walkInCards", { emptyMessage: "No walk-in windows are currently scheduled. Check back soon or book a consultation." });
+  </script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>

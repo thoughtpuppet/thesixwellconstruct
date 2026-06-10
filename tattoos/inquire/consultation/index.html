@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/booking-calendar.css">
+<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg:#0e0e0e; --signal:#7A1010; --ring:#6D3D15;
@@ -52,13 +53,6 @@
   /* ── WALK-IN WINDOWS ── */
   .windows-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
   .windows-note{font-size:13px;line-height:1.7;color:var(--text-dim);margin-bottom:var(--s5);}
-  .window-list{display:flex;flex-direction:column;gap:var(--s2);}
-  .window-item{display:grid;grid-template-columns:minmax(100px,0.4fr) minmax(0,1fr);gap:var(--s4);align-items:start;padding:var(--s4);border:5px solid var(--ring-faint);}
-  .window-day{font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text);}
-  .window-date{font-family:var(--serif);font-size:11px;color:var(--text-dim);margin-top:2px;}
-  .window-time{font-family:var(--serif);font-size:14px;color:var(--accent);margin-bottom:3px;}
-  .window-note{font-family:var(--serif);font-size:12px;color:var(--text-dim);}
-  .windows-empty{font-family:var(--serif);font-size:14px;line-height:1.75;color:var(--text-dim);padding:var(--s4);border:5px solid var(--ring-faint);}
 
   /* ── VIRTUAL NOTE ── */
   .virtual-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
@@ -192,6 +186,7 @@
 
               <!-- Calendar + time picker -->
               <div class="cal-wrap" id="calWrap">
+                <div class="cal-next-available" id="calNextAvailable"></div>
                 <div class="cal-header">
                   <button type="button" class="cal-nav" id="calPrev">←</button>
                   <span class="cal-month-label" id="calMonthLabel"></span>
@@ -253,6 +248,7 @@
     <a href="/">the six.well construct</a>
   </footer>
 
+  <script src="/js/walk-in-windows.js"></script>
   <script src="/js/booking-calendar.js"></script>
   <script>
   (function(){
