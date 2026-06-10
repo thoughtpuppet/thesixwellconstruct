@@ -923,6 +923,15 @@
     const depositCents = Number(appointment.depositCents || 0);
     const tipCents = Number(appointment.tipCents || 0);
     const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
+    const meeting = appointment.meeting || null;
+    const isVirtual = appointment.bookingTypeId === "consult_virtual";
+    const meetingLines = meeting?.joinUrl
+      ? `Zoom link: ${escapeHtml(meeting.joinUrl)}
+Zoom password: ${escapeHtml(meeting.password || "none")}`
+      : isVirtual
+        ? `Zoom link: not created
+${appointment.status === "archived" ? "" : `<button class="button" type="button" data-create-meeting="${escapeHtml(appointment.id)}" style="margin-top:8px;min-height:32px;padding:0 10px;font-size:10px;">Create Zoom Meeting</button>`}`
+        : "";
     return `
       <div class="field" style="margin-top:16px;">
         <label>Appointment Payment</label>
@@ -933,6 +942,7 @@ Deposit: ${escapeHtml(money(depositCents, currency))}
 Optional tip: ${escapeHtml(money(tipCents, currency))}
 Total due today: ${escapeHtml(money(totalCents, currency))}
 Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
+${meetingLines}
         </div>
       </div>
     `;
@@ -995,6 +1005,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
 
   function renderDetail(submission) {
     const isProtected = submission.status === "booked" || submission.status === "paid";
+    const hasAppointment = !!latestAppointmentFor(submission.id);
     detailEl.innerHTML = `
       <div class="detail-head">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -1022,15 +1033,23 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
           </select>
         </div>
         <div class="field">
-          <label for="bookingUrl">Booking URL</label>
-          <input id="bookingUrl" value="${escapeHtml(submission.bookingUrl || "")}">
-          <div class="booking-actions">
-            <button class="button" id="previewBookingBtn" type="button">Preview Client Flow</button>
-            <button class="button" id="generateBookingBtn" type="button">${submission.bookingUrl ? "Regenerate Link" : "Generate Link"}</button>
-            <button class="button" id="copyBookingBtn" type="button">Copy</button>
-            <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
-          </div>
-          <div id="tokenStateInfo" style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:6px;">Loading token state…</div>
+          ${hasAppointment ? `
+            <p style="font-family:var(--sans);font-size:11px;color:var(--dim);">
+              This consultation was booked directly through the public calendar.
+              No booking access link is needed — see Appointment Payment above.
+            </p>
+            <input id="bookingUrl" type="hidden" value="${escapeHtml(submission.bookingUrl || "")}">
+          ` : `
+            <label for="bookingUrl">Booking URL</label>
+            <input id="bookingUrl" value="${escapeHtml(submission.bookingUrl || "")}">
+            <div class="booking-actions">
+              <button class="button" id="previewBookingBtn" type="button">Preview Client Flow</button>
+              <button class="button" id="generateBookingBtn" type="button">${submission.bookingUrl ? "Regenerate Link" : "Generate Link"}</button>
+              <button class="button" id="copyBookingBtn" type="button">Copy</button>
+              <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
+            </div>
+            <div id="tokenStateInfo" style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:6px;">Loading token state…</div>
+          `}
           <button class="button" id="saveBtn" type="button" style="margin-top:10px;width:100%;border-color:#4caf50;">Save</button>
         </div>
       </div>
@@ -1070,7 +1089,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     `;
     enhanceControls(detailEl);
     renderEventHistory(submission.id);
-    renderTokenState(submission.id);
+    if (!hasAppointment) renderTokenState(submission.id);
   }
 
   function localDateTimeToIso(value) {
@@ -1204,10 +1223,11 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       const end = a.endAt ? new Date(a.endAt).toLocaleTimeString([], { hour:"numeric", minute:"2-digit" }) : "";
       const dateStr = a.startAt ? new Date(a.startAt).toLocaleDateString([], { month:"short", day:"numeric" }) : "";
       const deposit = a.depositCents ? money(a.depositCents, a.currency || "USD") : "";
+      const meetingLabel = a.meeting?.joinUrl ? "Zoom ready" : a.bookingTypeId === "consult_virtual" ? "Zoom missing" : "";
       return `
         <div class="appt-item">
           <div class="appt-item-top">
-            <span class="appt-name">${escapeHtml(a.clientName || "Unnamed")}</span>
+            <span class="appt-name">${escapeHtml(a.clientName || "Unnamed")}${meetingLabel ? ` / ${escapeHtml(meetingLabel)}` : ""}</span>
             <span class="appt-time">${escapeHtml(dayFilter ? `${start} – ${end}` : `${dateStr} ${start}`)}</span>
           </div>
           <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))}${deposit ? ` · ${deposit} deposit` : ""}${a.status ? ` · ${a.status}` : ""}</span>
@@ -1639,6 +1659,24 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     const cancelEdit = event.target.closest("[data-cancel-edit]");
     if (cancelEdit) {
       cancelEdit.closest("[data-availability-item]")?.querySelector("[data-edit-form]")?.classList.add("hidden");
+      return;
+    }
+
+    const createMeeting = event.target.closest("[data-create-meeting]");
+    if (createMeeting) {
+      const appointmentId = createMeeting.dataset.createMeeting;
+      setStatus("Creating Zoom meeting");
+      const payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/meeting`, {
+        method: "POST",
+      });
+      const index = appointments.findIndex((a) => a.id === appointmentId);
+      if (index >= 0) appointments[index] = payload.appointment;
+      if (activeId) {
+        const submission = submissions.find((item) => item.id === activeId);
+        if (submission) renderDetail(submission);
+      }
+      renderDayAppointments(selectedCalendarDay);
+      setStatus("Zoom meeting ready");
       return;
     }
 

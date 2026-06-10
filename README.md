@@ -149,10 +149,11 @@ art acquisition forms submit to the live Worker backend at
 `/studio/submissions/`, and approved tattoo clients receive a generated
 token link into `/booking/?token=...`.
 
-The in-person Build/Consultation page uses the owned public booking flow instead
-of a plain submission form: it loads public in-person availability from
-`/api/booking/public-consultation/context`, creates a linked `consultation`
-submission for review context, then starts Square checkout through
+The public consultation page uses the owned public booking flow instead of a
+plain submission form: it loads in-person and virtual consultation availability
+from `/api/booking/public-consultation/context`, creates a linked
+`consultation` submission for review context, creates a Zoom meeting for virtual
+consultations, then starts Square checkout through
 `/api/booking/public-consultation/checkout`.
 
 The forms live at:
@@ -161,6 +162,7 @@ The forms live at:
 - `/tattoos/flash/claim/`
 - `/tattoos/build/`
 - `/tattoos/build/in-person/`
+- `/tattoos/inquire/consultation/`
 - `/tattoos/special-projects/apply/`
 
 Each form uses `method="POST"` and `enctype="multipart/form-data"` so reference
@@ -174,8 +176,10 @@ Recommended review flow:
 - Set `SUBMISSIONS_DB` and `SUBMISSIONS_ADMIN_TOKEN` for the Worker.
 - Create/configure the `SUBMISSION_FILES` R2 bucket if reference upload contents
   should be preserved.
-- Apply all D1 migrations through `0009_walk_in_windows.sql` before enabling
-  public in-person booking and walk-in windows.
+- Apply all D1 migrations through `0011_virtual_zoom_meetings.sql` before
+  enabling public consultation booking, walk-in windows, and virtual Zoom links.
+- Configure `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, and
+  `ZOOM_HOST_USER_ID` before exposing virtual consultations.
 - Production deploys use `SQUARE_ENVIRONMENT=production`; keep local `.dev.vars`
   on `sandbox` for test payments.
 - Configure the Square webhook notification URL at

@@ -302,8 +302,10 @@ function normalizeSubmission(rowOrSubmission) {
 }
 
 function normalizeAppointment(row) {
+  const meetingJoinUrl = row.meeting_join_url || row.meetingJoinUrl || row.meeting?.joinUrl || "";
   return {
     id: row.id,
+    bookingTypeId: row.booking_type_id || row.bookingTypeId || "",
     bookingTypeLabel: row.booking_type_label || row.bookingTypeLabel || "Tattoo session",
     clientName: row.client_name || row.clientName || "",
     clientEmail: row.client_email || row.clientEmail || "",
@@ -314,6 +316,7 @@ function normalizeAppointment(row) {
     tipCents: row.tip_cents ?? row.tipCents ?? 0,
     totalDueCents: (row.deposit_cents ?? row.depositCents ?? 0) + (row.tip_cents ?? row.tipCents ?? 0),
     currency: row.currency || "USD",
+    meeting: meetingJoinUrl ? { joinUrl: meetingJoinUrl } : null,
   };
 }
 
@@ -406,6 +409,7 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
     `Deposit: ${formatMoney(appointment.depositCents, appointment.currency)} received`,
     appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
     appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
+    appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
     "",
     `Confirmation page: ${confirmationUrl}`,
     `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
@@ -440,9 +444,12 @@ export async function sendDueAppointmentReminders(env) {
   try {
     const result = await db
       .prepare(
-        `SELECT a.*, bt.label AS booking_type_label
+        `SELECT a.*, bt.label AS booking_type_label,
+                am.join_url AS meeting_join_url,
+                am.password AS meeting_password
          FROM appointments a
          LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+         LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
          WHERE a.status = 'confirmed'
            AND a.start_at >= ?
            AND a.start_at < ?
@@ -465,6 +472,7 @@ export async function sendDueAppointmentReminders(env) {
         "",
         `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
         `Session: ${appointment.bookingTypeLabel}`,
+        appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
         "",
         "Please review before arriving:",
         "",

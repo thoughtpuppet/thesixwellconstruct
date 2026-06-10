@@ -20,6 +20,7 @@ Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow.
 
 When: {{appointment_start}} - {{appointment_end}}
 Session: {{booking_type_label}}
+{{zoom_link_block}}
 
 Please review before arriving:
 
@@ -38,6 +39,7 @@ session.
 - `{{appointment_start}}`
 - `{{appointment_end}}`
 - `{{booking_type_label}}`
+- `{{zoom_link}}` (virtual appointments only)
 - `{{day_of_instructions_url}}`
 - `{{location_parking_url}}`
 - `{{appointment_id}}`
@@ -46,3 +48,5 @@ session.
 
 This should remain short and practical. Repeat the location/parking link here
 because clients will likely check this email from their phone before arrival.
+For virtual consultations, include the Zoom join link (link only, no
+password) directly under the session line.

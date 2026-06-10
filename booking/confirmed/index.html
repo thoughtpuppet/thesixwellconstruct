@@ -108,14 +108,18 @@
     lead.textContent = paid
       ? "Your deposit has been received and the appointment is confirmed. Keep an eye on your email for any direct studio follow-up."
       : "Square has not returned a paid order yet. If you just paid, refresh this page in a moment. The studio can also see this pending booking.";
+    const meetingRows = paid && appointment.meeting?.joinUrl
+      ? [renderRow("Zoom Link", appointment.meeting.joinUrl)]
+      : [];
     details.innerHTML = [
       renderRow("Client", appointment.clientName),
       renderRow("When", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
       renderRow("Deposit", `${money(appointment.depositCents, appointment.currency)} / ${paid ? "received" : "pending"}`),
       renderRow("Optional Tip", money(appointment.tipCents || 0, appointment.currency)),
       renderRow("Total Paid Today", money(appointment.totalDueCents || appointment.depositCents || 0, appointment.currency)),
+      ...meetingRows,
       renderRow("Status", appointment.status.replace(/_/g, " ")),
-    ].join("");
+    ].filter(Boolean).join("");
   }
 
   load().catch((error) => {

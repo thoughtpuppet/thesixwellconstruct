@@ -8,3 +8,7 @@ SQUARE_LOCATION_ID=replace-with-your-square-location-id
 SQUARE_ENVIRONMENT=sandbox
 SQUARE_WEBHOOK_NOTIFICATION_URL=https://thesixwellconstruct.com/api/square/webhook
 SQUARE_WEBHOOK_SIGNATURE_KEY=replace-with-your-square-webhook-signature-key
+ZOOM_ACCOUNT_ID=replace-with-your-zoom-account-id
+ZOOM_CLIENT_ID=replace-with-your-zoom-client-id
+ZOOM_CLIENT_SECRET=replace-with-your-zoom-client-secret
+ZOOM_HOST_USER_ID=replace-with-your-zoom-host-user-id-or-email

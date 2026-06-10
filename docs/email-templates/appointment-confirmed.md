@@ -22,6 +22,7 @@ Your art.pill TATTOO HOUSE appointment is confirmed.
 When: {{appointment_start}} - {{appointment_end}}
 Session: {{booking_type_label}}
 Deposit: {{deposit_amount}} received
+{{zoom_link_block}}
 
 Confirmation page: {{confirmation_url}}
 Day-of instructions: {{day_of_instructions_url}}
@@ -41,6 +42,7 @@ Saiel Solehman
 - `{{appointment_end}}`
 - `{{booking_type_label}}`
 - `{{deposit_amount}}`
+- `{{zoom_link}}` (virtual appointments only)
 - `{{confirmation_url}}`
 - `{{day_of_instructions_url}}`
 - `{{location_parking_url}}`
@@ -51,3 +53,5 @@ Saiel Solehman
 This email should feel final and clear. It should not over-explain the Square
 payment process once the deposit is confirmed. Include location and day-of
 links here because this is the client's practical reference email.
+For virtual consultations, include the Zoom join link (link only, no
+password) between the deposit line and confirmation page.

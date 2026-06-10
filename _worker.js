@@ -21,6 +21,7 @@ import {
 } from "./functions/api/submissions/_lib.js";
 import {
   handleAdminCreateAvailability,
+  handleAdminCreateAppointmentMeeting,
   handleAdminCreateBookingToken,
   handleAdminDeleteAvailability,
   handleAdminGetAvailabilityPreview,
@@ -471,6 +472,12 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/admin/booking/appointments") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleAdminListAppointments(request, env);
+  }
+
+  const appointmentMeetingMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/meeting$/);
+  if (appointmentMeetingMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminCreateAppointmentMeeting(request, env, decodeURIComponent(appointmentMeetingMatch[1]));
   }
 
   return notFound("Unknown booking API route.");

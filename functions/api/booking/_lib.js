@@ -12,11 +12,15 @@ const BOOKING_STATUSES = new Set([
 ]);
 
 const PUBLIC_CONSULTATION_BOOKING_TYPE_IDS = ["consult_in_person", "build_in_person", "consult_virtual"];
+const VIRTUAL_CONSULTATION_BOOKING_TYPE_ID = "consult_virtual";
 
 const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
   tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full", "build_in_person"],
   consultation: ["consult_in_person", "consult_virtual"],
 };
+
+// Consultation bookings charge their full fee up front, not a deposit toward a future session.
+const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual"];
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -134,6 +138,18 @@ function normalizeWalkInWindow(row) {
   };
 }
 
+function normalizeMeeting(row) {
+  if (!row || !row.meeting_provider) return null;
+  return {
+    provider: row.meeting_provider,
+    providerMeetingId: row.provider_meeting_id || "",
+    joinUrl: row.meeting_join_url || "",
+    password: row.meeting_password || "",
+    createdAt: row.meeting_created_at || "",
+    updatedAt: row.meeting_updated_at || "",
+  };
+}
+
 function normalizeSettings(row) {
   return {
     venture: row.venture,
@@ -184,6 +200,7 @@ function normalizeAppointment(row) {
     squareOrderId: row.square_order_id || "",
     squarePaymentLinkId: row.square_payment_link_id || "",
     squareCheckoutUrl: row.square_checkout_url || "",
+    meeting: normalizeMeeting(row),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -803,11 +820,11 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     )
     .run();
 
-  const appointment = await db.prepare("SELECT * FROM appointments WHERE id = ?").bind(id).first();
+  const appointment = await selectAppointmentWithMeeting(db, id);
   return { appointment: normalizeAppointment(appointment), bookingType: normalizeBookingType(bookingType) };
 }
 
-async function publicInPersonBookingTypes(db) {
+async function publicConsultationBookingTypes(db) {
   const placeholders = PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.map(() => "?").join(", ");
   const result = await db
     .prepare(
@@ -836,9 +853,9 @@ async function listPublicWalkInWindows(db) {
 export async function handlePublicConsultationContext(request, env) {
   try {
     const db = requireBookingDb(env);
-    const bookingTypes = await publicInPersonBookingTypes(db);
+    const bookingTypes = await publicConsultationBookingTypes(db);
     if (!bookingTypes.length) {
-      return errorResponse("Public in-person booking is not configured.", 503);
+      return errorResponse("Public consultation booking is not configured.", 503);
     }
     const windows = await listPublicWindows(db, bookingTypes);
     const walkInWindows = await listPublicWalkInWindows(db);
@@ -880,7 +897,7 @@ function validatePublicConsultation(body) {
     return { error: "Consultation acknowledgement is required." };
   }
   if (!PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(asString(body.bookingTypeId))) {
-    return { error: "Please select a public in-person session type." };
+    return { error: "Please select a public consultation session type." };
   }
   if (!asString(body.availabilityWindowId)) {
     return { error: "Please select an available consultation time." };
@@ -898,8 +915,8 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
   const id = crypto.randomUUID();
   const payload = {
     type: "consultation",
-    source_path: "/tattoos/build/in-person/",
-    subject: "New In-Person Build Consultation Request",
+    source_path: "/tattoos/inquire/consultation/",
+    subject: "New Art.Pill Consultation Booking Request",
     firstName: asString(body.firstName || body.first_name),
     lastName: asString(body.lastName || body.last_name),
     name: client.name,
@@ -931,7 +948,7 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
       id,
       "consultation",
       "approved",
-      "/tattoos/build/in-person/",
+      "/tattoos/inquire/consultation/",
       payload.subject,
       client.name,
       client.email,
@@ -958,7 +975,7 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
       id,
       "created",
       "system",
-      "Created from public in-person checkout.",
+      "Created from public consultation checkout.",
       now
     )
     .run();
@@ -973,7 +990,7 @@ async function createPublicConsultationAppointment(db, body) {
     .bind(bookingTypeId)
     .first();
   if (!bookingType || !PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(bookingType.id)) {
-    return { error: "Public in-person booking is not configured." };
+    return { error: "Public consultation booking is not configured." };
   }
 
   const validation = validatePublicConsultation(body);
@@ -1040,7 +1057,7 @@ async function createPublicConsultationAppointment(db, body) {
     )
     .run();
 
-  const appointment = await db.prepare("SELECT * FROM appointments WHERE id = ?").bind(id).first();
+  const appointment = await selectAppointmentWithMeeting(db, id);
   return { appointment: normalizeAppointment(appointment), bookingType: normalizeBookingType(bookingType) };
 }
 
@@ -1059,6 +1076,18 @@ export async function handlePublicConsultationCheckout(request, env) {
         checkoutUrl: result.appointment.squareCheckoutUrl,
         appointmentId: result.appointment.id,
       });
+    }
+
+    if (result.bookingType.id === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) {
+      try {
+        await createOrReplaceZoomMeetingForAppointment(db, env, result.appointment, result.bookingType);
+      } catch (error) {
+        await archiveAppointmentAfterMeetingFailure(db, result.appointment.id);
+        return errorResponse("Virtual meeting could not be created. Please try again or contact the studio.", 503, {
+          detail: error.message,
+          appointmentId: result.appointment.id,
+        });
+      }
     }
 
     let paymentLink;
@@ -1242,7 +1271,13 @@ async function createSquarePaymentLink(request, env, appointment, bookingType) {
       order: {
         location_id: env.SQUARE_LOCATION_ID,
         line_items: [
-          squareLineItem(`${bookingType.label} Deposit`, appointment.depositCents, appointment.currency),
+          squareLineItem(
+            FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
+              ? bookingType.label
+              : `${bookingType.label} Deposit`,
+            appointment.depositCents,
+            appointment.currency,
+          ),
           ...(appointment.tipCents > 0
             ? [squareLineItem("Optional Artist Tip", appointment.tipCents, appointment.currency)]
             : []),
@@ -1260,6 +1295,152 @@ async function createSquarePaymentLink(request, env, appointment, bookingType) {
     throw new Error(payload.errors?.[0]?.detail || "Square checkout failed.");
   }
   return payload.payment_link;
+}
+
+async function selectAppointmentWithMeeting(db, appointmentId) {
+  return db
+    .prepare(
+      `SELECT a.*, bt.label AS booking_type_label,
+              am.provider AS meeting_provider,
+              am.provider_meeting_id,
+              am.join_url AS meeting_join_url,
+              am.password AS meeting_password,
+              am.created_at AS meeting_created_at,
+              am.updated_at AS meeting_updated_at
+       FROM appointments a
+       LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+       LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
+       WHERE a.id = ?`
+    )
+    .bind(appointmentId)
+    .first();
+}
+
+function zoomConfigured(env) {
+  return Boolean(
+    asString(env.ZOOM_ACCOUNT_ID) &&
+    asString(env.ZOOM_CLIENT_ID) &&
+    asString(env.ZOOM_CLIENT_SECRET) &&
+    asString(env.ZOOM_HOST_USER_ID)
+  );
+}
+
+function zoomBasicAuth(env) {
+  return btoa(`${asString(env.ZOOM_CLIENT_ID)}:${asString(env.ZOOM_CLIENT_SECRET)}`);
+}
+
+async function createZoomAccessToken(env) {
+  if (!zoomConfigured(env)) {
+    throw new Error("Zoom is not configured.");
+  }
+  const body = new URLSearchParams();
+  body.set("grant_type", "account_credentials");
+  body.set("account_id", asString(env.ZOOM_ACCOUNT_ID));
+
+  const response = await fetch("https://zoom.us/oauth/token", {
+    method: "POST",
+    headers: {
+      "Authorization": `Basic ${zoomBasicAuth(env)}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.reason || payload.error_description || payload.message || "Zoom OAuth failed.");
+  }
+  if (!payload.access_token) {
+    throw new Error("Zoom OAuth did not return an access token.");
+  }
+  return payload.access_token;
+}
+
+function appointmentDurationMinutes(appointment, bookingType) {
+  const configured = Number(bookingType.durationMinutes || bookingType.duration_minutes || 0);
+  if (configured > 0) return configured;
+  const diff = new Date(appointment.endAt || appointment.end_at).getTime() - new Date(appointment.startAt || appointment.start_at).getTime();
+  return Math.max(1, Math.round(diff / 60000));
+}
+
+async function createZoomMeeting(env, appointment, bookingType) {
+  const token = await createZoomAccessToken(env);
+  const host = encodeURIComponent(asString(env.ZOOM_HOST_USER_ID));
+  const clientName = appointment.clientName || appointment.client_name || "Client";
+  const label = bookingType.label || bookingType.booking_type_label || "Virtual Consultation";
+  const response = await fetch(`https://api.zoom.us/v2/users/${host}/meetings`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      topic: `${label} - ${clientName}`,
+      type: 2,
+      start_time: appointment.startAt || appointment.start_at,
+      duration: appointmentDurationMinutes(appointment, bookingType),
+      timezone: "America/New_York",
+      agenda: "Virtual consultation booked through The Six Well Construct.",
+      settings: {
+        waiting_room: true,
+        join_before_host: false,
+        approval_type: 2,
+        registrants_email_notification: false,
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || payload.reason || "Zoom meeting creation failed.");
+  }
+  if (!payload.join_url) {
+    throw new Error("Zoom meeting did not return a join URL.");
+  }
+  return payload;
+}
+
+async function saveAppointmentMeeting(db, appointmentId, meeting) {
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO appointment_meetings (
+        id, appointment_id, provider, provider_meeting_id, join_url, password,
+        raw_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(appointment_id, provider) DO UPDATE SET
+        provider_meeting_id = excluded.provider_meeting_id,
+        join_url = excluded.join_url,
+        password = excluded.password,
+        raw_json = excluded.raw_json,
+        updated_at = excluded.updated_at`
+    )
+    .bind(
+      crypto.randomUUID(),
+      appointmentId,
+      "zoom",
+      asString(meeting.id || meeting.uuid),
+      asString(meeting.join_url),
+      asString(meeting.password),
+      JSON.stringify(meeting),
+      now,
+      now
+    )
+    .run();
+}
+
+async function createOrReplaceZoomMeetingForAppointment(db, env, appointment, bookingType) {
+  if ((bookingType.id || bookingType.booking_type_id) !== VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) {
+    return null;
+  }
+  const meeting = await createZoomMeeting(env, appointment, bookingType);
+  await saveAppointmentMeeting(db, appointment.id, meeting);
+  return meeting;
+}
+
+async function archiveAppointmentAfterMeetingFailure(db, appointmentId) {
+  await db
+    .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
+    .bind("archived", new Date().toISOString(), appointmentId)
+    .run();
 }
 
 export async function handleCreateBookingCheckout(request, env) {
@@ -1289,6 +1470,18 @@ export async function handleCreateBookingCheckout(request, env) {
         checkoutUrl: result.appointment.squareCheckoutUrl,
         appointmentId: result.appointment.id,
       });
+    }
+
+    if (result.bookingType.id === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) {
+      try {
+        await createOrReplaceZoomMeetingForAppointment(db, env, result.appointment, result.bookingType);
+      } catch (error) {
+        await archiveAppointmentAfterMeetingFailure(db, result.appointment.id);
+        return errorResponse("Virtual meeting could not be created. Please try again or contact the studio.", 503, {
+          detail: error.message,
+          appointmentId: result.appointment.id,
+        });
+      }
     }
 
     let paymentLink;
@@ -1413,19 +1606,11 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
   }
 
   if (!wasConfirmed) {
-    const appointmentWithType = await db
-      .prepare(
-        `SELECT a.*, bt.label AS booking_type_label
-         FROM appointments a
-         LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
-         WHERE a.id = ?`
-      )
-      .bind(appointment.id)
-      .first();
+    const appointmentWithType = await selectAppointmentWithMeeting(db, appointment.id);
     await notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow);
   }
 
-  const updated = await db.prepare("SELECT * FROM appointments WHERE id = ?").bind(appointment.id).first();
+  const updated = await selectAppointmentWithMeeting(db, appointment.id);
   return normalizeAppointment(updated || appointmentRow);
 }
 
@@ -1433,10 +1618,7 @@ export async function handleConfirmBooking(request, env) {
   try {
     const db = requireBookingDb(env);
     const appointmentId = new URL(request.url).searchParams.get("appointment") || "";
-    const appointmentRow = await db
-      .prepare("SELECT * FROM appointments WHERE id = ?")
-      .bind(appointmentId)
-      .first();
+    const appointmentRow = await selectAppointmentWithMeeting(db, appointmentId);
     if (!appointmentRow) return errorResponse("Appointment not found.", 404);
 
     let appointment = normalizeAppointment(appointmentRow);
@@ -2115,11 +2297,62 @@ export async function handleAdminListAppointments(request, env) {
   try {
     const db = requireBookingDb(env);
     const result = await db
-      .prepare("SELECT * FROM appointments ORDER BY start_at DESC LIMIT 100")
+      .prepare(
+        `SELECT a.*, bt.label AS booking_type_label,
+                am.provider AS meeting_provider,
+                am.provider_meeting_id,
+                am.join_url AS meeting_join_url,
+                am.password AS meeting_password,
+                am.created_at AS meeting_created_at,
+                am.updated_at AS meeting_updated_at
+         FROM appointments a
+         LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+         LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
+         ORDER BY a.start_at DESC
+         LIMIT 100`
+      )
       .all();
     return json({ appointments: (result.results || []).map(normalizeAppointment) });
   } catch (error) {
     return errorResponse("Unable to load appointments.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminCreateAppointmentMeeting(request, env, appointmentId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const row = await db
+      .prepare(
+        `SELECT a.*, bt.id AS booking_type_id, bt.label AS booking_type_label,
+                bt.duration_minutes, bt.currency
+         FROM appointments a
+         LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+         WHERE a.id = ?`
+      )
+      .bind(appointmentId)
+      .first();
+    if (!row) return errorResponse("Appointment not found.", 404);
+    if (row.booking_type_id !== VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) {
+      return errorResponse("Only virtual consultation appointments can receive Zoom meetings.", 400);
+    }
+
+    const appointment = normalizeAppointment(row);
+    const bookingType = {
+      id: row.booking_type_id,
+      label: row.booking_type_label || "Virtual Consultation",
+      durationMinutes: row.duration_minutes || 45,
+      currency: row.currency || "USD",
+    };
+    await createOrReplaceZoomMeetingForAppointment(db, env, appointment, bookingType);
+    const updated = await selectAppointmentWithMeeting(db, appointmentId);
+    return json({ appointment: normalizeAppointment(updated) });
+  } catch (error) {
+    return errorResponse("Unable to create Zoom meeting.", 500, {
       detail: error.message,
     });
   }
