@@ -11,7 +11,7 @@ const BOOKING_STATUSES = new Set([
   "archived",
 ]);
 
-const PUBLIC_IN_PERSON_BOOKING_TYPE_IDS = ["consult_in_person", "build_in_person"];
+const PUBLIC_CONSULTATION_BOOKING_TYPE_IDS = ["consult_in_person", "build_in_person", "consult_virtual"];
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -801,14 +801,14 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
 }
 
 async function publicInPersonBookingTypes(db) {
-  const placeholders = PUBLIC_IN_PERSON_BOOKING_TYPE_IDS.map(() => "?").join(", ");
+  const placeholders = PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.map(() => "?").join(", ");
   const result = await db
     .prepare(
       `SELECT * FROM booking_types
        WHERE id IN (${placeholders}) AND active = 1
        ORDER BY sort_order ASC, label ASC`
     )
-    .bind(...PUBLIC_IN_PERSON_BOOKING_TYPE_IDS)
+    .bind(...PUBLIC_CONSULTATION_BOOKING_TYPE_IDS)
     .all();
   return (result.results || []).map(normalizeBookingType);
 }
@@ -872,7 +872,7 @@ function validatePublicConsultation(body) {
   if (client.understand !== "yes") {
     return { error: "Consultation acknowledgement is required." };
   }
-  if (!PUBLIC_IN_PERSON_BOOKING_TYPE_IDS.includes(asString(body.bookingTypeId))) {
+  if (!PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(asString(body.bookingTypeId))) {
     return { error: "Please select a public in-person session type." };
   }
   if (!asString(body.availabilityWindowId)) {
@@ -965,7 +965,7 @@ async function createPublicConsultationAppointment(db, body) {
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
     .bind(bookingTypeId)
     .first();
-  if (!bookingType || !PUBLIC_IN_PERSON_BOOKING_TYPE_IDS.includes(bookingType.id)) {
+  if (!bookingType || !PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(bookingType.id)) {
     return { error: "Public in-person booking is not configured." };
   }
 

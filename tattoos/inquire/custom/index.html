@@ -63,6 +63,15 @@
   .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
+  .required-mark { color:var(--signal); }
+  .radio-group { display:flex; gap:24px; align-items:center; min-height:50px; }
+  .radio-option { display:flex; align-items:center; gap:8px; }
+  .radio-option input { width:16px; height:16px; accent-color:var(--signal); }
+  .radio-option span { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-mute); }
+  .lead-note { margin-top:34px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:22px 0; max-width:620px; }
+  .lead-note-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
+  .lead-note-body { font-size:13px; line-height:1.7; color:var(--text-mute); }
+  .lead-note-body + .lead-note-body { margin-top:8px; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
   .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
   .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
@@ -102,9 +111,9 @@
     <div class="layout">
       <section>
         <p class="page-label" data-copy-id="inquiry-page-label">Art.Pill Tattoo House</p>
-        <h1 class="page-title" data-copy-id="inquiry-page-title">Project<br>Inquiry.</h1>
-        <p class="intro-body" data-copy-id="inquiry-intro-primary">Submitting an inquiry begins the live review process. If your project is a strong fit for the studio, you will receive a private token booking link and next steps.</p>
-        <p class="intro-body" data-copy-id="inquiry-intro-secondary">Use this form for custom work, early ideas, or projects that need a new drawing. If you already know the flash piece you want, the flash claim form is the cleaner path because it carries the selected title, code, series, size, and price into review.</p>
+        <h1 class="page-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
+        <p class="intro-body" data-copy-id="inquiry-intro-primary"><span style="color: rgba(252, 184, 103, 0.64)">Submitting an inquiry starts the review process. If your project is a strong fit and meets budget requirements, you will receive a private booking link along with the next steps.</span></p>
+        <p class="intro-body" data-copy-id="inquiry-intro-secondary"><span style="color: rgba(252, 184, 103, 0.64)">Use this form for custom or derivative standard work. Keep in mind that I do not copy other artists work. Derivative work is limited to resonated culture cliches and classic mantras that will be reimagined in my own way and style. To see examples of what I mean, click here.</span><br><span style="color: rgba(252, 184, 103, 0.64)">To<span style="color: rgb(255, 231, 202)"> ensure you are filling out the correct form</span>, use this guide to determine you are in the right place.&nbsp;</span></p>
         <p class="include-label">What to Include</p>
         <ul class="include-list">
           <li>Concept, subject matter, and the meaning behind it</li>
@@ -115,44 +124,86 @@
         </ul>
         <div class="path-note">
           <p class="path-note-title" data-copy-id="inquiry-flash-note-title">Claiming flash?</p>
-          <p class="path-note-body" data-copy-id="inquiry-flash-note-body">Start on the flash wall first. Available designs can prefill the claim form so the review arrives with the right catalog metadata attached.</p>
+          <p class="path-note-body" data-copy-id="inquiry-flash-note-body">Start on the flash wall first. Available designs can prefill the claim form so the review arrives with the right catalog information attached.</p>
           <a class="path-note-link" href="/tattoos/flash/claim/">Open flash claim form &rarr;</a>
+        </div>
+        <div class="path-note">
+          <p class="path-note-title" data-copy-id="inquiry-consult-note-title">Want a consultation first?</p>
+          <p class="path-note-body" data-copy-id="inquiry-consult-note-body">Book a $20 consultation - in-person at the studio or virtual over video call - for placement, cover-up review, or project planning before or alongside your inquiry.</p>
+          <a class="path-note-link" href="/tattoos/inquire/consultation/">Book a consultation &rarr;</a>
+        </div>
+        <div class="lead-note">
+          <p class="lead-note-title" data-copy-id="inquiry-lead-note-title">Timing</p>
+          <p class="lead-note-body" data-copy-id="inquiry-lead-note-body-1">Custom artwork requires at least 2 weeks of lead time before your desired appointment date. Simple or pre-existing designs don't require this lead time, but follow first-come, first-served availability.</p>
+          <!-- TODO: confirm these hours are current before publishing -->
+          <p class="lead-note-body" data-copy-id="inquiry-lead-note-body-2">Studio hours: Tues-Wed 1pm-6pm, Fri-Sat 1pm-8pm. Closed Sun, Mon, Thurs.</p>
         </div>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <h2 class="form-title" data-copy-id="inquiry-form-title">Submit for Review</h2>
-        <p class="form-note" data-copy-id="inquiry-form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow.</p>
+        <p class="form-note" data-copy-id="inquiry-form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow. Please fill out all questions in detail - vague answers may delay approval.</p>
         <form id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="tattoo_inquiry">
           <input type="hidden" name="source_path" value="/tattoos/inquire/custom/">
           <input type="hidden" name="subject" value="New Art.Pill tattoo inquiry">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <div class="field-grid">
-            <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
-            <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
-            <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+            <div class="field"><label for="firstName">First name <span class="required-mark">*</span></label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+            <div class="field"><label for="lastName">Last name <span class="required-mark">*</span></label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+            <div class="field"><label for="email">Email <span class="required-mark">*</span></label><input id="email" name="email" type="email" autocomplete="email" required></div>
             <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" autocomplete="tel"></div>
             <div class="field"><label for="instagram">Instagram</label><input id="instagram" name="instagram" placeholder="@"></div>
-            <div class="field"><label for="pronouns">Pronouns</label><input id="pronouns" name="pronouns"></div>
+            <div class="field"><label for="dob">Date of birth <span class="required-mark">*</span></label><input id="dob" name="dob" type="date" autocomplete="bday" required></div>
+            <div class="field">
+              <label>Previous client? <span class="required-mark">*</span></label>
+              <div class="radio-group">
+                <label class="radio-option"><input type="radio" name="previous_client" value="yes" required><span>Yes</span></label>
+                <label class="radio-option"><input type="radio" name="previous_client" value="no"><span>No</span></label>
+              </div>
+            </div>
             <div class="field full">
               <label for="project_type">Project type</label>
               <select id="project_type" name="project_type">
                 <option value="new_work">New work</option>
                 <option value="cover_up">Cover-up</option>
                 <option value="large_cover_up">Large cover-up - in-person consult required</option>
-                <option value="rework">Rework / expansion</option>
+                <option value="rework">Rework / recolor</option>
+                <option value="space_filler">Space filler</option>
               </select>
             </div>
-            <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" required></div>
+            <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
             <div class="field"><label for="size">Approx. size</label><input id="size" name="size" placeholder="Example: 4-6 in"></div>
-            <div class="field"><label for="budget_range">Budget range</label><input id="budget_range" name="budget_range"></div>
+            <div class="field">
+              <label for="budget_range">Budget</label>
+              <select id="budget_range" name="budget_range">
+                <option value="">Select a range</option>
+                <option value="Under $150">Under $150</option>
+                <option value="$150-$300">$150-$300</option>
+                <option value="$300-$450">$300-$450</option>
+                <option value="$450-$600">$450-$600</option>
+                <option value="$600-$750">$600-$750</option>
+                <option value="$750-$900">$750-$900</option>
+                <option value="$1000+">$1000+</option>
+                <option value="Doesn't matter">Doesn't matter</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="color_preference">Color preference</label>
+              <select id="color_preference" name="color_preference">
+                <option value="">Select an option</option>
+                <option value="Color">Color</option>
+                <option value="Black & grey">Black &amp; grey</option>
+                <option value="Mix of both">Mix of both</option>
+              </select>
+            </div>
             <div class="field"><label for="timeline">Timeline</label><input id="timeline" name="timeline"></div>
-            <div class="field full"><label for="project_title">Project or flash title</label><input id="project_title" name="project_title"></div>
+            <div class="field"><label for="requested_date">Requested date</label><input id="requested_date" name="requested_date" type="date"></div>
             <div class="field full"><label for="reference_links">Reference links</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
+            <div class="field full"><label for="placement_photo">Placement photo <span class="required-mark">*</span></label><input id="placement_photo" name="placement_photo" type="file" accept="image/png,image/jpeg,image/webp" required><p class="file-note">A photo of the area where you want the tattoo. Circle the desired location and approximate size if possible.</p></div>
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
-            <div class="field full"><label for="message">Project notes</label><textarea id="message" name="message" required></textarea></div>
+            <div class="field full"><label for="message">Project notes <span class="required-mark">*</span></label><textarea id="message" name="message" required></textarea></div>
           </div>
-          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this submission begins review before an appointment is confirmed.</span></label>
+          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this submission begins review before an appointment is confirmed. <span class="required-mark">*</span></span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
             <p class="form-status" id="formStatus">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>

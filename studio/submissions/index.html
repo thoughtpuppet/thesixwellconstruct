@@ -1366,6 +1366,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
           <select id="availabilityType">
               <option value="">Any tattoo session</option>
               <option value="consult_in_person">In-Person Consultation</option>
+              <option value="consult_virtual">Virtual Consultation</option>
               <option value="build_in_person">In-Person Build Session</option>
               <option value="tattoo_quarter">Quarter Session</option>
             <option value="tattoo_half">Half Session</option>
@@ -1491,6 +1492,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
             <select data-edit-field="bookingTypeId">
               <option value="" ${windowItem.bookingTypeId ? "" : "selected"}>Any tattoo session</option>
               <option value="consult_in_person" ${windowItem.bookingTypeId === "consult_in_person" ? "selected" : ""}>In-Person Consultation</option>
+              <option value="consult_virtual" ${windowItem.bookingTypeId === "consult_virtual" ? "selected" : ""}>Virtual Consultation</option>
               <option value="build_in_person" ${windowItem.bookingTypeId === "build_in_person" ? "selected" : ""}>In-Person Build Session</option>
               <option value="tattoo_quarter" ${windowItem.bookingTypeId === "tattoo_quarter" ? "selected" : ""}>Quarter Session</option>
               <option value="tattoo_half" ${windowItem.bookingTypeId === "tattoo_half" ? "selected" : ""}>Half Session</option>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>In-Person Build · art.pill tattoo house</title>
+<title>Consultation · art.pill tattoo house</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
@@ -60,6 +60,10 @@
   .window-time{font-family:var(--serif);font-size:14px;color:var(--accent);margin-bottom:3px;}
   .window-note{font-family:var(--serif);font-size:12px;color:var(--text-dim);}
   .windows-empty{font-family:var(--serif);font-size:14px;line-height:1.75;color:var(--text-dim);padding:var(--s4);border:5px solid var(--ring-faint);}
+
+  /* ── VIRTUAL NOTE ── */
+  .virtual-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
+  .virtual-note{font-family:var(--serif);font-size:14px;line-height:1.75;color:var(--text-mute);padding:var(--s4);border:5px solid var(--ring-faint);}
 
   /* ── RIGHT COLUMN — FORM ── */
   .form-panel{border-top:5px solid var(--ring-soft);padding-top:var(--s6);}
@@ -184,37 +188,43 @@
 
       <!-- LEFT — INFO -->
       <section>
-        <p class="page-label">art.pill · build your own</p>
-        <h1 class="page-title">In-Person.</h1>
-        <p class="page-body">The Build Your Own process can happen in the studio directly. Sit with the visual language, talk through what you want to carry, and build the brief together before a session is scheduled.</p>
-        <p class="page-body">This is a longer in-person build session where the tattoo brief is developed with you in the studio. Looking for a shorter planning consultation instead? <a href="/tattoos/inquire/consultation/" style="color:var(--accent);text-decoration:underline;">Book a consultation</a>.</p>
+        <p class="page-label">art.pill · custom inquiry</p>
+        <h1 class="page-title">Consultation.</h1>
+        <p class="page-body">A $20 consultation is a focused session for planning, placement discussion, and cover-up review — useful before or alongside a custom inquiry submission, and required for large cover-ups.</p>
+        <p class="page-body">Choose an in-person session at the studio, or a virtual session over video call. After selecting a time, you'll be taken to Square to hold the slot.</p>
 
-        <!-- ADDRESS -->
+        <!-- ADDRESS (in-person only) -->
         <div class="address-block" id="addressBlock">
           <p class="block-kicker">Studio Location</p>
           <p class="address-lines" id="addressLines">Loading…</p>
           <a class="address-map-link" id="addressMapLink" href="#" target="_blank" rel="noopener">Open in Maps →</a>
         </div>
 
-        <!-- WALK-IN WINDOWS -->
-        <div class="windows-block">
+        <!-- WALK-IN WINDOWS (in-person only) -->
+        <div class="windows-block" id="windowsBlock">
           <p class="block-kicker">Walk-In Windows</p>
           <p class="windows-note" id="windowsNote">Loading availability…</p>
           <div class="window-list" id="windowList"></div>
         </div>
+
+        <!-- VIRTUAL NOTE (virtual only) -->
+        <div class="virtual-block" id="virtualBlock" style="display:none;">
+          <p class="block-kicker">Virtual Consultation</p>
+          <p class="virtual-note">A video call link will be emailed to you ahead of your appointment time. No travel required — just be ready with any references or questions.</p>
+        </div>
       </section>
 
       <!-- RIGHT — FORM -->
-      <section class="form-panel" aria-label="Book an in-person build session">
-        <h2 class="form-title">Book a Build Session.</h2>
-        <p class="form-note">A longer in-person session for developing your tattoo brief in the studio. After selecting a time, you'll be taken to Square to hold the slot.</p>
+      <section class="form-panel" aria-label="Book a consultation">
+        <h2 class="form-title">Book a Consultation.</h2>
+        <p class="form-note">Choose an in-person or virtual consultation. After selecting a time, you'll be taken to Square to hold the slot.</p>
 
         <!-- STEP 1: FORM -->
         <div id="formStep">
           <form id="consultForm" novalidate>
             <input type="hidden" name="type" value="consultation">
-            <input type="hidden" name="source_path" value="/tattoos/build/in-person/">
-            <input type="hidden" name="subject" value="New In-Person Build Consultation Request">
+            <input type="hidden" name="source_path" value="/tattoos/inquire/consultation/">
+            <input type="hidden" name="subject" value="New Art.Pill Consultation Booking Request">
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
 
             <div class="field-grid">
@@ -223,16 +233,16 @@
               <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
               <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" autocomplete="tel"></div>
               <div class="field full">
-                <label for="bookingTypeId">Session type</label>
+                <label for="bookingTypeId">Consultation type</label>
                 <select id="bookingTypeId" name="bookingTypeId" required>
-                  <option value="">Loading build session...</option>
+                  <option value="">Loading consultation options...</option>
                 </select>
               </div>
             </div>
 
             <!-- SLOT PICKER -->
             <div class="slot-picker">
-              <span class="slot-picker-label">Available in-person times</span>
+              <span class="slot-picker-label">Available consultation times</span>
 
               <!-- Selected slots list -->
               <div class="slot-selected" id="slotSelected"></div>
@@ -258,7 +268,7 @@
                   </div>
                   <button type="button" class="time-add-btn" id="timeAddBtn" disabled>Select Time</button>
                 </div>
-                <p class="cal-full-note" id="calFullNote" style="display:none;">No public consultation times are available for this date.</p>
+                <p class="cal-full-note" id="calFullNote" style="display:none;">No consultation times are available for this date.</p>
               </div>
 
               <input type="hidden" name="preferred_slots" id="preferredSlots">
@@ -272,7 +282,7 @@
 
             <label class="check">
               <input type="checkbox" name="understand" value="yes" required>
-              <span class="check-label">I understand this is an in-person planning/build session, not a tattoo appointment. Scheduling a tattoo session follows after the brief or consultation requirement is complete.</span>
+              <span class="check-label">I understand this is a paid consultation, not a tattoo appointment. Scheduling a tattoo session follows after the consultation or inquiry review is complete.</span>
             </label>
 
             <div class="submit-row">
@@ -296,12 +306,13 @@
   </main>
 
   <footer class="bottom">
-    <a href="/tattoos/build/">&larr; back to Build Your Own</a>
+    <a href="/tattoos/inquire/custom/">&larr; back to Custom Inquiry</a>
     <a href="/">the six.well construct</a>
   </footer>
 
   <script>
   (function(){
+    const CONSULTATION_TYPE_IDS = ["consult_in_person", "consult_virtual"];
     const form = document.getElementById("consultForm");
     const submitBtn = document.getElementById("submitBtn");
     const formError = document.getElementById("formError");
@@ -319,6 +330,9 @@
     const availabilityWindowId = document.getElementById("availabilityWindowId");
     const bookingTypeSelect = document.getElementById("bookingTypeId");
     const fullNote = document.getElementById("calFullNote");
+    const addressBlock = document.getElementById("addressBlock");
+    const windowsBlock = document.getElementById("windowsBlock");
+    const virtualBlock = document.getElementById("virtualBlock");
     const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
     const days = ["Su","Mo","Tu","We","Th","Fr","Sa"];
     let calendarDate = new Date();
@@ -328,6 +342,7 @@
     let pickedDate = null;
     let pendingWindow = null;
     let selectedWindow = null;
+    let walkInWindows = [];
 
     const freshPrevBtn = prevBtn.cloneNode(true);
     const freshNextBtn = nextBtn.cloneNode(true);
@@ -482,7 +497,7 @@
       }[char]));
     }
 
-    function renderWalkInWindows(walkInWindows) {
+    function renderWalkInWindows(items) {
       const list = document.getElementById("windowList");
       const note = document.getElementById("windowsNote");
       const address = document.getElementById("addressLines");
@@ -491,11 +506,11 @@
       mapLink.style.display = "none";
       if (!list || !note) return;
       note.textContent = "Walk-in windows are updated from the studio availability console.";
-      if (!walkInWindows.length) {
-        list.innerHTML = '<p class="windows-empty">No walk-in windows are currently set. Book a private consultation or check back soon.</p>';
+      if (!items.length) {
+        list.innerHTML = '<p class="windows-empty">No walk-in windows are currently set. Book a consultation or check back soon.</p>';
         return;
       }
-      list.innerHTML = walkInWindows.map((windowItem) => {
+      list.innerHTML = items.map((windowItem) => {
         const start = new Date(windowItem.startsAt);
         const end = new Date(windowItem.endsAt);
         const title = escapeHtml(windowItem.title || "Walk-in Window");
@@ -515,20 +530,28 @@
       }).join("");
     }
 
+    function updateInfoPanel() {
+      bookingType = selectedBookingType();
+      const isVirtual = bookingType && bookingType.id === "consult_virtual";
+      addressBlock.style.display = isVirtual ? "none" : "";
+      windowsBlock.style.display = isVirtual ? "none" : "";
+      virtualBlock.style.display = isVirtual ? "" : "none";
+      if (!isVirtual) renderWalkInWindows(walkInWindows);
+    }
+
     async function loadContext() {
       try {
         const response = await fetch("/api/booking/public-consultation/context", { cache: "no-store" });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
         const allTypes = payload.bookingTypes || (payload.bookingType ? [payload.bookingType] : []);
-        bookingTypes = allTypes.filter((type) => type.id === "build_in_person");
-        bookingType = bookingTypes[0] || null;
+        bookingTypes = allTypes.filter((type) => CONSULTATION_TYPE_IDS.includes(type.id));
         windows = payload.availabilityWindows || [];
-        renderWalkInWindows(payload.walkInWindows || []);
+        walkInWindows = payload.walkInWindows || [];
         bookingTypeSelect.innerHTML = bookingTypes.map((type) => (
           `<option value="${type.id}">${type.label} - ${type.depositLabel} / ${type.durationMinutes} min</option>`
         )).join("");
-        bookingType = selectedBookingType();
+        updateInfoPanel();
         if (bookingType) submitBtn.textContent = `Continue to Square - ${bookingType.depositLabel}`;
         renderCalendar();
       } catch (error) {
@@ -564,6 +587,7 @@
     bookingTypeSelect.addEventListener("change", () => {
       bookingType = selectedBookingType();
       submitBtn.textContent = bookingType ? `Continue to Square - ${bookingType.depositLabel}` : "Continue to Square";
+      updateInfoPanel();
       resetSelectedTime();
     });
 
