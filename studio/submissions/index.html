@@ -29,7 +29,7 @@
   .detail-pane { min-height:0; overflow:auto; padding:28px; }
   .toolbar { display:flex; gap:10px; padding:16px; border-bottom:5px solid var(--ring-faint); position:sticky; top:0; background:rgba(14,14,14,0.96); z-index:2; }
   select,input,textarea { width:100%; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; transition:border-color var(--t-fast), background var(--t-fast); }
-  select { -webkit-appearance:none; appearance:none; color-scheme:dark; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237A1010' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
+  select { -webkit-appearance:none; appearance:none; color-scheme:dark; accent-color:#FCB867; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
   option { background:var(--bg); color:#FFE7CA; }
   input[type="date"],input[type="time"],input[type="datetime-local"],input[type="month"],input[type="week"] { color-scheme:dark; }
   input[type="date"]::-webkit-calendar-picker-indicator,
@@ -40,9 +40,97 @@
     filter: invert(75%) sepia(48%) saturate(657%) hue-rotate(337deg) brightness(101%) contrast(101%);
     cursor: pointer;
   }
-  #statusFilter, #typeFilter, #detailStatus { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#7A1010; }
-  #statusFilter option, #typeFilter option, #detailStatus option { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#7A1010; }
+  #statusFilter, #typeFilter, #detailStatus { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
+  #statusFilter option, #typeFilter option, #detailStatus option { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
+  #statusFilter option:checked, #typeFilter option:checked, #detailStatus option:checked,
+  #statusFilter option:hover, #typeFilter option:hover, #detailStatus option:hover {
+    background:#FCB867; color:#0e0e0e;
+  }
   select:focus,input:focus,textarea:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
+
+  /* Custom dropdown — replaces native <select> for full hover/option styling control */
+  .custom-select { position:relative; width:100%; }
+  .native-select-hidden, .native-input-hidden { position:absolute; opacity:0; width:1px; height:1px; padding:0; border:0; margin:0; pointer-events:none; }
+  .custom-select-trigger {
+    width:100%; display:flex; align-items:center; justify-content:space-between;
+    background:var(--bg); color:#FCB867; border:5px solid var(--ring-faint);
+    font-family:inherit; font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
+    padding:10px 12px; cursor:pointer; transition:border-color var(--t-fast);
+  }
+  .custom-select-trigger:hover { border-color:var(--accent); }
+  .custom-select-arrow {
+    width:12px; height:8px; flex:none; margin-left:8px;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / contain;
+  }
+  .custom-select-list {
+    display:none; list-style:none; margin:0; padding:0;
+    position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:10;
+    background:var(--bg); border:5px solid var(--ring-faint);
+    max-height:240px; overflow-y:auto;
+    scrollbar-color: var(--accent) transparent; scrollbar-width: thin;
+  }
+  .custom-select.open .custom-select-list { display:block; }
+  .custom-select-list::-webkit-scrollbar { width:8px; background:transparent; }
+  .custom-select-list::-webkit-scrollbar-track { background:transparent; }
+  .custom-select-list::-webkit-scrollbar-thumb { background:var(--accent); border:2px solid transparent; background-clip:padding-box; }
+  .custom-select-option {
+    padding:10px 12px; font-family:var(--sans); font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
+    color:#FCB867; cursor:pointer;
+  }
+  .custom-select-option:hover, .custom-select-option.is-selected { background:#FCB867; color:#0e0e0e; }
+
+  /* Custom date & time pickers — replace native input[type=time]/[type=datetime-local] */
+  .datetimepicker, .timepicker { position:relative; width:100%; }
+  .datetimepicker-input, .timepicker-input { cursor:pointer; border-color:var(--ring-faint) !important; }
+  .datetimepicker-popup, .timepicker-popup {
+    display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:10;
+    background:var(--bg); border:5px solid var(--ring-faint);
+  }
+  .datetimepicker.open .datetimepicker-popup { display:flex; }
+  .timepicker.open .timepicker-popup { display:block; }
+  .datetimepicker-popup .dt-date { width:280px; padding:14px; border-right:5px solid var(--ring-faint); }
+  .datetimepicker-popup .dt-time, .timepicker-popup {
+    width:160px; max-height:280px; overflow-y:auto; padding:6px;
+    scrollbar-color: var(--accent) transparent; scrollbar-width: thin;
+  }
+  .datetimepicker-popup .dt-time::-webkit-scrollbar, .timepicker-popup::-webkit-scrollbar { width:8px; background:transparent; }
+  .datetimepicker-popup .dt-time::-webkit-scrollbar-track, .timepicker-popup::-webkit-scrollbar-track { background:transparent; }
+  .datetimepicker-popup .dt-time::-webkit-scrollbar-thumb, .timepicker-popup::-webkit-scrollbar-thumb { background:var(--accent); border:2px solid transparent; background-clip:padding-box; }
+  .datepicker-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .datepicker-head .month-label { font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); }
+  .datepicker-nav { display:flex; gap:6px; }
+  .datepicker-nav button {
+    width:auto; min-height:0; padding:4px 8px; border:5px solid var(--ring-faint);
+    background:var(--bg); color:var(--accent); font-family:var(--sans); font-weight:800; cursor:pointer;
+  }
+  .datepicker-nav button:hover { border-color:var(--accent); background:rgba(252,184,103,0.12); }
+  .dt-date .calendar-weekdays, .dt-date .calendar-grid { max-width:none; }
+  .dt-date .day-button { font-size:10px; cursor:pointer; }
+  .day-button:hover:not(.blank):not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  .day-button.today { color:var(--accent); border-color:var(--accent); }
+  .dt-date .day-button.selected { background:var(--accent); border-color:var(--accent); color:#1a0e00; outline:none; }
+
+  /* AM/PM toggle */
+  .ampm-toggle { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; }
+  .ampm-button {
+    width:auto; min-height:0; cursor:pointer;
+    background:var(--bg); color:var(--text); border:5px solid var(--ring-faint);
+    font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.12em;
+    padding:6px 0; text-align:center;
+  }
+  .ampm-button:hover { border-color:var(--accent); color:var(--accent); }
+  .ampm-button.is-active { background:var(--accent); border-color:var(--accent); color:#1a0e00; }
+
+  /* Time list */
+  .time-option {
+    display:block; width:100%; text-align:left; cursor:pointer; min-height:0;
+    background:var(--bg); color:var(--text); border:0; border-bottom:1px solid rgba(252,184,103,0.16);
+    font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:0.08em;
+    padding:8px 10px;
+  }
+  .time-option:last-child { border-bottom:0; }
+  .time-option:hover { background:rgba(252,184,103,0.12); color:var(--accent); }
+  .time-option.selected { background:var(--accent); color:#1a0e00; }
   textarea { min-height:160px; resize:vertical; line-height:1.5; }
   .button { border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; min-height:44px; padding:0 14px; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.045); }
@@ -259,6 +347,285 @@
   let activeId = "";
   let availabilityPreviewMonth = "";
   let selectedCalendarDay = "";
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+
+  function closeAllCustomPopups() {
+    document.querySelectorAll(".custom-select.open, .datetimepicker.open, .timepicker.open").forEach((el) => el.classList.remove("open"));
+  }
+  document.addEventListener("click", (event) => {
+    document.querySelectorAll(".custom-select.open, .datetimepicker.open, .timepicker.open").forEach((el) => {
+      if (!el.contains(event.target)) el.classList.remove("open");
+    });
+  });
+
+  function enhanceSelect(select) {
+    if (select.dataset.enhanced) return;
+    select.dataset.enhanced = "1";
+
+    const wrap = document.createElement("div");
+    wrap.className = "custom-select";
+    select.insertAdjacentElement("beforebegin", wrap);
+    wrap.appendChild(select);
+    select.classList.add("native-select-hidden");
+
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "custom-select-trigger";
+    trigger.innerHTML = `<span class="custom-select-value"></span><span class="custom-select-arrow"></span>`;
+    const valueLabel = trigger.querySelector(".custom-select-value");
+
+    const list = document.createElement("ul");
+    list.className = "custom-select-list";
+    list.setAttribute("role", "listbox");
+
+    function sync() {
+      list.innerHTML = "";
+      [...select.options].forEach((opt, index) => {
+        const li = document.createElement("li");
+        li.className = "custom-select-option" + (index === select.selectedIndex ? " is-selected" : "");
+        li.dataset.value = opt.value;
+        li.textContent = opt.textContent;
+        li.setAttribute("role", "option");
+        list.appendChild(li);
+      });
+      const opt = select.options[select.selectedIndex];
+      valueLabel.textContent = opt ? opt.textContent : "";
+    }
+
+    trigger.addEventListener("click", () => {
+      if (select.disabled) return;
+      const willOpen = !wrap.classList.contains("open");
+      closeAllCustomPopups();
+      if (willOpen) wrap.classList.add("open");
+    });
+
+    list.addEventListener("click", (event) => {
+      const li = event.target.closest(".custom-select-option");
+      if (!li) return;
+      if (select.value !== li.dataset.value) {
+        select.value = li.dataset.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      sync();
+      wrap.classList.remove("open");
+    });
+
+    select.addEventListener("change", sync);
+    wrap.insertBefore(trigger, select);
+    wrap.appendChild(list);
+    select._customSync = sync;
+    sync();
+  }
+
+  function formatTimeLabel(h, m) {
+    const period = h < 12 ? "AM" : "PM";
+    let hour12 = h % 12;
+    if (hour12 === 0) hour12 = 12;
+    return `${hour12}:${pad2(m)} ${period}`;
+  }
+
+  function renderTimeList(container, value, onPick) {
+    const initialPeriod = value && parseInt(value.slice(0, 2), 10) >= 12 ? "PM" : "AM";
+    container.innerHTML = `
+      <div class="ampm-toggle">
+        <button type="button" class="ampm-button ${initialPeriod === "AM" ? "is-active" : ""}" data-period="AM">AM</button>
+        <button type="button" class="ampm-button ${initialPeriod === "PM" ? "is-active" : ""}" data-period="PM">PM</button>
+      </div>
+      <div class="time-list"></div>
+    `;
+    const listEl = container.querySelector(".time-list");
+    const buttons = container.querySelectorAll(".ampm-button");
+
+    function render() {
+      listEl.innerHTML = "";
+      const active = container.querySelector(".ampm-button.is-active").dataset.period;
+      const startHour = active === "AM" ? 0 : 12;
+      for (let h = startHour; h < startHour + 12; h++) {
+        for (let m = 0; m < 60; m += 30) {
+          const v = `${pad2(h)}:${pad2(m)}`;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "time-option" + (v === value ? " selected" : "");
+          btn.textContent = formatTimeLabel(h, m);
+          btn.addEventListener("click", () => onPick(v));
+          listEl.appendChild(btn);
+        }
+      }
+    }
+
+    buttons.forEach((btn) => btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.toggle("is-active", b === btn));
+      render();
+    }));
+    render();
+  }
+
+  function renderCalendar(container, view, selectedDate, onPick) {
+    const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    container.innerHTML = `
+      <div class="datepicker-head">
+        <div class="datepicker-nav"><button type="button" data-cal-prev aria-label="Previous month">&#8592;</button></div>
+        <span class="month-label"></span>
+        <div class="datepicker-nav"><button type="button" data-cal-next aria-label="Next month">&#8594;</button></div>
+      </div>
+      <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div class="calendar-grid"></div>
+    `;
+    const monthLabel = container.querySelector(".month-label");
+    const grid = container.querySelector(".calendar-grid");
+
+    function render() {
+      monthLabel.textContent = `${monthNames[view.getMonth()]} ${view.getFullYear()}`;
+      grid.innerHTML = "";
+      const firstDay = new Date(view.getFullYear(), view.getMonth(), 1).getDay();
+      const daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+      const today = new Date();
+      for (let i = 0; i < firstDay; i++) {
+        const blank = document.createElement("button");
+        blank.type = "button";
+        blank.className = "day-button blank";
+        blank.tabIndex = -1;
+        grid.appendChild(blank);
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "day-button";
+        btn.textContent = d;
+        const date = new Date(view.getFullYear(), view.getMonth(), d);
+        if (date.toDateString() === today.toDateString()) btn.classList.add("today");
+        if (selectedDate && date.toDateString() === selectedDate.toDateString()) btn.classList.add("selected");
+        btn.addEventListener("click", () => onPick(date));
+        grid.appendChild(btn);
+      }
+    }
+
+    container.querySelector("[data-cal-prev]").addEventListener("click", () => { view.setMonth(view.getMonth() - 1); render(); });
+    container.querySelector("[data-cal-next]").addEventListener("click", () => { view.setMonth(view.getMonth() + 1); render(); });
+    render();
+  }
+
+  function enhanceDateTimeInput(input) {
+    if (input.dataset.enhanced) return;
+    input.dataset.enhanced = "1";
+
+    const wrap = document.createElement("div");
+    wrap.className = "datetimepicker";
+    input.insertAdjacentElement("beforebegin", wrap);
+    wrap.appendChild(input);
+    input.classList.add("native-input-hidden");
+
+    const display = document.createElement("input");
+    display.type = "text";
+    display.className = "datetimepicker-input";
+    display.readOnly = true;
+    display.placeholder = "Select date & time";
+    display.autocomplete = "off";
+
+    const popup = document.createElement("div");
+    popup.className = "datetimepicker-popup";
+    const dateBox = document.createElement("div");
+    dateBox.className = "dt-date";
+    const timeBox = document.createElement("div");
+    timeBox.className = "dt-time";
+    popup.append(dateBox, timeBox);
+
+    function parseValue() {
+      if (!input.value) return { date: null, time: "" };
+      const [d, t] = input.value.split("T");
+      const [y, mo, day] = d.split("-").map(Number);
+      return { date: new Date(y, mo - 1, day), time: t || "" };
+    }
+
+    function updateDisplay() {
+      const { date, time } = parseValue();
+      if (!date) { display.value = ""; return; }
+      const [h, m] = time.split(":").map(Number);
+      display.value = `${date.toLocaleDateString([], { month:"short", day:"numeric", year:"numeric" })} · ${formatTimeLabel(h || 0, m || 0)}`;
+    }
+
+    function setValue(date, time) {
+      if (!date) return;
+      const t = time || "12:00";
+      input.value = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${t}`;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      updateDisplay();
+      renderPopup();
+    }
+
+    function renderPopup() {
+      const { date, time } = parseValue();
+      const view = date ? new Date(date.getFullYear(), date.getMonth(), 1) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      renderCalendar(dateBox, view, date, (picked) => setValue(picked, time));
+      renderTimeList(timeBox, time, (picked) => {
+        const { date: currentDate } = parseValue();
+        setValue(currentDate || new Date(), picked);
+      });
+    }
+
+    display.addEventListener("click", () => {
+      const willOpen = !wrap.classList.contains("open");
+      closeAllCustomPopups();
+      if (willOpen) { renderPopup(); wrap.classList.add("open"); }
+    });
+
+    updateDisplay();
+    wrap.insertBefore(display, input);
+    wrap.appendChild(popup);
+  }
+
+  function enhanceTimeInput(input) {
+    if (input.dataset.enhanced) return;
+    input.dataset.enhanced = "1";
+
+    const wrap = document.createElement("div");
+    wrap.className = "timepicker";
+    input.insertAdjacentElement("beforebegin", wrap);
+    wrap.appendChild(input);
+    input.classList.add("native-input-hidden");
+
+    const display = document.createElement("input");
+    display.type = "text";
+    display.className = "timepicker-input";
+    display.readOnly = true;
+    display.placeholder = "Select a time";
+    display.autocomplete = "off";
+
+    const popup = document.createElement("div");
+    popup.className = "timepicker-popup";
+
+    function updateDisplay() {
+      if (!input.value) { display.value = ""; return; }
+      const [h, m] = input.value.split(":").map(Number);
+      display.value = formatTimeLabel(h, m);
+    }
+
+    function renderPopup() {
+      renderTimeList(popup, input.value, (picked) => {
+        input.value = picked;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        updateDisplay();
+        wrap.classList.remove("open");
+      });
+    }
+
+    display.addEventListener("click", () => {
+      const willOpen = !wrap.classList.contains("open");
+      closeAllCustomPopups();
+      if (willOpen) { renderPopup(); wrap.classList.add("open"); }
+    });
+
+    updateDisplay();
+    wrap.insertBefore(display, input);
+    wrap.appendChild(popup);
+  }
+
+  function enhanceControls(root) {
+    root.querySelectorAll("select:not([data-enhanced])").forEach(enhanceSelect);
+    root.querySelectorAll('input[type="datetime-local"]:not([data-enhanced])').forEach(enhanceDateTimeInput);
+    root.querySelectorAll('input[type="time"]:not([data-enhanced])').forEach(enhanceTimeInput);
+  }
 
   function nextActionBadge(submission) {
     const s = submission.status;
@@ -696,6 +1063,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         </div>
       </div>
     `;
+    enhanceControls(detailEl);
     renderEventHistory(submission.id);
     renderTokenState(submission.id);
   }
@@ -862,6 +1230,8 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     const index = monthKeys.indexOf(availabilityPreviewMonth);
     monthSelect.innerHTML = monthKeys.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(monthLabel(key))}</option>`).join("");
     monthSelect.value = availabilityPreviewMonth;
+    enhanceControls(detailEl);
+    monthSelect._customSync?.();
     prevButton.disabled = index <= 0;
     nextButton.disabled = index < 0 || index >= monthKeys.length - 1;
     renderBookedCalendar(availabilityPreviewMonth, dayStats);
@@ -1029,6 +1399,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
       </section>
       </div>
     `;
+    enhanceControls(detailEl);
     await loadSchedule();
     await loadWalkIns();
     await loadAvailabilityPreview();
@@ -1084,6 +1455,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         </div>
       </div>
     `).join("");
+    enhanceControls(detailEl);
   }
 
   async function loadAvailability() {
@@ -1159,6 +1531,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         </form>
       </div>
     `).join("") : '<p class="empty">No exceptions yet. Weekly schedule rules will generate booking times automatically.</p>';
+    enhanceControls(detailEl);
   }
 
   async function loadWalkIns() {
@@ -1638,6 +2011,8 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     tokenModal.classList.remove("hidden");
     setStatus("Locked");
   });
+
+  enhanceControls(document.querySelector(".toolbar"));
 
   if (token) {
     tokenModal.classList.add("hidden");

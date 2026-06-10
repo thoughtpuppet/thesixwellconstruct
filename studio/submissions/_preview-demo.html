@@ -8,7 +8,7 @@
     color-scheme: dark;
     --bg:#0e0e0e; --panel:#161616; --line:rgba(255,231,202,0.16);
     --text:#FFE7CA; --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.42);
-    --accent:#FCB867; --signal:#FCB867; --ring:#FFE7CA; --ring-soft:rgba(255,231,202,0.4); --ring-faint:rgba(255,231,202,0.16);
+    --accent:#FCB867; --signal:#FCB867; --ring:#6D3D15; --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --sans: Arial, sans-serif; --serif: Georgia, serif;
   }
   body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); padding:32px; }
@@ -33,10 +33,48 @@
 
   /* Dropdowns */
   select,input,textarea { font:inherit; width:100%; max-width:260px; background:var(--bg); color:#FFE7CA; border:5px solid var(--ring-faint); padding:10px 12px; border-radius:0; }
-  select { -webkit-appearance:none; appearance:none; color-scheme:dark; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237A1010' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
+  select { -webkit-appearance:none; appearance:none; color-scheme:dark; accent-color:#FCB867; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; padding-right:32px; }
   option { background:var(--bg); color:#FFE7CA; }
-  #statusFilter, #typeFilter, #detailStatus { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#7A1010; }
-  #statusFilter option, #typeFilter option, #detailStatus option { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#7A1010; }
+  #statusFilter, #typeFilter, #detailStatus { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
+  #statusFilter option, #typeFilter option, #detailStatus option { font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:#FCB867; }
+  #statusFilter option:checked, #typeFilter option:checked, #detailStatus option:checked,
+  #statusFilter option:hover, #typeFilter option:hover, #detailStatus option:hover {
+    background:#FCB867; color:#0e0e0e;
+  }
+
+  /* Custom dropdown */
+  .custom-select { position:relative; max-width:260px; }
+  .custom-select-trigger {
+    width:100%; display:flex; align-items:center; justify-content:space-between;
+    background:var(--bg); color:#FCB867; border:5px solid var(--ring-faint);
+    font-family:inherit; font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
+    padding:10px 12px; cursor:pointer;
+  }
+  .custom-select-trigger:hover { border-color:var(--accent); }
+  .custom-select-arrow {
+    width:12px; height:8px; flex:none; margin-left:8px;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / contain;
+  }
+  .custom-select-list {
+    display:none; list-style:none; margin:0; padding:0;
+    position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:10;
+    background:var(--bg); border:5px solid var(--ring-faint);
+    max-height:240px; overflow-y:auto;
+    scrollbar-color: var(--accent) transparent;
+    scrollbar-width: thin;
+  }
+  .custom-select.open .custom-select-list { display:block; }
+  .custom-select-list::-webkit-scrollbar { width:8px; background:transparent; }
+  .custom-select-list::-webkit-scrollbar-track { background:transparent; }
+  .custom-select-list::-webkit-scrollbar-thumb { background:var(--accent); border:2px solid transparent; background-clip:padding-box; }
+  .custom-select-option {
+    padding:10px 12px; font-family:inherit; font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
+    color:#FCB867; cursor:pointer;
+  }
+  .custom-select-option:hover,
+  .custom-select-option.is-selected {
+    background:#FCB867; color:#0e0e0e;
+  }
 
   /* Review card */
   .review-card { border:5px solid var(--ring-faint); padding:16px; margin-bottom:22px; max-width:520px; }
@@ -49,6 +87,60 @@
   /* Save button */
   .button { font:inherit; cursor:pointer; background:var(--bg); color:var(--text); border:5px solid var(--ring-faint); padding:10px 14px; }
   .booking-row { max-width:420px; }
+
+  /* Custom date & time pickers */
+  .datepicker, .timepicker { position:relative; max-width:260px; }
+  .datepicker-input, .timepicker-input { cursor:pointer; border-color:var(--ring-faint) !important; }
+  .datepicker-popup, .timepicker-popup {
+    display:none;
+    position:absolute; top:calc(100% + 6px); left:0; z-index:10;
+    background:var(--bg); border:5px solid var(--ring-faint);
+  }
+  .datepicker-popup { width:280px; padding:14px; }
+  .timepicker-popup {
+    width:160px; max-height:220px; overflow-y:auto; padding:6px;
+    scrollbar-color: var(--accent) transparent;
+    scrollbar-width: thin;
+  }
+  .timepicker-popup::-webkit-scrollbar { width:8px; background:transparent; }
+  .timepicker-popup::-webkit-scrollbar-track { background:transparent; }
+  .timepicker-popup::-webkit-scrollbar-thumb { background:var(--accent); border:2px solid transparent; background-clip:padding-box; }
+  .datepicker.open .datepicker-popup, .timepicker.open .timepicker-popup { display:block; }
+  .datepicker-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .datepicker-head .month-label { font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent); }
+  .datepicker-nav { display:flex; gap:6px; }
+  .datepicker-nav button {
+    width:auto; max-width:none; padding:4px 8px; border:5px solid var(--ring-faint);
+    background:var(--bg); color:var(--accent); font-family:var(--sans); font-weight:800; cursor:pointer;
+  }
+  .datepicker-nav button:hover { background:rgba(252,184,103,0.12); }
+  .datepicker .calendar-weekdays,.datepicker .calendar-grid { max-width:none; }
+  .datepicker .day-button { font-size:10px; cursor:pointer; border-color:var(--ring-faint); }
+  .datepicker .day-button:hover:not(.blank) { border-color:var(--accent); color:var(--accent); }
+  .datepicker .day-button.today { color:var(--accent); border-color:var(--accent); }
+  .datepicker .day-button.selected { background:var(--accent); border-color:var(--accent); color:#1a0e00; outline:none; }
+
+  /* AM/PM toggle */
+  .ampm-toggle { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; }
+  .ampm-button {
+    width:auto; max-width:none; cursor:pointer;
+    background:var(--bg); color:var(--text); border:5px solid var(--ring-faint);
+    font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.12em;
+    padding:6px 0; text-align:center;
+  }
+  .ampm-button:hover { border-color:var(--accent); color:var(--accent); }
+  .ampm-button.is-active { background:var(--accent); border-color:var(--accent); color:#1a0e00; }
+
+  /* Time list */
+  .time-option {
+    display:block; width:100%; text-align:left; cursor:pointer;
+    background:var(--bg); color:var(--text); border:0; border-bottom:1px solid rgba(252,184,103,0.16);
+    font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:0.08em;
+    padding:8px 10px;
+  }
+  .time-option:last-child { border-bottom:0; }
+  .time-option:hover { background:rgba(252,184,103,0.12); color:var(--accent); }
+  .time-option.selected { background:var(--accent); color:#1a0e00; }
 </style>
 </head>
 <body>
@@ -91,6 +183,23 @@
     <option value="flash_claim">FLASH CLAIM</option>
   </select>
 
+  <h2>Custom Dropdown — replaces native &lt;select&gt; (fully CSS-controlled hover)</h2>
+  <div class="custom-select" id="customStatusSelect">
+    <button type="button" class="custom-select-trigger">
+      <span class="custom-select-value">ALL STATUSES</span>
+      <span class="custom-select-arrow"></span>
+    </button>
+    <ul class="custom-select-list" role="listbox">
+      <li class="custom-select-option is-selected" data-value="" role="option">ALL STATUSES</li>
+      <li class="custom-select-option" data-value="new" role="option">NEW</li>
+      <li class="custom-select-option" data-value="reviewing" role="option">REVIEWING</li>
+      <li class="custom-select-option" data-value="approved" role="option">APPROVED</li>
+      <li class="custom-select-option" data-value="declined" role="option">DECLINED</li>
+      <li class="custom-select-option" data-value="booked" role="option">BOOKED</li>
+      <li class="custom-select-option" data-value="archived" role="option">ARCHIVED</li>
+    </ul>
+  </div>
+
   <h2>Review Card — type-specific fields</h2>
   <div class="review-card">
     <div class="review-card-header">Flash Claim</div>
@@ -108,5 +217,179 @@
     <input id="bookingUrl" value="/book/abc123">
     <button class="button" id="saveBtn" type="button" style="margin-top:10px;width:100%;border-color:#4caf50;">Save</button>
   </div>
+
+  <h2>Custom Date &amp; Time Pickers — replace native input[type=date]/[type=time]</h2>
+  <div class="grid" style="max-width:560px;">
+    <div class="field datepicker" id="demoDatepicker">
+      <label>Window Date</label>
+      <input class="datepicker-input" id="demoDateInput" readonly placeholder="Select a date" autocomplete="off">
+      <div class="datepicker-popup">
+        <div class="datepicker-head">
+          <div class="datepicker-nav"><button type="button" id="dpPrev" aria-label="Previous month">&#8592;</button></div>
+          <span class="month-label" id="dpMonthLabel"></span>
+          <div class="datepicker-nav"><button type="button" id="dpNext" aria-label="Next month">&#8594;</button></div>
+        </div>
+        <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div class="calendar-grid" id="dpGrid"></div>
+      </div>
+    </div>
+
+    <div class="field timepicker" id="demoTimepicker">
+      <label>Window Time</label>
+      <input class="timepicker-input" id="demoTimeInput" readonly placeholder="Select a time" autocomplete="off">
+      <div class="timepicker-popup">
+        <div class="ampm-toggle">
+          <button type="button" class="ampm-button is-active" data-period="AM">AM</button>
+          <button type="button" class="ampm-button" data-period="PM">PM</button>
+        </div>
+        <div id="tpList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const wrap = document.getElementById("demoDatepicker");
+      const input = document.getElementById("demoDateInput");
+      const popup = wrap.querySelector(".datepicker-popup");
+      const grid = document.getElementById("dpGrid");
+      const monthLabel = document.getElementById("dpMonthLabel");
+      const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+      let view = new Date();
+      view.setDate(1);
+      let selected = null;
+
+      function render() {
+        monthLabel.textContent = `${monthNames[view.getMonth()]} ${view.getFullYear()}`;
+        grid.innerHTML = "";
+        const firstDay = new Date(view.getFullYear(), view.getMonth(), 1).getDay();
+        const daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+        const today = new Date();
+
+        for (let i = 0; i < firstDay; i++) {
+          const blank = document.createElement("button");
+          blank.className = "day-button blank";
+          blank.tabIndex = -1;
+          grid.appendChild(blank);
+        }
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "day-button";
+          btn.textContent = d;
+          const date = new Date(view.getFullYear(), view.getMonth(), d);
+          if (date.toDateString() === today.toDateString()) btn.classList.add("today");
+          if (selected && date.toDateString() === selected.toDateString()) btn.classList.add("selected");
+          btn.addEventListener("click", () => {
+            selected = date;
+            input.value = date.toISOString().slice(0, 10);
+            wrap.classList.remove("open");
+            render();
+          });
+          grid.appendChild(btn);
+        }
+      }
+
+      input.addEventListener("click", () => {
+        wrap.classList.toggle("open");
+      });
+      document.getElementById("dpPrev").addEventListener("click", () => {
+        view.setMonth(view.getMonth() - 1);
+        render();
+      });
+      document.getElementById("dpNext").addEventListener("click", () => {
+        view.setMonth(view.getMonth() + 1);
+        render();
+      });
+      document.addEventListener("click", (e) => {
+        if (!wrap.contains(e.target)) wrap.classList.remove("open");
+      });
+
+      render();
+    })();
+
+    (function () {
+      const wrap = document.getElementById("demoTimepicker");
+      const input = document.getElementById("demoTimeInput");
+      const list = document.getElementById("tpList");
+      const ampmButtons = wrap.querySelectorAll(".ampm-button");
+      let selected = null;
+      let activePeriod = "AM";
+
+      function formatLabel(h, m) {
+        const period = h < 12 ? "AM" : "PM";
+        let hour12 = h % 12;
+        if (hour12 === 0) hour12 = 12;
+        return `${hour12}:${String(m).padStart(2, "0")} ${period}`;
+      }
+
+      function renderList() {
+        list.innerHTML = "";
+        const startHour = activePeriod === "AM" ? 0 : 12;
+        for (let h = startHour; h < startHour + 12; h++) {
+          for (let m = 0; m < 60; m += 30) {
+            const value = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "time-option";
+            btn.textContent = formatLabel(h, m);
+            btn.dataset.value = value;
+            if (value === selected) btn.classList.add("selected");
+            btn.addEventListener("click", () => {
+              selected = value;
+              input.value = formatLabel(h, m);
+              list.querySelectorAll(".time-option.selected").forEach((el) => el.classList.remove("selected"));
+              btn.classList.add("selected");
+              wrap.classList.remove("open");
+            });
+            list.appendChild(btn);
+          }
+        }
+      }
+
+      ampmButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          activePeriod = btn.dataset.period;
+          ampmButtons.forEach((b) => b.classList.toggle("is-active", b === btn));
+          renderList();
+        });
+      });
+
+      renderList();
+
+      input.addEventListener("click", () => {
+        wrap.classList.toggle("open");
+      });
+      document.addEventListener("click", (e) => {
+        if (!wrap.contains(e.target)) wrap.classList.remove("open");
+      });
+    })();
+
+    (function () {
+      const wrap = document.getElementById("customStatusSelect");
+      const trigger = wrap.querySelector(".custom-select-trigger");
+      const valueLabel = wrap.querySelector(".custom-select-value");
+      const options = wrap.querySelectorAll(".custom-select-option");
+
+      trigger.addEventListener("click", () => {
+        wrap.classList.toggle("open");
+      });
+
+      options.forEach((opt) => {
+        opt.addEventListener("click", () => {
+          options.forEach((o) => o.classList.remove("is-selected"));
+          opt.classList.add("is-selected");
+          valueLabel.textContent = opt.textContent;
+          wrap.classList.remove("open");
+        });
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!wrap.contains(e.target)) wrap.classList.remove("open");
+      });
+    })();
+  </script>
 </body>
 </html>
