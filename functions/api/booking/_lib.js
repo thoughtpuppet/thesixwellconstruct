@@ -13,6 +13,11 @@ const BOOKING_STATUSES = new Set([
 
 const PUBLIC_CONSULTATION_BOOKING_TYPE_IDS = ["consult_in_person", "build_in_person", "consult_virtual"];
 
+const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
+  tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full", "build_in_person"],
+  consultation: ["consult_in_person", "consult_virtual"],
+};
+
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     headers: {
@@ -155,6 +160,7 @@ function normalizeRule(row) {
     bufferBeforeMinutes: row.buffer_before_minutes,
     bufferAfterMinutes: row.buffer_after_minutes,
     note: row.note || "",
+    category: row.category || "tattooing",
   };
 }
 
@@ -463,7 +469,8 @@ async function listGeneratedWindows(db, bookingTypes, blackouts, activeAppointme
       const ruleEnd = zonedLocalToUtcIso(settings.timezone, local.year, local.month, local.day, endParts.hour, endParts.minute);
       if (new Date(ruleEnd).getTime() <= new Date(ruleStart).getTime()) continue;
 
-      for (const bookingType of bookingTypes) {
+      const allowedTypeIds = SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[rule.category] || SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing;
+      for (const bookingType of bookingTypes.filter((type) => allowedTypeIds.includes(type.id))) {
         let slotStart = ruleStart;
         while (new Date(addMinutes(slotStart, bookingType.durationMinutes)).getTime() <= new Date(ruleEnd).getTime()) {
           const slotEnd = addMinutes(slotStart, bookingType.durationMinutes);
@@ -1658,7 +1665,7 @@ export async function handleAdminGetSchedule(request, env) {
       .prepare(
         `SELECT * FROM availability_rules
          WHERE venture = ?
-         ORDER BY day_of_week ASC`
+         ORDER BY category ASC, day_of_week ASC`
       )
       .bind("tattooing")
       .all();

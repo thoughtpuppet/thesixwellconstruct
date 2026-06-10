@@ -193,6 +193,8 @@
   .appt-meta { color:var(--muted); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; }
   .day-button.selected { outline:3px solid #FFE7CA; outline-offset:-3px; }
   .schedule-section { border-top:5px solid var(--ring-faint); padding-top:18px; margin-top:18px; }
+  .schedule-group-title { font-family:var(--sans); font-size:12px; text-transform:uppercase; letter-spacing:0.08em; margin:18px 0 4px; }
+  .schedule-group-title:first-of-type { margin-top:0; }
   .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
   .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:5px solid var(--ring-faint); padding:12px 0; }
   .day-name { color:var(--accent); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; padding-bottom:12px; }
@@ -1292,7 +1294,12 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
         <section class="schedule-section" data-collapse-section>
           <button class="section-toggle" type="button">Weekly Schedule</button>
           <div class="section-body">
-          <div id="weeklyRules"></div>
+          <h3 class="schedule-group-title">Tattooing Hours</h3>
+          <p class="contact">Applies to Quarter, Half, and Full sessions, and in-person build sessions.</p>
+          <div id="weeklyRulesTattooing"></div>
+          <h3 class="schedule-group-title">Consultation Hours</h3>
+          <p class="contact">Applies to in-person and virtual consultations.</p>
+          <div id="weeklyRulesConsultation"></div>
           <button class="button save-schedule" type="submit">Save Schedule</button>
           </div>
         </section>
@@ -1423,7 +1430,7 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
     document.getElementById("settingBufferBefore").value = settings.defaultBufferBeforeMinutes || 30;
     document.getElementById("settingBufferAfter").value = settings.defaultBufferAfterMinutes || 30;
     const names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-    document.getElementById("weeklyRules").innerHTML = rules.map((rule) => `
+    const renderRule = (rule) => `
       <div class="day-row" data-rule-id="${escapeHtml(rule.id)}">
         <div class="day-name">${escapeHtml(names[rule.dayOfWeek] || "Day")}</div>
         <div class="field">
@@ -1458,7 +1465,15 @@ Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
           <input data-rule-field="note" value="${escapeHtml(rule.note || "")}">
         </div>
       </div>
-    `).join("");
+    `;
+    document.getElementById("weeklyRulesTattooing").innerHTML = rules
+      .filter((rule) => (rule.category || "tattooing") === "tattooing")
+      .map(renderRule)
+      .join("");
+    document.getElementById("weeklyRulesConsultation").innerHTML = rules
+      .filter((rule) => rule.category === "consultation")
+      .map(renderRule)
+      .join("");
     enhanceControls(detailEl);
   }
 
