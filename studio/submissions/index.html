@@ -74,7 +74,7 @@
   .custom-select-list::-webkit-scrollbar-track { background:transparent; }
   .custom-select-list::-webkit-scrollbar-thumb { background:var(--accent); border:2px solid transparent; background-clip:padding-box; }
   .custom-select-option {
-    padding:10px 12px; font-family:var(--sans); font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
+    padding:10px 12px; font-family:inherit; font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
     color:#FCB867; cursor:pointer;
   }
   .custom-select-option:hover, .custom-select-option.is-selected { background:#FCB867; color:#0e0e0e; }
@@ -551,7 +551,10 @@
       input.value = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${t}`;
       input.dispatchEvent(new Event("change", { bubbles: true }));
       updateDisplay();
-      renderPopup();
+      // Defer the rebuild so the click event finishes bubbling against the
+      // still-attached elements first — otherwise the document "click outside"
+      // listener sees a detached target and closes the popup immediately.
+      setTimeout(renderPopup, 0);
     }
 
     function renderPopup() {
