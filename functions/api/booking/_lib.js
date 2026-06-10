@@ -1,4 +1,5 @@
 import {
+  notifyAppointmentCancelled,
   notifyAppointmentConfirmed,
   notifyBookingLinkCreated,
 } from "../notifications/_lib.js";
@@ -19,8 +20,20 @@ const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
   consultation: ["consult_in_person", "consult_virtual"],
 };
 
-// Consultation bookings charge their full fee up front, not a deposit toward a future session.
-const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual"];
+// Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.
+const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
+
+const CONFIRMATION_PATHS = {
+  consult_in_person: "/booking/confirmed/consultation/",
+  consult_virtual: "/booking/confirmed/virtual-consultation/",
+  build_in_person: "/booking/confirmed/build/",
+};
+
+function confirmationPathForBookingType(bookingTypeId) {
+  return CONFIRMATION_PATHS[bookingTypeId] || "/booking/confirmed/";
+}
+
+const DEFAULT_SUPPORT_EMAIL = "saisolehamn@artpilltattoohouse.com";
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -1078,18 +1091,6 @@ export async function handlePublicConsultationCheckout(request, env) {
       });
     }
 
-    if (result.bookingType.id === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) {
-      try {
-        await createOrReplaceZoomMeetingForAppointment(db, env, result.appointment, result.bookingType);
-      } catch (error) {
-        await archiveAppointmentAfterMeetingFailure(db, result.appointment.id);
-        return errorResponse("Virtual meeting could not be created. Please try again or contact the studio.", 503, {
-          detail: error.message,
-          appointmentId: result.appointment.id,
-        });
-      }
-    }
-
     let paymentLink;
     try {
       paymentLink = await createSquarePaymentLink(request, env, result.appointment, result.bookingType);
@@ -1256,7 +1257,7 @@ async function createSquarePaymentLink(request, env, appointment, bookingType) {
     throw new Error("Square is not configured.");
   }
 
-  const redirectUrl = new URL("/booking/confirmed/", baseUrlFromRequest(request));
+  const redirectUrl = new URL(confirmationPathForBookingType(bookingType.id), baseUrlFromRequest(request));
   redirectUrl.searchParams.set("appointment", appointment.id);
 
   const response = await fetch(`${squareBaseUrl(env)}/v2/online-checkout/payment-links`, {
@@ -1273,7 +1274,7 @@ async function createSquarePaymentLink(request, env, appointment, bookingType) {
         line_items: [
           squareLineItem(
             FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
-              ? bookingType.label
+              ? `${bookingType.label} Reservation Fee`
               : `${bookingType.label} Deposit`,
             appointment.depositCents,
             appointment.currency,
@@ -1380,11 +1381,13 @@ async function createZoomMeeting(env, appointment, bookingType) {
       duration: appointmentDurationMinutes(appointment, bookingType),
       timezone: "America/New_York",
       agenda: "Virtual consultation booked through The Six Well Construct.",
+      password: "",
       settings: {
         waiting_room: true,
         join_before_host: false,
         approval_type: 2,
         registrants_email_notification: false,
+        meeting_authentication: false,
       },
     }),
   });
@@ -1436,11 +1439,42 @@ async function createOrReplaceZoomMeetingForAppointment(db, env, appointment, bo
   return meeting;
 }
 
-async function archiveAppointmentAfterMeetingFailure(db, appointmentId) {
-  await db
-    .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
-    .bind("archived", new Date().toISOString(), appointmentId)
-    .run();
+// Creates the Zoom meeting only after payment is confirmed, so a failed/abandoned
+// checkout never leaves an orphaned meeting on the host's Zoom account.
+async function maybeCreateVirtualMeeting(db, env, appointmentRow) {
+  if (appointmentRow.booking_type_id !== VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) return;
+  if (appointmentRow.meeting_provider) return;
+
+  const bookingTypeRow = await db
+    .prepare("SELECT label, duration_minutes, currency FROM booking_types WHERE id = ?")
+    .bind(appointmentRow.booking_type_id)
+    .first();
+  const appointment = normalizeAppointment(appointmentRow);
+  const bookingType = {
+    id: appointmentRow.booking_type_id,
+    label: bookingTypeRow?.label || "Virtual Consultation",
+    durationMinutes: bookingTypeRow?.duration_minutes || 0,
+    currency: bookingTypeRow?.currency || "USD",
+  };
+
+  try {
+    await createOrReplaceZoomMeetingForAppointment(db, env, appointment, bookingType);
+  } catch (error) {
+    console.warn("Unable to create Zoom meeting for confirmed appointment.", appointment.id, error.message);
+  }
+}
+
+async function deleteZoomMeeting(env, providerMeetingId) {
+  if (!providerMeetingId || !zoomConfigured(env)) return;
+  try {
+    const token = await createZoomAccessToken(env);
+    await fetch(`https://api.zoom.us/v2/meetings/${encodeURIComponent(providerMeetingId)}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+  } catch (error) {
+    console.warn("Unable to delete Zoom meeting.", providerMeetingId, error.message);
+  }
 }
 
 export async function handleCreateBookingCheckout(request, env) {
@@ -1470,18 +1504,6 @@ export async function handleCreateBookingCheckout(request, env) {
         checkoutUrl: result.appointment.squareCheckoutUrl,
         appointmentId: result.appointment.id,
       });
-    }
-
-    if (result.bookingType.id === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) {
-      try {
-        await createOrReplaceZoomMeetingForAppointment(db, env, result.appointment, result.bookingType);
-      } catch (error) {
-        await archiveAppointmentAfterMeetingFailure(db, result.appointment.id);
-        return errorResponse("Virtual meeting could not be created. Please try again or contact the studio.", 503, {
-          detail: error.message,
-          appointmentId: result.appointment.id,
-        });
-      }
     }
 
     let paymentLink;
@@ -1601,11 +1623,13 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
          SET status = ?, booking_url = ?, updated_at = ?
          WHERE id = ? AND status IN ('approved', 'booked')`
       )
-      .bind("booked", `/booking/confirmed/?appointment=${appointment.id}`, now, appointment.submissionId)
+      .bind("booked", `${confirmationPathForBookingType(appointment.bookingTypeId)}?appointment=${appointment.id}`, now, appointment.submissionId)
       .run();
   }
 
   if (!wasConfirmed) {
+    const appointmentWithMeeting = await selectAppointmentWithMeeting(db, appointment.id);
+    await maybeCreateVirtualMeeting(db, env, appointmentWithMeeting || appointmentRow);
     const appointmentWithType = await selectAppointmentWithMeeting(db, appointment.id);
     await notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow);
   }
@@ -1627,9 +1651,68 @@ export async function handleConfirmBooking(request, env) {
 
     if (paid) appointment = await confirmPaidAppointment(db, env, request, appointmentRow, order);
 
-    return json({ ok: true, appointment, depositStatus: paid ? "paid" : "pending" });
+    const hoursUntilStart = (new Date(appointment.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
+
+    return json({
+      ok: true,
+      appointment,
+      depositStatus: paid ? "paid" : "pending",
+      supportEmail: env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
+      hoursUntilStart,
+    });
   } catch (error) {
     return errorResponse("Unable to confirm booking.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleCancelAppointment(request, env) {
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const appointmentId = asString(body.appointmentId);
+    const email = asString(body.email).toLowerCase();
+    if (!appointmentId || !email) {
+      return errorResponse("Appointment id and email are required.", 400);
+    }
+
+    const appointmentRow = await selectAppointmentWithMeeting(db, appointmentId);
+    if (!appointmentRow) return errorResponse("Appointment not found.", 404);
+    if (asString(appointmentRow.client_email).toLowerCase() !== email) {
+      return errorResponse("That email does not match this booking.", 403);
+    }
+    if (["cancelled", "archived"].includes(appointmentRow.status)) {
+      return errorResponse("This appointment has already been cancelled.", 400);
+    }
+    if (new Date(appointmentRow.start_at).getTime() <= Date.now()) {
+      return errorResponse("This appointment has already passed and cannot be cancelled online.", 400);
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
+      .bind("cancelled", now, appointmentId)
+      .run();
+
+    if (appointmentRow.meeting_provider === "zoom" && appointmentRow.provider_meeting_id) {
+      await deleteZoomMeeting(env, appointmentRow.provider_meeting_id);
+      await db
+        .prepare("DELETE FROM appointment_meetings WHERE appointment_id = ? AND provider = 'zoom'")
+        .bind(appointmentId)
+        .run();
+    }
+
+    const updated = await selectAppointmentWithMeeting(db, appointmentId);
+    const appointment = normalizeAppointment(updated || appointmentRow);
+    await notifyAppointmentCancelled(env, request, updated || appointmentRow);
+
+    const hoursUntilStart = (new Date(appointment.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
+    return json({ ok: true, appointment, hoursUntilStart });
+  } catch (error) {
+    return errorResponse("Unable to cancel appointment.", 500, {
       detail: error.message,
     });
   }

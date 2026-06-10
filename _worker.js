@@ -38,6 +38,7 @@ import {
   handleAdminUpdateSchedule,
   handleAdminUpdateAvailability,
   handleBookingContext,
+  handleCancelAppointment,
   handleConfirmBooking,
   handleCreateBookingCheckout,
   handleCreateBookingHold,
@@ -414,6 +415,11 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/booking/confirm") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleConfirmBooking(request, env);
+  }
+
+  if (pathname === "/api/booking/cancel") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleCancelAppointment(request, env);
   }
 
   if (pathname === "/api/admin/booking/tokens") {

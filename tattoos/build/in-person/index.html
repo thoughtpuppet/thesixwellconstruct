@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/booking-calendar.css">
 <style>
   :root {
     --bg:#0e0e0e; --signal:#7A1010; --ring:#6D3D15;
@@ -47,8 +48,6 @@
   .address-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
   .block-kicker{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);opacity:0.68;margin-bottom:var(--s3);}
   .address-lines{font-family:var(--serif);font-size:15px;line-height:1.85;color:var(--text-mute);}
-  .address-map-link{display:inline-flex;align-items:center;gap:6px;margin-top:var(--s3);font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--signal);opacity:0.75;border-bottom:1px solid rgba(122,16,16,0.3);padding-bottom:1px;transition:opacity var(--t-fast),border-color var(--t-fast);}
-  .address-map-link:hover{opacity:1;border-bottom-color:var(--signal);}
 
   /* ── WALK-IN WINDOWS ── */
   .windows-block{margin-top:var(--s7);border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
@@ -84,61 +83,6 @@
   .payment-holding{padding:var(--s6) 0;}
   .payment-holding-title{font-family:var(--sans);font-weight:900;font-size:18px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s3);}
   .payment-holding-body{font-size:14px;line-height:1.75;color:var(--text-mute);}
-
-  /* ── SLOT PICKER ── */
-  .slot-picker{margin-bottom:18px;}
-  .slot-picker-label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;display:block;}
-  .slot-selected{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
-  .slot-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:5px solid rgba(122,16,16,0.4);background:rgba(122,16,16,0.06);}
-  .slot-item-text{font-family:var(--serif);font-size:13px;color:var(--text);line-height:1.4;}
-  .slot-item-num{font-family:var(--sans);font-weight:900;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);opacity:0.65;margin-right:6px;}
-  .slot-item-remove{font-size:18px;line-height:1;color:var(--text-dim);cursor:pointer;background:none;border:none;padding:2px 4px;transition:color var(--t-fast);flex-shrink:0;}
-  .slot-item-remove:hover{color:var(--signal);}
-  /* calendar */
-  .cal-wrap{border:5px solid var(--ring-soft);background:rgba(12,12,12,0.9);}
-  .cal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:5px solid var(--ring-faint);}
-  .cal-month-label{font-family:var(--sans);font-weight:900;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);}
-  .cal-nav{background:none;border:none;color:var(--text-mute);font-family:var(--serif);font-size:18px;cursor:pointer;padding:2px 10px;line-height:1;transition:color var(--t-fast);}
-  .cal-nav:hover{color:var(--accent);}
-  .cal-nav:disabled{color:var(--text-ghost);cursor:default;}
-  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);padding:8px 12px 2px;}
-  .cal-weekdays span{font-family:var(--sans);font-weight:700;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);text-align:center;}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;padding:4px 10px 10px;}
-  .cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:12px;color:var(--text-mute);cursor:pointer;border:2px solid transparent;background:none;transition:background var(--t-fast),color var(--t-fast),border-color var(--t-fast);}
-  .cal-day.empty{pointer-events:none;}
-  .cal-day.past{color:var(--text-ghost);cursor:not-allowed;pointer-events:none;}
-  .cal-day.today{color:var(--accent);font-weight:700;}
-  .cal-day:hover:not(.past):not(.empty){background:rgba(122,16,16,0.12);color:var(--text);border-color:rgba(122,16,16,0.35);}
-  .cal-day.active{background:rgba(122,16,16,0.22);color:var(--text);border-color:var(--signal);}
-  .cal-day.booked{background:rgba(122,16,16,0.08);color:var(--signal);border-color:rgba(122,16,16,0.4);cursor:default;}
-  /* time picker */
-  .time-row{display:flex;gap:8px;align-items:stretch;padding:10px 12px;border-top:5px solid var(--ring-faint);}
-  /* custom time dropdown */
-  .time-dropdown{position:relative;flex:1;min-width:0;}
-  .time-trigger{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.9);color:var(--text-dim);font-family:var(--serif);font-size:13px;padding:9px 12px;cursor:pointer;text-align:left;transition:border-color var(--t-fast),color var(--t-fast);line-height:1.4;}
-  .time-trigger:hover{border-color:var(--ring);color:var(--text);}
-  .time-trigger.open{border-color:var(--signal);color:var(--text);}
-  .time-trigger.has-value{color:var(--text);}
-  .time-trigger-label{flex:1;pointer-events:none;}
-  .time-trigger-arrow{font-family:var(--sans);font-size:10px;color:var(--text-dim);flex-shrink:0;pointer-events:none;transition:transform var(--t-fast);}
-  .time-trigger.open .time-trigger-arrow{transform:rotate(180deg);}
-  .time-panel{position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:30;background:#0d0d0d;border:5px solid var(--ring-soft);max-height:216px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--accent) #0d0d0d;}
-  .time-panel::-webkit-scrollbar{width:6px;}
-  .time-panel::-webkit-scrollbar-track{background:#0d0d0d;}
-  .time-panel::-webkit-scrollbar-thumb{background:var(--accent);}
-  .time-panel::-webkit-scrollbar-thumb:hover{background:var(--accent);}
-  .time-option{display:block;width:100%;text-align:left;padding:9px 14px;font-family:var(--serif);font-size:13px;color:var(--text-mute);background:none;border:none;border-bottom:1px solid var(--ring-faint);cursor:pointer;transition:background var(--t-fast),color var(--t-fast);}
-  .time-option:last-child{border-bottom:none;}
-  .time-option:hover{background:rgba(122,16,16,0.1);color:var(--text);}
-  .time-option.selected{color:var(--accent);background:rgba(122,16,16,0.08);}
-  .time-option.is-am{color:var(--text-dim);}
-  .time-option.is-am:hover,.time-option.is-am.selected{color:var(--text);}
-  .time-divider{display:block;width:100%;padding:4px 14px;font-family:var(--sans);font-weight:900;font-size:8px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-ghost);background:rgba(0,0,0,0.3);border-bottom:1px solid var(--ring-faint);pointer-events:none;}
-  /* add button */
-  .time-add-btn{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.13em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(122,16,16,0.4);background:transparent;padding:9px 14px;cursor:pointer;white-space:nowrap;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
-  .time-add-btn:hover:not(:disabled){background:rgba(122,16,16,0.1);border-color:var(--signal);}
-  .time-add-btn:disabled{color:var(--text-dim);border-color:var(--ring-faint);cursor:not-allowed;}
-  .cal-full-note{font-family:var(--serif);font-size:12px;color:var(--text-dim);padding:10px 14px;border-top:5px solid var(--ring-faint);font-style:italic;}
 
   /* ── FOOTER ── */
   footer.bottom{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:56px var(--s6);border-top:5px solid var(--ring-faint);display:flex;justify-content:space-between;align-items:center;}
@@ -193,7 +137,6 @@
         <div class="address-block" id="addressBlock">
           <p class="block-kicker">Studio Location</p>
           <p class="address-lines" id="addressLines">Loading…</p>
-          <a class="address-map-link" id="addressMapLink" href="#" target="_blank" rel="noopener">Open in Maps →</a>
         </div>
 
         <!-- WALK-IN WINDOWS -->
@@ -300,312 +243,13 @@
     <a href="/">the six.well construct</a>
   </footer>
 
+  <script src="/js/booking-calendar.js"></script>
   <script>
   (function(){
-    const form = document.getElementById("consultForm");
-    const submitBtn = document.getElementById("submitBtn");
-    const formError = document.getElementById("formError");
-    const calGrid = document.getElementById("calGrid");
-    const calMonthLabel = document.getElementById("calMonthLabel");
-    let prevBtn = document.getElementById("calPrev");
-    let nextBtn = document.getElementById("calNext");
-    const timeRow = document.getElementById("timeRow");
-    const timePanel = document.getElementById("timePanel");
-    let timeTrigger = document.getElementById("timeTrigger");
-    let timeTriggerLabel = document.getElementById("timeTriggerLabel");
-    const timeAddBtn = document.getElementById("timeAddBtn");
-    const selectedEl = document.getElementById("slotSelected");
-    const preferredSlots = document.getElementById("preferredSlots");
-    const availabilityWindowId = document.getElementById("availabilityWindowId");
-    const bookingTypeSelect = document.getElementById("bookingTypeId");
-    const fullNote = document.getElementById("calFullNote");
-    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-    const days = ["Su","Mo","Tu","We","Th","Fr","Sa"];
-    let calendarDate = new Date();
-    let windows = [];
-    let bookingTypes = [];
-    let bookingType = null;
-    let pickedDate = null;
-    let pendingWindow = null;
-    let selectedWindow = null;
-
-    const freshPrevBtn = prevBtn.cloneNode(true);
-    const freshNextBtn = nextBtn.cloneNode(true);
-    const freshTimeTrigger = timeTrigger.cloneNode(true);
-    prevBtn.replaceWith(freshPrevBtn);
-    nextBtn.replaceWith(freshNextBtn);
-    timeTrigger.replaceWith(freshTimeTrigger);
-    prevBtn = freshPrevBtn;
-    nextBtn = freshNextBtn;
-    timeTrigger = freshTimeTrigger;
-    timeTriggerLabel = timeTrigger.querySelector("#timeTriggerLabel");
-    const freshAddBtn = timeAddBtn.cloneNode(true);
-    timeAddBtn.replaceWith(freshAddBtn);
-
-    function dateKey(date) {
-      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    }
-
-    function formatDate(date) {
-      return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
-    }
-
-    function formatTime(windowItem) {
-      const options = { hour: "numeric", minute: "2-digit" };
-      return `${new Date(windowItem.startAt).toLocaleTimeString([], options)} - ${new Date(windowItem.endAt).toLocaleTimeString([], options)}`;
-    }
-
-    function windowsFor(date) {
-      const key = dateKey(date);
-      const selectedTypeId = bookingTypeSelect.value;
-      return windows.filter((item) => {
-        const typeMatches = !item.bookingTypeId || item.bookingTypeId === selectedTypeId;
-        return typeMatches && dateKey(new Date(item.startAt)) === key;
-      });
-    }
-
-    function resetSelectedTime() {
-      selectedWindow = null;
-      pendingWindow = null;
-      pickedDate = null;
-      selectedEl.innerHTML = "";
-      preferredSlots.value = "";
-      availabilityWindowId.value = "";
-      timeRow.style.display = "none";
-      renderCalendar();
-    }
-
-    function selectedBookingType() {
-      return bookingTypes.find((type) => type.id === bookingTypeSelect.value) || null;
-    }
-
-    function setSelectedWindow(windowItem) {
-      selectedWindow = windowItem;
-      pendingWindow = null;
-      timeRow.style.display = "none";
-      const date = new Date(windowItem.startAt);
-      selectedEl.innerHTML = `
-        <div class="slot-item">
-          <span class="slot-item-text"><span class="slot-item-num">Selected ·</span> ${formatDate(date)} at ${formatTime(windowItem)}</span>
-          <button type="button" class="slot-item-remove" aria-label="Clear selected time">×</button>
-        </div>
-      `;
-      selectedEl.querySelector(".slot-item-remove").addEventListener("click", () => {
-        selectedWindow = null;
-        selectedEl.innerHTML = "";
-        preferredSlots.value = "";
-        availabilityWindowId.value = "";
-        renderCalendar();
-      });
-      preferredSlots.value = `${formatDate(date)} at ${formatTime(windowItem)}`;
-      availabilityWindowId.value = windowItem.id;
-      renderCalendar();
-    }
-
-    function renderTimeOptions(date) {
-      const dayWindows = windowsFor(date);
-      timePanel.innerHTML = "";
-      pendingWindow = null;
-      timeTriggerLabel.textContent = dayWindows.length ? "Pick a time" : "No times available";
-      timeTrigger.classList.remove("has-value");
-      freshAddBtn.disabled = true;
-      freshAddBtn.textContent = "Select Time";
-      dayWindows.forEach((windowItem) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "time-option";
-        button.textContent = formatTime(windowItem);
-        button.addEventListener("click", (event) => {
-          event.stopPropagation();
-          pendingWindow = windowItem;
-          timeTriggerLabel.textContent = formatTime(windowItem);
-          timeTrigger.classList.add("has-value");
-          freshAddBtn.disabled = false;
-          timePanel.style.display = "none";
-        });
-        timePanel.appendChild(button);
-      });
-      timeRow.style.display = "";
-      fullNote.style.display = dayWindows.length ? "none" : "";
-    }
-
-    function renderCalendar() {
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const firstOfMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1);
-      const firstOfToday = new Date(today.getFullYear(), today.getMonth(), 1);
-      calMonthLabel.textContent = `${months[calendarDate.getMonth()]} ${calendarDate.getFullYear()}`;
-      prevBtn.disabled = firstOfMonth <= firstOfToday;
-      calGrid.innerHTML = "";
-
-      const firstDay = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay();
-      const daysInMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0).getDate();
-      for (let index = 0; index < firstDay; index += 1) {
-        const blank = document.createElement("button");
-        blank.type = "button";
-        blank.className = "cal-day empty";
-        calGrid.appendChild(blank);
-      }
-
-      for (let day = 1; day <= daysInMonth; day += 1) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = day;
-        const date = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day);
-        const key = dateKey(date);
-        const hasTimes = windowsFor(date).length > 0;
-        const isSelected = selectedWindow && dateKey(new Date(selectedWindow.startAt)) === key;
-        const isPicked = pickedDate && dateKey(pickedDate) === key;
-        button.className = "cal-day" +
-          (date < today || !hasTimes ? " past" : "") +
-          (date.getTime() === today.getTime() ? " today" : "") +
-          (isSelected ? " booked" : "") +
-          (isPicked ? " active" : "");
-        if (date >= today && hasTimes) {
-          button.addEventListener("click", () => {
-            pickedDate = date;
-            renderTimeOptions(date);
-            renderCalendar();
-          });
-        }
-        calGrid.appendChild(button);
-      }
-    }
-
-    function escapeHtml(value) {
-      return String(value || "").replace(/[&<>"']/g, (char) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      }[char]));
-    }
-
-    function renderWalkInWindows(walkInWindows) {
-      const list = document.getElementById("windowList");
-      const note = document.getElementById("windowsNote");
-      const address = document.getElementById("addressLines");
-      const mapLink = document.getElementById("addressMapLink");
-      address.textContent = "Studio address is shared with confirmed clients.";
-      mapLink.style.display = "none";
-      if (!list || !note) return;
-      note.textContent = "Walk-in windows are updated from the studio availability console.";
-      if (!walkInWindows.length) {
-        list.innerHTML = '<p class="windows-empty">No walk-in windows are currently set. Book a private consultation or check back soon.</p>';
-        return;
-      }
-      list.innerHTML = walkInWindows.map((windowItem) => {
-        const start = new Date(windowItem.startsAt);
-        const end = new Date(windowItem.endsAt);
-        const title = escapeHtml(windowItem.title || "Walk-in Window");
-        const noteText = escapeHtml(windowItem.note || "");
-        return `
-          <div class="window-item">
-            <div>
-              <p class="window-day">${start.toLocaleDateString([], { weekday:"long" })}</p>
-              <p class="window-date">${start.toLocaleDateString([], { month:"short", day:"numeric" })}</p>
-            </div>
-            <div>
-              <p class="window-time">${start.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })} - ${end.toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })}</p>
-              <p class="window-note">${title}${noteText ? ` - ${noteText}` : ""}</p>
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    async function loadContext() {
-      try {
-        const response = await fetch("/api/booking/public-consultation/context", { cache: "no-store" });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
-        const allTypes = payload.bookingTypes || (payload.bookingType ? [payload.bookingType] : []);
-        bookingTypes = allTypes.filter((type) => type.id === "build_in_person");
-        bookingType = bookingTypes[0] || null;
-        windows = payload.availabilityWindows || [];
-        renderWalkInWindows(payload.walkInWindows || []);
-        bookingTypeSelect.innerHTML = bookingTypes.map((type) => (
-          `<option value="${type.id}">${type.label} - ${type.depositLabel} / ${type.durationMinutes} min</option>`
-        )).join("");
-        bookingType = selectedBookingType();
-        if (bookingType) submitBtn.textContent = `Continue to Square - ${bookingType.depositLabel}`;
-        renderCalendar();
-      } catch (error) {
-        renderWalkInWindows([]);
-        formError.textContent = error.message || "Unable to load consultation times.";
-        formError.style.display = "block";
-        renderCalendar();
-      }
-    }
-
-    prevBtn.addEventListener("click", () => {
-      calendarDate.setMonth(calendarDate.getMonth() - 1);
-      pickedDate = null;
-      timeRow.style.display = "none";
-      renderCalendar();
+    initBookingCalendar({
+      filterBookingTypes: (type) => type.id === "build_in_person",
+      walkInEmptyMessage: "No walk-in windows are currently set. Book a private consultation or check back soon.",
     });
-    nextBtn.addEventListener("click", () => {
-      calendarDate.setMonth(calendarDate.getMonth() + 1);
-      pickedDate = null;
-      timeRow.style.display = "none";
-      renderCalendar();
-    });
-    timeTrigger.addEventListener("click", (event) => {
-      event.stopPropagation();
-      timePanel.style.display = timePanel.style.display === "none" ? "block" : "none";
-    });
-    document.addEventListener("click", () => {
-      timePanel.style.display = "none";
-    });
-    freshAddBtn.addEventListener("click", () => {
-      if (pendingWindow) setSelectedWindow(pendingWindow);
-    });
-    bookingTypeSelect.addEventListener("change", () => {
-      bookingType = selectedBookingType();
-      submitBtn.textContent = bookingType ? `Continue to Square - ${bookingType.depositLabel}` : "Continue to Square";
-      resetSelectedTime();
-    });
-
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-      }
-      if (!selectedWindow) {
-        formError.textContent = "Please select an available consultation time before continuing.";
-        formError.style.display = "block";
-        document.getElementById("calWrap").scrollIntoView({ behavior: "smooth", block: "center" });
-        return;
-      }
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Preparing checkout...";
-      formError.style.display = "none";
-      try {
-        const data = Object.fromEntries(new FormData(form).entries());
-        const response = await fetch("/api/booking/public-consultation/checkout", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(data)
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || "Unable to start checkout.");
-        document.getElementById("formStep").style.display = "none";
-        document.getElementById("paymentStep").style.display = "block";
-        window.location.href = payload.checkoutUrl || `/booking/confirmed/?appointment=${encodeURIComponent(payload.appointmentId || "")}`;
-      } catch (error) {
-        submitBtn.disabled = false;
-        bookingType = selectedBookingType();
-        submitBtn.textContent = bookingType ? `Continue to Square - ${bookingType.depositLabel}` : "Continue to Square";
-        formError.textContent = error.message || "Something went wrong. Please try again or email us directly.";
-        formError.style.display = "block";
-      }
-    }, true);
-
-    renderCalendar();
-    loadContext();
   })();
   </script>
 

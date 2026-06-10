@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Booking Preview Hub - the six.well construct</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#0e0e0e; --panel:#161616; --line:rgba(255,231,202,0.16);
+    --line-strong:rgba(255,231,202,0.32); --text:#FFE7CA;
+    --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.38);
+    --accent:#FCB867; --signal:#7A1010;
+    --ring:#6D3D15; --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --sans:Inter,"Helvetica Neue",Arial,sans-serif; --serif:Georgia,"Times New Roman",Times,serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); }
+  a { color:var(--accent); }
+  header { padding:28px 32px; border-bottom:5px solid var(--ring-faint); }
+  h1 { margin:0 0 6px; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
+  header p { margin:0; color:var(--muted); font-size:14px; line-height:1.6; max-width:760px; }
+  main { padding:32px; display:grid; gap:40px; max-width:1100px; margin:0 auto; }
+  h2 { font-family:var(--sans); font-size:13px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); margin:0 0 4px; }
+  .section-note { color:var(--dim); font-size:13px; margin:0 0 18px; line-height:1.6; }
+  .page-grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+  .page-card { border:5px solid var(--ring-faint); padding:18px; display:grid; gap:10px; }
+  .page-card h3 { margin:0; font-family:var(--sans); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text); }
+  .page-card p { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
+  .state-links { display:flex; gap:8px; flex-wrap:wrap; }
+  .state-links a {
+    display:inline-flex; align-items:center; min-height:36px; padding:0 14px;
+    border:5px solid var(--ring-soft); font-family:var(--sans); font-size:10px;
+    font-weight:800; letter-spacing:0.14em; text-transform:uppercase; text-decoration:none;
+  }
+  .state-links a:hover { border-color:var(--accent); }
+  .email-list { display:grid; gap:14px; }
+  .email-card { border:5px solid var(--ring-faint); }
+  .email-card summary {
+    cursor:pointer; padding:16px 18px; font-family:var(--sans); font-size:12px;
+    font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--text);
+    list-style:none; display:flex; justify-content:space-between; gap:12px; align-items:center;
+  }
+  .email-card summary::-webkit-details-marker { display:none; }
+  .email-card summary .key { color:var(--dim); font-weight:600; letter-spacing:0.08em; }
+  .email-card[open] summary { border-bottom:5px solid var(--ring-faint); }
+  .email-body { padding:18px; display:grid; gap:14px; }
+  .email-field label {
+    display:block; color:var(--dim); font-family:var(--sans); font-size:10px;
+    font-weight:800; letter-spacing:0.16em; text-transform:uppercase; margin-bottom:6px;
+  }
+  .email-field .value { color:var(--muted); font-size:14px; line-height:1.5; }
+  .email-field pre {
+    margin:0; white-space:pre-wrap; word-break:break-word; color:var(--muted);
+    font-family:var(--serif); font-size:14px; line-height:1.7; border:5px solid var(--ring-faint); padding:16px;
+  }
+  @media (max-width:680px) {
+    main { padding:20px; }
+    header { padding:20px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Booking Preview Hub</h1>
+  <p>
+    Internal reference only (not linked from the public site). Confirmation
+    pages below open with dummy appointment data via <code>?preview=1</code> -
+    nothing is read from or written to the live database. Email bodies show
+    the current copy with sample values filled in. Source of truth for emails
+    is <code>functions/api/notifications/_lib.js</code>; editable docs live in
+    <code>docs/email-templates/</code>.
+  </p>
+</header>
+<main>
+  <section>
+    <h2>Private Booking Page</h2>
+    <p class="section-note">
+      This is the page clients land on from their private booking link
+      (<code>/booking/?token=...</code>). It is normally only reachable with a
+      live token, so this preview uses dummy session types and availability
+      windows - nothing is read from the live database and "Continue to Square"
+      is disabled (it just shows your selection).
+    </p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Booking / Session Selection</h3>
+        <p>Session list, calendar of available windows, deposit/tip panel, and checkout button.</p>
+        <div class="state-links">
+          <a href="/booking/?preview=1" target="_blank" rel="noopener">Open Preview</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Invalid / Missing Link</h3>
+        <p>What clients see if their booking link is missing, expired, used, or still awaiting approval.</p>
+        <div class="state-links">
+          <a href="/booking/?preview=1&amp;state=missing-token" target="_blank" rel="noopener">No Link</a>
+          <a href="/booking/?preview=1&amp;state=expired" target="_blank" rel="noopener">Expired</a>
+          <a href="/booking/?preview=1&amp;state=used" target="_blank" rel="noopener">Already Used</a>
+          <a href="/booking/?preview=1&amp;state=pending-approval" target="_blank" rel="noopener">Pending Approval</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Inquiry &amp; Application Forms</h2>
+    <p class="section-note">
+      Public pages where clients submit inquiries before any approval or
+      booking link exists. On success they redirect to "Inquiry Received"
+      below; on failure they show an inline error and let the client retry.
+    </p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Tattoo Inquiry (Custom)</h3>
+        <p>General custom tattoo project inquiry form.</p>
+        <div class="state-links">
+          <a href="/tattoos/inquire/custom/" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Consultation Inquiry</h3>
+        <p>Entry point for in-person and virtual consultation requests.</p>
+        <div class="state-links">
+          <a href="/tattoos/inquire/consultation/" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Build Session Inquiry</h3>
+        <p>In-person build session request form.</p>
+        <div class="state-links">
+          <a href="/tattoos/build/in-person/" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Flash Claim</h3>
+        <p>Client claims an available flash design for booking.</p>
+        <div class="state-links">
+          <a href="/tattoos/flash/claim/" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Special Projects Application</h3>
+        <p>Application form for special project review.</p>
+        <div class="state-links">
+          <a href="/tattoos/special-projects/apply/" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Art Acquisition Inquiry</h3>
+        <p>Inquiry form for purchasing/acquiring artwork.</p>
+        <div class="state-links">
+          <a href="/art/acquisitioninquiry.html" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>End-of-Flow Pages</h2>
+    <p class="section-note">
+      Clients only land on these after submitting a form or following an
+      approval link - they are <code>noindex</code> and not linked from the
+      public site, so they're easy to forget about.
+    </p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Inquiry Received</h3>
+        <p>Shown after any inquiry/application form submits successfully.</p>
+        <div class="state-links">
+          <a href="/tattoos/submission-received/" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Approved Booking</h3>
+        <p>Landing page for clients following an approval link before reaching the private booking page.</p>
+        <div class="state-links">
+          <a href="/tattoos/approved/" target="_blank" rel="noopener">Open Page</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Confirmation Pages</h2>
+    <p class="section-note">
+      Each booking type redirects to its own confirmation page after Square
+      checkout. Use the links below to see every state a client might land on.
+    </p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Tattoo Session</h3>
+        <p>Quarter / Half / Full sessions. Deposit language, day-of instructions, location &amp; parking. No Zoom.</p>
+        <div class="state-links">
+          <a href="/booking/confirmed/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>In-Person Consultation</h3>
+        <p>Reservation fee language (full price, not a deposit). No day-of instructions, no Zoom.</p>
+        <div class="state-links">
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Virtual Consultation</h3>
+        <p>Reservation fee language. Includes Zoom join link. No day-of instructions or location/parking.</p>
+        <div class="state-links">
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>In-Person Build Session</h3>
+        <p>Reservation fee language, build-specific copy. Location &amp; parking, no day-of instructions, no Zoom.</p>
+        <div class="state-links">
+          <a href="/booking/confirmed/build/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Email Templates</h2>
+    <p class="section-note">
+      Rendered with sample values. Actual sends go through
+      <code>functions/api/notifications/_lib.js</code> - this view exists so
+      changes can be reviewed without triggering a real booking.
+    </p>
+    <div class="email-list" id="emailList"></div>
+  </section>
+</main>
+<script>
+(function(){
+  const SUPPORT_EMAIL = "saisolehamn@artpilltattoohouse.com";
+  const RESOURCES = {
+    bookingTermsUrl: "https://thesixwellconstruct.com/tattoos/policies/",
+    dayOfInstructionsUrl: "https://thesixwellconstruct.com/tattoos/day-of/",
+    locationParkingUrl: "https://thesixwellconstruct.com/tattoos/location-parking/",
+  };
+  const NAME = "Jordan Rivera";
+  const WHEN_START = "Friday, June 12, 2026 at 2:00 PM EDT";
+  const WHEN_END_TATTOO = "Friday, June 12, 2026 at 5:00 PM EDT";
+  const WHEN_END_CONSULT = "Friday, June 12, 2026 at 2:30 PM EDT";
+  const WHEN_END_BUILD = "Friday, June 12, 2026 at 3:00 PM EDT";
+  const ZOOM_LINK = "https://zoom.us/j/00000000000";
+
+  const templates = [
+    {
+      key: "submission_received",
+      subject: "art.pill TATTOO HOUSE inquiry received",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your art.pill TATTOO HOUSE inquiry has been received.",
+        "The studio will review the project notes, placement, scale, references, and timing before sending any booking access.",
+        "",
+        "If the project is approved, you will receive a private booking link for scheduling and deposit.",
+        "",
+        "Thank you,",
+        "art.pill TATTOO HOUSE",
+      ],
+    },
+    {
+      key: "booking_link_created",
+      subject: "Your private art.pill TATTOO HOUSE booking link",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your tattoo project has been approved for booking.",
+        "",
+        "Approved session options:",
+        "",
+        "- Half Session: 3 hours - Approx. 3 hours for medium approved projects or developed symbolic work. Deposit: $100.",
+        "",
+        "Deposit due to book: $100",
+        "",
+        "Before booking, please review:",
+        "",
+        `- Terms & Conditions: ${RESOURCES.bookingTermsUrl}`,
+        `- Day-of / session prep: ${RESOURCES.dayOfInstructionsUrl}`,
+        "",
+        "Use the private link below to choose an available session and pay the deposit:",
+        "",
+        "https://thesixwellconstruct.com/booking/?token=demo-token",
+        "",
+        "This link is private to your project. Deposits are non-refundable and go toward the final cost of your tattoo. If the available times do not work, reply to this email and the studio can help.",
+        "",
+        "Thank you,",
+        "art.pill TATTOO HOUSE",
+      ],
+    },
+    {
+      key: "appointment_confirmed",
+      subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your art.pill TATTOO HOUSE appointment is confirmed.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_TATTOO}`,
+        "Session: Half Session",
+        "Deposit: $100 received",
+        "",
+        "Confirmation page: https://thesixwellconstruct.com/booking/confirmed/?appointment=demo",
+        `Day-of instructions: ${RESOURCES.dayOfInstructionsUrl}`,
+        `Location & parking: ${RESOURCES.locationParkingUrl}`,
+        "",
+        "I may follow up directly with prep notes or adjustments before your appointment, if needed.",
+        "",
+        "Thank you,",
+        "Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+    {
+      key: "consultation_confirmed_in_person",
+      subject: "Your consultation at art.pill TATTOO HOUSE has been confirmed",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your in-person consultation at art.pill TATTOO HOUSE is confirmed.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_CONSULT}`,
+        "Session: In-Person Consultation",
+        "Reservation fee: $50 received - this is the full price for your consultation, not a deposit toward future work.",
+        "",
+        "Confirmation page: https://thesixwellconstruct.com/booking/confirmed/consultation/?appointment=demo",
+        `Location & parking: ${RESOURCES.locationParkingUrl}`,
+        "",
+        "We'll talk through your project, placement, scale, and timeline in person. No prep is required ahead of time - just bring any reference images or ideas you'd like to share.",
+        "",
+        "Thank you,",
+        "Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+    {
+      key: "consultation_confirmed_virtual",
+      subject: "Your virtual consultation with art.pill TATTOO HOUSE has been confirmed",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your virtual consultation with art.pill TATTOO HOUSE is confirmed.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_CONSULT}`,
+        "Session: Virtual Consultation",
+        "Reservation fee: $50 received - this is the full price for your consultation, not a deposit toward future work.",
+        `Zoom link: ${ZOOM_LINK}`,
+        "",
+        "Confirmation page: https://thesixwellconstruct.com/booking/confirmed/virtual-consultation/?appointment=demo",
+        "",
+        "We'll talk through your project, placement, scale, and timeline over video. No prep is required ahead of time - just bring any reference images or ideas you'd like to share, and a quiet spot with a stable connection.",
+        "",
+        "Thank you,",
+        "Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+    {
+      key: "build_session_confirmed",
+      subject: "Your build session at art.pill TATTOO HOUSE has been confirmed",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your in-person build session at art.pill TATTOO HOUSE is confirmed.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_BUILD}`,
+        "Session: In-Person Build Session",
+        "Reservation fee: $75 received - this is the full price for the build session, not a deposit toward a future tattoo.",
+        "",
+        "Confirmation page: https://thesixwellconstruct.com/booking/confirmed/build/?appointment=demo",
+        `Location & parking: ${RESOURCES.locationParkingUrl}`,
+        "",
+        "This session is dedicated to building out your design together - placement, scale, and final artwork. Bring any reference images, sizing notes, or ideas you'd like to work from.",
+        "",
+        "Thank you,",
+        "Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+    {
+      key: "appointment_cancelled (tattoo / build)",
+      subject: "Your appointment has been cancelled",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your art.pill TATTOO HOUSE appointment has been cancelled.",
+        "",
+        `Was scheduled: ${WHEN_START} - ${WHEN_END_TATTOO}`,
+        "Session: Half Session",
+        "",
+        "Per studio policy, deposits and payments are non-refundable. One reschedule is allowed with at least 48 hours notice; a new deposit is required for reschedules made within 48 hours.",
+        "",
+        "Pick a new time: https://thesixwellconstruct.com/tattoos/inquire/consultation/?rebook=1",
+        "",
+        `Questions? Email ${SUPPORT_EMAIL}.`,
+        "",
+        "Thank you,",
+        "art.pill TATTOO HOUSE",
+      ],
+    },
+    {
+      key: "appointment_cancelled (consultation)",
+      subject: "Your appointment has been cancelled",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your art.pill TATTOO HOUSE consultation has been cancelled.",
+        "",
+        `Was scheduled: ${WHEN_START} - ${WHEN_END_CONSULT}`,
+        "Session: In-Person Consultation",
+        "",
+        "Per studio policy, reservation fees are non-refundable. One reschedule is allowed with at least 48 hours notice; a new reservation fee is required for reschedules made within 48 hours.",
+        "",
+        "Pick a new time: https://thesixwellconstruct.com/tattoos/inquire/consultation/?rebook=1",
+        "",
+        `Questions? Email ${SUPPORT_EMAIL}.`,
+        "",
+        "Thank you,",
+        "art.pill TATTOO HOUSE",
+      ],
+    },
+    {
+      key: "appointment_reminder_24h (tattoo / build)",
+      subject: "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_TATTOO}`,
+        "Session: Half Session",
+        "",
+        "Please review before arriving:",
+        "",
+        `- Day-of instructions: ${RESOURCES.dayOfInstructionsUrl}`,
+        `- Location & parking: ${RESOURCES.locationParkingUrl}`,
+        "",
+        "Reply to this thread if you have any questions or concerns before your session.",
+        "",
+        "-Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+    {
+      key: "appointment_reminder_24h (in-person consultation)",
+      subject: "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_CONSULT}`,
+        "Session: In-Person Consultation",
+        "",
+        "Please review before arriving:",
+        "",
+        `- Location & parking: ${RESOURCES.locationParkingUrl}`,
+        "",
+        "Reply to this thread if you have any questions or concerns before your session.",
+        "",
+        "-Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+    {
+      key: "appointment_reminder_24h (virtual consultation)",
+      subject: "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_CONSULT}`,
+        "Session: Virtual Consultation",
+        `Zoom link: ${ZOOM_LINK}`,
+        "",
+        "Reply to this thread if you have any questions or concerns before your session.",
+        "",
+        "-Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+  ];
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+    }[char]));
+  }
+
+  const list = document.getElementById("emailList");
+  list.innerHTML = templates.map((tpl) => `
+    <details class="email-card">
+      <summary>
+        <span>${escapeHtml(tpl.subject)}</span>
+        <span class="key">${escapeHtml(tpl.key)}</span>
+      </summary>
+      <div class="email-body">
+        <div class="email-field">
+          <label>Subject</label>
+          <div class="value">${escapeHtml(tpl.subject)}</div>
+        </div>
+        <div class="email-field">
+          <label>Body</label>
+          <pre>${escapeHtml(tpl.body.join("\n"))}</pre>
+        </div>
+      </div>
+    </details>
+  `).join("");
+})();
+</script>
+</body>
+</html>

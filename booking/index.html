@@ -456,6 +456,17 @@
 
   async function loadContext() {
     if (previewMode) {
+      const previewState = params.get("state") || "ready";
+      if (previewState !== "ready") {
+        const messages = {
+          "missing-token": "A private booking link is required. Approved clients receive this after review.",
+          "expired": "This booking link has expired.",
+          "used": "This booking link is no longer active.",
+          "pending-approval": "This booking link is waiting on approval.",
+        };
+        statusEl.textContent = messages[previewState] || messages["missing-token"];
+        return;
+      }
       context = adminPreviewContext() || previewContext();
       selectedType = context.bookingTypes[0] || null;
       selectedWindow = null;

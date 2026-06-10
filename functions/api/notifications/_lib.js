@@ -55,6 +55,25 @@ function publicUrl(env, request, path) {
   return `${publicBaseUrl(env, request)}${path}`;
 }
 
+const IN_PERSON_CONSULTATION_BOOKING_TYPE_ID = "consult_in_person";
+const VIRTUAL_CONSULTATION_BOOKING_TYPE_ID = "consult_virtual";
+const BUILD_SESSION_BOOKING_TYPE_ID = "build_in_person";
+const CONSULTATION_BOOKING_TYPE_IDS = [
+  IN_PERSON_CONSULTATION_BOOKING_TYPE_ID,
+  VIRTUAL_CONSULTATION_BOOKING_TYPE_ID,
+  BUILD_SESSION_BOOKING_TYPE_ID,
+];
+const CONFIRMATION_PATHS = {
+  [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/consultation/",
+  [VIRTUAL_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/virtual-consultation/",
+  [BUILD_SESSION_BOOKING_TYPE_ID]: "/booking/confirmed/build/",
+};
+
+function appointmentConfirmationUrl(env, request, appointment) {
+  const path = CONFIRMATION_PATHS[appointment.bookingTypeId] || "/booking/confirmed/";
+  return `${publicBaseUrl(env, request)}${path}?appointment=${encodeURIComponent(appointment.id)}`;
+}
+
 function clientResourceUrls(env, request) {
   return {
     bookingTermsUrl: publicUrl(env, request, "/tattoos/policies/"),
@@ -393,12 +412,8 @@ export async function notifyBookingLinkCreated(env, request, submission, token) 
   });
 }
 
-export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
-  const appointment = normalizeAppointment(appointmentRow);
-  if (!appointment.clientEmail) return { ok: false, skipped: true };
-
+async function sendTattooAppointmentConfirmed(env, request, appointment) {
   const resources = clientResourceUrls(env, request);
-  const confirmationUrl = `${publicBaseUrl(env, request)}/booking/confirmed/?appointment=${encodeURIComponent(appointment.id)}`;
   const text = [
     `Hi ${appointment.clientName || "there"},`,
     "",
@@ -409,9 +424,8 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
     `Deposit: ${formatMoney(appointment.depositCents, appointment.currency)} received`,
     appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
     appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
-    appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
     "",
-    `Confirmation page: ${confirmationUrl}`,
+    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
     `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
     `Location & parking: ${resources.locationParkingUrl}`,
     "",
@@ -420,7 +434,7 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
     "Thank you,",
     "Saiel Solehman",
     "[art.pill TATTOO HOUSE]",
-  ].join("\n");
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
@@ -430,6 +444,164 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: `appointment_confirmed:${appointment.id}`,
+  });
+}
+
+async function sendInPersonConsultationConfirmed(env, request, appointment) {
+  const resources = clientResourceUrls(env, request);
+  const text = [
+    `Hi ${appointment.clientName || "there"},`,
+    "",
+    "Your in-person consultation at art.pill TATTOO HOUSE is confirmed.",
+    "",
+    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    `Session: ${appointment.bookingTypeLabel}`,
+    `Reservation fee: ${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
+    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
+    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
+    "",
+    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Location & parking: ${resources.locationParkingUrl}`,
+    "",
+    "We'll talk through your project, placement, scale, and timeline in person. No prep is required ahead of time - just bring any reference images or ideas you'd like to share.",
+    "",
+    "Thank you,",
+    "Saiel Solehman",
+    "[art.pill TATTOO HOUSE]",
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    subject: "Your consultation at art.pill TATTOO HOUSE has been confirmed",
+    text,
+    templateKey: "consultation_confirmed_in_person",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: `appointment_confirmed:${appointment.id}`,
+  });
+}
+
+async function sendVirtualConsultationConfirmed(env, request, appointment) {
+  const text = [
+    `Hi ${appointment.clientName || "there"},`,
+    "",
+    "Your virtual consultation with art.pill TATTOO HOUSE is confirmed.",
+    "",
+    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    `Session: ${appointment.bookingTypeLabel}`,
+    `Reservation fee: ${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
+    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
+    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
+    appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
+    "",
+    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    "",
+    "We'll talk through your project, placement, scale, and timeline over video. No prep is required ahead of time - just bring any reference images or ideas you'd like to share, and a quiet spot with a stable connection.",
+    "",
+    "Thank you,",
+    "Saiel Solehman",
+    "[art.pill TATTOO HOUSE]",
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    subject: "Your virtual consultation with art.pill TATTOO HOUSE has been confirmed",
+    text,
+    templateKey: "consultation_confirmed_virtual",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: `appointment_confirmed:${appointment.id}`,
+  });
+}
+
+async function sendBuildSessionConfirmed(env, request, appointment) {
+  const resources = clientResourceUrls(env, request);
+  const text = [
+    `Hi ${appointment.clientName || "there"},`,
+    "",
+    "Your in-person build session at art.pill TATTOO HOUSE is confirmed.",
+    "",
+    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    `Session: ${appointment.bookingTypeLabel}`,
+    `Reservation fee: ${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for the build session, not a deposit toward a future tattoo.`,
+    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
+    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
+    "",
+    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Location & parking: ${resources.locationParkingUrl}`,
+    "",
+    "This session is dedicated to building out your design together - placement, scale, and final artwork. Bring any reference images, sizing notes, or ideas you'd like to work from.",
+    "",
+    "Thank you,",
+    "Saiel Solehman",
+    "[art.pill TATTOO HOUSE]",
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    subject: "Your build session at art.pill TATTOO HOUSE has been confirmed",
+    text,
+    templateKey: "build_session_confirmed",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: `appointment_confirmed:${appointment.id}`,
+  });
+}
+
+export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
+  const appointment = normalizeAppointment(appointmentRow);
+  if (!appointment.clientEmail) return { ok: false, skipped: true };
+
+  switch (appointment.bookingTypeId) {
+    case IN_PERSON_CONSULTATION_BOOKING_TYPE_ID:
+      return sendInPersonConsultationConfirmed(env, request, appointment);
+    case VIRTUAL_CONSULTATION_BOOKING_TYPE_ID:
+      return sendVirtualConsultationConfirmed(env, request, appointment);
+    case BUILD_SESSION_BOOKING_TYPE_ID:
+      return sendBuildSessionConfirmed(env, request, appointment);
+    default:
+      return sendTattooAppointmentConfirmed(env, request, appointment);
+  }
+}
+
+export async function notifyAppointmentCancelled(env, request, appointmentRow) {
+  const appointment = normalizeAppointment(appointmentRow);
+  if (!appointment.clientEmail) return { ok: false, skipped: true };
+
+  const isConsultation = CONSULTATION_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
+  const rebookPath = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID
+    ? "/tattoos/build/in-person/"
+    : "/tattoos/inquire/consultation/";
+  const rebookUrl = `${publicBaseUrl(env, request)}${rebookPath}?rebook=1`;
+  const policyText = isConsultation
+    ? "Per studio policy, reservation fees are non-refundable. One reschedule is allowed with at least 48 hours notice; a new reservation fee is required for reschedules made within 48 hours."
+    : "Per studio policy, deposits and payments are non-refundable. One reschedule is allowed with at least 48 hours notice; a new deposit is required for reschedules made within 48 hours.";
+  const text = [
+    `Hi ${appointment.clientName || "there"},`,
+    "",
+    `Your art.pill TATTOO HOUSE ${isConsultation ? "consultation" : "appointment"} has been cancelled.`,
+    "",
+    `Was scheduled: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    `Session: ${appointment.bookingTypeLabel}`,
+    "",
+    policyText,
+    "",
+    `Pick a new time: ${rebookUrl}`,
+    "",
+    `Questions? Email ${env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO}.`,
+    "",
+    "Thank you,",
+    "art.pill TATTOO HOUSE",
+  ].join("\n");
+
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    subject: "Your appointment has been cancelled",
+    text,
+    templateKey: "appointment_cancelled",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: `appointment_cancelled:${appointment.id}`,
   });
 }
 
@@ -465,28 +637,31 @@ export async function sendDueAppointmentReminders(env) {
     for (const row of result.results || []) {
       const appointment = normalizeAppointment(row);
       const resources = clientResourceUrls(env);
+      const isConsultation = CONSULTATION_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
+      const isVirtual = appointment.bookingTypeId === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID;
+      const occasion = isConsultation ? "consultation" : "tattoo appointment";
       const text = [
         `Hi ${appointment.clientName || "there"},`,
         "",
-        "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow.",
+        `Reminder: Your ${occasion} with art.pill TATTOO HOUSE is tomorrow.`,
         "",
         `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
         `Session: ${appointment.bookingTypeLabel}`,
         appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
         "",
-        "Please review before arriving:",
-        "",
-        `- Day-of instructions: ${resources.dayOfInstructionsUrl}`,
-        `- Location & parking: ${resources.locationParkingUrl}`,
+        isVirtual ? "" : "Please review before arriving:",
+        isVirtual ? "" : "",
+        isConsultation ? "" : `- Day-of instructions: ${resources.dayOfInstructionsUrl}`,
+        isVirtual ? "" : `- Location & parking: ${resources.locationParkingUrl}`,
         "",
         "Reply to this thread if you have any questions or concerns before your session.",
         "",
         "-Saiel Solehman",
         "[art.pill TATTOO HOUSE]",
-      ].join("\n");
+      ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
       const delivery = await sendTransactionalEmail(env, {
         to: appointment.clientEmail,
-        subject: "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow",
+        subject: `Reminder: Your ${occasion} with art.pill TATTOO HOUSE is tomorrow`,
         text,
         templateKey: "appointment_reminder_24h",
         relatedType: "appointment",

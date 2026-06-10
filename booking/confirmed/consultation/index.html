@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Booking Confirmation - the six.well construct</title>
+<title>Consultation Confirmation - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -28,6 +28,7 @@
   .label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--dim); }
   h1 { max-width:720px; margin:16px 0 28px; font-family:var(--sans); font-size:clamp(42px,7vw,82px); line-height:0.9; letter-spacing:0; color:var(--signal); }
   .lead { max-width:620px; margin:0 0 44px; color:var(--muted); font-size:16px; line-height:1.8; }
+  .note { max-width:620px; margin:0 0 44px; color:var(--muted); font-size:14px; line-height:1.7; padding:18px 20px; border:5px solid var(--ring-faint); }
   .detail-block { max-width:620px; border-top:5px solid var(--ring-soft); margin:36px 0; }
   .detail-row { display:grid; grid-template-columns:180px 1fr; gap:18px; border-bottom:5px solid var(--ring-faint); padding:16px 0; color:var(--muted); line-height:1.55; }
   .detail-key { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
@@ -65,11 +66,12 @@
 <div class="grain"></div>
 <header></header>
 <main>
-  <div id="badge" class="badge"><span class="badge-dot"></span><span id="badgeText">Checking Deposit</span></div>
+  <div id="badge" class="badge"><span class="badge-dot"></span><span id="badgeText">Checking Reservation</span></div>
   <p class="label">art.pill tattoo house - atlanta</p>
   <h1 id="title">Reading the booking record.</h1>
-  <p id="lead" class="lead">Give this a moment. The system is checking the appointment and Square deposit state.</p>
+  <p id="lead" class="lead">Give this a moment. The system is checking the appointment and Square reservation fee state.</p>
   <div id="details" class="detail-block"></div>
+  <p class="note">The amount above is your reservation fee - it is the full price of your consultation, not a deposit toward future work.</p>
   <div class="cta-row">
     <a class="cta-primary" href="/tattoos/">Back to Art.Pill</a>
     <a class="cta-ghost" href="/">the six.well construct</a>
@@ -107,11 +109,8 @@
   const manage = document.getElementById("manageBlock");
   const DEFAULT_SUPPORT_EMAIL = "saisolehamn@artpilltattoohouse.com";
 
-  function rebookUrl(appointment) {
-    const path = appointment.bookingTypeId === "build_in_person"
-      ? "/tattoos/build/in-person/"
-      : "/tattoos/inquire/consultation/";
-    return `${path}?rebook=1`;
+  function rebookUrl() {
+    return "/tattoos/inquire/consultation/?rebook=1";
   }
 
   function renderManageBlock(appointment, payload, paid) {
@@ -125,8 +124,8 @@
     if (isCancelled) {
       manage.innerHTML = `
         <p class="label" style="margin-bottom:12px;">Need to make changes?</p>
-        <p>This appointment has been cancelled. ${supportLine}</p>
-        <a class="cta-primary" href="${rebookUrl(appointment)}">Pick a New Time</a>
+        <p>This consultation has been cancelled. ${supportLine}</p>
+        <a class="cta-primary" href="${rebookUrl()}">Pick a New Time</a>
       `;
       return;
     }
@@ -141,8 +140,8 @@
 
     const hours = payload.hoursUntilStart;
     const policyText = (typeof hours === "number" && hours < 48)
-      ? "This appointment is less than 48 hours away. Cancelling now is fine, but a new deposit will be required to book a new time, per studio policy."
-      : "You can cancel or reschedule with at least 48 hours notice without needing a new deposit.";
+      ? "This consultation is less than 48 hours away. Cancelling now is fine, but a new reservation fee will be required to book a new time, per studio policy."
+      : "You can cancel or reschedule with at least 48 hours notice without needing a new reservation fee.";
 
     manage.innerHTML = `
       <p class="label" style="margin-bottom:12px;">Need to make changes?</p>
@@ -150,7 +149,7 @@
       <p>${policyText}</p>
       <div class="manage-actions">
         <input type="email" id="manageEmail" class="manage-input" placeholder="Confirm your booking email">
-        <button type="button" id="cancelBtn" class="btn-link">Cancel Appointment</button>
+        <button type="button" id="cancelBtn" class="btn-link">Cancel Consultation</button>
         <button type="button" id="rebookBtn" class="btn-link">Reschedule</button>
       </div>
       <p id="manageError" class="manage-error" style="display:none;"></p>
@@ -171,8 +170,8 @@
       return;
     }
     const confirmMessage = redirect
-      ? "This will cancel your current appointment so you can pick a new time. Continue?"
-      : "Cancel this appointment? This cannot be undone.";
+      ? "This will cancel your current consultation so you can pick a new time. Continue?"
+      : "Cancel this consultation? This cannot be undone.";
     if (!window.confirm(confirmMessage)) return;
 
     try {
@@ -182,14 +181,14 @@
         body: JSON.stringify({ appointmentId: appointment.id, email }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Unable to cancel this appointment.");
+      if (!response.ok) throw new Error(result.error || "Unable to cancel this consultation.");
       if (redirect) {
-        window.location.href = rebookUrl(appointment);
+        window.location.href = rebookUrl();
         return;
       }
       badge.classList.add("pending");
-      badgeText.textContent = "Appointment Cancelled";
-      title.textContent = "This appointment has been cancelled.";
+      badgeText.textContent = "Consultation Cancelled";
+      title.textContent = "This consultation has been cancelled.";
       lead.textContent = "Your slot has been released. Email us if you have any questions.";
       renderManageBlock(result.appointment, payload, false);
     } catch (error) {
@@ -200,18 +199,18 @@
 
   function previewPayload(state) {
     const start = new Date(Date.now() + 26 * 60 * 60 * 1000);
-    const end = new Date(start.getTime() + 180 * 60 * 1000);
+    const end = new Date(start.getTime() + 30 * 60 * 1000);
     return {
       appointment: {
         id: "demo",
-        bookingTypeId: "tattoo_half",
-        bookingTypeLabel: "Half Session",
+        bookingTypeId: "consult_in_person",
+        bookingTypeLabel: "In-Person Consultation",
         clientName: "Jordan Rivera",
         startAt: start.toISOString(),
         endAt: end.toISOString(),
-        depositCents: 10000,
+        depositCents: 5000,
         tipCents: 0,
-        totalDueCents: 10000,
+        totalDueCents: 5000,
         currency: "USD",
         status: state === "cancelled" ? "cancelled" : (state === "pending" ? "pending_deposit" : "confirmed"),
         meeting: null,
@@ -232,33 +231,29 @@
       if (!appointmentId) throw new Error("Appointment reference is missing.");
       const response = await fetch(`/api/booking/confirm?appointment=${encodeURIComponent(appointmentId)}`);
       payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Unable to confirm this appointment.");
+      if (!response.ok) throw new Error(payload.error || "Unable to confirm this consultation.");
     }
     const appointment = payload.appointment;
     const isCancelled = appointment.status === "cancelled" || appointment.status === "archived";
     const paid = payload.depositStatus === "paid" || appointment.status === "confirmed";
     badge.classList.toggle("pending", !paid || isCancelled);
     if (isCancelled) {
-      badgeText.textContent = "Appointment Cancelled";
-      title.textContent = "This appointment has been cancelled.";
+      badgeText.textContent = "Consultation Cancelled";
+      title.textContent = "This consultation has been cancelled.";
       lead.textContent = "Your slot has been released. Email us if you have any questions.";
     } else {
-      badgeText.textContent = paid ? "Appointment Confirmed" : "Deposit Pending";
-      title.textContent = paid ? "You are locked in." : "Your booking is waiting on payment confirmation.";
+      badgeText.textContent = paid ? "Consultation Confirmed" : "Reservation Fee Pending";
+      title.textContent = paid ? "You are locked in." : "Your consultation is waiting on payment confirmation.";
       lead.textContent = paid
-        ? "Your deposit has been received and the appointment is confirmed. Keep an eye on your email for any direct studio follow-up."
+        ? "Your reservation fee has been received and your consultation is confirmed. Keep an eye on your email for any direct studio follow-up."
         : "Square has not returned a paid order yet. If you just paid, refresh this page in a moment. The studio can also see this pending booking.";
     }
-    const meetingRows = paid && appointment.meeting?.joinUrl
-      ? [renderRow("Zoom Link", `<a href="${escapeHtml(appointment.meeting.joinUrl)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Join Zoom Meeting</a>`, true)]
-      : [];
     details.innerHTML = [
       renderRow("Client", appointment.clientName),
       renderRow("When", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
-      renderRow("Deposit", `${money(appointment.depositCents, appointment.currency)} / ${paid ? "received" : "pending"}`),
+      renderRow("Reservation Fee", `${money(appointment.depositCents, appointment.currency)} / ${paid ? "received" : "pending"}`),
       renderRow("Optional Tip", money(appointment.tipCents || 0, appointment.currency)),
       renderRow("Total Paid Today", money(appointment.totalDueCents || appointment.depositCents || 0, appointment.currency)),
-      ...meetingRows,
       renderRow("Status", appointment.status.replace(/_/g, " ")),
     ].filter(Boolean).join("");
 

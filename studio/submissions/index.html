@@ -195,6 +195,15 @@
   .schedule-section { border-top:5px solid var(--ring-faint); padding-top:18px; margin-top:18px; }
   .schedule-group-title { font-family:var(--sans); font-size:12px; text-transform:uppercase; letter-spacing:0.08em; margin:18px 0 4px; }
   .schedule-group-title:first-of-type { margin-top:0; }
+  .schedule-group { margin:18px 0; }
+  .schedule-group:first-child { margin-top:0; }
+  .schedule-group-toggle { width:100%; min-height:40px; border:0; border-bottom:5px solid var(--ring-faint); background:transparent; color:var(--accent); padding:0; display:flex; align-items:center; justify-content:space-between; gap:12px; font-family:var(--sans); font-size:12px; font-weight:900; letter-spacing:0.08em; text-transform:uppercase; text-align:left; cursor:pointer; }
+  .schedule-group-toggle:hover { color:#FFE7CA; }
+  .schedule-group-toggle::after { content:"-"; color:var(--signal); font-size:16px; line-height:1; }
+  .schedule-group:not(.is-open) .schedule-group-toggle { border-bottom:0; }
+  .schedule-group:not(.is-open) .schedule-group-toggle::after { content:"+"; color:var(--accent); }
+  .schedule-group-body { display:grid; gap:14px; padding-top:10px; }
+  .schedule-group:not(.is-open) .schedule-group-body { display:none; }
   .schedule-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 22px; }
   .day-row { display:grid; grid-template-columns:110px repeat(3,minmax(0,1fr)); gap:10px; align-items:end; border-bottom:5px solid var(--ring-faint); padding:12px 0; }
   .day-name { color:var(--accent); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; padding-bottom:12px; }
@@ -991,6 +1000,10 @@ ${meetingLines}
   function textReminderCopy(submission) {
     const name = submission.contactName || payloadValue(submission, "name") || "there";
     const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
+    const appointment = latestAppointmentFor(submission.id);
+    if (appointment && appointment.status === "confirmed") {
+      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
+    }
     if (bookingUrl && submission.status === "approved") {
       if (requiresInPersonConsult(submission)) {
         return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: ${bookingUrl}`;
@@ -1314,12 +1327,20 @@ ${meetingLines}
         <section class="schedule-section" data-collapse-section>
           <button class="section-toggle" type="button">Weekly Schedule</button>
           <div class="section-body">
-          <h3 class="schedule-group-title">Tattooing Hours</h3>
-          <p class="contact">Applies to Quarter, Half, and Full sessions, and in-person build sessions.</p>
-          <div id="weeklyRulesTattooing"></div>
-          <h3 class="schedule-group-title">Consultation Hours</h3>
-          <p class="contact">Applies to in-person and virtual consultations.</p>
-          <div id="weeklyRulesConsultation"></div>
+          <div class="schedule-group is-open" data-collapse-group>
+            <button class="schedule-group-toggle" type="button">Tattooing Hours</button>
+            <div class="schedule-group-body">
+              <p class="contact">Applies to Quarter, Half, and Full sessions, and in-person build sessions.</p>
+              <div id="weeklyRulesTattooing"></div>
+            </div>
+          </div>
+          <div class="schedule-group is-open" data-collapse-group>
+            <button class="schedule-group-toggle" type="button">Consultation Hours</button>
+            <div class="schedule-group-body">
+              <p class="contact">Applies to in-person and virtual consultations.</p>
+              <div id="weeklyRulesConsultation"></div>
+            </div>
+          </div>
           <button class="button save-schedule" type="submit">Save Schedule</button>
           </div>
         </section>
@@ -1646,6 +1667,12 @@ ${meetingLines}
     const sectionToggle = event.target.closest(".section-toggle");
     if (sectionToggle) {
       sectionToggle.closest("[data-collapse-section]")?.classList.toggle("is-open");
+      return;
+    }
+
+    const groupToggle = event.target.closest(".schedule-group-toggle");
+    if (groupToggle) {
+      groupToggle.closest("[data-collapse-group]")?.classList.toggle("is-open");
       return;
     }
 
