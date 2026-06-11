@@ -1184,17 +1184,21 @@
   function savedEntries() {
     var saved = getSavedCopy();
     var currentIds = {};
-    var sourceBackedIds = {};
     editableElements.forEach(function(element) {
       var id = element.getAttribute('data-live-edit-id');
       if (id) currentIds[id] = true;
-      if (id && copyIdForElement(element)) sourceBackedIds[id] = true;
     });
     return Object.keys(saved).map(function(id) {
-      return { id: id, record: normalizeRecord(saved[id]), sourceBacked: Boolean(sourceBackedIds[id]) };
+      return { id: id, record: normalizeRecord(saved[id]) };
     }).filter(function(entry) {
       if (editableElements.length && !currentIds[entry.id]) return false;
       return entry.record.html || entry.record.text || hasMeaningfulStyles(entry.record.styles);
+    }).map(function(entry) {
+      // Any entry that matches a currently-tracked element can be located in the
+      // source document, either via a stable data-copy-id or via the same
+      // path/text/index id scheme used to generate data-live-edit-id values.
+      entry.sourceBacked = true;
+      return entry;
     });
   }
 
@@ -1306,18 +1310,51 @@
     applyElementStyles(element, record.styles);
   }
 
+  // Replicates collectEditableElements() against a parsed source document so that
+  // elements without a stable data-copy-id can still be located by the same
+  // path/text/index scheme used to build data-live-edit-id values in the live DOM.
+  // Mutates `doc` by setting data-live-edit-id on each collected element, mirroring
+  // the live-document behavior so hasEditableParent() and ordering line up.
+  function collectDocEditableElements(doc) {
+    var root = doc.body;
+    var candidates = Array.prototype.slice.call(doc.querySelectorAll(TEXT_SELECTOR));
+    var collected = [];
+
+    candidates.forEach(function(element) {
+      var hasStableCopyId = Boolean(copyIdForElement(element));
+      if (element.closest('script, style, noscript, svg, canvas, input, textarea, select')) return;
+      if (element.closest('#construct-fade, #construct-corner, #construct-nav')) return;
+      if (element.closest('[data-live-edit-ignore]')) return;
+      if (!element.textContent || !element.textContent.trim()) return;
+      if (!hasStableCopyId && !hasDirectText(element)) return;
+      if (hasEditableParent(element)) return;
+
+      var id = buildElementId(element, collected.length, root);
+      element.setAttribute('data-live-edit-id', id);
+      collected.push({ element: element, id: id });
+    });
+
+    return collected;
+  }
+
   function findSourceElement(doc, id) {
     var candidates = Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]'));
     for (var i = 0; i < candidates.length; i += 1) {
       if (candidates[i].getAttribute('data-copy-id') === id) return candidates[i];
     }
+    var generated = collectDocEditableElements(doc);
+    for (var j = 0; j < generated.length; j += 1) {
+      if (generated[j].id === id) return generated[j].element;
+    }
     return null;
   }
 
   function sourceEditableIds(doc) {
-    return Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]')).map(function(element) {
+    var ids = Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]')).map(function(element) {
       return element.getAttribute('data-copy-id') || '';
     }).filter(Boolean);
+    collectDocEditableElements(doc).forEach(function(entry) { ids.push(entry.id); });
+    return ids;
   }
 
   function sampleIds(ids) {
