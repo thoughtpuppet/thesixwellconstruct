@@ -447,7 +447,9 @@
   .section-head,
   .feature-grid,
   .media-grid {
-    grid-template-columns: 1fr;
+    /* minmax(0,1fr), not 1fr — lets the column shrink below the
+       title's min-content width so long headlines can't widen the page */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .visual-board {

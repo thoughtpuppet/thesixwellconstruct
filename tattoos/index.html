@@ -478,7 +478,10 @@
     .ritual-intro { position:static; }
     .brand-band { grid-template-columns:1fr; gap:24px; margin-top:-24px; padding:24px; }
     .artist-band { grid-template-columns:1fr; gap:24px; padding:24px; }
-    .artist-portrait { aspect-ratio:16/9; }
+    /* stacked layout: show the portrait uncropped at its natural ratio,
+       width-capped so it doesn't tower on tablets */
+    .artist-portrait { aspect-ratio:auto; max-width:420px; }
+    .artist-portrait img { height:auto; }
     .ledger-row { grid-template-columns:minmax(210px,0.42fr) minmax(0,1fr) minmax(150px,0.24fr); }
     .ledger-status,.ledger-action { grid-column:auto; }
     footer.bottom { padding:48px var(--s5); }

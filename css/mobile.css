@@ -61,6 +61,11 @@ main > * > * > *,
 /* Images and media never exceed their container */
 img, video, iframe { max-width: 100%; }
 
+/* Cart drawer sits above the injected construct nav (z-index 999/1000)
+   so the logo and medium dots don't float over the open cart. */
+.cart-overlay { z-index: 1090 !important; }
+.cart-drawer  { z-index: 1100 !important; }
+
 /* Global scrollbars + dropdowns
    Matches the Build/In-Person time picker: dark track, amber thumb,
    square ringed controls, no native rounded select chrome. */
@@ -230,8 +235,19 @@ select option:checked {
     font-size: clamp(48px, 16vw, 84px) !important;
     line-height: 0.92 !important;
     letter-spacing: -0.04em !important;
+    white-space: normal !important;   /* desktop titles often set nowrap */
     word-break: break-word;
     overflow-wrap: break-word;
+  }
+
+  /* Live-editor copy edits can pin a fixed px size on a span inside a
+     hero title; on phones that overrides the responsive clamp above. */
+  .intro h1 span[style*="font-size"],
+  .hero-title span[style*="font-size"],
+  .page-title span[style*="font-size"],
+  .gate-title span[style*="font-size"],
+  .series-title span[style*="font-size"] {
+    font-size: inherit !important;
   }
 
   /* ── Intro section stacks ─────────────────────────────── */
@@ -451,6 +467,27 @@ select option:checked {
     letter-spacing: 0.16em !important;
     flex-wrap: wrap;
     gap: 6px;
+  }
+
+  /* ── Tap target expansion ─────────────────────────────────
+     Visuals stay small; the hit area grows via padding (links)
+     or an invisible pseudo-element halo (nav dots). */
+  .breadcrumb a,
+  .construct-breadcrumb a,
+  footer.bottom a,
+  .footer a,
+  .page-links a {
+    display: inline-block;
+    padding: 12px 6px;
+    margin: -12px -6px;
+  }
+
+  .cnav-dot { position: relative; }
+  .cnav-dot::after {
+    content: "";
+    position: absolute;
+    inset: -11px;
+    border-radius: 50%;
   }
 
   /* ── Overlay (work overlay, modal) ────────────────────── */
