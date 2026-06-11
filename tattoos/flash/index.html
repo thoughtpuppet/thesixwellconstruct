@@ -209,7 +209,8 @@
     main { padding:var(--s6) var(--s5); }
     .page-title { font-size:clamp(58px,18vw,92px); }
     .section { padding:48px 0; }
-    .catalog-grid,.sheet-grid { grid-template-columns:1fr; }
+    .catalog-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .sheet-grid { grid-template-columns:1fr; }
     .field-grid { grid-template-columns:1fr; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
