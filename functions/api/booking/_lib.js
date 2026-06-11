@@ -34,6 +34,9 @@ function confirmationPathForBookingType(bookingTypeId) {
 }
 
 const DEFAULT_SUPPORT_EMAIL = "saisolehamn@artpilltattoohouse.com";
+const DEFAULT_STUDIO_CALENDAR_LOCATION = "364 Nelson Street SW, Atlanta, GA 30313";
+const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
+const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -199,6 +202,7 @@ function normalizeAppointment(row) {
     submissionId: row.submission_id || "",
     bookingTokenId: row.booking_token_id || "",
     bookingTypeId: row.booking_type_id,
+    bookingTypeLabel: row.booking_type_label || row.bookingTypeLabel || "",
     availabilityWindowId: row.availability_window_id || "",
     status: row.status,
     clientName: row.client_name,
@@ -351,6 +355,150 @@ function requireAdmin(request, env) {
 function baseUrlFromRequest(request) {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
+}
+
+function publicBaseUrl(env, request) {
+  if (env.PUBLIC_SITE_URL) return String(env.PUBLIC_SITE_URL).replace(/\/+$/g, "");
+  return baseUrlFromRequest(request);
+}
+
+function publicUrl(env, request, path) {
+  return `${publicBaseUrl(env, request)}${path}`;
+}
+
+function studioCalendarLocation(env) {
+  return asString(env.STUDIO_CALENDAR_LOCATION) || DEFAULT_STUDIO_CALENDAR_LOCATION;
+}
+
+function studioContactPhone(env) {
+  return asString(env.STUDIO_CONTACT_PHONE) || DEFAULT_STUDIO_CONTACT_PHONE;
+}
+
+function studioContactEmail(env) {
+  return asString(env.NOTIFICATION_REPLY_TO) || DEFAULT_SUPPORT_EMAIL;
+}
+
+function appointmentConfirmationUrl(env, request, appointment) {
+  const path = confirmationPathForBookingType(appointment.bookingTypeId || appointment.booking_type_id);
+  return `${publicBaseUrl(env, request)}${path}?appointment=${encodeURIComponent(appointment.id)}`;
+}
+
+function appointmentCalendarUrl(env, request, appointment) {
+  return `${publicBaseUrl(env, request)}/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`;
+}
+
+function isVirtualAppointment(appointment) {
+  return (appointment.bookingTypeId || appointment.booking_type_id) === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID;
+}
+
+function icsDate(value) {
+  const date = new Date(value);
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function icsLocalDate(value, timeZone = DEFAULT_CALENDAR_TIME_ZONE) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}${map.month}${map.day}T${map.hour}${map.minute}${map.second}`;
+}
+
+function icsEscape(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+
+function foldIcsLine(line) {
+  const parts = [];
+  let rest = line;
+  while (rest.length > 74) {
+    parts.push(rest.slice(0, 74));
+    rest = ` ${rest.slice(74)}`;
+  }
+  parts.push(rest);
+  return parts.join("\r\n");
+}
+
+function icsProperty(name, value) {
+  return foldIcsLine(`${name}:${icsEscape(value)}`);
+}
+
+function appointmentResourceUrls(env, request) {
+  return {
+    bookingTermsUrl: publicUrl(env, request, "/tattoos/policies/"),
+    dayOfInstructionsUrl: publicUrl(env, request, "/tattoos/day-of/"),
+    locationParkingUrl: publicUrl(env, request, "/tattoos/location-parking/"),
+  };
+}
+
+function appointmentCalendarDescription(env, request, appointment) {
+  const resources = appointmentResourceUrls(env, request);
+  const virtual = isVirtualAppointment(appointment);
+  const lines = [
+    "Point of contact: art.pill TATTOO HOUSE",
+    `Email: ${studioContactEmail(env)}`,
+    `Phone: ${studioContactPhone(env)}`,
+    "",
+    `Manage / cancel / reschedule: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
+    `Booking policies: ${resources.bookingTermsUrl}`,
+  ];
+
+  if (virtual) {
+    lines.push(`Zoom link: ${appointment.meeting?.joinUrl || ""}`);
+  } else {
+    lines.push(`Studio address: ${studioCalendarLocation(env)}`);
+    lines.push(`Day-of prep: ${resources.dayOfInstructionsUrl}`);
+    lines.push(`Location & parking: ${resources.locationParkingUrl}`);
+  }
+
+  return lines.join("\n");
+}
+
+function appointmentCalendarLocation(env, appointment) {
+  if (isVirtualAppointment(appointment) && appointment.meeting?.joinUrl) {
+    return appointment.meeting.joinUrl;
+  }
+  return studioCalendarLocation(env);
+}
+
+function buildAppointmentIcs(env, request, appointment) {
+  const label = appointment.bookingTypeLabel || "Tattoo session";
+  const summary = `art.pill TATTOO HOUSE - ${label}`;
+  const confirmationUrl = appointmentConfirmationUrl(env, request, appointment);
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//The Six Well Construct//Art.Pill Booking//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    icsProperty("X-WR-TIMEZONE", DEFAULT_CALENDAR_TIME_ZONE),
+    "BEGIN:VEVENT",
+    icsProperty("UID", `${appointment.id}@thesixwellconstruct.com`),
+    `DTSTAMP:${icsDate(new Date().toISOString())}`,
+    foldIcsLine(`DTSTART;TZID=${DEFAULT_CALENDAR_TIME_ZONE}:${icsLocalDate(appointment.startAt)}`),
+    foldIcsLine(`DTEND;TZID=${DEFAULT_CALENDAR_TIME_ZONE}:${icsLocalDate(appointment.endAt)}`),
+    icsProperty("SUMMARY", summary),
+    icsProperty("LOCATION", appointmentCalendarLocation(env, appointment)),
+    icsProperty("DESCRIPTION", appointmentCalendarDescription(env, request, appointment)),
+    icsProperty("URL", confirmationUrl),
+    "STATUS:CONFIRMED",
+    "END:VEVENT",
+    "END:VCALENDAR",
+    "",
+  ];
+  return lines.join("\r\n");
 }
 
 function base64Url(bytes) {
@@ -1667,6 +1815,38 @@ export async function handleConfirmBooking(request, env) {
   }
 }
 
+export async function handleBookingCalendar(request, env) {
+  try {
+    const db = requireBookingDb(env);
+    const appointmentId = new URL(request.url).searchParams.get("appointment") || "";
+    if (!appointmentId) return errorResponse("Appointment reference is required.", 400);
+
+    const appointmentRow = await selectAppointmentWithMeeting(db, appointmentId);
+    if (!appointmentRow) return errorResponse("Appointment not found.", 404);
+
+    const appointment = normalizeAppointment(appointmentRow);
+    if (appointment.status !== "confirmed") {
+      return errorResponse("Calendar is available after payment confirmation.", 403);
+    }
+    if (isVirtualAppointment(appointment) && !appointment.meeting?.joinUrl) {
+      return errorResponse("Calendar is available once the Zoom meeting is ready.", 409);
+    }
+
+    return new Response(buildAppointmentIcs(env, request, appointment), {
+      status: 200,
+      headers: {
+        "content-type": "text/calendar; charset=utf-8",
+        "content-disposition": 'attachment; filename="art-pill-appointment.ics"',
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    return errorResponse("Unable to create calendar event.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
 export async function handleCancelAppointment(request, env) {
   const body = await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
@@ -2436,6 +2616,45 @@ export async function handleAdminCreateAppointmentMeeting(request, env, appointm
     return json({ appointment: normalizeAppointment(updated) });
   } catch (error) {
     return errorResponse("Unable to create Zoom meeting.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminReleasePendingAppointment(request, env, appointmentId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const row = await selectAppointmentWithMeeting(db, appointmentId);
+    if (!row) return errorResponse("Appointment not found.", 404);
+    if (!["pending_deposit", "deposit_pending"].includes(row.status)) {
+      return errorResponse("Only pending checkout appointments can be released.", 400);
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
+      .bind("cancelled", now, appointmentId)
+      .run();
+    await db
+      .prepare("UPDATE deposit_payments SET status = ?, updated_at = ? WHERE appointment_id = ? AND status = ?")
+      .bind("cancelled", now, appointmentId, "pending")
+      .run();
+
+    if (row.meeting_provider === "zoom" && row.provider_meeting_id) {
+      await deleteZoomMeeting(env, row.provider_meeting_id);
+      await db
+        .prepare("DELETE FROM appointment_meetings WHERE appointment_id = ? AND provider = 'zoom'")
+        .bind(appointmentId)
+        .run();
+    }
+
+    const updated = await selectAppointmentWithMeeting(db, appointmentId);
+    return json({ ok: true, appointment: normalizeAppointment(updated || row) });
+  } catch (error) {
+    return errorResponse("Unable to release pending checkout.", 500, {
       detail: error.message,
     });
   }

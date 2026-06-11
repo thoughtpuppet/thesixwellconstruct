@@ -74,6 +74,10 @@ function appointmentConfirmationUrl(env, request, appointment) {
   return `${publicBaseUrl(env, request)}${path}?appointment=${encodeURIComponent(appointment.id)}`;
 }
 
+function appointmentCalendarUrl(env, request, appointment) {
+  return `${publicBaseUrl(env, request)}/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`;
+}
+
 function clientResourceUrls(env, request) {
   return {
     bookingTermsUrl: publicUrl(env, request, "/tattoos/policies/"),
@@ -307,6 +311,49 @@ async function sendTransactionalEmail(env, message) {
   }
 }
 
+function json(data, init = {}) {
+  return new Response(JSON.stringify(data), {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...init.headers,
+    },
+    status: init.status || 200,
+  });
+}
+
+function errorResponse(message, status = 400, extras = {}) {
+  return json({ error: message, ...extras }, { status });
+}
+
+async function readJsonBody(request) {
+  try {
+    const body = await request.json();
+    return body && typeof body === "object" ? body : {};
+  } catch {
+    return null;
+  }
+}
+
+function authTokenFromRequest(request) {
+  const authorization = request.headers.get("authorization") || "";
+  if (authorization.toLowerCase().startsWith("bearer ")) {
+    return authorization.slice(7).trim();
+  }
+  return new URL(request.url).searchParams.get("token") || "";
+}
+
+function requireAdmin(request, env) {
+  const expectedToken = env.SUBMISSIONS_ADMIN_TOKEN;
+  if (!expectedToken) return errorResponse("Admin notifications are not configured.", 503);
+  if (authTokenFromRequest(request) !== expectedToken) return errorResponse("Unauthorized.", 401);
+  return null;
+}
+
+function resendKey(base) {
+  return `${base}:resend:${crypto.randomUUID()}`;
+}
+
 function normalizeSubmission(rowOrSubmission) {
   const contact = rowOrSubmission.contact || parseJsonField(rowOrSubmission.contact_json, {});
   const payload = rowOrSubmission.payload || parseJsonField(rowOrSubmission.payload_json, {});
@@ -339,7 +386,7 @@ function normalizeAppointment(row) {
   };
 }
 
-export async function notifySubmissionReceived(env, submission) {
+export async function notifySubmissionReceived(env, submission, options = {}) {
   const normalized = normalizeSubmission(submission);
   if (!normalized.contactEmail) return { ok: false, skipped: true };
 
@@ -362,11 +409,11 @@ export async function notifySubmissionReceived(env, submission) {
     templateKey: "submission_received",
     relatedType: "submission",
     relatedId: normalized.id,
-    idempotencyKey: `submission_received:${normalized.id}`,
+    idempotencyKey: options.idempotencyKey || `submission_received:${normalized.id}`,
   });
 }
 
-export async function notifyBookingLinkCreated(env, request, submission, token) {
+export async function notifyBookingLinkCreated(env, request, submission, token, options = {}) {
   const normalized = normalizeSubmission(submission);
   if (!normalized.contactEmail || !token?.bookingUrl) return { ok: false, skipped: true };
 
@@ -408,11 +455,11 @@ export async function notifyBookingLinkCreated(env, request, submission, token) 
     templateKey: "booking_link_created",
     relatedType: "submission",
     relatedId: normalized.id,
-    idempotencyKey: `booking_link_created:${token.id}`,
+    idempotencyKey: options.idempotencyKey || `booking_link_created:${token.id}`,
   });
 }
 
-async function sendTattooAppointmentConfirmed(env, request, appointment) {
+async function sendTattooAppointmentConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
   const text = [
     `Hi ${appointment.clientName || "there"},`,
@@ -426,6 +473,7 @@ async function sendTattooAppointmentConfirmed(env, request, appointment) {
     appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
     "",
     `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
     `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
     `Location & parking: ${resources.locationParkingUrl}`,
     "",
@@ -443,11 +491,11 @@ async function sendTattooAppointmentConfirmed(env, request, appointment) {
     templateKey: "appointment_confirmed",
     relatedType: "appointment",
     relatedId: appointment.id,
-    idempotencyKey: `appointment_confirmed:${appointment.id}`,
+    idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
   });
 }
 
-async function sendInPersonConsultationConfirmed(env, request, appointment) {
+async function sendInPersonConsultationConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
   const text = [
     `Hi ${appointment.clientName || "there"},`,
@@ -461,6 +509,7 @@ async function sendInPersonConsultationConfirmed(env, request, appointment) {
     appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
     "",
     `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
     `Location & parking: ${resources.locationParkingUrl}`,
     "",
     "We'll talk through your project, placement, scale, and timeline in person. No prep is required ahead of time - just bring any reference images or ideas you'd like to share.",
@@ -477,11 +526,11 @@ async function sendInPersonConsultationConfirmed(env, request, appointment) {
     templateKey: "consultation_confirmed_in_person",
     relatedType: "appointment",
     relatedId: appointment.id,
-    idempotencyKey: `appointment_confirmed:${appointment.id}`,
+    idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
   });
 }
 
-async function sendVirtualConsultationConfirmed(env, request, appointment) {
+async function sendVirtualConsultationConfirmed(env, request, appointment, options = {}) {
   const text = [
     `Hi ${appointment.clientName || "there"},`,
     "",
@@ -495,6 +544,7 @@ async function sendVirtualConsultationConfirmed(env, request, appointment) {
     appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
     "",
     `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
     "",
     "We'll talk through your project, placement, scale, and timeline over video. No prep is required ahead of time - just bring any reference images or ideas you'd like to share, and a quiet spot with a stable connection.",
     "",
@@ -510,11 +560,11 @@ async function sendVirtualConsultationConfirmed(env, request, appointment) {
     templateKey: "consultation_confirmed_virtual",
     relatedType: "appointment",
     relatedId: appointment.id,
-    idempotencyKey: `appointment_confirmed:${appointment.id}`,
+    idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
   });
 }
 
-async function sendBuildSessionConfirmed(env, request, appointment) {
+async function sendBuildSessionConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
   const text = [
     `Hi ${appointment.clientName || "there"},`,
@@ -528,6 +578,7 @@ async function sendBuildSessionConfirmed(env, request, appointment) {
     appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
     "",
     `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
     `Location & parking: ${resources.locationParkingUrl}`,
     "",
     "This session is dedicated to building out your design together - placement, scale, and final artwork. Bring any reference images, sizing notes, or ideas you'd like to work from.",
@@ -544,23 +595,139 @@ async function sendBuildSessionConfirmed(env, request, appointment) {
     templateKey: "build_session_confirmed",
     relatedType: "appointment",
     relatedId: appointment.id,
-    idempotencyKey: `appointment_confirmed:${appointment.id}`,
+    idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
   });
 }
 
-export async function notifyAppointmentConfirmed(env, request, appointmentRow) {
+export async function notifyAppointmentConfirmed(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   if (!appointment.clientEmail) return { ok: false, skipped: true };
 
   switch (appointment.bookingTypeId) {
     case IN_PERSON_CONSULTATION_BOOKING_TYPE_ID:
-      return sendInPersonConsultationConfirmed(env, request, appointment);
+      return sendInPersonConsultationConfirmed(env, request, appointment, options);
     case VIRTUAL_CONSULTATION_BOOKING_TYPE_ID:
-      return sendVirtualConsultationConfirmed(env, request, appointment);
+      return sendVirtualConsultationConfirmed(env, request, appointment, options);
     case BUILD_SESSION_BOOKING_TYPE_ID:
-      return sendBuildSessionConfirmed(env, request, appointment);
+      return sendBuildSessionConfirmed(env, request, appointment, options);
     default:
-      return sendTattooAppointmentConfirmed(env, request, appointment);
+      return sendTattooAppointmentConfirmed(env, request, appointment, options);
+  }
+}
+
+async function selectSubmission(db, submissionId) {
+  return db.prepare("SELECT * FROM submissions WHERE id = ?").bind(submissionId).first();
+}
+
+async function selectAppointmentWithMeeting(db, appointmentId) {
+  return db
+    .prepare(
+      `SELECT a.*, bt.label AS booking_type_label,
+              am.provider AS meeting_provider,
+              am.provider_meeting_id,
+              am.join_url AS meeting_join_url,
+              am.password AS meeting_password,
+              am.created_at AS meeting_created_at,
+              am.updated_at AS meeting_updated_at
+       FROM appointments a
+       LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+       LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
+       WHERE a.id = ?`
+    )
+    .bind(appointmentId)
+    .first();
+}
+
+async function latestActiveToken(db, submissionId) {
+  return db
+    .prepare(
+      `SELECT * FROM booking_tokens
+       WHERE submission_id = ? AND revoked_at IS NULL AND used_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`
+    )
+    .bind(submissionId)
+    .first();
+}
+
+async function deliveryById(db, notificationId) {
+  if (!notificationId) return null;
+  return db
+    .prepare(
+      `SELECT id, template_key, related_type, related_id
+       FROM notification_deliveries WHERE id = ?`
+    )
+    .bind(notificationId)
+    .first();
+}
+
+export async function handleAdminResendNotification(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  try {
+    const db = notificationDb(env);
+    if (!db) return errorResponse("Missing D1 binding SUBMISSIONS_DB.", 503);
+
+    const sourceDelivery = await deliveryById(db, asString(body.notificationId));
+    const templateKey = asString(body.templateKey || sourceDelivery?.template_key);
+    const submissionId = asString(
+      body.submissionId || (sourceDelivery?.related_type === "submission" ? sourceDelivery.related_id : "")
+    );
+    const appointmentId = asString(
+      body.appointmentId || (sourceDelivery?.related_type === "appointment" ? sourceDelivery.related_id : "")
+    );
+
+    if (templateKey === "submission_received") {
+      const submission = await selectSubmission(db, submissionId);
+      if (!submission) return errorResponse("Submission not found.", 404);
+      const delivery = await notifySubmissionReceived(env, submission, {
+        idempotencyKey: resendKey(`submission_received:${submission.id}`),
+      });
+      return json({ ok: Boolean(delivery.ok), delivery });
+    }
+
+    if (templateKey === "booking_link_created") {
+      const submission = await selectSubmission(db, submissionId);
+      if (!submission) return errorResponse("Submission not found.", 404);
+      if (!submission.booking_url) return errorResponse("This submission does not have a booking URL.", 400);
+
+      const token = await latestActiveToken(db, submission.id);
+      const tokenId = token?.id || submission.id;
+      const delivery = await notifyBookingLinkCreated(env, request, submission, {
+        id: tokenId,
+        bookingUrl: submission.booking_url.startsWith("http")
+          ? submission.booking_url
+          : `${publicBaseUrl(env, request)}${submission.booking_url}`,
+        allowedBookingTypes: parseJsonField(token?.allowed_booking_types_json, []),
+      }, {
+        idempotencyKey: resendKey(`booking_link_created:${tokenId}`),
+      });
+      return json({ ok: Boolean(delivery.ok), delivery });
+    }
+
+    if ([
+      "appointment_confirmed",
+      "consultation_confirmed_in_person",
+      "consultation_confirmed_virtual",
+      "build_session_confirmed",
+    ].includes(templateKey)) {
+      const appointment = await selectAppointmentWithMeeting(db, appointmentId);
+      if (!appointment) return errorResponse("Appointment not found.", 404);
+      if (appointment.status !== "confirmed") {
+        return errorResponse("Only confirmed appointments can receive confirmation resends.", 400);
+      }
+      const delivery = await notifyAppointmentConfirmed(env, request, appointment, {
+        idempotencyKey: resendKey(`appointment_confirmed:${appointment.id}`),
+      });
+      return json({ ok: Boolean(delivery.ok), delivery });
+    }
+
+    return errorResponse(`Unsupported notification template: ${templateKey || "(blank)"}.`, 400);
+  } catch (error) {
+    return errorResponse("Unable to resend notification.", 500, { detail: error.message });
   }
 }
 
@@ -648,6 +815,7 @@ export async function sendDueAppointmentReminders(env) {
         `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
         `Session: ${appointment.bookingTypeLabel}`,
         appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
+        `Add to calendar: ${appointmentCalendarUrl(env, null, appointment)}`,
         "",
         isVirtual ? "" : "Please review before arriving:",
         isVirtual ? "" : "",

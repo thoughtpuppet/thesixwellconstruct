@@ -352,6 +352,7 @@
   const statusFilter = document.getElementById("statusFilter");
   const typeFilter = document.getElementById("typeFilter");
   const bookingPreviewKey = "swc_booking_admin_preview";
+  const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
   let appointments = [];
@@ -819,6 +820,58 @@
     }
   }
 
+  function notificationRetryAttrs(notification, fallbackSubmissionId) {
+    const template = notification.template_key || notification.templateKey || "";
+    const relatedType = notification.related_type || notification.relatedType || "";
+    const relatedId = notification.related_id || notification.relatedId || "";
+    const submissionId = relatedType === "submission" ? relatedId : fallbackSubmissionId;
+    const appointmentId = relatedType === "appointment" ? relatedId : "";
+    return [
+      `data-resend-template="${escapeHtml(template)}"`,
+      `data-notification-id="${escapeHtml(notification.id || "")}"`,
+      submissionId ? `data-submission-id="${escapeHtml(submissionId)}"` : "",
+      appointmentId ? `data-appointment-id="${escapeHtml(appointmentId)}"` : "",
+    ].filter(Boolean).join(" ");
+  }
+
+  async function renderEventHistory(submissionId) {
+    const evContainer = document.getElementById("eventHistoryBody");
+    const notifContainer = document.getElementById("notificationsBody");
+    if (!evContainer && !notifContainer) return;
+    try {
+      const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}`);
+      const events = payload.events || [];
+      if (evContainer) {
+        evContainer.innerHTML = events.length ? `<div class="event-list">${events.map((ev) => `
+          <div class="event-item">
+            <span class="event-time">${escapeHtml(formatDate(ev.created_at || ev.createdAt))}</span>
+            <span class="event-text">${escapeHtml(titleize(ev.event_type || ev.eventType || ""))}${ev.note ? ` - ${escapeHtml(ev.note)}` : ""}${ev.actor && ev.actor !== "system" ? ` (${escapeHtml(ev.actor)})` : ""}</span>
+          </div>
+        `).join("")}</div>`
+        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events recorded.</p>';
+      }
+
+      const notifications = payload.notifications || [];
+      if (notifContainer) {
+        notifContainer.innerHTML = notifications.length ? `<div class="event-list">${notifications.map((n) => `
+          <div class="event-item">
+            <span class="event-time">${escapeHtml(formatDate(n.sent_at || n.created_at))}</span>
+            <span class="event-text" style="${n.status === "failed" ? "color:var(--signal);" : ""}">
+              ${escapeHtml(n.channel || "")} / ${escapeHtml(n.template_key || "")} -> ${escapeHtml(n.recipient || "")}
+              / <strong>${escapeHtml(n.status || "")}</strong>
+              ${n.error ? ` - ${escapeHtml(n.error)}` : ""}
+            </span>
+            ${n.status === "failed" ? `<button class="button" type="button" style="min-height:30px;padding:0 10px;font-size:10px;" ${notificationRetryAttrs(n, submissionId)}>Retry</button>` : ""}
+          </div>
+        `).join("")}</div>`
+        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No notifications recorded.</p>';
+      }
+    } catch {
+      if (evContainer) evContainer.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load events.</p>';
+      if (notifContainer) notifContainer.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load notifications.</p>';
+    }
+  }
+
   async function renderTokenState(submissionId) {
     const container = document.getElementById("tokenStateInfo");
     if (!container) return;
@@ -925,6 +978,19 @@
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
   }
 
+  function appointmentIsPending(appointment) {
+    return ["pending_deposit", "deposit_pending"].includes(appointment?.status || "");
+  }
+
+  function appointmentIsConfirmed(appointment) {
+    return appointment?.status === "confirmed";
+  }
+
+  function appointmentCalendarUrl(appointment) {
+    if (!appointment?.id) return "";
+    return absoluteUrl(`/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`);
+  }
+
   function renderPaymentSummary(submission) {
     const appointment = latestAppointmentFor(submission.id);
     if (!appointment) return "";
@@ -934,24 +1000,37 @@
     const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
     const meeting = appointment.meeting || null;
     const isVirtual = appointment.bookingTypeId === "consult_virtual";
+    const isPublicBooking = submission.type === "consultation" || ["consult_in_person", "consult_virtual", "build_in_person"].includes(appointment.bookingTypeId);
+    const calendarHref = appointmentIsConfirmed(appointment) ? appointmentCalendarUrl(appointment) : "";
     const meetingLines = meeting?.joinUrl
-      ? `Zoom link: ${escapeHtml(meeting.joinUrl)}
+      ? `Zoom: ready
+<a class="button" href="${escapeHtml(meeting.joinUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;margin-top:8px;min-height:32px;padding:0 10px;font-size:10px;">Open Zoom Link</a>
+Raw Zoom URL: ${escapeHtml(meeting.joinUrl)}
 Zoom password: ${escapeHtml(meeting.password || "none")}`
       : isVirtual
-        ? `Zoom link: not created
-${appointment.status === "archived" ? "" : `<button class="button" type="button" data-create-meeting="${escapeHtml(appointment.id)}" style="margin-top:8px;min-height:32px;padding:0 10px;font-size:10px;">Create Zoom Meeting</button>`}`
+        ? `Zoom: not created
+${["archived", "cancelled"].includes(appointment.status) ? "" : `<button class="button" type="button" data-create-meeting="${escapeHtml(appointment.id)}" style="margin-top:8px;min-height:32px;padding:0 10px;font-size:10px;">Create Zoom Meeting</button>`}`
         : "";
     return `
       <div class="field" style="margin-top:16px;">
         <label>Appointment Payment</label>
         <div class="value">
-Status: ${escapeHtml(titleize(appointment.status))}
+${isPublicBooking ? "Source: Public calendar booking\n" : ""}Status: ${escapeHtml(titleize(appointment.status))}
+Session: ${escapeHtml(titleize(appointment.bookingTypeId || "session"))}
 When: ${escapeHtml(formatDate(appointment.startAt))}
-Deposit: ${escapeHtml(money(depositCents, currency))}
+Ends: ${escapeHtml(formatDate(appointment.endAt))}
+${appointmentIsConfirmed(appointment) && !isVirtual ? `Location: ${escapeHtml(STUDIO_ADDRESS)}\n` : ""}
+Reservation/deposit: ${escapeHtml(money(depositCents, currency))}
 Optional tip: ${escapeHtml(money(tipCents, currency))}
-Total due today: ${escapeHtml(money(totalCents, currency))}
+Total paid today: ${escapeHtml(money(totalCents, currency))}
 Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
 ${meetingLines}
+        </div>
+        <div class="booking-actions" style="margin-top:10px;">
+          ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
+          ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
+          ${appointmentIsPending(appointment) ? `<button class="button danger-button" type="button" data-release-pending="${escapeHtml(appointment.id)}">Release Pending Checkout</button>` : ""}
+          ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
         </div>
       </div>
     `;
@@ -1016,6 +1095,21 @@ ${meetingLines}
     return `Hi ${name}, this is art.pill TATTOO HOUSE. We received your inquiry and will review the project details before sending booking access. Thank you.`;
   }
 
+  function renderCommunicationActions(submission) {
+    const appointment = latestAppointmentFor(submission.id);
+    const canResendBooking = !!submission.bookingUrl && submission.status === "approved" && !appointmentIsConfirmed(appointment);
+    const canResendConfirmation = appointmentIsConfirmed(appointment);
+    if (!canResendBooking && !canResendConfirmation) {
+      return `<p class="contact" style="margin-top:8px;">No resend actions are available for the current status.</p>`;
+    }
+    return `
+      <div class="booking-actions" style="margin-top:10px;">
+        ${canResendBooking ? `<button class="button" type="button" data-resend-template="booking_link_created" data-submission-id="${escapeHtml(submission.id)}">Resend Booking Link Email</button>` : ""}
+        ${canResendConfirmation ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
+      </div>
+    `;
+  }
+
   function renderDetail(submission) {
     const isProtected = submission.status === "booked" || submission.status === "paid";
     const hasAppointment = !!latestAppointmentFor(submission.id);
@@ -1074,7 +1168,9 @@ ${meetingLines}
         }
       </div>
       <div class="assist-panel">
-        <label for="textAssist">Manual Text Assist</label>
+        <label>Client Communication</label>
+        ${renderCommunicationActions(submission)}
+        <label for="textAssist" style="margin-top:14px;">Manual Text Assist</label>
         <textarea id="textAssist">${escapeHtml(textReminderCopy(submission))}</textarea>
         <div class="booking-actions">
           <button class="button" id="refreshTextAssistBtn" type="button">Refresh Text</button>
@@ -1761,6 +1857,50 @@ ${meetingLines}
       return;
     }
 
+    const releasePending = event.target.closest("[data-release-pending]");
+    if (releasePending) {
+      const appointmentId = releasePending.dataset.releasePending;
+      if (!window.confirm("Release this pending checkout? The held time will be freed and the existing Square checkout should no longer be used.")) return;
+      setStatus("Releasing pending checkout");
+      const payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/release-pending`, {
+        method: "POST",
+      });
+      const index = appointments.findIndex((a) => a.id === appointmentId);
+      if (index >= 0) appointments[index] = payload.appointment;
+      if (activeId) {
+        const submission = submissions.find((item) => item.id === activeId);
+        if (submission) renderDetail(submission);
+      }
+      renderDayAppointments(selectedCalendarDay);
+      setStatus("Pending checkout released");
+      return;
+    }
+
+    const copyCalendar = event.target.closest("[data-copy-calendar]");
+    if (copyCalendar) {
+      const value = copyCalendar.dataset.copyCalendar || "";
+      if (value) await navigator.clipboard?.writeText(absoluteUrl(value)).catch(() => {});
+      setStatus("Calendar link copied");
+      return;
+    }
+
+    const resendButton = event.target.closest("[data-resend-template]");
+    if (resendButton) {
+      const templateKey = resendButton.dataset.resendTemplate;
+      const submissionId = resendButton.dataset.submissionId || activeId || "";
+      const appointmentId = resendButton.dataset.appointmentId || "";
+      const notificationId = resendButton.dataset.notificationId || "";
+      setStatus(notificationId ? "Retrying notification" : "Resending email");
+      await api("/api/admin/notifications/resend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ templateKey, submissionId, appointmentId, notificationId }),
+      });
+      if (activeId) await renderEventHistory(activeId);
+      setStatus(notificationId ? "Notification retried" : "Email resent");
+      return;
+    }
+
     const deleteButton = event.target.closest("[data-delete-window]");
     if (deleteButton) {
       const id = deleteButton.dataset.deleteWindow;
@@ -1822,7 +1962,7 @@ ${meetingLines}
       }
       await navigator.clipboard?.writeText(payload.token.bookingUrl).catch(() => {});
       await loadSubmissions();
-      setStatus("Booking link copied");
+      setStatus("Booking link emailed and copied");
       return;
     }
 

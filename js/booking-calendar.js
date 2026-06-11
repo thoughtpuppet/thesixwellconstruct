@@ -60,6 +60,38 @@
       onBookingTypeChange,
     } = options;
 
+    const previewParams = new URLSearchParams(window.location.search);
+    const previewMode = previewParams.get("preview") === "1";
+    const previewState = previewParams.get("state") || "";
+
+    function previewContext() {
+      if (previewState === "error") {
+        return { error: "Unable to load consultation times. (Preview of the load-error state.)" };
+      }
+      const previewTypes = [
+        { id: "consult_in_person", label: "In-Person Consultation", depositCents: 5000, depositLabel: "$50.00", durationMinutes: 30, currency: "USD" },
+        { id: "consult_virtual", label: "Virtual Consultation", depositCents: 5000, depositLabel: "$50.00", durationMinutes: 30, currency: "USD" },
+        { id: "build_in_person", label: "In-Person Build Session", depositCents: 7500, depositLabel: "$75.00", durationMinutes: 60, currency: "USD" },
+      ];
+      const previewWindows = [];
+      if (previewState !== "no-availability") {
+        const dayOffsets = [2, 4, 7, 9, 11, 16];
+        const startHours = [11, 14, 12, 15, 10, 13];
+        dayOffsets.forEach((offset, index) => {
+          const start = new Date();
+          start.setDate(start.getDate() + offset);
+          start.setHours(startHours[index], 0, 0, 0);
+          previewWindows.push({
+            id: `preview-${index + 1}`,
+            bookingTypeId: null,
+            startAt: start.toISOString(),
+            endAt: new Date(start.getTime() + 60 * 60 * 1000).toISOString(),
+          });
+        });
+      }
+      return { bookingTypes: previewTypes, availabilityWindows: previewWindows, walkInWindows: [] };
+    }
+
     const form = document.getElementById("consultForm");
     const submitBtn = document.getElementById("submitBtn");
     const formError = document.getElementById("formError");
@@ -270,9 +302,15 @@
 
     async function loadContext() {
       try {
-        const response = await fetch("/api/booking/public-consultation/context", { cache: "no-store" });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
+        let payload;
+        if (previewMode) {
+          payload = previewContext();
+          if (payload.error) throw new Error(payload.error);
+        } else {
+          const response = await fetch("/api/booking/public-consultation/context", { cache: "no-store" });
+          payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
+        }
         const allTypes = payload.bookingTypes || (payload.bookingType ? [payload.bookingType] : []);
         bookingTypes = allTypes.filter(filterBookingTypes);
         windows = payload.availabilityWindows || [];
@@ -286,7 +324,8 @@
         } else {
           renderWalkInWindows(walkInWindows);
         }
-        if (bookingType) submitBtn.textContent = `Continue to Square - ${bookingType.depositLabel}`;
+        if (previewMode) submitBtn.textContent = "Preview Checkout";
+        else if (bookingType) submitBtn.textContent = `Continue to Square - ${bookingType.depositLabel}`;
         renderCalendar();
       } catch (error) {
         renderWalkInWindows([]);
@@ -320,7 +359,9 @@
     });
     bookingTypeSelect.addEventListener("change", () => {
       bookingType = selectedBookingType();
-      submitBtn.textContent = bookingType ? `Continue to Square - ${bookingType.depositLabel}` : "Continue to Square";
+      submitBtn.textContent = previewMode
+        ? "Preview Checkout"
+        : (bookingType ? `Continue to Square - ${bookingType.depositLabel}` : "Continue to Square");
       if (onBookingTypeChange) onBookingTypeChange(bookingType, null, renderWalkInWindows);
       resetSelectedTime();
     });
@@ -328,6 +369,13 @@
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (previewMode) {
+        formError.textContent = selectedWindow
+          ? `Preview mode only - real clients continue to Square. Selected: ${formatDate(new Date(selectedWindow.startAt))} at ${formatTime(selectedWindow)}.`
+          : "Preview mode only - select an available time to see the checkout step.";
+        formError.style.display = "block";
+        return;
+      }
       if (!form.checkValidity()) {
         form.reportValidity();
         return;

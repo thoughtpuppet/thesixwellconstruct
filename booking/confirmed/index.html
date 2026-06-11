@@ -104,8 +104,17 @@
     return `<div class="detail-row"><span class="detail-key">${escapeHtml(key)}</span><span>${raw ? value : escapeHtml(value)}</span></div>`;
   }
 
+  function calendarRow(appointment, paid, isCancelled) {
+    if (!paid || isCancelled || !appointment?.id) return "";
+    const isDemo = appointment.id === "demo";
+    const url = isDemo ? "#" : `/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`;
+    return renderRow("Calendar", `<a href="${escapeHtml(url)}"${isDemo ? ' onclick="return false;" title="Disabled in preview"' : ""} style="color:var(--accent);text-decoration:underline;">Add to Calendar</a>`, true);
+  }
+
   const manage = document.getElementById("manageBlock");
   const DEFAULT_SUPPORT_EMAIL = "saisolehamn@artpilltattoohouse.com";
+  const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
+  const previewMode = new URLSearchParams(window.location.search).get("preview") === "1";
 
   function rebookUrl(appointment) {
     const path = appointment.bookingTypeId === "build_in_person"
@@ -175,6 +184,19 @@
       : "Cancel this appointment? This cannot be undone.";
     if (!window.confirm(confirmMessage)) return;
 
+    if (previewMode) {
+      if (redirect) {
+        window.location.href = rebookUrl(appointment);
+        return;
+      }
+      badge.classList.add("pending");
+      badgeText.textContent = "Appointment Cancelled";
+      title.textContent = "This appointment has been cancelled.";
+      lead.textContent = "Your slot has been released. Email us if you have any questions.";
+      renderManageBlock({ ...appointment, status: "cancelled" }, payload, false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/booking/cancel", {
         method: "POST",
@@ -198,8 +220,11 @@
     }
   }
 
-  function previewPayload(state) {
-    const start = new Date(Date.now() + 26 * 60 * 60 * 1000);
+  function previewPayload(state, params) {
+    const hoursParam = Number(params.get("hours"));
+    const hoursUntilStart = Number.isFinite(hoursParam) && hoursParam !== 0 ? hoursParam : 26;
+    const tipCents = params.get("tip") === "1" ? 2500 : 0;
+    const start = new Date(Date.now() + hoursUntilStart * 60 * 60 * 1000);
     const end = new Date(start.getTime() + 180 * 60 * 1000);
     return {
       appointment: {
@@ -210,15 +235,15 @@
         startAt: start.toISOString(),
         endAt: end.toISOString(),
         depositCents: 10000,
-        tipCents: 0,
-        totalDueCents: 10000,
+        tipCents,
+        totalDueCents: 10000 + tipCents,
         currency: "USD",
         status: state === "cancelled" ? "cancelled" : (state === "pending" ? "pending_deposit" : "confirmed"),
         meeting: null,
       },
       depositStatus: state === "pending" ? "pending" : "paid",
       supportEmail: DEFAULT_SUPPORT_EMAIL,
-      hoursUntilStart: 26,
+      hoursUntilStart,
     };
   }
 
@@ -227,7 +252,7 @@
     let payload;
     if (params.get("preview") === "1") {
       if (params.get("state") === "error") throw new Error("Appointment not found.");
-      payload = previewPayload(params.get("state") || "paid");
+      payload = previewPayload(params.get("state") || "paid", params);
     } else {
       if (!appointmentId) throw new Error("Appointment reference is missing.");
       const response = await fetch(`/api/booking/confirm?appointment=${encodeURIComponent(appointmentId)}`);
@@ -252,13 +277,18 @@
     const meetingRows = paid && appointment.meeting?.joinUrl
       ? [renderRow("Zoom Link", `<a href="${escapeHtml(appointment.meeting.joinUrl)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Join Zoom Meeting</a>`, true)]
       : [];
+    const locationRows = paid && !isCancelled && appointment.bookingTypeId !== "consult_virtual"
+      ? [renderRow("Location", STUDIO_ADDRESS)]
+      : [];
     details.innerHTML = [
       renderRow("Client", appointment.clientName),
       renderRow("When", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
+      ...locationRows,
       renderRow("Deposit", `${money(appointment.depositCents, appointment.currency)} / ${paid ? "received" : "pending"}`),
       renderRow("Optional Tip", money(appointment.tipCents || 0, appointment.currency)),
       renderRow("Total Paid Today", money(appointment.totalDueCents || appointment.depositCents || 0, appointment.currency)),
       ...meetingRows,
+      calendarRow(appointment, paid, isCancelled),
       renderRow("Status", appointment.status.replace(/_/g, " ")),
     ].filter(Boolean).join("");
 

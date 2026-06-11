@@ -43,6 +43,8 @@
     "NOTIFICATION_FROM_EMAIL": "saisolehamn@artpilltattoohouse.com",
     "NOTIFICATION_FROM_NAME": "art.pill TATTOO HOUSE",
     "NOTIFICATION_REPLY_TO": "saisolehamn@artpilltattoohouse.com",
+    "STUDIO_CALENDAR_LOCATION": "364 Nelson Street SW, Atlanta, GA 30313",
+    "STUDIO_CONTACT_PHONE": "(770) 820-5800",
     "SHOPIFY_STORE_DOMAIN": "six-well-2.myshopify.com",
     "SHOPIFY_STOREFRONT_API_VERSION": "2025-07",
     "SHOPIFY_MERCH_QUERY": "tag:construct-merch"

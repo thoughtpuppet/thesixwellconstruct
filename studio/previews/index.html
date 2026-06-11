@@ -65,12 +65,22 @@
 <header>
   <h1>Booking Preview Hub</h1>
   <p>
-    Internal reference only (not linked from the public site). Confirmation
-    pages below open with dummy appointment data via <code>?preview=1</code> -
-    nothing is read from or written to the live database. Email bodies show
-    the current copy with sample values filled in. Source of truth for emails
-    is <code>functions/api/notifications/_lib.js</code>; editable docs live in
+    Internal reference only (not linked from the public site). Links marked
+    with <code>?preview=1</code> open with dummy data - nothing is read from
+    or written to the live database, and cancel/checkout actions are simulated.
+    Links labelled "Open Live Page" go to the real public pages and behave
+    exactly like they do for clients. Email bodies show the current copy with
+    sample values filled in. Source of truth for emails is
+    <code>functions/api/notifications/_lib.js</code>; editable docs live in
     <code>docs/email-templates/</code>.
+  </p>
+  <div class="state-links" style="margin-top:14px;">
+    <a href="#" id="baseLocalBtn">Open Links Locally</a>
+    <a href="#" id="baseLiveBtn">Open Links on Live Site</a>
+  </div>
+  <p id="baseNote" style="margin-top:10px; color:var(--dim); font-size:13px;">
+    Links point to <code id="baseNoteUrl"></code>. The live site reflects the
+    last deployed version - push first to see recent changes there.
   </p>
 </header>
 <main>
@@ -88,17 +98,29 @@
         <h3>Booking / Session Selection</h3>
         <p>Session list, calendar of available windows, deposit/tip panel, and checkout button.</p>
         <div class="state-links">
-          <a href="/booking/?preview=1" target="_blank" rel="noopener">Open Preview</a>
+          <a href="/booking/?preview=1">Open Preview</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Invalid / Missing Link</h3>
         <p>What clients see if their booking link is missing, expired, used, or still awaiting approval.</p>
         <div class="state-links">
-          <a href="/booking/?preview=1&amp;state=missing-token" target="_blank" rel="noopener">No Link</a>
-          <a href="/booking/?preview=1&amp;state=expired" target="_blank" rel="noopener">Expired</a>
-          <a href="/booking/?preview=1&amp;state=used" target="_blank" rel="noopener">Already Used</a>
-          <a href="/booking/?preview=1&amp;state=pending-approval" target="_blank" rel="noopener">Pending Approval</a>
+          <a href="/booking/?preview=1&amp;state=missing-token">No Link</a>
+          <a href="/booking/?preview=1&amp;state=expired">Expired</a>
+          <a href="/booking/?preview=1&amp;state=used">Already Used</a>
+          <a href="/booking/?preview=1&amp;state=pending-approval">Pending Approval</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Live Availability Preview (Admin)</h3>
+        <p>
+          To preview the booking page with real schedule data instead of dummy
+          windows, open a submission in the Submissions Console and use its
+          booking preview action - it loads live availability with your admin
+          token and opens <code>/booking/?preview=1</code> with that data.
+        </p>
+        <div class="state-links">
+          <a href="/studio/submissions/">Open Submissions Console</a>
         </div>
       </div>
     </div>
@@ -110,48 +132,58 @@
       Public pages where clients submit inquiries before any approval or
       booking link exists. On success they redirect to "Inquiry Received"
       below; on failure they show an inline error and let the client retry.
+      "Open Live Page" links are the real forms - submitting them creates real
+      inquiries. The consultation and build pages also support
+      <code>?preview=1</code>, which loads dummy calendar windows and disables
+      the Square checkout.
     </p>
     <div class="page-grid">
       <div class="page-card">
         <h3>Tattoo Inquiry (Custom)</h3>
         <p>General custom tattoo project inquiry form.</p>
         <div class="state-links">
-          <a href="/tattoos/inquire/custom/" target="_blank" rel="noopener">Open Page</a>
+          <a href="/tattoos/inquire/custom/">Open Live Page</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Consultation Inquiry</h3>
-        <p>Entry point for in-person and virtual consultation requests.</p>
+        <p>Entry point for in-person and virtual consultation requests, with the public booking calendar.</p>
         <div class="state-links">
-          <a href="/tattoos/inquire/consultation/" target="_blank" rel="noopener">Open Page</a>
+          <a href="/tattoos/inquire/consultation/?preview=1">Calendar Preview</a>
+          <a href="/tattoos/inquire/consultation/?preview=1&amp;state=no-availability">No Availability</a>
+          <a href="/tattoos/inquire/consultation/?preview=1&amp;state=error">Load Error</a>
+          <a href="/tattoos/inquire/consultation/">Open Live Page</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Build Session Inquiry</h3>
-        <p>In-person build session request form.</p>
+        <p>In-person build session request form, with the public booking calendar.</p>
         <div class="state-links">
-          <a href="/tattoos/build/in-person/" target="_blank" rel="noopener">Open Page</a>
+          <a href="/tattoos/build/in-person/?preview=1">Calendar Preview</a>
+          <a href="/tattoos/build/in-person/?preview=1&amp;state=no-availability">No Availability</a>
+          <a href="/tattoos/build/in-person/?preview=1&amp;state=error">Load Error</a>
+          <a href="/tattoos/build/in-person/">Open Live Page</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Flash Claim</h3>
         <p>Client claims an available flash design for booking.</p>
         <div class="state-links">
-          <a href="/tattoos/flash/claim/" target="_blank" rel="noopener">Open Page</a>
+          <a href="/tattoos/flash/claim/">Open Live Page</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Special Projects Application</h3>
         <p>Application form for special project review.</p>
         <div class="state-links">
-          <a href="/tattoos/special-projects/apply/" target="_blank" rel="noopener">Open Page</a>
+          <a href="/tattoos/special-projects/apply/">Open Live Page</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Art Acquisition Inquiry</h3>
         <p>Inquiry form for purchasing/acquiring artwork.</p>
         <div class="state-links">
-          <a href="/art/acquisitioninquiry.html" target="_blank" rel="noopener">Open Page</a>
+          <a href="/art/acquisitioninquiry.html">Open Live Page</a>
         </div>
       </div>
     </div>
@@ -169,14 +201,14 @@
         <h3>Inquiry Received</h3>
         <p>Shown after any inquiry/application form submits successfully.</p>
         <div class="state-links">
-          <a href="/tattoos/submission-received/" target="_blank" rel="noopener">Open Page</a>
+          <a href="/tattoos/submission-received/">Open Page</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Approved Booking</h3>
         <p>Landing page for clients following an approval link before reaching the private booking page.</p>
         <div class="state-links">
-          <a href="/tattoos/approved/" target="_blank" rel="noopener">Open Page</a>
+          <a href="/tattoos/approved/">Open Page</a>
         </div>
       </div>
     </div>
@@ -187,46 +219,59 @@
     <p class="section-note">
       Each booking type redirects to its own confirmation page after Square
       checkout. Use the links below to see every state a client might land on.
+      "Paid" previews default to an appointment 26 hours out (inside the
+      48-hour policy window); "48h+ Notice" and "Past" show the other
+      cancel/reschedule policy variants. Cancel buttons in previews are
+      simulated - they never touch the live API.
     </p>
     <div class="page-grid">
       <div class="page-card">
         <h3>Tattoo Session</h3>
         <p>Quarter / Half / Full sessions. Deposit language, day-of instructions, location &amp; parking. No Zoom.</p>
         <div class="state-links">
-          <a href="/booking/confirmed/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
-          <a href="/booking/confirmed/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
-          <a href="/booking/confirmed/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
-          <a href="/booking/confirmed/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=paid">Paid</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;tip=1">Paid + Tip</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;hours=72">48h+ Notice</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=paid&amp;hours=-2">Past</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=pending">Pending</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=cancelled">Cancelled</a>
+          <a href="/booking/confirmed/?preview=1&amp;state=error">Error</a>
         </div>
       </div>
       <div class="page-card">
         <h3>In-Person Consultation</h3>
         <p>Reservation fee language (full price, not a deposit). No day-of instructions, no Zoom.</p>
         <div class="state-links">
-          <a href="/booking/confirmed/consultation/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
-          <a href="/booking/confirmed/consultation/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
-          <a href="/booking/confirmed/consultation/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
-          <a href="/booking/confirmed/consultation/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=paid">Paid</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=paid&amp;hours=72">48h+ Notice</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=paid&amp;hours=-2">Past</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=pending">Pending</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=cancelled">Cancelled</a>
+          <a href="/booking/confirmed/consultation/?preview=1&amp;state=error">Error</a>
         </div>
       </div>
       <div class="page-card">
         <h3>Virtual Consultation</h3>
         <p>Reservation fee language. Includes Zoom join link. No day-of instructions or location/parking.</p>
         <div class="state-links">
-          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
-          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
-          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
-          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=paid">Paid</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=paid&amp;hours=72">48h+ Notice</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=paid&amp;hours=-2">Past</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=pending">Pending</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=cancelled">Cancelled</a>
+          <a href="/booking/confirmed/virtual-consultation/?preview=1&amp;state=error">Error</a>
         </div>
       </div>
       <div class="page-card">
         <h3>In-Person Build Session</h3>
         <p>Reservation fee language, build-specific copy. Location &amp; parking, no day-of instructions, no Zoom.</p>
         <div class="state-links">
-          <a href="/booking/confirmed/build/?preview=1&amp;state=paid" target="_blank" rel="noopener">Paid</a>
-          <a href="/booking/confirmed/build/?preview=1&amp;state=pending" target="_blank" rel="noopener">Pending</a>
-          <a href="/booking/confirmed/build/?preview=1&amp;state=cancelled" target="_blank" rel="noopener">Cancelled</a>
-          <a href="/booking/confirmed/build/?preview=1&amp;state=error" target="_blank" rel="noopener">Error</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=paid">Paid</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=paid&amp;hours=72">48h+ Notice</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=paid&amp;hours=-2">Past</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=pending">Pending</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=cancelled">Cancelled</a>
+          <a href="/booking/confirmed/build/?preview=1&amp;state=error">Error</a>
         </div>
       </div>
     </div>
@@ -326,6 +371,31 @@
       ],
     },
     {
+      key: "appointment_confirmed (with tip)",
+      subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your art.pill TATTOO HOUSE appointment is confirmed.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_TATTOO}`,
+        "Session: Half Session",
+        "Deposit: $100 received",
+        "Optional tip: $25",
+        "Total paid today: $125",
+        "",
+        "Confirmation page: https://thesixwellconstruct.com/booking/confirmed/?appointment=demo",
+        `Day-of instructions: ${RESOURCES.dayOfInstructionsUrl}`,
+        `Location & parking: ${RESOURCES.locationParkingUrl}`,
+        "",
+        "I may follow up directly with prep notes or adjustments before your appointment, if needed.",
+        "",
+        "Thank you,",
+        "Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
+      ],
+    },
+    {
       key: "consultation_confirmed_in_person",
       subject: "Your consultation at art.pill TATTOO HOUSE has been confirmed",
       body: [
@@ -392,7 +462,7 @@
       ],
     },
     {
-      key: "appointment_cancelled (tattoo / build)",
+      key: "appointment_cancelled (tattoo)",
       subject: "Your appointment has been cancelled",
       body: [
         `Hi ${NAME},`,
@@ -405,6 +475,27 @@
         "Per studio policy, deposits and payments are non-refundable. One reschedule is allowed with at least 48 hours notice; a new deposit is required for reschedules made within 48 hours.",
         "",
         "Pick a new time: https://thesixwellconstruct.com/tattoos/inquire/consultation/?rebook=1",
+        "",
+        `Questions? Email ${SUPPORT_EMAIL}.`,
+        "",
+        "Thank you,",
+        "art.pill TATTOO HOUSE",
+      ],
+    },
+    {
+      key: "appointment_cancelled (build session)",
+      subject: "Your appointment has been cancelled",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your art.pill TATTOO HOUSE consultation has been cancelled.",
+        "",
+        `Was scheduled: ${WHEN_START} - ${WHEN_END_BUILD}`,
+        "Session: In-Person Build Session",
+        "",
+        "Per studio policy, reservation fees are non-refundable. One reschedule is allowed with at least 48 hours notice; a new reservation fee is required for reschedules made within 48 hours.",
+        "",
+        "Pick a new time: https://thesixwellconstruct.com/tattoos/build/in-person/?rebook=1",
         "",
         `Questions? Email ${SUPPORT_EMAIL}.`,
         "",
@@ -434,7 +525,7 @@
       ],
     },
     {
-      key: "appointment_reminder_24h (tattoo / build)",
+      key: "appointment_reminder_24h (tattoo)",
       subject: "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow",
       body: [
         `Hi ${NAME},`,
@@ -456,7 +547,7 @@
       ],
     },
     {
-      key: "appointment_reminder_24h (in-person consultation)",
+      key: "appointment_reminder_24h (in-person consultation / build session)",
       subject: "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow",
       body: [
         `Hi ${NAME},`,
@@ -501,6 +592,47 @@
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
     }[char]));
   }
+
+  // Page links can be opened against the local dev server or the deployed
+  // live site. Root-relative hrefs are kept in data-path and rewritten
+  // whenever the base changes. When this file is opened directly from disk
+  // (file://), same-origin links cannot work, so the local base falls back
+  // to the dev server URL. Override with ?base=http://localhost:8788 if the
+  // server runs elsewhere.
+  const LOCAL_BASE = /^https?:$/.test(window.location.protocol)
+    ? window.location.origin
+    : "http://localhost:4173";
+  const LIVE_BASE = "https://thesixwellconstruct.com";
+  const baseParam = (new URLSearchParams(window.location.search).get("base") || "").replace(/\/$/, "");
+  const baseChoiceKey = "swc_preview_base";
+
+  const pageLinks = [...document.querySelectorAll('a[href^="/"]')];
+  pageLinks.forEach((anchor) => { anchor.dataset.path = anchor.getAttribute("href"); });
+
+  function applyBase(choice) {
+    const base = baseParam || (choice === "live" ? LIVE_BASE : LOCAL_BASE);
+    pageLinks.forEach((anchor) => { anchor.setAttribute("href", base + anchor.dataset.path); });
+    document.getElementById("baseNoteUrl").textContent = base;
+    const localBtn = document.getElementById("baseLocalBtn");
+    const liveBtn = document.getElementById("baseLiveBtn");
+    localBtn.style.borderColor = choice === "live" ? "" : "var(--accent)";
+    liveBtn.style.borderColor = choice === "live" ? "var(--accent)" : "";
+  }
+
+  let baseChoice = localStorage.getItem(baseChoiceKey) === "live" ? "live" : "local";
+  applyBase(baseChoice);
+  document.getElementById("baseLocalBtn").addEventListener("click", (event) => {
+    event.preventDefault();
+    baseChoice = "local";
+    localStorage.setItem(baseChoiceKey, baseChoice);
+    applyBase(baseChoice);
+  });
+  document.getElementById("baseLiveBtn").addEventListener("click", (event) => {
+    event.preventDefault();
+    baseChoice = "live";
+    localStorage.setItem(baseChoiceKey, baseChoice);
+    applyBase(baseChoice);
+  });
 
   const list = document.getElementById("emailList");
   list.innerHTML = templates.map((tpl) => `

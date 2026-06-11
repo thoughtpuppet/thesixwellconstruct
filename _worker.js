@@ -30,6 +30,7 @@ import {
   handleAdminListAvailability,
   handleAdminListSubmissionTokens,
   handleAdminListWalkIns,
+  handleAdminReleasePendingAppointment,
   handleAdminRevokeBookingToken,
   handleAdminRevokeSubmissionBookingTokens,
   handleAdminCreateWalkIn,
@@ -37,6 +38,7 @@ import {
   handleAdminUpdateWalkIn,
   handleAdminUpdateSchedule,
   handleAdminUpdateAvailability,
+  handleBookingCalendar,
   handleBookingContext,
   handleCancelAppointment,
   handleConfirmBooking,
@@ -46,7 +48,10 @@ import {
   handlePublicConsultationContext,
   handleSquareWebhook,
 } from "./functions/api/booking/_lib.js";
-import { sendDueAppointmentReminders } from "./functions/api/notifications/_lib.js";
+import {
+  handleAdminResendNotification,
+  sendDueAppointmentReminders,
+} from "./functions/api/notifications/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/events",
@@ -387,6 +392,11 @@ async function handleBookingApi(request, env) {
   const { pathname } = url;
   const { method } = request;
 
+  if (pathname === "/api/booking/calendar") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleBookingCalendar(request, env);
+  }
+
   if (pathname === "/api/booking/context") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleBookingContext(request, env);
@@ -486,7 +496,26 @@ async function handleBookingApi(request, env) {
     return handleAdminCreateAppointmentMeeting(request, env, decodeURIComponent(appointmentMeetingMatch[1]));
   }
 
+  const appointmentReleaseMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/release-pending$/);
+  if (appointmentReleaseMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminReleasePendingAppointment(request, env, decodeURIComponent(appointmentReleaseMatch[1]));
+  }
+
   return notFound("Unknown booking API route.");
+}
+
+async function handleNotificationsApi(request, env) {
+  const url = new URL(request.url);
+  const { pathname } = url;
+  const { method } = request;
+
+  if (pathname === "/api/admin/notifications/resend") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminResendNotification(request, env);
+  }
+
+  return notFound("Unknown notifications API route.");
 }
 
 async function handleSquareApi(request, env) {
@@ -522,6 +551,10 @@ export default {
       url.pathname.startsWith("/api/admin/booking/")
     ) {
       return handleBookingApi(request, env);
+    }
+
+    if (url.pathname.startsWith("/api/admin/notifications/")) {
+      return handleNotificationsApi(request, env);
     }
 
     if (

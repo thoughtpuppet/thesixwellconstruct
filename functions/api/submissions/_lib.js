@@ -468,12 +468,16 @@ export async function handleGetSubmission(request, env, id) {
 
     const notifications = await db
       .prepare(
-        `SELECT id, channel, template_key, recipient, subject, status, error, sent_at, created_at
+        `SELECT id, channel, template_key, recipient, subject, related_type, related_id,
+                status, error, sent_at, created_at
          FROM notification_deliveries
-         WHERE related_type = 'submission' AND related_id = ?
+         WHERE (related_type = 'submission' AND related_id = ?)
+            OR (related_type = 'appointment' AND related_id IN (
+              SELECT id FROM appointments WHERE submission_id = ?
+            ))
          ORDER BY created_at DESC`
       )
-      .bind(id)
+      .bind(id, id)
       .all();
 
     return json({
