@@ -56,6 +56,7 @@
   function initBookingCalendar(options) {
     const {
       filterBookingTypes,
+      apiBookingTypeIds = [],
       walkInEmptyMessage = "No walk-in windows are currently set. Book a consultation or check back soon.",
       onBookingTypeChange,
     } = options;
@@ -118,6 +119,8 @@
     let pickedDate = null;
     let pendingWindow = null;
     let selectedWindow = null;
+    let windowIndex = new Map();
+    let nextWindowByType = new Map();
 
     const freshPrevBtn = prevBtn.cloneNode(true);
     const freshNextBtn = nextBtn.cloneNode(true);
@@ -132,13 +135,32 @@
     const freshAddBtn = timeAddBtn.cloneNode(true);
     timeAddBtn.replaceWith(freshAddBtn);
 
-    function windowsFor(date) {
-      const key = dateKey(date);
-      const selectedTypeId = bookingTypeSelect.value;
-      return windows.filter((item) => {
-        const typeMatches = !item.bookingTypeId || item.bookingTypeId === selectedTypeId;
-        return typeMatches && dateKey(new Date(item.startAt)) === key;
+    function indexKey(typeId, key) {
+      return `${typeId || ""}|${key}`;
+    }
+
+    function rebuildWindowIndex() {
+      const nextIndex = new Map();
+      const nextByType = new Map();
+      const now = Date.now();
+      const sorted = [...windows].sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+      sorted.forEach((item) => {
+        const start = new Date(item.startAt);
+        const key = dateKey(start);
+        const ids = item.bookingTypeId ? [item.bookingTypeId] : bookingTypes.map((type) => type.id);
+        ids.forEach((typeId) => {
+          const bucketKey = indexKey(typeId, key);
+          if (!nextIndex.has(bucketKey)) nextIndex.set(bucketKey, []);
+          nextIndex.get(bucketKey).push(item);
+          if (start.getTime() >= now && !nextByType.has(typeId)) nextByType.set(typeId, item);
+        });
       });
+      windowIndex = nextIndex;
+      nextWindowByType = nextByType;
+    }
+
+    function windowsFor(date) {
+      return windowIndex.get(indexKey(bookingTypeSelect.value, dateKey(date))) || [];
     }
 
     function resetSelectedTime() {
@@ -149,6 +171,7 @@
       preferredSlots.value = "";
       availabilityWindowId.value = "";
       timeRow.style.display = "none";
+      timePanel.style.display = "none";
       renderCalendar();
     }
 
@@ -160,6 +183,7 @@
       selectedWindow = windowItem;
       pendingWindow = null;
       timeRow.style.display = "none";
+      timePanel.style.display = "none";
       const date = new Date(windowItem.startAt);
       selectedEl.innerHTML = `
         <div class="slot-item">
@@ -194,24 +218,17 @@
         button.textContent = formatTime(windowItem);
         button.addEventListener("click", (event) => {
           event.stopPropagation();
-          pendingWindow = windowItem;
-          timeTriggerLabel.textContent = formatTime(windowItem);
-          timeTrigger.classList.add("has-value");
-          freshAddBtn.disabled = false;
-          timePanel.style.display = "none";
+          setSelectedWindow(windowItem);
         });
         timePanel.appendChild(button);
       });
       timeRow.style.display = "";
+      timePanel.style.display = dayWindows.length ? "grid" : "none";
       fullNote.style.display = dayWindows.length ? "none" : "";
     }
 
     function nextAvailableWindow() {
-      const selectedTypeId = bookingTypeSelect.value;
-      const now = Date.now();
-      return windows
-        .filter((item) => (!item.bookingTypeId || item.bookingTypeId === selectedTypeId) && new Date(item.startAt).getTime() >= now)
-        .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())[0] || null;
+      return nextWindowByType.get(bookingTypeSelect.value) || null;
     }
 
     function renderNextAvailable() {
@@ -239,7 +256,6 @@
         const date = new Date(next.startAt);
         calendarDate = new Date(date.getFullYear(), date.getMonth(), 1);
         pickedDate = date;
-        renderTimeOptions(date);
         setSelectedWindow(next);
       });
     }
@@ -307,13 +323,17 @@
           payload = previewContext();
           if (payload.error) throw new Error(payload.error);
         } else {
-          const response = await fetch("/api/booking/public-consultation/context", { cache: "no-store" });
+          const params = apiBookingTypeIds.length
+            ? `?type=${apiBookingTypeIds.map(encodeURIComponent).join("&type=")}`
+            : "";
+          const response = await fetch(`/api/booking/public-consultation/context${params}`, { cache: "no-store" });
           payload = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
         }
         const allTypes = payload.bookingTypes || (payload.bookingType ? [payload.bookingType] : []);
         bookingTypes = allTypes.filter(filterBookingTypes);
         windows = payload.availabilityWindows || [];
+        rebuildWindowIndex();
         const walkInWindows = payload.walkInWindows || [];
         bookingTypeSelect.innerHTML = bookingTypes.map((type) => (
           `<option value="${type.id}">${type.label} - ${type.depositLabel} / ${type.durationMinutes} min</option>`
@@ -339,12 +359,14 @@
       calendarDate.setMonth(calendarDate.getMonth() - 1);
       pickedDate = null;
       timeRow.style.display = "none";
+      timePanel.style.display = "none";
       renderCalendar();
     });
     nextBtn.addEventListener("click", () => {
       calendarDate.setMonth(calendarDate.getMonth() + 1);
       pickedDate = null;
       timeRow.style.display = "none";
+      timePanel.style.display = "none";
       renderCalendar();
     });
     timeTrigger.addEventListener("click", (event) => {
@@ -352,7 +374,7 @@
       timePanel.style.display = timePanel.style.display === "none" ? "block" : "none";
     });
     document.addEventListener("click", () => {
-      timePanel.style.display = "none";
+      if (timeRow.style.display === "none") timePanel.style.display = "none";
     });
     freshAddBtn.addEventListener("click", () => {
       if (pendingWindow) setSelectedWindow(pendingWindow);

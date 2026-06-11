@@ -71,7 +71,8 @@
   input:focus,textarea:focus,select:focus{outline:1px solid var(--signal);border-color:var(--signal);}
   .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
   .check{display:grid;grid-template-columns:18px 1fr;gap:12px;align-items:start;margin:6px 0 28px;}
-  .check input{width:18px;height:18px;accent-color:var(--signal);margin-top:2px;padding:0;}
+  .check input{width:18px;height:18px;margin-top:2px;padding:0;appearance:none;border:3px solid var(--ring-soft);background:transparent;cursor:pointer;transition:background var(--t-fast),border-color var(--t-fast),box-shadow var(--t-fast);}
+  .check input:checked{background:var(--signal);border-color:var(--signal);box-shadow:inset 0 0 0 3px var(--bg);}
   .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
   .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
@@ -177,6 +178,11 @@
               </div>
             </div>
 
+            <div class="field">
+              <label for="direction">Initial direction</label>
+              <textarea id="direction" name="direction" placeholder="What are you working toward? Even a vague sense of meaning, placement, or feeling is useful here."></textarea>
+            </div>
+
             <!-- SLOT PICKER -->
             <div class="slot-picker">
               <span class="slot-picker-label">Available consultation times</span>
@@ -211,11 +217,6 @@
 
               <input type="hidden" name="preferred_slots" id="preferredSlots">
               <input type="hidden" name="availabilityWindowId" id="availabilityWindowId">
-            </div>
-
-            <div class="field">
-              <label for="direction">Initial direction</label>
-              <textarea id="direction" name="direction" placeholder="What are you working toward? Even a vague sense of meaning, placement, or feeling is useful here."></textarea>
             </div>
 
             <label class="check">
@@ -259,6 +260,7 @@
     let cachedWalkInWindows = [];
 
     initBookingCalendar({
+      apiBookingTypeIds: CONSULTATION_TYPE_IDS,
       filterBookingTypes: (type) => CONSULTATION_TYPE_IDS.includes(type.id),
       walkInEmptyMessage: "No walk-in windows are currently set. Book a consultation or check back soon.",
       onBookingTypeChange(bookingType, walkInWindows, renderWalkInWindows) {

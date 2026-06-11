@@ -985,15 +985,17 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
   return { appointment: normalizeAppointment(appointment), bookingType: normalizeBookingType(bookingType) };
 }
 
-async function publicConsultationBookingTypes(db) {
-  const placeholders = PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.map(() => "?").join(", ");
+async function publicConsultationBookingTypes(db, requestedTypeIds = PUBLIC_CONSULTATION_BOOKING_TYPE_IDS) {
+  const ids = requestedTypeIds.filter((id) => PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(id));
+  const allowedIds = ids.length ? ids : PUBLIC_CONSULTATION_BOOKING_TYPE_IDS;
+  const placeholders = allowedIds.map(() => "?").join(", ");
   const result = await db
     .prepare(
       `SELECT * FROM booking_types
        WHERE id IN (${placeholders}) AND active = 1
        ORDER BY sort_order ASC, label ASC`
     )
-    .bind(...PUBLIC_CONSULTATION_BOOKING_TYPE_IDS)
+    .bind(...allowedIds)
     .all();
   return (result.results || []).map(normalizeBookingType);
 }
@@ -1014,7 +1016,8 @@ async function listPublicWalkInWindows(db) {
 export async function handlePublicConsultationContext(request, env) {
   try {
     const db = requireBookingDb(env);
-    const bookingTypes = await publicConsultationBookingTypes(db);
+    const requestedTypes = new URL(request.url).searchParams.getAll("type");
+    const bookingTypes = await publicConsultationBookingTypes(db, requestedTypes);
     if (!bookingTypes.length) {
       return errorResponse("Public consultation booking is not configured.", 503);
     }
