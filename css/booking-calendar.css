@@ -31,7 +31,7 @@
 .cal-day.empty{visibility:hidden;border-color:transparent;pointer-events:none;}
 .cal-day.past{color:rgba(255,231,202,0.32);border-color:var(--ring-faint);cursor:not-allowed;pointer-events:none;}
 .cal-day.open{color:#FFE7CA;border-color:var(--ring-soft);}
-.cal-day.today{color:var(--accent);border-color:var(--ring-soft);}
+.cal-day.today{color:var(--accent);border-color:var(--ring-soft);font-size:9px;letter-spacing:0.04em;text-transform:uppercase;}
 .cal-day:hover:not(.past):not(.empty){border-color:var(--accent);color:var(--accent);background:rgba(252,184,103,0.045);}
 .cal-day.active{border-color:var(--signal);color:var(--text);background:rgba(122,16,16,0.12);}
 .cal-day.booked{border-color:var(--signal);color:var(--text);background:rgba(122,16,16,0.12);cursor:default;}

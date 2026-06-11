@@ -11,6 +11,7 @@
   }
 
   function formatDate(date) {
+    if (dateKey(date) === dateKey(new Date())) return "Today";
     const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, weekday: "short", month: "short", day: "numeric" }).format(date);
     return parts;
   }
@@ -234,9 +235,9 @@
       for (let day = 1; day <= daysInMonth; day += 1) {
         const button = document.createElement("button");
         button.type = "button";
-        button.textContent = day;
         const date = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), day, 12);
         const key = dateKey(date);
+        button.textContent = key === todayKey ? "Today" : day;
         const hasTimes = windowsFor(date).length > 0;
         const isSelected = selectedWindow && dateKey(new Date(selectedWindow.startAt)) === key;
         const isPicked = pickedDate && dateKey(pickedDate) === key;
