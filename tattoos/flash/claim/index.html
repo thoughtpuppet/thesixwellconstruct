@@ -24,7 +24,7 @@
   button,input,textarea,select { font:inherit; }
   .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
-  .breadcrumb { display:flex; align-items:center; gap:10px; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
+  .breadcrumb { display:flex; align-items:center; gap:10px; margin-bottom:var(--s6); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
   .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
   .breadcrumb-link:hover { color:var(--accent); }
   .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
@@ -97,14 +97,13 @@
   })();
   </script>
   <div class="grain"></div>
-  <header class="top">
+  <header class="top"></header>
+  <main>
     <nav class="breadcrumb" aria-label="breadcrumb">
       <a class="breadcrumb-link" href="/tattoos/flash/">Flash</a>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">Claim</span>
     </nav>
-  </header>
-  <main>
     <div class="layout">
       <section>
         <p class="page-label">Art.Pill Tattoo House</p>

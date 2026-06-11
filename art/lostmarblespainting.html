@@ -126,7 +126,7 @@ statement:    "placeholder — replace with real statement text"
      HEADER — same as art/index.html
   ============================================================ */
   header.top {
-    position:fixed; top:0; left:0; right:0; z-index:50;
+    position:sticky; top:0; z-index:50;
     display:flex; align-items:center; justify-content:flex-end;
     padding:var(--s5) var(--s6);
   }
@@ -166,16 +166,14 @@ statement:    "placeholder — replace with real statement text"
   }
 
   /* ============================================================
-     BREADCRUMB — fixed below header
+     BREADCRUMB
   ============================================================ */
   .breadcrumb {
-    position:fixed; top:73px; left:0; right:0; z-index:40;
+    position:relative; z-index:2;
     display:flex; align-items:center; gap:var(--s3);
-    padding:var(--s3) var(--s6);
-    background:rgba(14,14,14,0.75);
-    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.22em; text-transform:uppercase;
+    padding:0 var(--s6) var(--s4);
+    font-family:var(--serif); font-size:11px;
+    letter-spacing:0.18em; text-transform:uppercase;
   }
   .breadcrumb a { color:var(--text-dim); transition:color var(--t-fast); }
   .breadcrumb a:hover { color:var(--text-mute); }
@@ -184,20 +182,19 @@ statement:    "placeholder — replace with real statement text"
   .breadcrumb-current { color:var(--accent-hot); opacity:0.8; }
 
   /* ============================================================
-     SPLIT LAYOUT — clears header + breadcrumb (≈116px)
+     SPLIT LAYOUT
   ============================================================ */
   .split {
     display:grid;
     grid-template-columns:1fr 1fr;
-    min-height:100vh;
-    padding-top:116px;
+    min-height:calc(100vh - 116px);
   }
 
   /* ── LEFT: sticky painting ─────────────────────────────── */
   .split-image {
     position:sticky;
-    top:116px;
-    height:calc(100vh - 116px);
+    top:73px;
+    height:calc(100vh - 73px);
     display:flex;
     align-items:center;
     justify-content:center;
@@ -526,7 +523,6 @@ statement:    "placeholder — replace with real statement text"
   @media (max-width:900px) {
     .split {
       grid-template-columns:1fr;
-      padding-top:108px;
     }
 
     /* image unsticks on mobile — becomes a tall block at top */
@@ -549,7 +545,7 @@ statement:    "placeholder — replace with real statement text"
     footer.bottom { grid-column:1; }
 
     header.top  { padding:var(--s4) var(--s5); }
-    .breadcrumb { padding:var(--s3) var(--s5); }
+    .breadcrumb { padding:0 var(--s5) var(--s3); font-size:10px; overflow:hidden; }
   }
 @media (max-width: 700px) {
   header.top {

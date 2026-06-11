@@ -71,7 +71,9 @@
   }
   .header-right { display:flex; align-items:center; gap:var(--s6); }
   .breadcrumb {
+    position:relative; z-index:2;
     display:flex; align-items:center; gap:var(--s3);
+    padding:0 var(--s6) var(--s4);
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
   }
@@ -583,7 +585,7 @@
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     .header-right { gap:var(--s4); }
-    .breadcrumb { display:none; }
+    .breadcrumb { padding:0 var(--s4) var(--s3); font-size:10px; overflow:hidden; }
     .product-image { padding:var(--s5) var(--s4) var(--s3); }
     .gallery-thumb {
       width:78px;
@@ -620,19 +622,20 @@
   <header class="top">
     <div></div>
     <div class="header-right">
-      <nav class="breadcrumb" aria-label="breadcrumb">
-        <a href="/merch/">merch</a>
-        <span class="breadcrumb-sep">/</span>
-        <a href="/merch/?filter=thoughtpuppet">thoughtpuppet</a>
-        <span class="breadcrumb-sep">/</span>
-        <span class="breadcrumb-current">hoodie</span>
-      </nav>
       <button class="cart-toggle" id="cartToggle" type="button" aria-label="open cart">
         <span class="cart-label">cart</span>
         <span class="cart-count" id="cartCount">0</span>
       </button>
     </div>
   </header>
+
+  <nav class="breadcrumb" aria-label="breadcrumb">
+    <a href="/merch/">merch</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="/merch/?filter=thoughtpuppet">thoughtpuppet</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">hoodie</span>
+  </nav>
 
   <main>
     <section class="product-hero">

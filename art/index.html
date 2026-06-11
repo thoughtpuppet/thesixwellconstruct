@@ -1149,7 +1149,7 @@ statement:    —
     card.addEventListener('click', () => {
       const slug = card.dataset.slug;
       if (slug) {
-        window.location.href = '/art/' + slug;
+        window.location.href = '/art/' + slug + '.html';
       } else {
         openOverlay(card);
       }

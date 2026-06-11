@@ -96,6 +96,7 @@ function assetRequest(request, pathname) {
 function assetPathForRequest(pathname) {
   if (pathname === "/") return "/index.html";
   if (pathname.endsWith("/")) return `${pathname}index.html`;
+  if (pathname.startsWith("/art/") && !hasFileExtension(pathname)) return `${pathname}.html`;
   if (!hasFileExtension(pathname)) return `${pathname}/index.html`;
   return pathname;
 }

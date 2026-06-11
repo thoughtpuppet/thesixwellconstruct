@@ -120,7 +120,9 @@
 
   /* breadcrumb — "merch." in amber, links back */
   .breadcrumb {
+    position:relative; z-index:2;
     display:flex; align-items:center; gap:var(--s3);
+    padding:0 var(--s6) var(--s4);
     font-family:var(--serif); font-size:11px;
     letter-spacing:0.18em; text-transform:uppercase;
   }
@@ -172,7 +174,7 @@
     100% { transform:scale(1);   }
   }
 
-  /* header right cluster — breadcrumb + cart */
+  /* header right cluster — cart */
   .header-right { display:flex; align-items:center; gap:var(--s6); }
 
   /* ============================================================
@@ -553,7 +555,7 @@
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     .header-right { gap:var(--s4); }
-    .breadcrumb { display:none; } /* too cramped on mobile */
+    .breadcrumb { padding:0 var(--s4) var(--s3); font-size:10px; overflow:hidden; }
     .painting-col { height:80vw; }
     .product-col { padding:var(--s5) var(--s4) var(--s6); }
     footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s4); }
@@ -579,17 +581,18 @@
   ============================================================ -->
   <header class="top" style="justify-content:flex-end;">
     <div class="header-right">
-      <nav class="breadcrumb" aria-label="breadcrumb">
-        <a class="breadcrumb-link" href="/merch">merch</a>
-        <span class="breadcrumb-sep">/</span>
-        <span class="breadcrumb-current">painting</span>
-      </nav>
       <button class="cart-toggle" id="cartToggle" type="button" aria-label="open cart">
         <span class="cart-label">cart</span>
         <span class="cart-count" id="cartCount">0</span>
       </button>
     </div>
   </header>
+
+  <nav class="breadcrumb" aria-label="breadcrumb">
+    <a class="breadcrumb-link" href="/merch">merch</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">painting</span>
+  </nav>
 
   <!-- ============================================================
        MAIN — two-column

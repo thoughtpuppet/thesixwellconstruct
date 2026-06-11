@@ -49,6 +49,12 @@ const checkRoutes = [
   ["/tattoos/location-parking/", 200],
   ["/merch/", 200],
   ["/art/", 200],
+  ["/art/lostmarblespainting", 200],
+  ["/art/lustpainting", 200],
+  ["/art/slothpainting", 200],
+  ["/art/homelandsecuritypainting", 200],
+  ["/art/thefrustrationsofinnercharospainting", 200],
+  ["/art/paranoiafosteredtraumapainting", 200],
   ["/js/live-text-editor.js", 200],
 ];
 
@@ -227,7 +233,12 @@ async function resolveFile(urlPath) {
     const info = await stat(file);
     if (info.isDirectory()) file = path.join(file, "index.html");
   } catch {
-    if (!path.extname(file)) file = path.join(file, "index.html");
+    const decoded = requestPathname(urlPath);
+    if (!path.extname(file) && decoded.startsWith("/art/")) {
+      file = `${file}.html`;
+    } else if (!path.extname(file)) {
+      file = path.join(file, "index.html");
+    }
   }
 
   try {
