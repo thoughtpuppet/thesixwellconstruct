@@ -1344,6 +1344,30 @@ function squareConfigured(env) {
   return Boolean(env.SQUARE_ACCESS_TOKEN && env.SQUARE_LOCATION_ID);
 }
 
+function readinessItem(id, label, ready, message, details = {}) {
+  return {
+    id,
+    label,
+    ready: Boolean(ready),
+    status: ready ? "ready" : "needs_attention",
+    message,
+    details,
+  };
+}
+
+function requiredPositiveSetting(settings, key) {
+  return Number(settings?.[key] || 0) > 0;
+}
+
+async function tableReady(db, tableName) {
+  try {
+    await db.prepare(`SELECT 1 FROM ${tableName} LIMIT 1`).first();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function squareWebhookNotificationUrl(request, env) {
   return asString(env.SQUARE_WEBHOOK_NOTIFICATION_URL) || `${baseUrlFromRequest(request)}/api/square/webhook`;
 }
@@ -2123,6 +2147,128 @@ export async function handleAdminGetSchedule(request, env) {
     });
   } catch (error) {
     return errorResponse("Unable to load schedule.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminGetBookingReadiness(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const settingsRow = await db
+      .prepare("SELECT * FROM booking_settings WHERE venture = ?")
+      .bind("tattooing")
+      .first();
+    const settings = settingsRow ? normalizeSettings(settingsRow) : null;
+    const rules = await db
+      .prepare(
+        `SELECT category, active FROM availability_rules
+         WHERE venture = ?`
+      )
+      .bind("tattooing")
+      .all();
+    const bookingTypes = await db
+      .prepare(
+        `SELECT id, active, deposit_cents
+         FROM booking_types
+         WHERE venture = ?`
+      )
+      .bind("tattooing")
+      .all();
+
+    const activeRules = rules.results || [];
+    const activeBookingTypes = bookingTypes.results || [];
+    const activePublicBookingTypes = activeBookingTypes.filter(
+      (type) => PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(type.id) && type.active
+    );
+    const hasConsultationRule = activeRules.some(
+      (rule) => (rule.category || "tattooing") === "consultation" && rule.active
+    );
+    const appointmentMeetingsReady = await tableReady(db, "appointment_meetings");
+    const squareWebhookUrl = squareWebhookNotificationUrl(request, env);
+    const requiredSettingsReady = Boolean(
+      settings &&
+      asString(settings.timezone) &&
+      requiredPositiveSetting(settings, "bookingHorizonDays") &&
+      requiredPositiveSetting(settings, "slotIntervalMinutes") &&
+      requiredPositiveSetting(settings, "maxBookingsPerDay") &&
+      requiredPositiveSetting(settings, "defaultCapacity") &&
+      activePublicBookingTypes.length > 0 &&
+      hasConsultationRule
+    );
+
+    const checks = [
+      readinessItem(
+        "square_checkout",
+        "Square checkout",
+        squareConfigured(env),
+        squareConfigured(env)
+          ? `Checkout can create ${env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox"} Square payment links.`
+          : "Missing SQUARE_ACCESS_TOKEN or SQUARE_LOCATION_ID.",
+        {
+          environment: env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
+          hasAccessToken: Boolean(asString(env.SQUARE_ACCESS_TOKEN)),
+          hasLocationId: Boolean(asString(env.SQUARE_LOCATION_ID)),
+        }
+      ),
+      readinessItem(
+        "square_webhook_signing",
+        "Square webhook signing",
+        Boolean(asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY)),
+        asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY)
+          ? "Webhook signature verification is configured."
+          : "Missing SQUARE_WEBHOOK_SIGNATURE_KEY, so paid appointments cannot be trusted from Square webhooks.",
+        {
+          hasSignatureKey: Boolean(asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY)),
+          notificationUrl: squareWebhookUrl,
+        }
+      ),
+      readinessItem(
+        "zoom_credentials",
+        "Zoom credentials",
+        zoomConfigured(env) && appointmentMeetingsReady,
+        zoomConfigured(env)
+          ? appointmentMeetingsReady
+            ? "Zoom Server-to-Server OAuth credentials and meeting storage are present."
+            : "Zoom credentials are present, but the appointment_meetings migration is not available."
+          : "Missing one or more Zoom Server-to-Server OAuth settings.",
+        {
+          hasAccountId: Boolean(asString(env.ZOOM_ACCOUNT_ID)),
+          hasClientId: Boolean(asString(env.ZOOM_CLIENT_ID)),
+          hasClientSecret: Boolean(asString(env.ZOOM_CLIENT_SECRET)),
+          hasHostUserId: Boolean(asString(env.ZOOM_HOST_USER_ID)),
+          appointmentMeetingsTable: appointmentMeetingsReady,
+        }
+      ),
+      readinessItem(
+        "booking_settings",
+        "Booking settings",
+        requiredSettingsReady,
+        requiredSettingsReady
+          ? "Booking settings, public consultation types, and consultation schedule are ready."
+          : "Booking settings need a horizon, interval, daily limit, capacity, public consultation type, and active consultation hours.",
+        {
+          settings,
+          publicConsultationTypes: activePublicBookingTypes.map((type) => ({
+            id: type.id,
+            depositCents: type.deposit_cents,
+          })),
+          activeConsultationRuleCount: activeRules.filter((rule) => (rule.category || "tattooing") === "consultation" && rule.active).length,
+        }
+      ),
+    ];
+
+    return json({
+      ok: true,
+      ready: checks.every((check) => check.ready),
+      checkedAt: new Date().toISOString(),
+      checks,
+    });
+  } catch (error) {
+    return errorResponse("Unable to load booking readiness.", 500, {
       detail: error.message,
     });
   }

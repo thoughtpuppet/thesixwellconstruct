@@ -32,6 +32,17 @@
   .page-label { font-family:var(--serif); font-size:15px; letter-spacing:0.32em; text-transform:uppercase; color:var(--accent); opacity:0.7; margin-bottom:-8px; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(38px,7vw,96px); letter-spacing:-0.06em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:34px; white-space:nowrap; }
   .intro-body { font-size:17px; line-height:1.8; color:var(--text); max-width:660px; }
+  .consult-band { display:grid; grid-template-columns:minmax(190px,0.3fr) minmax(0,1fr); gap:44px; align-items:start; padding:34px; margin:-22px 0 56px; background:#171717; }
+  .consult-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
+  .consult-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; }
+  .consult-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
+  .consult-option { display:grid; grid-template-rows:auto 1fr auto; gap:18px; min-height:210px; padding:22px; border-right:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
+  .consult-option:last-child { border-right:none; }
+  .consult-option:hover,.consult-option:focus-visible { background:rgba(109,61,21,0.16); outline:none; }
+  .consult-option-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
+  .consult-option-title { font-family:var(--sans); font-weight:900; font-size:clamp(22px,3vw,36px); letter-spacing:-0.04em; line-height:0.94; color:var(--text); text-transform:uppercase; margin-bottom:12px; }
+  .consult-option-body { font-size:14px; line-height:1.7; color:var(--text-mute); }
+  .consult-option-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
   .fit-guide { display:grid; grid-template-columns:minmax(190px,0.32fr) minmax(0,1fr); gap:40px; align-items:start; margin-bottom:56px; padding:34px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
   .fit-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
   .fit-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; }
@@ -62,6 +73,10 @@
     main { padding:var(--s6) var(--s5); }
     .intro { margin-bottom:42px; }
     .page-title { font-size:clamp(30px,10vw,58px); }
+    .consult-band { grid-template-columns:1fr; gap:24px; margin:-16px 0 42px; padding:24px; }
+    .consult-options { grid-template-columns:1fr; }
+    .consult-option,.consult-option:last-child { border-right:none; border-bottom:5px solid var(--ring-faint); }
+    .consult-option:last-child { border-bottom:none; }
     .fit-guide { grid-template-columns:1fr; gap:24px; margin-bottom:42px; padding:26px 0; }
     .fit-row { grid-template-columns:1fr; }
     .fit-row > * + * { border-left:none; border-top:1px solid var(--ring-faint); }
@@ -88,9 +103,9 @@
   <div class="grain"></div>
   <header class="top">
     <nav class="breadcrumb" aria-label="breadcrumb">
-      <a class="breadcrumb-link" href="/tattoos/" data-copy-id="inquire-breadcrumb-link">Art.Pill tattoo house</a>
+      <a class="breadcrumb-link" href="/tattoos/" data-copy-id="inquire-breadcrumb-link"><span style="color: rgb(252, 184, 103)">Art.Pill tattoo house</span></a>
       <span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current" data-copy-id="inquire-breadcrumb-current">Inquire</span>
+      <span class="breadcrumb-current" data-copy-id="inquire-breadcrumb-current"><span style="color: rgb(122, 16, 16)"><strong>Inquire</strong></span></span>
     </nav>
   </header>
   <main>
@@ -98,6 +113,30 @@
       <p class="page-label" data-copy-id="inquire-chooser-label">Art.Pill Tattoo House</p>
       <h1 class="page-title" data-copy-id="inquire-chooser-title">Choose<br>Your Pathway.</h1>
       <p class="intro-body" data-copy-id="inquire-chooser-intro">Each form carries a different kind of request into review. Choose the path closest to what you want, then submit the details there.</p>
+    </section>
+    <section class="consult-band" aria-labelledby="consult-options-title">
+      <div>
+        <p class="consult-kicker" data-copy-id="inquire-consult-kicker">Want to discuss options with the artist ?&nbsp;</p>
+        <h2 class="consult-title" id="consult-options-title" data-copy-id="inquire-consult-title">Consultation Options</h2>
+      </div>
+      <div class="consult-options">
+        <a class="consult-option" href="/tattoos/inquire/consultation/?type=consult_in_person">
+          <p class="consult-option-kicker" data-copy-id="inquire-consult-in-person-kicker">at the studio</p>
+          <div>
+            <h3 class="consult-option-title" data-copy-id="inquire-consult-in-person-title">In-Person<br>Consultation</h3>
+            <p class="consult-option-body" data-copy-id="inquire-consult-in-person-body">Book focused planning time for placement, cover-up review, project direction, or questions that need to happen face to face.</p>
+          </div>
+          <span class="consult-option-action">Book in person &rarr;</span>
+        </a>
+        <a class="consult-option" href="/tattoos/inquire/consultation/?type=consult_virtual">
+          <p class="consult-option-kicker" data-copy-id="inquire-consult-virtual-kicker">by video call</p>
+          <div>
+            <h3 class="consult-option-title" data-copy-id="inquire-consult-virtual-title">Virtual<br>Consultation</h3>
+            <p class="consult-option-body" data-copy-id="inquire-consult-virtual-body">Meet over video when you need planning support before an inquiry, but cannot make it to the studio first.</p>
+          </div>
+          <span class="consult-option-action">Book virtual &rarr;</span>
+        </a>
+      </div>
     </section>
     <section class="fit-guide" aria-labelledby="fit-guide-title">
       <div>

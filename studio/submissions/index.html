@@ -239,6 +239,17 @@
   .availability-manager .mini-calendar,
   .availability-manager .slot-preview,
   .availability-manager .availability-item { border:5px solid var(--ring-faint); background:transparent; }
+  .booking-readiness-summary { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; border:5px solid var(--ring-faint); padding:12px; }
+  .booking-readiness-state { font-family:var(--sans); font-size:11px; font-weight:900; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
+  .booking-readiness-state.needs_attention { color:#EC5E26; }
+  .booking-readiness-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .booking-readiness-card { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:8px; min-width:0; }
+  .booking-readiness-card.ready { border-color:rgba(85,186,90,0.45); }
+  .booking-readiness-card.needs_attention { border-color:rgba(236,94,38,0.72); }
+  .booking-readiness-card .pill { width:max-content; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+  .booking-readiness-card.ready .pill { color:#55BA5A; border-color:rgba(85,186,90,0.5); }
+  .booking-readiness-card.needs_attention .pill { color:#EC5E26; border-color:rgba(236,94,38,0.72); }
+  .booking-readiness-detail { color:var(--dim); font-family:var(--sans); font-size:10px; line-height:1.6; overflow-wrap:anywhere; }
   .availability-manager .day-button { border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .availability-manager .day-button.booked-bright { background:#BE1919; border-color:#BE1919; color:#1a0000; }
   .availability-manager .day-button.booked-medium { background:#7A1010; border-color:#7A1010; color:#FFE7CA; }
@@ -281,6 +292,7 @@
     .grid,.actions,.availability-overview { grid-template-columns:1fr; }
     .availability-manager .schedule-grid,
     .availability-manager .availability-form,
+    .booking-readiness-grid,
     .availability-manager .availability-edit-form,
     .availability-manager .day-row { grid-template-columns:1fr; }
     .availability-manager .wide-field { grid-column:auto; }
@@ -1356,6 +1368,77 @@ ${meetingLines}
     }).join("");
   }
 
+  function readinessDetailLines(check) {
+    const details = check.details || {};
+    if (check.id === "square_checkout") {
+      return [
+        `Environment: ${details.environment || "sandbox"}`,
+        `Access token: ${details.hasAccessToken ? "present" : "missing"}`,
+        `Location ID: ${details.hasLocationId ? "present" : "missing"}`,
+      ];
+    }
+    if (check.id === "square_webhook_signing") {
+      return [
+        `Signature key: ${details.hasSignatureKey ? "present" : "missing"}`,
+        `Webhook URL: ${details.notificationUrl || "not resolved"}`,
+      ];
+    }
+    if (check.id === "zoom_credentials") {
+      return [
+        `Account ID: ${details.hasAccountId ? "present" : "missing"}`,
+        `Client ID: ${details.hasClientId ? "present" : "missing"}`,
+        `Client secret: ${details.hasClientSecret ? "present" : "missing"}`,
+        `Host user: ${details.hasHostUserId ? "present" : "missing"}`,
+        `Meeting table: ${details.appointmentMeetingsTable ? "ready" : "missing migration"}`,
+      ];
+    }
+    if (check.id === "booking_settings") {
+      const settings = details.settings || {};
+      const types = (details.publicConsultationTypes || []).map((type) => type.id).join(", ") || "none active";
+      return [
+        `Timezone: ${settings.timezone || "missing"}`,
+        `Horizon: ${settings.bookingHorizonDays || 0} days`,
+        `Notice: ${settings.minimumNoticeHours || 0} hours`,
+        `Interval: ${settings.slotIntervalMinutes || 0} minutes`,
+        `Daily limit: ${settings.maxBookingsPerDay || 0}`,
+        `Default capacity: ${settings.defaultCapacity || 0}`,
+        `Public types: ${types}`,
+        `Consultation rules: ${details.activeConsultationRuleCount || 0} active`,
+      ];
+    }
+    return [];
+  }
+
+  function renderBookingReadiness(payload) {
+    const panel = document.getElementById("bookingReadinessPanel");
+    if (!panel) return;
+    const checks = payload.checks || [];
+    const state = payload.ready ? "READY" : "NEEDS ATTENTION";
+    panel.innerHTML = `
+      <div class="booking-readiness-summary">
+        <span class="booking-readiness-state ${payload.ready ? "ready" : "needs_attention"}">${state}</span>
+        <span class="meta">Checked ${escapeHtml(formatDate(payload.checkedAt))}</span>
+        <button class="button" type="button" data-refresh-readiness>Refresh Readiness</button>
+      </div>
+      <div class="booking-readiness-grid">
+        ${checks.map((check) => `
+          <div class="booking-readiness-card ${escapeHtml(check.status)}">
+            <span class="pill">${escapeHtml(check.ready ? "ready" : "needs attention")} / ${escapeHtml(check.label)}</span>
+            <div class="contact">${escapeHtml(check.message)}</div>
+            <div class="booking-readiness-detail">${readinessDetailLines(check).map(escapeHtml).join("<br>")}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  async function loadBookingReadiness() {
+    const panel = document.getElementById("bookingReadinessPanel");
+    if (!panel) return;
+    const payload = await api("/api/admin/booking/readiness");
+    renderBookingReadiness(payload);
+  }
+
   async function loadAvailabilityPreview() {
     const calendar = document.getElementById("bookedCalendar");
     if (!calendar) return;
@@ -1391,6 +1474,14 @@ ${meetingLines}
           <h2>Availability Windows</h2>
           <p class="contact">Set recurring weekly hours once. Use exceptions only for extra days, closed days, or unusual blocks.</p>
         </div>
+      <section class="schedule-section is-open" data-collapse-section>
+        <button class="section-toggle" type="button">Booking Readiness</button>
+        <div class="section-body">
+          <div id="bookingReadinessPanel">
+            <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading booking readiness.</p>
+          </div>
+        </div>
+      </section>
       <form id="scheduleForm">
         <section class="schedule-section" data-collapse-section>
           <button class="section-toggle" type="button">Booking Rules</button>
@@ -1559,6 +1650,7 @@ ${meetingLines}
       </div>
     `;
     enhanceControls(detailEl);
+    await loadBookingReadiness();
     await loadSchedule();
     await loadWalkIns();
     await loadAvailabilityPreview();
@@ -1804,6 +1896,14 @@ ${meetingLines}
     const sectionToggle = event.target.closest(".section-toggle");
     if (sectionToggle) {
       sectionToggle.closest("[data-collapse-section]")?.classList.toggle("is-open");
+      return;
+    }
+
+    const readinessRefresh = event.target.closest("[data-refresh-readiness]");
+    if (readinessRefresh) {
+      setStatus("Checking booking readiness");
+      await loadBookingReadiness();
+      setStatus("Booking readiness checked");
       return;
     }
 

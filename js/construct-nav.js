@@ -35,7 +35,7 @@
     { key: 'tattooing', label: 'TATTOOING',  color: '#7A1010', url: '/tattoos/'   },
     { key: 'art',       label: 'ART MAKING', color: '#0581C1', url: '/art/'       },
     { key: 'merch',     label: 'MERCH',      color: '#F7A226', url: '/merch/'     },
-    { key: 'about',     label: 'ABOUT',      color: '#FCB867', url: '/construct-map/' },
+    { key: 'about',     label: 'ABOUT',      color: '#FCB867', url: '/about/' },
     { key: 'events',    label: 'EVENTS',     color: '#55BA5A', url: '/events/'    },
     { key: 'music',     label: 'MUSIC',      color: '#A856A1', url: '/music/'     },
     { key: 'writings',  label: 'WRITINGS',   color: '#328C84', url: '/writings/'  },
@@ -342,5 +342,11 @@
     show: function() { nav.style.opacity = '1'; },
     hide: function() { nav.style.opacity = '0'; },
   };
+
+  if (!window.__constructWayfindingLoaded && !document.querySelector('script[src="/js/construct-wayfinding.js"]')) {
+    var wayfindingScript = document.createElement('script');
+    wayfindingScript.src = '/js/construct-wayfinding.js';
+    document.body.appendChild(wayfindingScript);
+  }
 
 })();

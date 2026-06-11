@@ -24,6 +24,7 @@ import {
   handleAdminCreateAppointmentMeeting,
   handleAdminCreateBookingToken,
   handleAdminDeleteAvailability,
+  handleAdminGetBookingReadiness,
   handleAdminGetAvailabilityPreview,
   handleAdminGetSchedule,
   handleAdminListAppointments,
@@ -457,6 +458,11 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/admin/booking/availability-preview") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleAdminGetAvailabilityPreview(request, env);
+  }
+
+  if (pathname === "/api/admin/booking/readiness") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAdminGetBookingReadiness(request, env);
   }
 
   if (pathname === "/api/admin/booking/walk-ins") {

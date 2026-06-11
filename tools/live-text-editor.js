@@ -1302,6 +1302,15 @@
     if (importButton) importButton.remove();
   }
 
+  // data-live-edit-id is a runtime-only marker (set on parsed source documents by
+  // collectDocEditableElements). Strip it before serializing outerHTML so it never
+  // gets written into source files.
+  function stripLiveEditIds(element) {
+    element.removeAttribute('data-live-edit-id');
+    var nested = element.querySelectorAll('[data-live-edit-id]');
+    for (var i = 0; i < nested.length; i += 1) nested[i].removeAttribute('data-live-edit-id');
+  }
+
   function applyRecordToElement(element, record) {
     var newHtml = sanitizeHtml(record.html || '');
     if (newHtml && newHtml !== element.innerHTML) {
@@ -1337,6 +1346,14 @@
     return collected;
   }
 
+  // Generated ids have the shape "path:signature:index". Parsing from the right
+  // keeps any ':' inside the path intact.
+  function parseGeneratedId(id) {
+    var match = String(id).match(/^(.*):([a-z0-9-]+):(\d+)$/);
+    if (!match) return null;
+    return { path: match[1], signature: match[2], index: Number(match[3]) };
+  }
+
   function findSourceElement(doc, id) {
     var candidates = Array.prototype.slice.call(doc.querySelectorAll('[data-copy-id]'));
     for (var i = 0; i < candidates.length; i += 1) {
@@ -1346,6 +1363,36 @@
     for (var j = 0; j < generated.length; j += 1) {
       if (generated[j].id === id) return generated[j].element;
     }
+
+    // Fuzzy matching for generated ids. The index component counts elements
+    // across the whole live page, so JS-injected content (walk-in cards, flash
+    // grids) shifts it relative to the static source file; the signature
+    // component changes when the text itself was edited. Match on the stable
+    // parts instead of requiring all three to line up.
+    var wanted = parseGeneratedId(id);
+    if (!wanted) return null;
+    var parsed = generated.map(function(entry) {
+      return { entry: entry, id: parseGeneratedId(entry.id) };
+    }).filter(function(item) { return item.id; });
+
+    var samePathSig = parsed.filter(function(item) {
+      return item.id.path === wanted.path && item.id.signature === wanted.signature;
+    });
+    if (samePathSig.length) {
+      samePathSig.sort(function(a, b) {
+        return Math.abs(a.id.index - wanted.index) - Math.abs(b.id.index - wanted.index);
+      });
+      return samePathSig[0].entry.element;
+    }
+
+    var samePathIndex = parsed.filter(function(item) {
+      return item.id.path === wanted.path && item.id.index === wanted.index;
+    });
+    if (samePathIndex.length === 1) return samePathIndex[0].entry.element;
+
+    var samePath = parsed.filter(function(item) { return item.id.path === wanted.path; });
+    if (samePath.length === 1) return samePath[0].entry.element;
+
     return null;
   }
 
@@ -1381,70 +1428,110 @@
   // `replacement`. Returns the updated source string, or null if the element cannot
   // be located. This avoids the DOMParser-to-outerHTML roundtrip that causes
   // serialization mismatches (e.g. trailing semicolons on inline style values).
-  function replaceSourceElement(source, element, replacement) {
+  // Given the position of an element's '<' in the raw source, return the index of
+  // the final '>' that closes the element (its full outer span), or -1 if the span
+  // cannot be determined.
+  function elementSpanEnd(source, tagStart, tagName) {
+    var openEnd = source.indexOf('>', tagStart);
+    if (openEnd === -1) return -1;
+
+    // Void elements and explicit self-closing tags have no children or closing tag.
+    var VOID = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
+    if (VOID[tagName] || source[openEnd - 1] === '/') return openEnd;
+
+    // Walk forward to find the matching closing tag, tracking nesting depth.
+    var pos = openEnd + 1;
+    var depth = 1;
+    var openPat = '<' + tagName;
+    var closePat = '</' + tagName;
+
+    while (depth > 0 && pos < source.length) {
+      var nc = source.indexOf(closePat, pos);
+      if (nc === -1) return -1; // malformed HTML
+
+      var no = source.indexOf(openPat, pos);
+      if (no !== -1 && no < nc) {
+        var c = source[no + openPat.length];
+        // Confirm this is an actual opening tag, not a prefix match (e.g. <paragraph vs <p).
+        if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '>' || c === '/') {
+          depth += 1;
+          pos = no + 1;
+          continue;
+        }
+      }
+
+      var ce = source.indexOf('>', nc);
+      if (ce === -1) return -1;
+      depth -= 1;
+      if (depth === 0) return ce;
+      pos = ce + 1;
+    }
+
+    return -1;
+  }
+
+  function normalizeMatchText(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function replaceSourceElement(source, element, replacement, originalText) {
     var copyId = element.getAttribute('data-copy-id') || '';
     var tagName = element.tagName.toLowerCase();
 
-    var searches = [];
     if (copyId) {
-      searches.push('data-copy-id="' + copyId + '"');
-      searches.push("data-copy-id='" + copyId + "'");
+      var searches = ['data-copy-id="' + copyId + '"', "data-copy-id='" + copyId + "'"];
+      for (var si = 0; si < searches.length; si += 1) {
+        var attrPos = source.indexOf(searches[si]);
+        if (attrPos === -1) continue;
+
+        // Walk backward from the attribute to find the '<' that opens this tag.
+        var tagStart = source.lastIndexOf('<', attrPos);
+        if (tagStart === -1) continue;
+
+        // Confirm the tag name at this position matches (case-insensitive).
+        var nameSlice = source.slice(tagStart + 1, tagStart + 1 + tagName.length);
+        if (nameSlice.toLowerCase() !== tagName) continue;
+        var boundaryChar = source[tagStart + 1 + tagName.length];
+        if (!boundaryChar || !/[\s>\/]/.test(boundaryChar)) continue;
+
+        var spanEnd = elementSpanEnd(source, tagStart, tagName);
+        if (spanEnd === -1) continue;
+        return source.slice(0, tagStart) + replacement + source.slice(spanEnd + 1);
+      }
     }
-    if (!searches.length) return null;
 
-    for (var si = 0; si < searches.length; si += 1) {
-      var attrPos = source.indexOf(searches[si]);
-      if (attrPos === -1) continue;
+    // Fallback for elements without a data-copy-id: scan the raw source for tags of
+    // the same name (and class, when the element has one) and compare decoded text
+    // content. Parsing each candidate span through DOMParser makes the comparison
+    // immune to entity differences (&mdash; vs the literal character) and attribute
+    // serialization drift that defeat plain outerHTML string matching.
+    var wanted = normalizeMatchText(originalText);
+    if (!wanted) return null;
+    var firstClass = (typeof element.className === 'string' && element.className.trim().split(/\s+/)[0]) || '';
+    var openPattern = '<' + tagName;
+    var parser = new DOMParser();
+    var from = 0;
 
-      // Walk backward from the attribute to find the '<' that opens this tag.
-      var tagStart = source.lastIndexOf('<', attrPos);
-      if (tagStart === -1) continue;
+    while (true) {
+      var start = source.indexOf(openPattern, from);
+      if (start === -1) break;
+      from = start + 1;
 
-      // Confirm the tag name at this position matches (case-insensitive).
-      var nameSlice = source.slice(tagStart + 1, tagStart + 1 + tagName.length);
-      if (nameSlice.toLowerCase() !== tagName) continue;
-      var boundaryChar = source[tagStart + 1 + tagName.length];
-      if (!boundaryChar || !/[\s>\/]/.test(boundaryChar)) continue;
+      var boundary = source[start + openPattern.length];
+      if (!boundary || !/[\s>\/]/.test(boundary)) continue;
 
-      // Find the end '>' of the opening tag.
-      var openEnd = source.indexOf('>', tagStart);
-      if (openEnd === -1) continue;
+      var openClose = source.indexOf('>', start);
+      if (openClose === -1) break;
+      if (firstClass && source.slice(start, openClose + 1).indexOf(firstClass) === -1) continue;
 
-      // Void elements and explicit self-closing tags have no children or closing tag.
-      var VOID = { area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1, link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1 };
-      if (VOID[tagName] || source[openEnd - 1] === '/') {
-        return source.slice(0, tagStart) + replacement + source.slice(openEnd + 1);
-      }
+      var end = elementSpanEnd(source, start, tagName);
+      if (end === -1) continue;
 
-      // Walk forward to find the matching closing tag, tracking nesting depth.
-      var pos = openEnd + 1;
-      var depth = 1;
-      var openPat = '<' + tagName;
-      var closePat = '</' + tagName;
+      var spanDoc = parser.parseFromString(source.slice(start, end + 1), 'text/html');
+      var spanElement = spanDoc.body && spanDoc.body.firstElementChild;
+      if (!spanElement || normalizeMatchText(spanElement.textContent) !== wanted) continue;
 
-      while (depth > 0 && pos < source.length) {
-        var nc = source.indexOf(closePat, pos);
-        if (nc === -1) break; // malformed HTML — bail and try next search pattern
-
-        var no = source.indexOf(openPat, pos);
-        if (no !== -1 && no < nc) {
-          var c = source[no + openPat.length];
-          // Confirm this is an actual opening tag, not a prefix match (e.g. <paragraph vs <p).
-          if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '>' || c === '/') {
-            depth += 1;
-            pos = no + 1;
-            continue;
-          }
-        }
-
-        var ce = source.indexOf('>', nc);
-        if (ce === -1) break;
-        depth -= 1;
-        if (depth === 0) {
-          return source.slice(0, tagStart) + replacement + source.slice(ce + 1);
-        }
-        pos = ce + 1;
-      }
+      return source.slice(0, start) + replacement + source.slice(end + 1);
     }
 
     return null;
@@ -1494,7 +1581,9 @@
           // Deabsolutize immediately: DOMParser converts relative URLs (href="/tattoos/")
           // to absolute ones (href="http://localhost:4173/tattoos/") when serializing
           // outerHTML. Strip the origin prefix so comparisons against raw source work.
+          stripLiveEditIds(target);
           var originalOuterHTML = deabsolutizeHtml(target.outerHTML);
+          var originalText = target.textContent;
           applyRecordToElement(target, entry.record);
           var modifiedOuterHTML = deabsolutizeHtml(target.outerHTML);
           if (modifiedOuterHTML === originalOuterHTML) {
@@ -1506,7 +1595,7 @@
           // and replace its full span. This is immune to DOMParser serialization differences
           // (trailing semicolons on inline styles, attribute-order shifts, etc.) that make
           // outerHTML string matching unreliable.
-          var replaced = replaceSourceElement(nextContent, target, modifiedOuterHTML);
+          var replaced = replaceSourceElement(nextContent, target, modifiedOuterHTML, originalText);
           if (replaced !== null) {
             nextContent = replaced;
             applied += 1;

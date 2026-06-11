@@ -64,6 +64,7 @@
     const previewParams = new URLSearchParams(window.location.search);
     const previewMode = previewParams.get("preview") === "1";
     const previewState = previewParams.get("state") || "";
+    const requestedBookingTypeId = previewParams.get("type") || "";
 
     function previewContext() {
       if (previewState === "error") {
@@ -338,6 +339,9 @@
         bookingTypeSelect.innerHTML = bookingTypes.map((type) => (
           `<option value="${type.id}">${type.label} - ${type.depositLabel} / ${type.durationMinutes} min</option>`
         )).join("");
+        if (requestedBookingTypeId && bookingTypes.some((type) => type.id === requestedBookingTypeId)) {
+          bookingTypeSelect.value = requestedBookingTypeId;
+        }
         bookingType = selectedBookingType();
         if (onBookingTypeChange) {
           onBookingTypeChange(bookingType, walkInWindows, renderWalkInWindows);
