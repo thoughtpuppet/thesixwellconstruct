@@ -1140,6 +1140,17 @@ ${meetingLines}
     };
   }
 
+  function editWalkInPayload(form) {
+    const fields = Object.fromEntries([...form.querySelectorAll("[data-edit-field]")].map((field) => [field.dataset.editField, field.value]));
+    return {
+      startsAt: localDateTimeToIso(fields.startsAt),
+      endsAt: localDateTimeToIso(fields.endsAt),
+      title: fields.title || "",
+      note: fields.note || "",
+      active: fields.active === "1",
+    };
+  }
+
   function monthKey(value) {
     if (!value) return "";
     const date = new Date(value);
@@ -1330,14 +1341,14 @@ ${meetingLines}
           <div class="schedule-group is-open" data-collapse-group>
             <button class="schedule-group-toggle" type="button">Tattooing Hours</button>
             <div class="schedule-group-body">
-              <p class="contact">Applies to Quarter, Half, and Full sessions, and in-person build sessions.</p>
+              <p class="contact">Applies to Quarter, Half, and Full sessions.</p>
               <div id="weeklyRulesTattooing"></div>
             </div>
           </div>
           <div class="schedule-group is-open" data-collapse-group>
             <button class="schedule-group-toggle" type="button">Consultation Hours</button>
             <div class="schedule-group-body">
-              <p class="contact">Applies to in-person and virtual consultations.</p>
+              <p class="contact">Applies to in-person and virtual consultations, and in-person build sessions.</p>
               <div id="weeklyRulesConsultation"></div>
             </div>
           </div>
@@ -1607,9 +1618,39 @@ ${meetingLines}
         <div class="meta">${escapeHtml(windowItem.title || "Walk-in Window")}</div>
         <div class="meta">${escapeHtml(windowItem.note || "")}</div>
         <div class="booking-actions">
+          <button class="button" type="button" data-edit-walk-in="${escapeHtml(windowItem.id)}">Edit</button>
           <button class="button" type="button" data-toggle-walk-in="${escapeHtml(windowItem.id)}" data-active="${windowItem.active ? "0" : "1"}">${windowItem.active ? "Disable" : "Enable"}</button>
           <button class="button danger-button" type="button" data-delete-walk-in="${escapeHtml(windowItem.id)}">Delete</button>
         </div>
+        <form class="availability-edit-form hidden" data-edit-walk-in-form="${escapeHtml(windowItem.id)}">
+          <div class="field">
+            <label>Start</label>
+            <input data-edit-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(windowItem.startsAt))}" required>
+          </div>
+          <div class="field">
+            <label>End</label>
+            <input data-edit-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(windowItem.endsAt))}" required>
+          </div>
+          <div class="field">
+            <label>Title</label>
+            <input data-edit-field="title" value="${escapeHtml(windowItem.title || "Walk-in Window")}">
+          </div>
+          <div class="field">
+            <label>Active</label>
+            <select data-edit-field="active">
+              <option value="1" ${windowItem.active ? "selected" : ""}>Active</option>
+              <option value="0" ${windowItem.active ? "" : "selected"}>Inactive</option>
+            </select>
+          </div>
+          <div class="field wide-field">
+            <label>Note</label>
+            <input data-edit-field="note" value="${escapeHtml(windowItem.note || "")}">
+          </div>
+          <div class="booking-actions wide-field">
+            <button class="button" type="submit">Save Walk-In</button>
+            <button class="button" type="button" data-cancel-edit-walk-in="${escapeHtml(windowItem.id)}">Cancel</button>
+          </div>
+        </form>
       </div>
     `).join("") : '<p class="empty">No walk-in windows yet. Add daily windows as they become available.</p>';
   }
@@ -1686,6 +1727,19 @@ ${meetingLines}
     const cancelEdit = event.target.closest("[data-cancel-edit]");
     if (cancelEdit) {
       cancelEdit.closest("[data-availability-item]")?.querySelector("[data-edit-form]")?.classList.add("hidden");
+      return;
+    }
+
+    const editWalkInButton = event.target.closest("[data-edit-walk-in]");
+    if (editWalkInButton) {
+      const form = editWalkInButton.closest("[data-walk-in-item]")?.querySelector("[data-edit-walk-in-form]");
+      form?.classList.toggle("hidden");
+      return;
+    }
+
+    const cancelEditWalkIn = event.target.closest("[data-cancel-edit-walk-in]");
+    if (cancelEditWalkIn) {
+      cancelEditWalkIn.closest("[data-walk-in-item]")?.querySelector("[data-edit-walk-in-form]")?.classList.add("hidden");
       return;
     }
 
@@ -1989,6 +2043,21 @@ ${meetingLines}
       await loadAvailability();
       await loadAvailabilityPreview();
       setStatus("Exception saved");
+      return;
+    }
+
+    const editWalkInForm = event.target.closest("[data-edit-walk-in-form]");
+    if (editWalkInForm) {
+      event.preventDefault();
+      const id = editWalkInForm.dataset.editWalkInForm;
+      setStatus("Saving walk-in");
+      await api(`/api/admin/booking/walk-ins/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(editWalkInPayload(editWalkInForm)),
+      });
+      await loadWalkIns();
+      setStatus("Walk-in saved");
       return;
     }
 

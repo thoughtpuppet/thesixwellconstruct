@@ -16,8 +16,8 @@ const PUBLIC_CONSULTATION_BOOKING_TYPE_IDS = ["consult_in_person", "build_in_per
 const VIRTUAL_CONSULTATION_BOOKING_TYPE_ID = "consult_virtual";
 
 const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
-  tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full", "build_in_person"],
-  consultation: ["consult_in_person", "consult_virtual"],
+  tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full"],
+  consultation: ["consult_in_person", "consult_virtual", "build_in_person"],
 };
 
 // Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.

@@ -26,14 +26,13 @@
     container.innerHTML = `<div class="walkin-cards">${items.map((item) => {
       const start = new Date(item.startsAt);
       const end = new Date(item.endsAt);
-      const title = escapeHtml(item.title || "Walk-in Window");
       const note = escapeHtml(item.note || "");
       return `
         <div class="walkin-card">
           <span class="walkin-card-day">${escapeHtml(dayFmt.format(start))}</span>
           <span class="walkin-card-date">${escapeHtml(dateFmt.format(start))}</span>
           <span class="walkin-card-time">${escapeHtml(timeFmt.format(start))} - ${escapeHtml(timeFmt.format(end))} ET</span>
-          <span class="walkin-card-note">${title}${note ? ` - ${note}` : ""}</span>
+          ${note ? `<span class="walkin-card-note">${note}</span>` : ""}
           <span class="walkin-card-meta">Updated daily</span>
         </div>
       `;
