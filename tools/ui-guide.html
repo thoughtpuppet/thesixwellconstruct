@@ -29,7 +29,7 @@
   --color-accent-dim: rgba(252, 184, 103, 0.25);
 
   /* mediums */
-  --color-tattooing: #7A1010;  --color-tattooing-dim: rgba(122,16,16,.25);
+  --color-tattooing: #6E0404;  --color-tattooing-dim: rgba(110,4,4,.25);
   --color-art:       #0581C1;  --color-art-dim:       rgba(5,129,193,.25);
   --color-merch:     #F7A226;  --color-merch-dim:     rgba(247,162,38,.25);
   --color-about:     #FCB867;  --color-about-dim:     rgba(252,184,103,.25);
@@ -592,7 +592,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <h3>Media card · <code>.media-card</code> (css/media.css)</h3>
     <p class="lead">The universal image card: 4/5 aspect, 5px faint border, hover darkens image + scales down 0.97 + border takes the medium color + overlay slides up. Wide variant <code>.card--wide</code> is 3/2 for sheets and landscapes. Grid: <code>auto-fill minmax(260px,1fr)</code>, 3px gap.</p>
-    <div class="demo" style="--venture-color:#7A1010;">
+    <div class="demo" style="--venture-color:#6E0404;">
       <div class="media-grid-demo">
         <div class="media-card">
           <span class="card-image">image 4/5</span>
@@ -616,7 +616,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <h3>Buttons (tattoos.css pattern)</h3>
     <p class="lead">Inter 700 · 11px · 0.14em tracking · uppercase · 48px min-height · square corners. Primary fills with the medium color and inverts text to background black; secondary is outlined and adopts the medium color on hover. Full-width at ≤640px.</p>
-    <div class="demo" style="--venture-color:#7A1010;">
+    <div class="demo" style="--venture-color:#6E0404;">
       <a class="btn-primary" href="#components" onclick="return false">Primary action</a>&nbsp;&nbsp;
       <a class="btn-secondary" href="#components" onclick="return false">Secondary action</a>
     </div>
@@ -640,7 +640,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <p class="lead">Sections separate with 5px <code>--ring-faint</code> bottom borders and clamp-padded vertical rhythm. Card grids (<code>.feature-grid</code>, <code>.record-grid</code> 3-up, <code>.path-grid</code> 4-up, <code>.status-grid</code> 2-up) share a 5px outer frame with 1px gaps; cards inside have 5px faint top borders and clamp(24–36px) padding. Card headings are Inter 900 18px uppercase in the medium color; card copy is muted 14px/1.75.</p>
 
     <h3>Process list / price cards (tattoos pattern)</h3>
-    <div class="demo" style="--venture-color:#7A1010;">
+    <div class="demo" style="--venture-color:#6E0404;">
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint);">
         <div style="padding:20px; border-right:1px solid var(--ring-faint);">
           <span style="display:block; color:var(--venture-color); font-family:var(--font-display); font-weight:900; font-size:28px; letter-spacing:-0.04em; margin-bottom:8px;">01</span>
@@ -673,7 +673,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <h3>Dot nav (order is canonical)</h3>
     <div class="demo">
       <div class="dotnav-demo">
-        <span class="dot current" style="background:#7A1010" title="TATTOOING"></span>
+        <span class="dot current" style="background:#6E0404" title="TATTOOING"></span>
         <span class="dot" style="background:#0581C1" title="ART MAKING"></span>
         <span class="dot" style="background:#F7A226" title="MERCH"></span>
         <span class="dot" style="background:#FCB867" title="ABOUT"></span>
@@ -791,7 +791,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <h2>Site map</h2>
     <p class="lead">Nine mediums orbit the landing construct (an interactive canvas ring at <code>/</code>). Pathways are the routes inside each medium. Pages currently hidden from the public live in <code>.hidden-pages/</code> and 404 on the live site (managed via <code>/tools/page-visibility.html</code>).</p>
 
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#7A1010"></span><span class="label">Tattooing — Art.Pill Tattoo House</span><span class="url">/tattoos/</span></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#6E0404"></span><span class="label">Tattooing — Art.Pill Tattoo House</span><span class="url">/tattoos/</span></div>
       <ul>
         <li>Flash <code>/tattoos/flash/</code> — maze sheet, ap-* piece pages, claim form <code>/tattoos/flash/claim/</code></li>
         <li>Inquire <code>/tattoos/inquire/</code> — custom <code>/custom/</code>, consultation <code>/consultation/</code> (public booking + Square checkout + Zoom for virtual)</li>
@@ -908,7 +908,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   "use strict";
 
   var MEDIUMS = [
-    {key:'tattooing', name:'Tattooing',  signal:'#7A1010', label:'TATTOOING'},
+    {key:'tattooing', name:'Tattooing',  signal:'#6E0404', label:'TATTOOING'},
     {key:'art',       name:'Art making', signal:'#0581C1', label:'ART MAKING'},
     {key:'merch',     name:'Merch',      signal:'#F7A226', label:'MERCH'},
     {key:'about',     name:'About',      signal:'#FCB867', label:'ABOUT'},

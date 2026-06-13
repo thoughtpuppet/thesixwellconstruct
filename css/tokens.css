@@ -39,10 +39,10 @@
   ────────────────────────────────────────────────────────── */
 
   /* TATTOOING */
-  --color-tattooing:        #7A1010;
-  --color-tattooing-dim:    rgba(122, 16, 16, 0.25);
-  --color-tattooing-bright: #954040;
-  --color-tattooing-dark:   #620D0D;
+  --color-tattooing:        #6E0404;
+  --color-tattooing-dim:    rgba(110, 4, 4, 0.25);
+  --color-tattooing-bright: #8B3636;
+  --color-tattooing-dark:   #580303;
 
   /* ART MAKING */
   --color-art:              #0581C1;

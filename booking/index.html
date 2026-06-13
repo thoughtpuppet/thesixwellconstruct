@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
-    --bg:#0e0e0e; --accent:#FCB867; --signal:#7A1010;
+    --bg:#0e0e0e; --accent:#FCB867; --signal:#6E0404;
     --ring:#6D3D15; --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --text:#FCB867; --muted:rgba(252,184,103,0.64); --dim:rgba(252,184,103,0.38);
     --ghost:rgba(252,184,103,0.14); --sans:Inter,"Helvetica Neue",Arial,sans-serif;
@@ -48,12 +48,12 @@
   .day-button { aspect-ratio:1; min-width:0; border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); font-family:var(--sans); font-size:12px; font-weight:900; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .day-button.open { color:#FFE7CA; border-color:var(--ring-soft); }
   .day-button.open:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.045); }
-  .day-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(122,16,16,0.12); }
+  .day-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(110,4,4,0.12); }
   .day-button.closed { cursor:not-allowed; }
   .day-button.blank { visibility:hidden; }
   .choice { width:100%; display:grid; grid-template-columns:1fr auto; gap:16px; text-align:left; background:transparent; color:var(--text); border:5px solid var(--ring-faint); padding:18px; transition:border-color var(--t-fast), background var(--t-fast); }
   .choice:hover { border-color:var(--accent); background:rgba(252,184,103,0.045); }
-  .choice.active { border-color:var(--signal); background:rgba(122,16,16,0.12); }
+  .choice.active { border-color:var(--signal); background:rgba(110,4,4,0.12); }
   .choice.active .price { color:var(--signal); }
   .choice-title { display:block; font-family:var(--sans); font-size:15px; font-weight:900; letter-spacing:0; color:#FFE7CA; }
   .choice-meta { display:block; margin-top:6px; color:var(--dim); font-size:12px; line-height:1.45; }
@@ -68,7 +68,7 @@
   .tip-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
   .tip-button { min-height:38px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .tip-button:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
-  .tip-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(122,16,16,0.12); }
+  .tip-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(110,4,4,0.12); }
   .custom-tip { width:100%; min-height:42px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; padding:0 12px; font-family:var(--sans); font-size:13px; }
   .custom-tip:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
   .checkout { width:100%; min-height:52px; margin-top:22px; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }

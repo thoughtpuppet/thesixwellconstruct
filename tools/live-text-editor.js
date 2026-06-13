@@ -18,7 +18,7 @@
   var BASE_COLOR_PALETTE = [
     { name: 'Default body', value: '#FFE7CA' },
     { name: 'Global amber', value: '#FCB867' },
-    { name: 'Tattooing', value: '#7A1010' },
+    { name: 'Tattooing', value: '#6E0404' },
     { name: 'Art making', value: '#0581C1' },
     { name: 'Merch', value: '#F7A226' },
     { name: 'Events', value: '#005d25' },
@@ -33,7 +33,7 @@
     { name: 'Muted cream', value: 'rgba(255,231,202,0.62)' },
     { name: 'Faint amber', value: 'rgba(252,184,103,0.64)' },
     { name: 'Amber wash', value: 'rgba(252,184,103,0.25)' },
-    { name: 'Tattoo wash', value: 'rgba(122,16,16,0.25)' },
+    { name: 'Tattoo wash', value: 'rgba(110,4,4,0.25)' },
     { name: 'Art wash', value: 'rgba(5,129,193,0.25)' },
     { name: 'Merch wash', value: 'rgba(247,162,38,0.25)' },
     { name: 'Events wash', value: 'rgba(0, 93, 37,0.25)' },

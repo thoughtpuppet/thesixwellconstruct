@@ -6,7 +6,7 @@
 .slot-picker-label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;display:block;}
 .tz-note{font-family:var(--serif);font-size:12px;font-style:italic;color:var(--text-dim);margin:-4px 0 12px;}
 .slot-selected{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
-.slot-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:5px solid rgba(122,16,16,0.4);background:rgba(122,16,16,0.06);}
+.slot-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:5px solid rgba(110,4,4,0.4);background:rgba(110,4,4,0.06);}
 .slot-item-text{font-family:var(--serif);font-size:13px;color:var(--text);line-height:1.4;}
 .slot-item-num{font-family:var(--sans);font-weight:900;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);opacity:0.65;margin-right:6px;}
 .slot-item-remove{font-size:18px;line-height:1;color:var(--text-dim);cursor:pointer;background:none;border:none;padding:2px 4px;transition:color var(--t-fast);flex-shrink:0;}
@@ -33,8 +33,8 @@
 .cal-day.open{color:#FFE7CA;border-color:var(--ring-soft);}
 .cal-day.today{color:var(--accent);border-color:var(--ring-soft);font-size:9px;letter-spacing:0.04em;text-transform:uppercase;}
 .cal-day:hover:not(.past):not(.empty){border-color:var(--accent);color:var(--accent);background:rgba(252,184,103,0.045);}
-.cal-day.active{border-color:var(--signal);color:var(--text);background:rgba(122,16,16,0.12);}
-.cal-day.booked{border-color:var(--signal);color:var(--text);background:rgba(122,16,16,0.12);cursor:default;}
+.cal-day.active{border-color:var(--signal);color:var(--text);background:rgba(110,4,4,0.12);}
+.cal-day.booked{border-color:var(--signal);color:var(--text);background:rgba(110,4,4,0.12);cursor:default;}
 /* time picker */
 .time-row{display:block;padding:10px 0 0;border-top:5px solid var(--ring-faint);}
 /* custom time dropdown */
@@ -54,14 +54,14 @@
 .time-panel::-webkit-scrollbar-thumb:hover{background:var(--accent);}
 .time-option{display:block;width:100%;text-align:left;padding:12px 14px;font-family:var(--serif);font-size:13px;color:var(--text-mute);background:transparent;border:5px solid var(--ring-faint);cursor:pointer;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
 .time-option:last-child{border-bottom:5px solid var(--ring-faint);}
-.time-option:hover{background:rgba(122,16,16,0.1);border-color:var(--signal);color:var(--text);}
-.time-option.selected{color:var(--accent);background:rgba(122,16,16,0.08);}
+.time-option:hover{background:rgba(110,4,4,0.1);border-color:var(--signal);color:var(--text);}
+.time-option.selected{color:var(--accent);background:rgba(110,4,4,0.08);}
 .time-option.is-am{color:var(--text-dim);}
 .time-option.is-am:hover,.time-option.is-am.selected{color:var(--text);}
 .time-divider{display:block;width:100%;padding:4px 14px;font-family:var(--sans);font-weight:900;font-size:8px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-ghost);background:rgba(0,0,0,0.3);border-bottom:1px solid var(--ring-faint);pointer-events:none;}
 /* add button */
-.time-add-btn{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.13em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(122,16,16,0.4);background:transparent;padding:9px 14px;cursor:pointer;white-space:nowrap;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
-.time-add-btn:hover:not(:disabled){background:rgba(122,16,16,0.1);border-color:var(--signal);}
+.time-add-btn{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.13em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(110,4,4,0.4);background:transparent;padding:9px 14px;cursor:pointer;white-space:nowrap;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
+.time-add-btn:hover:not(:disabled){background:rgba(110,4,4,0.1);border-color:var(--signal);}
 .time-add-btn:disabled{color:var(--text-dim);border-color:var(--ring-faint);cursor:not-allowed;}
 .cal-full-note{font-family:var(--serif);font-size:12px;color:var(--text-dim);padding:10px 14px;border-top:5px solid var(--ring-faint);font-style:italic;}
 

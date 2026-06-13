@@ -75,7 +75,7 @@ img, video, iframe { max-width: 100%; }
   --global-ui-ring: rgba(109, 61, 21, 0.4);
   --global-ui-text: #FFE7CA;
   --global-ui-accent: #FCB867;
-  --global-ui-signal: #7A1010;
+  --global-ui-signal: #6E0404;
   --global-ui-serif: Georgia, "Times New Roman", Times, serif;
   --global-ui-fast: 0.18s cubic-bezier(0.2, 0, 0.2, 1);
 }

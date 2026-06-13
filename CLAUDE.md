@@ -10,7 +10,7 @@ The CSS custom property is still named `--venture-color` for compatibility.
 
 | Medium     | CSS token                  | Hex       |
 |------------|----------------------------|-----------|
-| tattooing  | `var(--color-tattooing)`   | `#7A1010` |
+| tattooing  | `var(--color-tattooing)`   | `#6E0404` |
 | art        | `var(--color-art)`         | `#0581C1` |
 | merch      | `var(--color-merch)`       | `#F7A226` |
 | about      | `var(--color-about)`       | `#FCB867` |

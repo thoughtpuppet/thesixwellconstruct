@@ -1,7 +1,7 @@
 .tattoos-page {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(149, 6, 6, 0.14), transparent 34%),
+    radial-gradient(circle at top, rgba(110, 4, 4, 0.14), transparent 34%),
     var(--color-bg);
   color: var(--color-body);
   overflow-x: clip;
@@ -107,14 +107,14 @@
 }
 
 .tattoos-page .tattoos-button-secondary {
-  background: rgba(149, 6, 6, 0.04);
+  background: rgba(110, 4, 4, 0.04);
   color: var(--color-body);
 }
 
 .tattoos-page .tattoos-button-secondary:hover,
 .tattoos-page .tattoos-button-secondary:focus-visible {
   border-color: var(--venture-accent);
-  background: rgba(149, 6, 6, 0.08);
+  background: rgba(110, 4, 4, 0.08);
   color: var(--venture-accent);
   outline: none;
 }

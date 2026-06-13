@@ -139,7 +139,7 @@
     transition: color 180ms var(--ease), outline-color 180ms var(--ease), transform 180ms var(--ease);
   }
 
-  .text-link[href^="/tattoos"] { --pill-color: #7A1010; }
+  .text-link[href^="/tattoos"] { --pill-color: #6E0404; }
   .text-link[href^="/art"] { --pill-color: #0581C1; }
   .text-link[href^="/merch"] { --pill-color: #F7A226; }
   .text-link[href^="/archive"] { --pill-color: #6D3D15; }
@@ -1317,7 +1317,7 @@
     const detailFade = 320;    // details fade-out time before content swaps
 
     const nodes = [
-      { key: 'tattooing', label: 'Tattooing', color: '#7A1010', activeColor: '#7A1010', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'] },
+      { key: 'tattooing', label: 'Tattooing', color: '#6E0404', activeColor: '#6E0404', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'] },
       { key: 'art', label: 'Art', color: '#0581C1', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'] },
       { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'] },
       { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'] },
@@ -1412,7 +1412,7 @@
     const connectionList = document.querySelector('.connection-list');
     const fadeGroup = [selectedCopy, connectionList, stateLabel];
     const highlightRules = [
-      { color: '#7A1010', terms: ['Art.Pill', 'tattoo house', 'tattooing', 'tattoo', 'tattoos', 'mark', 'marks', 'body', 'bodies', 'flash', 'aftercare', 'consultation', 'consultations', 'appointment', 'appointments', 'client', 'clients', 'healed work', 'symbolic mark'] },
+      { color: '#6E0404', terms: ['Art.Pill', 'tattoo house', 'tattooing', 'tattoo', 'tattoos', 'mark', 'marks', 'body', 'bodies', 'flash', 'aftercare', 'consultation', 'consultations', 'appointment', 'appointments', 'client', 'clients', 'healed work', 'symbolic mark'] },
       { color: '#0581C1', terms: ['art index', 'acquisition inquiry', 'symbol maps', 'source material', 'visual vocabulary', 'art', 'artist', 'paintings', 'painting', 'studies', 'study', 'symbols', 'symbol', 'visual', 'image', 'images', 'objects', 'object', 'drawings'] },
       { color: '#F7A226', terms: ['merch', 'garments', 'garment', 'prints', 'print', 'editions', 'edition', 'drops', 'drop', 'commerce', 'product', 'products', 'clothing', 'capsules'] },
       { color: '#FCB867', terms: ['six.well construct', 'the construct', 'construct', 'six.well', 'about', 'orientation', 'map', 'hierarchy', 'current state', 'access', 'press', 'public language', 'system', 'door', 'doors', 'room', 'rooms', 'routes', 'ways in'] },

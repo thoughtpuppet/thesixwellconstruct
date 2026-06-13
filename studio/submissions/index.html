@@ -10,7 +10,7 @@
     --bg:#0e0e0e; --panel:#161616; --line:rgba(255,231,202,0.16);
     --line-strong:rgba(255,231,202,0.32); --text:#FFE7CA;
     --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.38);
-    --accent:#FCB867; --signal:#7A1010;
+    --accent:#FCB867; --signal:#6E0404;
     --ring:#6D3D15; --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --ghost:rgba(252,184,103,0.14); --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --sans:Inter,"Helvetica Neue",Arial,sans-serif; --serif:Georgia,"Times New Roman",Times,serif;
@@ -135,8 +135,8 @@
   .button { border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; min-height:44px; padding:0 14px; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.045); }
   .button:disabled { opacity:0.42; cursor:not-allowed; }
-  .danger-button { border-color:rgba(122,16,16,0.72); }
-  .danger-button:hover:not(:disabled) { border-color:var(--signal); color:var(--signal); background:rgba(122,16,16,0.12); }
+  .danger-button { border-color:rgba(110,4,4,0.72); }
+  .danger-button:hover:not(:disabled) { border-color:var(--signal); color:var(--signal); background:rgba(110,4,4,0.12); }
   .submission { width:100%; text-align:left; border:0; border-bottom:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:16px; display:grid; gap:8px; }
   .submission:hover,.submission.active { background:rgba(252,184,103,0.045); }
   .submission-top { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
@@ -169,13 +169,13 @@
   .day-button { aspect-ratio:1; min-height:0; border:5px solid var(--ring-faint); background:transparent; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; padding:0; }
   .day-button.blank { visibility:hidden; }
   .day-button.booked-bright { background:#BE1919; border-color:#BE1919; color:#1a0000; }
-  .day-button.booked-medium { background:#7A1010; border-color:#7A1010; color:#FFE7CA; }
+  .day-button.booked-medium { background:#6E0404; border-color:#6E0404; color:#FFE7CA; }
   .day-button.booked-dark { background:#3F0808; border-color:#3F0808; color:#FFE7CA; }
   .calendar-legend { display:flex; gap:8px; flex-wrap:wrap; }
   .legend-item { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; text-transform:uppercase; }
   .legend-dot { width:10px; height:10px; border:5px solid var(--ring-faint); display:inline-block; }
   .legend-dot.bright { background:#BE1919; }
-  .legend-dot.medium { background:#7A1010; }
+  .legend-dot.medium { background:#6E0404; }
   .legend-dot.dark { background:#3F0808; }
   .slot-preview { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
@@ -234,8 +234,8 @@
   .availability-manager .availability-edit-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border-top:5px solid var(--ring-faint); padding-top:14px; }
   .availability-manager .availability-edit-form.hidden { display:none; }
   .availability-manager .wide-field { grid-column:1 / -1; }
-  .availability-manager .danger-button { border-color:rgba(122,16,16,0.72); color:#FFE7CA; }
-  .availability-manager .danger-button:hover { border-color:var(--signal); color:var(--signal); background:rgba(122,16,16,0.12); }
+  .availability-manager .danger-button { border-color:rgba(110,4,4,0.72); color:#FFE7CA; }
+  .availability-manager .danger-button:hover { border-color:var(--signal); color:var(--signal); background:rgba(110,4,4,0.12); }
   .availability-manager .mini-calendar,
   .availability-manager .slot-preview,
   .availability-manager .availability-item { border:5px solid var(--ring-faint); background:transparent; }
@@ -252,7 +252,7 @@
   .booking-readiness-detail { color:var(--dim); font-family:var(--sans); font-size:10px; line-height:1.6; overflow-wrap:anywhere; }
   .availability-manager .day-button { border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .availability-manager .day-button.booked-bright { background:#BE1919; border-color:#BE1919; color:#1a0000; }
-  .availability-manager .day-button.booked-medium { background:#7A1010; border-color:#7A1010; color:#FFE7CA; }
+  .availability-manager .day-button.booked-medium { background:#6E0404; border-color:#6E0404; color:#FFE7CA; }
   .availability-manager .day-button.booked-dark { background:#3F0808; border-color:#3F0808; color:#FFE7CA; }
   .availability-manager .slot-preview-item { border-bottom:5px solid var(--ring-faint); }
   .availability-manager .save-schedule { width:100%; margin-top:16px; }
@@ -265,7 +265,7 @@
   .na-no-link { border-color:rgba(85,186,90,0.5); color:#55BA5A; }
   .na-link-sent { border-color:rgba(85,186,90,0.72); color:#55BA5A; }
   .na-deposit-pending { border-color:rgba(252,184,103,0.72); color:var(--accent); }
-  .na-booked { border-color:rgba(122,16,16,0.72); color:var(--signal); }
+  .na-booked { border-color:rgba(110,4,4,0.72); color:var(--signal); }
   .na-email-warn { border-color:rgba(236,94,38,0.72); color:#EC5E26; }
   .na-declined { border-color:rgba(255,231,202,0.22); color:var(--dim); }
   .na-archived { border-color:rgba(255,231,202,0.16); color:var(--dim); }
