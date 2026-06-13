@@ -10,15 +10,15 @@ The CSS custom property is still named `--venture-color` for compatibility.
 
 | Medium     | CSS token                  | Hex       |
 |------------|----------------------------|-----------|
-| tattooing  | `var(--color-tattooing)`   | `#8F231D` |
+| tattooing  | `var(--color-tattooing)`   | `#7A1010` |
 | art        | `var(--color-art)`         | `#0581C1` |
 | merch      | `var(--color-merch)`       | `#F7A226` |
 | about      | `var(--color-about)`       | `#FCB867` |
-| events     | `var(--color-events)`      | `#55BA5A` |
+| events     | `var(--color-events)`      | `#005d25` |
 | music      | `var(--color-music)`       | `#A856A1` |
-| writings   | `var(--color-writings)`    | `#328C84` |
-| archive    | `var(--color-archive)`     | `#EC5E26` |
-| film       | `var(--color-film)`        | `#FFE7CA` |
+| writings   | `var(--color-writings)`    | `#FFE7CA` |
+| archive    | `var(--color-archive)`     | `#6D3D15` |
+| film       | `var(--color-film)`        | `#328C84` |
 
 The single source of truth for these values is `css/tokens.css` and `js/construct-nav.js`.
 

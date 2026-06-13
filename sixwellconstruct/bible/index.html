@@ -1,0 +1,1940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bible - the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<style>
+  :root {
+    --venture-color: var(--color-about);
+    --bg: #0e0e0e;
+    --accent: #FCB867;
+    --accent-dim: rgba(252, 184, 103, 0.25);
+    --accent-faint: rgba(252, 184, 103, 0.12);
+    --ring-soft: rgba(109, 61, 21, 0.4);
+    --ring-faint: rgba(109, 61, 21, 0.18);
+    --body: #FFE7CA;
+    --body-muted: rgba(255, 231, 202, 0.68);
+    --body-dim: rgba(255, 231, 202, 0.42);
+    --sans: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    --serif: Georgia, 'Times New Roman', Times, serif;
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 40px;
+    --s7: 64px;
+    --s8: 96px;
+    --t-fast: 180ms cubic-bezier(0.2, 0, 0.2, 1);
+    --t-med: 350ms cubic-bezier(0.2, 0, 0.2, 1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); scroll-behavior: smooth; }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--body);
+    font-family: var(--serif);
+    overflow-x: clip;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+
+  /* ---- cosmic ground layers (back to front: shade, stars, light, grain, content) ---- */
+  .depth-shade {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: #050505;
+    opacity: 0;
+  }
+
+  #starfield {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .surface-light {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 90% 46% at 50% -8%, rgba(252, 184, 103, 0.12), transparent 70%);
+  }
+
+  .grain {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  .bible-page {
+    position: relative;
+    z-index: 2;
+    width: min(100%, 1480px);
+    margin: 0 auto;
+    padding: 132px var(--s6) var(--s7);
+  }
+
+  /* ---- the rim (hero) ---- */
+  .rim {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+    align-items: end;
+    gap: var(--s6);
+    min-height: 52vh;
+    margin-bottom: var(--s8);
+  }
+
+  .eyebrow {
+    display: block;
+    margin-bottom: var(--s3);
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 160px;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.86;
+    text-transform: uppercase;
+  }
+
+  .rim-copy {
+    max-width: 360px;
+    padding-bottom: var(--s4);
+    color: var(--body-muted);
+    font-size: 13px;
+    letter-spacing: 0;
+    line-height: 1.7;
+    text-align: right;
+    text-transform: uppercase;
+  }
+
+  .descend-cue {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s2);
+    margin-top: var(--s5);
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    transition: color var(--t-fast);
+  }
+
+  .descend-cue::after {
+    content: "\2193";
+    color: var(--accent);
+    animation: cue-sink 3.2s ease-in-out infinite;
+  }
+
+  .descend-cue:hover { color: var(--accent); }
+
+  @keyframes cue-sink {
+    0%, 100% { transform: translateY(0); opacity: 0.6; }
+    50% { transform: translateY(4px); opacity: 1; }
+  }
+
+  /* ---- the descent layout: plumb-line rail + planes ---- */
+  .descent {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: var(--s6);
+    align-items: start;
+  }
+
+  .depth-rail {
+    position: sticky;
+    top: 116px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-left: var(--s4);
+    border-left: 1px solid var(--accent-faint);
+  }
+
+  .rail-stop {
+    position: relative;
+    display: block;
+    padding: var(--s3) 0;
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.3;
+    text-transform: uppercase;
+    transition: color var(--t-fast), padding-left var(--t-fast);
+  }
+
+  .rail-stop .rail-depth {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--body-dim);
+    font-family: var(--serif);
+    font-size: 9px;
+    text-transform: uppercase;
+    transition: color var(--t-fast);
+  }
+
+  .rail-stop::before {
+    content: "";
+    position: absolute;
+    left: calc(-1 * var(--s4) - 3.5px);
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.18;
+    transform: translateY(-50%);
+    transition: opacity var(--t-fast), box-shadow var(--t-fast);
+  }
+
+  .rail-stop:hover { color: var(--accent); }
+
+  .rail-stop.is-active {
+    color: var(--accent);
+    padding-left: var(--s2);
+  }
+
+  .rail-stop.is-active .rail-depth { color: var(--accent); }
+
+  .rail-stop.is-active::before {
+    opacity: 1;
+    box-shadow: 0 0 0 5px rgba(252, 184, 103, 0.14);
+  }
+
+  /* ---- planes ---- */
+  .planes { min-width: 0; }
+
+  .plane {
+    padding: var(--s8) 0;
+    border-top: 1px solid var(--accent-faint);
+  }
+
+  .plane:first-child { border-top: 0; padding-top: 0; }
+
+  .plane-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
+    gap: var(--s6);
+    align-items: start;
+    margin-bottom: var(--s7);
+  }
+
+  .plane-depth,
+  .section-kicker {
+    display: block;
+    margin-bottom: var(--s3);
+    color: var(--accent);
+    font-family: var(--serif);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .plane-title {
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 56px;
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.92;
+    text-transform: uppercase;
+  }
+
+  .plane-lede {
+    color: var(--body-muted);
+    font-size: 17px;
+    line-height: 1.7;
+  }
+
+  .section-block { margin-bottom: var(--s7); }
+  .section-block:last-child { margin-bottom: 0; }
+
+  .section-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s5);
+  }
+
+  .section-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .section-grid.single { grid-template-columns: 1fr; }
+
+  .text-block,
+  .law-item,
+  .door-item,
+  .node-card,
+  .glyph-block {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .text-block h3,
+  .law-item h3,
+  .door-item h3,
+  .node-card h3,
+  .glyph-block h3 {
+    margin-bottom: var(--s2);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.35;
+    text-transform: uppercase;
+  }
+
+  .text-block p,
+  .law-item p,
+  .door-item p,
+  .node-card p,
+  .glyph-block p {
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  /* breathing divider between section blocks */
+  .breath-divider {
+    height: 1px;
+    margin: var(--s7) 0;
+    background: linear-gradient(90deg, var(--accent-dim), transparent 70%);
+    animation: divider-breath 6.4s ease-in-out infinite;
+  }
+
+  @keyframes divider-breath {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+
+  /* layered definition */
+  .layer-stack { display: grid; gap: var(--s5); }
+
+  .layer {
+    display: grid;
+    grid-template-columns: 130px minmax(0, 1fr);
+    gap: var(--s5);
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .layer-depth {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .layer blockquote {
+    color: var(--body);
+    font-size: 19px;
+    line-height: 1.6;
+  }
+
+  .layer .layer-note {
+    margin-top: var(--s2);
+    color: var(--body-dim);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* function model row (the map) */
+  .function-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s5);
+  }
+
+  .function-chip {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s3);
+  }
+
+  .function-chip span {
+    display: block;
+    margin-bottom: var(--s2);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .function-chip p {
+    color: var(--body-muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* constellation glyphs */
+  .glyph-block svg {
+    display: block;
+    width: 84px;
+    height: 56px;
+    margin-bottom: var(--s3);
+    color: var(--accent);
+    opacity: 0.85;
+  }
+
+  /* the orbit */
+  .orbit-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 1fr) minmax(260px, 0.66fr);
+    gap: var(--s5);
+    align-items: start;
+  }
+
+  .orbit-stage {
+    position: relative;
+    min-height: 480px;
+    border: 5px solid var(--ring-faint);
+    overflow: hidden;
+    background: radial-gradient(circle at center, rgba(252, 184, 103, 0.07), transparent 60%);
+  }
+
+  #orbitMap {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .orbit-buttons {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .orbit-body {
+    position: absolute;
+    min-width: 96px;
+    padding-top: 18px;
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.2;
+    text-align: center;
+    text-transform: uppercase;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    transition: color var(--t-fast);
+  }
+
+  .orbit-body:hover,
+  .orbit-body.is-active { color: var(--body-color); }
+
+  .orbit-detail {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .orbit-detail h3 {
+    margin-bottom: var(--s2);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .orbit-detail .orbit-state {
+    display: block;
+    margin-bottom: var(--s2);
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .orbit-detail .orbit-role {
+    display: block;
+    margin-bottom: var(--s3);
+    color: var(--body-dim);
+    font-family: var(--serif);
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+
+  .orbit-detail p {
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .orbit-hint {
+    margin-top: var(--s3);
+    color: var(--body-dim);
+    font-family: var(--serif);
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  /* node record cards */
+  .node-card { position: relative; }
+
+  .node-card::after {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 0;
+    width: 56px;
+    height: 5px;
+    background: var(--node-color, var(--accent));
+  }
+
+  .node-state {
+    display: inline-block;
+    margin-bottom: var(--s2);
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .node-role {
+    display: block;
+    margin-bottom: var(--s2);
+    color: var(--body-dim);
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .node-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-top: var(--s3);
+  }
+
+  .link-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border-top: 5px solid var(--ring-faint);
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+
+  .link-pill:hover {
+    border-color: var(--accent);
+    color: var(--body);
+  }
+
+  /* founder lists */
+  .signature-list {
+    display: grid;
+    gap: var(--s3);
+    list-style: none;
+  }
+
+  .signature-list li {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s3);
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .signature-list strong {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  /* laws */
+  .law-index {
+    display: block;
+    margin-bottom: var(--s2);
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .doctrine {
+    border-top: 5px solid var(--accent-dim);
+    padding-top: var(--s5);
+    margin-bottom: var(--s6);
+  }
+
+  .doctrine blockquote {
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .doctrine p {
+    margin-top: var(--s3);
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.7;
+    max-width: 620px;
+  }
+
+  /* ritual cycle */
+  .ritual-list { display: grid; gap: var(--s5); }
+
+  .ritual-item {
+    display: grid;
+    grid-template-columns: 130px minmax(0, 1fr);
+    gap: var(--s5);
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+  }
+
+  .ritual-day {
+    color: var(--accent);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .ritual-item h3 {
+    margin-bottom: var(--s2);
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .ritual-item p {
+    color: var(--body-muted);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  /* doors */
+  .door-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s5);
+  }
+
+  .funnel-line {
+    margin-top: var(--s6);
+    border-top: 5px solid var(--ring-faint);
+    padding-top: var(--s4);
+    color: var(--body-dim);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.8;
+    text-transform: uppercase;
+  }
+
+  /* bottom of the well */
+  .well-bottom {
+    margin-top: var(--s8);
+    padding-top: var(--s5);
+    border-top: 1px solid var(--accent-faint);
+    text-align: center;
+  }
+
+  .well-bottom p {
+    color: var(--body-dim);
+    font-family: var(--serif);
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .well-bottom a {
+    color: var(--accent);
+    transition: color var(--t-fast);
+  }
+
+  .well-bottom a:hover { color: var(--body); }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--s5);
+    margin-top: var(--s6);
+    padding-top: var(--s5);
+    border-top: 5px solid var(--ring-faint);
+  }
+
+  .footer-links a {
+    color: var(--body-dim);
+    font-family: var(--serif);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    transition: color var(--t-fast);
+  }
+
+  .footer-links a:hover { color: var(--accent); }
+
+  @media (max-width: 1120px) {
+    .descent,
+    .plane-head,
+    .rim,
+    .orbit-layout {
+      /* minmax(0,1fr), not 1fr — columns must shrink below the
+         plane-title's min-content width on narrow screens */
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rim { min-height: 0; }
+    .rim-copy { text-align: left; }
+
+    .depth-rail {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      flex-direction: row;
+      gap: var(--s4);
+      overflow-x: auto;
+      padding: var(--s3) var(--s2);
+      border-left: 0;
+      border-bottom: 1px solid var(--accent-faint);
+      background: rgba(14, 14, 14, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      scrollbar-width: thin;
+    }
+
+    .rail-stop {
+      min-width: max-content;
+      padding: var(--s1) 0;
+    }
+
+    .rail-stop::before {
+      position: static;
+      display: inline-block;
+      margin-right: var(--s2);
+      transform: none;
+    }
+
+    .rail-stop.is-active { padding-left: 0; }
+
+    .section-grid.cols-3,
+    .door-grid,
+    .function-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .bible-page {
+      padding: 116px var(--s5) var(--s6);
+    }
+
+    h1 { font-size: 68px; }
+
+    .plane { padding: var(--s7) 0; }
+    .plane-title { font-size: clamp(34px, 11vw, 56px); }
+
+    .section-grid,
+    .section-grid.cols-3,
+    .door-grid,
+    .function-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .layer,
+    .ritual-item {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s2);
+    }
+
+    .layer blockquote { font-size: 17px; }
+    .doctrine blockquote { font-size: 22px; }
+
+    .orbit-stage { min-height: 440px; }
+
+    /* 12 moving labels collide on a narrow stage — show dots only,
+       reveal the label on the selected body */
+    .orbit-body {
+      min-width: 30px;
+      min-height: 30px;
+      padding-top: 0;
+      font-size: 0;
+    }
+
+    .orbit-body.is-active {
+      min-width: 72px;
+      padding-top: 20px;
+      font-size: 9px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .breath-divider,
+    .descend-cue::after { animation: none; }
+  }
+</style>
+</head>
+<body data-venture="about">
+  <div class="depth-shade" id="depthShade" aria-hidden="true"></div>
+  <canvas id="starfield" aria-hidden="true"></canvas>
+  <div class="surface-light" id="surfaceLight" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <main class="bible-page entrance-fade">
+
+    <!-- THE RIM -->
+    <section class="rim" aria-labelledby="page-title">
+      <div>
+        <span class="eyebrow" data-copy-id="bible-eyebrow">the construct bible</span>
+        <h1 id="page-title" data-copy-id="bible-page-title">Bible.</h1>
+        <a class="descend-cue" href="#surface" data-copy-id="bible-descend-cue">Begin the descent</a>
+      </div>
+      <p class="rim-copy" data-copy-id="bible-intro-copy">
+        A cosmology of the six.well construct, read top to bottom. Eight planes,
+        descending: surface first, myth at the bottom. You can stop at any depth.
+      </p>
+    </section>
+
+    <!-- THE DESCENT -->
+    <div class="descent">
+      <nav class="depth-rail" aria-label="planes of descent">
+        <a class="rail-stop is-active" href="#surface" data-plane="surface"><span class="rail-depth">Plane 0</span>The Surface</a>
+        <a class="rail-stop" href="#deep" data-plane="deep"><span class="rail-depth">Plane I</span>The Deep</a>
+        <a class="rail-stop" href="#constellations" data-plane="constellations"><span class="rail-depth">Plane II</span>The Constellations</a>
+        <a class="rail-stop" href="#orbit" data-plane="orbit"><span class="rail-depth">Plane III</span>The Orbit</a>
+        <a class="rail-stop" href="#origin" data-plane="origin"><span class="rail-depth">Plane IV</span>The Origin</a>
+        <a class="rail-stop" href="#fixed-stars" data-plane="fixed-stars"><span class="rail-depth">Plane V</span>The Fixed Stars</a>
+        <a class="rail-stop" href="#cycle" data-plane="cycle"><span class="rail-depth">Plane VI</span>The Cycle</a>
+        <a class="rail-stop" href="#doors" data-plane="doors"><span class="rail-depth">Plane VII</span>The Doors</a>
+      </nav>
+
+      <div class="planes">
+
+        <!-- PLANE 0: THE SURFACE -->
+        <section class="plane" id="surface" data-plane="surface">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-surface-depth">plane 0 &mdash; the world from outside</span>
+              <h2 class="plane-title" data-copy-id="bible-surface-title">The Surface</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-surface-lede">
+              Seen from the surface, the six.well construct is not one business. Not a
+              website, a tattoo studio, a clothing line, a film project, an archive.
+              Those are bodies. The construct is the gravity that holds them in relation.
+            </p>
+          </header>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-construct-layers-kicker">read it in layers</span>
+            <div class="layer-stack">
+              <div class="layer">
+                <span class="layer-depth">Surface</span>
+                <div>
+                  <blockquote data-copy-id="bible-layer-surface">A living creative ecosystem by Sai Solehman.</blockquote>
+                  <p class="layer-note" data-copy-id="bible-layer-surface-note">The first sentence. Enough for anyone, on any page, in any room.</p>
+                </div>
+              </div>
+              <div class="layer">
+                <span class="layer-depth">Middle</span>
+                <div>
+                  <blockquote data-copy-id="bible-layer-middle">Tattoos, garments, films, writings, events, and artifacts from a living symbolic world.</blockquote>
+                  <p class="layer-note" data-copy-id="bible-layer-middle-note">For the ones who stay a while. The forms are different; the world is the same.</p>
+                </div>
+              </div>
+              <div class="layer">
+                <span class="layer-depth">Deep</span>
+                <div>
+                  <blockquote data-copy-id="bible-layer-deep">An evolving system for turning memory, myth, identity, and experience into physical and cultural forms.</blockquote>
+                  <p class="layer-note" data-copy-id="bible-layer-deep-note">The bottom of the well. You do not have to start here. Most people should not.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-construct-whatfor-kicker">what it does</span>
+            <div class="section-grid">
+              <div class="text-block">
+                <h3 data-copy-id="bible-construct-purpose-title">Purpose</h3>
+                <p data-copy-id="bible-construct-purpose-body">
+                  The construct turns experience into artifacts, artifacts into worlds,
+                  worlds into community, and community into a structure that can hold
+                  its own weight. It is a system for making meaning tangible &mdash;
+                  a small universe, under construction.
+                </p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-construct-not-title">What it is not</h3>
+                <p data-copy-id="bible-construct-not-body">
+                  Not one lane. Not one brand. Not one medium. It is a sky large enough
+                  to hold the artist, the tattooist, the filmmaker, the thinker, the
+                  builder, and the future institution &mdash; without forcing them
+                  to collide.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-construct-map-kicker">how the world reads</span>
+            <div class="function-row" aria-label="map functions">
+              <div class="function-chip"><span data-copy-id="bible-map-1-label">The website</span><p data-copy-id="bible-map-1-body">is the map.</p></div>
+              <div class="function-chip"><span data-copy-id="bible-map-2-label">The nodes</span><p data-copy-id="bible-map-2-body">are the destinations.</p></div>
+              <div class="function-chip"><span data-copy-id="bible-map-3-label">The letters</span><p data-copy-id="bible-map-3-body">are the thread.</p></div>
+              <div class="function-chip"><span data-copy-id="bible-map-4-label">The shop</span><p data-copy-id="bible-map-4-body">is the market.</p></div>
+              <div class="function-chip"><span data-copy-id="bible-map-5-label">The archive</span><p data-copy-id="bible-map-5-body">is the memory.</p></div>
+              <div class="function-chip"><span data-copy-id="bible-map-6-label">The events</span><p data-copy-id="bible-map-6-body">are the gathering points.</p></div>
+              <div class="function-chip"><span data-copy-id="bible-map-7-label">The founder</span><p data-copy-id="bible-map-7-body">is the origin.</p></div>
+              <div class="function-chip"><span data-copy-id="bible-map-8-label">The homepage</span><p data-copy-id="bible-map-8-body">is the door.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANE I: THE DEEP -->
+        <section class="plane" id="deep" data-plane="deep">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-deep-depth">plane I &mdash; what the world runs on</span>
+              <h2 class="plane-title" data-copy-id="bible-philosophy-title">The Deep</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-philosophy-lede">
+              Below the surface, the world runs on containers. A container is anything
+              that gives experience a boundary, a context, and a meaning. Without
+              containers, ideas become fog. The construct exists to give form to the fog.
+            </p>
+          </header>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-containers-kicker">containers</span>
+            <div class="section-grid">
+              <div class="text-block">
+                <h3 data-copy-id="bible-containers-what-title">What a container is</h3>
+                <p data-copy-id="bible-containers-what-body">
+                  A tattoo contains a story in skin. A room contains a state of being.
+                  A garment contains an edition, a symbol, a moment. A letter contains
+                  a dispatch from inside the system. Each one is a small vessel for
+                  something that would otherwise drift.
+                </p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-containers-chain-title">The chain of containers</h3>
+                <p data-copy-id="bible-containers-chain-body">
+                  A painting contains a thoughtform. A business contains a ritualized
+                  exchange. A building contains the future institution. The construct
+                  contains the bodies. The founder contains the original logic. It is
+                  the container of containers &mdash; the universe the vessels float in.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="breath-divider" aria-hidden="true"></div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-alive-kicker">the system is alive</span>
+            <div class="section-grid">
+              <div class="text-block">
+                <h3 data-copy-id="bible-alive-living-title">Not a dead object</h3>
+                <p data-copy-id="bible-alive-living-body">
+                  The construct is closer to a living system than a brand. It has bodies,
+                  rituals, artifacts, archives, symbols, laws, seasons, transmissions,
+                  public doors, hidden rooms, and future expansions. It does not ask only
+                  how to make money. It asks how a world functions.
+                </p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-alive-evidence-title">Evidence over theory</h3>
+                <p data-copy-id="bible-alive-evidence-body">
+                  A world is real only if it leaves evidence: objects, images, writing,
+                  records, events, transactions, archives, rituals, work. No evidence,
+                  no world.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="breath-divider" aria-hidden="true"></div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-artifacts-kicker">products versus artifacts</span>
+            <div class="section-grid">
+              <div class="text-block">
+                <h3 data-copy-id="bible-artifacts-products-title">Products fall out of orbit</h3>
+                <p data-copy-id="bible-artifacts-products-body">
+                  Products are bought. They solve a problem, burn up in the feed, and
+                  are gone. A shirt with a logo is merch. Most of the market stops there.
+                </p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-artifacts-artifacts-title">Artifacts stay</h3>
+                <p data-copy-id="bible-artifacts-artifacts-body">
+                  Artifacts are collected. They carry meaning: limited editions, numbered
+                  releases, story-linked objects, physical markings, archive records,
+                  ritualized drops. A numbered garment tied to a myth, an event, a
+                  symbol, or a project holds its orbit. Each object should feel like
+                  it fell from the world.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANE II: THE CONSTELLATIONS -->
+        <section class="plane" id="constellations" data-plane="constellations">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-constellations-depth">plane II &mdash; the shapes the world navigates by</span>
+              <h2 class="plane-title" data-copy-id="bible-symbols-title">The Constellations</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-symbols-lede">
+              The construct navigates by six recurring shapes. They are meant to be felt
+              before they are explained &mdash; the symbols need oxygen, and the sky
+              needs dark.
+            </p>
+          </header>
+
+          <div class="section-grid cols-3">
+            <div class="glyph-block">
+              <svg viewBox="0 0 84 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1" opacity="0.9">
+                <path d="M14 8 L34 14 L26 28 L48 34 L42 48" stroke-opacity="0.45"/>
+                <circle cx="14" cy="8" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="34" cy="14" r="1.6" fill="currentColor" stroke="none"/>
+                <circle cx="26" cy="28" r="2.2" fill="currentColor" stroke="none"/>
+                <circle cx="48" cy="34" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="42" cy="48" r="2.6" fill="currentColor" stroke="none"/>
+              </svg>
+              <h3 data-copy-id="bible-symbol-wells-title">Wells</h3>
+              <p data-copy-id="bible-symbol-wells-body">
+                Depth, extraction, hidden knowledge, descent, retrieval. A well is a
+                container that reaches downward. Meaning is not floating on the surface;
+                you have to draw it up. This is the foundation of the name &mdash; and
+                of this page.
+              </p>
+            </div>
+            <div class="glyph-block">
+              <svg viewBox="0 0 84 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1" opacity="0.9">
+                <path d="M20 12 L58 14 L56 44 L22 42 Z" stroke-opacity="0.45"/>
+                <circle cx="20" cy="12" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="58" cy="14" r="1.6" fill="currentColor" stroke="none"/>
+                <circle cx="56" cy="44" r="2.2" fill="currentColor" stroke="none"/>
+                <circle cx="22" cy="42" r="1.6" fill="currentColor" stroke="none"/>
+                <circle cx="39" cy="28" r="1.2" fill="currentColor" stroke="none"/>
+              </svg>
+              <h3 data-copy-id="bible-symbol-rooms-title">Rooms</h3>
+              <p data-copy-id="bible-symbol-rooms-body">
+                States of being, thresholds, interior realities, designed experiences.
+                A room is not just architecture. A room is a condition &mdash; it can
+                heal, trap, reveal, restore, or transform.
+              </p>
+            </div>
+            <div class="glyph-block">
+              <svg viewBox="0 0 84 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1" opacity="0.9">
+                <path d="M12 46 L12 16 L40 16 L40 32 L26 32 L26 46 L56 46 L56 24 L70 24" stroke-opacity="0.45"/>
+                <circle cx="12" cy="46" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="40" cy="16" r="1.6" fill="currentColor" stroke="none"/>
+                <circle cx="26" cy="46" r="1.4" fill="currentColor" stroke="none"/>
+                <circle cx="70" cy="24" r="2.4" fill="currentColor" stroke="none"/>
+              </svg>
+              <h3 data-copy-id="bible-symbol-mazes-title">Mazes</h3>
+              <p data-copy-id="bible-symbol-mazes-body">
+                Searching, uncertainty, intelligence, navigation, transformation through
+                movement. A maze is not confusion. A maze is a process.
+              </p>
+            </div>
+            <div class="glyph-block">
+              <svg viewBox="0 0 84 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1" opacity="0.9">
+                <path d="M30 48 L30 10 L52 10 L52 48" stroke-opacity="0.45"/>
+                <circle cx="30" cy="48" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="30" cy="10" r="1.6" fill="currentColor" stroke="none"/>
+                <circle cx="52" cy="10" r="1.6" fill="currentColor" stroke="none"/>
+                <circle cx="52" cy="48" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="47" cy="30" r="1.3" fill="currentColor" stroke="none"/>
+              </svg>
+              <h3 data-copy-id="bible-symbol-doors-title">Doors</h3>
+              <p data-copy-id="bible-symbol-doors-body">
+                Access, initiation, permission, transition. The site itself works like
+                a door system: some doors are public, some are hidden, some open later.
+                Not everything needs to be visible at once.
+              </p>
+            </div>
+            <div class="glyph-block">
+              <svg viewBox="0 0 84 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1" opacity="0.9">
+                <path d="M42 8 L66 22 L58 46 L26 46 L18 22 Z" stroke-opacity="0.45"/>
+                <circle cx="42" cy="8" r="1.8" fill="currentColor" stroke="none"/>
+                <circle cx="66" cy="22" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="58" cy="46" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="26" cy="46" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="18" cy="22" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="42" cy="29" r="2.6" fill="currentColor" stroke="none"/>
+              </svg>
+              <h3 data-copy-id="bible-symbol-containers-title">Containers</h3>
+              <p data-copy-id="bible-symbol-containers-body">
+                The master symbol. Bodies, rooms, websites, garments, films, paintings,
+                rituals, businesses, archives, buildings. The construct itself is the
+                container of containers.
+              </p>
+            </div>
+            <div class="glyph-block">
+              <svg viewBox="0 0 84 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1" opacity="0.9">
+                <path d="M16 40 L34 20 M34 20 L52 36 M52 36 L68 14" stroke-opacity="0.45"/>
+                <circle cx="16" cy="40" r="2.4" fill="currentColor" stroke="none"/>
+                <circle cx="34" cy="20" r="1.6" fill="currentColor" stroke="none"/>
+                <circle cx="52" cy="36" r="2" fill="currentColor" stroke="none"/>
+                <circle cx="68" cy="14" r="1.4" fill="currentColor" stroke="none"/>
+                <circle cx="60" cy="46" r="1.2" fill="currentColor" stroke="none"/>
+              </svg>
+              <h3 data-copy-id="bible-symbol-artifacts-title">Artifacts</h3>
+              <p data-copy-id="bible-symbol-artifacts-body">
+                The physical evidence of the world: tattoos, garments, prints, books,
+                zines, films, letters, event objects, numbered editions, ritual
+                documents, archives. The artifact is how the abstract becomes touchable.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANE III: THE ORBIT -->
+        <section class="plane" id="orbit" data-plane="orbit">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-orbit-depth">plane III &mdash; the bodies of the system</span>
+              <h2 class="plane-title" data-copy-id="bible-atlas-title">The Orbit</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-atlas-lede">
+              Every branch of the system is a body with its own function, output,
+              audience, and economic role. The bodies do not all orbit at the same
+              distance. Some are close and hot. Some are still forming. Some are far
+              and quiet. One is beyond the visible.
+            </p>
+          </header>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-atlas-states-kicker">orbital states</span>
+            <div class="section-grid">
+              <div class="text-block">
+                <h3 data-copy-id="bible-state-active-title">Close orbit &mdash; active</h3>
+                <p data-copy-id="bible-state-active-body">Currently operating or directly needed. At any given time only a few bodies hold close orbit. Everything else is documented, not pursued.</p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-state-incubating-title">Forming &mdash; incubating</h3>
+                <p data-copy-id="bible-state-incubating-body">Defined but not fully built. Gathering mass behind the public surface.</p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-state-dormant-title">Far orbit &mdash; dormant</h3>
+                <p data-copy-id="bible-state-dormant-body">Important later, not a current priority. A seed is not a failure because it is not a forest yet.</p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-state-mythic-title">Beyond the visible &mdash; mythic</h3>
+                <p data-copy-id="bible-state-mythic-body">Not businesses yet, but they shape the world and pull the system forward, the way unseen mass bends light.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-orbit-map-kicker">the orbital map</span>
+            <div class="orbit-layout">
+              <div class="orbit-stage" id="orbitStage" aria-label="animated orbital map of the construct's bodies">
+                <canvas id="orbitMap"></canvas>
+                <div class="orbit-buttons" id="orbitButtons"></div>
+              </div>
+              <aside class="orbit-detail" aria-live="polite">
+                <span class="orbit-state" id="orbitState">Active &mdash; close orbit</span>
+                <h3 id="orbitTitle">art.pill Tattoo House</h3>
+                <span class="orbit-role" id="orbitRole">the economic spine</span>
+                <p id="orbitNote">The place where the construct touches bodies. Tattooing turns symbols into permanent personal mythology.</p>
+                <div class="node-meta" id="orbitLinks"></div>
+                <p class="orbit-hint" data-copy-id="bible-orbit-hint">Select a body to read it. The full record is below.</p>
+              </aside>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-atlas-nodes-kicker">the record of bodies</span>
+            <div class="section-grid">
+              <div class="node-card" style="--node-color: var(--color-tattooing);">
+                <span class="node-state" data-copy-id="bible-node-artpill-state">Active &mdash; close orbit &mdash; revenue engine</span>
+                <h3 data-copy-id="bible-node-artpill-title">art.pill Tattoo House</h3>
+                <span class="node-role" data-copy-id="bible-node-artpill-role">the economic spine</span>
+                <p data-copy-id="bible-node-artpill-body">
+                  The place where the construct touches bodies. Tattooing turns symbols
+                  into permanent personal mythology &mdash; a tattoo is already a ritual
+                  object. Symbolic, story-driven work rooted in transformation and an
+                  original visual language.
+                </p>
+                <div class="node-meta"><a class="link-pill" href="/tattoos/">Tattooing</a></div>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-art);">
+                <span class="node-state" data-copy-id="bible-node-thoughtpuppet-state">Active &mdash; close orbit &mdash; research lab</span>
+                <h3 data-copy-id="bible-node-thoughtpuppet-title">ThoughtPuppet / Fine Art</h3>
+                <span class="node-role" data-copy-id="bible-node-thoughtpuppet-role">the visual root system</span>
+                <p data-copy-id="bible-node-thoughtpuppet-body">
+                  The painting and symbolic art branch. Where the construct discovers
+                  its deeper visual language without needing commercial translation.
+                  Source material for tattoos, garments, and film imagery &mdash; the
+                  place where raw symbols emerge.
+                </p>
+                <div class="node-meta"><a class="link-pill" href="/art/">Art making</a></div>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-merch);">
+                <span class="node-state" data-copy-id="bible-node-clothing-state">Active &mdash; close orbit &mdash; artifact node</span>
+                <h3 data-copy-id="bible-node-clothing-title">Six.Well Clothing</h3>
+                <span class="node-role" data-copy-id="bible-node-clothing-role">wearable mythology</span>
+                <p data-copy-id="bible-node-clothing-body">
+                  Not a generic clothing line. The market does not need another hoodie
+                  brand; the construct needs artifact garments &mdash; editioned objects,
+                  symbolic uniforms, event relics, physical proof of participation in
+                  the world.
+                </p>
+                <div class="node-meta"><a class="link-pill" href="/merch/">Merch</a></div>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-film);">
+                <span class="node-state" data-copy-id="bible-node-sloth99-state">Incubating &mdash; forming &mdash; media node</span>
+                <h3 data-copy-id="bible-node-sloth99-title">Sloth99</h3>
+                <span class="node-role" data-copy-id="bible-node-sloth99-role">the narrative engine</span>
+                <p data-copy-id="bible-node-sloth99-body">
+                  The media-production branch. If art.pill touches skin and ThoughtPuppet
+                  develops the visual mythology, Sloth99 tells the story. It begins by
+                  documenting the world already being built &mdash; the evidence, not
+                  invented content.
+                </p>
+                <div class="node-meta"><a class="link-pill" href="/film/">Film</a></div>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-music);">
+                <span class="node-state" data-copy-id="bible-node-andfriends-state">Incubating &mdash; forming &mdash; conversation node</span>
+                <h3 data-copy-id="bible-node-andfriends-title">&amp;Friends</h3>
+                <span class="node-role" data-copy-id="bible-node-andfriends-role">the public thought layer</span>
+                <p data-copy-id="bible-node-andfriends-body">
+                  The conversation platform. One guest, one theme, one honest
+                  conversation. It builds audience trust, collaborator discovery, and a
+                  living archive of talk &mdash; the construct becoming social without
+                  becoming random.
+                </p>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-events);">
+                <span class="node-state" data-copy-id="bible-node-cultatl-state">Incubating &mdash; forming &mdash; gathering node</span>
+                <h3 data-copy-id="bible-node-cultatl-title">Cult.ATL / Cultivation ATL</h3>
+                <span class="node-role" data-copy-id="bible-node-cultatl-role">the public gathering engine</span>
+                <p data-copy-id="bible-node-cultatl-body">
+                  A live performance platform for musicians, poets, and performers.
+                  It pays artists, platforms overlooked talent, and brings bodies into
+                  rooms. The construct cannot exist only online &mdash; this is where
+                  people experience it as culture, not brand.
+                </p>
+                <div class="node-meta"><a class="link-pill" href="/events/">Events</a></div>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-archive);">
+                <span class="node-state" data-copy-id="bible-node-seventhroom-state">Incubating &mdash; forming &mdash; space node</span>
+                <h3 data-copy-id="bible-node-seventhroom-title">The Seventh Room</h3>
+                <span class="node-role" data-copy-id="bible-node-seventhroom-role">the philosophy of space, made practical</span>
+                <p data-copy-id="bible-node-seventhroom-body">
+                  A home reset and interior care venture: move-in and move-out support,
+                  decluttering, room transformation, functional calm. It turns the
+                  construct's room philosophy into a service &mdash; it helps people
+                  clear, reset, and inhabit their lives differently.
+                </p>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-writings);">
+                <span class="node-state" data-copy-id="bible-node-letters-state">Active &mdash; close orbit &mdash; the thread</span>
+                <h3 data-copy-id="bible-node-letters-title">The Underside Letters</h3>
+                <span class="node-role" data-copy-id="bible-node-letters-role">dispatches from inside the system</span>
+                <p data-copy-id="bible-node-letters-body">
+                  Personal letters from inside a living creative system: what is being
+                  made, studied, released, and becoming real. Not marketing &mdash;
+                  a peek through a window not everyone gets to stand at.
+                </p>
+                <div class="node-meta"><a class="link-pill" href="/writings/">Writings</a></div>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-writings);">
+                <span class="node-state" data-copy-id="bible-node-darkness-state">Dormant &mdash; far orbit &mdash; publishing node</span>
+                <h3 data-copy-id="bible-node-darkness-title">Mindful Darkness</h3>
+                <span class="node-role" data-copy-id="bible-node-darkness-role">the reflective publishing branch</span>
+                <p data-copy-id="bible-node-darkness-body">
+                  Essays, interviews, criticism, philosophy, artist features &mdash;
+                  curated darkness, not despair. It waits until the letters breathe.
+                  Newsletter first. Magazine later.
+                </p>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-about);">
+                <span class="node-state" data-copy-id="bible-node-website-state">Active &mdash; close orbit &mdash; the map</span>
+                <h3 data-copy-id="bible-node-website-title">The Website</h3>
+                <span class="node-role" data-copy-id="bible-node-website-role">the public interface of the world</span>
+                <p data-copy-id="bible-node-website-body">
+                  Not just a portfolio, a shop, or an about page &mdash; the digital map
+                  of a connected ecosystem. It answers: what is this, who made it, what
+                  can I do here, where do I enter, what is available now, what is
+                  coming later.
+                </p>
+                <div class="node-meta"><a class="link-pill" href="/">Homepage</a> <a class="link-pill" href="/construct-map/">System map</a></div>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-archive);">
+                <span class="node-state" data-copy-id="bible-node-vault-state">Active &mdash; close orbit &mdash; private</span>
+                <h3 data-copy-id="bible-node-vault-title">The Vault</h3>
+                <span class="node-role" data-copy-id="bible-node-vault-role">the internal nervous system</span>
+                <p data-copy-id="bible-node-vault-body">
+                  The private codex where the construct thinks: symbols, references,
+                  vocabulary, project logic, mythology, node connections. The website is
+                  public; the vault is private. Every work leaves a trace there. That is
+                  how a world becomes coherent over time.
+                </p>
+              </div>
+
+              <div class="node-card" style="--node-color: var(--color-about);">
+                <span class="node-state" data-copy-id="bible-node-compound-state">Mythic &mdash; beyond the visible &mdash; earned, not started</span>
+                <h3 data-copy-id="bible-node-compound-title">The Compound</h3>
+                <span class="node-role" data-copy-id="bible-node-compound-role">the construct made physical</span>
+                <p data-copy-id="bible-node-compound-body">
+                  A long-term live/work environment in Atlanta: studio, gallery,
+                  boutique, media space, residency, headquarters. Not real estate &mdash;
+                  a body for the system. It is not the thing that starts the construct.
+                  It is the thing the construct earns.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANE IV: THE ORIGIN -->
+        <section class="plane" id="origin" data-plane="origin">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-origin-depth">plane IV &mdash; the first body</span>
+              <h2 class="plane-title" data-copy-id="bible-founder-title">The Origin</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-founder-lede">
+              Every system has a first body. Sai Solehman is a surrealist tattoo artist,
+              painter, filmmaker, and founder building the six.well construct: an
+              artist-led ecosystem where symbols become tattoos, garments, films,
+              rituals, and spaces.
+            </p>
+          </header>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-founder-thesis-kicker">the founder thesis</span>
+            <div class="section-grid">
+              <div class="text-block">
+                <h3 data-copy-id="bible-founder-containers-title">An artist who builds containers</h3>
+                <p data-copy-id="bible-founder-containers-body">
+                  The work does not stop at making objects. A tattoo becomes a ritual.
+                  A hoodie becomes an artifact. A website becomes a map. A letter becomes
+                  a dispatch. A studio becomes a temple-workshop. A business becomes a
+                  body in orbit. A life becomes architecture. That is the signature.
+                </p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-founder-role-title">The role, in stages</h3>
+                <p data-copy-id="bible-founder-role-body">
+                  Now: founder-operator. Next: creative director and systems builder.
+                  Eventually: architect and steward. The job is not to push every rock
+                  forever &mdash; it is to define the terrain, build the first roads,
+                  and decide what is allowed to grow there.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="breath-divider" aria-hidden="true"></div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-founder-paradox-kicker">the binary star</span>
+            <div class="section-grid single">
+              <ul class="signature-list">
+                <li data-copy-id="bible-paradox-1"><strong>The artist</strong> wants mystery.</li>
+                <li data-copy-id="bible-paradox-2"><strong>The architect</strong> wants structure.</li>
+                <li data-copy-id="bible-paradox-3"><strong>The entrepreneur</strong> wants cash.</li>
+                <li data-copy-id="bible-paradox-4"><strong>The philosopher</strong> wants meaning.</li>
+                <li data-copy-id="bible-paradox-5"><strong>The filmmaker</strong> wants narrative.</li>
+                <li data-copy-id="bible-paradox-6"><strong>The tattooist</strong> wants clients.</li>
+                <li data-copy-id="bible-paradox-7"><strong>The institution-builder</strong> wants legacy.</li>
+              </ul>
+            </div>
+            <div class="section-grid single" style="margin-top: var(--s5);">
+              <div class="text-block">
+                <h3 data-copy-id="bible-paradox-resolution-title">All of them are real</h3>
+                <p data-copy-id="bible-paradox-resolution-body">
+                  Seven selves sharing one sky. The construct is the attempt to stop
+                  forcing them to collide and give each one an orbit instead. Not killing
+                  parts of the self &mdash; sequencing them, so every part stops grabbing
+                  the steering wheel at the same time.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="breath-divider" aria-hidden="true"></div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-founder-instincts-kicker">working instincts</span>
+            <div class="section-grid cols-3">
+              <div class="text-block">
+                <h3 data-copy-id="bible-instinct-symbolic-title">Symbolic intelligence</h3>
+                <p data-copy-id="bible-instinct-symbolic-body">Reading the world through symbols, patterns, myth, and hidden structure. The work means something &mdash; the craft is building the doorway into that meaning.</p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-instinct-systems-title">Systems thinking</h3>
+                <p data-copy-id="bible-instinct-systems-body">Tattooing connects to clothing, clothing to film, film to events, events to community, community to physical space, space to legacy. Ecosystems, not isolated products.</p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-instinct-longrange-title">Long-range vision</h3>
+                <p data-copy-id="bible-instinct-longrange-body">Thinking in years and decades &mdash; an annual ritual, a future compound, a cultural institution in embryo &mdash; while executing in weeks. That is the bridge.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANE V: THE FIXED STARS -->
+        <section class="plane" id="fixed-stars" data-plane="fixed-stars">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-fixedstars-depth">plane V &mdash; the constants</span>
+              <h2 class="plane-title" data-copy-id="bible-laws-title">The Fixed Stars</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-laws-lede">
+              Everything else in the system moves. These do not. Seven laws and one
+              governing doctrine that the construct navigates by &mdash; they keep the
+              mythology honest and the system buildable.
+            </p>
+          </header>
+
+          <div class="doctrine">
+            <blockquote data-copy-id="bible-doctrine-quote">Build doors before secret rooms.</blockquote>
+            <p data-copy-id="bible-doctrine-note">
+              The governing rule of execution. The construct can have hidden depth,
+              but hidden depth cannot be the only entrance. Simple door. Deep room.
+            </p>
+          </div>
+
+          <div class="section-grid">
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-law-1-index">Law one</span>
+              <h3 data-copy-id="bible-law-1-title">Every node must serve the whole</h3>
+              <p data-copy-id="bible-law-1-body">If a body does not feed revenue, audience, meaning, archive, or community, it must be questioned.</p>
+            </div>
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-law-2-index">Law two</span>
+              <h3 data-copy-id="bible-law-2-title">Every artifact must carry memory</h3>
+              <p data-copy-id="bible-law-2-body">Products should have context. Drops should have records. Events should leave traces. Work should not vanish into the feed.</p>
+            </div>
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-law-3-index">Law three</span>
+              <h3 data-copy-id="bible-law-3-title">The public needs doors</h3>
+              <p data-copy-id="bible-law-3-body">No matter how deep the system gets, every public-facing branch needs a clear entrance.</p>
+            </div>
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-law-4-index">Law four</span>
+              <h3 data-copy-id="bible-law-4-title">The founder cannot be the only infrastructure</h3>
+              <p data-copy-id="bible-law-4-body">If only one person can understand it, run it, explain it, or fix it, the system is fragile.</p>
+            </div>
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-law-5-index">Law five</span>
+              <h3 data-copy-id="bible-law-5-title">Build small versions of large dreams</h3>
+              <p data-copy-id="bible-law-5-body">The compound begins as a room. The archive begins as a folder. The festival begins as a small gathering. The mythology begins as one repeated symbol.</p>
+            </div>
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-law-6-index">Law six</span>
+              <h3 data-copy-id="bible-law-6-title">Cash is not the mission, but it is the oxygen</h3>
+              <p data-copy-id="bible-law-6-body">Do not worship money. Do not ignore it either. No cash, no cathedral.</p>
+            </div>
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-law-7-index">Law seven</span>
+              <h3 data-copy-id="bible-law-7-title">The construct must leave evidence</h3>
+              <p data-copy-id="bible-law-7-body">If it is real, it produces objects, images, writing, records, events, transactions, archives, rituals, and work.</p>
+            </div>
+            <div class="law-item">
+              <span class="law-index" data-copy-id="bible-filter-index">The filter</span>
+              <h3 data-copy-id="bible-filter-title">Five questions before anything begins</h3>
+              <p data-copy-id="bible-filter-body">Does this create revenue? Grow audience? Produce an artifact? Strengthen the archive? Support the next flagship move? No to all five &mdash; it is a distraction. Beautiful, maybe. Still a distraction.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANE VI: THE CYCLE -->
+        <section class="plane" id="cycle" data-plane="cycle">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-cycle-depth">plane VI &mdash; the year completing its orbit</span>
+              <h2 class="plane-title" data-copy-id="bible-ritual-title">The Cycle</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-ritual-lede">
+              Once a year, the world completes an orbit. Solehman's New Year is the
+              annual showcase of the construct &mdash; four days in October, the week
+              before the founder's birthday, when every body in the system becomes
+              visible from one room. Most brands have launches. Institutions have rituals.
+            </p>
+          </header>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-ritual-shape-kicker">the shape of the cycle</span>
+            <div class="ritual-list">
+              <div class="ritual-item">
+                <span class="ritual-day">Thursday</span>
+                <div><h3 data-copy-id="bible-ritual-thu-title">Live tattoo</h3><p data-copy-id="bible-ritual-thu-body">The mark, made in public. The construct touching skin in real time.</p></div>
+              </div>
+              <div class="ritual-item">
+                <span class="ritual-day">Friday</span>
+                <div><h3 data-copy-id="bible-ritual-fri-title">Fashion show</h3><p data-copy-id="bible-ritual-fri-body">The artifacts, worn. Garments and editions presented as objects from the world.</p></div>
+              </div>
+              <div class="ritual-item">
+                <span class="ritual-day">Saturday</span>
+                <div><h3 data-copy-id="bible-ritual-sat-title">Art show + screening</h3><p data-copy-id="bible-ritual-sat-body">Paintings on walls, moving image in the room &mdash; the visual mythology and its behind-the-scenes record.</p></div>
+              </div>
+              <div class="ritual-item">
+                <span class="ritual-day">Sunday</span>
+                <div><h3 data-copy-id="bible-ritual-sun-title">Artist talk</h3><p data-copy-id="bible-ritual-sun-body">The language layer. The founder speaking from inside the system, in person.</p></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-block">
+            <span class="section-kicker" data-copy-id="bible-ritual-why-kicker">why it matters</span>
+            <div class="section-grid">
+              <div class="text-block">
+                <h3 data-copy-id="bible-ritual-gather-title">It gathers everything</h3>
+                <p data-copy-id="bible-ritual-gather-body">
+                  Tattoos, paintings, garments, films, performances, letters, audience,
+                  collectors, collaborators, documentation &mdash; the annual proof that
+                  the construct is alive.
+                </p>
+              </div>
+              <div class="text-block">
+                <h3 data-copy-id="bible-ritual-recurrence-title">Recurrence over scale</h3>
+                <p data-copy-id="bible-ritual-recurrence-body">
+                  The first version can be one room, one capsule, one painting wall,
+                  one projection, one talk. A strong small ritual beats a giant
+                  imaginary festival. Do it every year. Let the myth accrete, the way
+                  worlds do &mdash; one pass at a time.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PLANE VII: THE DOORS -->
+        <section class="plane" id="doors" data-plane="doors">
+          <header class="plane-head">
+            <div>
+              <span class="plane-depth" data-copy-id="bible-doors-depth">plane VII &mdash; re-entry</span>
+              <h2 class="plane-title" data-copy-id="bible-doors-title">The Doors</h2>
+            </div>
+            <p class="plane-lede" data-copy-id="bible-doors-lede">
+              This is where the descent ends and the world begins. The public does not
+              enter through the full cosmology &mdash; they enter through a clear
+              doorway. The depth is here when they want it. Choose yours.
+            </p>
+          </header>
+
+          <div class="door-grid">
+            <div class="door-item">
+              <h3 data-copy-id="bible-door-tattoos-title">Through the body</h3>
+              <p data-copy-id="bible-door-tattoos-body">You come for a tattoo. You discover the wider symbolic world the mark belongs to.</p>
+              <div class="node-meta"><a class="link-pill" href="/tattoos/">Tattooing</a> <a class="link-pill" href="/tattoos/inquire/">Inquire</a></div>
+            </div>
+            <div class="door-item">
+              <h3 data-copy-id="bible-door-objects-title">Through the object</h3>
+              <p data-copy-id="bible-door-objects-body">You buy a garment or an edition. You discover the archive and the story behind it.</p>
+              <div class="node-meta"><a class="link-pill" href="/merch/">Merch</a></div>
+            </div>
+            <div class="door-item">
+              <h3 data-copy-id="bible-door-letters-title">Through the letters</h3>
+              <p data-copy-id="bible-door-letters-body">You read the dispatches from inside the system. You follow the projects as they become real.</p>
+              <div class="node-meta"><a class="link-pill" href="/writings/">Writings</a></div>
+            </div>
+            <div class="door-item">
+              <h3 data-copy-id="bible-door-events-title">Through the gathering</h3>
+              <p data-copy-id="bible-door-events-body">You attend something. You become part of the world while it is happening.</p>
+              <div class="node-meta"><a class="link-pill" href="/events/">Events</a></div>
+            </div>
+            <div class="door-item">
+              <h3 data-copy-id="bible-door-film-title">Through the image</h3>
+              <p data-copy-id="bible-door-film-body">You watch the films and documentation. You understand the atmosphere before the explanation.</p>
+              <div class="node-meta"><a class="link-pill" href="/film/">Film</a></div>
+            </div>
+            <div class="door-item">
+              <h3 data-copy-id="bible-door-painting-title">Through the painting</h3>
+              <p data-copy-id="bible-door-painting-body">You encounter the fine art. You discover the mythology underneath it.</p>
+              <div class="node-meta"><a class="link-pill" href="/art/">Art making</a></div>
+            </div>
+          </div>
+
+          <p class="funnel-line" data-copy-id="bible-funnel-line">
+            Discover &rarr; Understand &rarr; Trust &rarr; Enter &rarr; Collect &rarr; Return &rarr; Participate &mdash; the orbit a visitor enters.
+          </p>
+        </section>
+      </div>
+    </div>
+
+    <!-- BOTTOM OF THE WELL -->
+    <div class="well-bottom">
+      <p data-copy-id="bible-well-bottom">You have reached the bottom of the well. <a href="#page-title">Return to the surface</a></p>
+      <footer class="footer-links">
+        <a href="/">return to construct</a>
+        <a href="/about/">about</a>
+        <a href="/archive/">archive</a>
+        <a href="/art/">art</a>
+        <a href="/tattoos/">tattooing</a>
+        <a href="/merch/">merch</a>
+        <a href="/writings/">writings</a>
+      </footer>
+    </div>
+  </main>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script>
+    (function() {
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      /* ---------- hash aliases (old tab anchors -> new plane ids) ---------- */
+      const HASH_ALIASES = {
+        construct: 'surface',
+        philosophy: 'deep',
+        symbols: 'constellations',
+        atlas: 'orbit',
+        founder: 'origin',
+        laws: 'fixed-stars',
+        ritual: 'cycle'
+      };
+
+      function resolveHash() {
+        const raw = window.location.hash.replace('#', '').toLowerCase();
+        if (!raw) return;
+        const target = HASH_ALIASES[raw] || raw;
+        const el = document.getElementById(target);
+        if (el) {
+          if (HASH_ALIASES[raw]) history.replaceState(null, '', '#' + target);
+          requestAnimationFrame(() => el.scrollIntoView());
+        }
+      }
+
+      resolveHash();
+      window.addEventListener('hashchange', resolveHash);
+
+      /* ---------- depth rail: highlight current plane ---------- */
+      const railStops = Array.from(document.querySelectorAll('.rail-stop'));
+      const planes = Array.from(document.querySelectorAll('.plane'));
+
+      function setActivePlane(key) {
+        railStops.forEach(stop => stop.classList.toggle('is-active', stop.dataset.plane === key));
+      }
+
+      if ('IntersectionObserver' in window) {
+        const planeObserver = new IntersectionObserver(entries => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) setActivePlane(entry.target.dataset.plane);
+          });
+        }, { rootMargin: '-35% 0px -55% 0px', threshold: 0 });
+        planes.forEach(plane => planeObserver.observe(plane));
+      }
+
+      /* ---------- starfield ---------- */
+      const starCanvas = document.getElementById('starfield');
+      const starCtx = starCanvas.getContext('2d');
+      const surfaceLight = document.getElementById('surfaceLight');
+      const depthShade = document.getElementById('depthShade');
+      const STAR_COUNT = 120;
+      let stars = [];
+      let scrollProgress = 0;
+
+      function buildStars() {
+        stars = [];
+        for (let i = 0; i < STAR_COUNT; i++) {
+          const amber = Math.random() < 0.3;
+          stars.push({
+            x: Math.random(),
+            y: Math.random(),
+            r: 0.4 + Math.random() * 1.1,
+            base: 0.12 + Math.random() * 0.5,
+            phase: Math.random() * Math.PI * 2,
+            speed: 0.0004 + Math.random() * 0.0008,
+            drift: 1.5 + Math.random() * 4,       /* px per second, upward */
+            depth: 0.03 + Math.random() * 0.09,    /* parallax factor */
+            color: amber ? '252, 184, 103' : '255, 231, 202'
+          });
+        }
+      }
+
+      function resizeStars() {
+        const dpr = window.devicePixelRatio || 1;
+        starCanvas.width = Math.max(1, Math.floor(window.innerWidth * dpr));
+        starCanvas.height = Math.max(1, Math.floor(window.innerHeight * dpr));
+        starCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function updateScrollProgress() {
+        const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+        scrollProgress = Math.min(1, Math.max(0, window.scrollY / max));
+        surfaceLight.style.opacity = String(Math.max(0, 1 - scrollProgress * 2.2));
+        depthShade.style.opacity = String(scrollProgress * 0.7);
+      }
+
+      function drawStars(t) {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        starCtx.clearRect(0, 0, w, h);
+        /* stars thin out as you descend */
+        const dimming = 1 - scrollProgress * 0.55;
+        for (let i = 0; i < stars.length; i++) {
+          const s = stars[i];
+          let y = (s.y * h - (reducedMotion ? 0 : t * 0.001 * s.drift) - window.scrollY * s.depth) % h;
+          if (y < 0) y += h;
+          const twinkle = reducedMotion ? 1 : (0.75 + 0.25 * Math.sin(t * s.speed + s.phase));
+          starCtx.beginPath();
+          starCtx.arc(s.x * w, y, s.r, 0, Math.PI * 2);
+          starCtx.fillStyle = 'rgba(' + s.color + ', ' + (s.base * twinkle * dimming).toFixed(3) + ')';
+          starCtx.fill();
+        }
+      }
+
+      /* ---------- the orbit map ---------- */
+      const bodies = [
+        { key: 'artpill', label: 'art.pill', color: '#7A1010', ring: 0, state: 'Active — close orbit', role: 'the economic spine', note: 'The place where the construct touches bodies. Tattooing turns symbols into permanent personal mythology.', url: '/tattoos/', linkLabel: 'Tattooing' },
+        { key: 'thoughtpuppet', label: 'ThoughtPuppet', color: '#0581C1', ring: 0, state: 'Active — close orbit', role: 'the visual root system', note: 'The painting branch — where the construct discovers its deeper visual language and raw symbols emerge.', url: '/art/', linkLabel: 'Art making' },
+        { key: 'clothing', label: 'Six.Well Clothing', color: '#F7A226', ring: 0, state: 'Active — close orbit', role: 'wearable mythology', note: 'Artifact garments: editioned objects, symbolic uniforms, event relics — physical proof of participation in the world.', url: '/merch/', linkLabel: 'Merch' },
+        { key: 'letters', label: 'Underside Letters', color: '#FFE7CA', ring: 0, state: 'Active — close orbit', role: 'dispatches from inside', note: 'Personal letters from inside a living creative system — the thread an audience can follow.', url: '/writings/', linkLabel: 'Writings' },
+        { key: 'website', label: 'The Website', color: '#FCB867', ring: 0, state: 'Active — close orbit', role: 'the public interface', note: 'The digital map of the ecosystem: what this is, who made it, where to enter, what is available now.', url: '/', linkLabel: 'Homepage' },
+        { key: 'vault', label: 'The Vault', color: '#EC5E26', ring: 0, state: 'Active — close orbit', role: 'the internal nervous system', note: 'The private codex where the construct thinks. Every work leaves a trace there.', url: '', linkLabel: '' },
+        { key: 'sloth99', label: 'Sloth99', color: '#328C84', ring: 1, state: 'Incubating — forming', role: 'the narrative engine', note: 'The media branch. It begins by documenting the world already being built.', url: '/film/', linkLabel: 'Film' },
+        { key: 'andfriends', label: '&Friends', color: '#A856A1', ring: 1, state: 'Incubating — forming', role: 'the public thought layer', note: 'One guest, one theme, one honest conversation — the construct becoming social without becoming random.', url: '', linkLabel: '' },
+        { key: 'cultatl', label: 'Cult.ATL', color: '#005d25', ring: 1, state: 'Incubating — forming', role: 'the public gathering engine', note: 'Live performance that pays artists and brings bodies into rooms — the construct as culture, not brand.', url: '/events/', linkLabel: 'Events' },
+        { key: 'seventhroom', label: 'The Seventh Room', color: '#EC5E26', ring: 1, state: 'Incubating — forming', role: 'the philosophy of space, made practical', note: 'Home reset and interior care — helping people clear, reset, and inhabit their lives differently.', url: '', linkLabel: '' },
+        { key: 'darkness', label: 'Mindful Darkness', color: '#FFE7CA', ring: 2, state: 'Dormant — far orbit', role: 'the reflective publishing branch', note: 'Curated darkness, not despair. It waits until the letters breathe. Newsletter first, magazine later.', url: '', linkLabel: '' },
+        { key: 'compound', label: 'The Compound', color: '#FCB867', ring: 3, state: 'Mythic — beyond the visible', role: 'the construct made physical', note: 'A body for the system: studio, gallery, residency, headquarters. Not the thing that starts the construct — the thing it earns.', url: '', linkLabel: '' }
+      ];
+
+      const RING_FRACTIONS = [0.36, 0.56, 0.74, 0.9];
+      const RING_SPEEDS = [0.000016, 0.000011, 0.000007, 0.000005];
+      const ringCounts = [0, 0, 0, 0];
+      bodies.forEach(b => { b.indexInRing = ringCounts[b.ring]++; });
+
+      const orbitStage = document.getElementById('orbitStage');
+      const orbitCanvas = document.getElementById('orbitMap');
+      const orbitCtx = orbitCanvas.getContext('2d');
+      const orbitButtons = document.getElementById('orbitButtons');
+      const orbitTitle = document.getElementById('orbitTitle');
+      const orbitState = document.getElementById('orbitState');
+      const orbitRole = document.getElementById('orbitRole');
+      const orbitNote = document.getElementById('orbitNote');
+      const orbitLinks = document.getElementById('orbitLinks');
+      let activeBody = 0;
+      let orbitVisible = false;
+      let buttonEls = [];
+
+      function setBody(index) {
+        activeBody = index;
+        const b = bodies[index];
+        orbitTitle.textContent = b.label;
+        orbitTitle.style.color = b.color;
+        orbitState.textContent = b.state;
+        orbitRole.textContent = b.role;
+        orbitNote.textContent = b.note;
+        orbitLinks.innerHTML = '';
+        if (b.url) {
+          const link = document.createElement('a');
+          link.className = 'link-pill';
+          link.href = b.url;
+          link.textContent = b.linkLabel;
+          orbitLinks.appendChild(link);
+        }
+        buttonEls.forEach((btn, i) => btn.classList.toggle('is-active', i === activeBody));
+        if (reducedMotion) drawOrbit(0);
+      }
+
+      function buildOrbitButtons() {
+        orbitButtons.innerHTML = '';
+        buttonEls = bodies.map((b, index) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'orbit-body';
+          btn.textContent = b.label;
+          btn.style.setProperty('--body-color', b.color);
+          btn.addEventListener('click', () => setBody(index));
+          orbitButtons.appendChild(btn);
+          return btn;
+        });
+      }
+
+      function resizeOrbit() {
+        const rect = orbitCanvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        orbitCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        orbitCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        orbitCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function bodyPosition(b, t, w, h) {
+        const cx = w / 2;
+        const cy = h / 2;
+        const frac = RING_FRACTIONS[b.ring];
+        const rx = (w / 2 - 56) * frac;
+        const ry = (h / 2 - 44) * frac;
+        const count = ringCounts[b.ring];
+        const base = -Math.PI / 2 + b.indexInRing * (Math.PI * 2 / count) + b.ring * 0.7;
+        const angle = base + (reducedMotion ? 0 : t * RING_SPEEDS[b.ring]);
+        const breath = reducedMotion ? 0 : Math.sin(t * 0.0009 + b.indexInRing * 1.1) * 2;
+        return {
+          x: cx + Math.cos(angle) * (rx + breath),
+          y: cy + Math.sin(angle) * (ry + breath)
+        };
+      }
+
+      function drawOrbit(t) {
+        const rect = orbitCanvas.getBoundingClientRect();
+        const w = rect.width;
+        const h = rect.height;
+        if (w < 2 || h < 2) return;
+        const cx = w / 2;
+        const cy = h / 2;
+        orbitCtx.clearRect(0, 0, w, h);
+
+        /* orbit rings */
+        for (let ring = 0; ring < RING_FRACTIONS.length; ring++) {
+          const frac = RING_FRACTIONS[ring];
+          const rx = (w / 2 - 56) * frac;
+          const ry = (h / 2 - 44) * frac;
+          orbitCtx.beginPath();
+          orbitCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          const isActiveRing = bodies[activeBody].ring === ring;
+          orbitCtx.strokeStyle = isActiveRing ? 'rgba(252, 184, 103, 0.26)' : 'rgba(252, 184, 103, 0.10)';
+          orbitCtx.lineWidth = 1;
+          orbitCtx.stroke();
+        }
+
+        /* the well at the center: filled annulus, breathing */
+        const wellBreath = reducedMotion ? 0 : Math.sin(t * 0.001) * 2;
+        orbitCtx.beginPath();
+        orbitCtx.arc(cx, cy, 26 + wellBreath, 0, Math.PI * 2);
+        orbitCtx.arc(cx, cy, 16, 0, Math.PI * 2, true);
+        orbitCtx.fillStyle = 'rgba(109, 61, 21, 0.85)';
+        orbitCtx.fill();
+
+        /* bodies */
+        bodies.forEach((b, index) => {
+          const pos = bodyPosition(b, t, w, h);
+          const isActive = index === activeBody;
+          if (isActive) {
+            orbitCtx.beginPath();
+            orbitCtx.arc(pos.x, pos.y, 15, 0, Math.PI * 2);
+            orbitCtx.fillStyle = 'rgba(252, 184, 103, 0.14)';
+            orbitCtx.fill();
+          }
+          orbitCtx.beginPath();
+          orbitCtx.arc(pos.x, pos.y, isActive ? 8.5 : 5, 0, Math.PI * 2);
+          orbitCtx.fillStyle = b.color;
+          orbitCtx.globalAlpha = isActive ? 1 : 0.55;
+          orbitCtx.fill();
+          orbitCtx.globalAlpha = 1;
+          const btn = buttonEls[index];
+          if (btn) {
+            btn.style.left = pos.x + 'px';
+            btn.style.top = pos.y + 'px';
+          }
+        });
+      }
+
+      if ('IntersectionObserver' in window) {
+        const orbitObserver = new IntersectionObserver(entries => {
+          entries.forEach(entry => { orbitVisible = entry.isIntersecting; });
+        }, { rootMargin: '160px 0px' });
+        orbitObserver.observe(orbitStage);
+      } else {
+        orbitVisible = true;
+      }
+
+      /* ---------- main loop ---------- */
+      function frame(t) {
+        drawStars(t);
+        if (orbitVisible) drawOrbit(t);
+        requestAnimationFrame(frame);
+      }
+
+      function init() {
+        buildStars();
+        resizeStars();
+        resizeOrbit();
+        buildOrbitButtons();
+        setBody(0);
+        updateScrollProgress();
+        if (reducedMotion) {
+          drawStars(0);
+          drawOrbit(0);
+        } else {
+          requestAnimationFrame(frame);
+        }
+      }
+
+      window.addEventListener('scroll', updateScrollProgress, { passive: true });
+      window.addEventListener('resize', () => {
+        resizeStars();
+        resizeOrbit();
+        updateScrollProgress();
+        if (reducedMotion) {
+          drawStars(0);
+          drawOrbit(0);
+        }
+      });
+
+      init();
+    })();
+  </script>
+</body>
+</html>

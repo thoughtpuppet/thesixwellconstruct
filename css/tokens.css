@@ -32,43 +32,65 @@
 
      Signal  → use for: dots, active states, highlighted UI
      Dim     → use for: borders, dividers, bg washes, inactive
+     Bright  → use for: hover lifts, active highlights, focus glows
+               (signal mixed 20% toward white)
+     Dark    → use for: pressed states, depth, shadowed fills
+               (signal mixed 20% toward black)
   ────────────────────────────────────────────────────────── */
 
   /* TATTOOING */
   --color-tattooing:        #7A1010;
   --color-tattooing-dim:    rgba(122, 16, 16, 0.25);
+  --color-tattooing-bright: #954040;
+  --color-tattooing-dark:   #620D0D;
 
   /* ART MAKING */
   --color-art:              #0581C1;
   --color-art-dim:          rgba(5, 129, 193, 0.25);
+  --color-art-bright:       #379ACD;
+  --color-art-dark:         #04679A;
 
   /* MERCH */
   --color-merch:            #F7A226;
   --color-merch-dim:        rgba(247, 162, 38, 0.25);
+  --color-merch-bright:     #F9B551;
+  --color-merch-dark:       #C6821E;
 
   /* ABOUT */
   --color-about:            #FCB867;
   --color-about-dim:        rgba(252, 184, 103, 0.25);
+  --color-about-bright:     #FDC685;
+  --color-about-dark:       #CA9352;
 
   /* EVENTS */
-  --color-events:           #55BA5A;
-  --color-events-dim:       rgba(85, 186, 90, 0.25);
+  --color-events:           #005d25;
+  --color-events-dim:       rgba(0, 93, 37, 0.25);
+  --color-events-bright:    #337D51;
+  --color-events-dark:      #004A1E;
 
   /* MUSIC */
   --color-music:            #A856A1;
   --color-music-dim:        rgba(168, 86, 161, 0.25);
+  --color-music-bright:     #B978B4;
+  --color-music-dark:       #864581;
 
   /* WRITINGS */
-  --color-writings:         #328C84;
-  --color-writings-dim:     rgba(50, 140, 132, 0.25);
+  --color-writings:         #FFE7CA;
+  --color-writings-dim:     rgba(255, 231, 202, 0.25);
+  --color-writings-bright:  #FFECD5;
+  --color-writings-dark:    #CCB9A2;
 
   /* ARCHIVE */
-  --color-archive:          #EC5E26;
-  --color-archive-dim:      rgba(236, 94, 38, 0.25);
+  --color-archive:          #6D3D15;
+  --color-archive-dim:      rgba(109, 61, 21, 0.25);
+  --color-archive-bright:   #8A6444;
+  --color-archive-dark:     #573111;
 
   /* FILM */
-  --color-film:             #FFE7CA;
-  --color-film-dim:         rgba(255, 231, 202, 0.25);
+  --color-film:             #328C84;
+  --color-film-dim:         rgba(50, 140, 132, 0.25);
+  --color-film-bright:      #5BA39D;
+  --color-film-dark:        #28706A;
 
 
   /* ──────────────────────────────────────────────────────────

@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>UI Guide — the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap">
+<style>
+/* ============================================================
+   UI GUIDE — the six.well construct
+   ------------------------------------------------------------
+   Self-contained reference. Values below are COPIED from
+   css/tokens.css — that file (and js/construct-nav.js) remain
+   the single source of truth. If tokens change, update both.
+   ------------------------------------------------------------
+   Toolbar: "Edit" toggles contenteditable on the whole document
+   so notes can be added inline. "Export PDF" opens the print
+   dialog — choose "Save as PDF" and enable background graphics.
+   ============================================================ */
+
+:root {
+  /* base */
+  --color-bg:         #0e0e0e;
+  --color-body:       #FFE7CA;
+  --color-accent:     #FCB867;
+  --color-accent-dim: rgba(252, 184, 103, 0.25);
+
+  /* mediums */
+  --color-tattooing: #7A1010;  --color-tattooing-dim: rgba(122,16,16,.25);
+  --color-art:       #0581C1;  --color-art-dim:       rgba(5,129,193,.25);
+  --color-merch:     #F7A226;  --color-merch-dim:     rgba(247,162,38,.25);
+  --color-about:     #FCB867;  --color-about-dim:     rgba(252,184,103,.25);
+  --color-events:    #005d25;  --color-events-dim:    rgba(0,93,37,.25);
+  --color-music:     #A856A1;  --color-music-dim:     rgba(168,86,161,.25);
+  --color-writings:  #FFE7CA;  --color-writings-dim:  rgba(255,231,202,.25);
+  --color-archive:   #6D3D15;  --color-archive-dim:   rgba(109,61,21,.25);
+  --color-film:      #328C84;  --color-film-dim:      rgba(50,140,132,.25);
+
+  /* type */
+  --font-display: 'Inter','Helvetica Neue',Arial,sans-serif;
+  --font-serif:   Georgia,'Times New Roman',Times,serif;
+
+  /* derived ink levels (from venture-pages.css) */
+  --text:       var(--color-body);
+  --text-muted: rgba(255,231,202,.66);
+  --text-dim:   rgba(255,231,202,.38);
+  --text-ghost: rgba(255,231,202,.16);
+  --ring-soft:  rgba(109,61,21,.4);
+  --ring-faint: rgba(109,61,21,.18);
+  --surface:      #111111;
+  --surface-deep: #090909;
+
+  /* guide accent */
+  --venture-color: var(--color-accent);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--color-bg);
+  color: var(--color-body);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+img { display: block; max-width: 100%; }
+
+.shell { max-width: 1080px; margin: 0 auto; padding: 64px 40px 120px; }
+
+/* ── toolbar ── */
+.toolbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 24px;
+  background: rgba(14,14,14,.9); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--ring-faint);
+}
+.toolbar .mark {
+  font-family: var(--font-display); font-weight: 900; font-size: 14px;
+  letter-spacing: -0.05em; color: var(--color-accent); margin-right: auto;
+}
+.toolbar button {
+  font-family: var(--font-display); font-weight: 700; font-size: 10px;
+  letter-spacing: .14em; text-transform: uppercase;
+  background: none; color: var(--text-muted);
+  border: 1px solid var(--ring-soft); padding: 8px 14px; cursor: pointer;
+  transition: color .2s, border-color .2s;
+}
+.toolbar button:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.toolbar button.active { color: var(--color-bg); background: var(--color-accent); border-color: var(--color-accent); }
+body { padding-top: 48px; }
+
+/* ── document chrome ── */
+.doc-title {
+  font-family: var(--font-display); font-weight: 900;
+  font-size: clamp(48px, 8vw, 96px); letter-spacing: -0.05em;
+  line-height: .9; text-transform: uppercase; color: var(--color-accent);
+  margin: 40px 0 8px;
+}
+.doc-sub { color: var(--text-muted); font-size: 16px; max-width: 640px; }
+.doc-meta {
+  margin-top: 20px; display: flex; flex-wrap: wrap; gap: 18px;
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-dim);
+}
+
+.toc { margin: 48px 0 0; border-top: 5px solid var(--ring-faint); padding-top: 24px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 32px; }
+.toc a {
+  text-decoration: none; font-family: var(--font-display); font-weight: 700;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted);
+  padding: 6px 0; border-bottom: 1px solid transparent; transition: color .2s;
+}
+.toc a:hover { color: var(--color-accent); }
+.toc a .n { color: var(--color-accent); margin-right: 8px; font-family: var(--font-serif); font-weight: 400; }
+
+section.guide { margin-top: 96px; border-top: 5px solid var(--ring-faint); padding-top: 40px; }
+.kicker {
+  display: block; font-family: var(--font-serif); font-size: 10px;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--color-accent); margin-bottom: 10px;
+}
+h2 {
+  font-family: var(--font-display); font-weight: 900;
+  font-size: clamp(30px, 4.5vw, 52px); letter-spacing: -0.03em; line-height: .95;
+  text-transform: uppercase; margin-bottom: 16px;
+}
+h3 {
+  font-family: var(--font-display); font-weight: 900; font-size: 16px;
+  letter-spacing: .02em; text-transform: uppercase; margin: 36px 0 12px; color: var(--color-body);
+}
+p.lead { color: var(--text-muted); max-width: 720px; margin-bottom: 8px; }
+.rule-note {
+  margin: 16px 0; padding: 14px 18px; border-left: 4px solid var(--color-accent);
+  background: var(--surface); color: var(--text-muted); font-size: 14px; max-width: 720px;
+}
+.rule-note strong { color: var(--color-body); }
+.rule-note.danger { border-left-color: var(--color-tattooing); }
+code, .mono {
+  font-family: Consolas, 'SF Mono', Menlo, monospace; font-size: 12.5px;
+  color: var(--color-accent); background: var(--surface); padding: 1px 6px;
+}
+pre {
+  background: var(--surface-deep); border: 1px solid var(--ring-faint);
+  padding: 18px 20px; overflow-x: auto; margin: 14px 0; max-width: 100%;
+}
+pre code { background: none; padding: 0; color: var(--text-muted); display: block; line-height: 1.7; }
+pre code .c { color: var(--text-ghost); }
+pre code .k { color: var(--color-accent); }
+
+table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+th {
+  text-align: left; font-family: var(--font-display); font-weight: 700; font-size: 10px;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim);
+  padding: 8px 12px 8px 0; border-bottom: 1px solid var(--ring-soft);
+}
+td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--ring-faint); color: var(--text-muted); vertical-align: top; }
+td:first-child { color: var(--color-body); }
+
+/* ── color swatches ── */
+.swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin: 20px 0; }
+.swatch { border: 1px solid var(--ring-faint); background: var(--surface-deep); }
+.swatch .chip { height: 84px; display: flex; align-items: flex-end; padding: 10px; }
+.swatch .chip .dim-strip { width: 38%; height: 100%; margin: -10px -10px -10px auto; }
+.swatch .ramp { display: flex; height: 72px; }
+.swatch .ramp span { flex: 1; display: block; }
+.swatch .dim-bar { height: 12px; }
+.swatch .info { padding: 12px 14px 14px; }
+.swatch .name {
+  font-family: var(--font-display); font-weight: 900; font-size: 13px;
+  letter-spacing: .02em; text-transform: uppercase; margin-bottom: 4px;
+}
+.swatch .hex { font-family: Consolas, Menlo, monospace; font-size: 11.5px; color: var(--text-muted); }
+.swatch .token { font-family: Consolas, Menlo, monospace; font-size: 10.5px; color: var(--text-dim); margin-top: 4px; word-break: break-all; }
+
+/* ── type scale ── */
+.type-row { display: grid; grid-template-columns: 170px 1fr; gap: 24px; align-items: baseline;
+  padding: 14px 0; border-bottom: 1px solid var(--ring-faint); }
+.type-row .spec { font-family: Consolas, Menlo, monospace; font-size: 11px; color: var(--text-dim); line-height: 1.7; }
+.type-row .sample { overflow: hidden; }
+.t-display { font-family: var(--font-display); font-weight: 900; text-transform: uppercase; line-height: 1.05; }
+.t-serif   { font-family: var(--font-serif); }
+
+/* ── spacing bars ── */
+.space-row { display: grid; grid-template-columns: 170px 1fr; gap: 24px; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--ring-faint); }
+.space-row .bar { height: 14px; background: var(--color-accent); opacity: .85; }
+.space-row .spec { font-family: Consolas, Menlo, monospace; font-size: 11px; color: var(--text-dim); }
+
+/* ── component demos ── */
+.demo {
+  border: 1px dashed var(--ring-soft); padding: 28px; margin: 16px 0;
+  background: var(--surface-deep); position: relative;
+}
+.demo::before {
+  content: "live demo"; position: absolute; top: -8px; left: 16px;
+  font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--text-dim); background: var(--color-bg); padding: 0 8px;
+}
+
+/* media card system — copied from css/media.css */
+.media-grid-demo { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 3px; }
+.media-card {
+  position: relative; aspect-ratio: 4/5; overflow: hidden; cursor: pointer;
+  background: #0f0f0f; border: 5px solid var(--ring-faint); display: block;
+  color: var(--text); transition: border-color .18s cubic-bezier(.2,0,.2,1);
+}
+.media-card:hover { border-color: var(--venture-color); }
+.media-card.card--wide { aspect-ratio: 3/2; }
+.card-image { position: absolute; inset: 0; z-index: 1; background: #111;
+  display: grid; place-items: center; color: var(--text-ghost);
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
+.card-badge { position: absolute; top: 12px; left: 12px; z-index: 3; pointer-events: none;
+  font-family: var(--font-display); font-weight: 700; font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--venture-color); }
+.card-overlay {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 3;
+  padding: 48px 16px 16px;
+  background: linear-gradient(to top, rgba(14,14,14,.92), transparent);
+  transform: translateY(6px); opacity: 0;
+  transition: opacity .18s ease, transform .18s ease; pointer-events: none;
+}
+.media-card:hover .card-overlay { opacity: 1; transform: translateY(0); }
+.card-title { display: block; font-family: var(--font-display); font-weight: 900; font-size: 13px;
+  letter-spacing: -0.01em; color: var(--text); margin-bottom: 4px; }
+.card-sub { display: block; font-family: var(--font-serif); font-size: 11px; font-style: italic;
+  color: var(--text-muted); letter-spacing: .03em; }
+
+/* buttons — copied from css/tattoos.css */
+.btn-primary, .btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 48px; padding: 0 20px; border: 1px solid var(--ring-soft);
+  font-family: var(--font-display); font-size: 11px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; cursor: pointer;
+  text-decoration: none; transition: all .3s cubic-bezier(.16,1,.3,1);
+}
+.btn-primary { background: var(--venture-color); border-color: var(--venture-color); color: var(--color-bg); }
+.btn-primary:hover { opacity: .9; }
+.btn-secondary { background: rgba(255,255,255,.02); color: var(--color-body); }
+.btn-secondary:hover { border-color: var(--venture-color); color: var(--venture-color); }
+
+/* venture-link — copied from css/venture-pages.css */
+.venture-link-demo {
+  display: inline-flex; align-items: center; min-height: 42px; margin-right: 16px;
+  border-top: 5px solid var(--ring-faint); color: var(--venture-color);
+  font-family: var(--font-display); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; text-decoration: none;
+  transition: color .3s, border-color .3s;
+}
+.venture-link-demo:hover { border-color: var(--venture-color); color: var(--text); }
+
+/* meta pill */
+.meta-pill-demo {
+  display: inline-block; margin-right: 12px; border-top: 5px solid var(--color-accent-dim);
+  color: var(--text-dim); font-family: var(--font-serif); font-size: 10px;
+  text-transform: uppercase; padding-top: 4px;
+}
+
+/* breadcrumb — copied from construct-wayfinding.js */
+.crumb-demo { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  font-family: var(--font-display); font-size: 10px; font-weight: 800;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--text-dim); }
+.crumb-demo a { color: rgba(255,231,202,.58); text-decoration: none; }
+.crumb-demo a:hover { color: var(--color-accent); }
+.crumb-demo .sep { color: rgba(255,231,202,.28); }
+
+/* dot nav demo */
+.dotnav-demo { display: flex; gap: 30px; align-items: center; }
+.dotnav-demo .dot { width: 17px; height: 17px; border-radius: 50%; opacity: .22; transition: opacity .2s; cursor: pointer; }
+.dotnav-demo .dot.current, .dotnav-demo .dot:hover { opacity: 1; }
+
+/* kicker demo levels */
+.ink-row { display: grid; grid-template-columns: 170px 1fr 1fr; gap: 18px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--ring-faint); font-size: 13px; }
+.ink-row .spec { font-family: Consolas, Menlo, monospace; font-size: 11px; color: var(--text-dim); }
+
+/* motion demo */
+.ease-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 12px; margin: 16px 0; }
+.ease-cell { border: 1px solid var(--ring-faint); padding: 16px; background: var(--surface-deep); }
+.ease-cell .lane { height: 22px; margin: 12px 0 4px; position: relative; background: var(--surface); }
+.ease-cell .puck { position: absolute; top: 4px; left: 4px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-accent); }
+.ease-cell:hover .puck { transform: translateX(160px); }
+.ease-cell .name { font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.ease-cell .spec { font-family: Consolas, Menlo, monospace; font-size: 10px; color: var(--text-dim); }
+
+/* checklist */
+.checklist { list-style: none; max-width: 760px; }
+.checklist li {
+  padding: 10px 0 10px 32px; border-bottom: 1px solid var(--ring-faint);
+  position: relative; color: var(--text-muted); font-size: 14px;
+}
+.checklist li::before {
+  content: ""; position: absolute; left: 0; top: 14px; width: 14px; height: 14px;
+  border: 1px solid var(--color-accent);
+}
+.checklist li strong { color: var(--color-body); }
+
+/* sitemap */
+.map-medium { margin: 22px 0; }
+.map-medium .head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.map-medium .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.map-medium .label { font-family: var(--font-display); font-weight: 900; font-size: 14px; letter-spacing: .02em; text-transform: uppercase; }
+.map-medium .url { font-family: Consolas, Menlo, monospace; font-size: 11px; color: var(--text-dim); }
+.map-medium ul { list-style: none; margin-left: 22px; border-left: 1px solid var(--ring-faint); padding-left: 16px; }
+.map-medium li { font-size: 13px; color: var(--text-muted); padding: 3px 0; }
+.map-medium li code { background: none; padding: 0; color: var(--text-dim); }
+
+footer.guide-footer {
+  margin-top: 110px; border-top: 5px solid var(--ring-faint); padding-top: 28px;
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-dim);
+}
+
+body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35); outline-offset: 4px; }
+
+/* ── inline color tuner (live editor, hidden on export) ── */
+#tuner { margin: 18px 0 8px; border: 1px solid var(--ring-faint); background: var(--surface-deep); }
+#tuner[hidden] { display: none; }
+#tuner .tn-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 24px; padding: 18px 20px; border-bottom: 1px solid var(--ring-faint); }
+#tuner .tn-head .ctrl { display: flex; flex-direction: column; gap: 8px; }
+#tuner .tn-head label { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); }
+#tuner .tn-head input[type=range] { width: 180px; accent-color: var(--color-accent); }
+#tuner .tn-head .val { font-family: Consolas, Menlo, monospace; font-size: 12px; color: var(--color-body); }
+#tuner .tn-head .note { flex: 1; min-width: 200px; color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+#tuner .media-row { display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--ring-faint); }
+#tuner .ident { display: flex; flex-direction: column; gap: 4px; }
+#tuner .ident .nm { font-family: var(--font-display); font-weight: 900; font-size: 14px; letter-spacing: .02em; text-transform: uppercase; }
+#tuner .ident .ky { font-family: Consolas, Menlo, monospace; font-size: 10.5px; color: var(--text-dim); }
+#tuner .stops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#tuner .stop { border: 1px solid var(--ring-faint); background: var(--surface); }
+#tuner .stop .well { height: 52px; position: relative; display: block; cursor: pointer; }
+#tuner .stop .well.dimwell { cursor: default; }
+#tuner .stop .well input[type=color] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+#tuner .stop .meta { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 8px; }
+#tuner .stop .meta .role { font-family: var(--font-display); font-weight: 700; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); }
+#tuner .stop.derived .meta .role::after { content: " · auto"; color: var(--text-ghost); }
+#tuner .stop.overridden .meta .role::after { content: " · set"; color: var(--color-accent); }
+#tuner .stop .hx { font-family: Consolas, Menlo, monospace; font-size: 10px; color: var(--text-muted); }
+#tuner .stop .reset { font-family: Consolas, Menlo, monospace; font-size: 11px; color: var(--text-dim); cursor: pointer; background: none; border: 0; padding: 2px 4px; }
+#tuner .stop .reset:hover { color: var(--color-accent); }
+#tuner .tn-out { padding: 18px 20px; border-top: 1px solid var(--ring-faint); }
+#tuner .tn-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+#tuner .tn-actions button { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; background: none; color: var(--text-muted); border: 1px solid var(--ring-soft); padding: 9px 14px; cursor: pointer; transition: .2s; }
+#tuner .tn-actions button:hover { color: var(--color-accent); border-color: var(--color-accent); }
+#tuner .tn-actions button.primary { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
+#tuner .tn-status { font-family: Consolas, Menlo, monospace; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; min-height: 16px; }
+#tuner .tn-status.ok { color: #6fae7c; }
+#tuner .tn-status.err { color: #c97; }
+#tuner pre { margin: 0; max-height: 320px; }
+@media (max-width: 720px) { #tuner .media-row { grid-template-columns: 1fr; } }
+
+/* ── responsive ── */
+@media (max-width: 720px) {
+  .shell { padding: 48px 22px 80px; }
+  .type-row, .space-row, .ink-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+
+/* ── print / PDF export ── */
+@media print {
+  body { padding-top: 0; background: var(--color-bg) !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .toolbar { display: none; }
+  section.guide { break-before: page; margin-top: 0; padding-top: 32px; }
+  .toc, .demo, pre, table, .swatch, .ease-cell { break-inside: avoid; }
+  #tuner, .tn-toggle { display: none !important; }
+  .ease-cell:hover .puck { transform: none; }
+  a { text-decoration: none; }
+  @page { size: A4; margin: 10mm; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <span class="mark">the six.well construct — ui guide</span>
+  <button id="tuner-toggle" class="tn-toggle" type="button">🎨 Edit colors</button>
+  <button id="edit-toggle" type="button">✎ Edit</button>
+  <button id="print-btn" type="button">⤓ Export PDF</button>
+</div>
+
+<div class="shell" id="doc" contenteditable="false">
+
+  <header>
+    <span class="kicker">internal reference · working document</span>
+    <h1 class="doc-title">UI<br>Guide</h1>
+    <p class="doc-sub">Everything needed to make edits to thesixwellconstruct without drifting from the system: colors, type, spacing, components, navigation, page anatomy, language, and known gotchas.</p>
+    <div class="doc-meta">
+      <span>source of truth: css/tokens.css + js/construct-nav.js</span>
+      <span>last reviewed: June 2026</span>
+      <span>export: toolbar → export pdf → enable background graphics</span>
+    </div>
+
+    <nav class="toc">
+      <a href="#colors"><span class="n">01</span>Color system</a>
+      <a href="#typography"><span class="n">02</span>Typography</a>
+      <a href="#ink"><span class="n">03</span>Ink &amp; surface levels</a>
+      <a href="#spacing"><span class="n">04</span>Spacing &amp; layout</a>
+      <a href="#components"><span class="n">05</span>Components</a>
+      <a href="#navigation"><span class="n">06</span>Navigation system</a>
+      <a href="#motion"><span class="n">07</span>Motion</a>
+      <a href="#anatomy"><span class="n">08</span>Page anatomy</a>
+      <a href="#sitemap"><span class="n">09</span>Site map</a>
+      <a href="#language"><span class="n">10</span>Language rules</a>
+      <a href="#gotchas"><span class="n">11</span>Gotchas</a>
+    </nav>
+  </header>
+
+
+  <!-- ════════════════════ 01 COLOR ════════════════════ -->
+  <section class="guide" id="colors">
+    <span class="kicker">01 · color system</span>
+    <h2>Color</h2>
+    <p class="lead">A near-black ground, one warm body ink, one global amber, and nine medium signal colors. Every color has a full-strength signal use and a 25%-opacity dim variant for borders, dividers, and washes.</p>
+
+    <h3>Base palette</h3>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="chip" style="background:#0e0e0e; border-bottom:1px solid var(--ring-faint)"></div>
+        <div class="info"><div class="name">Background</div><div class="hex">#0E0E0E</div><div class="token">--color-bg</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FFE7CA"></div>
+        <div class="info"><div class="name">Body ink</div><div class="hex">#FFE7CA</div><div class="token">--color-body</div></div></div>
+      <div class="swatch"><div class="chip" style="background:#FCB867"></div>
+        <div class="info"><div class="name">Global amber</div><div class="hex">#FCB867</div><div class="token">--color-accent</div></div></div>
+      <div class="swatch"><div class="chip" style="background:rgba(252,184,103,.25)"></div>
+        <div class="info"><div class="name">Amber dim</div><div class="hex">rgba(252,184,103,.25)</div><div class="token">--color-accent-dim</div></div></div>
+    </div>
+
+    <div class="rule-note"><strong>Adjust these live:</strong> hit <strong>🎨 Edit colors</strong> in the toolbar (or the button below) to open the inline tuner — tweak any medium's signal color and the brighten/darken steps, watch the swatches above update, then copy the CSS or write it straight back into <code>tokens.css</code>. The editor is hidden when you export the PDF.</div>
+
+    <h3>Medium signal colors &amp; ramps</h3>
+    <p class="lead">Each swatch is a three-stop ramp — <strong>dark</strong> (signal mixed toward black), the <strong>signal</strong> color, and <strong>bright</strong> (mixed toward white) — with the 25% dim variant as the thin strip beneath. Hex labels read dark · signal · bright. These swatches stay in sync with the live tuner.</p>
+    <div class="swatch-grid" id="medium-swatch-grid"><!-- rendered by tuner script --></div>
+
+    <div class="tn-actions" style="margin:16px 0;">
+      <button id="tuner-open" class="tn-toggle" type="button" style="font-family:var(--font-display);font-weight:700;font-size:10px;letter-spacing:.14em;text-transform:uppercase;background:var(--color-accent);color:var(--color-bg);border:1px solid var(--color-accent);padding:10px 16px;cursor:pointer;">🎨 Edit colors</button>
+    </div>
+
+    <!-- ── inline live tuner ── -->
+    <div id="tuner" hidden>
+      <div class="tn-head">
+        <div class="ctrl">
+          <label>Brighten step</label>
+          <input id="bright-range" type="range" min="0" max="60" value="20">
+          <span class="val"><span id="bright-val">20</span>% toward white</span>
+        </div>
+        <div class="ctrl">
+          <label>Darken step</label>
+          <input id="dark-range" type="range" min="0" max="60" value="20">
+          <span class="val"><span id="dark-val">20</span>% toward black</span>
+        </div>
+        <p class="note">Sliders set how far the auto bright/dark stops move from each signal. Click a stop swatch to override it by hand; use <code>↺</code> to re-derive. The reference swatches above update live.</p>
+      </div>
+      <div id="media-list"></div>
+      <div class="tn-out">
+        <div class="tn-actions">
+          <button id="copy-css" class="primary" type="button">⧉ Copy CSS block</button>
+          <button id="save-file" type="button">⤓ Save to tokens.css</button>
+          <button id="reload-tokens" type="button">↻ Reload from tokens.css</button>
+          <button id="reset-all" type="button">Reset all</button>
+        </div>
+        <div class="tn-status" id="tn-status"></div>
+        <pre><code id="css-out"></code></pre>
+      </div>
+    </div>
+
+    <div class="rule-note danger">
+      <strong>The medium accent rule (non-negotiable):</strong> every medium page must use its own medium color as the primary accent. Never use global amber <code>#FCB867</code> as the primary signal color on a medium page. Set <code>--venture-color</code> in the page's <code>:root</code>:
+    </div>
+<pre><code><span class="c">/* in the page's CSS */</span>
+:root {
+  <span class="k">--venture-color</span>: var(--color-tattooing); <span class="c">/* this medium's token */</span>
+}</code></pre>
+    <p class="lead">Then use <code>var(--venture-color)</code> for: filter-chip active states (dot + underline), section labels and kicker text, status indicators, active UI states, and hover border colors on cards and interactive elements. The property is still named <code>--venture-color</code> for legacy compatibility — keep the name.</p>
+
+    <h3>Where signal vs. dim goes</h3>
+    <table>
+      <tr><th>Variant</th><th>Use for</th></tr>
+      <tr><td>Signal (full strength)</td><td>Dots, active states, kickers, highlighted UI, hover borders, price figures, step numbers</td></tr>
+      <tr><td>Bright (+20% white)<br><code>--color-{medium}-bright</code></td><td>Hover lifts, active highlights, focus glows — a step up from signal without changing hue</td></tr>
+      <tr><td>Dark (+20% black)<br><code>--color-{medium}-dark</code></td><td>Pressed states, depth, shadowed fills, layered backgrounds beneath signal elements</td></tr>
+      <tr><td>Dim (25% opacity)</td><td>Borders, dividers, background washes, inactive states, meta-pill top borders</td></tr>
+      <tr><td>Archive brown dims<br><code>rgba(109,61,21,…)</code></td><td>The site-wide structural border color — <code>--ring-faint</code> (.18) and <code>--ring-soft</code> (.4) frame nearly every panel, grid, and footer on every medium</td></tr>
+    </table>
+  </section>
+
+
+  <!-- ════════════════════ 02 TYPOGRAPHY ════════════════════ -->
+  <section class="guide" id="typography">
+    <span class="kicker">02 · typography</span>
+    <h2>Typography</h2>
+    <p class="lead">Two voices only. <strong>Inter 900</strong> for anything declarative — titles, wordmarks, buttons, navigation. <strong>Georgia</strong> for everything that reads — body copy, labels, captions, metadata. Display gets tighter as it grows; serif labels get wider. Never introduce a third face.</p>
+
+    <table>
+      <tr><th>Stack</th><th>Token</th><th>Value</th></tr>
+      <tr><td>Display</td><td><code>--font-display</code></td><td>'Inter', 'Helvetica Neue', Arial, sans-serif — weight 900 (700 at small UI sizes)</td></tr>
+      <tr><td>Serif</td><td><code>--font-serif</code></td><td>Georgia, 'Times New Roman', Times, serif</td></tr>
+    </table>
+
+    <h3>Size scale</h3>
+    <p class="lead">Pick the closest step — don't freestyle between them. Hero/page titles on real pages use <code>clamp()</code> built from these anchors (e.g. <code>clamp(80px, 14vw, 220px)</code> for medium heroes).</p>
+
+    <div class="type-row"><div class="spec">--text-3xl · 80px<br>tracking -0.05em</div><div class="sample t-display" style="font-size:60px; letter-spacing:-0.05em;">Wordmark</div></div>
+    <div class="type-row"><div class="spec">--text-2xl · 56px<br>tracking -0.06em</div><div class="sample t-display" style="font-size:56px; letter-spacing:-0.06em;">Hero display</div></div>
+    <div class="type-row"><div class="spec">--text-xl · 38px<br>tracking -0.05em</div><div class="sample t-display" style="font-size:38px; letter-spacing:-0.05em;">Page title</div></div>
+    <div class="type-row"><div class="spec">--text-lg · 28px<br>tracking -0.03em</div><div class="sample t-display" style="font-size:28px; letter-spacing:-0.03em;">Section heading</div></div>
+    <div class="type-row"><div class="spec">--text-md · 20px<br>serif · leading 1.35</div><div class="sample t-serif" style="font-size:20px; line-height:1.35;">Lead text and short descriptors set in Georgia.</div></div>
+    <div class="type-row"><div class="spec">--text-base · 16px<br>serif · leading 1.6</div><div class="sample t-serif" style="font-size:16px;">Primary body copy. The main reading size across all mediums, warm off-white on near-black.</div></div>
+    <div class="type-row"><div class="spec">--text-sm · 13px<br>serif · leading 1.6</div><div class="sample t-serif" style="font-size:13px;">Small body and captions — card descriptions, panel copy, process steps.</div></div>
+    <div class="type-row"><div class="spec">--text-xs · 11px<br>tracking 0.14em</div><div class="sample t-serif" style="font-size:11px; letter-spacing:.14em; text-transform:uppercase;">Pathway labels &amp; metadata</div></div>
+    <div class="type-row"><div class="spec">--text-2xs · 9px<br>tracking 0.18em</div><div class="sample t-serif" style="font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-dim);">Hint text · tiny labels</div></div>
+
+    <h3>Tracking &amp; leading</h3>
+    <table>
+      <tr><th>Token</th><th>Value</th><th>Role</th></tr>
+      <tr><td><code>--tracking-display-tight</code></td><td>-0.05em</td><td>Wordmark scale, display 32px+</td></tr>
+      <tr><td><code>--tracking-display-tighter</code></td><td>-0.06em</td><td>Hero display, 56px+</td></tr>
+      <tr><td><code>--tracking-body</code></td><td>0</td><td>Body copy — no adjustment</td></tr>
+      <tr><td><code>--tracking-label</code></td><td>0.14em</td><td>Small serif labels</td></tr>
+      <tr><td><code>--tracking-label-wide</code></td><td>0.18em</td><td>Small caps, hints, metadata</td></tr>
+      <tr><td><code>--leading-tight</code></td><td>1.1</td><td>Display text, titles (heroes go as low as 0.84–0.92)</td></tr>
+      <tr><td><code>--leading-snug</code></td><td>1.3</td><td>Sub-headings, ledes</td></tr>
+      <tr><td><code>--leading-normal</code></td><td>1.6</td><td>Body copy</td></tr>
+      <tr><td><code>--leading-relaxed</code></td><td>1.8</td><td>Long-form body, /writings</td></tr>
+    </table>
+
+    <div class="rule-note"><strong>Voice contrast is the system:</strong> giant tight uppercase Inter against small wide-tracked uppercase Georgia. Kickers are always serif, 10px, uppercase, wide-tracked, in the medium color.</div>
+  </section>
+
+
+  <!-- ════════════════════ 03 INK LEVELS ════════════════════ -->
+  <section class="guide" id="ink">
+    <span class="kicker">03 · ink &amp; surface levels</span>
+    <h2>Ink &amp; surfaces</h2>
+    <p class="lead">Body ink <code>#FFE7CA</code> steps down through four opacity levels (defined on <code>.venture-page</code> in venture-pages.css). Structural borders are archive brown at two opacities, not gray.</p>
+
+    <div class="ink-row"><div class="spec">--text · 1.0</div><div style="color:var(--text)">Full ink — titles, primary copy</div><div class="spec">#FFE7CA</div></div>
+    <div class="ink-row"><div class="spec">--text-muted · .66</div><div style="color:var(--text-muted)">Muted — section copy, descriptions, notes</div><div class="spec">rgba(255,231,202,.66)</div></div>
+    <div class="ink-row"><div class="spec">--text-dim · .38</div><div style="color:var(--text-dim)">Dim — metadata, footers, breadcrumb current page</div><div class="spec">rgba(255,231,202,.38)</div></div>
+    <div class="ink-row"><div class="spec">--text-ghost · .16</div><div style="color:var(--text-ghost)">Ghost — empty states, placeholders</div><div class="spec">rgba(255,231,202,.16)</div></div>
+    <div class="ink-row"><div class="spec">--ring-soft · .4</div><div><span style="display:inline-block; width:120px; border-top:1px solid var(--ring-soft);"></span> stronger borders, button outlines</div><div class="spec">rgba(109,61,21,.4)</div></div>
+    <div class="ink-row"><div class="spec">--ring-faint · .18</div><div><span style="display:inline-block; width:120px; border-top:5px solid var(--ring-faint);"></span> the signature 5px frame on grids, heroes, sections</div><div class="spec">rgba(109,61,21,.18)</div></div>
+    <div class="ink-row"><div class="spec">--surface</div><div><span style="display:inline-block; width:60px; height:18px; background:var(--surface); border:1px solid var(--ring-faint); vertical-align:middle;"></span> raised panels</div><div class="spec">#111111</div></div>
+    <div class="ink-row"><div class="spec">--surface-deep</div><div><span style="display:inline-block; width:60px; height:18px; background:var(--surface-deep); border:1px solid var(--ring-faint); vertical-align:middle;"></span> recessed boards, visual panels</div><div class="spec">#090909</div></div>
+
+    <div class="rule-note"><strong>Atmosphere:</strong> medium pages add a fixed full-viewport SVG fractal-noise grain at 3.5% opacity with <code>mix-blend-mode: overlay</code> (<code>.venture-grain</code> / <code>.tattoos-page::before</code>), and often a faint radial wash of the medium color at the top of the page.</div>
+  </section>
+
+
+  <!-- ════════════════════ 04 SPACING & LAYOUT ════════════════════ -->
+  <section class="guide" id="spacing">
+    <span class="kicker">04 · spacing &amp; layout</span>
+    <h2>Spacing &amp; layout</h2>
+
+    <h3>Spacing scale</h3>
+    <div class="space-row"><div class="spec">--space-2xs · 4px</div><div class="bar" style="width:4px"></div></div>
+    <div class="space-row"><div class="spec">--space-xs · 8px</div><div class="bar" style="width:8px"></div></div>
+    <div class="space-row"><div class="spec">--space-sm · 16px</div><div class="bar" style="width:16px"></div></div>
+    <div class="space-row"><div class="spec">--space-md · 32px</div><div class="bar" style="width:32px"></div></div>
+    <div class="space-row"><div class="spec">--space-lg · 56px</div><div class="bar" style="width:56px"></div></div>
+    <div class="space-row"><div class="spec">--space-xl · 80px</div><div class="bar" style="width:80px"></div></div>
+    <div class="space-row"><div class="spec">--space-2xl · 120px</div><div class="bar" style="width:120px"></div></div>
+    <div class="space-row"><div class="spec">--space-3xl · 180px</div><div class="bar" style="width:180px"></div></div>
+
+    <h3>Page shells</h3>
+    <table>
+      <tr><th>Shell</th><th>Width</th><th>Padding</th><th>Used by</th></tr>
+      <tr><td><code>--max-width</code> column</td><td>1080px max</td><td>40px x · 80px y (tokens)</td><td>Reading-weight pages</td></tr>
+      <tr><td><code>.venture-shell</code></td><td>min(100%, 1480px)</td><td>132px top · clamp(24–56px) x · 72px bottom</td><td>Shared medium page template</td></tr>
+      <tr><td><code>.tattoos-shell</code></td><td>min(100% − 80px, 1440px)</td><td>96px top · 64px bottom</td><td>Tattoo medium pages</td></tr>
+    </table>
+
+    <h3>Breakpoints in active use</h3>
+    <table>
+      <tr><th>Width</th><th>What changes</th></tr>
+      <tr><td>≤ 1080px</td><td>Heroes, feature grids, cta panels collapse to single column (<code>minmax(0,1fr)</code>); record/path grids go 2-up; process list stacks</td></tr>
+      <tr><td>≤ 720px</td><td>Venture shell padding tightens; hero titles re-clamp; record/path/status grids go 1-up; timeline + footer stack</td></tr>
+      <tr><td>≤ 700px</td><td>Breadcrumb/wayfinding footer shrink to 9px and stack; mobile.css guards activate</td></tr>
+      <tr><td>≤ 640px</td><td>Media grid forces 2-up <code>repeat(2, minmax(0,1fr))</code>; header shell grows to 110px; dot nav drops to 92px; buttons go full-width</td></tr>
+    </table>
+
+    <div class="rule-note danger"><strong>Grid collapse rule:</strong> always write <code>grid-template-columns: minmax(0, 1fr)</code> in mobile collapse rules — never bare <code>1fr</code>. <code>1fr</code> = <code>minmax(auto, 1fr)</code> and cannot shrink below a child's min-content width, which is how long headlines drag 390px phones to desktop scale. See Gotchas.</div>
+  </section>
+
+
+  <!-- ════════════════════ 05 COMPONENTS ════════════════════ -->
+  <section class="guide" id="components">
+    <span class="kicker">05 · components</span>
+    <h2>Components</h2>
+    <p class="lead">Shared pieces live in <code>css/media.css</code> (cards/grids), <code>css/venture-pages.css</code> (page shell, sections, links, pills, footer), and <code>css/tattoos.css</code> (buttons, panels, process list — the richest medium stylesheet, often the pattern source).</p>
+
+    <h3>Media card · <code>.media-card</code> (css/media.css)</h3>
+    <p class="lead">The universal image card: 4/5 aspect, 5px faint border, hover darkens image + scales down 0.97 + border takes the medium color + overlay slides up. Wide variant <code>.card--wide</code> is 3/2 for sheets and landscapes. Grid: <code>auto-fill minmax(260px,1fr)</code>, 3px gap.</p>
+    <div class="demo" style="--venture-color:#7A1010;">
+      <div class="media-grid-demo">
+        <div class="media-card">
+          <span class="card-image">image 4/5</span>
+          <span class="card-badge">flash · available</span>
+          <span class="card-overlay"><span class="card-title">Piece Title</span><span class="card-sub">sub · metadata</span></span>
+        </div>
+        <div class="media-card card--wide" style="--venture-color:#0581C1;">
+          <span class="card-image">.card--wide 3/2</span>
+          <span class="card-overlay"><span class="card-title">Sheet Title</span><span class="card-sub">wide variant</span></span>
+        </div>
+      </div>
+    </div>
+<pre><code>&lt;div class="media-card"&gt;
+  &lt;span class="card-image"&gt;&lt;img src="..." alt="..."&gt;&lt;/span&gt;
+  &lt;span class="card-badge"&gt;...&lt;/span&gt;        <span class="c">&lt;!-- optional, always visible --&gt;</span>
+  &lt;span class="card-overlay"&gt;
+    &lt;span class="card-title"&gt;Title&lt;/span&gt;
+    &lt;span class="card-sub"&gt;Sub / metadata&lt;/span&gt;
+  &lt;/span&gt;
+&lt;/div&gt;</code></pre>
+
+    <h3>Buttons (tattoos.css pattern)</h3>
+    <p class="lead">Inter 700 · 11px · 0.14em tracking · uppercase · 48px min-height · square corners. Primary fills with the medium color and inverts text to background black; secondary is outlined and adopts the medium color on hover. Full-width at ≤640px.</p>
+    <div class="demo" style="--venture-color:#7A1010;">
+      <a class="btn-primary" href="#components" onclick="return false">Primary action</a>&nbsp;&nbsp;
+      <a class="btn-secondary" href="#components" onclick="return false">Secondary action</a>
+    </div>
+
+    <h3>Venture link · <code>.venture-link</code></h3>
+    <p class="lead">Quiet text link with a 5px faint top border; hover fills the border with the medium color and lifts the text to full ink.</p>
+    <div class="demo" style="--venture-color:#0581C1;">
+      <a class="venture-link-demo" href="#components" onclick="return false">View the work</a>
+      <a class="venture-link-demo" href="#components" onclick="return false">Inquire</a>
+    </div>
+
+    <h3>Kickers, pills, labels</h3>
+    <div class="demo" style="--venture-color:#005d25;">
+      <span style="display:block; color:var(--venture-color); font-family:var(--font-serif); font-size:10px; letter-spacing:.22em; text-transform:uppercase; margin-bottom:14px;">section kicker · serif 10px wide-tracked</span>
+      <span class="meta-pill-demo">meta pill</span>
+      <span class="meta-pill-demo">venture-dim top border</span>
+      <span class="meta-pill-demo">10px serif uppercase</span>
+    </div>
+
+    <h3>Section &amp; grid framing</h3>
+    <p class="lead">Sections separate with 5px <code>--ring-faint</code> bottom borders and clamp-padded vertical rhythm. Card grids (<code>.feature-grid</code>, <code>.record-grid</code> 3-up, <code>.path-grid</code> 4-up, <code>.status-grid</code> 2-up) share a 5px outer frame with 1px gaps; cards inside have 5px faint top borders and clamp(24–36px) padding. Card headings are Inter 900 18px uppercase in the medium color; card copy is muted 14px/1.75.</p>
+
+    <h3>Process list / price cards (tattoos pattern)</h3>
+    <div class="demo" style="--venture-color:#7A1010;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint);">
+        <div style="padding:20px; border-right:1px solid var(--ring-faint);">
+          <span style="display:block; color:var(--venture-color); font-family:var(--font-display); font-weight:900; font-size:28px; letter-spacing:-0.04em; margin-bottom:8px;">01</span>
+          <span style="display:block; font-family:var(--font-display); font-weight:900; font-size:13px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px;">Step title</span>
+          <span style="color:var(--text-muted); font-size:13px;">Step copy at 13px/1.6.</span>
+        </div>
+        <div style="padding:20px;">
+          <span style="display:block; color:var(--venture-color); font-family:var(--font-display); font-weight:900; font-size:34px; letter-spacing:-0.04em; margin-bottom:4px;">$160</span>
+          <span style="color:var(--text-muted); font-size:13px;">Price figure — Inter 900 clamp(30–52px), medium color.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ════════════════════ 06 NAVIGATION ════════════════════ -->
+  <section class="guide" id="navigation">
+    <span class="kicker">06 · navigation system</span>
+    <h2>Navigation</h2>
+    <p class="lead">Four injected, shared pieces — none are hand-written into page HTML. They read <code>body[data-venture]</code> to know where they are.</p>
+
+    <table>
+      <tr><th>Piece</th><th>Script</th><th>What it renders</th></tr>
+      <tr><td>Fade overlay</td><td><code>js/transition.js</code></td><td><code>#construct-fade</code> — 500ms fade-to-black between pages; must load first (sets <code>window._constructFade</code>)</td></tr>
+      <tr><td>Corner lockup</td><td><code>js/construct-corner.js</code></td><td>Top-left ring (#6D3D15 annulus) + 6 orbiting amber dots + "the six.well construct" wordmark (Inter 900, 19px, −0.05em, #FCB867 at .82). Click returns home. Fades in after 800ms.</td></tr>
+      <tr><td>Medium dot nav</td><td><code>js/construct-nav.js</code></td><td>9 colored 17px dots, top-center, 30px gap. Current medium full opacity, others at .22. Hover shows a 9px Inter 700 label in the medium color.</td></tr>
+      <tr><td>Wayfinding</td><td><code>js/construct-wayfinding.js</code></td><td>Breadcrumb at top of <code>&lt;main&gt;</code> + normalized footer with "Return to construct" / "Back to [medium]" links</td></tr>
+    </table>
+
+    <h3>Dot nav (order is canonical)</h3>
+    <div class="demo">
+      <div class="dotnav-demo">
+        <span class="dot current" style="background:#7A1010" title="TATTOOING"></span>
+        <span class="dot" style="background:#0581C1" title="ART MAKING"></span>
+        <span class="dot" style="background:#F7A226" title="MERCH"></span>
+        <span class="dot" style="background:#FCB867" title="ABOUT"></span>
+        <span class="dot" style="background:#005d25" title="EVENTS"></span>
+        <span class="dot" style="background:#A856A1" title="MUSIC"></span>
+        <span class="dot" style="background:#FFE7CA" title="WRITINGS"></span>
+        <span class="dot" style="background:#6D3D15" title="ARCHIVE"></span>
+        <span class="dot" style="background:#328C84" title="FILM"></span>
+      </div>
+      <p style="margin-top:14px; color:var(--text-dim); font-size:11px;">tattooing · art · merch · about · events · music · writings · archive · film — hover any dot</p>
+    </div>
+
+    <h3>Breadcrumb (injected)</h3>
+    <div class="demo">
+      <nav class="crumb-demo">
+        <a href="#navigation" onclick="return false">Construct</a><span class="sep">/</span>
+        <a href="#navigation" onclick="return false">Art.Pill Tattoo House</a><span class="sep">/</span>
+        <span>Flash</span>
+      </nav>
+    </div>
+    <p class="lead">Inter 800 · 10px · 0.16em tracking · uppercase. Links at .58 ink, current page at .38, separators at .28; hover goes amber. Auto-built from the URL path — segment labels come from <code>SECTION_LABELS</code> in construct-wayfinding.js; <code>ap-*</code> slugs render uppercase.</p>
+
+    <h3>Header band</h3>
+    <p class="lead">A fixed 88px frosted band (<code>rgba(14,14,14,.85)</code> + 8px blur + 5px faint bottom border) activates behind the lockup and dots on scroll (<code>#construct-header-shell</code> / <code>.construct-header-active</code>). At ≤640px it grows to 110px and the dot row drops to 92px to clear the wrapped lockup.</p>
+
+    <div class="rule-note"><strong>Script order on every page, before <code>&lt;/body&gt;</code>:</strong> transition.js → construct-corner.js → construct-nav.js → construct-wayfinding.js. The <code>data-venture</code> key on <code>&lt;body&gt;</code> must be one of: <code>tattooing | art | merch | about | events | music | writings | archive | film</code>. The attribute name is legacy — do not rename it.</div>
+  </section>
+
+
+  <!-- ════════════════════ 07 MOTION ════════════════════ -->
+  <section class="guide" id="motion">
+    <span class="kicker">07 · motion</span>
+    <h2>Motion</h2>
+    <p class="lead">Quiet and warm. One page-level fade, staggered entrances, and small 150–300ms hover moves. Nothing bounces.</p>
+
+    <h3>Easing &amp; duration tokens (hover the cells)</h3>
+    <div class="ease-grid">
+      <div class="ease-cell"><span class="name">--ease-out</span><div class="lane"><div class="puck" style="transition:transform .6s cubic-bezier(.16,1,.3,1)"></div></div><span class="spec">cubic-bezier(.16,1,.3,1) · snappy exit</span></div>
+      <div class="ease-cell"><span class="name">--ease-in-out</span><div class="lane"><div class="puck" style="transition:transform .6s cubic-bezier(.45,0,.55,1)"></div></div><span class="spec">cubic-bezier(.45,0,.55,1) · balanced</span></div>
+      <div class="ease-cell"><span class="name">--ease-gentle</span><div class="lane"><div class="puck" style="transition:transform .6s cubic-bezier(.25,.46,.45,.94)"></div></div><span class="spec">cubic-bezier(.25,.46,.45,.94) · soft</span></div>
+    </div>
+    <table>
+      <tr><th>Token</th><th>Value</th><th>Role</th></tr>
+      <tr><td><code>--duration-fast</code></td><td>150ms</td><td>Micro interactions, icon swaps (cards use 180ms inline)</td></tr>
+      <tr><td><code>--duration-base</code></td><td>300ms</td><td>Hover states, label fades</td></tr>
+      <tr><td><code>--duration-slow</code></td><td>600ms</td><td>Reveals, section entrances</td></tr>
+      <tr><td><code>--duration-crawl</code></td><td>900ms</td><td>Ambient, atmospheric</td></tr>
+    </table>
+
+    <h3>Page transition &amp; entrance</h3>
+    <table>
+      <tr><th>Mechanism</th><th>Spec</th></tr>
+      <tr><td>Fade-to-black</td><td><code>#construct-fade</code> overlay, opacity over <strong>500ms</strong> <code>--ease-in-out</code> — the one place to change all page transitions site-wide (transitions.css)</td></tr>
+      <tr><td>Entrance</td><td>Add <code>.entrance-fade</code> to elements: starts at opacity 0 / translateY(12px), animates 600ms <code>--ease-out</code> when body gets <code>.entrance-active</code></td></tr>
+      <tr><td>Stagger</td><td><code>.entrance-delay-1</code> … <code>-5</code> add 80ms each (80 → 400ms)</td></tr>
+      <tr><td>Chrome fade-in</td><td>Corner lockup and dot nav appear together after an 800ms delay, 600ms fade</td></tr>
+      <tr><td>Card hover</td><td>Image: scale .97 + brightness .9 → .45 · overlay rises 6px · border takes medium color · all ~180ms</td></tr>
+    </table>
+  </section>
+
+
+  <!-- ════════════════════ 08 PAGE ANATOMY ════════════════════ -->
+  <section class="guide" id="anatomy">
+    <span class="kicker">08 · page anatomy</span>
+    <h2>Building a page</h2>
+    <p class="lead">The minimum correct skeleton for any new medium or pathway page:</p>
+
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"&gt;
+  &lt;meta name="theme-color" content="#0e0e0e"&gt;
+  &lt;meta name="color-scheme" content="dark"&gt;
+  <span class="c">&lt;!-- Inter from Google Fonts: weights 400/500/700/900 --&gt;</span>
+  &lt;link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap"&gt;
+  &lt;link rel="stylesheet" href="/css/tokens.css"&gt;
+  &lt;link rel="stylesheet" href="/css/transitions.css"&gt;
+  &lt;link rel="stylesheet" href="/css/media.css"&gt;        <span class="c">&lt;!-- if the page has card grids --&gt;</span>
+  &lt;link rel="stylesheet" href="/css/mobile.css"&gt;       <span class="c">&lt;!-- mobile guards --&gt;</span>
+  &lt;style&gt;
+    :root { <span class="k">--venture-color</span>: var(--color-tattooing); } <span class="c">/* THIS medium's color */</span>
+  &lt;/style&gt;
+&lt;/head&gt;
+&lt;body <span class="k">data-venture="tattooing"</span>&gt;   <span class="c">&lt;!-- legacy attr name — required --&gt;</span>
+  &lt;main&gt;
+    <span class="c">&lt;!-- breadcrumb is injected here automatically --&gt;</span>
+    ...
+  &lt;/main&gt;
+  <span class="c">&lt;!-- footer normalized/injected by wayfinding --&gt;</span>
+  &lt;script src="/js/transition.js"&gt;&lt;/script&gt;
+  &lt;script src="/js/construct-corner.js"&gt;&lt;/script&gt;
+  &lt;script src="/js/construct-nav.js"&gt;&lt;/script&gt;
+  &lt;script src="/js/construct-wayfinding.js"&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+    <h3>Edit checklist</h3>
+    <ul class="checklist">
+      <li><strong>Root-relative paths only</strong> (<code>/css/…</code>, <code>/art/</code>) — the site deploys at the domain root on Cloudflare Workers. No build step; static files + <code>_worker.js</code>.</li>
+      <li><strong><code>data-venture</code> set correctly</strong> on <code>&lt;body&gt;</code> — it drives dot nav highlight, breadcrumb labels, and footer links.</li>
+      <li><strong><code>--venture-color</code> set</strong> to this medium's token — never global amber on a medium page.</li>
+      <li><strong>Use token steps</strong> for size, spacing, easing — don't freestyle values between steps.</li>
+      <li><strong>Ecosystem-first:</strong> every page points to at least one other medium — a related-medium band, source lineage, or a quiet next action (inquire, claim, read, attend, collect, listen, revisit, enter the archive). Subtle; discovery, not promotion.</li>
+      <li><strong>Mobile pass:</strong> collapse grids with <code>minmax(0,1fr)</code>; verify at 390px; check hero titles for editor-injected font-size spans.</li>
+      <li><strong>Forms:</strong> tattoo/acquisition forms POST <code>multipart/form-data</code> to <code>/api/submissions</code> and include the <code>_gotcha</code> honeypot.</li>
+      <li><strong>Never push</strong> — commits are fine; the user always pushes manually. Work directly on main in the main repo (no worktrees).</li>
+    </ul>
+  </section>
+
+
+  <!-- ════════════════════ 09 SITE MAP ════════════════════ -->
+  <section class="guide" id="sitemap">
+    <span class="kicker">09 · site map</span>
+    <h2>Site map</h2>
+    <p class="lead">Nine mediums orbit the landing construct (an interactive canvas ring at <code>/</code>). Pathways are the routes inside each medium. Pages currently hidden from the public live in <code>.hidden-pages/</code> and 404 on the live site (managed via <code>/tools/page-visibility.html</code>).</p>
+
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#7A1010"></span><span class="label">Tattooing — Art.Pill Tattoo House</span><span class="url">/tattoos/</span></div>
+      <ul>
+        <li>Flash <code>/tattoos/flash/</code> — maze sheet, ap-* piece pages, claim form <code>/tattoos/flash/claim/</code></li>
+        <li>Inquire <code>/tattoos/inquire/</code> — custom <code>/custom/</code>, consultation <code>/consultation/</code> (public booking + Square checkout + Zoom for virtual)</li>
+        <li>Build Your Own <code>/tattoos/build/</code> + <code>/build/in-person/</code></li>
+        <li>Special projects <code>/tattoos/special-projects/</code> + <code>/apply/</code></li>
+        <li>Client path: submission-received → approved <code>/tattoos/approved/</code> → token booking <code>/booking/?token=…</code> → confirmed <code>/booking/confirmed/…</code></li>
+        <li>Support: policies, day-of prep, location &amp; parking, portfolio</li>
+      </ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#0581C1"></span><span class="label">Art making</span><span class="url">/art/</span></div>
+      <ul><li>Painting pages (lostmarbles, lust, sloth, homelandsecurity, paranoiafosteredtrauma, thefrustrationsofinnercharos…) · acquisition inquiry <code>/art/acquisitioninquiry.html</code></li></ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#F7A226"></span><span class="label">Merch</span><span class="url">/merch/</span></div>
+      <ul><li>Product pages (hoodie, puffer, print…) · Shopify Storefront via <code>/api/shop/*</code>, tagged <code>construct-merch</code></li></ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#FCB867"></span><span class="label">About</span><span class="url">/about/</span></div>
+      <ul><li>Construct-connections prototypes in progress (<code>about-next.html</code>, connection maps)</li></ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#005d25"></span><span class="label">Events</span><span class="url">/events/</span></div><ul><li>Currently hidden (<code>.hidden-pages/events/</code>)</li></ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#A856A1"></span><span class="label">Music</span><span class="url">/music/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#FFE7CA"></span><span class="label">Writings</span><span class="url">/writings/</span></div><ul><li>Long-form — uses <code>--leading-relaxed</code> (1.8)</li></ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#6D3D15"></span><span class="label">Archive</span><span class="url">/archive/</span></div>
+      <ul><li>Generated from Obsidian vault via <code>node tools/build-archive.mjs</code> → <code>assets/archive/records.json</code> (only <code>archive_publish: true</code> + <code>visibility: public</code>)</li></ul></div>
+    <div class="map-medium"><div class="head"><span class="dot" style="background:#328C84"></span><span class="label">Film</span><span class="url">/film/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
+
+    <h3>Non-public surfaces</h3>
+    <table>
+      <tr><th>Path</th><th>Purpose</th></tr>
+      <tr><td><code>/studio/submissions/</code></td><td>Private review of inquiries; approve → generate booking token</td></tr>
+      <tr><td><code>/tools/…</code></td><td>Internal tools: page-visibility, live-text-editor, architecture maps, this guide</td></tr>
+      <tr><td><code>/sixwellconstruct/bible/</code></td><td>Construct bible documents</td></tr>
+      <tr><td><code>/construct-map/</code></td><td>Construct map page</td></tr>
+    </table>
+  </section>
+
+
+  <!-- ════════════════════ 10 LANGUAGE ════════════════════ -->
+  <section class="guide" id="language">
+    <span class="kicker">10 · language rules</span>
+    <h2>Language</h2>
+
+    <h3>Construct vocabulary</h3>
+    <table>
+      <tr><th>Say</th><th>Not</th><th>Meaning</th></tr>
+      <tr><td><strong>medium</strong></td><td>node, venture</td><td>Top-level practice area (tattooing, art making, merch…)</td></tr>
+      <tr><td><strong>pathway</strong></td><td>subnode</td><td>Entry route inside a medium (flash, portfolio, inquiry, acquisition…)</td></tr>
+      <tr><td><strong>the construct</strong></td><td>—</td><td>The whole ecosystem; the landing page ring</td></tr>
+    </table>
+    <p class="lead">Legacy technical identifiers keep the old <code>venture</code> name — <code>body[data-venture]</code>, <code>--venture-color</code>, Shopify <code>venture:</code> tags. Leave them unless doing a dedicated migration.</p>
+
+    <h3>Generous language rule</h3>
+    <p class="lead">Describe what the work <em>invites, offers, carries, and opens toward</em>. Preferred phrasing: "best for," "drawn toward," "built for," "good entry point," "opens into." Warm boundaries that explain the path forward; process language that helps visitors enter well. Reserve hard boundary phrasing for operational clarity (booking status, legal, confirmations) — and keep even that plain and generous.</p>
+
+    <h3>Ecosystem-first principle</h3>
+    <p class="lead">Every page is a medium in a living ecosystem. When editing any page ask: what is its primary action? Which other mediums should it point toward? Is the connection conceptual, commercial, archival, experiential, or biographical? Connections should feel like discovery — quiet paths, traces, source threads, optional doors — never banner cross-promotion. A conversion page stays focused but carries at least one subtle reminder of the wider construct.</p>
+
+    <h3>Case conventions</h3>
+    <table>
+      <tr><th>Element</th><th>Case</th></tr>
+      <tr><td>Display titles, buttons, kickers, nav labels</td><td>UPPERCASE</td></tr>
+      <tr><td>Pathway labels on the landing ring, node descriptions</td><td>lowercase</td></tr>
+      <tr><td>Body copy</td><td>Sentence case, Georgia</td></tr>
+      <tr><td>Wordmark</td><td>always exactly "the six.well construct"</td></tr>
+    </table>
+  </section>
+
+
+  <!-- ════════════════════ 11 GOTCHAS ════════════════════ -->
+  <section class="guide" id="gotchas">
+    <span class="kicker">11 · gotchas</span>
+    <h2>Known gotchas</h2>
+
+    <table>
+      <tr><th>Gotcha</th><th>Detail</th></tr>
+      <tr><td>Editor-injected font-size spans</td><td>The live text editor writes copy edits as inline <code>&lt;span style="font-size: NNpx"&gt;</code> inside hero titles, overriding responsive clamps (a 96px span once made a title's min-content 759px on a 390px phone). A guard in <code>css/mobile.css</code> (≤700px) neutralizes them — but only on pages that link mobile.css. Check for these spans first when a phone layout is cut off.</td></tr>
+      <tr><td>Bare <code>1fr</code> mobile collapse</td><td><code>1fr</code> can't shrink below child min-content. Always <code>minmax(0, 1fr)</code> in collapse rules. When auditing a cut-off page, check the computed grid track width first.</td></tr>
+      <tr><td><code>data-venture</code> is legacy</td><td>Attribute and <code>--venture-color</code> keep the old name on purpose. Renaming breaks construct-nav, wayfinding, and Shopify tag mapping.</td></tr>
+      <tr><td>Two <code>.media-grid</code> definitions</td><td><code>css/media.css</code> defines the card grid (auto-fill 260px); <code>css/venture-pages.css</code> also defines a 2-up <code>.media-grid</code> for media panels. Don't load both on one page without checking which wins.</td></tr>
+      <tr><td>Hidden pages</td><td>Hiding/showing is done through <code>/tools/page-visibility.html</code>, which edits <code>_worker.js</code> and moves files to <code>.hidden-pages/</code>. Don't hand-move page files.</td></tr>
+      <tr><td>Token sync</td><td>Colors live in both <code>css/tokens.css</code> and the <code>VENTURES</code> array in <code>js/construct-nav.js</code> (and this guide). A color change must touch all of them.</td></tr>
+      <tr><td>Push policy</td><td>Never push. The user pushes manually. Work directly on main.</td></tr>
+    </table>
+  </section>
+
+  <footer class="guide-footer">
+    <p>the six.well construct — ui guide</p>
+    <p>tools/ui-guide.html · update when tokens or shared systems change</p>
+  </footer>
+
+</div>
+
+<script>
+/* ── document chrome: edit-notes mode + PDF export ── */
+(function() {
+  var doc = document.getElementById('doc');
+  var editBtn = document.getElementById('edit-toggle');
+  var printBtn = document.getElementById('print-btn');
+
+  editBtn.addEventListener('click', function() {
+    var on = doc.getAttribute('contenteditable') !== 'true';
+    doc.setAttribute('contenteditable', on ? 'true' : 'false');
+    document.body.classList.toggle('editing', on);
+    editBtn.classList.toggle('active', on);
+    editBtn.textContent = on ? '✎ Editing — click to lock' : '✎ Edit';
+  });
+
+  printBtn.addEventListener('click', function() {
+    doc.setAttribute('contenteditable', 'false');
+    document.body.classList.remove('editing');
+    editBtn.classList.remove('active');
+    editBtn.textContent = '✎ Edit';
+    window.print();
+  });
+})();
+
+/* ── inline color tuner: drives the reference swatches + editor rows ── */
+(function(){
+  "use strict";
+
+  var MEDIUMS = [
+    {key:'tattooing', name:'Tattooing',  signal:'#7A1010', label:'TATTOOING'},
+    {key:'art',       name:'Art making', signal:'#0581C1', label:'ART MAKING'},
+    {key:'merch',     name:'Merch',      signal:'#F7A226', label:'MERCH'},
+    {key:'about',     name:'About',      signal:'#FCB867', label:'ABOUT'},
+    {key:'events',    name:'Events',     signal:'#005d25', label:'EVENTS'},
+    {key:'music',     name:'Music',      signal:'#A856A1', label:'MUSIC'},
+    {key:'writings',  name:'Writings',   signal:'#FFE7CA', label:'WRITINGS'},
+    {key:'archive',   name:'Archive',    signal:'#6D3D15', label:'ARCHIVE'},
+    {key:'film',      name:'Film',       signal:'#328C84', label:'FILM'},
+  ];
+  var DEFAULTS = MEDIUMS.map(function(m){return m.signal;});
+  var state = MEDIUMS.map(function(m){return {signal:m.signal, bright:null, dark:null};});
+  var brightPct = 20, darkPct = 20, fileHandle = null;
+
+  /* color math */
+  function hx(n){ n=Math.max(0,Math.min(255,Math.round(n))); var s=n.toString(16); return s.length<2?'0'+s:s; }
+  function parse(h){ h=h.replace('#',''); if(h.length===3){h=h.split('').map(function(c){return c+c;}).join('');}
+    return {r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}; }
+  function toHex(c){ return '#'+hx(c.r)+hx(c.g)+hx(c.b); }
+  function mixWhite(h,p){ var c=parse(h),t=p/100; return toHex({r:c.r+(255-c.r)*t,g:c.g+(255-c.g)*t,b:c.b+(255-c.b)*t}); }
+  function mixBlack(h,p){ var c=parse(h),t=p/100; return toHex({r:c.r*(1-t),g:c.g*(1-t),b:c.b*(1-t)}); }
+  function rgba(h,a){ var c=parse(h); return 'rgba('+c.r+', '+c.g+', '+c.b+', '+a+')'; }
+  function bright(i){ return state[i].bright || mixWhite(state[i].signal, brightPct); }
+  function dark(i){ return state[i].dark || mixBlack(state[i].signal, darkPct); }
+  function dim(i){ return rgba(state[i].signal, 0.25); }
+
+  var grid = document.getElementById('medium-swatch-grid');
+  var list = document.getElementById('media-list');
+  var tuner = document.getElementById('tuner');
+
+  /* build reference swatches (printed) */
+  function buildGrid(){
+    grid.innerHTML = MEDIUMS.map(function(m,i){
+      return '<div class="swatch" data-i="'+i+'">'+
+        '<div class="ramp"><span class="s-dark"></span><span class="s-sig"></span><span class="s-bright"></span></div>'+
+        '<div class="dim-bar"></div>'+
+        '<div class="info"><div class="name"></div><div class="hex"></div>'+
+          '<div class="token">--color-'+m.key+'[-dark|-bright]</div></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  /* build editor rows */
+  function buildRows(){
+    list.innerHTML = MEDIUMS.map(function(m,i){
+      return '<div class="media-row" data-i="'+i+'">'+
+        '<div class="ident"><span class="nm">'+m.name+'</span><span class="ky">--color-'+m.key+'</span></div>'+
+        '<div class="stops">'+
+          stop(i,'dark','Dark',true)+ stop(i,'signal','Signal',false)+
+          stop(i,'bright','Bright',true)+ dimStop()+
+        '</div>'+
+      '</div>';
+    }).join('');
+    list.querySelectorAll('input[type=color]').forEach(function(inp){
+      inp.addEventListener('input', function(){
+        var i=+inp.dataset.i, role=inp.dataset.role;
+        if(role==='signal'){ state[i].signal=inp.value; } else { state[i][role]=inp.value; }
+        refresh();
+      });
+    });
+    list.querySelectorAll('.reset').forEach(function(btn){
+      btn.addEventListener('click', function(){ state[+btn.dataset.i][btn.dataset.role]=null; refresh(); });
+    });
+  }
+  function stop(i,role,label,auto){
+    return '<div class="stop" data-role="'+role+'">'+
+      '<label class="well"><input type="color" data-i="'+i+'" data-role="'+role+'"></label>'+
+      '<div class="meta"><span class="role">'+label+'</span>'+
+        (auto?'<button class="reset" data-i="'+i+'" data-role="'+role+'" title="re-derive">↺</button>':'')+
+        '<span class="hx"></span></div></div>';
+  }
+  function dimStop(){
+    return '<div class="stop" data-role="dim"><span class="well dimwell"></span>'+
+      '<div class="meta"><span class="role">Dim · 25%</span><span class="hx">—</span></div></div>';
+  }
+
+  /* refresh visuals + output */
+  function refresh(){
+    MEDIUMS.forEach(function(m,i){
+      var sig=state[i].signal, br=bright(i), dk=dark(i), dm=dim(i);
+
+      var sw=grid.querySelector('.swatch[data-i="'+i+'"]');
+      sw.querySelector('.s-dark').style.background=dk;
+      sw.querySelector('.s-sig').style.background=sig;
+      sw.querySelector('.s-bright').style.background=br;
+      sw.querySelector('.dim-bar').style.background=dm;
+      var nm=sw.querySelector('.name'); nm.textContent=m.name; nm.style.color=br;
+      sw.querySelector('.hex').textContent=dk.toUpperCase()+' · '+sig.toUpperCase()+' · '+br.toUpperCase();
+
+      var row=list.querySelector('.media-row[data-i="'+i+'"]');
+      var vals={dark:dk,signal:sig,bright:br};
+      row.querySelectorAll('.stop').forEach(function(stp){
+        var role=stp.dataset.role;
+        if(role==='dim'){ stp.querySelector('.dimwell').style.background=dm; return; }
+        var val=vals[role], inp=stp.querySelector('input[type=color]');
+        if(inp){ inp.value=val; inp.parentElement.style.background=val; }
+        stp.querySelector('.hx').textContent=val.toUpperCase();
+        if(role==='bright'||role==='dark'){
+          var over=!!state[i][role];
+          stp.classList.toggle('overridden',over);
+          stp.classList.toggle('derived',!over);
+        }
+      });
+    });
+    renderCSS();
+  }
+
+  function renderCSS(){
+    var lines=[];
+    MEDIUMS.forEach(function(m,i){
+      var pad=function(s){ while(s.length<26){s+=' ';} return s; };
+      lines.push('  /* '+m.label+' */');
+      lines.push('  '+pad('--color-'+m.key+':')+state[i].signal.toUpperCase()+';');
+      lines.push('  '+pad('--color-'+m.key+'-dim:')+dim(i)+';');
+      lines.push('  '+pad('--color-'+m.key+'-bright:')+bright(i).toUpperCase()+';');
+      lines.push('  '+pad('--color-'+m.key+'-dark:')+dark(i).toUpperCase()+';');
+      lines.push('');
+    });
+    document.getElementById('css-out').textContent=lines.join('\n').replace(/\n$/,'');
+  }
+
+  function status(msg,kind){ var s=document.getElementById('tn-status'); s.textContent=msg||''; s.className='tn-status'+(kind?' '+kind:''); }
+
+  /* load current values from tokens.css */
+  function loadFromTokens(){
+    status('Loading tokens.css…');
+    fetch('/css/tokens.css',{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
+      var n=0;
+      MEDIUMS.forEach(function(m,i){
+        var sig=matchVar(txt,'--color-'+m.key);
+        var br=matchVar(txt,'--color-'+m.key+'-bright');
+        var dk=matchVar(txt,'--color-'+m.key+'-dark');
+        if(sig){ state[i].signal=normHex(sig); n++; }
+        var s=state[i].signal;
+        var brN=br?normHex(br):null, dkN=dk?normHex(dk):null;
+        state[i].bright=(brN && brN.toLowerCase()!==mixWhite(s,brightPct).toLowerCase())?brN:null;
+        state[i].dark  =(dkN && dkN.toLowerCase()!==mixBlack(s,darkPct).toLowerCase())?dkN:null;
+      });
+      refresh();
+      status('Loaded '+n+' signal colors from tokens.css.','ok');
+    }).catch(function(e){ status('Could not fetch tokens.css ('+e.message+'). Using defaults.','err'); });
+  }
+  function matchVar(txt,name){
+    var re=new RegExp(name.replace(/[-]/g,'\\-')+'(?=\\s*:)\\s*:\\s*([#0-9A-Fa-f]+|rgba?\\([^)]*\\))');
+    var mm=re.exec(txt); return mm?mm[1].trim():null;
+  }
+  function normHex(v){ return v.charAt(0)==='#'?toHex(parse(v)):v; }
+
+  /* write back to tokens.css */
+  function setVar(txt,name,value){
+    var re=new RegExp('('+name.replace(/[-]/g,'\\-')+'(?=\\s*:)\\s*:\\s*)([^;]+)(;)');
+    return re.test(txt)?txt.replace(re,'$1'+value+'$3'):txt;
+  }
+  function buildUpdated(txt){
+    MEDIUMS.forEach(function(m,i){
+      txt=setVar(txt,'--color-'+m.key+'-bright', bright(i).toUpperCase());
+      txt=setVar(txt,'--color-'+m.key+'-dark', dark(i).toUpperCase());
+      txt=setVar(txt,'--color-'+m.key+'-dim', dim(i));
+      txt=setVar(txt,'--color-'+m.key, state[i].signal.toUpperCase());
+    });
+    return txt;
+  }
+  async function saveToFile(){
+    if(!window.showOpenFilePicker){ status('This browser can\'t write files directly — use “Copy CSS block”.','err'); return; }
+    try{
+      if(!fileHandle){
+        var picks=await window.showOpenFilePicker({types:[{description:'tokens.css',accept:{'text/css':['.css']}}],multiple:false});
+        fileHandle=picks[0];
+      }
+      if((await fileHandle.requestPermission({mode:'readwrite'}))!=='granted'){ status('Write permission denied.','err'); return; }
+      var txt=await (await fileHandle.getFile()).text();
+      if(txt.indexOf('--color-tattooing')===-1){ status('That isn\'t tokens.css — pick css/tokens.css.','err'); fileHandle=null; return; }
+      var w=await fileHandle.createWritable(); await w.write(buildUpdated(txt)); await w.close();
+      status('Saved ✓  Wrote all 9 ramps into '+fileHandle.name+'.','ok');
+    }catch(e){ if(e.name==='AbortError'){status('Save cancelled.');return;} status('Save failed: '+e.message,'err'); }
+  }
+  function copyCSS(){
+    navigator.clipboard.writeText(document.getElementById('css-out').textContent).then(
+      function(){ status('Copied — paste over the medium-color block in css/tokens.css.','ok'); },
+      function(){ status('Copy failed — select the text manually.','err'); });
+  }
+  function resetAll(){
+    state=MEDIUMS.map(function(m,idx){return {signal:DEFAULTS[idx],bright:null,dark:null};});
+    brightPct=20; darkPct=20;
+    document.getElementById('bright-range').value=20; document.getElementById('bright-val').textContent='20';
+    document.getElementById('dark-range').value=20; document.getElementById('dark-val').textContent='20';
+    refresh(); status('Reset to built-in defaults.');
+  }
+
+  /* toggle panel */
+  function openTuner(){ tuner.hidden=false; tuner.scrollIntoView({behavior:'smooth',block:'start'}); }
+  function toggleTuner(){ if(tuner.hidden){ openTuner(); } else { tuner.hidden=true; } }
+
+  /* wire */
+  document.getElementById('bright-range').addEventListener('input', function(e){ brightPct=+e.target.value; document.getElementById('bright-val').textContent=e.target.value; refresh(); });
+  document.getElementById('dark-range').addEventListener('input', function(e){ darkPct=+e.target.value; document.getElementById('dark-val').textContent=e.target.value; refresh(); });
+  document.getElementById('copy-css').addEventListener('click', copyCSS);
+  document.getElementById('save-file').addEventListener('click', saveToFile);
+  document.getElementById('reload-tokens').addEventListener('click', loadFromTokens);
+  document.getElementById('reset-all').addEventListener('click', resetAll);
+  document.getElementById('tuner-toggle').addEventListener('click', toggleTuner);
+  document.getElementById('tuner-open').addEventListener('click', openTuner);
+
+  buildGrid();
+  buildRows();
+  loadFromTokens();
+})();
+</script>
+
+</body>
+</html>

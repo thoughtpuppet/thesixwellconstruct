@@ -21,10 +21,11 @@
     { name: 'Tattooing', value: '#7A1010' },
     { name: 'Art making', value: '#0581C1' },
     { name: 'Merch', value: '#F7A226' },
-    { name: 'Events', value: '#55BA5A' },
+    { name: 'Events', value: '#005d25' },
     { name: 'Music', value: '#A856A1' },
-    { name: 'Writings', value: '#328C84' },
-    { name: 'Archive', value: '#EC5E26' },
+    { name: 'Writings', value: '#FFE7CA' },
+    { name: 'Film', value: '#328C84' },
+    { name: 'Archive', value: '#6D3D15' },
     { name: 'Site black', value: '#0e0e0e' },
     { name: 'Dark brown', value: '#3a2418' },
     { name: 'Construct brown', value: '#6D3D15' },
@@ -35,11 +36,11 @@
     { name: 'Tattoo wash', value: 'rgba(122,16,16,0.25)' },
     { name: 'Art wash', value: 'rgba(5,129,193,0.25)' },
     { name: 'Merch wash', value: 'rgba(247,162,38,0.25)' },
-    { name: 'Events wash', value: 'rgba(85,186,90,0.25)' },
+    { name: 'Events wash', value: 'rgba(0, 93, 37,0.25)' },
     { name: 'Music wash', value: 'rgba(168,86,161,0.25)' },
-    { name: 'Writings wash', value: 'rgba(50,140,132,0.25)' },
-    { name: 'Archive wash', value: 'rgba(236,94,38,0.25)' },
-    { name: 'Film wash', value: 'rgba(255,231,202,0.25)' }
+    { name: 'Writings wash', value: 'rgba(255,231,202,0.25)' },
+    { name: 'Archive wash', value: 'rgba(109,61,21,0.25)' },
+    { name: 'Film wash', value: 'rgba(50,140,132,0.25)' }
   ];
   var SITE_COLOR_VARS = [
     '--color-bg',

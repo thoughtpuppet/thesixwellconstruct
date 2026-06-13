@@ -36,7 +36,7 @@
     z-index: 10; white-space: nowrap; pointer-events: none;
     transition: opacity 0.6s ease;
   }
-  /* Medium description layer — Georgia-first serif, appears on hover */
+  /* Construct-entry description layer — Georgia-first serif, appears on hover */
   #node-descs { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
   .node-desc {
     position: absolute; font-family: Georgia, 'Times New Roman', Times, serif;
@@ -94,12 +94,12 @@
 <div id="stage">
   <canvas id="c"></canvas>
   <div id="wordmark">the six.well construct</div>
-  <div id="wordmark-desc" data-copy-id="home-wordmark-desc">the creative ecosystem of Saiel Dauhn Solehman</div>
+  <div id="wordmark-desc" data-copy-id="home-wordmark-desc">nodes, mediums, archive, and method by Saiel Dauhn Solehman</div>
   <div id="node-labels"></div>
   <div id="node-descs"></div>
   <div id="sub-node-labels"></div>
   <div id="hint"></div>
-  <button id="back-btn" aria-label="Return to mediums" type="button">
+  <button id="back-btn" aria-label="Return to construct nodes" type="button">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     <span>return</span>
   </button>
@@ -117,10 +117,10 @@ const hint = document.getElementById('hint');
 const wordmarkDesc = document.getElementById('wordmark-desc');
 
 let W, H, cx, cy, scale = 1, dpr = 1;
-// Mobile layout state — set by resize(). When true, ring shrinks to top, mediums use vertical stack layout.
+// Mobile layout state — set by resize(). When true, ring shrinks to top, construct entries use vertical stack layout.
 let isMobile = false;
 // Reference viewport: scale = 1 at >= 1000px short edge.
-// Below that, everything (rings, mediums, eyes, particles, dots) scales down proportionally
+// Below that, everything (rings, entries, eyes, particles, dots) scales down proportionally
 // so the composition remains balanced on phones and tablets.
 function computeScale(w, h) {
   const shortEdge = Math.min(w, h);
@@ -298,11 +298,11 @@ const VENTURES=[
   {name:'ART MAKING',   color:'#0581C1',angle:40,  dist:250, fromDot:1},
   {name:'MERCH',         color:'#F7A226',angle:80,  dist:250, fromDot:2},
   {name:'ABOUT',         color:'#FCB867',angle:120, dist:250, fromDot:-1},
-  {name:'EVENTS',        color:'#55BA5A',angle:160, dist:250, fromDot:3},
+  {name:'EVENTS',        color:'#005d25',angle:160, dist:250, fromDot:3},
   {name:'MUSIC',         color:'#A856A1',angle:200, dist:250, fromDot:4},
-  {name:'WRITINGS',      color:'#328C84',angle:240, dist:250, fromDot:-1},
-  {name:'ARCHIVE',       color:'#EC5E26',angle:280, dist:250, fromDot:5},
-  {name:'FILM',          color:'#FFE7CA',angle:320, dist:250, fromDot:-1},
+  {name:'WRITINGS',      color:'#FFE7CA',angle:240, dist:250, fromDot:-1},
+  {name:'ARCHIVE',       color:'#6D3D15',angle:280, dist:250, fromDot:5},
+  {name:'FILM',          color:'#328C84',angle:320, dist:250, fromDot:-1},
 ];
 
 const TRAVEL_END=0.85,XFADE_START=0.42,DRIFT_OPEN_DURATION=0.22;
@@ -445,18 +445,18 @@ function clamp01(t){return Math.max(0,Math.min(1,t));}
 function driftOpenFactor(i,prog){if(prog<ARRIVE_AT[i])return 0;return easeOutSoft(Math.min((prog-ARRIVE_AT[i])/DRIFT_OPEN_DURATION,1));}
 function getDrift(i,t,of){const d=DRIFTS[i];return{x:d.ax*of*Math.sin((t/d.px)*Math.PI*2+d.ox),y:d.ay*of*Math.sin((t/d.py)*Math.PI*2+d.oy)};}
 function getMobileNodeAnchor(i,n){
-  // Layout space: ring sits at H*0.17, mediums pack tightly underneath with breathing room
+  // Layout space: ring sits at H*0.17, construct entries pack tightly underneath with breathing room
   const top = H * 0.26;
   const bot = H * 0.93;
   const cxv = W / 2;
   const usableH = bot - top;
   const t = n > 1 ? i / (n - 1) : 0.5;
   const _t = slowOrbit;
-  // Stack layout — floatier: larger sway + gentle vertical bob, each medium phase-offset
+  // Stack layout — floatier: larger sway + gentle vertical bob, each entry phase-offset
   const swayX = Math.sin((_t*0.00065) + i*0.85) * 18 + Math.sin((_t*0.00031) + i*1.7) * 6;
   const bobY  = Math.sin((_t*0.00048) + i*1.3) * 7;
   let pos = { x: cxv + swayX, y: top + t * usableH + bobY };
-  // Mobile takeover: drift the active medium toward upper-center of viewport
+  // Mobile takeover: drift the active construct entry toward upper-center of viewport
   // so the orbital pathway ring has room to fill the page around it.
   if(i === activeVentureIdx && subNodeState !== 'idle'){
     const tk = subNodeState==='collapsing' ? 1 - subNodeCollapseProgress
@@ -502,7 +502,7 @@ stage.addEventListener('mousemove',e=>{
   const over=isOverLogo(mouseX,mouseY);
   if(over!==logoHover){logoHover=over;if(logoHover&&state==='idle'){state='hover-logo';hint.style.opacity='0';}else if(!logoHover&&state==='hover-logo'){state='idle';hint.style.opacity='1';}}
 
-  // Pathway hover takes priority — check before mediums
+  // Pathway hover takes priority — check before construct entries
   hoveredSubNode=getHoveredSubNode(mouseX,mouseY);
 
   if(state==='expanded'&&isOverCenter(mouseX,mouseY)){
@@ -548,18 +548,18 @@ stage.addEventListener('click',e=>{
     }
   }
 
-  // ④ Medium click → expand pathways, or collapse if the same medium is clicked again
+  // ④ Construct-entry click → expand pathways, or collapse if the same entry is clicked again
   const hn=getHoveredNode(mx,my);
   if(hn>=0){
     if(hn===activeVentureIdx&&subNodeState!=='idle'){
-      // Same medium: collapse pathways
+      // Same entry: collapse pathways
       for(let i=0;i<MAX_SUBNODES;i++){
         subNodeCollapseStartX[i]=subNodeX[i];
         subNodeCollapseStartY[i]=subNodeY[i];
       }
       subNodeCollapseProgress=0;subNodeState='collapsing';subNodeHP.fill(0);
     }else{
-      // Different/new medium: immediately open pathways (any previous set vanishes)
+      // Different/new entry: immediately open pathways (any previous set vanishes)
       activeVentureIdx=hn;
       subNodeProgress=0;subNodeState='expanding';subNodeHP.fill(0);
       subNodeLabelEls.forEach(el=>el.style.opacity='0');
@@ -573,7 +573,7 @@ stage.addEventListener('click',e=>{
 });
 
 // === Touch / pointer support ===
-// On touch devices, tap-and-hold near logo opens it; tap on a medium opens pathways; tap elsewhere collapses.
+// On touch devices, tap-and-hold near logo opens it; tap on a construct entry opens pathways; tap elsewhere collapses.
 function getStagePos(e){
   const r=stage.getBoundingClientRect();
   const t = e.touches && e.touches[0] ? e.touches[0] : e;
@@ -589,7 +589,7 @@ stage.addEventListener('touchstart', e => {
 }, {passive:true});
 stage.addEventListener('mouseleave',()=>{logoHover=false;hoveredNode=-1;mouseX=cx;mouseY=cy;if(state==='hover-logo'){state='idle';hint.style.opacity='1';}});
 
-// Mobile-aware ring transform: shrinks + slides up when mediums are expanding on small viewports
+// Mobile-aware ring transform: shrinks + slides up when construct entries are expanding on small viewports
 function ringTransform(){
   if(!isMobile) return { x: cx, y: cy, s: 1 };
   // Use overall expansion (parent ring + pathway takeover) to drive shrink.
@@ -626,7 +626,7 @@ function drawTravelingDots(prog){
   if(ta<=0)return;
   VENTURES.forEach((v,i)=>{
     const anc=getNodeAnchor(v);
-    /* Once nodePosInit has fired, use the settled medium's live position so
+    /* Once nodePosInit has fired, use the settled entry's live position so
        both renderers are always coincident — no double-dot during crossfade. */
     const px=nodePosInit?nodeX[i]:lerp(dotStartX[i],anc.x,tp);
     const py=nodePosInit?nodeY[i]:lerp(dotStartY[i],anc.y,tp);
@@ -720,16 +720,16 @@ function drawCollapsingNodes(cp){
 const SUB_NODE_DATA = {
   'TATTOOS':    [{name:'art.pill tattoo house',url:'/tattoos/'},{name:'portfolio',url:'/tattoos/portfolio/'},{name:'flash',url:'/tattoos/flash/'},{name:'special projects',url:'/tattoos/special-projects/'},{name:'booking & inquiry',url:'/tattoos/inquire/'},{name:'process',url:'/tattoos/#booking-process'}],
   'ART MAKING': [{name:'statements',url:'/writings/#featured'},{name:'artist bio',url:'/about/#saiel'},{name:'portfolio',url:'/art/'},{name:'meridian in conflux',url:'/art/#sectionPainting'},{name:'studio visit',url:'/events/#pathways'}],
-  'MERCH':      [{name:'six.well clothing',url:'/merch/?filter=six.well',color:'#F7A226'},{name:'art.pill tattoo supply',url:'/merch/?filter=art.pill',color:'#7A1010'},{name:'thoughtpuppet artifacts',url:'/merch/?filter=thoughtpuppet',color:'#0581C1'},{name:'CULT[&SHIFT] merch',url:'/merch/?filter=cultiv',color:'#55BA5A'},{name:'all merch',url:'/merch/',color:'#FCB867'}],
-  'ABOUT':      [{name:'the construct',url:'/about/#construct'},{name:'saiel dauhn solehman',url:'/about/#saiel'},{name:'access',url:'/about/#access'},{name:'library',url:'/about/#library'},{name:'contact / press',url:'/about/#contact'},{name:'faq',url:'/about/#faq'}],
+  'MERCH':      [{name:'six.well clothing',url:'/merch/?filter=six.well',color:'#F7A226'},{name:'art.pill tattoo supply',url:'/merch/?filter=art.pill',color:'#7A1010'},{name:'thoughtpuppet artifacts',url:'/merch/?filter=thoughtpuppet',color:'#0581C1'},{name:'CULT[&SHIFT] merch',url:'/merch/?filter=cultiv',color:'#005d25'},{name:'all merch',url:'/merch/',color:'#FCB867'}],
+  'ABOUT':      [{name:'the construct',url:'/about/#construct'},{name:'saiel / founder',url:'/about/#saiel'},{name:'architecture',url:'/about/#construct-architecture'},{name:'nodes',url:'/about/#access'},{name:'method',url:'/about/#library'},{name:'faq',url:'/about/#faq'}],
   'EVENTS':     [{name:'CULT[&SHIFT]',url:'/events/#active'},{name:'the gathering',url:'/events/#pathways'},{name:"solehman's new year",url:'/events/#active'},{name:'movie nights',url:'/events/#pathways'},{name:'hosting',url:'/events/#pathways'},{name:'calendar',url:'/events/#active'},{name:'open studios',url:'/events/#pathways'}],
   'MUSIC':      [{name:'ringtones',url:'/music/#listening-surfaces'},{name:'milowalksonwater',url:'/music/#listening-index'},{name:'scores',url:'/music/#forms'}],
   'WRITINGS':   [{name:'substack',url:'/writings/#featured'},{name:'the solehman letters',url:'https://thesolehmanletters.com'},{name:'mindful darkness',url:'/writings/#reading-paths'}],
-  'ARCHIVE':    [{name:'sketches',url:'/archive/#rooms'},{name:'abandoned concepts',url:'/archive/#rooms'},{name:'process',url:'/archive/#rooms'},{name:'ephemera',url:'/archive/#timeline'},{name:'raw audio',url:'/archive/#browse-by-node'}],
+  'ARCHIVE':    [{name:'works',url:'/archive/#rooms'},{name:'process',url:'/archive/#rooms'},{name:'releases',url:'/archive/#timeline'},{name:'events',url:'/archive/#timeline'},{name:'documents',url:'/archive/#rooms'},{name:'experiments',url:'/archive/#browse-by-node'}],
   'FILM':       [{name:'isolated.take',url:'/film/#projects'},{name:'&friends',url:'/film/#projects'},{name:'animations',url:'/film/#forms'},{name:'sloth99',url:'/film/#status'}],
 };
 
-// Sacred geometry shape assigned to each medium pathway
+// Sacred geometry shape assigned to each construct pathway
 const SUB_SHAPES = {
   'TATTOOS':    'circle',
   'ART MAKING': 'circle',
@@ -763,7 +763,7 @@ function SUB_MAX_PULL(){return 20*scale;}
 const MAX_SUBNODES      = 7;
 
 // Pathway runtime state
-let activeVentureIdx        = -1;     // which medium has pathways open; -1 = none
+let activeVentureIdx        = -1;     // which construct entry has pathways open; -1 = none
 let subNodeState            = 'idle'; // 'idle' | 'expanding' | 'expanded' | 'collapsing'
 let subNodeProgress         = 0;
 let subNodeCollapseProgress = 0;
@@ -785,14 +785,14 @@ for(let i = 0; i < MAX_SUBNODES; i++){
   subNodeLabelEls.push(el);
 }
 
-// ── Helper: world position of pathway i for the given medium ───────────────
+// ── Helper: world position of pathway i for the given construct entry ──────
 // Pathways orbit the parent in a full circle, evenly spaced.
 // First pathway is aligned outward (away from center) so the cluster feels grounded.
 function getSubNodeTargetPos(ventureIdx, subIdx){
   const px = nodeX[ventureIdx], py = nodeY[ventureIdx];
   const subs = SUB_NODE_DATA[VENTURES[ventureIdx].name];
   const n = subs.length;
-  // Mobile takeover: pathways orbit the active medium (now drifted near top-center)
+  // Mobile takeover: pathways orbit the active construct entry (now drifted near top-center)
   // at a large radius that fills the viewport.
   if(isMobile && ventureIdx === activeVentureIdx){
     const orbitR = Math.min(W * 0.34, H * 0.26);
@@ -824,7 +824,7 @@ function getHoveredSubNode(mx, my){
   return -1;
 }
 
-// ── Shape drawing: sacred geometry path for each medium ────────────────────
+// ── Shape drawing: sacred geometry path for each construct entry ───────────
 // All shapes drawn relative to (x, y) with circumradius r.
 function drawSubShape(x, y, r, shape){
   ctx.beginPath();
@@ -946,7 +946,7 @@ function drawSubNodes(){
       const sx = subNodeX[i], sy = subNodeY[i];
       const drawR = lerp(3, SUB_NODE_RADIUS(), ep);
       const alpha = ep * 0.88;
-      // use pathway own color if defined, else fall back to parent medium color
+      // use pathway own color if defined, else fall back to parent entry color
       const subColor = sub.color || v.color;
 
       ctx.save();

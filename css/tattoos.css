@@ -28,16 +28,6 @@
   padding: 96px 0 64px;
 }
 
-.tattoos-page .eyebrow {
-  display: inline-block;
-  margin-bottom: 10px;
-  color: var(--venture-accent);
-  font-family: var(--font-serif);
-  font-size: 12px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
 .tattoos-page .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);

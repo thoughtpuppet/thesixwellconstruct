@@ -1,13 +1,13 @@
 /* ============================================================
    construct-nav.js — the six.well construct
    ============================================================
-   Renders a row of 9 colored dots, one per medium, fixed
-   at the top of every inner medium page.
+   Renders a row of 9 colored dots, one per construct entry, fixed
+   at the top of every inner page.
 
-   - Current medium dot: full opacity in its color
+   - Current construct entry dot: full opacity in its color
    - Other dots: dimmed to 0.2 opacity
-   - Hover: dot brightens, medium name fades in above it
-   - Click: fades to that medium's URL via transition.js
+   - Hover: dot brightens, entry name fades in above it
+   - Click: fades to that entry's URL via transition.js
 
    HOW TO USE:
    1. Add data-venture="[key]" to the <body> tag of each page.
@@ -24,11 +24,11 @@
 
 (function() {
 
-  /* ── MEDIUM REGISTRY ─────────────────────────────────────
-     Single source of truth for all 9 mediums.
+  /* ── CONSTRUCT ENTRY REGISTRY ────────────────────────────
+     Single source of truth for all 9 construct entries.
      key:   must match the data-venture attribute on <body>
      label: shown in the hover tooltip
-     color: medium color from the landing system
+     color: construct color from the landing system
      url:   destination when dot is clicked
   ────────────────────────────────────────────────────────── */
   var VENTURES = [
@@ -36,11 +36,11 @@
     { key: 'art',       label: 'ART MAKING', color: '#0581C1', url: '/art/'       },
     { key: 'merch',     label: 'MERCH',      color: '#F7A226', url: '/merch/'     },
     { key: 'about',     label: 'ABOUT',      color: '#FCB867', url: '/about/' },
-    { key: 'events',    label: 'EVENTS',     color: '#55BA5A', url: '/events/'    },
+    { key: 'events',    label: 'EVENTS',     color: '#005d25', url: '/events/'    },
     { key: 'music',     label: 'MUSIC',      color: '#A856A1', url: '/music/'     },
-    { key: 'writings',  label: 'WRITINGS',   color: '#328C84', url: '/writings/'  },
-    { key: 'archive',   label: 'ARCHIVE',    color: '#EC5E26', url: '/archive/'   },
-    { key: 'film',      label: 'FILM',       color: '#FFE7CA', url: '/film/'      },
+    { key: 'writings',  label: 'WRITINGS',   color: '#FFE7CA', url: '/writings/'  },
+    { key: 'archive',   label: 'ARCHIVE',    color: '#6D3D15', url: '/archive/'   },
+    { key: 'film',      label: 'FILM',       color: '#328C84', url: '/film/'      },
   ];
 
   /* ── CONFIGURATION ────────────────────────────────────────
@@ -52,8 +52,8 @@
     topInset:        38,     /* px — aligns the dot row closer to header center */
 
     /* Dot opacity states */
-    opacityActive:   1.0,    /* current medium */
-    opacityInactive: 0.22,   /* all other mediums */
+    opacityActive:   1.0,    /* current construct entry */
+    opacityInactive: 0.22,   /* all other construct entries */
     opacityHover:    1.0,    /* any dot on hover */
 
     /* Label (tooltip above dot) */
@@ -70,7 +70,7 @@
     zIndex:          999,    /* just below corner element (1000) */
   };
 
-  /* ── READ CURRENT MEDIUM ─────────────────────────────────
+  /* ── READ CURRENT CONSTRUCT ENTRY ────────────────────────
      Reads data-venture from <body>.
      If missing or unrecognised, no dot is highlighted.
   ────────────────────────────────────────────────────────── */
@@ -78,14 +78,14 @@
 
 
   /* ── BUILD NAV ────────────────────────────────────────────
-     Structure per medium:
+     Structure per construct entry:
        .cnav-item              — wrapper, position:relative
          .cnav-label           — tooltip text, above dot
          .cnav-dot             — the colored circle
   ────────────────────────────────────────────────────────── */
   var nav = document.createElement('nav');
   nav.id = 'construct-nav';
-  nav.setAttribute('aria-label', 'medium navigation');
+  nav.setAttribute('aria-label', 'construct navigation');
 
   /* Nav is fixed, horizontally centered, vertically aligned
      with the corner element. Uses pointer-events:none on the
@@ -156,7 +156,7 @@
     dot.setAttribute('aria-label', v.label);
     dot.setAttribute('data-bg-color', v.color);  // store for desktop restore
 
-    /* Base opacity: full for current, dim for others */
+    /* Base opacity: full for current entry, dim for others */
     var baseOpacity = isCurrent
       ? CONFIG.opacityActive
       : CONFIG.opacityInactive;
@@ -174,7 +174,7 @@
       'flex-shrink:0',
     ].join(';');
 
-    /* Mobile: current dot shows as open ring instead of dim filled dot */
+    /* Mobile: current entry dot shows as open ring instead of dim filled dot */
     if (isCurrent) {
       dot.setAttribute('data-current', 'true');
     }
@@ -194,9 +194,9 @@
     });
 
 
-    /* ── Click: fade to medium URL ─── */
+    /* ── Click: fade to construct entry URL ─── */
     dot.addEventListener('click', function() {
-      /* Don't navigate if already on this medium */
+      /* Don't navigate if already on this construct entry */
       if (isCurrent) return;
 
       if (typeof window._constructFade === 'function') {
@@ -226,7 +226,7 @@
   /* ── RESPONSIVE ───────────────────────────────────────────
      <700px: position nav inside the header band, centered in the
              space between the corner ring (left) and cart button
-             (right). Tighter gaps. Current medium dot rendered
+             (right). Tighter gaps. Current construct entry dot rendered
              as an open ring so it reads at small size.
      <380px: shrink dots + reduce gaps further so all 9 fit.
   ────────────────────────────────────────────────────────── */
