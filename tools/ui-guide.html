@@ -1113,7 +1113,8 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
   buildGrid();
   buildRows();
-  loadFromTokens();
+  refresh();          // paint built-in defaults immediately (no blank flash)
+  loadFromTokens();   // then sync to the live tokens.css values
 })();
 </script>
 

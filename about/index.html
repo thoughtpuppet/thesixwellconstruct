@@ -331,7 +331,7 @@
 
   .details {
     display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
+    grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.14fr);
     gap: clamp(22px, 4vw, 42px);
     align-items: start;
     padding: 0 clamp(20px, 5vw, 64px) clamp(26px, 4vw, 42px);
@@ -409,6 +409,45 @@
     letter-spacing: 0;
     line-height: 1.2;
     text-transform: uppercase;
+  }
+
+  .manifest-brand {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: clamp(18px, 2.8vw, 34px);
+    align-items: start;
+    margin-top: 22px;
+    padding: clamp(20px, 3vw, 30px);
+    background: #171717;
+  }
+
+  .manifest-brand-kicker {
+    color: var(--brand-color, var(--accent));
+    font-family: var(--serif);
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    opacity: 0.72;
+  }
+
+  .manifest-brand-title {
+    margin-top: 10px;
+    color: var(--brand-color, var(--accent));
+    font-family: var(--sans);
+    font-size: clamp(24px, 2.8vw, 36px);
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.96;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+
+  .manifest-brand-copy {
+    color: var(--base-text);
+    font-size: clamp(15px, 1.8vw, 22px);
+    line-height: 1.36;
+    text-wrap: balance;
   }
 
   .connection-list {
@@ -767,6 +806,11 @@
       grid-template-columns: 1fr;
     }
 
+    .manifest-brand {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
     .info-band,
     .copy-grid,
     .path-grid,
@@ -841,12 +885,19 @@
       </svg>
     </div>
 
-    <footer class="details" aria-live="polite">
+    <div class="details" aria-live="polite">
       <section class="selected-copy">
         <span class="selected-kicker">selected construct entry</span>
         <h2 class="selected-title" id="selectedTitle">Map at rest</h2>
         <p class="selected-body" id="selectedBody">Public doors orbit the construct. Select one to see whether it is acting as node, medium, archive, or orientation layer, and where someone can enter.</p>
         <div class="material-strip" id="selectedMaterials" aria-label="selected construct entry materials"></div>
+        <section class="manifest-brand" id="manifestBrand" aria-labelledby="manifestBrandTitle">
+          <div>
+            <p class="manifest-brand-kicker" id="manifestBrandKicker">construct system / orientation</p>
+            <h3 class="manifest-brand-title" id="manifestBrandTitle">The Six.Well Construct</h3>
+          </div>
+          <p class="manifest-brand-copy" id="manifestBrandCopy">The operating architecture that holds the nodes, mediums, archive, and method in relation.</p>
+        </section>
       </section>
 
       <section class="connection-list">
@@ -855,7 +906,7 @@
           <p class="empty-note">Choose a node to reveal its linked rooms, routes, and descriptions.</p>
         </div>
       </section>
-    </footer>
+    </div>
   </section>
 
   <section class="content-bands" aria-label="about content">
@@ -1317,15 +1368,15 @@
     const detailFade = 320;    // details fade-out time before content swaps
 
     const nodes = [
-      { key: 'tattooing', label: 'Tattooing', color: '#7A1010', activeColor: '#7A1010', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'] },
-      { key: 'art', label: 'Art', color: '#0581C1', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'] },
-      { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'] },
-      { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'] },
-      { key: 'events', label: 'Events', color: '#005d25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['gatherings', 'recaps', 'tickets', 'relics', 'ritual calendar'] },
-      { key: 'music', label: 'Music', color: '#A856A1', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'] },
-      { key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', angle: 150, status: 'thread to launch', role: 'language and letter layer', note: 'What it is: letters, statements, essays, release notes, and field fragments. Why it matters: it keeps the public language alive without forcing every explanation into the first doorway.', materials: ['letters', 'essays', 'notes', 'release context', 'field fragments'] },
-      { key: 'archive', label: 'Archive', color: '#6D3D15', url: '/archive/', angle: 190, status: 'live memory system', role: 'record and proof layer', note: 'What it is: process, residue, records, abandoned paths, and older rooms that still speak. Why it matters: it lets the system remember itself instead of disappearing into feeds.', materials: ['records', 'photos', 'process scans', 'timelines', 'source material'] },
-      { key: 'film', label: 'Film', color: '#328C84', url: '/film/', angle: 230, status: 'incubating narrative engine', role: 'moving-image and documentation layer', note: 'What it is: campaign footage, studio life, interviews, recaps, and mythic documentation. Why it matters: it makes the world visible as it is being built.', materials: ['short films', 'BTS', 'campaigns', 'recaps', 'lore videos'] }
+      { key: 'tattooing', label: 'Tattooing', color: '#7A1010', activeColor: '#7A1010', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'], brand: { kicker: 'node manifestation / tattoo', title: 'art.pill Tattoo House', copy: 'The tattoo medium manifests through art.pill Tattoo House: an artist-led mark and body-ritual room for flash, custom review, special projects, and private booking.' } },
+      { key: 'art', label: 'Art', color: '#0581C1', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'], brand: { kicker: 'node manifestation / image', title: 'ThoughtPuppet', copy: 'The painting and visual-language medium manifests through ThoughtPuppet: the blue-origin image room where symbols, studies, objects, and source material begin talking to the rest of the construct.' } },
+      { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'], brand: { kicker: 'node manifestation / clothing', title: 'Six.Well Clothing', copy: 'The clothing and object medium manifests through Six.Well Clothing: garments, prints, editions, and artifact commerce that lets source imagery move into the world.' } },
+      { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'], brand: { kicker: 'construct system / orientation', title: 'The Six.Well Construct', copy: 'The orientation layer manifests the construct itself: the public language that explains the founder, architecture, nodes, mediums, archive, and ways in.' } },
+      { key: 'events', label: 'Events', color: '#005d25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['gatherings', 'recaps', 'tickets', 'relics', 'ritual calendar'], brand: { kicker: 'node manifestation / space', title: 'The Seventh Room', copy: 'The events and space medium manifests through The Seventh Room: the threshold for hosting, interior, installation, gathering, atmosphere, and live ritual.' } },
+      { key: 'music', label: 'Music', color: '#A856A1', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'], brand: { kicker: 'node manifestation / atmosphere', title: 'Mindful Darkness', copy: 'The sound and atmosphere medium sits closest to Mindful Darkness: a room for tone, voice, interior pressure, conversation, and the parts of the construct that need to be felt before they are explained.' } },
+      { key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', angle: 150, status: 'thread to launch', role: 'language and letter layer', note: 'What it is: letters, statements, essays, release notes, and field fragments. Why it matters: it keeps the public language alive without forcing every explanation into the first doorway.', materials: ['letters', 'essays', 'notes', 'release context', 'field fragments'], brand: { kicker: 'node manifestation / writing', title: 'Mindful Darkness', copy: 'The writing medium manifests through Mindful Darkness: letters, statements, field notes, theory, and the language that lets the deeper rooms keep their charge.' } },
+      { key: 'archive', label: 'Archive', color: '#6D3D15', url: '/archive/', angle: 190, status: 'live memory system', role: 'record and proof layer', note: 'What it is: process, residue, records, abandoned paths, and older rooms that still speak. Why it matters: it lets the system remember itself instead of disappearing into feeds.', materials: ['records', 'photos', 'process scans', 'timelines', 'source material'], brand: { kicker: 'construct system / record', title: 'The Archive', copy: 'The archive manifests as the construct memory: works, process, releases, events, documents, experiments, and older rooms that still feed the active system.' } },
+      { key: 'film', label: 'Film', color: '#328C84', url: '/film/', angle: 230, status: 'incubating narrative engine', role: 'moving-image and documentation layer', note: 'What it is: campaign footage, studio life, interviews, recaps, and mythic documentation. Why it matters: it makes the world visible as it is being built.', materials: ['short films', 'BTS', 'campaigns', 'recaps', 'lore videos'], brand: { kicker: 'node manifestation / film', title: 'Sloth99', copy: 'The film medium manifests through Sloth99: moving image, character, slow attention, documentation, campaign footage, and the narrative engine of the construct.' } }
     ];
 
     /*
@@ -1406,6 +1457,10 @@
     const selectedTitle = document.getElementById('selectedTitle');
     const selectedBody = document.getElementById('selectedBody');
     const selectedMaterials = document.getElementById('selectedMaterials');
+    const manifestBrand = document.getElementById('manifestBrand');
+    const manifestBrandKicker = document.getElementById('manifestBrandKicker');
+    const manifestBrandTitle = document.getElementById('manifestBrandTitle');
+    const manifestBrandCopy = document.getElementById('manifestBrandCopy');
     const stateLabel = document.getElementById('stateLabel');
     const connectionGrid = document.getElementById('connectionGrid');
     const selectedCopy = document.querySelector('.selected-copy');
@@ -1547,6 +1602,7 @@
         selectedBody.textContent = 'Public doors orbit the construct. Select one to see whether it is acting as node, medium, archive, or orientation layer, and where someone can enter.';
         selectedMaterials.replaceChildren();
         selectedMaterials.style.removeProperty('--chip-color');
+        renderManifestBrand(null);
         stateLabel.textContent = 'click a construct entry - its connections illuminate';
         connectionGrid.innerHTML = '<p class="empty-note">Choose a node to reveal its linked rooms, routes, and descriptions.</p>';
         highlightNodeTerms(selectedCopy);
@@ -1564,6 +1620,18 @@
         chip.textContent = item;
         container.appendChild(chip);
       });
+    }
+
+    function renderManifestBrand(node) {
+      const brand = node && node.brand ? node.brand : {
+        kicker: 'construct system / orientation',
+        title: 'The Six.Well Construct',
+        copy: 'The operating architecture that holds the nodes, mediums, archive, and method in relation.'
+      };
+      manifestBrand.style.setProperty('--brand-color', node ? (node.activeColor || node.color) : 'var(--accent)');
+      manifestBrandKicker.textContent = brand.kicker;
+      manifestBrandTitle.textContent = brand.title;
+      manifestBrandCopy.textContent = brand.copy;
     }
 
     function drawConnection(source, target, color, index) {
@@ -1628,6 +1696,7 @@
       selectedTitle.style.color = source.activeColor || source.color;
       selectedBody.textContent = `${source.role} - ${source.status}. ${source.note}`;
       renderMaterialChips(selectedMaterials, source.materials || [], source.activeColor || source.color);
+      renderManifestBrand(source);
       stateLabel.textContent = `${source.label.toLowerCase()} - ${entries.length} connections`;
       connectionGrid.replaceChildren();
 
