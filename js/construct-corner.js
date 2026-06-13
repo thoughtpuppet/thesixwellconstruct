@@ -74,7 +74,7 @@
     /* Wordmark */
     wordmark:        'the six.well construct',
     fontSize:        19,      /* px — 4px larger global construct wordmark */
-    fontFamily:      "'Inter','Helvetica Neue',Arial,sans-serif",
+    fontFamily:      "'Inter',Arial,sans-serif",
     fontWeight:      900,
     letterSpacing:   '-0.05em',
     wordmarkColor:   '#FCB867',

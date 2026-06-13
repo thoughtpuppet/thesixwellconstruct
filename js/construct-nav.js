@@ -57,7 +57,7 @@
     opacityHover:    1.0,    /* any dot on hover */
 
     /* Label (tooltip above dot) */
-    labelFont:       "'Inter','Helvetica Neue',Arial,sans-serif",
+    labelFont:       "'Inter',Arial,sans-serif",
     labelWeight:     700,    /* Inter 700 — bold but not 900 at this size */
     labelSize:       9,      /* px */
     labelTracking:   '0.14em',

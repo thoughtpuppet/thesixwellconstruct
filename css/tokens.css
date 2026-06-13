@@ -11,6 +11,8 @@
      padding: var(--space-md);
    ============================================================ */
 
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block");
+
 :root {
 
   /* ──────────────────────────────────────────────────────────
@@ -102,7 +104,7 @@
                 metadata, captions. All serif roles.
   ────────────────────────────────────────────────────────── */
 
-  --font-display: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Inter', Arial, sans-serif;
   --font-serif:   Georgia, 'Times New Roman', Times, serif;
 
 
@@ -234,5 +236,4 @@ img, video {
   display: block;
   max-width: 100%;
 }
-
 

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>about - the six.well construct</title>
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
 <style>
   :root {
     --bg: #0e0e0e;
@@ -16,7 +19,7 @@
     --amber-soft: rgba(252, 184, 103, 0.18);
     --amber-faint: rgba(252, 184, 103, 0.105);
     --ring: #6D3D15;
-    --sans: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    --sans: 'Inter', Arial, sans-serif;
     --serif: Georgia, 'Times New Roman', Times, serif;
     --ease: cubic-bezier(0.2, 0, 0.2, 1);
   }
@@ -65,8 +68,15 @@
     pointer-events: none;
   }
 
-  #particleBg {
+  #eyesBg {
     z-index: 0;
+    opacity: 0.10;
+    -webkit-mask-image: radial-gradient(ellipse 58% 48% at 50% 42%, black 18%, rgba(0,0,0,0.62) 46%, transparent 86%);
+    mask-image: radial-gradient(ellipse 58% 48% at 50% 42%, black 18%, rgba(0,0,0,0.62) 46%, transparent 86%);
+  }
+
+  #particleBg {
+    z-index: 1;
   }
 
   .stage-head,
@@ -912,6 +922,7 @@
 <body data-venture="about">
 <main class="about-next entrance-fade">
   <section class="stage" aria-labelledby="page-title">
+    <canvas class="stage-bg" id="eyesBg" aria-hidden="true"></canvas>
     <canvas class="stage-bg" id="particleBg" aria-hidden="true"></canvas>
     <header class="stage-head">
       <h1 class="wordmark" id="page-title">THE six.well CONSTRUCT.</h1>
@@ -1347,9 +1358,81 @@
     const stage = document.querySelector('.stage');
     const dustCanvas = document.getElementById('particleBg');
     const pctx = dustCanvas.getContext('2d');
+    const eyesCanvas = document.getElementById('eyesBg');
+    const ectx = eyesCanvas.getContext('2d');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     let W = 0, H = 0;
+
+    /* ---------- eyes wall (404-style drift, tinted to the slab texture) ---------- */
+    const EYE_TINT = '#6D3D15';
+    let TW = 0, TH = 0, EYE = 0, OX = 0, OY = 0;
+    function tileSize() {
+      if (W < 480)       { TW = 95;  TH = 85;  EYE = 65; }
+      else if (W < 768)  { TW = 120; TH = 108; EYE = 85; }
+      else if (W < 1200) { TW = 148; TH = 132; EYE = 100; }
+      else               { TW = 175; TH = 155; EYE = 115; }
+      OX = (TW - EYE) / 2;
+      OY = (TH - EYE) / 2;
+    }
+
+    const GLOBAL_DOWN = 0.10;
+    const BASE_SPEED = 0.18;
+    const POOL = 20;
+    const rowOffset = new Array(POOL);
+    const rowSpeed = new Array(POOL);
+    for (let r = 0; r < POOL; r++) {
+      const dir = r % 2 === 0 ? 1 : -1;
+      rowOffset[r] = Math.random() * 100000;
+      rowSpeed[r] = dir * BASE_SPEED * (0.70 + Math.random() * 0.60);
+    }
+    let slotY = 0;
+    let baseRow = 0;
+
+    const openImg = new Image();
+    const closedImg = new Image();
+    let eyesReady = false;
+    let loadedImgs = 0;
+    function onImg() {
+      if (++loadedImgs < 2) return;
+      eyesReady = true;
+      drawEyes();
+    }
+    openImg.onload = onImg;
+    closedImg.onload = onImg;
+    openImg.src = '../assets/eyes/openeye.png';
+    closedImg.src = '../assets/eyes/closedeye.png';
+
+    function drawEyes() {
+      ectx.clearRect(0, 0, W, H);
+      if (!eyesReady) return;
+      const slots = Math.ceil(H / TH) + 2;
+      const cols = Math.ceil(W / TW) + 3;
+      for (let i = 0; i < slots; i++) {
+        const logicalRow = baseRow + i;
+        const rowId = ((logicalRow % POOL) + POOL) % POOL;
+        const isOdd = ((logicalRow % 2) + 2) % 2 === 1;
+        const stagger = isOdd ? TW / 2 : 0;
+        const ox = ((rowOffset[rowId] + stagger) % TW + TW) % TW - TW;
+        const y = i * TH + slotY - TH;
+        for (let c = 0; c < cols; c++) {
+          const parity = ((logicalRow + c) % 2 + 2) % 2;
+          ectx.drawImage(parity === 0 ? openImg : closedImg, c * TW + ox + OX, y + OY, EYE, EYE);
+        }
+      }
+      ectx.globalCompositeOperation = 'source-in';
+      ectx.fillStyle = EYE_TINT;
+      ectx.fillRect(0, 0, W, H);
+      ectx.globalCompositeOperation = 'source-over';
+    }
+
+    function stepEyes(f) {
+      slotY += GLOBAL_DOWN * f;
+      while (slotY >= TH) { slotY -= TH; baseRow--; }
+      for (let r = 0; r < POOL; r++) {
+        rowOffset[r] = (rowOffset[r] + rowSpeed[r] * f + 1000000) % 1000000;
+      }
+    }
 
     /* ---------- particle field ---------- */
     const PARTICLE_COLOR = '#FCB867';
@@ -1432,14 +1515,18 @@
     function resize() {
       W = stage.clientWidth;
       H = stage.clientHeight;
+      eyesCanvas.width = W; eyesCanvas.height = H;
       dustCanvas.width = W; dustCanvas.height = H;
-      if (reduceMotion) { updateParticles(16, 0); }
+      tileSize();
+      if (reduceMotion) { drawEyes(); updateParticles(16, 0); }
     }
 
     let lastTime = 0;
     function loop(ts) {
       const dt = Math.min(ts - lastTime, 50);
       lastTime = ts;
+      stepEyes(dt / 16.667);
+      drawEyes();
       updateParticles(dt * PARTICLE_SPEED, ts);
       requestAnimationFrame(loop);
     }
