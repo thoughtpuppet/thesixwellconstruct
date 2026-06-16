@@ -229,6 +229,14 @@
   var MOBILE_PARTICLE_COUNT = 26;
   var GLYPH_R = 32;
   var GLYPH_INNER = 22;
+  var WM_SIZE = 30;
+  var WM_OUTER = 12;
+  var WM_INNER = 8.5;
+  var WM_DOTR = 1.7;
+  var WM_FACTOR = WM_OUTER / 56;
+  var WM_DOTS = [[-18, -28], [18, -28], [-18, 0], [18, 0], [-18, 28], [18, 28]].map(function(d) {
+    return [d[0] * WM_FACTOR, d[1] * WM_FACTOR];
+  });
   var currentVenture = null;
   VENTURES.forEach(function(v) { if (v.key === currentKey) currentVenture = v; });
 
@@ -276,9 +284,50 @@
     'pointer-events:none',
   ].join(';');
 
+  var mWordmark = document.createElement('div');
+  mWordmark.id = 'cnav-mobile-wordmark';
+  mWordmark.style.cssText = [
+    'position:absolute',
+    'top:16px',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'display:flex',
+    'align-items:center',
+    'gap:10px',
+    'white-space:nowrap',
+    'opacity:0',
+    'transition:opacity 600ms ease',
+    'pointer-events:none',
+  ].join(';');
+
+  var mWmCanvas = document.createElement('canvas');
+  mWmCanvas.id = 'cnav-mobile-wordmark-glyph';
+  mWmCanvas.style.cssText = [
+    'flex-shrink:0',
+    'display:block',
+    'width:' + WM_SIZE + 'px',
+    'height:' + WM_SIZE + 'px',
+  ].join(';');
+  var mWmCtx = mWmCanvas.getContext('2d');
+
+  var mWmText = document.createElement('span');
+  mWmText.textContent = 'the six.well construct';
+  mWmText.style.cssText = [
+    'font-family:' + CONFIG.labelFont,
+    'font-weight:900',
+    'font-size:22px',
+    'letter-spacing:-0.05em',
+    'color:' + PARTICLE_COLOR,
+    'line-height:1',
+  ].join(';');
+
+  mWordmark.appendChild(mWmCanvas);
+  mWordmark.appendChild(mWmText);
+
   mScrim.appendChild(mCanvas);
   mScrim.appendChild(mLabels);
   mScrim.appendChild(mCenterLabel);
+  mScrim.appendChild(mWordmark);
 
   /* mRing remains as a compatibility handle for responsive hide/show code. */
   var mRing = mScrim;
@@ -342,6 +391,9 @@
     mCanvas.width = Math.round(mobileW * mobileDpr);
     mCanvas.height = Math.round(mobileH * mobileDpr);
     mCtx.setTransform(mobileDpr, 0, 0, mobileDpr, 0, 0);
+    mWmCanvas.width = Math.round(WM_SIZE * mobileDpr);
+    mWmCanvas.height = Math.round(WM_SIZE * mobileDpr);
+    mWmCtx.setTransform(mobileDpr, 0, 0, mobileDpr, 0, 0);
     mobileCx = mobileW / 2;
     mobileCy = mobileH * 0.46;
   }
@@ -481,6 +533,28 @@
     mCtx.restore();
   }
 
+  function drawMobileWordmarkGlyph(t) {
+    var c = WM_SIZE / 2;
+    mWmCtx.clearRect(0, 0, WM_SIZE, WM_SIZE);
+    mWmCtx.beginPath();
+    mWmCtx.arc(c, c, WM_OUTER, 0, Math.PI * 2);
+    mWmCtx.arc(c, c, WM_INNER, 0, Math.PI * 2, true);
+    mWmCtx.fillStyle = '#6D3D15';
+    mWmCtx.fill();
+    var orbit = t * 0.003;
+    for (var i = 0; i < WM_DOTS.length; i++) {
+      var d = WM_DOTS[i];
+      var ang = Math.atan2(d[1], d[0]) + orbit;
+      var dist = Math.hypot(d[0], d[1]) + Math.sin(t * 0.025 + i * 1.1) * 1.5 * WM_FACTOR;
+      mWmCtx.beginPath();
+      mWmCtx.arc(c + Math.cos(ang) * dist, c + Math.sin(ang) * dist, WM_DOTR, 0, Math.PI * 2);
+      mWmCtx.fillStyle = PARTICLE_COLOR;
+      mWmCtx.globalAlpha = 0.9;
+      mWmCtx.fill();
+      mWmCtx.globalAlpha = 1;
+    }
+  }
+
   function mobileProgress(now) {
     if (mobileState === 'opening') {
       var p = clamp01((now - mobileAnimStart) / MOBILE_BLOOM_DUR);
@@ -504,6 +578,7 @@
     var dt = Math.min(now - mobileLastT, 50);
     mobileLastT = now;
     mCtx.clearRect(0, 0, mobileW, mobileH);
+    drawMobileWordmarkGlyph(now);
 
     var prog = mobileProgress(now);
     var visible = mobileState !== 'closed';
@@ -560,6 +635,8 @@
     mobileAnimStart = performance.now();
     requestAnimationFrame(function() {
       mScrim.style.opacity = '0.94';
+      mWordmark.style.opacity = '0.82';
+      mChip.style.zIndex = '1099';
     });
     chipCaret.style.transform = 'rotate(180deg)';
     mChip.setAttribute('aria-expanded', 'true');
@@ -573,11 +650,15 @@
     mobileAnimStart = performance.now();
     mScrim.style.opacity = '0';
     mScrim.style.pointerEvents = 'none';
+    mWordmark.style.opacity = '0';
     mobileNodes.forEach(function(nd) { nd.el.style.opacity = '0'; });
     mCenterLabel.style.opacity = '0';
     chipCaret.style.transform = 'rotate(0deg)';
     mChip.setAttribute('aria-expanded', 'false');
     mChip.setAttribute('aria-label', 'open navigation');
+    setTimeout(function() {
+      if (!ringOpen) mChip.style.zIndex = '1103';
+    }, MOBILE_CLOSE_DUR);
   }
 
   function hitMobileNode(mx, my) {
