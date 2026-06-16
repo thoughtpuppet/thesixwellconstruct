@@ -356,7 +356,7 @@
   chipText.textContent = chipLabel;
   var chipCaret = document.createElement('span');
   chipCaret.textContent = '▾';
-  chipCaret.style.cssText = 'font-size:10px;line-height:1;transition:transform 300ms ease';
+  chipCaret.style.cssText = 'font-size:14px;line-height:1;transition:transform 300ms ease';
   mChip.appendChild(chipText);
   mChip.appendChild(chipCaret);
 
