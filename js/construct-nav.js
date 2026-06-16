@@ -223,12 +223,25 @@
   var SITE_BG = '#0e0e0e';
   var PARTICLE_COLOR = '#FCB867';
   var MOBILE_RING_RADIUS = 122;
-  var MOBILE_BLOOM_DUR = 950;
+  var MOBILE_BLOOM_DUR = 2200;
   var MOBILE_CLOSE_DUR = 520;
   var MOBILE_NODE_SIZE = 18;
   var MOBILE_PARTICLE_COUNT = 26;
+  var MOBILE_TRAVEL_END = 0.85;
+  var MOBILE_XFADE_START = 0.42;
+  var MOBILE_ORBIT_SPEED = 0.00007;
+  var MOBILE_ORBIT_RADIUS = 8;
   var GLYPH_R = 32;
   var GLYPH_INNER = 22;
+  var HOME_DOT_POSITIONS = [[-18, -28], [18, -28], [-18, 0], [18, 0], [-18, 28], [18, 28]];
+  var HOME_FROM_DOT = {
+    tattooing: 0,
+    art: 1,
+    merch: 2,
+    events: 3,
+    music: 4,
+    archive: 5,
+  };
   var WM_SIZE = 30;
   var WM_OUTER = 12;
   var WM_INNER = 8.5;
@@ -297,8 +310,12 @@
     'white-space:nowrap',
     'opacity:0',
     'transition:opacity 600ms ease',
-    'pointer-events:none',
+    'pointer-events:auto',
+    'cursor:pointer',
   ].join(';');
+  mWordmark.setAttribute('role', 'link');
+  mWordmark.setAttribute('aria-label', 'go to home page');
+  mWordmark.setAttribute('tabindex', '0');
 
   var mWmCanvas = document.createElement('canvas');
   mWmCanvas.id = 'cnav-mobile-wordmark-glyph';
@@ -372,9 +389,12 @@
   var mobileCx = 0;
   var mobileCy = 0;
   var mobileDpr = 1;
+  var mobileOrbit = 0;
 
   function clamp01(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
   function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
   function easeOutSoft(t) { return 1 - Math.pow(1 - t, 2); }
   function smoothBreath(phase) {
     var s = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
@@ -382,6 +402,49 @@
   }
   function otherVentures() {
     return VENTURES.filter(function(v) { return v.key !== currentKey; });
+  }
+  function hexToRgb(hex) {
+    var c = hex.replace('#', '');
+    return {
+      r: parseInt(c.slice(0, 2), 16),
+      g: parseInt(c.slice(2, 4), 16),
+      b: parseInt(c.slice(4, 6), 16),
+    };
+  }
+  function lerpColor(a, b, t) {
+    var ca = hexToRgb(a);
+    var cb = hexToRgb(b);
+    return 'rgb(' + Math.round(lerp(ca.r, cb.r, t)) + ',' + Math.round(lerp(ca.g, cb.g, t)) + ',' + Math.round(lerp(ca.b, cb.b, t)) + ')';
+  }
+  function mobileDriftOpenFactor(prog) {
+    var t = clamp01(prog);
+    return 0.04 + 0.96 * (t * t * t);
+  }
+  function mobileStartForNode(v) {
+    var fromDot = HOME_FROM_DOT[v.key];
+    if (typeof fromDot === 'number') {
+      var factor = GLYPH_R / 56;
+      var d = HOME_DOT_POSITIONS[fromDot];
+      return {
+        x: mobileCx + d[0] * factor,
+        y: mobileCy + d[1] * factor,
+        r: 7.5 * factor,
+      };
+    }
+    return { x: mobileCx, y: mobileCy, r: 3 };
+  }
+  function mobileAnchorForNode(nd, prog) {
+    var orbitOpen = mobileDriftOpenFactor(prog);
+    var orbitAngle = mobileOrbit * orbitOpen + nd.orbitPhase;
+    var angle = nd.angle + mobileOrbit * 0.18 * orbitOpen;
+    var drift = {
+      x: nd.dax * orbitOpen * Math.sin((mobileLastT / nd.dpx) * Math.PI * 2 + nd.dox),
+      y: nd.day * orbitOpen * Math.sin((mobileLastT / nd.dpy) * Math.PI * 2 + nd.doy),
+    };
+    return {
+      x: mobileCx + Math.cos(angle) * MOBILE_RING_RADIUS + Math.cos(orbitAngle) * MOBILE_ORBIT_RADIUS * orbitOpen + drift.x,
+      y: mobileCy + Math.sin(angle) * MOBILE_RING_RADIUS + Math.sin(orbitAngle) * MOBILE_ORBIT_RADIUS * orbitOpen + drift.y,
+    };
   }
 
   function resizeMobileCanvas() {
@@ -430,6 +493,7 @@
         y: mobileCy,
         r: 0,
         alpha: 0,
+        orbitPhase: i * 0.77,
         dax: 4.5 + (i * 1.7) % 3.5,
         day: 3.5 + (i * 2.3) % 3.5,
         dpx: 18000 + (i * 3700) % 9000,
@@ -577,6 +641,7 @@
     if (mobileLastT == null) mobileLastT = now;
     var dt = Math.min(now - mobileLastT, 50);
     mobileLastT = now;
+    mobileOrbit += dt * MOBILE_ORBIT_SPEED;
     mCtx.clearRect(0, 0, mobileW, mobileH);
     drawMobileWordmarkGlyph(now);
 
@@ -588,32 +653,45 @@
       updateMobileParticles(dt, now, mobileState === 'open' || mobileState === 'opening');
       drawMobileGlyph(now);
 
-      var edge = GLYPH_R;
       var n = mobileNodes.length;
       for (var i = 0; i < n; i++) {
         var nd = mobileNodes[i];
-        var local = clamp01((prog - (i * 0.05)) / (1 - (n - 1) * 0.05));
-        var e = easeInOut(local);
-        var rad = edge + (MOBILE_RING_RADIUS - edge) * e;
-        var of = easeOutSoft(clamp01((e - 0.6) / 0.4));
-        var dx = nd.dax * of * Math.sin((now / nd.dpx) * Math.PI * 2 + nd.dox);
-        var dy = nd.day * of * Math.sin((now / nd.dpy) * Math.PI * 2 + nd.doy);
+        var staggered = prog;
+        var travel = easeOut(clamp01(staggered / MOBILE_TRAVEL_END));
+        var xfade = clamp01((staggered - MOBILE_XFADE_START) / (MOBILE_TRAVEL_END - MOBILE_XFADE_START));
+        var bloomAlpha = 1 - xfade;
+        var settledAlpha = easeOutSoft(xfade);
+        var start = mobileStartForNode(nd.venture);
+        var anchor = mobileAnchorForNode(nd, staggered);
+        var travelX = lerp(start.x, anchor.x, travel);
+        var travelY = lerp(start.y, anchor.y, travel);
 
-        nd.x = mobileCx + Math.cos(nd.angle) * rad + dx;
-        nd.y = mobileCy + Math.sin(nd.angle) * rad + dy;
-        nd.r = MOBILE_NODE_SIZE * e;
-        nd.alpha = e;
+        if (settledAlpha > 0 && nd.alpha <= 0.02) {
+          nd.x = travelX;
+          nd.y = travelY;
+        }
+        if (settledAlpha > 0) {
+          var follow = 0.012 * (dt / 16);
+          nd.x += (anchor.x - nd.x) * follow;
+          nd.y += (anchor.y - nd.y) * follow;
+        } else {
+          nd.x = travelX;
+          nd.y = travelY;
+        }
+
+        nd.r = lerp(start.r, MOBILE_NODE_SIZE, travel);
+        nd.alpha = Math.max(bloomAlpha * 0.9, settledAlpha);
 
         mCtx.globalAlpha = mobileAlpha * nd.alpha;
         mCtx.beginPath();
         mCtx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2);
-        mCtx.fillStyle = nd.venture.color;
+        mCtx.fillStyle = lerpColor(PARTICLE_COLOR, nd.venture.color, travel);
         mCtx.fill();
         mCtx.globalAlpha = 1;
 
         nd.el.style.left = nd.x + 'px';
         nd.el.style.top = (nd.y + nd.r + 8) + 'px';
-        nd.el.style.opacity = (mobileState === 'closing') ? '0' : String(clamp01((e - 0.7) / 0.3));
+        nd.el.style.opacity = (mobileState === 'closing') ? '0' : String(clamp01((settledAlpha - 0.25) / 0.75));
       }
 
       mCenterLabel.style.left = mobileCx + 'px';
@@ -681,6 +759,25 @@
       return;
     }
     closeRing();
+  });
+
+  function goHomeFromWordmark() {
+    if (typeof window._constructFade === 'function') {
+      window._constructFade('/');
+    } else {
+      window.location.href = '/';
+    }
+  }
+
+  mWordmark.addEventListener('click', function(e) {
+    e.stopPropagation();
+    goHomeFromWordmark();
+  });
+  mWordmark.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      goHomeFromWordmark();
+    }
   });
 
   mChip.addEventListener('click', function(e) {
