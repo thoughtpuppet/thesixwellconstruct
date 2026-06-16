@@ -215,20 +215,428 @@
   document.body.appendChild(nav);
 
 
+  /* ── MOBILE: CHIP + CANVAS BLOOM RING ─────────────────────
+     Below MOBILE_BP the desktop dot row is replaced by the
+     previewed chip and full-screen bloom navigation.
+  ────────────────────────────────────────────────────────── */
+
+  var SITE_BG = '#0e0e0e';
+  var PARTICLE_COLOR = '#FCB867';
+  var MOBILE_RING_RADIUS = 122;
+  var MOBILE_BLOOM_DUR = 950;
+  var MOBILE_CLOSE_DUR = 520;
+  var MOBILE_NODE_SIZE = 18;
+  var MOBILE_PARTICLE_COUNT = 26;
+  var GLYPH_R = 32;
+  var GLYPH_INNER = 22;
+  var currentVenture = null;
+  VENTURES.forEach(function(v) { if (v.key === currentKey) currentVenture = v; });
+
+  var mScrim = document.createElement('div');
+  mScrim.id = 'cnav-mobile-overlay';
+  mScrim.style.cssText = [
+    'position:fixed', 'inset:0',
+    'background:' + SITE_BG,
+    'opacity:0', 'pointer-events:none',
+    'transition:opacity 550ms ease',
+    'z-index:1100', 'display:none',
+    'overflow:hidden',
+  ].join(';');
+
+  var mCanvas = document.createElement('canvas');
+  mCanvas.id = 'cnav-mobile-canvas';
+  mCanvas.style.cssText = [
+    'position:absolute', 'inset:0',
+    'width:100%', 'height:100%',
+    'display:block',
+  ].join(';');
+  var mCtx = mCanvas.getContext('2d');
+
+  var mLabels = document.createElement('div');
+  mLabels.id = 'cnav-mobile-labels';
+  mLabels.style.cssText = [
+    'position:absolute', 'inset:0',
+    'pointer-events:none',
+  ].join(';');
+
+  var mCenterLabel = document.createElement('div');
+  mCenterLabel.id = 'cnav-mobile-center-label';
+  mCenterLabel.style.cssText = [
+    'position:absolute',
+    'font-family:' + CONFIG.labelFont,
+    'font-size:13px',
+    'font-weight:900',
+    'letter-spacing:-0.06em',
+    'text-transform:uppercase',
+    'transform:translate(-50%,0)',
+    'white-space:nowrap',
+    'text-align:center',
+    'opacity:0',
+    'transition:opacity 400ms ease',
+    'pointer-events:none',
+  ].join(';');
+
+  mScrim.appendChild(mCanvas);
+  mScrim.appendChild(mLabels);
+  mScrim.appendChild(mCenterLabel);
+
+  /* mRing remains as a compatibility handle for responsive hide/show code. */
+  var mRing = mScrim;
+
+  var mChip = document.createElement('button');
+  mChip.id = 'cnav-chip';
+  mChip.setAttribute('aria-label', 'open navigation');
+  mChip.setAttribute('aria-expanded', 'false');
+  var chipColor = currentVenture ? currentVenture.color : '#FCB867';
+  var chipLabel = currentVenture ? currentVenture.label : 'MENU';
+  mChip.style.cssText = [
+    'position:fixed', 'top:30px', 'left:50%',
+    'transform:translate(-50%,-50%)',
+    'display:none', 'align-items:center', 'gap:7px',
+    'background:' + chipColor,
+    'color:' + SITE_BG,
+    'font-family:' + CONFIG.labelFont,
+    'font-size:11px', 'font-weight:900',
+    'letter-spacing:0.06em', 'text-transform:uppercase',
+    'padding:8px 15px', 'border:none', 'border-radius:20px',
+    'cursor:pointer', 'white-space:nowrap',
+    'z-index:1103', 'opacity:0',
+    'transition:opacity ' + CONFIG.fadeInDuration + 'ms ease',
+  ].join(';');
+  var chipText = document.createElement('span');
+  chipText.textContent = chipLabel;
+  var chipCaret = document.createElement('span');
+  chipCaret.textContent = '▾';
+  chipCaret.style.cssText = 'font-size:10px;line-height:1;transition:transform 300ms ease';
+  mChip.appendChild(chipText);
+  mChip.appendChild(chipCaret);
+
+  var mobileNodes = [];
+  var mobileParticles = [];
+  var ringOpen = false;
+  var mobileState = 'closed';
+  var mobileAnimStart = 0;
+  var mobileAlpha = 0;
+  var mobileLastT = null;
+  var mobileW = 0;
+  var mobileH = 0;
+  var mobileCx = 0;
+  var mobileCy = 0;
+  var mobileDpr = 1;
+
+  function clamp01(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
+  function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function easeOutSoft(t) { return 1 - Math.pow(1 - t, 2); }
+  function smoothBreath(phase) {
+    var s = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+    return s * s * (3 - 2 * s);
+  }
+  function otherVentures() {
+    return VENTURES.filter(function(v) { return v.key !== currentKey; });
+  }
+
+  function resizeMobileCanvas() {
+    mobileDpr = Math.min(window.devicePixelRatio || 1, 2);
+    mobileW = window.innerWidth;
+    mobileH = window.innerHeight;
+    mCanvas.width = Math.round(mobileW * mobileDpr);
+    mCanvas.height = Math.round(mobileH * mobileDpr);
+    mCtx.setTransform(mobileDpr, 0, 0, mobileDpr, 0, 0);
+    mobileCx = mobileW / 2;
+    mobileCy = mobileH * 0.46;
+  }
+
+  function buildMobileNodes() {
+    mLabels.innerHTML = '';
+    mobileNodes = [];
+    var list = otherVentures();
+    var n = list.length;
+    list.forEach(function(v, i) {
+      var ang = (-90 + i * (360 / n)) * Math.PI / 180;
+      var el = document.createElement('div');
+      el.textContent = v.label + ' .';
+      el.style.cssText = [
+        'position:absolute',
+        'font-family:' + CONFIG.labelFont,
+        'font-weight:900',
+        'font-size:13px',
+        'letter-spacing:-0.06em',
+        'text-transform:uppercase',
+        'transform:translate(-50%,0)',
+        'white-space:nowrap',
+        'opacity:0',
+        'transition:opacity 250ms ease',
+        'pointer-events:none',
+        'color:' + v.color,
+      ].join(';');
+      mLabels.appendChild(el);
+      mobileNodes.push({
+        venture: v,
+        angle: ang,
+        el: el,
+        x: mobileCx,
+        y: mobileCy,
+        r: 0,
+        alpha: 0,
+        dax: 4.5 + (i * 1.7) % 3.5,
+        day: 3.5 + (i * 2.3) % 3.5,
+        dpx: 18000 + (i * 3700) % 9000,
+        dpy: 22000 + (i * 4100) % 8000,
+        dox: i * 1.4,
+        doy: i * 2.1,
+      });
+    });
+
+    if (currentVenture) {
+      mCenterLabel.textContent = currentVenture.label + ' .';
+      mCenterLabel.style.color = currentVenture.color;
+    }
+  }
+
+  function spawnMobileParticle(seeded) {
+    var p = {
+      angle: Math.random() * Math.PI * 2,
+      dist: GLYPH_R,
+      target: GLYPH_R + 18 + Math.random() * 120,
+      orbit: (Math.random() * 0.00003 + 0.00001) * (Math.random() < 0.5 ? 1 : -1),
+      driftSpeed: 0.0025 + Math.random() * 0.006,
+      size: 1 + Math.random() * 2.1,
+      maxAlpha: 0.12 + Math.random() * 0.30,
+      fAX: 2 + Math.random() * 4,
+      fAY: 2 + Math.random() * 4,
+      fPX: 12000 + Math.random() * 10000,
+      fPY: 14000 + Math.random() * 10000,
+      fOX: Math.random() * Math.PI * 2,
+      fOY: Math.random() * Math.PI * 2,
+      fadeIn: 700 + Math.random() * 500,
+      fadeOut: 1200 + Math.random() * 900,
+      age: 0,
+      life: null,
+      reached: false,
+    };
+    if (seeded) {
+      var fr = Math.random();
+      p.dist = GLYPH_R + fr * (p.target - GLYPH_R);
+      p.age = fr * (p.fadeIn + 2500);
+      if (p.dist >= p.target) {
+        p.reached = true;
+        p.life = p.age + 3000 + Math.random() * 6000;
+      }
+    }
+    mobileParticles.push(p);
+  }
+
+  function updateMobileParticles(dt, t, visible) {
+    var cap = visible ? MOBILE_PARTICLE_COUNT : 0;
+    while (mobileParticles.length < cap) spawnMobileParticle(true);
+    for (var i = mobileParticles.length - 1; i >= 0; i--) {
+      var p = mobileParticles[i];
+      p.age += dt;
+      p.angle += p.orbit * dt;
+      if (!p.reached) {
+        p.dist += p.driftSpeed * dt;
+        if (p.dist >= p.target) {
+          p.dist = p.target;
+          p.reached = true;
+          p.life = p.age + 3000 + Math.random() * 6000;
+        }
+      }
+      if ((p.reached && p.age >= p.life) || mobileParticles.length > cap) {
+        mobileParticles.splice(i, 1);
+        continue;
+      }
+      var alpha;
+      if (!p.reached) {
+        alpha = Math.min(p.age / p.fadeIn, 1) * p.maxAlpha;
+      } else {
+        var tl = p.life - p.age;
+        alpha = tl < p.fadeOut ? (tl / p.fadeOut) * p.maxAlpha : p.maxAlpha;
+      }
+      var fx = p.fAX * Math.sin((t / p.fPX) * Math.PI * 2 + p.fOX);
+      var fy = p.fAY * Math.sin((t / p.fPY) * Math.PI * 2 + p.fOY);
+      var px = mobileCx + Math.cos(p.angle) * p.dist + fx;
+      var py = mobileCy + Math.sin(p.angle) * p.dist + fy;
+      mCtx.globalAlpha = alpha * mobileAlpha;
+      mCtx.beginPath();
+      mCtx.arc(px, py, p.size, 0, Math.PI * 2);
+      mCtx.fillStyle = PARTICLE_COLOR;
+      mCtx.fill();
+    }
+    mCtx.globalAlpha = 1;
+  }
+
+  function drawMobileGlyph(t) {
+    if (!currentVenture) return;
+    var breath = smoothBreath((t * 1.375) / 9000);
+    var grow = 1 + 0.03 * (breath - 0.5);
+    var outer = GLYPH_R * grow;
+    var inner = GLYPH_INNER * grow;
+    mCtx.save();
+    mCtx.globalAlpha = mobileAlpha * (0.88 + 0.12 * breath);
+    mCtx.beginPath();
+    mCtx.arc(mobileCx, mobileCy, outer, 0, Math.PI * 2);
+    mCtx.arc(mobileCx, mobileCy, inner, 0, Math.PI * 2, true);
+    mCtx.fillStyle = currentVenture.color;
+    mCtx.fill();
+    mCtx.restore();
+  }
+
+  function mobileProgress(now) {
+    if (mobileState === 'opening') {
+      var p = clamp01((now - mobileAnimStart) / MOBILE_BLOOM_DUR);
+      if (p >= 1) mobileState = 'open';
+      return p;
+    }
+    if (mobileState === 'open') return 1;
+    if (mobileState === 'closing') {
+      var c = clamp01((now - mobileAnimStart) / MOBILE_CLOSE_DUR);
+      if (c >= 1) {
+        mobileState = 'closed';
+        mScrim.style.display = 'none';
+      }
+      return 1 - c;
+    }
+    return 0;
+  }
+
+  function mobileFrame(now) {
+    if (mobileLastT == null) mobileLastT = now;
+    var dt = Math.min(now - mobileLastT, 50);
+    mobileLastT = now;
+    mCtx.clearRect(0, 0, mobileW, mobileH);
+
+    var prog = mobileProgress(now);
+    var visible = mobileState !== 'closed';
+    mobileAlpha = easeOutSoft(prog);
+
+    if (visible) {
+      updateMobileParticles(dt, now, mobileState === 'open' || mobileState === 'opening');
+      drawMobileGlyph(now);
+
+      var edge = GLYPH_R;
+      var n = mobileNodes.length;
+      for (var i = 0; i < n; i++) {
+        var nd = mobileNodes[i];
+        var local = clamp01((prog - (i * 0.05)) / (1 - (n - 1) * 0.05));
+        var e = easeInOut(local);
+        var rad = edge + (MOBILE_RING_RADIUS - edge) * e;
+        var of = easeOutSoft(clamp01((e - 0.6) / 0.4));
+        var dx = nd.dax * of * Math.sin((now / nd.dpx) * Math.PI * 2 + nd.dox);
+        var dy = nd.day * of * Math.sin((now / nd.dpy) * Math.PI * 2 + nd.doy);
+
+        nd.x = mobileCx + Math.cos(nd.angle) * rad + dx;
+        nd.y = mobileCy + Math.sin(nd.angle) * rad + dy;
+        nd.r = MOBILE_NODE_SIZE * e;
+        nd.alpha = e;
+
+        mCtx.globalAlpha = mobileAlpha * nd.alpha;
+        mCtx.beginPath();
+        mCtx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2);
+        mCtx.fillStyle = nd.venture.color;
+        mCtx.fill();
+        mCtx.globalAlpha = 1;
+
+        nd.el.style.left = nd.x + 'px';
+        nd.el.style.top = (nd.y + nd.r + 8) + 'px';
+        nd.el.style.opacity = (mobileState === 'closing') ? '0' : String(clamp01((e - 0.7) / 0.3));
+      }
+
+      mCenterLabel.style.left = mobileCx + 'px';
+      mCenterLabel.style.top = (mobileCy + GLYPH_R + 10) + 'px';
+      mCenterLabel.style.opacity = (mobileState === 'closing') ? '0' : String(clamp01((prog - 0.5) / 0.5));
+    }
+
+    requestAnimationFrame(mobileFrame);
+  }
+
+  function openRing() {
+    if (mobileState === 'open' || mobileState === 'opening') return;
+    ringOpen = true;
+    resizeMobileCanvas();
+    buildMobileNodes();
+    mScrim.style.display = 'block';
+    mScrim.style.pointerEvents = 'auto';
+    mobileState = 'opening';
+    mobileAnimStart = performance.now();
+    requestAnimationFrame(function() {
+      mScrim.style.opacity = '0.94';
+    });
+    chipCaret.style.transform = 'rotate(180deg)';
+    mChip.setAttribute('aria-expanded', 'true');
+    mChip.setAttribute('aria-label', 'close navigation');
+  }
+
+  function closeRing() {
+    if (mobileState === 'closed' || mobileState === 'closing') return;
+    ringOpen = false;
+    mobileState = 'closing';
+    mobileAnimStart = performance.now();
+    mScrim.style.opacity = '0';
+    mScrim.style.pointerEvents = 'none';
+    mobileNodes.forEach(function(nd) { nd.el.style.opacity = '0'; });
+    mCenterLabel.style.opacity = '0';
+    chipCaret.style.transform = 'rotate(0deg)';
+    mChip.setAttribute('aria-expanded', 'false');
+    mChip.setAttribute('aria-label', 'open navigation');
+  }
+
+  function hitMobileNode(mx, my) {
+    if (mobileState !== 'open') return null;
+    for (var i = 0; i < mobileNodes.length; i++) {
+      var nd = mobileNodes[i];
+      if (Math.hypot(mx - nd.x, my - nd.y) < Math.max(28, nd.r + 18)) return nd.venture;
+    }
+    return null;
+  }
+
+  mCanvas.addEventListener('click', function(e) {
+    var hit = hitMobileNode(e.clientX, e.clientY);
+    if (hit) {
+      if (typeof window._constructFade === 'function') {
+        window._constructFade(hit.url);
+      } else {
+        window.location.href = hit.url;
+      }
+      return;
+    }
+    closeRing();
+  });
+
+  mChip.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (ringOpen) closeRing(); else openRing();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && ringOpen) closeRing();
+  });
+  window.addEventListener('resize', function() {
+    if (ringOpen) {
+      resizeMobileCanvas();
+      buildMobileNodes();
+    }
+  });
+
+  document.body.appendChild(mScrim);
+  document.body.appendChild(mChip);
+  resizeMobileCanvas();
+  requestAnimationFrame(mobileFrame);
+
+
   /* ── FADE IN ──────────────────────────────────────────────
      Matches the corner element's fade-in delay so both
      appear at the same moment after the page entrance.
   ────────────────────────────────────────────────────────── */
   setTimeout(function() {
     nav.style.opacity = '1';
+    mChip.style.opacity = '1';
   }, CONFIG.fadeInDelay);
 
   /* ── RESPONSIVE ───────────────────────────────────────────
-     <700px: position nav inside the header band, centered in the
-             space between the corner ring (left) and cart button
-             (right). Tighter gaps. Current construct entry dot rendered
-             as an open ring so it reads at small size.
-     <380px: shrink dots + reduce gaps further so all 9 fit.
+     <700px: hide the 9-dot row and show the chip + bloom ring
+             instead. The chip is centered in the header band,
+             in the space between the corner ring (left) and the
+             cart button (right).
+     >=700px: restore the desktop dot row; hide chip + ring.
   ────────────────────────────────────────────────────────── */
   var MOBILE_BP = 700;
   var TINY_BP   = 380;
@@ -237,6 +645,8 @@
     var w = window.innerWidth;
 
     if (w < MOBILE_BP) {
+      nav.style.display = 'none';
+
       var corner = document.getElementById('construct-corner');
       var cornerRect = corner ? corner.getBoundingClientRect() : null;
       var ringRight = cornerRect ? cornerRect.right : (w < TINY_BP ? 68 : 72);
@@ -262,49 +672,17 @@
       var availableWidth = Math.max(88, rightBoundary - leftBoundary);
       var centerX        = leftBoundary + (availableWidth / 2);
 
-      nav.style.position       = 'fixed';
-      nav.style.top            = '30px';
-      nav.style.left           = centerX + 'px';
-      nav.style.transform      = 'translate(-50%, -50%)';
-      nav.style.justifyContent = 'center';
-      nav.style.maxWidth       = (availableWidth - 20) + 'px';
-      nav.style.flexWrap       = 'wrap';
-
-      var dotSize = w < TINY_BP ? 10 : 12;
-
-      // Calculate gap so all 9 dots fit between the real left ring and right CTA.
-      var usableWidth = availableWidth - 8;
-      if (usableWidth < dotSize * 9 + 4 * 8) {
-        dotSize = Math.max(8, Math.floor((usableWidth - 4 * 8) / 9));
-      }
-      var maxGap = Math.floor((usableWidth - dotSize * 9) / 8);
-      var gapSize = Math.max(3, Math.min(maxGap, w < TINY_BP ? 8 : 10));
-
-      nav.style.gap     = gapSize + 'px';
-      nav.style.flexWrap = 'nowrap';
-
-      var dots = nav.querySelectorAll('.cnav-dot');
-      dots.forEach(function(d) {
-        d.style.width  = dotSize + 'px';
-        d.style.height = dotSize + 'px';
-
-        var isCurrent = d.hasAttribute('data-current');
-        if (isCurrent) {
-          var bgColor = d.getAttribute('data-bg-color') || '#FCB867';
-          d.style.background = 'transparent';
-          d.style.border     = '2px solid ' + bgColor;
-          d.style.opacity    = '1';
-        } else {
-          d.style.opacity = '1';
-          d.style.border  = 'none';
-          var bgColor2 = d.getAttribute('data-bg-color');
-          if (bgColor2 && d.style.background === 'transparent') {
-            d.style.background = bgColor2;
-          }
-        }
-      });
+      mChip.style.display = 'inline-flex';
+      mChip.style.top     = '30px';
+      mChip.style.left    = centerX + 'px';
 
     } else {
+      if (ringOpen) closeRing();
+      mChip.style.display  = 'none';
+      mScrim.style.display = 'none';
+      mRing.style.display  = 'none';
+
+      nav.style.display        = 'flex';
       nav.style.top            = CONFIG.topInset + 'px';
       nav.style.left           = '50%';
       nav.style.transform      = 'translateX(-50%)';
