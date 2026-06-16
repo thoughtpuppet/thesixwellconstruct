@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>menu preview — the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block">
+<style>
+  :root{
+    --font-inter:'Inter',Arial,sans-serif;
+    --font-serif:Georgia,'Times New Roman',Times,serif;
+    --bg:#0e0e0e;
+    --amber:#FCB867;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    background:#161616;font-family:var(--font-inter);color:#fff;
+    display:flex;align-items:center;justify-content:center;gap:28px;
+    min-height:100vh;padding:24px;-webkit-tap-highlight-color:transparent;
+    flex-wrap:wrap;
+  }
+
+  /* ── Faux phone frame ─────────────────────────────── */
+  #phone{
+    position:relative;width:390px;height:min(800px,90vh);
+    background:var(--bg);border-radius:34px;overflow:hidden;
+    box-shadow:0 0 0 2px #2a2a2a,0 30px 70px rgba(0,0,0,0.6);
+    flex-shrink:0;
+  }
+
+  /* sample page behind the menu */
+  #page{position:absolute;inset:0;z-index:1;}
+  header.top{
+    position:absolute;top:0;left:0;right:0;height:64px;z-index:3;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;
+  }
+  #corner{width:30px;height:30px;border-radius:50%;border:2px solid #6D3D15;opacity:.8;}
+  #cart{color:#666;font-size:18px;}
+  #chip{
+    display:inline-flex;align-items:center;gap:7px;border:none;cursor:pointer;
+    font-family:var(--font-inter);font-size:11px;font-weight:900;
+    letter-spacing:.06em;text-transform:uppercase;
+    padding:8px 15px;border-radius:20px;white-space:nowrap;
+  }
+  #chip .caret{font-size:10px;transition:transform .3s ease;}
+  #page-body{padding:96px 26px 0;}
+  #page-body h1{font-size:54px;font-weight:900;letter-spacing:-.03em;line-height:.95;}
+  #page-body p{margin-top:18px;font-family:var(--font-serif);font-size:14px;line-height:1.7;color:#8a8a8a;max-width:30ch;}
+
+  /* ── Menu overlay ─────────────────────────────────── */
+  #menu{position:absolute;inset:0;z-index:10;pointer-events:none;}
+  #dim{
+    position:absolute;inset:0;background:var(--bg);
+    opacity:0;transition:opacity .55s ease;
+  }
+  #mc{position:absolute;inset:0;}
+  #labels{position:absolute;inset:0;pointer-events:none;}
+  .lbl{
+    position:absolute;font-family:var(--font-inter);font-weight:900;
+    font-size:13px;letter-spacing:-.06em;text-transform:uppercase;
+    transform:translate(-50%,0);white-space:nowrap;
+    opacity:0;transition:opacity .25s ease;pointer-events:none;
+  }
+  #center-lbl{
+    position:absolute;font-family:var(--font-inter);font-weight:900;
+    font-size:13px;letter-spacing:-.06em;text-transform:uppercase;
+    transform:translate(-50%,0);white-space:nowrap;text-align:center;
+    opacity:0;transition:opacity .4s ease;pointer-events:none;
+  }
+  #wm{
+    position:absolute;top:16px;left:50%;transform:translateX(-50%);
+    display:flex;align-items:center;gap:10px;white-space:nowrap;
+    opacity:0;transition:opacity .6s ease;pointer-events:none;
+  }
+  #wm-glyph{flex-shrink:0;display:block;}
+  #wm-text{font-weight:900;font-size:22px;letter-spacing:-.05em;color:var(--amber);line-height:1;}
+  #menu.open{pointer-events:auto;}
+  #menu.open #wm{opacity:.82;}
+
+  /* ── Tuning panel ─────────────────────────────────── */
+  #panel{
+    width:300px;background:#1d1d1d;border:1px solid #313131;border-radius:14px;
+    padding:18px 18px 22px;font-size:12px;flex-shrink:0;align-self:flex-start;
+  }
+  #panel h2{font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#bbb;margin-bottom:4px;}
+  #panel .hint{color:#777;font-size:11px;line-height:1.5;margin-bottom:16px;font-family:var(--font-serif);}
+  .ctrl{margin-bottom:15px;}
+  .ctrl label{display:flex;justify-content:space-between;color:#aaa;margin-bottom:6px;letter-spacing:.02em;}
+  .ctrl label b{color:#fff;font-weight:700;}
+  .ctrl input[type=range]{width:100%;accent-color:var(--amber);}
+  .ctrl select{width:100%;background:#111;color:#fff;border:1px solid #383838;border-radius:7px;padding:7px 9px;font-family:var(--font-inter);font-size:12px;}
+  #panel .row{display:flex;gap:8px;margin-top:8px;}
+  #panel button{flex:1;background:#111;color:#ccc;border:1px solid #383838;border-radius:7px;padding:9px;cursor:pointer;font-family:var(--font-inter);font-size:12px;}
+  #panel button:hover{background:#262626;}
+  #status{margin-top:12px;color:#888;font-size:11px;font-family:var(--font-serif);min-height:16px;}
+</style>
+</head>
+<body>
+
+<div id="phone">
+  <div id="page">
+    <header class="top">
+      <span id="corner"></span>
+      <button id="chip"><span class="chip-name">TATTOOS</span><span class="caret">▾</span></button>
+      <span id="cart">⌕</span>
+    </header>
+    <div id="page-body">
+      <h1>TATTOOS.</h1>
+      <p>the ink &amp; skin medium of Saiel Dauhn Solehman — original, collaborative and experimental work that pushes the bounds of what it means to be a tattoo artist.</p>
+    </div>
+  </div>
+
+  <div id="menu">
+    <div id="dim"></div>
+    <canvas id="mc"></canvas>
+    <div id="labels"></div>
+    <div id="center-lbl"></div>
+    <div id="wm">
+      <canvas id="wm-glyph"></canvas>
+      <span id="wm-text">the six.well construct</span>
+    </div>
+  </div>
+</div>
+
+<div id="panel">
+  <h2>menu tuning</h2>
+  <p class="hint">Tap the chip in the phone to open the menu. Adjust live, then we port the chosen values into construct-nav.js.</p>
+
+  <div class="ctrl">
+    <label>current page <b id="v-cur">TATTOOS</b></label>
+    <select id="cur"></select>
+  </div>
+  <div class="ctrl">
+    <label>page dim <b id="v-dim">0.94</b></label>
+    <input id="dim-r" type="range" min="0.5" max="1" step="0.01" value="0.94">
+  </div>
+  <div class="ctrl">
+    <label>ring radius (px) <b id="v-rad">122</b></label>
+    <input id="rad-r" type="range" min="80" max="160" step="1" value="122">
+  </div>
+  <div class="ctrl">
+    <label>bloom duration (ms) <b id="v-dur">950</b></label>
+    <input id="dur-r" type="range" min="400" max="1600" step="50" value="950">
+  </div>
+  <div class="ctrl">
+    <label>node size <b id="v-node">18</b></label>
+    <input id="node-r" type="range" min="6" max="26" step="1" value="18">
+  </div>
+  <div class="ctrl">
+    <label>particle count <b id="v-pc">26</b></label>
+    <input id="pc-r" type="range" min="0" max="80" step="1" value="26">
+  </div>
+  <div class="ctrl">
+    <label>particle drift / float <b id="v-drift">1.0</b></label>
+    <input id="drift-r" type="range" min="0" max="2.5" step="0.1" value="1.0">
+  </div>
+  <div class="row">
+    <button id="toggle-btn">open / close</button>
+    <button id="copy-btn">copy values</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ── Registry (mirrors construct-nav.js / index.html) ── */
+  var VENTURES = [
+    { key:'tattooing', name:'TATTOOS',   color:'#6E0404' },
+    { key:'art',       name:'ART MAKING',color:'#0581C1' },
+    { key:'merch',     name:'MERCH',     color:'#F7A226' },
+    { key:'about',     name:'ABOUT',     color:'#FCB867' },
+    { key:'events',    name:'EVENTS',    color:'#005d25' },
+    { key:'music',     name:'MUSIC',     color:'#A856A1' },
+    { key:'writings',  name:'WRITINGS',  color:'#FFE7CA' },
+    { key:'archive',   name:'ARCHIVE',   color:'#6D3D15' },
+    { key:'film',      name:'FILM',      color:'#328C84' },
+  ];
+  var PARTICLE_COLOR = '#FCB867';
+
+  /* ── Tunable parameters (driven by the panel) ── */
+  var P = {
+    current:    'tattooing',
+    dim:        0.94,
+    ringRadius: 122,
+    bloomDur:   950,
+    closeDur:   520,
+    nodeSize:   18,
+    particles:  26,
+    drift:      1.0,
+  };
+
+  var GLYPH_R = 32;       /* central ring outer radius (node emergence edge) */
+  var GLYPH_INNER = 22;   /* central ring inner radius — open hole, like home */
+
+  /* Wordmark lockup glyph — the ring + 6 orbiting dots, matching
+     construct-corner.js (brown annulus + amber dots). */
+  var WM_SIZE=30, WM_OUTER=12, WM_INNER=8.5, WM_DOTR=1.7, WM_FACTOR=WM_OUTER/56;
+  var WM_DOTS=[[-18,-28],[18,-28],[-18,0],[18,0],[-18,28],[18,28]].map(function(d){return [d[0]*WM_FACTOR,d[1]*WM_FACTOR];});
+
+  /* ── Elements ── */
+  var phone   = document.getElementById('phone');
+  var canvas  = document.getElementById('mc');
+  var ctx     = canvas.getContext('2d');
+  var wmCanvas= document.getElementById('wm-glyph');
+  var wmCtx   = wmCanvas.getContext('2d');
+  var menu    = document.getElementById('menu');
+  var dim     = document.getElementById('dim');
+  var labelsDiv = document.getElementById('labels');
+  var centerLbl = document.getElementById('center-lbl');
+  var chip    = document.getElementById('chip');
+  var chipName= chip.querySelector('.chip-name');
+  var caret   = chip.querySelector('.caret');
+  var status  = document.getElementById('status');
+
+  /* ── Helpers ── */
+  function readableText(hex){
+    var c=hex.replace('#',''),r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16);
+    return (0.299*r+0.587*g+0.114*b)/255>0.6?'#1a1a1a':'#ffffff';
+  }
+  function easeInOut(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+  function easeOutSoft(t){return 1-Math.pow(1-t,2);}
+  function clamp01(t){return t<0?0:t>1?1:t;}
+  function smoothBreath(phase){var s=0.5+0.5*Math.sin(phase*Math.PI*2);return s*s*(3-2*s);}
+  function curVenture(){for(var i=0;i<VENTURES.length;i++)if(VENTURES[i].key===P.current)return VENTURES[i];return VENTURES[0];}
+  function others(){return VENTURES.filter(function(v){return v.key!==P.current;});}
+
+  /* ── Canvas sizing ── */
+  var W,H,cx,cy,dpr;
+  function resize(){
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    W=phone.clientWidth; H=phone.clientHeight;
+    canvas.style.width=W+'px'; canvas.style.height=H+'px';
+    canvas.width=Math.round(W*dpr); canvas.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    cx=W/2; cy=H*0.46;
+    wmCanvas.style.width=WM_SIZE+'px'; wmCanvas.style.height=WM_SIZE+'px';
+    wmCanvas.width=Math.round(WM_SIZE*dpr); wmCanvas.height=Math.round(WM_SIZE*dpr);
+    wmCtx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  /* Wordmark glyph — brown annulus + 6 amber dots orbiting (corner lockup). */
+  function drawWmGlyph(t){
+    var c=WM_SIZE/2;
+    wmCtx.clearRect(0,0,WM_SIZE,WM_SIZE);
+    wmCtx.beginPath();
+    wmCtx.arc(c,c,WM_OUTER,0,Math.PI*2);
+    wmCtx.arc(c,c,WM_INNER,0,Math.PI*2,true);
+    wmCtx.fillStyle='#6D3D15';wmCtx.fill();
+    var orbit=t*0.003;
+    for(var i=0;i<WM_DOTS.length;i++){
+      var d=WM_DOTS[i];
+      var ang=Math.atan2(d[1],d[0])+orbit;
+      var dist=Math.hypot(d[0],d[1])+Math.sin(t*0.025+i*1.1)*1.5*WM_FACTOR;
+      wmCtx.beginPath();
+      wmCtx.arc(c+Math.cos(ang)*dist,c+Math.sin(ang)*dist,WM_DOTR,0,Math.PI*2);
+      wmCtx.fillStyle='#FCB867';wmCtx.globalAlpha=0.9;wmCtx.fill();wmCtx.globalAlpha=1;
+    }
+  }
+
+  /* ── Bloom nodes ── */
+  var nodes=[];           /* {name,color,angle,labelEl,x,y,r,alpha,drift...} */
+  function buildNodes(){
+    labelsDiv.innerHTML='';
+    nodes=[];
+    var list=others();
+    var n=list.length;
+    list.forEach(function(v,i){
+      var ang=(-90 + i*(360/n))*Math.PI/180;
+      var el=document.createElement('div');
+      el.className='lbl';
+      el.textContent=v.name+' .';
+      el.style.color=v.color;
+      labelsDiv.appendChild(el);
+      nodes.push({
+        name:v.name, key:v.key, color:v.color, angle:ang, el:el,
+        x:cx, y:cy, r:0, alpha:0,
+        dax:4.5+(i*1.7)%3.5, day:3.5+(i*2.3)%3.5,
+        dpx:18000+(i*3700)%9000, dpy:22000+(i*4100)%8000,
+        dox:i*1.4, doy:i*2.1,
+      });
+    });
+    var cv=curVenture();
+    centerLbl.textContent=cv.name+' .';
+    centerLbl.style.color=cv.color;
+  }
+
+  /* ── Particles (echo of index.html field) ── */
+  var particles=[];
+  function spawnParticle(seeded){
+    var edge=GLYPH_R;
+    var p={
+      angle:Math.random()*Math.PI*2,
+      dist:edge,
+      target:edge + 18 + Math.random()*120,
+      orbit:(Math.random()*0.00003+0.00001)*(Math.random()<0.5?1:-1),
+      driftSpeed:0.0025+Math.random()*0.006,
+      size:1+Math.random()*2.1,
+      maxAlpha:0.12+Math.random()*0.30,
+      fAX:2+Math.random()*4, fAY:2+Math.random()*4,
+      fPX:12000+Math.random()*10000, fPY:14000+Math.random()*10000,
+      fOX:Math.random()*Math.PI*2, fOY:Math.random()*Math.PI*2,
+      fadeIn:700+Math.random()*500, fadeOut:1200+Math.random()*900,
+      age:0, life:null, reached:false
+    };
+    if(seeded){
+      var fr=Math.random();
+      p.dist=edge+fr*(p.target-edge);
+      p.age=fr*(p.fadeIn+2500);
+      if(p.dist>=p.target){p.reached=true;p.life=p.age+3000+Math.random()*6000;}
+    }
+    particles.push(p);
+  }
+  function updateParticles(dt,t,vis){
+    var cap = vis ? P.particles : 0;
+    while(particles.length<cap) spawnParticle(true);
+    for(var i=particles.length-1;i>=0;i--){
+      var p=particles[i];
+      p.age+=dt; p.angle+=p.orbit*dt;
+      if(!p.reached){
+        p.dist+=p.driftSpeed*P.drift*dt;
+        if(p.dist>=p.target){p.dist=p.target;p.reached=true;p.life=p.age+3000+Math.random()*6000;}
+      }
+      var over = particles.length>cap;
+      if((p.reached&&p.age>=p.life) || over){particles.splice(i,1);continue;}
+      var alpha;
+      if(!p.reached){alpha=Math.min(p.age/p.fadeIn,1)*p.maxAlpha;}
+      else{var tl=p.life-p.age;alpha=tl<p.fadeOut?(tl/p.fadeOut)*p.maxAlpha:p.maxAlpha;}
+      var fx=p.fAX*P.drift*Math.sin((t/p.fPX)*Math.PI*2+p.fOX);
+      var fy=p.fAY*P.drift*Math.sin((t/p.fPY)*Math.PI*2+p.fOY);
+      var px=cx+Math.cos(p.angle)*p.dist+fx;
+      var py=cy+Math.sin(p.angle)*p.dist+fy;
+      ctx.globalAlpha=alpha*menuAlpha;
+      ctx.beginPath();ctx.arc(px,py,p.size,0,Math.PI*2);
+      ctx.fillStyle=PARTICLE_COLOR;ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  /* ── Central ring — solid filled annulus, open centre.
+     Mirrors index.html drawRing(): outer arc + inner arc (reversed)
+     subtract to leave a solid band. Coloured by the current medium. ── */
+  function drawGlyph(t){
+    var cv=curVenture();
+    var breath=smoothBreath((t*1.375)/9000);
+    var grow=1+0.03*(breath-0.5);
+    var outer=GLYPH_R*grow, inner=GLYPH_INNER*grow;
+    ctx.save();
+    ctx.globalAlpha=menuAlpha*(0.88+0.12*breath);
+    ctx.beginPath();
+    ctx.arc(cx,cy,outer,0,Math.PI*2);
+    ctx.arc(cx,cy,inner,0,Math.PI*2,true);
+    ctx.fillStyle=cv.color;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* ── State + animation ── */
+  var state='closed';        /* closed | opening | open | closing */
+  var animStart=0;
+  var menuAlpha=0;           /* overall menu element alpha 0..1 */
+  var STAGGER=0.05;          /* per-node bloom delay fraction */
+
+  function open(){
+    if(state==='open'||state==='opening')return;
+    buildNodes();
+    state='opening';animStart=performance.now();
+    menu.classList.add('open');
+    dim.style.opacity=String(P.dim);
+    caret.style.transform='rotate(180deg)';
+  }
+  function close(){
+    if(state==='closed'||state==='closing')return;
+    state='closing';animStart=performance.now();
+    dim.style.opacity='0';
+    caret.style.transform='rotate(0deg)';
+    nodes.forEach(function(nd){nd.el.style.opacity='0';});
+    centerLbl.style.opacity='0';
+  }
+  function toggle(){ (state==='closed'||state==='closing')?open():close(); }
+
+  function progress(now){
+    if(state==='opening'){
+      var p=clamp01((now-animStart)/P.bloomDur);
+      if(p>=1)state='open';
+      return p;
+    }
+    if(state==='open')return 1;
+    if(state==='closing'){
+      var c=clamp01((now-animStart)/P.closeDur);
+      if(c>=1){state='closed';menu.classList.remove('open');}
+      return 1-c;
+    }
+    return 0;
+  }
+
+  var lastT=null;
+  function frame(now){
+    if(lastT==null)lastT=now;
+    var dt=Math.min(now-lastT,50);lastT=now;
+
+    ctx.clearRect(0,0,W,H);
+    drawWmGlyph(now);
+
+    var prog=progress(now);
+    var visible = state!=='closed';
+    menuAlpha = easeOutSoft(prog);
+
+    if(visible){
+      updateParticles(dt,now,state==='open'||state==='opening');
+      drawGlyph(now);
+
+      var edge=GLYPH_R;
+      var R=P.ringRadius;
+      var n=nodes.length;
+      for(var i=0;i<n;i++){
+        var nd=nodes[i];
+        var local=clamp01((prog - (i*STAGGER)) / (1 - (n-1)*STAGGER));
+        var e=easeInOut(local);
+        var rad=edge+(R-edge)*e;
+
+        /* drift/float once mostly arrived (mirrors home getDrift) */
+        var of=easeOutSoft(clamp01((e-0.6)/0.4));
+        var dx=nd.dax*of*Math.sin((now/nd.dpx)*Math.PI*2+nd.dox);
+        var dy=nd.day*of*Math.sin((now/nd.dpy)*Math.PI*2+nd.doy);
+
+        nd.x=cx+Math.cos(nd.angle)*rad+dx;
+        nd.y=cy+Math.sin(nd.angle)*rad+dy;
+        nd.r=P.nodeSize*e;
+        nd.alpha=e;
+
+        /* draw node */
+        ctx.globalAlpha=menuAlpha*nd.alpha;
+        ctx.beginPath();ctx.arc(nd.x,nd.y,nd.r,0,Math.PI*2);
+        ctx.fillStyle=nd.color;ctx.fill();
+        ctx.globalAlpha=1;
+
+        /* label — fades in near arrival, centred directly beneath the node */
+        nd.el.style.left=nd.x+'px';
+        nd.el.style.top=(nd.y+nd.r+8)+'px';
+        nd.el.style.opacity=(state==='closing')?'0':String(clamp01((e-0.7)/0.3));
+      }
+
+      /* centre label */
+      centerLbl.style.left=cx+'px';
+      centerLbl.style.top=(cy+GLYPH_R+10)+'px';
+      centerLbl.style.opacity=(state==='closing')?'0':String(clamp01((prog-0.5)/0.5));
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  /* ── Hit testing (tap a bloomed node) ── */
+  function hit(mx,my){
+    if(state!=='open')return -1;
+    for(var i=0;i<nodes.length;i++){
+      var nd=nodes[i];
+      if(Math.hypot(mx-nd.x,my-nd.y) < Math.max(28,nd.r+18))return i;
+    }
+    return -1;
+  }
+  canvas.addEventListener('click',function(e){
+    var r=phone.getBoundingClientRect();
+    var mx=e.clientX-r.left, my=e.clientY-r.top;
+    var h=hit(mx,my);
+    if(h>=0){
+      var nd=nodes[h];
+      status.textContent='→ would navigate to '+nd.name;
+      setCurrent(nd.key);   /* simulate landing on that page */
+      close();
+    }else{
+      close();              /* tap-out anywhere else closes */
+    }
+  });
+
+  /* ── Chip ── */
+  function paintChip(){
+    var cv=curVenture();
+    chipName.textContent=cv.name;
+    chip.style.background=cv.color;
+    chip.style.color='var(--bg)';
+  }
+  chip.addEventListener('click',function(e){e.stopPropagation();toggle();});
+
+  /* ── Panel wiring ── */
+  function setCurrent(key){
+    P.current=key;
+    document.getElementById('cur').value=key;
+    document.getElementById('v-cur').textContent=curVenture().name;
+    paintChip();
+    if(state==='open'||state==='opening')buildNodes();
+  }
+  var curSel=document.getElementById('cur');
+  VENTURES.forEach(function(v){var o=document.createElement('option');o.value=v.key;o.textContent=v.name;curSel.appendChild(o);});
+  curSel.value=P.current;
+  curSel.addEventListener('change',function(){setCurrent(curSel.value);});
+
+  function bind(id,key,out,fix){
+    var el=document.getElementById(id);
+    el.addEventListener('input',function(){
+      P[key]=parseFloat(el.value);
+      document.getElementById(out).textContent=fix?P[key].toFixed(fix):P[key];
+      if(key==='dim'&&dim.style.opacity!=='0')dim.style.opacity=String(P.dim);
+    });
+  }
+  bind('dim-r','dim','v-dim',2);
+  bind('rad-r','ringRadius','v-rad');
+  bind('dur-r','bloomDur','v-dur');
+  bind('node-r','nodeSize','v-node');
+  bind('pc-r','particles','v-pc');
+  bind('drift-r','drift','v-drift',1);
+
+  document.getElementById('toggle-btn').addEventListener('click',toggle);
+  document.getElementById('copy-btn').addEventListener('click',function(){
+    var out=JSON.stringify({dim:P.dim,ringRadius:P.ringRadius,bloomDur:P.bloomDur,nodeSize:P.nodeSize,particles:P.particles,drift:P.drift},null,2);
+    navigator.clipboard&&navigator.clipboard.writeText(out);
+    status.textContent='copied: '+out.replace(/\s+/g,' ');
+  });
+
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+
+  /* ── Boot ── */
+  resize();
+  window.addEventListener('resize',resize);
+  paintChip();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
