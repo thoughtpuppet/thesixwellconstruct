@@ -677,9 +677,13 @@
   function openOverlay(card) {
     const d = card.dataset;
     overlayImg.src           = card.querySelector('img').src;
-    overlayImg.alt           = d.title;
-    overlayTitle.textContent = d.title;
-    overlaySub.textContent   = [d.year, d.placement].filter(s => s && s !== '—').join(' · ') || '—';
+    const title = (d.title && d.title !== '—') ? d.title : '';
+    overlayImg.alt           = title;
+    overlayTitle.textContent = title;
+    overlayTitle.style.display = title ? '' : 'none';
+    const sub = [d.year, d.placement].filter(s => s && s !== '—').join(' · ');
+    overlaySub.textContent   = sub;
+    overlaySub.style.display = sub ? '' : 'none';
     overlayTags.innerHTML = '';
     [d.type, d.mode, d.series].filter(Boolean).forEach(val => {
       const t = document.createElement('span');

@@ -85,6 +85,11 @@
     .path-card:last-child { border-bottom:none; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
+  @media (max-width:640px) {
+    .path-card { min-height:auto; }
+    .consult-band,.fit-guide,.path-grid { grid-template-columns:1fr; }
+    main { overflow-x:hidden; }
+  }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 </head>

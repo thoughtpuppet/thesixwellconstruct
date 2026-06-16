@@ -22,6 +22,11 @@
   main { width:min(100%,720px); border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:44px 0; }
   h1 { font-family:var(--sans); font-weight:900; font-size:clamp(34px,7vw,74px); line-height:0.9; letter-spacing:-0.05em; color:var(--accent); text-transform:uppercase; margin-bottom:28px; }
   p { font-size:15px; line-height:1.75; color:var(--text-mute); margin-bottom:18px; }
+  .next-steps { margin:30px 0 4px; padding-top:24px; border-top:5px solid var(--ring-faint); }
+  .next-steps-label { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--accent); margin-bottom:18px; }
+  .next-steps ol { list-style:none; counter-reset:step; display:grid; gap:14px; }
+  .next-steps li { counter-increment:step; position:relative; padding-left:40px; font-size:15px; line-height:1.6; color:var(--text-mute); }
+  .next-steps li::before { content:counter(step); position:absolute; left:0; top:0; width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:12px; color:var(--accent); border:2px solid var(--ring-soft); border-radius:50%; }
   .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
   a { display:inline-flex; min-height:50px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--text-mute); padding:0 24px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; }
   a:hover { border-color:var(--accent); color:var(--accent); }
@@ -33,6 +38,14 @@
     <h1>Inquiry Received.</h1>
     <p>Your submission was captured for review in the studio submissions system. Booking confirmation follows approval.</p>
     <p>Flash claims are checked for availability, placement, and scale. Custom inquiries and Special Projects are reviewed for the strongest path forward. If approved, you will receive a private token booking link to choose a session, place the deposit, and confirm the appointment.</p>
+    <div class="next-steps">
+      <p class="next-steps-label">What happens next</p>
+      <ol>
+        <li>Your submission enters review — this typically takes a few days.</li>
+        <li>If it's a fit, you'll receive a private booking link by email.</li>
+        <li>The link lets you choose a session time and place your deposit.</li>
+      </ol>
+    </div>
     <div class="actions">
       <a href="/tattoos/flash/">Back to flash</a>
       <a href="/tattoos/">Return to Art.Pill</a>

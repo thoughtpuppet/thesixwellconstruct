@@ -347,6 +347,10 @@
     padding: 0 clamp(20px, 5vw, 64px) clamp(26px, 4vw, 42px);
   }
 
+  .details:not(.has-selection) {
+    display: none;
+  }
+
   .selected-copy {
     min-height: 118px;
     border-top: 5px solid rgba(252, 184, 103, 0.14);
@@ -992,13 +996,14 @@
         evolution.
       </p>
       <nav class="hero-jump" aria-label="about draft sections">
-        <a href="#orientation">Orientation</a>
-        <a href="#breakdown">Breakdown</a>
-        <a href="#origin">Origin</a>
-        <a href="#ways-in">Mediums</a>
-        <a href="#visitor-paths">Ways in</a>
-        <a href="#current-state">Current state</a>
-        <a href="#contact-press">Contact / press</a>
+        <a href="#orientation">ABOUT</a>
+        <a href="/about/visual-language/">Visual language</a>
+        <a href="/about/breakdown/">Breakdown</a>
+        <a href="/about/founder/">Founder</a>
+        <a href="/about/mediums/">Mediums</a>
+        <a href="/about/ways-in/">Ways in</a>
+        <a href="/about/current-state/">Current state</a>
+        <a href="/about/contact-press/">Contact / press</a>
       </nav>
       <span class="state-label" id="stateLabel">click a construct entry - its connections illuminate</span>
     </header>
@@ -1026,8 +1031,8 @@
     <div class="details" aria-live="polite">
       <section class="selected-copy">
         <span class="selected-kicker">selected construct entry</span>
-        <h2 class="selected-title" id="selectedTitle">Map at rest</h2>
-        <p class="selected-body" id="selectedBody">Public doors orbit the construct. Select one to see whether it is acting as node, medium, archive, or orientation layer, and where someone can enter.</p>
+        <h2 class="selected-title" id="selectedTitle"></h2>
+        <p class="selected-body" id="selectedBody"></p>
         <div class="material-strip" id="selectedMaterials" aria-label="selected construct entry materials"></div>
         <section class="manifest-brand" id="manifestBrand" aria-labelledby="manifestBrandTitle">
           <div>
@@ -1041,7 +1046,6 @@
       <section class="connection-list">
         <span class="connection-kicker">connections</span>
         <div class="connection-grid" id="connectionGrid">
-          <p class="empty-note">Choose a node to reveal its linked rooms, routes, and descriptions.</p>
         </div>
       </section>
     </div>
@@ -1055,22 +1059,22 @@
       </header>
       <div>
         <p class="band-lede">
-          The Six.Well Construct is the full operating architecture. It holds named
-          nodes, creative mediums, public entry points, private logic, and the archive
-          record that helps people find the right door.
+          The <span>Six.Well Construct</span> is the full operating self-sustaining creative ecosystem. Its purpose is to create an environment where ideas and projects exist as interconnected parts of a larger world. It is a living creative system designed to develop, fund, document, connect, and circulate the work. Each node supports each other. It holds named
+          nodes, creative mediums, public entry points, private logic, and the <span>archive</span>
+          <span>record</span> that helps people find the right <span>door</span>.
         </p>
         <div class="copy-grid">
           <div class="copy-block">
             <h3>The construct</h3>
-            <p>The system that lets the work stay operational, poetic, commercial, private, public, and alive at the same time.</p>
+            <p>The&nbsp;<span>system</span> that lets the work stay operational, and an anchor of the philosophy that informs all brands, nodes and mediums.</p>
           </div>
           <div class="copy-block">
             <h3>Nodes</h3>
-            <p>Named houses and project rooms: art.pill Tattoo House, ThoughtPuppet, Sloth99, Six.Well Clothing, Mindful Darkness, and The Seventh Room.</p>
+            <p>Named houses, domains and project containers: <span><span>art.pill</span></span> <span><span>Tattoo House</span></span>, ThoughtPuppet, Sloth99, <span><span>Six.Well</span></span> <span><span>Clothing</span></span>, CULT[&amp;SHIFT], MILOWALKSONWATER, <span>Mindful Darkness</span>, The Seventh <span><span>Room and THE SOLEHMAN LETTERS.</span></span></p>
           </div>
           <div class="copy-block">
             <h3>Mediums</h3>
-            <p>The forms the work moves through: tattoo, painting, film, writing, clothing, and space or interior.</p>
+            <p>The forms the work MANIFESTS as: <span>tattooing</span>, <span>paintings</span>, woodworks,&nbsp;<span>film</span>, animation,&nbsp;<span>writing</span>, <span>clothing and other objects</span>, music and space or interior.</p>
           </div>
           <div class="copy-block">
             <h3>Archive</h3>
@@ -1080,229 +1084,6 @@
       </div>
     </article>
 
-    <article class="info-band" id="breakdown">
-      <header>
-        <span class="band-kicker">construct breakdown</span>
-        <h2 class="band-title">How it holds.</h2>
-      </header>
-      <div>
-        <p class="band-lede">
-          A plain view of the architecture. Select a branch to see what belongs
-          inside it and how that branch behaves inside the larger construct.
-        </p>
-        <div class="breakdown-shell">
-          <div class="breakdown-root">
-            <span class="breakdown-root-title">The Six.Well Construct</span>
-            <div class="breakdown-group-list" role="tablist" aria-label="construct breakdown branches">
-              <button class="breakdown-group is-active" type="button" role="tab" aria-selected="true" data-breakdown-group="about">About</button>
-              <button class="breakdown-group" type="button" role="tab" aria-selected="false" data-breakdown-group="nodes">Nodes</button>
-              <button class="breakdown-group" type="button" role="tab" aria-selected="false" data-breakdown-group="mediums">Mediums</button>
-              <button class="breakdown-group" type="button" role="tab" aria-selected="false" data-breakdown-group="archive">Archive</button>
-            </div>
-          </div>
-          <div class="breakdown-board">
-            <div class="breakdown-children" id="breakdownChildren" aria-live="polite"></div>
-            <aside class="breakdown-detail" aria-live="polite">
-              <h3 id="breakdownTitle">About</h3>
-              <p id="breakdownCopy"></p>
-              <div class="breakdown-meta" id="breakdownMeta"></div>
-            </aside>
-          </div>
-        </div>
-      </div>
-    </article>
-
-    <article class="info-band" id="origin">
-      <header>
-        <span class="band-kicker">origin</span>
-        <h2 class="band-title">Who made it.</h2>
-      </header>
-      <div>
-        <p class="band-lede">
-          Saiel Dauhn Solehman is an interdisciplinary artist and founder working across
-          tattooing, painting, systems, objects, writing, film, sound, and event-based
-          forms.
-        </p>
-        <div class="copy-grid">
-          <div class="copy-block">
-            <h3>Founder statement</h3>
-            <p>I build systems because the work keeps arriving in more than one form. The construct is the room I made so the forms could stop apologizing for knowing each other.</p>
-          </div>
-          <div class="copy-block">
-            <h3>Method</h3>
-            <p>Observe the charge, choose the node or medium, make the work, document the residue, and let the result alter the system.</p>
-          </div>
-          <div class="copy-block">
-            <h3>Discipline stack</h3>
-            <p>Tattooing, painting, film, writing, design, hosting, commerce, archive, and system architecture.</p>
-          </div>
-          <div class="copy-block">
-            <h3>Practice links</h3>
-            <p>Use the public rooms when the medium is clear. Use this page when the relationship between rooms is the thing you are trying to understand.</p>
-            <div class="link-row">
-              <a class="text-link" href="/art/">Art</a>
-              <a class="text-link" href="/tattoos/">Tattooing</a>
-              <a class="text-link" href="/writings/">Writings</a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </article>
-
-    <article class="info-band" id="ways-in">
-      <header>
-        <span class="band-kicker">mediums</span>
-        <h2 class="band-title">Choose a form.</h2>
-      </header>
-      <div>
-        <p class="band-lede">
-          Mediums are the forms the work moves through. The construct can stay
-          layered, but the first step should still be obvious.
-        </p>
-        <div class="path-grid">
-          <div class="path-card">
-            <h3>Tattoo</h3>
-            <p>Permanent symbolic mark-making, client review, flash, custom inquiry, build-your-own, and special projects.</p>
-            <div class="link-row"><a class="text-link" href="/tattoos/inquire/">Tattoo inquiry</a></div>
-          </div>
-          <div class="path-card">
-            <h3>Painting</h3>
-            <p>Source imagery, paintings, objects, statements, acquisition, and visual language that can feed other nodes.</p>
-            <div class="link-row"><a class="text-link" href="/art/">Art index</a><a class="text-link" href="/art/acquisitioninquiry.html">Acquire art</a></div>
-          </div>
-          <div class="path-card">
-            <h3>Clothing</h3>
-            <p>Garments, prints, editions, and commerce that turns source language into wearable or holdable form.</p>
-            <div class="link-row"><a class="text-link" href="/merch/">Merch</a></div>
-          </div>
-          <div class="path-card">
-            <h3>Writing</h3>
-            <p>Letters, statements, frameworks, notes, and public thinking that keep the construct legible.</p>
-            <div class="link-row"><a class="text-link" href="#orientation">Orientation</a><a class="text-link" href="#current-state">Current state</a></div>
-          </div>
-          <div class="path-card">
-            <h3>Film</h3>
-            <p>Moving image, documentation, animation, character, and performance trace as the film room develops.</p>
-            <div class="link-row"><a class="text-link" href="/film/">Film</a><a class="text-link" href="/archive/">Archive</a></div>
-          </div>
-          <div class="path-card">
-            <h3>Space / Interior</h3>
-            <p>Rooms, events, hosting, atmosphere, installation, and the private threshold of The Seventh Room.</p>
-            <div class="link-row"><a class="text-link" href="#current-state">Current state</a><a class="text-link" href="/archive/">Archive</a></div>
-          </div>
-        </div>
-      </div>
-    </article>
-
-    <article class="info-band" id="visitor-paths">
-      <header>
-        <span class="band-kicker">ways in</span>
-        <h2 class="band-title">Start with need.</h2>
-      </header>
-      <div>
-        <p class="band-lede">
-          The taxonomy can explain the system, but most people arrive with a want,
-          a question, or a pull. Start there; the construct can translate the rest.
-        </p>
-        <div class="path-grid">
-          <div class="path-card">
-            <h3>I want a tattoo</h3>
-            <p>Begin with art.pill Tattoo House, then choose the tattoo medium through consultation, custom inquiry, flash, build-your-own, or special projects.</p>
-            <div class="link-row"><a class="text-link" href="/tattoos/inquire/">Tattoo inquiry</a><a class="text-link" href="/tattoos/flash/">Flash</a></div>
-          </div>
-          <div class="path-card">
-            <h3>I want to buy or inquire about art</h3>
-            <p>Enter through painting and visual work. Browse the art index, then use acquisition inquiry when a work, delivery path, or hanging question is ready.</p>
-            <div class="link-row"><a class="text-link" href="/art/">Art index</a><a class="text-link" href="/art/acquisitioninquiry.html">Acquire art</a></div>
-          </div>
-          <div class="path-card">
-            <h3>I want merch or objects</h3>
-            <p>Use Six.Well Clothing and the object economy for garments, prints, editions, and artifacts that carry source imagery out into the world.</p>
-            <div class="link-row"><a class="text-link" href="/merch/">Merch</a></div>
-          </div>
-          <div class="path-card">
-            <h3>I want to understand the Construct</h3>
-            <p>Stay in About for the system language: the Construct, Saiel / Founder, architecture, nodes, mediums, method, and the public record around them.</p>
-            <div class="link-row"><a class="text-link" href="#orientation">Orientation</a><a class="text-link" href="#breakdown">Breakdown</a></div>
-          </div>
-          <div class="path-card">
-            <h3>I want the record</h3>
-            <p>Use the Archive when you are tracing works, process, releases, events, documents, experiments, older rooms, or evidence across nodes.</p>
-            <div class="link-row"><a class="text-link" href="/archive/">Archive</a></div>
-          </div>
-          <div class="path-card">
-            <h3>I want writing, film, events, or rooms</h3>
-            <p>Those doors are still developing. Follow the current state and archive bridge while Mindful Darkness, Sloth99, and The Seventh Room take public shape.</p>
-            <div class="link-row"><a class="text-link" href="#current-state">Current state</a><a class="text-link" href="/archive/">Archive</a></div>
-          </div>
-        </div>
-      </div>
-    </article>
-
-    <article class="info-band" id="current-state">
-      <header>
-        <span class="band-kicker">current state</span>
-        <h2 class="band-title">What is live.</h2>
-      </header>
-      <div>
-        <p class="band-lede">
-          The page names future rooms without pretending every room is equally open.
-          Active doors get practical links; incubating nodes get context and archive
-          support until they have enough public surface.
-        </p>
-        <div class="state-grid">
-          <div class="state-card">
-            <h3>Live public pathways</h3>
-            <p>Tattooing, art, merch, archive, and About are the current public doors into the construct.</p>
-          </div>
-          <div class="state-card">
-            <h3>In development</h3>
-            <p>Node depth, writings, film, events, documents, collaborator histories, and press surfaces are still being shaped.</p>
-          </div>
-          <div class="state-card">
-            <h3>Archive-backed</h3>
-            <p>Past iterations, abandoned concepts, process fragments, and dormant rooms route through the archive instead of cluttering the first doorway.</p>
-          </div>
-          <div class="state-card">
-            <h3>Current priority</h3>
-            <p>Make the system legible, preserve the voice, and give every visible entry point a practical next step.</p>
-          </div>
-        </div>
-      </div>
-    </article>
-
-    <article class="info-band" id="contact-press">
-      <header>
-        <span class="band-kicker">contact / press</span>
-        <h2 class="band-title">Utility layer.</h2>
-      </header>
-      <div>
-        <p class="band-lede">
-          This section stays practical without shrinking the system: short bio, inquiry
-          routes, press language, and the links most people need when they arrive with
-          a specific ask.
-        </p>
-        <div class="press-grid">
-          <div class="press-card">
-            <h3>Short bio</h3>
-            <p>Saiel Dauhn Solehman is an interdisciplinary artist and founder building a connected body of work across image, mark, object, language, room, film, and record.</p>
-          </div>
-          <div class="press-card">
-            <h3>Inquiries</h3>
-            <p>Use medium-specific forms whenever possible. General contact can stay here once the public channel is finalized.</p>
-            <div class="link-row"><a class="text-link" href="/tattoos/inquire/">Tattoo inquiry</a><a class="text-link" href="/art/acquisitioninquiry.html">Acquire art</a></div>
-          </div>
-          <div class="press-card">
-            <h3>Construct description</h3>
-            <p>The Six.Well Construct is an operating architecture for nodes, mediums, public offerings, private logic, and archive-backed evolution.</p>
-          </div>
-          <div class="press-card">
-            <h3>Press / features</h3>
-            <p>Press, interviews, external documentation, and notable public mentions can collect here without becoming another separate room.</p>
-          </div>
-        </div>
-      </div>
-    </article>
   </section>
 
   <footer class="footer-links">
@@ -1359,7 +1140,7 @@
       nodes: {
         title: 'Nodes',
         copy: 'The named houses and project rooms. A node can use many mediums, hold its own tone, and still remain accountable to the whole construct.',
-        children: ['art.pill Tattoo House', 'ThoughtPuppet', 'Sloth99', 'Six.Well Clothing', 'Mindful Darkness', 'The Seventh Room'],
+        children: ['art.pill Tattoo House', 'ThoughtPuppet', 'Sloth99', 'Six.Well Clothing', 'CULT[&SHIFT]', 'MILOWALKSONWATER', 'Mindful Darkness', 'The Seventh Room'],
         meta: ['houses', 'projects', 'rooms']
       },
       mediums: {
@@ -1381,6 +1162,7 @@
     const copy = document.getElementById('breakdownCopy');
     const children = document.getElementById('breakdownChildren');
     const meta = document.getElementById('breakdownMeta');
+    if (!buttons.length || !title || !copy || !children || !meta) return;
 
     function setBreakdown(key) {
       const group = groups[key] || groups.about;
@@ -1615,9 +1397,9 @@
       { key: 'art', label: 'Art', color: '#0581C1', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'], brand: { kicker: 'node manifestation / image', title: 'ThoughtPuppet', copy: 'The painting and visual-language medium manifests through ThoughtPuppet: the blue-origin image room where symbols, studies, objects, and source material begin talking to the rest of the construct.' } },
       { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'], brand: { kicker: 'node manifestation / clothing', title: 'Six.Well Clothing', copy: 'The clothing and object medium manifests through Six.Well Clothing: garments, prints, editions, and artifact commerce that lets source imagery move into the world.' } },
       { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'], brand: { kicker: 'construct system / orientation', title: 'The Six.Well Construct', copy: 'The orientation layer manifests the construct itself: the public language that explains the founder, architecture, nodes, mediums, archive, and ways in.' } },
-      { key: 'events', label: 'Events', color: '#005d25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['gatherings', 'recaps', 'tickets', 'relics', 'ritual calendar'], brand: { kicker: 'node manifestation / space', title: 'The Seventh Room', copy: 'The events and space medium manifests through The Seventh Room: the threshold for hosting, interior, installation, gathering, atmosphere, and live ritual.' } },
-      { key: 'music', label: 'Music', color: '#A856A1', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'], brand: { kicker: 'node manifestation / atmosphere', title: 'Mindful Darkness', copy: 'The sound and atmosphere medium sits closest to Mindful Darkness: a room for tone, voice, interior pressure, conversation, and the parts of the construct that need to be felt before they are explained.' } },
-      { key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', angle: 150, status: 'thread to launch', role: 'language and letter layer', note: 'What it is: letters, statements, essays, release notes, and field fragments. Why it matters: it keeps the public language alive without forcing every explanation into the first doorway.', materials: ['letters', 'essays', 'notes', 'release context', 'field fragments'], brand: { kicker: 'node manifestation / writing', title: 'Mindful Darkness', copy: 'The writing medium manifests through Mindful Darkness: letters, statements, field notes, theory, and the language that lets the deeper rooms keep their charge.' } },
+      { key: 'events', label: 'Events', color: '#005d25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['CULT[&SHIFT]', 'gatherings', 'recaps', 'tickets', 'ritual calendar'], brand: { kicker: 'node manifestation / events', title: 'CULT[&SHIFT]', copy: 'The events medium manifests through CULT[&SHIFT]: gatherings, hosted rooms, annual rituals, performance traces, and live containers that make the construct social and physically witnessed.' } },
+      { key: 'music', label: 'Music', color: '#A856A1', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'], brand: { kicker: 'node manifestation / music', title: 'MILOWALKSONWATER', copy: 'The music medium manifests through MILOWALKSONWATER: performance audio, scores, loops, voice fragments, and sound work that gives the construct cadence and atmosphere.' } },
+      { key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', angle: 150, status: 'thread to launch', role: 'language and letter layer', note: 'What it is: letters, statements, essays, release notes, newsletter dispatches, and field fragments. Why it matters: it keeps the public language alive without forcing every explanation into the first doorway.', materials: ['Mindful Darkness', 'THE SOLEHMAN LETTERS', 'essays', 'notes', 'field fragments'], brand: { kicker: 'node manifestation / writing', title: 'Mindful Darkness', copy: 'The writing medium manifests through Mindful Darkness, with THE SOLEHMAN LETTERS as its newsletter surface for letters, statements, field notes, theory, and the language that lets the deeper rooms keep their charge.' } },
       { key: 'archive', label: 'Archive', color: '#6D3D15', url: '/archive/', angle: 190, status: 'live memory system', role: 'record and proof layer', note: 'What it is: process, residue, records, abandoned paths, and older rooms that still speak. Why it matters: it lets the system remember itself instead of disappearing into feeds.', materials: ['records', 'photos', 'process scans', 'timelines', 'source material'], brand: { kicker: 'construct system / record', title: 'The Archive', copy: 'The archive manifests as the construct memory: works, process, releases, events, documents, experiments, and older rooms that still feed the active system.' } },
       { key: 'film', label: 'Film', color: '#328C84', url: '/film/', angle: 230, status: 'incubating narrative engine', role: 'moving-image and documentation layer', note: 'What it is: campaign footage, studio life, interviews, recaps, and mythic documentation. Why it matters: it makes the world visible as it is being built.', materials: ['short films', 'BTS', 'campaigns', 'recaps', 'lore videos'], brand: { kicker: 'node manifestation / film', title: 'Sloth99', copy: 'The film medium manifests through Sloth99: moving image, character, slow attention, documentation, campaign footage, and the narrative engine of the construct.' } }
     ];
@@ -1652,7 +1434,7 @@
         { target: 'merch', title: 'About -> Merch', description: 'The map clarifies why a garment is an artifact, not just a product, and points visitors toward what is available now.', materials: ['shop door', 'artifact language', 'availability'] },
         { target: 'events', title: 'About -> Events', description: 'About can hold the public explanation for gatherings, annual rituals, and future live rooms before each event surface opens.', materials: ['public context', 'ritual calendar', 'gathering frame'] },
         { target: 'music', title: 'About -> Music', description: 'About gives the sound layer enough context to feel like atmosphere and conversation inside the construct rather than a separate channel.', materials: ['sound context', 'performance audio', 'conversation layer'] },
-        { target: 'writings', title: 'About -> Writings', description: 'Layered public language routes curious visitors toward the letter thread instead of overloading the first doorway.', materials: ['positioning', 'letters signup', 'founder voice'] },
+        { target: 'writings', title: 'About -> Writings', description: 'Layered public language routes curious visitors toward Mindful Darkness and THE SOLEHMAN LETTERS instead of overloading the first doorway.', materials: ['positioning', 'newsletter', 'founder voice'] },
         { target: 'archive', title: 'About -> Archive', description: 'About translates the system; Archive proves it by keeping records, traces, and source material findable.', materials: ['node atlas', 'proof', 'records'] },
         { target: 'film', title: 'About -> Film', description: 'About frames the moving-image branch as the narrative arm that documents, explains, and mythologizes the world being built.', materials: ['narrative frame', 'documentation', 'Sloth99'] }
       ],
@@ -1706,6 +1488,7 @@
     const manifestBrandCopy = document.getElementById('manifestBrandCopy');
     const stateLabel = document.getElementById('stateLabel');
     const connectionGrid = document.getElementById('connectionGrid');
+    const details = document.querySelector('.details');
     const selectedCopy = document.querySelector('.selected-copy');
     const connectionList = document.querySelector('.connection-list');
     const fadeGroup = [selectedCopy, connectionList, stateLabel];
@@ -1714,9 +1497,9 @@
       { color: '#0581C1', terms: ['art index', 'acquisition inquiry', 'symbol maps', 'source material', 'visual vocabulary', 'art', 'artist', 'paintings', 'painting', 'studies', 'study', 'symbols', 'symbol', 'visual', 'image', 'images', 'objects', 'object', 'drawings'] },
       { color: '#F7A226', terms: ['merch', 'garments', 'garment', 'prints', 'print', 'editions', 'edition', 'drops', 'drop', 'commerce', 'product', 'products', 'clothing', 'capsules'] },
       { color: '#FCB867', terms: ['six.well construct', 'the construct', 'construct', 'six.well', 'about', 'orientation', 'map', 'hierarchy', 'current state', 'access', 'press', 'public language', 'system', 'door', 'doors', 'room', 'rooms', 'routes', 'ways in'] },
-      { color: '#005d25', terms: ['events', 'event', 'gatherings', 'gathering', 'rituals', 'ritual', 'performance', 'performances', 'hosted', 'social', 'annual'] },
+      { color: '#005d25', terms: ['CULT[&SHIFT]', 'events', 'event', 'gatherings', 'gathering', 'rituals', 'ritual', 'performance', 'performances', 'hosted', 'social', 'annual'] },
       { color: '#A856A1', terms: ['music', 'sound', 'audio', 'scores', 'score', 'loops', 'loop', 'voice', 'atmosphere', 'cadence'] },
-      { color: '#FFE7CA', terms: ['writings', 'writing', 'letters', 'letter', 'essays', 'essay', 'language', 'statements', 'statement', 'notes', 'release notes', 'field fragments', 'fragments'] },
+      { color: '#FFE7CA', terms: ['THE SOLEHMAN LETTERS', 'newsletter', 'Mindful Darkness', 'writings', 'writing', 'letters', 'letter', 'essays', 'essay', 'language', 'statements', 'statement', 'notes', 'release notes', 'field fragments', 'fragments'] },
       { color: '#6D3D15', terms: ['archive', 'record', 'records', 'proof', 'process', 'evidence', 'residue', 'memory', 'past iterations', 'source material', 'timelines', 'history'] },
       { color: '#328C84', terms: ['film', 'films', 'moving-image', 'documentary', 'documentation', 'footage', 'recaps', 'recap', 'interviews', 'interview', 'campaign', 'campaigns', 'cinematic', 'subject matter'] }
     ];
@@ -1835,19 +1618,20 @@
       activeConnections = [];
       gradientDefs.querySelectorAll('.connection-gradient').forEach(gradient => gradient.remove());
       diagram.classList.remove('has-active');
+      details.classList.remove('has-selection');
       connectionLayer.replaceChildren();
       nodeLayer.querySelectorAll('.node-hit').forEach(group => {
         group.classList.remove('is-active', 'is-connected', 'is-connected-pending');
       });
       softSwap(() => {
-        selectedTitle.textContent = 'Map at rest';
+        selectedTitle.textContent = '';
         selectedTitle.style.color = 'var(--accent)';
-        selectedBody.textContent = 'Public doors orbit the construct. Select one to see whether it is acting as node, medium, archive, or orientation layer, and where someone can enter.';
+        selectedBody.textContent = '';
         selectedMaterials.replaceChildren();
         selectedMaterials.style.removeProperty('--chip-color');
         renderManifestBrand(null);
         stateLabel.textContent = 'click a construct entry - its connections illuminate';
-        connectionGrid.innerHTML = '<p class="empty-note">Choose a node to reveal its linked rooms, routes, and descriptions.</p>';
+        connectionGrid.replaceChildren();
         highlightNodeTerms(selectedCopy);
         highlightNodeTerms(connectionGrid);
       });
@@ -1988,6 +1772,7 @@
       gradientDefs.querySelectorAll('.connection-gradient').forEach(gradient => gradient.remove());
       connectionLayer.replaceChildren();
       diagram.classList.add('has-active');
+      details.classList.add('has-selection');
       nodeLayer.querySelectorAll('.node-hit').forEach(group => {
         group.classList.toggle('is-active', group.dataset.node === key);
         group.classList.remove('is-connected', 'is-connected-pending');

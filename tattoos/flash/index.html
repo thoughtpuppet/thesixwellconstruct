@@ -439,7 +439,21 @@
       items.forEach((item) => container.appendChild(card(item)));
     }
 
+    function renderUnavailable(container) {
+      container.innerHTML = "";
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.innerHTML = 'Flash designs are loading — check back soon, or <a href="/tattoos/inquire/">submit an inquiry directly</a>.';
+      container.appendChild(empty);
+    }
+
     function renderCatalog() {
+      if (!state.items.length) {
+        renderUnavailable(els.sheetGrid);
+        renderUnavailable(els.catalogGrid);
+        els.resultCount.textContent = "0 individual / 0 sheet";
+        return;
+      }
       const filtered = state.items.filter(matches);
       const sheets = filtered.filter((item) => item.type === "Sheet");
       const designs = filtered.filter((item) => item.type !== "Sheet");

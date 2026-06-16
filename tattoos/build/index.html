@@ -59,6 +59,14 @@
   .studio-aside a{color:var(--signal);opacity:0.8;border-bottom:1px solid rgba(110,4,4,0.3);padding-bottom:1px;transition:opacity var(--t-fast),border-color var(--t-fast);}
   .studio-aside a:hover{opacity:1;border-bottom-color:var(--signal);}
 
+  /* ── COMING SOON (Build Your Own not yet open) ── */
+  .coming-soon{border:5px solid var(--ring-faint);padding:var(--s7) var(--s6);margin-bottom:var(--s7);display:grid;gap:var(--s4);max-width:780px;}
+  .coming-soon-kicker{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);}
+  .coming-soon-title{font-family:var(--sans);font-weight:900;font-size:clamp(28px,4vw,46px);letter-spacing:-0.03em;line-height:0.95;text-transform:uppercase;color:var(--accent);}
+  .coming-soon-body{font-size:14px;line-height:1.75;color:var(--text-mute);max-width:580px;}
+  .coming-soon-cta{justify-self:start;display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(110,4,4,0.4);padding:12px 24px;margin-top:var(--s2);transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
+  .coming-soon-cta:hover{background:rgba(110,4,4,0.06);border-color:var(--signal);color:var(--accent);}
+
   /* ── BUILDER WRAP ── */
   .builder-wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;border-top:5px solid var(--ring-faint);}
 
@@ -225,8 +233,16 @@
 
     <p class="studio-aside" data-copy-id="build-studio-aside">There is an option to do this in-person at the art.pill Tattoo House studio. <a href="/tattoos/build/in-person/">Learn more.</a></p>
 
-    <!-- BUILDER -->
-    <div class="builder-wrap">
+    <!-- COMING SOON (Build Your Own is not yet open) -->
+    <section class="coming-soon" aria-label="Build Your Own status">
+      <p class="coming-soon-kicker">Opening soon</p>
+      <h2 class="coming-soon-title">The builder is<br>being finished.</h2>
+      <p class="coming-soon-body">Build Your Own is almost ready. The symbol language and the in-person build session are being finalized before this path opens. If you already know you want to work from the visual language, begin an inquiry and say so — your note carries into review.</p>
+      <a class="coming-soon-cta" href="/tattoos/inquire/">Begin an inquiry →</a>
+    </section>
+
+    <!-- BUILDER (hidden until Build Your Own opens) -->
+    <div class="builder-wrap" style="display:none">
 
       <!-- SYMBOL BROWSER -->
       <div class="symbol-col">
@@ -259,8 +275,8 @@
 
     </div><!-- /builder-wrap -->
 
-    <!-- FORM -->
-    <section class="build-form-section" id="build-form" aria-label="Build Your Own submission form">
+    <!-- FORM (hidden until Build Your Own opens) -->
+    <section class="build-form-section" id="build-form" aria-label="Build Your Own submission form" style="display:none">
       <div class="form-header">
         <p class="form-kicker" data-copy-id="build-form-kicker">Submit your brief</p>
         <h2 class="form-title" data-copy-id="build-form-title">From the language<br>to the skin.</h2>
@@ -285,10 +301,10 @@
           <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
           <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
           <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
-          <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" autocomplete="tel"></div>
+          <div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" autocomplete="tel"></div>
           <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
-          <div class="field"><label for="scale">Approx. scale</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
-          <div class="field"><label for="timeline">Timeline</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
+          <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
+          <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
           <div class="field"><label for="intent">Design intent</label><input id="intent" name="intent" placeholder="What should the piece carry or mean?"></div>
           <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="form-status" style="margin-top:6px;">Optional. Body reference or placement images only — not mood boards.</p></div>
           <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
