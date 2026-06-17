@@ -41,6 +41,7 @@ const checkRoutes = [
   ["/construct-map/", 200],
   ["/events/", 200],
   ["/events/sip-and-paint/", 200],
+  ["/events/example-created-in-studio/", 200],
   ["/events/confirmed/", 200],
   ["/music/", 302],
   ["/film/", 302],
@@ -119,6 +120,17 @@ function isPublicPageRoute(urlPath) {
   );
 }
 
+function isEventDetailRoute(urlPath) {
+  const normalized = normalizeRoute(urlPath);
+  const parts = normalized.split("/").filter(Boolean);
+  return (
+    parts.length === 2 &&
+    parts[0] === "events" &&
+    parts[1] !== "confirmed" &&
+    !hasFileExtension(requestPathname(urlPath))
+  );
+}
+
 function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
@@ -156,6 +168,7 @@ function safePath(urlPath) {
   if (localOnlyFile) return path.resolve(root, localOnlyFile);
 
   const clean = decoded === "/" ? "/index.html" : decoded;
+  if (isEventDetailRoute(clean)) return path.resolve(root, "events/sip-and-paint/index.html");
   const resolved = path.resolve(root, "." + clean);
   if (!resolved.startsWith(root)) return null;
   return resolved;

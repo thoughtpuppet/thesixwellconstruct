@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sip &amp; Paint — the six.well construct</title>
+<title>Event Tickets - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -43,11 +43,11 @@
     <section class="venture-hero" aria-labelledby="page-title">
       <div>
         <span class="venture-kicker">ticketed gathering</span>
-        <h1 class="venture-title" id="page-title">Sip &amp; Paint.</h1>
+        <h1 class="venture-title" id="page-title">Event tickets.</h1>
       </div>
       <div class="hero-copy">
-        <p class="hero-lede" id="ev-desc">A guided evening of painting, drinks, and slow looking inside the construct.</p>
-        <p class="hero-note">Reserve below. You'll pay securely through Square, and your seat is confirmed the moment payment clears.</p>
+        <p class="hero-lede" id="ev-desc">Loading the event details.</p>
+        <p class="hero-note" id="ev-note">Reserve below. You'll pay securely through Square, and your seat is confirmed the moment payment clears.</p>
         <div class="hero-actions">
           <a class="venture-link" href="/events/">all events</a>
         </div>
@@ -104,7 +104,16 @@
 
   <script>
   (function () {
-    var SLUG = "sip-and-paint";
+    function slugFromPath() {
+      var parts = window.location.pathname.split("/").filter(Boolean);
+      var eventsIndex = parts.indexOf("events");
+      if (eventsIndex >= 0 && parts[eventsIndex + 1] && parts[eventsIndex + 1] !== "confirmed") {
+        return decodeURIComponent(parts[eventsIndex + 1]);
+      }
+      return "sip-and-paint";
+    }
+
+    var SLUG = slugFromPath();
     var params = new URLSearchParams(window.location.search);
     var previewMode = params.get("preview") === "1";
     var priceCents = 0, currency = "USD", isFree = false;
@@ -119,6 +128,8 @@
       btn: document.getElementById("submitBtn"),
       err: document.getElementById("formError"),
       form: document.getElementById("ticketForm"),
+      title: document.getElementById("page-title"),
+      note: document.getElementById("ev-note"),
     };
 
     function money(cents) {
@@ -144,6 +155,8 @@
     function applyContext(ev) {
       priceCents = ev.priceCents; currency = ev.currency;
       isFree = ev.free || (Number(ev.priceCents) || 0) <= 0;
+      document.title = (ev.title || "Event Tickets") + " - the six.well construct";
+      els.title.textContent = (ev.title || "Event tickets") + ".";
       if (ev.description) els.desc.textContent = ev.description;
       els.when.textContent = fmtWhen(ev.startsAt);
       els.where.textContent = ev.location || "Shared after booking";
@@ -170,9 +183,11 @@
       if (isFree) {
         els.btn.textContent = previewMode ? "Register (preview)" : "Register";
         var fn = document.querySelector(".form-note");
-        if (fn) fn.textContent = "This event is free. Register to reserve your seat — you'll get a confirmation by email.";
+        if (fn) fn.textContent = "This event is free. Register to reserve your seat - you'll get a confirmation by email.";
+        if (els.note) els.note.textContent = "Register below. Your seat is confirmed as soon as the reservation is recorded.";
       } else {
         els.btn.textContent = previewMode ? "Continue to payment (preview)" : "Continue to payment";
+        if (els.note) els.note.textContent = "Reserve below. You'll pay securely through Square, and your seat is confirmed the moment payment clears.";
       }
     }
 

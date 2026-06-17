@@ -204,6 +204,7 @@ async function createEventSquarePaymentLink(request, env, ticket, event) {
 
   const redirectUrl = new URL("/events/confirmed/", baseUrlFromRequest(request));
   redirectUrl.searchParams.set("ticket", ticket.id);
+  redirectUrl.searchParams.set("event", event.slug);
 
   const seatLabel = ticket.seats === 1 ? "seat" : "seats";
   const response = await fetch(

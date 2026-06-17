@@ -1151,6 +1151,10 @@
     return events.find((e) => e.slug === slug) || null;
   }
 
+  function publicEventPath(slug) {
+    return slug ? `/events/${encodeURIComponent(slug)}/` : "/events/";
+  }
+
   function rsvpsForEvent(ev) {
     if (!ev) return [];
     return submissions.filter((s) => s.type === "event_rsvp" && (
@@ -1217,6 +1221,10 @@
           ${escapeHtml(formatDate(ev.startsAt))}${ev.location ? `<br>${escapeHtml(ev.location)}` : ""}<br>
           ${ev.paidSeats || 0} / ${ev.capacity || 0} seats sold · ${escapeHtml(money(ev.priceCents || 0, ev.currency || "USD"))} per seat
         </p>
+        <div class="booking-actions">
+          <a class="button" href="${escapeHtml(publicEventPath(ev.slug))}" target="_blank" rel="noopener noreferrer">Open Public Page</a>
+          <button class="button" type="button" data-copy-public-link="${escapeHtml(publicEventPath(ev.slug))}">Copy Public Link</button>
+        </div>
       </div>
       <div class="review-card">
         <div class="review-card-header">RSVPs (${rsvps.length})</div>
@@ -2573,6 +2581,14 @@ ${meetingLines}
       const value = copyCalendar.dataset.copyCalendar || "";
       if (value) await navigator.clipboard?.writeText(absoluteUrl(value)).catch(() => {});
       setStatus("Calendar link copied");
+      return;
+    }
+
+    const copyPublicLink = event.target.closest("[data-copy-public-link]");
+    if (copyPublicLink) {
+      const value = copyPublicLink.dataset.copyPublicLink || "";
+      if (value) await navigator.clipboard?.writeText(absoluteUrl(value)).catch(() => {});
+      setStatus("Public link copied");
       return;
     }
 

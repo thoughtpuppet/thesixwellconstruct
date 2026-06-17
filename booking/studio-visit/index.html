@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book a Studio Visit · the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/booking-calendar.css">
+<style>
+  :root {
+    --bg:#0e0e0e; --signal:#6E0404; --ring:#6D3D15;
+    --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
+    --accent:#FCB867; --art:#0581C1; --text:#FFE7CA;
+    --text-mute:rgba(255,231,202,0.6); --text-dim:rgba(255,231,202,0.35); --text-ghost:rgba(255,231,202,0.12);
+    --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:40px;--s7:64px;--s8:96px;
+    --sans:'Inter',Arial,sans-serif;
+    --serif:Georgia,'Times New Roman',Times,serif;
+    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);font-family:var(--serif);min-height:100vh;overflow-x:clip;-webkit-font-smoothing:antialiased;}
+  a{color:inherit;text-decoration:none;}
+  button,input,textarea,select{font:inherit;}
+
+  .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");}
+
+  header.top{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:flex-end;padding:var(--s5) var(--s6);min-height:72px;}
+  .nav-inquire{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--art);border:5px solid rgba(5,129,193,0.4);padding:8px 16px;transition:background var(--t-fast),border-color var(--t-fast);}
+  .nav-inquire:hover{background:rgba(5,129,193,0.06);border-color:var(--art);}
+
+  main{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:var(--s8) var(--s6) var(--s7);}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
+
+  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,96px);letter-spacing:-0.05em;line-height:0.88;color:var(--art);text-transform:uppercase;margin-bottom:var(--s6);}
+  .page-body{font-size:16px;line-height:1.8;color:var(--text-mute);max-width:560px;}
+  .page-body+.page-body{margin-top:var(--s4);}
+
+  .visit-rail{margin-top:var(--s7);display:grid;gap:var(--s5);}
+  .info-block{border-top:5px solid var(--ring-faint);padding-top:var(--s5);}
+  .block-kicker{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--art);opacity:0.85;margin-bottom:var(--s3);}
+  .visit-list{display:grid;gap:var(--s3);list-style:none;}
+  .visit-list li{display:grid;grid-template-columns:18px 1fr;gap:12px;font-size:14px;line-height:1.7;color:var(--text-mute);}
+  .visit-list li::before{content:"";width:7px;height:7px;margin-top:9px;background:var(--art);opacity:0.8;}
+  .offering-desc{font-size:14px;line-height:1.7;color:var(--text-mute);}
+  .visit-note{font-size:13px;line-height:1.75;color:var(--text-dim);font-style:italic;max-width:560px;}
+  .other-link{display:inline-block;margin-top:var(--s5);font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-mute);border-bottom:1px solid var(--ring-soft);padding-bottom:2px;transition:color var(--t-fast),border-color var(--t-fast);}
+  .other-link:hover{color:var(--accent);border-color:var(--accent);}
+
+  .form-panel{border-top:5px solid var(--ring-soft);padding-top:var(--s6);}
+  .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(22px,3vw,34px);letter-spacing:-0.02em;line-height:0.94;color:var(--art);text-transform:uppercase;margin-bottom:var(--s3);}
+  .form-note{font-size:13px;line-height:1.75;color:var(--text-mute);margin-bottom:var(--s6);}
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
+  .field.full{grid-column:1 / -1;}
+  label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
+  input,textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;}
+  textarea{min-height:110px;resize:vertical;}
+  input:focus,textarea:focus,select:focus{outline:1px solid var(--art);border-color:var(--art);}
+  .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
+  .check{display:grid;grid-template-columns:18px 1fr;gap:12px;align-items:start;margin:6px 0 28px;}
+  .check input{width:18px;height:18px;margin-top:2px;padding:0;appearance:none;border:3px solid var(--ring-soft);background:transparent;cursor:pointer;transition:background var(--t-fast),border-color var(--t-fast),box-shadow var(--t-fast);}
+  .check input:checked{background:var(--art);border-color:var(--art);box-shadow:inset 0 0 0 3px var(--bg);}
+  .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
+  .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
+  .submit-btn{display:inline-flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
+  .submit-btn:hover{background:rgba(5,129,193,0.06);border-color:var(--art);color:var(--art);}
+  .submit-btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .form-status{font-size:12px;line-height:1.6;color:var(--text-dim);}
+  .payment-holding{padding:var(--s6) 0;}
+  .payment-holding-title{font-family:var(--sans);font-weight:900;font-size:18px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--art);margin-bottom:var(--s3);}
+  .payment-holding-body{font-size:14px;line-height:1.75;color:var(--text-mute);}
+
+  footer.bottom{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:56px var(--s6);border-top:5px solid var(--ring-faint);display:flex;justify-content:space-between;align-items:center;}
+  footer.bottom p,footer.bottom a{font-size:10px;letter-spacing:0.22em;color:var(--text-dim);text-transform:uppercase;}
+  footer.bottom a{color:var(--text-mute);transition:color var(--t-fast);}
+  footer.bottom a:hover{color:var(--accent);}
+
+  @media(max-width:1080px){
+    .layout{grid-template-columns:minmax(0,1fr);gap:48px;}
+    .form-panel{border-top:5px solid var(--ring-faint);}
+  }
+  @media(max-width:640px){
+    header.top{padding:var(--s4) var(--s5);}
+    main{padding:var(--s6) var(--s5) var(--s7);}
+    .page-title{font-size:clamp(34px,11vw,90px);}
+    .field-grid{grid-template-columns:1fr;}
+    footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
+  }
+  @media(max-width:700px){
+    header.top{position:sticky;padding:var(--s3) var(--s4);min-height:60px;align-items:center;}
+  }
+</style>
+<link rel="stylesheet" href="/css/site-typography.css">
+</head>
+<body data-venture="art">
+  <script>
+  (function(){
+    var o=document.createElement('div');o.id='construct-fade';
+    o.style.cssText='position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);';
+    document.body.appendChild(o);
+    function fadeOut(){requestAnimationFrame(function(){requestAnimationFrame(function(){o.style.opacity='0';o.style.pointerEvents='none';});});}
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fadeOut);else fadeOut();
+  })();
+  </script>
+  <div class="grain"></div>
+
+  <header class="top">
+    <a class="nav-inquire" href="/art/">Art Making</a>
+  </header>
+
+  <main>
+    <div class="layout">
+
+      <!-- LEFT — INFO -->
+      <section>
+        <h1 class="page-title">Studio Visit.</h1>
+        <p class="page-body">Spend time inside the art-making practice. An open studio visit is a scheduled window to see the space, the works in progress, finished paintings, and the process behind the construct.</p>
+        <p class="page-body">Pick a time below. A deposit holds your visit; it can go toward anything you take home, or simply stand as your hold on the date.</p>
+
+        <div class="visit-rail">
+          <div class="info-block">
+            <p class="block-kicker">What the visit is</p>
+            <ul class="visit-list">
+              <li>A focused appointment for collectors, collaborators, friends of the practice, and people who want to meet the work in person.</li>
+              <li>Time to look through available paintings, active pieces, sketches, source material, and the studio environment without the pressure of an event.</li>
+              <li>A small visit by default. Bring one or two people if they are part of the conversation.</li>
+            </ul>
+          </div>
+
+          <div class="info-block">
+            <p class="block-kicker">Before you arrive</p>
+            <p class="visit-note">The exact studio address is shared after the visit is confirmed. If you are hoping to see a specific work from the Art Making page, mention it in the note field so it can be ready.</p>
+          </div>
+
+          <div class="info-block">
+            <p class="block-kicker">Need the room instead?</p>
+            <p class="offering-desc">Use the broader studio booking path for private gatherings or external event rentals.</p>
+            <a class="other-link" href="/booking/studio/">Book the studio &rarr;</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT — FORM -->
+      <section class="form-panel" aria-label="Book a studio visit">
+        <h2 class="form-title">Reserve Your Visit.</h2>
+        <p class="form-note">Pick a time. After selecting it, you'll be taken to Square to place the deposit and hold your visit.</p>
+
+        <div id="formStep">
+          <form id="consultForm" novalidate>
+            <input type="hidden" name="type" value="studio_booking">
+            <input type="hidden" name="source_path" value="/booking/studio-visit/">
+            <input type="hidden" name="subject" value="New Studio Visit Request">
+            <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
+
+            <div class="field-grid">
+              <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+              <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+              <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+              <div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" autocomplete="tel"></div>
+              <div class="field full">
+                <label for="bookingTypeId">Visit type</label>
+                <select id="bookingTypeId" name="bookingTypeId" required>
+                  <option value="">Loading studio visit options...</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="details">Anything we should know? (optional)</label>
+              <textarea id="details" name="details" placeholder="What draws you in, what you would like to see, or who is coming with you."></textarea>
+            </div>
+
+            <!-- SLOT PICKER -->
+            <div class="slot-picker">
+              <span class="slot-picker-label">Available times</span>
+
+              <div class="slot-selected" id="slotSelected"></div>
+
+              <div class="cal-wrap" id="calWrap">
+                <div class="cal-next-available" id="calNextAvailable"></div>
+                <div class="cal-header">
+                  <button type="button" class="cal-nav" id="calPrev">←</button>
+                  <span class="cal-month-label" id="calMonthLabel"></span>
+                  <button type="button" class="cal-nav" id="calNext">→</button>
+                </div>
+                <div class="cal-weekdays">
+                  <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                </div>
+                <div class="cal-grid" id="calGrid"></div>
+                <div class="time-row" id="timeRow" style="display:none;">
+                  <div class="time-dropdown" id="timeDropdown">
+                    <button type="button" class="time-trigger" id="timeTrigger" aria-haspopup="listbox" aria-expanded="false">
+                      <span class="time-trigger-label" id="timeTriggerLabel">Pick a time</span>
+                      <span class="time-trigger-arrow">▾</span>
+                    </button>
+                    <div class="time-panel" id="timePanel" role="listbox" style="display:none;"></div>
+                  </div>
+                  <button type="button" class="time-add-btn" id="timeAddBtn" disabled>Select Time</button>
+                </div>
+                <p class="cal-full-note" id="calFullNote" style="display:none;">No studio visit times are available for this date.</p>
+              </div>
+
+              <input type="hidden" name="preferred_slots" id="preferredSlots">
+              <input type="hidden" name="availabilityWindowId" id="availabilityWindowId">
+            </div>
+
+            <label class="check">
+              <input type="checkbox" name="understand" value="yes" required>
+              <span class="check-label">I understand the deposit holds my visit and is settled with the studio. This is an open studio visit, not a tattoo appointment.</span>
+            </label>
+
+            <div class="submit-row">
+              <button class="submit-btn" type="submit" id="submitBtn">Continue to Square</button>
+            </div>
+            <p class="form-status" id="formError" style="display:none;color:rgba(5,129,193,0.95);margin-top:14px;"></p>
+          </form>
+        </div>
+
+        <div id="paymentStep" style="display:none;">
+          <div class="payment-holding">
+            <p class="payment-holding-title">Details saved.</p>
+            <p class="payment-holding-body">Taking you to complete the deposit now...</p>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="bottom">
+    <a href="/art/">&larr; back to Art Making</a>
+    <a href="/">the six.well construct</a>
+  </footer>
+
+  <script src="/js/booking-calendar.js"></script>
+  <script>
+  (function(){
+    const VISIT_TYPE_IDS = ["studio_visit"];
+    initBookingCalendar({
+      apiBookingTypeIds: VISIT_TYPE_IDS,
+      filterBookingTypes: (type) => VISIT_TYPE_IDS.includes(type.id),
+      previewBookingTypes: [
+        { id: "studio_visit", label: "Open Studio Visit", depositCents: 5000, depositLabel: "$50.00", durationMinutes: 60, currency: "USD" },
+      ],
+      contextUrl: "/api/booking/public-studio/context",
+      checkoutUrl: "/api/booking/public-studio/checkout",
+    });
+  })();
+  </script>
+
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

@@ -62,7 +62,7 @@
   <p id="lead" class="lead">Give this a moment. We're confirming your seat and Square payment.</p>
   <div id="details" class="detail-block"></div>
   <div class="cta-row">
-    <a class="cta-primary" href="/events/">Back to Events</a>
+    <a class="cta-primary" id="eventBackLink" href="/events/">Back to Events</a>
     <a class="cta-ghost" href="/">Return to construct</a>
   </div>
 </main>
@@ -74,6 +74,7 @@
   const title = document.getElementById("title");
   const lead = document.getElementById("lead");
   const details = document.getElementById("details");
+  const eventBackLink = document.getElementById("eventBackLink");
 
   function escapeHtml(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function(c){
@@ -117,6 +118,12 @@
     ctaRow.insertBefore(link, ctaRow.firstChild);
   }
 
+  function setEventBackLink(slug) {
+    if (!eventBackLink || !slug) return;
+    eventBackLink.href = "/events/" + encodeURIComponent(slug) + "/";
+    eventBackLink.textContent = "Back to event";
+  }
+
   // Dummy ticket for the events preview hub (?preview=1&state=...). Nothing is
   // read from the API; the confirmation flow renders exactly as it would live.
   function previewTicket(state) {
@@ -149,6 +156,7 @@
     }
     const paid = ticket.status === "paid";
     const cancelled = ticket.status === "cancelled";
+    setEventBackLink(ticket.eventSlug);
 
     badge.classList.toggle("pending", !paid);
     badgeText.textContent = paid ? "Ticket Confirmed" : (cancelled ? "Ticket Cancelled" : "Payment Pending");

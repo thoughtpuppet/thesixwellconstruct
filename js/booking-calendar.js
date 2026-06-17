@@ -59,6 +59,7 @@
       apiBookingTypeIds = [],
       walkInEmptyMessage = "No walk-in windows are currently set. Book a consultation or check back soon.",
       onBookingTypeChange,
+      previewBookingTypes,
       contextUrl = "/api/booking/public-consultation/context",
       checkoutUrl = "/api/booking/public-consultation/checkout",
     } = options;
@@ -72,7 +73,7 @@
       if (previewState === "error") {
         return { error: "Unable to load consultation times. (Preview of the load-error state.)" };
       }
-      const previewTypes = [
+      const previewTypes = previewBookingTypes || [
         { id: "consult_in_person", label: "In-Person Consultation", depositCents: 5000, depositLabel: "$50.00", durationMinutes: 30, currency: "USD" },
         { id: "consult_virtual", label: "Virtual Consultation", depositCents: 5000, depositLabel: "$50.00", durationMinutes: 30, currency: "USD" },
         { id: "build_in_person", label: "In-Person Build Session", depositCents: 7500, depositLabel: "$75.00", durationMinutes: 60, currency: "USD" },
