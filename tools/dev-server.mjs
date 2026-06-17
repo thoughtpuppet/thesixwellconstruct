@@ -39,7 +39,9 @@ const checkRoutes = [
   ["/about/current-state/", 200],
   ["/about/contact-press/", 200],
   ["/construct-map/", 200],
-  ["/events/", 302],
+  ["/events/", 200],
+  ["/events/sip-and-paint/", 200],
+  ["/events/confirmed/", 200],
   ["/music/", 302],
   ["/film/", 302],
   ["/writings/", 302],
@@ -79,7 +81,6 @@ const localOnlyRoutes = new Map([
 ]);
 
 const hiddenPublicPaths = new Set([
-  "/events",
   "/film",
   "/music",
   "/writings",

@@ -169,6 +169,66 @@ The old tattoo booking paths redirect into the system booking flow:
 - `/tattoos/booking/` -> `/booking/`
 - `/tattoos/booking/confirmed/` -> `/booking/confirmed/`
 
+## Ticketed events (Sip & Paint)
+
+Public paid events run on their own isolated stack so the money stays separate
+from tattoo deposits:
+
+- Tables `events` and `event_tickets` (migration `0012_events.sql`).
+- Module `functions/api/events/_lib.js`.
+- The **same Square account/API token** as tattoo deposits, but a **dedicated
+  Square location** (`SQUARE_EVENTS_LOCATION_ID`) so event money settles to that
+  location's own bank account / EIN. Square allows a per-location EIN and bank
+  account under one login (payroll is the only feature that still needs a wholly
+  separate account). Isolation is reinforced with a dedicated webhook
+  subscription + signing key feeding `/api/square-events/webhook`.
+
+Public endpoints:
+
+- `GET /api/events/:slug/context` — event info + seats remaining.
+- `POST /api/events/:slug/checkout` — validates name/email/seats, capacity-checks
+  against paid tickets, creates a pending `event_tickets` row, opens a Square
+  hosted checkout on the events account, and mirrors an `event_rsvp` submission
+  into `/studio` for visibility. Returns `{ checkoutUrl }`. The studio console has
+  an **EVENT RSVP** type filter and an event detail card (event, seats, amount,
+  paid status, ticket ID); paid tickets show as `booked`.
+- `GET /api/events/tickets/:id` — ticket status for `/events/confirmed/` (also
+  falls back to verifying the Square order if the webhook has not landed yet).
+- `POST /api/square-events/webhook` — verifies the **events** signing key, marks
+  the ticket `paid`, moves the mirrored submission to `booked`, and emails the
+  buyer (`event_ticket_paid` template). Idempotent on Square retries.
+
+The events checkout reuses `SQUARE_ACCESS_TOKEN` and `SQUARE_ENVIRONMENT` (same
+account as tattoo deposits). You only need two new values before enabling ticket
+checkout — the events location and its webhook signing key:
+
+```sh
+npx.cmd wrangler@latest secret put SQUARE_EVENTS_LOCATION_ID
+npx.cmd wrangler@latest secret put SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY
+```
+
+`SQUARE_EVENTS_LOCATION_ID` is the location ID for the events location you create
+in the Square Dashboard (Account & Settings → Business → Locations), where you
+set that location's EIN/tax info and bank account.
+
+`wrangler.jsonc` provides `SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL`. In the Square
+Developer Dashboard (same application as the tattoo webhook), create a **second**
+webhook subscription pointed at:
+
+```text
+https://thesixwellconstruct.com/api/square-events/webhook
+```
+
+subscribed to `payment.created`, `payment.updated`, `order.created`, and
+`order.updated`, then copy its signing key into
+`SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY`. (Both webhook subscriptions receive every
+order in the account; each endpoint simply ignores orders it has no record for,
+so tattoo and event payments never collide.)
+
+The seeded Sip & Paint event uses **placeholder** price/capacity/date. Update
+them (and add new events) with `wrangler d1 execute swc-submissions` against the
+`events` table; set `status='open'` to make an event bookable.
+
 ## Availability model
 
 Booking availability is now managed as a weekly schedule, not one block at a time.

@@ -435,6 +435,24 @@
     background: #171717;
   }
 
+  .manifest-brand-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .manifest-brand-logo {
+    width: auto;
+    height: 42px;
+    max-width: 42px;
+    flex: 0 0 auto;
+    opacity: 0.9;
+  }
+
+  .manifest-brand-logo[hidden] {
+    display: none;
+  }
+
   .manifest-brand-kicker {
     color: var(--brand-color, var(--accent));
     font-family: var(--serif);
@@ -982,6 +1000,7 @@
     }
   }
 </style>
+<link rel="stylesheet" href="/css/site-typography.css">
 </head>
 <body data-venture="about">
 <main class="about-next entrance-fade">
@@ -1035,9 +1054,12 @@
         <p class="selected-body" id="selectedBody"></p>
         <div class="material-strip" id="selectedMaterials" aria-label="selected construct entry materials"></div>
         <section class="manifest-brand" id="manifestBrand" aria-labelledby="manifestBrandTitle">
-          <div>
-            <p class="manifest-brand-kicker" id="manifestBrandKicker">construct system / orientation</p>
-            <h3 class="manifest-brand-title" id="manifestBrandTitle">The Six.Well Construct</h3>
+          <div class="manifest-brand-head">
+            <img class="manifest-brand-logo" id="manifestBrandLogo" alt="" hidden>
+            <div>
+              <p class="manifest-brand-kicker" id="manifestBrandKicker">construct system / orientation</p>
+              <h3 class="manifest-brand-title" id="manifestBrandTitle">The Six.Well Construct</h3>
+            </div>
           </div>
           <p class="manifest-brand-copy" id="manifestBrandCopy">The operating architecture that holds the nodes, mediums, archive, and method in relation.</p>
         </section>
@@ -1393,9 +1415,9 @@
     const detailFade = 320;    // details fade-out time before content swaps
 
     const nodes = [
-      { key: 'tattooing', label: 'Tattooing', color: '#6E0404', activeColor: '#6E0404', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'], brand: { kicker: 'node manifestation / tattoo', title: 'art.pill Tattoo House', copy: 'The tattoo medium manifests through art.pill Tattoo House: an artist-led mark and body-ritual room for flash, custom review, special projects, and private booking.' } },
+      { key: 'tattooing', label: 'Tattooing', color: '#6E0404', activeColor: '#6E0404', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'], brand: { kicker: 'node manifestation / tattoo', title: 'art.pill Tattoo House', copy: 'The tattoo medium manifests through art.pill Tattoo House: an artist-led mark and body-ritual room for flash, custom review, special projects, and private booking.', logo: '/assets/brand/art-pill-tattoo-house.svg.svg', logoAlt: 'art.pill Tattoo House logo' } },
       { key: 'art', label: 'Art', color: '#0581C1', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'], brand: { kicker: 'node manifestation / image', title: 'ThoughtPuppet', copy: 'The painting and visual-language medium manifests through ThoughtPuppet: the blue-origin image room where symbols, studies, objects, and source material begin talking to the rest of the construct.' } },
-      { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'], brand: { kicker: 'node manifestation / clothing', title: 'Six.Well Clothing', copy: 'The clothing and object medium manifests through Six.Well Clothing: garments, prints, editions, and artifact commerce that lets source imagery move into the world.' } },
+      { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'], brand: { kicker: 'node manifestation / clothing', title: 'Six.Well Clothing', copy: 'The clothing and object medium manifests through Six.Well Clothing: garments, prints, editions, and artifact commerce that lets source imagery move into the world.', logo: '/assets/brand/six-well-clothing.svg.svg', logoAlt: 'Six.Well Clothing logo' } },
       { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'], brand: { kicker: 'construct system / orientation', title: 'The Six.Well Construct', copy: 'The orientation layer manifests the construct itself: the public language that explains the founder, architecture, nodes, mediums, archive, and ways in.' } },
       { key: 'events', label: 'Events', color: '#005d25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['CULT[&SHIFT]', 'gatherings', 'recaps', 'tickets', 'ritual calendar'], brand: { kicker: 'node manifestation / events', title: 'CULT[&SHIFT]', copy: 'The events medium manifests through CULT[&SHIFT]: gatherings, hosted rooms, annual rituals, performance traces, and live containers that make the construct social and physically witnessed.' } },
       { key: 'music', label: 'Music', color: '#A856A1', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'], brand: { kicker: 'node manifestation / music', title: 'MILOWALKSONWATER', copy: 'The music medium manifests through MILOWALKSONWATER: performance audio, scores, loops, voice fragments, and sound work that gives the construct cadence and atmosphere.' } },
@@ -1483,6 +1505,7 @@
     const selectedBody = document.getElementById('selectedBody');
     const selectedMaterials = document.getElementById('selectedMaterials');
     const manifestBrand = document.getElementById('manifestBrand');
+    const manifestBrandLogo = document.getElementById('manifestBrandLogo');
     const manifestBrandKicker = document.getElementById('manifestBrandKicker');
     const manifestBrandTitle = document.getElementById('manifestBrandTitle');
     const manifestBrandCopy = document.getElementById('manifestBrandCopy');
@@ -1656,6 +1679,15 @@
         copy: 'The operating architecture that holds the nodes, mediums, archive, and method in relation.'
       };
       manifestBrand.style.setProperty('--brand-color', node ? (node.activeColor || node.color) : 'var(--accent)');
+      if (brand.logo) {
+        manifestBrandLogo.src = brand.logo;
+        manifestBrandLogo.alt = brand.logoAlt || '';
+        manifestBrandLogo.hidden = false;
+      } else {
+        manifestBrandLogo.removeAttribute('src');
+        manifestBrandLogo.alt = '';
+        manifestBrandLogo.hidden = true;
+      }
       manifestBrandKicker.textContent = brand.kicker;
       manifestBrandTitle.textContent = brand.title;
       manifestBrandCopy.textContent = brand.copy;

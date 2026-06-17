@@ -333,6 +333,7 @@
           <option value="consultation">CONSULTATION</option>
           <option value="special_project">SPECIAL PROJECT</option>
           <option value="art_acquisition">ART ACQUISITION</option>
+          <option value="event_rsvp">EVENT RSVP</option>
         </select>
       </div>
       <div id="submissionList" class="empty" style="padding:16px;">Unlock to load submissions.</div>
@@ -757,6 +758,20 @@
         <div class="field" style="margin-top:16px;"><label>Project Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+      `);
+    }
+
+    if (t === "event_rsvp") {
+      const amount = p("amount_cents");
+      return card("Event RSVP", `
+        <div class="grid">
+          ${field("Event", p("event_title") || p("event_slug"))}
+          ${field("Seats", p("seats"))}
+          ${field("Amount", amount ? money(amount, p("currency") || "USD") : "")}
+          ${field("Payment", submission.status === "booked" ? "Paid" : "Pending")}
+          ${field("Ticket ID", p("ticket_id"))}
+          ${field("Source", submission.sourcePath || "")}
+        </div>
       `);
     }
 

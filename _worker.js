@@ -50,15 +50,19 @@ import {
   handleSquareWebhook,
 } from "./functions/api/booking/_lib.js";
 import {
+  handleEventsApi,
+  handleEventsSquareWebhook,
+} from "./functions/api/events/_lib.js";
+import {
   handleAdminResendNotification,
   sendDueAppointmentReminders,
 } from "./functions/api/notifications/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
-  "/events",
+  "/about",
   "/film",
   "/music",
-  "/writings",
+  "/writings"
 ];
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
@@ -551,6 +555,15 @@ export default {
 
     if (url.pathname.startsWith("/api/square/")) {
       return handleSquareApi(request, env);
+    }
+
+    if (url.pathname === "/api/square-events/webhook") {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handleEventsSquareWebhook(request, env);
+    }
+
+    if (url.pathname.startsWith("/api/events/")) {
+      return handleEventsApi(request, env);
     }
 
     if (

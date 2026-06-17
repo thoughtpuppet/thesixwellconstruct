@@ -772,6 +772,53 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow) {
   });
 }
 
+export async function notifyEventTicketPaid(env, request, ticketRow) {
+  const email = ticketRow.contact_email || ticketRow.contactEmail || "";
+  if (!email) return { ok: false, skipped: true };
+
+  const db = notificationDb(env);
+  let event = null;
+  if (db) {
+    event = await db
+      .prepare("SELECT title, starts_at, location FROM events WHERE id = ?")
+      .bind(ticketRow.event_id)
+      .first()
+      .catch(() => null);
+  }
+
+  const seats = Number(ticketRow.seats) || 1;
+  const title = event?.title || "the event";
+  const whenLine = event?.starts_at ? `When: ${formatDate(event.starts_at)}` : null;
+  const whereLine = event?.location ? `Where: ${event.location}` : null;
+
+  const text = [
+    `Hi ${ticketRow.contact_name || "there"},`,
+    "",
+    `You're booked for ${title}.`,
+    "",
+    `Seats reserved: ${seats}`,
+    whenLine,
+    whereLine,
+    "",
+    "Your spot is confirmed and paid. Reply to this email if anything changes or you have questions before the night.",
+    "",
+    "See you there,",
+    "the six.well construct",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  return sendTransactionalEmail(env, {
+    to: email,
+    subject: `You're booked — ${title}`,
+    text,
+    templateKey: "event_ticket_paid",
+    relatedType: "event_ticket",
+    relatedId: ticketRow.id,
+    idempotencyKey: `event_ticket_paid:${ticketRow.id}`,
+  });
+}
+
 export async function sendDueAppointmentReminders(env) {
   const db = notificationDb(env);
   if (!db) return { sent: 0, skipped: 0, failed: 0 };

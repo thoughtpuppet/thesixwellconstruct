@@ -5,6 +5,8 @@ export const SOURCES = {
     label: "six.well clothing",
     color: "#F7A226",
     statement: "garments from the construct's own hand",
+    logo: "/assets/brand/six-well-clothing.svg.svg",
+    logoAlt: "Six.Well Clothing logo",
   },
   thoughtpuppet: {
     label: "thoughtpuppet",
@@ -15,6 +17,8 @@ export const SOURCES = {
     label: "art.pill Tattoo Supply",
     color: "#6E0404",
     statement: "materials behind the marks",
+    logo: "/assets/brand/art-pill-tattoo-house.svg.svg",
+    logoAlt: "art.pill Tattoo House logo",
   },
 };
 

@@ -590,6 +590,9 @@ export async function initMerchCatalogPage() {
         };
 
         const cardUrl = product.pagePath || "#";
+        const sourceMark = source.logo
+          ? `<img class="cat-logo" src="${source.logo}" alt="${source.logoAlt || source.label}" loading="lazy">`
+          : `<span class="cat-dot"></span>`;
         const imageHtml = product.heroImage
           ? `<img src="${product.heroImage}" alt="${product.heroImageAlt || product.title}">`
           : `<span class="card-number">${product.catalogNumber || ""}</span>`;
@@ -631,7 +634,7 @@ export async function initMerchCatalogPage() {
               ${product.editionText ? `<span class="card-edition">${product.editionText}</span>` : ""}
             </a>
             <div class="card-cat">
-              <span class="cat-dot"></span>
+              ${sourceMark}
               <span class="cat-label" style="color:${source.color}; opacity:0.7">${source.label}</span>
             </div>
             <div class="card-meta">

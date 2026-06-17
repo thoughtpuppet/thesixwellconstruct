@@ -3,183 +3,178 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow">
-<title>Not found - the six.well construct</title>
+<title>events - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/site-typography.css">
 <style>
   :root {
-    --bg:#0e0e0e;
-    --text:#FFE7CA;
-    --muted:rgba(255,231,202,0.62);
-    --accent:#FCB867;
-    --sans:Inter,Arial,sans-serif;
-    --serif:Georgia,"Times New Roman",Times,serif;
+    --venture-color: var(--color-events);
+    --venture-accent: var(--color-events);
+    --venture-dim: var(--color-events-dim);
+    --venture-wash: rgba(0, 93, 37, 0.1);
   }
-  * { box-sizing:border-box; }
-  body {
-    margin:0;
-    min-height:100vh;
-    display:grid;
-    place-items:center;
-    background:var(--bg);
-    color:var(--text);
-    font-family:var(--serif);
-    padding:32px;
-    overflow:hidden;
+  .event-cta {
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    margin-top: 18px;
+    border: 5px solid var(--venture-accent);
+    padding: 0 24px;
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-decoration: none;
+    transition: color var(--duration-base) var(--ease-out), background var(--duration-base) var(--ease-out);
   }
-  #bg {
-    position:fixed;
-    inset:0;
-    width:100%;
-    height:100%;
-    z-index:0;
-    pointer-events:none;
-    filter:brightness(0.20) saturate(2);
+  .event-cta:hover,
+  .event-cta:focus-visible {
+    background: var(--venture-accent);
+    color: #0e0e0e;
+    outline: none;
   }
-  main {
-    width:100%;
-    position:relative;
-    z-index:1;
-  }
-  p {
-    margin:0 0 18px;
-    color:var(--muted);
-    font-size:14px;
-    line-height:1.6;
-    font-family:var(--serif);
-    text-transform:uppercase;
-    letter-spacing:0.35em;
-  }
-  h1 {
-    margin:0 0 20px;
-    font-family:var(--sans);
-    font-size:23vw;
-    line-height:0.88;
-    letter-spacing:-0.02em;
-    text-transform:uppercase;
-    color:var(--accent);
-  }
-  a {
-    display:inline-block;
-    background:#7B1A1A;
-    color:var(--accent);
-    font-family:var(--sans);
-    font-size:12px;
-    font-weight:800;
-    letter-spacing:0.14em;
-    text-transform:uppercase;
-    text-decoration:none;
-    padding:10px 14px;
-    border-radius:6px;
-  }
+  .seats-pill[data-state="soldout"] { color: var(--color-tattooing); }
 </style>
-<link rel="stylesheet" href="/css/mobile.css">
 </head>
-<body>
-<canvas id="bg"></canvas>
-<main>
-  <h1>Nope.</h1>
-  <p>Come back later.</p>
-  <a href="/">Return home</a>
-</main>
-<script>
-(function () {
-  const canvas = document.getElementById('bg');
-  const ctx = canvas.getContext('2d');
+<body class="venture-page" data-venture="events">
+  <div class="venture-grain" aria-hidden="true"></div>
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">live container</span>
+        <h1 class="venture-title" id="page-title">Events.</h1>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-lede">Gatherings, open calls, temporary rooms, and live experiments attached to the construct.</p>
+        <p class="hero-note">This page is built as a public event board and project doorway. Dates can be added as the calendar firms up without rebuilding the whole route.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="/about/#construct-accesspoints">access points</a>
+          <a class="venture-link" href="/archive/">past record</a>
+        </div>
+      </div>
+    </section>
 
-  // Tile dimensions — set responsively, called before anything uses them
-  let TW, TH, EYE, OX, OY;
+    <section class="section" id="active">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">calendar layer</span>
+          <h2 class="section-title">Upcoming / Active</h2>
+        </div>
+        <p class="section-copy">What is currently open, what is forming, and where participation may be useful.</p>
+      </header>
+      <div class="feature-grid">
+        <article class="feature-card is-large" style="--feature-image:url('/assets/paintings/DECISION%204AM.jpg')">
+          <span class="tile-kicker" id="sp-kicker">open for booking</span>
+          <h3 id="sp-title">Sip &amp; Paint</h3>
+          <p id="sp-desc">A guided evening of painting, drinks, and slow looking inside the construct. Canvas, paint, and a glass are provided — bring nothing but yourself.</p>
+          <div class="meta-row">
+            <span class="meta-pill" id="sp-when">date to be announced</span>
+            <span class="meta-pill" id="sp-price">ticketed</span>
+            <span class="meta-pill seats-pill" id="sp-seats">checking seats…</span>
+          </div>
+          <a class="event-cta" id="sp-cta" href="/events/sip-and-paint/">Reserve a seat</a>
+        </article>
+        <div class="status-grid">
+          <article class="status-card">
+            <h3>Open-call channel</h3>
+            <p>A future place for calls for readers, helpers, vendors, performers, documenters, and project-specific contributors.</p>
+          </article>
+          <article class="status-card">
+            <h3>Hosting notes</h3>
+            <p>Event language, capacity, location details, accessibility notes, and house rules live alongside each gathering once it is real.</p>
+          </article>
+        </div>
+      </div>
+    </section>
 
-  function tileSize() {
-    const w = window.innerWidth;
-    if (w < 480)       { TW = 95;  TH = 85;  EYE = 65; }
-    else if (w < 768)  { TW = 120; TH = 108; EYE = 85; }
-    else if (w < 1200) { TW = 148; TH = 132; EYE = 100; }
-    else               { TW = 175; TH = 155; EYE = 115; }
-    OX = (TW - EYE) / 2;
-    OY = (TH - EYE) / 2;
-  }
+    <section class="section" id="pathways">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">ways in</span>
+          <h2 class="section-title">Event Pathways</h2>
+        </div>
+        <p class="section-copy">The page is structured for several kinds of public time without forcing every event into the same shape.</p>
+      </header>
+      <div class="path-grid">
+        <article class="path-card"><h3>Readings</h3><p>Language-led nights for letters, essays, statements, fragments, and unfinished public thinking.</p></article>
+        <article class="path-card"><h3>Open studios</h3><p>Temporary access to process, works in progress, object studies, and material decisions.</p></article>
+        <article class="path-card"><h3>Pop-ups</h3><p>Small commerce rooms for merch, prints, flash, editions, and experiments that fund the next layer.</p></article>
+        <article class="path-card"><h3>Project nights</h3><p>Focused gatherings attached to a film, archive room, collaborative build, or special tattoo project.</p></article>
+      </div>
+    </section>
 
-  tileSize(); // initialise before rowOffset/rowSpeed use TW
+    <section class="section" id="record">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">record</span>
+          <h2 class="section-title">Past / Recorded</h2>
+        </div>
+        <p class="section-copy">As events happen, this becomes the bridge between calendar and archive: what happened, who helped, what changed, and what evidence remains.</p>
+      </header>
+      <div class="timeline">
+        <article class="timeline-item">
+          <span class="timeline-date">in development</span>
+          <div><h3>First public record</h3><p>Photo sets, flyers, set lists, readings, recap notes, or participant credits can be added here after the first documented gathering.</p></div>
+        </article>
+        <article class="timeline-item">
+          <span class="timeline-date">archive bridge</span>
+          <div><h3>Event residue</h3><p>Each event should eventually leave a trail into the archive rather than disappearing after the date passes.</p></div>
+        </article>
+      </div>
+    </section>
 
-  const GLOBAL_DOWN = 0.10;
-  const BASE_SPEED  = 0.18;
-  const POOL        = 20;
-
-  const rowOffset = new Array(POOL);
-  const rowSpeed  = new Array(POOL);
-  for (let r = 0; r < POOL; r++) {
-    const dir    = r % 2 === 0 ? 1 : -1;
-    rowOffset[r] = Math.random() * TW * 1000;
-    rowSpeed[r]  = dir * BASE_SPEED * (0.70 + Math.random() * 0.60);
-  }
-
-  let W, H;
-  let slotY   = 0;
-  let baseRow = 0;
-  let lastTime = 0;
-
-  const openImg   = new Image();
-  const closedImg = new Image();
-  let loaded = 0;
-
-  function resize() {
-    tileSize();
-    W = canvas.width  = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-  }
-
-  /* ---------- draw ---------- */
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-
-    const slots = Math.ceil(H / TH) + 2;
-    const cols  = Math.ceil(W / TW) + 3;
-
-    for (let i = 0; i < slots; i++) {
-      const logicalRow = baseRow + i;
-      const rowId  = ((logicalRow % POOL) + POOL) % POOL;
-      const isOdd  = ((logicalRow % 2) + 2) % 2 === 1;
-      const stagger = isOdd ? TW / 2 : 0;
-      const ox = ((rowOffset[rowId] + stagger) % TW + TW) % TW - TW;
-      const y  = i * TH + slotY - TH;
-
-      for (let c = 0; c < cols; c++) {
-        const parity = ((logicalRow + c) % 2 + 2) % 2;
-        ctx.drawImage(parity === 0 ? openImg : closedImg, c * TW + ox + OX, y + OY, EYE, EYE);
-      }
+    <footer class="footer">
+      <p>&copy; the six.well construct</p>
+      <div class="page-links">
+        <a href="/">return to construct</a>
+        <a href="/archive/">archive</a>
+      </div>
+    </footer>
+  </main>
+  <script>
+  (function () {
+    function fmtWhen(value) {
+      if (!value) return null;
+      try {
+        return new Date(value).toLocaleString("en-US", {
+          timeZone: "America/New_York", weekday: "short", month: "short",
+          day: "numeric", hour: "numeric", minute: "2-digit",
+        });
+      } catch (e) { return null; }
     }
-  }
-
-  /* ---------- loop ---------- */
-  function loop(ts) {
-    const dt = Math.min(ts - lastTime, 50);
-    lastTime = ts;
-    const f = dt / 16.667;
-    slotY += GLOBAL_DOWN * f;
-    while (slotY >= TH) { slotY -= TH; baseRow--; }
-    for (let r = 0; r < POOL; r++) {
-      rowOffset[r] = (rowOffset[r] + rowSpeed[r] * f + TW * 10000) % (TW * 10000);
-    }
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  function onLoad() {
-    if (++loaded < 2) return;
-    resize();
-    window.addEventListener('resize', resize);
-    requestAnimationFrame(ts => { lastTime = ts; requestAnimationFrame(loop); });
-  }
-
-  openImg.onload   = onLoad;
-  closedImg.onload = onLoad;
-  openImg.src   = '/assets/eyes/openeye.png';
-  closedImg.src = '/assets/eyes/closedeye.png';
-})();
-</script>
+    fetch("/api/events/sip-and-paint/context")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.event) return;
+        var ev = data.event;
+        var when = fmtWhen(ev.startsAt);
+        if (when) document.getElementById("sp-when").textContent = when;
+        if (ev.priceFormatted) document.getElementById("sp-price").textContent = ev.priceFormatted + " / seat";
+        var seats = document.getElementById("sp-seats");
+        var cta = document.getElementById("sp-cta");
+        if (ev.soldOut || !ev.open) {
+          seats.textContent = ev.soldOut ? "sold out" : "booking closed";
+          seats.setAttribute("data-state", "soldout");
+          cta.textContent = ev.soldOut ? "Sold out" : "Closed";
+          cta.removeAttribute("href");
+          cta.style.opacity = "0.5";
+          cta.style.pointerEvents = "none";
+        } else {
+          seats.textContent = ev.seatsRemaining + " seat" + (ev.seatsRemaining === 1 ? "" : "s") + " left";
+        }
+      })
+      .catch(function () {});
+  })();
+  </script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
 </body>
 </html>

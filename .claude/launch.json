@@ -10,8 +10,8 @@
     },
     {
       "name": "Wrangler (Cloudflare Workers)",
-      "runtimeExecutable": "wrangler",
-      "runtimeArgs": ["dev"],
+      "runtimeExecutable": "npx.cmd",
+      "runtimeArgs": ["wrangler@latest", "dev", "--port", "8787"],
       "port": 8787
     }
   ]

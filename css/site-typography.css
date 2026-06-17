@@ -1,0 +1,187 @@
+/* Site-wide typography direction: uppercase, tracked text with unified rhythm. */
+
+:where(body, body *:not(script):not(style):not(svg):not(path):not(use):not(canvas):not(img):not(video)) {
+  text-transform: uppercase !important;
+  letter-spacing: 0.1em !important;
+  line-height: 1.42 !important;
+  font-variant-caps: normal;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.hero-title,
+.page-title,
+.wordmark,
+.site-wordmark,
+.brand-wordmark,
+.logo-wordmark,
+.nav-wordmark,
+.site-title,
+.brand-name,
+.logo-text,
+#wordmark,
+#wm-text,
+.section-title,
+.brand-title,
+.brand-title *,
+.manifest-brand-title,
+.manifest-brand-title *,
+.ledger-title,
+.manifesto-line,
+.path-title,
+.note-title,
+.fit-title,
+.booking-cta-title,
+.flash-title,
+.faq-q,
+[class*="wordmark"],
+[id*="wordmark"],
+[class*="logo"],
+[id*="logo"] {
+  letter-spacing: -0.015em !important;
+  line-height: 0.98 !important;
+}
+
+.hero-title,
+.page-title,
+.wordmark,
+.site-wordmark,
+.brand-wordmark,
+.logo-wordmark,
+.nav-wordmark,
+#wordmark,
+#wm-text,
+[class*="wordmark"],
+[id*="wordmark"] {
+  line-height: 0.9 !important;
+}
+
+#wordmark,
+#construct-corner span {
+  text-transform: none !important;
+  letter-spacing: -0.05em !important;
+  line-height: 1 !important;
+  font-variant-caps: normal !important;
+}
+
+#wordmark-desc {
+  text-transform: uppercase !important;
+  letter-spacing: 0.18em !important;
+  line-height: 1.42 !important;
+  font-variant-caps: normal !important;
+}
+
+body.is-mobile #wordmark {
+  letter-spacing: -0.04em !important;
+}
+
+body.is-mobile #wordmark-desc {
+  letter-spacing: 0.18em !important;
+}
+
+#node-labels .node-label {
+  font-family: var(--font-inter, Inter, Arial, sans-serif) !important;
+  letter-spacing: -0.1em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  font-variant-caps: normal !important;
+}
+
+#sub-node-labels .sub-node-label {
+  font-family: var(--font-inter, Inter, Arial, sans-serif) !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.1em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  font-variant-caps: normal !important;
+}
+
+body.is-mobile #sub-node-labels .sub-node-label {
+  letter-spacing: -0.1em !important;
+}
+
+#construct-nav .cnav-label {
+  font-family: var(--font-inter, Inter, Arial, sans-serif) !important;
+  letter-spacing: 0.14em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  font-variant-caps: normal !important;
+}
+
+#cnav-mobile-labels > div,
+#cnav-mobile-center-label {
+  font-family: var(--font-inter, Inter, Arial, sans-serif) !important;
+  letter-spacing: -0.06em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  font-variant-caps: normal !important;
+}
+
+#cnav-chip {
+  font-family: var(--font-inter, Inter, Arial, sans-serif) !important;
+  letter-spacing: 0.06em !important;
+  line-height: 1 !important;
+  text-transform: uppercase !important;
+  font-variant-caps: normal !important;
+}
+
+#cnav-mobile-wordmark span {
+  font-family: var(--font-inter, Inter, Arial, sans-serif) !important;
+  text-transform: none !important;
+  letter-spacing: -0.05em !important;
+  line-height: 1 !important;
+  font-variant-caps: normal !important;
+}
+
+#cnav-mobile-wordmark-desc,
+#cnav-mobile-descriptor {
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.18em !important;
+  line-height: 1.42 !important;
+  font-variant-caps: normal !important;
+}
+
+@media (max-width: 900px) {
+  .hero-title,
+  .page-title {
+    font-size: clamp(64px, 20vw, 118px) !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .hero-title,
+  .page-title {
+    font-size: clamp(56px, 19vw, 92px) !important;
+  }
+}
+
+body[data-venture="tattooing"] .hero-right {
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+body[data-venture="tattooing"] .hero > .hero-right {
+  width: min(100%, 380px);
+}
+
+body[data-venture="tattooing"] .hero > .hero-right .cta-primary {
+  align-self: center;
+  margin-top: 0 !important;
+}
+
+@media (max-width: 768px) {
+  body[data-venture="tattooing"] .hero > .hero-right {
+    width: 100%;
+    align-items: flex-start !important;
+  }
+
+  body[data-venture="tattooing"] .hero > .hero-right .cta-primary {
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
