@@ -891,6 +891,81 @@ export async function handleAdminEventsList(request, env) {
   }
 }
 
+function slugify(value) {
+  return asString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+export async function handleAdminEventCreate(request, env) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  const body = await readJsonOrForm(request);
+  if (!body) return errorResponse("Expected JSON or form data.", 400);
+
+  const title = asString(body.title);
+  if (!title) return errorResponse("Title is required.", 400);
+
+  const slug = slugify(body.slug || title);
+  if (!slug) return errorResponse("A valid slug or title is required.", 400);
+
+  if (body.status !== undefined && !ADMIN_EVENT_STATUSES.has(asString(body.status))) {
+    return errorResponse("Status must be draft, open, or closed.", 400);
+  }
+
+  try {
+    const db = requireEventsDb(env);
+    const existing = await getEventBySlug(db, slug);
+    if (existing) {
+      return errorResponse(`An event with slug "${slug}" already exists.`, 409);
+    }
+
+    const id = `evt_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `INSERT INTO events (
+          id, slug, title, description, starts_at, ends_at, location,
+          price_cents, currency, capacity, max_seats_per_order, status,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        id,
+        slug,
+        title,
+        asString(body.description),
+        asString(body.startsAt) || null,
+        asString(body.endsAt) || null,
+        asString(body.location),
+        Math.max(0, Math.floor(Number(body.priceCents) || 0)),
+        asString(body.currency).toUpperCase() || "USD",
+        Math.max(0, Math.floor(Number(body.capacity) || 0)),
+        Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 4)),
+        ADMIN_EVENT_STATUSES.has(asString(body.status)) ? asString(body.status) : "draft",
+        now,
+        now
+      )
+      .run();
+
+    const created = await getEventBySlug(db, slug);
+    const stats = await eventStats(db, created.id);
+    return json({
+      event: {
+        ...created,
+        priceFormatted: formatMoney(created.priceCents, created.currency),
+        ...stats,
+        seatsRemaining: Math.max(0, created.capacity - stats.paidSeats),
+      },
+    }, { status: 201 });
+  } catch (error) {
+    return errorResponse("Unable to create event.", 500, { detail: error.message });
+  }
+}
+
 export async function handleAdminEventUpdate(request, env, slug) {
   const authError = requireEventsAdmin(request, env);
   if (authError) return authError;
@@ -918,7 +993,7 @@ export async function handleAdminEventUpdate(request, env, slug) {
     if (body.startsAt !== undefined) setField("starts_at", asString(body.startsAt) || null);
     if (body.endsAt !== undefined) setField("ends_at", asString(body.endsAt) || null);
     if (body.priceCents !== undefined) setField("price_cents", Math.max(0, Math.floor(Number(body.priceCents) || 0)));
-    if (body.currency !== undefined) setField("currency", asString(body.currency) || "USD");
+    if (body.currency !== undefined) setField("currency", asString(body.currency).toUpperCase() || "USD");
     if (body.capacity !== undefined) setField("capacity", Math.max(0, Math.floor(Number(body.capacity) || 0)));
     if (body.maxSeatsPerOrder !== undefined) {
       setField("max_seats_per_order", Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 1)));
@@ -1071,8 +1146,9 @@ export async function handleAdminEventsApi(request, env) {
   const parts = url.pathname.split("/").filter(Boolean); // ["api","admin","events",...]
 
   if (!parts[3]) {
-    if (method !== "GET") return errorResponse("Method not allowed.", 405);
-    return handleAdminEventsList(request, env);
+    if (method === "GET") return handleAdminEventsList(request, env);
+    if (method === "POST") return handleAdminEventCreate(request, env);
+    return errorResponse("Method not allowed.", 405);
   }
 
   if (parts[3] === "tickets" && parts[4] && parts[5] === "cancel") {

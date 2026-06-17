@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Events Preview Hub - the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#0e0e0e; --panel:#161616; --line:rgba(255,231,202,0.16);
+    --line-strong:rgba(255,231,202,0.32); --text:#FFE7CA;
+    --muted:rgba(255,231,202,0.62); --dim:rgba(255,231,202,0.38);
+    --accent:#005d25; --signal:#6E0404;
+    --ring:#005d25; --ring-soft:rgba(0,93,37,0.45); --ring-faint:rgba(0,93,37,0.2);
+    --sans:Inter,Arial,sans-serif; --serif:Georgia,"Times New Roman",Times,serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); }
+  a { color:var(--accent); }
+  header { padding:28px 32px; border-bottom:5px solid var(--ring-faint); }
+  h1 { margin:0 0 6px; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
+  header p { margin:0; color:var(--muted); font-size:14px; line-height:1.6; max-width:760px; }
+  main { padding:32px; display:grid; gap:40px; max-width:1100px; margin:0 auto; }
+  h2 { font-family:var(--sans); font-size:13px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); margin:0 0 4px; }
+  .section-note { color:var(--dim); font-size:13px; margin:0 0 18px; line-height:1.6; }
+  .page-grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+  .page-card { border:5px solid var(--ring-faint); padding:18px; display:grid; gap:10px; }
+  .page-card h3 { margin:0; font-family:var(--sans); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text); }
+  .page-card p { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
+  .state-links { display:flex; gap:8px; flex-wrap:wrap; }
+  .state-links a {
+    display:inline-flex; align-items:center; min-height:36px; padding:0 14px;
+    border:5px solid var(--ring-soft); font-family:var(--sans); font-size:10px;
+    font-weight:800; letter-spacing:0.14em; text-transform:uppercase; text-decoration:none;
+  }
+  .state-links a:hover { border-color:var(--accent); }
+  .email-list { display:grid; gap:14px; }
+  .email-card { border:5px solid var(--ring-faint); }
+  .email-card summary {
+    cursor:pointer; padding:16px 18px; font-family:var(--sans); font-size:12px;
+    font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--text);
+    list-style:none; display:flex; justify-content:space-between; gap:12px; align-items:center;
+  }
+  .email-card summary::-webkit-details-marker { display:none; }
+  .email-card summary .key { color:var(--dim); font-weight:600; letter-spacing:0.08em; }
+  .email-card[open] summary { border-bottom:5px solid var(--ring-faint); }
+  .email-body { padding:18px; display:grid; gap:14px; }
+  .email-field label {
+    display:block; color:var(--dim); font-family:var(--sans); font-size:10px;
+    font-weight:800; letter-spacing:0.16em; text-transform:uppercase; margin-bottom:6px;
+  }
+  .email-field .value { color:var(--muted); font-size:14px; line-height:1.5; }
+  .email-field pre {
+    margin:0; white-space:pre-wrap; word-break:break-word; color:var(--muted);
+    font-family:var(--serif); font-size:14px; line-height:1.7; border:5px solid var(--ring-faint); padding:16px;
+  }
+  @media (max-width:680px) {
+    main { padding:20px; }
+    header { padding:20px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Events Preview Hub</h1>
+  <p>
+    Internal reference only (not linked from the public site). Links marked
+    with <code>?preview=1</code> open with dummy data - nothing is read from
+    or written to the live database, and checkout/calendar actions are
+    simulated. Links labelled "Open Live Page" go to the real public pages and
+    read live event data from the API. Email bodies show the current copy with
+    sample values filled in. Source of truth for emails is
+    <code>functions/api/notifications/_lib.js</code>; the events API lives in
+    <code>functions/api/events/_lib.js</code>.
+  </p>
+  <div class="state-links" style="margin-top:14px;">
+    <a href="#" id="baseLocalBtn">Open Links Locally</a>
+    <a href="#" id="baseLiveBtn">Open Links on Live Site</a>
+  </div>
+  <p id="baseNote" style="margin-top:10px; color:var(--dim); font-size:13px;">
+    Links point to <code id="baseNoteUrl"></code>. The live site reflects the
+    last deployed version - push first to see recent changes there.
+  </p>
+</header>
+<main>
+  <section>
+    <h2>Public Event Pages</h2>
+    <p class="section-note">
+      The public-facing event board and ticket pages. In <code>?preview=1</code>
+      they render with dummy events and a disabled Square checkout, so every
+      state can be seen without a live, open event in the database. "Open Live
+      Page" links hit the real API and reflect the current event status.
+    </p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Events Board</h3>
+        <p>The public events index. Feed of bookable gatherings with seats-left and price pills.</p>
+        <div class="state-links">
+          <a href="/events/?preview=1">List</a>
+          <a href="/events/?preview=1&amp;state=empty">Empty</a>
+          <a href="/events/?preview=1&amp;state=error">Load Error</a>
+          <a href="/events/">Open Live Page</a>
+        </div>
+      </div>
+      <div class="page-card">
+        <h3>Sip &amp; Paint Ticket Page</h3>
+        <p>Single-event ticket page: details, seat selector, total, and "continue to payment" checkout.</p>
+        <div class="state-links">
+          <a href="/events/sip-and-paint/?preview=1">Open / Booking</a>
+          <a href="/events/sip-and-paint/?preview=1&amp;state=soldout">Sold Out</a>
+          <a href="/events/sip-and-paint/?preview=1&amp;state=closed">Booking Closed</a>
+          <a href="/events/sip-and-paint/?preview=1&amp;state=error">Load Error</a>
+          <a href="/events/sip-and-paint/">Open Live Page</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Confirmation Page</h2>
+    <p class="section-note">
+      After Square checkout, ticket holders land on
+      <code>/events/confirmed/?ticket=...</code>, which polls the ticket status.
+      The previews below show every state a visitor might land on. The "Add to
+      calendar" button in previews is simulated and never hits the API.
+    </p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Ticket Confirmation</h3>
+        <p>Seat + payment status for a ticket, with add-to-calendar once paid.</p>
+        <div class="state-links">
+          <a href="/events/confirmed/?preview=1&amp;state=paid">Paid</a>
+          <a href="/events/confirmed/?preview=1&amp;state=pending">Pending</a>
+          <a href="/events/confirmed/?preview=1&amp;state=cancelled">Cancelled</a>
+          <a href="/events/confirmed/?preview=1&amp;state=error">Error</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Admin: Events Console</h2>
+    <p class="section-note">
+      Tickets are mirrored into the Submissions Console as
+      <code>event_rsvp</code> entries, and events are managed through the admin
+      API (<code>/api/admin/events</code>). Cancel + refund actions live there.
+    </p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Submissions Console</h3>
+        <p>Where paid tickets appear as bookings and where cancel/refund is triggered.</p>
+        <div class="state-links">
+          <a href="/studio/submissions/">Open Submissions Console</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Email Templates</h2>
+    <p class="section-note">
+      Rendered with sample values. Actual sends go through
+      <code>functions/api/notifications/_lib.js</code> - this view exists so
+      changes can be reviewed without booking a real ticket.
+    </p>
+    <div class="email-list" id="emailList"></div>
+  </section>
+</main>
+<script>
+(function(){
+  const NAME = "Jordan Rivera";
+  const EVENT_TITLE = "Sip & Paint";
+  const WHEN = "Saturday, July 25, 2026 at 7:00 PM EDT";
+  const LOCATION = "the six.well construct — location shared after booking";
+  const SEATS = 2;
+  const TICKET_URL = "https://thesixwellconstruct.com/events/confirmed/?ticket=demo-ticket";
+  const CALENDAR_URL = "https://thesixwellconstruct.com/api/events/tickets/demo-ticket/calendar";
+
+  const templates = [
+    {
+      key: "event_ticket_paid",
+      subject: `You're booked — ${EVENT_TITLE}`,
+      body: [
+        `Hi ${NAME},`,
+        "",
+        `You're booked for ${EVENT_TITLE}.`,
+        "",
+        `Seats reserved: ${SEATS}`,
+        `When: ${WHEN}`,
+        `Where: ${LOCATION}`,
+        "",
+        `Your ticket: ${TICKET_URL}`,
+        `Add to calendar: ${CALENDAR_URL}`,
+        "",
+        "Your spot is confirmed and paid. Reply to this email if anything changes or you have questions before the night.",
+        "",
+        "See you there,",
+        "the six.well construct",
+      ],
+    },
+    {
+      key: "event_ticket_cancelled (refunded)",
+      subject: `Your ticket for ${EVENT_TITLE} was cancelled`,
+      body: [
+        `Hi ${NAME},`,
+        "",
+        `Your ticket for ${EVENT_TITLE} has been cancelled.`,
+        "",
+        `Was scheduled: ${WHEN}`,
+        "",
+        "A full refund has been issued to your original payment method. It may take a few business days to appear.",
+        "",
+        "Sorry to miss you this time — reply to this email if you'd like help getting into a future gathering.",
+        "",
+        "the six.well construct",
+      ],
+    },
+    {
+      key: "event_ticket_cancelled (no refund)",
+      subject: `Your ticket for ${EVENT_TITLE} was cancelled`,
+      body: [
+        `Hi ${NAME},`,
+        "",
+        `Your ticket for ${EVENT_TITLE} has been cancelled.`,
+        "",
+        `Was scheduled: ${WHEN}`,
+        "",
+        "If you were charged, a refund will be handled separately — reply to this email if you have any questions.",
+        "",
+        "Sorry to miss you this time — reply to this email if you'd like help getting into a future gathering.",
+        "",
+        "the six.well construct",
+      ],
+    },
+    {
+      key: "event_ticket_reminder_24h",
+      subject: `Reminder: ${EVENT_TITLE} is tomorrow`,
+      body: [
+        `Hi ${NAME},`,
+        "",
+        `Reminder: ${EVENT_TITLE} is tomorrow.`,
+        "",
+        `When: ${WHEN}`,
+        `Where: ${LOCATION}`,
+        `Seats reserved: ${SEATS}`,
+        "",
+        `Add to calendar: ${CALENDAR_URL}`,
+        "",
+        "Looking forward to seeing you. Reply to this email if anything has changed.",
+        "",
+        "the six.well construct",
+      ],
+    },
+  ];
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+    }[char]));
+  }
+
+  // Page links can be opened against the local dev server or the deployed live
+  // site. Root-relative hrefs are kept in data-path and rewritten whenever the
+  // base changes. When this file is opened directly from disk (file://),
+  // same-origin links cannot work, so the local base falls back to the dev
+  // server URL. Override with ?base=http://localhost:4173 if it runs elsewhere.
+  const LOCAL_BASE = /^https?:$/.test(window.location.protocol)
+    ? window.location.origin
+    : "http://localhost:4173";
+  const LIVE_BASE = "https://thesixwellconstruct.com";
+  const baseParam = (new URLSearchParams(window.location.search).get("base") || "").replace(/\/$/, "");
+  const baseChoiceKey = "swc_preview_base";
+
+  const pageLinks = [...document.querySelectorAll('a[href^="/"]')];
+  pageLinks.forEach((anchor) => { anchor.dataset.path = anchor.getAttribute("href"); });
+
+  function applyBase(choice) {
+    const base = baseParam || (choice === "live" ? LIVE_BASE : LOCAL_BASE);
+    pageLinks.forEach((anchor) => { anchor.setAttribute("href", base + anchor.dataset.path); });
+    document.getElementById("baseNoteUrl").textContent = base;
+    const localBtn = document.getElementById("baseLocalBtn");
+    const liveBtn = document.getElementById("baseLiveBtn");
+    localBtn.style.borderColor = choice === "live" ? "" : "var(--accent)";
+    liveBtn.style.borderColor = choice === "live" ? "var(--accent)" : "";
+  }
+
+  let baseChoice = localStorage.getItem(baseChoiceKey) === "live" ? "live" : "local";
+  applyBase(baseChoice);
+  document.getElementById("baseLocalBtn").addEventListener("click", (event) => {
+    event.preventDefault();
+    baseChoice = "local";
+    localStorage.setItem(baseChoiceKey, baseChoice);
+    applyBase(baseChoice);
+  });
+  document.getElementById("baseLiveBtn").addEventListener("click", (event) => {
+    event.preventDefault();
+    baseChoice = "live";
+    localStorage.setItem(baseChoiceKey, baseChoice);
+    applyBase(baseChoice);
+  });
+
+  const list = document.getElementById("emailList");
+  list.innerHTML = templates.map((tpl) => `
+    <details class="email-card">
+      <summary>
+        <span>${escapeHtml(tpl.subject)}</span>
+        <span class="key">${escapeHtml(tpl.key)}</span>
+      </summary>
+      <div class="email-body">
+        <div class="email-field">
+          <label>Subject</label>
+          <div class="value">${escapeHtml(tpl.subject)}</div>
+        </div>
+        <div class="email-field">
+          <label>Body</label>
+          <pre>${escapeHtml(tpl.body.join("\n"))}</pre>
+        </div>
+      </div>
+    </details>
+  `).join("");
+})();
+</script>
+</body>
+</html>

@@ -105,6 +105,8 @@
   <script>
   (function () {
     var SLUG = "sip-and-paint";
+    var params = new URLSearchParams(window.location.search);
+    var previewMode = params.get("preview") === "1";
     var priceCents = 0, currency = "USD";
     var els = {
       desc: document.getElementById("ev-desc"),
@@ -139,41 +141,72 @@
       els.total.textContent = money(priceCents * n);
     }
 
-    fetch("/api/events/" + SLUG + "/context")
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-      .then(function (res) {
-        if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
-        var ev = res.d.event;
-        priceCents = ev.priceCents; currency = ev.currency;
-        if (ev.description) els.desc.textContent = ev.description;
-        els.when.textContent = fmtWhen(ev.startsAt);
-        els.where.textContent = ev.location || "Shared after booking";
-        els.price.textContent = ev.priceFormatted + " per seat";
-        els.seatsLeft.textContent = ev.soldOut ? "Sold out" : (ev.seatsRemaining + " of " + ev.capacity);
+    function applyContext(ev) {
+      priceCents = ev.priceCents; currency = ev.currency;
+      if (ev.description) els.desc.textContent = ev.description;
+      els.when.textContent = fmtWhen(ev.startsAt);
+      els.where.textContent = ev.location || "Shared after booking";
+      els.price.textContent = ev.priceFormatted + " per seat";
+      els.seatsLeft.textContent = ev.soldOut ? "Sold out" : (ev.seatsRemaining + " of " + ev.capacity);
 
-        if (!ev.open) {
-          els.btn.textContent = ev.soldOut ? "Sold out" : "Booking closed";
-          els.btn.disabled = true;
-          els.seats.disabled = true;
-          updateTotal();
-          return;
-        }
-        var max = Math.min(ev.maxSeatsPerOrder, ev.seatsRemaining);
-        for (var i = 1; i <= max; i++) {
-          var opt = document.createElement("option");
-          opt.value = String(i);
-          opt.textContent = i + (i === 1 ? " seat" : " seats");
-          els.seats.appendChild(opt);
-        }
-        els.seats.addEventListener("change", updateTotal);
+      if (!ev.open) {
+        els.btn.textContent = ev.soldOut ? "Sold out" : "Booking closed";
+        els.btn.disabled = true;
+        els.seats.disabled = true;
         updateTotal();
-        els.btn.disabled = false;
-        els.btn.textContent = "Continue to payment";
-      })
-      .catch(function (e) {
-        els.btn.textContent = "Unavailable";
-        showError(e.message || "This event could not be loaded.");
-      });
+        return;
+      }
+      var max = Math.min(ev.maxSeatsPerOrder, ev.seatsRemaining);
+      for (var i = 1; i <= max; i++) {
+        var opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = i + (i === 1 ? " seat" : " seats");
+        els.seats.appendChild(opt);
+      }
+      els.seats.addEventListener("change", updateTotal);
+      updateTotal();
+      els.btn.disabled = false;
+      els.btn.textContent = previewMode ? "Continue to payment (preview)" : "Continue to payment";
+    }
+
+    function failContext(message) {
+      els.btn.textContent = "Unavailable";
+      showError(message || "This event could not be loaded.");
+    }
+
+    // Dummy context for the events preview hub (?preview=1&state=...). Nothing
+    // is read from the API and checkout is simulated below.
+    function previewContext(state) {
+      var base = {
+        description: "A guided evening of painting, drinks, and slow looking inside the construct.",
+        startsAt: "2026-07-25T19:00:00-04:00",
+        location: "the six.well construct — location shared after booking",
+        priceCents: 4500, currency: "USD",
+        priceFormatted: "$45.00",
+        capacity: 20, maxSeatsPerOrder: 4,
+      };
+      if (state === "soldout") {
+        return Object.assign(base, { seatsRemaining: 0, soldOut: true, open: false });
+      }
+      if (state === "closed") {
+        return Object.assign(base, { seatsRemaining: 8, soldOut: false, open: false });
+      }
+      return Object.assign(base, { seatsRemaining: 12, soldOut: false, open: true });
+    }
+
+    if (previewMode) {
+      var state = params.get("state") || "open";
+      if (state === "error") failContext("This event could not be loaded.");
+      else applyContext(previewContext(state));
+    } else {
+      fetch("/api/events/" + SLUG + "/context")
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
+          applyContext(res.d.event);
+        })
+        .catch(function (e) { failContext(e.message); });
+    }
 
     els.form.addEventListener("submit", function (e) {
       e.preventDefault();
@@ -185,6 +218,11 @@
       var gotcha = els.form.querySelector('[name="_gotcha"]').value;
       if (!name) return showError("Please enter your name.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError("Please enter a valid email.");
+
+      if (previewMode) {
+        showError("Preview mode — Square checkout is disabled. Your selection: " + seats + " seat" + (seats === 1 ? "" : "s") + ".");
+        return;
+      }
 
       els.btn.disabled = true;
       els.btn.textContent = "Sending you to Square…";

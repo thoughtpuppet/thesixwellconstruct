@@ -195,6 +195,22 @@
       }).join("");
     }
 
+    // Events preview hub (?preview=1&state=...): render the board with dummy
+    // events instead of reading the live API.
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("preview") === "1") {
+      var state = params.get("state") || "list";
+      if (state === "error") { renderEmpty("Events couldn't be loaded right now — please check back shortly."); }
+      else if (state === "empty") { renderEvents([]); }
+      else {
+        renderEvents([
+          { slug: "sip-and-paint", title: "Sip & Paint", description: "A guided evening of painting, drinks, and slow looking inside the construct.", startsAt: "2026-07-25T19:00:00-04:00", priceFormatted: "$45.00", seatsRemaining: 12, capacity: 20, soldOut: false, open: true },
+          { slug: "open-studio", title: "Open Studio Night", description: "Temporary access to process, works in progress, and material decisions.", startsAt: "2026-08-08T18:00:00-04:00", priceFormatted: "$20.00", seatsRemaining: 0, capacity: 15, soldOut: true, open: false },
+        ]);
+      }
+      return;
+    }
+
     fetch("/api/events")
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {

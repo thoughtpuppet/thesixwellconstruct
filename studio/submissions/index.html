@@ -22,8 +22,13 @@
   body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); }
   button,input,textarea,select { font:inherit; }
   button { cursor:pointer; }
-  .shell { min-height:100vh; display:grid; grid-template-rows:auto 1fr; }
+  .shell { min-height:100vh; display:grid; grid-template-rows:auto auto 1fr; }
   header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:22px 28px; border-bottom:5px solid var(--ring-faint); }
+  .tabs { display:flex; gap:0; padding:0 28px; border-bottom:5px solid var(--ring-faint); flex-wrap:wrap; }
+  .tab { border:0; border-bottom:3px solid transparent; background:transparent; color:var(--dim); min-height:50px; padding:0 18px; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; transition:color var(--t-fast), border-color var(--t-fast); margin-bottom:-5px; }
+  .tab:hover { color:var(--text); }
+  .tab.is-active { color:var(--accent); border-bottom-color:var(--accent); }
+  .layout.single { grid-template-columns:1fr; }
   h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
   .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .status { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.12em; text-transform:uppercase; }
@@ -305,38 +310,22 @@
 <body>
 <div class="shell">
   <header>
-    <h1>Studio Submissions</h1>
+    <h1>Studio Console</h1>
     <div class="header-actions">
       <span class="status" id="status">Locked</span>
-      <button class="button" id="availabilityBtn" type="button">Availability</button>
-      <button class="button" id="eventsBtn" type="button">Events</button>
       <button class="button" id="refreshBtn" type="button">Refresh</button>
       <button class="button" id="lockBtn" type="button">Lock</button>
     </div>
   </header>
-  <main class="layout">
-    <section class="list-pane">
-      <div class="toolbar">
-        <select id="statusFilter" aria-label="Filter by status">
-          <option value="">ALL STATUSES</option>
-          <option value="new">NEW</option>
-          <option value="reviewing">REVIEWING</option>
-          <option value="approved">APPROVED</option>
-          <option value="declined">DECLINED</option>
-          <option value="booked">BOOKED</option>
-          <option value="archived">ARCHIVED</option>
-        </select>
-        <select id="typeFilter" aria-label="Filter by type">
-          <option value="">ALL TYPES</option>
-          <option value="tattoo_inquiry">TATTOO INQUIRY</option>
-          <option value="flash_claim">FLASH CLAIM</option>
-          <option value="build_brief">BUILD YOUR OWN</option>
-          <option value="consultation">CONSULTATION</option>
-          <option value="special_project">SPECIAL PROJECT</option>
-          <option value="art_acquisition">ART ACQUISITION</option>
-          <option value="event_rsvp">EVENT RSVP</option>
-        </select>
-      </div>
+  <nav class="tabs" id="tabs" aria-label="Console sections">
+    <button class="tab is-active" type="button" data-tab="tattoo">Tattoo Booking</button>
+    <button class="tab" type="button" data-tab="studio">Studio Booking</button>
+    <button class="tab" type="button" data-tab="art">Art Inquiries</button>
+    <button class="tab" type="button" data-tab="events">Events RSVP</button>
+  </nav>
+  <main class="layout" id="layout">
+    <section class="list-pane" id="listPane">
+      <div class="toolbar" id="toolbar"></div>
       <div id="submissionList" class="empty" style="padding:16px;">Unlock to load submissions.</div>
     </section>
     <section class="detail-pane" id="detailPane">
@@ -365,16 +354,24 @@
   const detailEl = document.getElementById("detailPane");
   const refreshBtn = document.getElementById("refreshBtn");
   const lockBtn = document.getElementById("lockBtn");
-  const availabilityBtn = document.getElementById("availabilityBtn");
-  const eventsBtn = document.getElementById("eventsBtn");
-  const statusFilter = document.getElementById("statusFilter");
-  const typeFilter = document.getElementById("typeFilter");
+  const tabsEl = document.getElementById("tabs");
+  const toolbarEl = document.getElementById("toolbar");
+  const layoutEl = document.getElementById("layout");
+  const listPane = document.getElementById("listPane");
   const bookingPreviewKey = "swc_booking_admin_preview";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
+  const TAB_TYPES = {
+    tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "special_project", "consultation", "in_person_consultation"],
+    art: ["art_acquisition", "art_inquiry"],
+    events: ["event_rsvp"],
+  };
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
   let appointments = [];
   let activeId = "";
+  let activeTab = "tattoo";
+  let statusValue = "";
+  let typeValue = "";
   let availabilityPreviewMonth = "";
   let selectedCalendarDay = "";
 
@@ -964,9 +961,66 @@
     statusEl.textContent = message;
   }
 
+  function currentTabTypes() {
+    return TAB_TYPES[activeTab] || [];
+  }
+
+  function emptyDetail() {
+    return '<p class="empty">Select a submission to review details.</p>';
+  }
+
+  function buildToolbar() {
+    const statusOptions = [["", "ALL STATUSES"], ["new", "NEW"], ["reviewing", "REVIEWING"], ["approved", "APPROVED"], ["declined", "DECLINED"], ["booked", "BOOKED"], ["archived", "ARCHIVED"]];
+    let html = `<select id="statusFilter" aria-label="Filter by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+    if (activeTab === "tattoo") {
+      const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["special_project", "SPECIAL PROJECT"], ["consultation", "CONSULTATION"]];
+      html += `<select id="typeFilter" aria-label="Filter by type">${typeOptions.map(([v, l]) => `<option value="${v}"${v === typeValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+    }
+    if (activeTab === "events") {
+      html += `<button class="button" id="eventSetupBtn" type="button">Event Setup</button>`;
+    }
+    toolbarEl.innerHTML = html;
+    enhanceControls(toolbarEl);
+  }
+
+  function renderActiveTab() {
+    tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
+
+    if (activeTab === "studio") {
+      layoutEl.classList.add("single");
+      listPane.classList.add("hidden");
+      renderAvailabilityManager().catch((error) => setStatus(error.message));
+      return;
+    }
+
+    layoutEl.classList.remove("single");
+    listPane.classList.remove("hidden");
+    buildToolbar();
+    renderList();
+
+    const active = activeId ? submissions.find((s) => s.id === activeId) : null;
+    if (active) {
+      renderDetail(active);
+    } else if (activeTab === "events") {
+      renderEventsManager().catch((error) => setStatus(error.message));
+    } else {
+      detailEl.innerHTML = emptyDetail();
+    }
+  }
+
+  function setActiveTab(tab) {
+    if (tab === activeTab) return;
+    activeTab = tab;
+    activeId = "";
+    typeValue = "";
+    selectedCalendarDay = "";
+    renderActiveTab();
+  }
+
   function renderList() {
-    const typeVal = typeFilter.value;
-    const visible = typeVal ? submissions.filter((s) => s.type === typeVal) : submissions;
+    const tabTypes = currentTabTypes();
+    let visible = submissions.filter((s) => tabTypes.includes(s.type));
+    if (typeValue) visible = visible.filter((s) => s.type === typeValue);
 
     if (!visible.length) {
       listEl.innerHTML = '<p class="empty" style="padding:16px;">No submissions found.</p>';
@@ -1300,8 +1354,16 @@ ${meetingLines}
                 <input data-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(ev.startsAt))}">
               </div>
               <div class="field">
-                <label>Price (USD per seat)</label>
+                <label>Ends</label>
+                <input data-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(ev.endsAt))}">
+              </div>
+              <div class="field">
+                <label>Price (per seat)</label>
                 <input data-field="price" type="number" min="0" step="0.01" value="${escapeHtml(dollars)}">
+              </div>
+              <div class="field">
+                <label>Currency</label>
+                <input data-field="currency" value="${escapeHtml(ev.currency || "USD")}" maxlength="3" style="text-transform:uppercase;">
               </div>
               <div class="field">
                 <label>Capacity</label>
@@ -1331,6 +1393,65 @@ ${meetingLines}
     `;
   }
 
+  function renderCreateEventCard() {
+    return `
+      <section class="schedule-section" data-collapse-section>
+        <button class="section-toggle" type="button">+ New event</button>
+        <div class="section-body">
+          <form data-event-create-form>
+            <div class="schedule-grid">
+              <div class="field wide-field">
+                <label>Title</label>
+                <input data-field="title" placeholder="Sip &amp; Paint" required>
+              </div>
+              <div class="field">
+                <label>Slug (optional)</label>
+                <input data-field="slug" placeholder="auto from title">
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select data-field="status">${eventStatusOptions("draft")}</select>
+              </div>
+              <div class="field">
+                <label>Starts</label>
+                <input data-field="startsAt" type="datetime-local">
+              </div>
+              <div class="field">
+                <label>Ends</label>
+                <input data-field="endsAt" type="datetime-local">
+              </div>
+              <div class="field">
+                <label>Price (per seat)</label>
+                <input data-field="price" type="number" min="0" step="0.01" value="0.00">
+              </div>
+              <div class="field">
+                <label>Currency</label>
+                <input data-field="currency" value="USD" maxlength="3" style="text-transform:uppercase;">
+              </div>
+              <div class="field">
+                <label>Capacity</label>
+                <input data-field="capacity" type="number" min="0" step="1" value="0">
+              </div>
+              <div class="field">
+                <label>Max Seats / Order</label>
+                <input data-field="maxSeatsPerOrder" type="number" min="1" step="1" value="4">
+              </div>
+              <div class="field wide-field">
+                <label>Location</label>
+                <input data-field="location">
+              </div>
+              <div class="field wide-field">
+                <label>Description</label>
+                <textarea data-field="description" rows="3"></textarea>
+              </div>
+            </div>
+            <button class="button save-schedule" type="submit">Create Event</button>
+          </form>
+        </div>
+      </section>
+    `;
+  }
+
   async function renderEventsManager() {
     activeId = "";
     detailEl.innerHTML = `
@@ -1338,7 +1459,7 @@ ${meetingLines}
         <div class="detail-head">
           <span class="pill">Public / Events</span>
           <h2>Ticketed Events</h2>
-          <p class="contact">Flip an event between draft, open, and closed; adjust date, price, capacity, and copy. Seat counts reflect paid tickets only. Manage individual RSVPs from the submissions list (filter by EVENT RSVP).</p>
+          <p class="contact">Create a new event, or flip an existing one between draft, open, and closed; adjust date, price, capacity, and copy. Seat counts reflect paid tickets only. Individual RSVPs are listed on the left — select one to manage or refund it.</p>
         </div>
         <div id="eventsManagerBody"><p class="empty" style="font-family:var(--sans);font-size:11px;">Loading events.</p></div>
       </div>
@@ -1347,9 +1468,10 @@ ${meetingLines}
     try {
       const payload = await api("/api/admin/events");
       const events = payload.events || [];
-      body.innerHTML = events.length
+      const existing = events.length
         ? events.map(renderEventCard).join("")
-        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events found. Seed one via migration, then manage it here.</p>';
+        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events yet. Create your first one below.</p>';
+      body.innerHTML = renderCreateEventCard() + existing;
       enhanceControls(detailEl);
     } catch (error) {
       body.innerHTML = `<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message)}</p>`;
@@ -1978,17 +2100,17 @@ ${meetingLines}
     }
 
     setStatus("Loading");
-    const query = statusFilter.value ? `?status=${encodeURIComponent(statusFilter.value)}` : "";
+    const query = statusValue ? `?status=${encodeURIComponent(statusValue)}` : "";
     const payload = await api(`/api/admin/submissions${query}`);
     const appointmentPayload = await api("/api/admin/booking/appointments");
     submissions = payload.submissions || [];
     appointments = appointmentPayload.appointments || [];
     setStatus(`${submissions.length} loaded`);
-    renderList();
-    if (activeId) {
-      const active = submissions.find((submission) => submission.id === activeId);
-      if (active) renderDetail(active);
-    }
+  }
+
+  async function loadAndRender() {
+    await loadSubmissions();
+    renderActiveTab();
   }
 
   tokenForm.addEventListener("submit", async (event) => {
@@ -1997,7 +2119,7 @@ ${meetingLines}
     localStorage.setItem(tokenKey, token);
     tokenModal.classList.add("hidden");
     try {
-      await loadSubmissions();
+      await loadAndRender();
     } catch (error) {
       setStatus(error.message);
       tokenModal.classList.remove("hidden");
@@ -2150,7 +2272,7 @@ ${meetingLines}
       const refundNote = result.refund && result.refund.attempted
         ? (result.refund.ok ? " · refunded" : ` · refund failed (${result.refund.error || "manual refund needed"})`)
         : "";
-      await loadSubmissions();
+      await loadAndRender();
       setStatus(`Ticket cancelled${refundNote}`);
       return;
     }
@@ -2215,7 +2337,7 @@ ${meetingLines}
         });
       }
       await navigator.clipboard?.writeText(payload.token.bookingUrl).catch(() => {});
-      await loadSubmissions();
+      await loadAndRender();
       setStatus("Booking link emailed and copied");
       return;
     }
@@ -2265,7 +2387,7 @@ ${meetingLines}
           internalNotes: document.getElementById("internalNotes").value,
         }),
       });
-      await loadSubmissions();
+      await loadAndRender();
       setStatus("Links revoked");
       return;
     }
@@ -2424,12 +2546,48 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const eventCreateForm = event.target.closest("[data-event-create-form]");
+    if (eventCreateForm) {
+      event.preventDefault();
+      const fieldValue = (name) => eventCreateForm.querySelector(`[data-field="${name}"]`)?.value ?? "";
+      const title = fieldValue("title").trim();
+      if (!title) { setStatus("Title is required"); return; }
+      const startsLocal = fieldValue("startsAt");
+      const endsLocal = fieldValue("endsAt");
+      setStatus("Creating event");
+      try {
+        await api("/api/admin/events", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            title,
+            slug: fieldValue("slug"),
+            status: fieldValue("status"),
+            location: fieldValue("location"),
+            description: fieldValue("description"),
+            startsAt: startsLocal ? localDateTimeToIso(startsLocal) : "",
+            endsAt: endsLocal ? localDateTimeToIso(endsLocal) : "",
+            priceCents: Math.round((Number(fieldValue("price")) || 0) * 100),
+            currency: (fieldValue("currency") || "USD").toUpperCase(),
+            capacity: Number(fieldValue("capacity")) || 0,
+            maxSeatsPerOrder: Number(fieldValue("maxSeatsPerOrder")) || 4,
+          }),
+        });
+        await renderEventsManager();
+        setStatus("Event created");
+      } catch (error) {
+        setStatus(error.message || "Could not create event");
+      }
+      return;
+    }
+
     const eventForm = event.target.closest("[data-event-form]");
     if (eventForm) {
       event.preventDefault();
       const slug = eventForm.dataset.eventForm;
       const fieldValue = (name) => eventForm.querySelector(`[data-field="${name}"]`)?.value ?? "";
       const startsLocal = fieldValue("startsAt");
+      const endsLocal = fieldValue("endsAt");
       setStatus("Saving event");
       await api(`/api/admin/events/${encodeURIComponent(slug)}`, {
         method: "PATCH",
@@ -2440,7 +2598,9 @@ ${meetingLines}
           location: fieldValue("location"),
           description: fieldValue("description"),
           startsAt: startsLocal ? localDateTimeToIso(startsLocal) : "",
+          endsAt: endsLocal ? localDateTimeToIso(endsLocal) : "",
           priceCents: Math.round((Number(fieldValue("price")) || 0) * 100),
+          currency: (fieldValue("currency") || "USD").toUpperCase(),
           capacity: Number(fieldValue("capacity")) || 0,
           maxSeatsPerOrder: Number(fieldValue("maxSeatsPerOrder")) || 1,
         }),
@@ -2568,11 +2728,28 @@ ${meetingLines}
     setStatus("Exception added");
   });
 
-  refreshBtn.addEventListener("click", () => loadSubmissions().catch((error) => setStatus(error.message)));
-  availabilityBtn.addEventListener("click", () => renderAvailabilityManager().catch((error) => setStatus(error.message)));
-  eventsBtn.addEventListener("click", () => renderEventsManager().catch((error) => setStatus(error.message)));
-  statusFilter.addEventListener("change", () => loadSubmissions().catch((error) => setStatus(error.message)));
-  typeFilter.addEventListener("change", () => { renderList(); if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); } });
+  refreshBtn.addEventListener("click", () => loadAndRender().catch((error) => setStatus(error.message)));
+  tabsEl.addEventListener("click", (event) => {
+    const tabBtn = event.target.closest("[data-tab]");
+    if (tabBtn) setActiveTab(tabBtn.dataset.tab);
+  });
+  toolbarEl.addEventListener("change", (event) => {
+    if (event.target.id === "statusFilter") {
+      statusValue = event.target.value;
+      loadAndRender().catch((error) => setStatus(error.message));
+    } else if (event.target.id === "typeFilter") {
+      typeValue = event.target.value;
+      renderList();
+      if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); }
+    }
+  });
+  toolbarEl.addEventListener("click", (event) => {
+    if (event.target.id === "eventSetupBtn") {
+      activeId = "";
+      renderList();
+      renderEventsManager().catch((error) => setStatus(error.message));
+    }
+  });
   detailEl.addEventListener("change", (event) => {
     if (event.target.id !== "previewMonthSelect") return;
     availabilityPreviewMonth = event.target.value;
@@ -2587,11 +2764,9 @@ ${meetingLines}
     setStatus("Locked");
   });
 
-  enhanceControls(document.querySelector(".toolbar"));
-
   if (token) {
     tokenModal.classList.add("hidden");
-    loadSubmissions().catch((error) => {
+    loadAndRender().catch((error) => {
       setStatus(error.message);
       tokenModal.classList.remove("hidden");
     });

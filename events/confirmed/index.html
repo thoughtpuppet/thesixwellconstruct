@@ -90,6 +90,8 @@
     return '<div class="detail-row"><span class="detail-key">' + escapeHtml(key) + '</span><span>' + escapeHtml(value) + '</span></div>';
   }
 
+  const params = new URLSearchParams(window.location.search);
+  const previewMode = params.get("preview") === "1";
   const ctaRow = document.querySelector(".cta-row");
   let calendarAdded = false;
 
@@ -104,17 +106,47 @@
     calendarAdded = true;
     const link = document.createElement("a");
     link.className = "cta-primary";
-    link.href = "/api/events/tickets/" + encodeURIComponent(ticketId) + "/calendar";
+    if (previewMode) {
+      link.href = "#";
+      link.title = "Disabled in preview";
+      link.addEventListener("click", function(e){ e.preventDefault(); });
+    } else {
+      link.href = "/api/events/tickets/" + encodeURIComponent(ticketId) + "/calendar";
+    }
     link.textContent = "Add to calendar";
     ctaRow.insertBefore(link, ctaRow.firstChild);
   }
 
+  // Dummy ticket for the events preview hub (?preview=1&state=...). Nothing is
+  // read from the API; the confirmation flow renders exactly as it would live.
+  function previewTicket(state) {
+    const start = new Date(Date.now() + 26 * 60 * 60 * 1000);
+    return {
+      id: "demo",
+      status: state === "cancelled" ? "cancelled" : (state === "pending" ? "pending" : "paid"),
+      seats: 2,
+      amountFormatted: "$90.00",
+      eventTitle: "Sip & Paint",
+      eventSlug: "sip-and-paint",
+      eventStartsAt: start.toISOString(),
+      eventLocation: "the six.well construct — location shared after booking",
+      contactName: "Jordan Rivera",
+      contactEmail: "jordan@example.com",
+    };
+  }
+
   async function load() {
-    if (!ticketId) throw new Error("Ticket reference is missing.");
-    const response = await fetch("/api/events/tickets/" + encodeURIComponent(ticketId));
-    const payload = await response.json().catch(function(){ return {}; });
-    if (!response.ok) throw new Error(payload.error || "Unable to confirm this ticket.");
-    const ticket = payload.ticket;
+    let ticket;
+    if (previewMode) {
+      if (params.get("state") === "error") throw new Error("Ticket not found.");
+      ticket = previewTicket(params.get("state") || "paid");
+    } else {
+      if (!ticketId) throw new Error("Ticket reference is missing.");
+      const response = await fetch("/api/events/tickets/" + encodeURIComponent(ticketId));
+      const payload = await response.json().catch(function(){ return {}; });
+      if (!response.ok) throw new Error(payload.error || "Unable to confirm this ticket.");
+      ticket = payload.ticket;
+    }
     const paid = ticket.status === "paid";
     const cancelled = ticket.status === "cancelled";
 
@@ -145,6 +177,7 @@
   function run() {
     load()
       .then(function(status){
+        if (previewMode) return;
         if (status === "pending" && polls < MAX_POLLS) {
           polls += 1;
           setTimeout(run, POLL_INTERVAL_MS);
