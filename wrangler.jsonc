@@ -41,6 +41,7 @@
     "SQUARE_ENVIRONMENT": "production",
     "SQUARE_WEBHOOK_NOTIFICATION_URL": "https://thesixwellconstruct.com/api/square/webhook",
     "SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL": "https://thesixwellconstruct.com/api/square-events/webhook",
+    "SQUARE_STUDIO_WEBHOOK_NOTIFICATION_URL": "https://thesixwellconstruct.com/api/square-studio/webhook",
     "NOTIFICATION_FROM_EMAIL": "saisolehamn@artpilltattoohouse.com",
     "NOTIFICATION_FROM_NAME": "art.pill TATTOO HOUSE",
     "NOTIFICATION_REPLY_TO": "saisolehamn@artpilltattoohouse.com",

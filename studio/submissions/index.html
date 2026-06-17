@@ -22,13 +22,35 @@
   body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font-family:var(--serif); }
   button,input,textarea,select { font:inherit; }
   button { cursor:pointer; }
-  .shell { min-height:100vh; display:grid; grid-template-rows:auto auto 1fr; }
+  .shell { min-height:100vh; display:grid; grid-template-rows:auto auto auto 1fr; }
   header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:22px 28px; border-bottom:5px solid var(--ring-faint); }
   .tabs { display:flex; gap:0; padding:0 28px; border-bottom:5px solid var(--ring-faint); flex-wrap:wrap; }
   .tab { border:0; border-bottom:3px solid transparent; background:transparent; color:var(--dim); min-height:50px; padding:0 18px; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; transition:color var(--t-fast), border-color var(--t-fast); margin-bottom:-5px; }
   .tab:hover { color:var(--text); }
   .tab.is-active { color:var(--accent); border-bottom-color:var(--accent); }
+  .subnav { display:flex; gap:8px; align-items:center; padding:10px 28px; border-bottom:5px solid var(--ring-faint); flex-wrap:wrap; }
+  .subnav:empty { display:none; }
+  .subnav-btn { border:5px solid var(--ring-faint); background:transparent; color:var(--dim); min-height:34px; padding:0 14px; font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .subnav-btn:hover { color:var(--text); border-color:var(--accent); }
+  .subnav-btn.is-active { color:#0e0e0e; background:var(--accent); border-color:var(--accent); }
+  .subnav-crumb { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; }
   .layout.single { grid-template-columns:1fr; }
+  /* Home hub calendar */
+  .hub { padding:4px; }
+  .hub-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+  .hub-legend { display:flex; gap:14px; flex-wrap:wrap; }
+  .hub-body { display:grid; grid-template-columns:minmax(280px,1fr) minmax(260px,360px); gap:20px; align-items:start; }
+  .hub-cal .day-button { aspect-ratio:1; }
+  .day-button.has-appt { border-color:var(--accent); color:var(--accent); }
+  .day-button.has-event { background:rgba(168,86,161,0.28); border-color:#A856A1; color:#FFE7CA; }
+  .day-button.has-both { background:rgba(168,86,161,0.28); border-color:var(--accent); color:var(--accent); }
+  .hub-entry { width:100%; text-align:left; border:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:10px 12px; display:grid; gap:4px; cursor:pointer; }
+  .hub-entry:hover { border-color:var(--accent); }
+  .hub-entry .he-top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .hub-entry .he-kind { font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; }
+  .hub-entry.kind-event .he-kind { color:#A856A1; }
+  .hub-entry.kind-appt .he-kind { color:var(--accent); }
+  @media (max-width:900px) { .hub-body { grid-template-columns:1fr; } }
   h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
   .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .status { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.12em; text-transform:uppercase; }
@@ -318,11 +340,13 @@
     </div>
   </header>
   <nav class="tabs" id="tabs" aria-label="Console sections">
-    <button class="tab is-active" type="button" data-tab="tattoo">Tattoo Booking</button>
+    <button class="tab is-active" type="button" data-tab="home">Home</button>
+    <button class="tab" type="button" data-tab="tattoo">Tattoo Booking</button>
     <button class="tab" type="button" data-tab="studio">Studio Booking</button>
     <button class="tab" type="button" data-tab="art">Art Inquiries</button>
-    <button class="tab" type="button" data-tab="events">Events RSVP</button>
+    <button class="tab" type="button" data-tab="events">Events</button>
   </nav>
+  <nav class="subnav" id="subnav" aria-label="Section view"></nav>
   <main class="layout" id="layout">
     <section class="list-pane" id="listPane">
       <div class="toolbar" id="toolbar"></div>
@@ -358,22 +382,63 @@
   const toolbarEl = document.getElementById("toolbar");
   const layoutEl = document.getElementById("layout");
   const listPane = document.getElementById("listPane");
+  const subnavEl = document.getElementById("subnav");
   const bookingPreviewKey = "swc_booking_admin_preview";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const TAB_TYPES = {
     tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "special_project", "consultation", "in_person_consultation"],
+    studio: ["studio_booking"],
     art: ["art_acquisition", "art_inquiry"],
     events: ["event_rsvp"],
+  };
+  // Per-tab availability scopes. The schedule engine + appointments calendar are
+  // shown inside each booking tab, filtered to that tab's categories/booking types.
+  const AVAILABILITY_CONFIGS = {
+    tattoo: {
+      groups: [
+        { category: "tattooing", label: "Tattooing Hours", note: "Applies to Quarter, Half, and Full sessions.", containerId: "weeklyRulesTattooing" },
+        { category: "consultation", label: "Consultation Hours", note: "Applies to in-person and virtual consultations, and in-person build sessions.", containerId: "weeklyRulesConsultation" },
+      ],
+      sessionTypeOptions: [
+        ["", "Any tattoo session"],
+        ["consult_in_person", "In-Person Consultation"],
+        ["consult_virtual", "Virtual Consultation"],
+        ["build_in_person", "In-Person Build Session"],
+        ["tattoo_quarter", "Quarter Session"],
+        ["tattoo_half", "Half Session"],
+        ["tattoo_full", "Full Session"],
+      ],
+      bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_full", "consult_in_person", "consult_virtual", "build_in_person"],
+      walkInPlaceholder: "Small flash, build consults, or studio note",
+    },
+    studio: {
+      groups: [
+        { category: "studio", label: "Studio Hours", note: "Applies to open studio visits, private gatherings, and external event rentals. These can open earlier than tattoo hours.", containerId: "weeklyRulesStudio" },
+      ],
+      sessionTypeOptions: [
+        ["", "Any studio booking"],
+        ["studio_visit", "Open Studio Visit"],
+        ["studio_gathering", "Private Gathering"],
+        ["studio_rental", "External Event Rental"],
+      ],
+      bookingTypeIds: ["studio_visit", "studio_gathering", "studio_rental"],
+      walkInPlaceholder: "Open studio note",
+    },
   };
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
   let appointments = [];
+  let events = [];
   let activeId = "";
-  let activeTab = "tattoo";
+  let activeTab = "home";
+  let subView = "requests";
   let statusValue = "";
   let typeValue = "";
   let availabilityPreviewMonth = "";
   let selectedCalendarDay = "";
+  let homeMonth = "";
+  let selectedHomeDay = "";
+  let selectedEventSlug = "";
 
   function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -760,6 +825,19 @@
       `);
     }
 
+    if (t === "studio_booking") {
+      return card("Studio Booking", `
+        <div class="grid">
+          ${field("Booking", p("booking_type_label") || p("booking_type_id"))}
+          ${field("Deposit", p("deposit_label"))}
+          ${field("Organization", p("organization"))}
+          ${field("Phone", submission.contactPhone || p("phone"))}
+          ${field("Source", submission.sourcePath || "")}
+        </div>
+        <div class="field" style="margin-top:16px;"><label>Details</label><div class="value full">${escapeHtml(p("details") || p("message"))}</div></div>
+      `);
+    }
+
     if (t === "event_rsvp") {
       const amount = p("amount_cents");
       return card("Event RSVP", `
@@ -976,36 +1054,77 @@
       const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["special_project", "SPECIAL PROJECT"], ["consultation", "CONSULTATION"]];
       html += `<select id="typeFilter" aria-label="Filter by type">${typeOptions.map(([v, l]) => `<option value="${v}"${v === typeValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     }
-    if (activeTab === "events") {
-      html += `<button class="button" id="eventSetupBtn" type="button">Event Setup</button>`;
-    }
     toolbarEl.innerHTML = html;
     enhanceControls(toolbarEl);
   }
 
+  function buildSubnav() {
+    let html = "";
+    if (activeTab === "tattoo" || activeTab === "studio") {
+      html = `
+        <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
+        <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>`;
+    } else if (activeTab === "events") {
+      html = `<button class="subnav-btn ${selectedEventSlug ? "" : "is-active"}" type="button" data-events-home>All Events</button>`;
+      if (selectedEventSlug) {
+        const ev = events.find((e) => e.slug === selectedEventSlug);
+        html += `<span class="subnav-crumb">/ ${escapeHtml(ev ? ev.title : selectedEventSlug)}</span>`;
+      }
+      html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
+    }
+    subnavEl.innerHTML = html;
+  }
+
+  function tabForType(type) {
+    if ((TAB_TYPES.studio || []).includes(type)) return "studio";
+    if ((TAB_TYPES.art || []).includes(type)) return "art";
+    if ((TAB_TYPES.events || []).includes(type)) return "events";
+    return "tattoo";
+  }
+
+  function goToSubmission(id) {
+    const sub = submissions.find((s) => s.id === id);
+    if (!sub) return;
+    activeTab = tabForType(sub.type);
+    subView = "requests";
+    activeId = id;
+    selectedEventSlug = activeTab === "events" ? (sub.payload?.event_slug || "") : "";
+    renderActiveTab();
+  }
+
   function renderActiveTab() {
     tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
+    buildSubnav();
 
-    if (activeTab === "studio") {
+    if (activeTab === "home") {
       layoutEl.classList.add("single");
       listPane.classList.add("hidden");
+      toolbarEl.innerHTML = "";
+      renderHome();
+      return;
+    }
+
+    if ((activeTab === "tattoo" || activeTab === "studio") && subView === "availability") {
+      layoutEl.classList.add("single");
+      listPane.classList.add("hidden");
+      selectedCalendarDay = "";
       renderAvailabilityManager().catch((error) => setStatus(error.message));
       return;
     }
 
     layoutEl.classList.remove("single");
     listPane.classList.remove("hidden");
+
+    if (activeTab === "events") {
+      renderEventsTab();
+      return;
+    }
+
     buildToolbar();
     renderList();
-
     const active = activeId ? submissions.find((s) => s.id === activeId) : null;
-    if (active) {
-      renderDetail(active);
-    } else if (activeTab === "events") {
-      renderEventsManager().catch((error) => setStatus(error.message));
-    } else {
-      detailEl.innerHTML = emptyDetail();
-    }
+    detailEl.innerHTML = emptyDetail();
+    if (active) renderDetail(active);
   }
 
   function setActiveTab(tab) {
@@ -1013,13 +1132,233 @@
     activeTab = tab;
     activeId = "";
     typeValue = "";
+    subView = "requests";
     selectedCalendarDay = "";
+    selectedEventSlug = "";
     renderActiveTab();
+  }
+
+  function setSubView(view) {
+    if (subView === view) return;
+    subView = view;
+    activeId = "";
+    renderActiveTab();
+  }
+
+  /* ---- Events tab (events list -> RSVPs) ---- */
+
+  function eventBySlug(slug) {
+    return events.find((e) => e.slug === slug) || null;
+  }
+
+  function rsvpsForEvent(ev) {
+    if (!ev) return [];
+    return submissions.filter((s) => s.type === "event_rsvp" && (
+      (s.payload?.event_slug && s.payload.event_slug === ev.slug) ||
+      (s.payload?.event_title && s.payload.event_title === ev.title)
+    ));
+  }
+
+  function renderEventsTab() {
+    toolbarEl.innerHTML = "";
+    renderEventsList();
+    if (selectedEventSlug) {
+      const active = activeId ? submissions.find((s) => s.id === activeId) : null;
+      if (active) renderDetail(active);
+      else renderEventDetail(selectedEventSlug);
+      return;
+    }
+    renderEventsManager().catch((error) => setStatus(error.message));
+  }
+
+  function renderEventsList() {
+    if (!events.length) {
+      listEl.innerHTML = '<p class="empty" style="padding:16px;">No events yet. Use “Manage / New Events”.</p>';
+      return;
+    }
+    listEl.innerHTML = events.map((ev) => {
+      const count = rsvpsForEvent(ev).length;
+      return `
+        <button class="submission ${ev.slug === selectedEventSlug ? "active" : ""}" type="button" data-event-slug="${escapeHtml(ev.slug)}">
+          <span class="submission-top">
+            <span class="name">${escapeHtml(ev.title)}</span>
+            <span class="pill">${escapeHtml((ev.status || "").toUpperCase())}</span>
+          </span>
+          <span class="meta">${escapeHtml(formatDate(ev.startsAt))}</span>
+          <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span class="date">${count} RSVP${count !== 1 ? "s" : ""}</span>
+            <span class="meta">${ev.paidSeats || 0}/${ev.capacity || 0} seats</span>
+          </span>
+        </button>`;
+    }).join("");
+  }
+
+  function renderEventDetail(slug) {
+    const ev = eventBySlug(slug);
+    if (!ev) { detailEl.innerHTML = emptyDetail(); return; }
+    const rsvps = rsvpsForEvent(ev);
+    const cards = rsvps.length ? rsvps.map((s) => {
+      const seats = s.payload?.seats || "";
+      const paid = s.status === "booked";
+      return `
+        <button class="hub-entry" type="button" data-id="${escapeHtml(s.id)}">
+          <span class="he-top">
+            <span class="name">${escapeHtml(s.contactName || "Unnamed")}</span>
+            <span class="pill">${escapeHtml(s.status)}</span>
+          </span>
+          <span class="meta">${escapeHtml(s.contactEmail || "")}${seats ? ` · ${escapeHtml(String(seats))} seat${Number(seats) !== 1 ? "s" : ""}` : ""} · ${paid ? "Paid" : "Pending"}</span>
+        </button>`;
+    }).join("") : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No RSVPs for this event yet.</p>';
+    detailEl.innerHTML = `
+      <div class="detail-head">
+        <span class="pill">Event · ${escapeHtml((ev.status || "").toUpperCase())}</span>
+        <h2>${escapeHtml(ev.title)}</h2>
+        <p class="contact">
+          ${escapeHtml(formatDate(ev.startsAt))}${ev.location ? `<br>${escapeHtml(ev.location)}` : ""}<br>
+          ${ev.paidSeats || 0} / ${ev.capacity || 0} seats sold · ${escapeHtml(money(ev.priceCents || 0, ev.currency || "USD"))} per seat
+        </p>
+      </div>
+      <div class="review-card">
+        <div class="review-card-header">RSVPs (${rsvps.length})</div>
+        <div style="display:grid;gap:8px;">${cards}</div>
+      </div>`;
+  }
+
+  /* ---- Home hub calendar ---- */
+
+  function scopedAppointments() {
+    const config = AVAILABILITY_CONFIGS[activeTab];
+    if (!config || !config.bookingTypeIds) return appointments;
+    return appointments.filter((a) => config.bookingTypeIds.includes(a.bookingTypeId));
+  }
+
+  function liveAppointments() {
+    return appointments.filter((a) => !["cancelled", "archived"].includes(a.status));
+  }
+
+  function homeEntriesByDay() {
+    const map = new Map();
+    const ensure = (key) => { if (!map.has(key)) map.set(key, { appts: [], events: [] }); return map.get(key); };
+    for (const a of liveAppointments()) {
+      if (!a.startAt) continue;
+      ensure(dayKey(a.startAt)).appts.push(a);
+    }
+    for (const ev of events) {
+      if (!ev.startsAt) continue;
+      ensure(dayKey(ev.startsAt)).events.push(ev);
+    }
+    return map;
+  }
+
+  function renderHome() {
+    const byDay = homeEntriesByDay();
+    const monthKeys = [...new Set([
+      ...liveAppointments().map((a) => monthKey(a.startAt)).filter(Boolean),
+      ...events.map((e) => monthKey(e.startsAt)).filter(Boolean),
+    ])];
+    const nowMonth = monthKey(new Date().toISOString());
+    if (!monthKeys.includes(nowMonth)) monthKeys.push(nowMonth);
+    monthKeys.sort();
+    if (!monthKeys.includes(homeMonth)) homeMonth = nowMonth;
+
+    detailEl.innerHTML = `
+      <div class="availability-manager hub">
+        <div class="detail-head">
+          <span class="pill">Hub</span>
+          <h2>Everything Booked</h2>
+          <p class="contact">All tattoo, consult, and studio appointments plus events in one calendar. Click a day, then an entry to open it in its tab.</p>
+        </div>
+        <div class="hub-head">
+          <div class="calendar-tools" style="grid-template-columns:38px minmax(0,220px) 38px;">
+            <button class="button icon-button" id="homePrevMonth" type="button" aria-label="Previous month">&lt;</button>
+            <select id="homeMonthSelect" aria-label="Month"></select>
+            <button class="button icon-button" id="homeNextMonth" type="button" aria-label="Next month">&gt;</button>
+          </div>
+          <div class="hub-legend">
+            <span class="legend-item"><span class="legend-dot" style="background:var(--accent);border-color:var(--accent);"></span>Appointments</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#A856A1;border-color:#A856A1;"></span>Events</span>
+          </div>
+        </div>
+        <div class="hub-body">
+          <div class="mini-calendar hub-cal"><div id="homeCalendar"></div></div>
+          <div class="appt-day-panel">
+            <div class="appt-day-header">
+              <span class="appt-day-label" id="homeDayLabel">Select a day</span>
+              <span class="appt-day-count" id="homeDayCount"></span>
+            </div>
+            <div id="homeDayList" class="appt-day-list"><p class="empty" style="font-family:var(--sans);font-size:11px;">Pick a day to see its bookings and events.</p></div>
+          </div>
+        </div>
+      </div>`;
+    const select = document.getElementById("homeMonthSelect");
+    select.innerHTML = monthKeys.map((k) => `<option value="${escapeHtml(k)}">${escapeHtml(monthLabel(k))}</option>`).join("");
+    select.value = homeMonth;
+    enhanceControls(detailEl);
+    select._customSync?.();
+    renderHomeCalendar(byDay);
+    renderHomeDay(byDay);
+  }
+
+  function renderHomeCalendar(byDay) {
+    const cal = document.getElementById("homeCalendar");
+    if (!cal || !homeMonth) return;
+    const [year, month] = homeMonth.split("-").map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const cells = [];
+    for (let b = 0; b < firstDay.getDay(); b += 1) cells.push('<button class="day-button blank" type="button" tabindex="-1" aria-hidden="true"></button>');
+    for (let d = 1; d <= daysInMonth; d += 1) {
+      const key = `${homeMonth}-${String(d).padStart(2, "0")}`;
+      const entry = byDay.get(key);
+      const appts = entry?.appts.length || 0;
+      const evs = entry?.events.length || 0;
+      const cls = appts && evs ? "has-both" : evs ? "has-event" : appts ? "has-appt" : "";
+      const sel = key === selectedHomeDay ? " selected" : "";
+      const label = `${appts} appointment${appts !== 1 ? "s" : ""}, ${evs} event${evs !== 1 ? "s" : ""}`;
+      cells.push(`<button class="day-button ${cls}${sel}" type="button" data-home-day="${escapeHtml(key)}" title="${escapeHtml(label)}">${d}</button>`);
+    }
+    cal.innerHTML = `<div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="calendar-grid">${cells.join("")}</div>`;
+  }
+
+  function renderHomeDay(byDay) {
+    const panel = document.getElementById("homeDayList");
+    const label = document.getElementById("homeDayLabel");
+    const countEl = document.getElementById("homeDayCount");
+    if (!panel) return;
+    byDay = byDay || homeEntriesByDay();
+    if (!selectedHomeDay) {
+      if (label) label.textContent = "Select a day";
+      if (countEl) countEl.textContent = "";
+      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">Pick a day to see its bookings and events.</p>';
+      return;
+    }
+    const entry = byDay.get(selectedHomeDay) || { appts: [], events: [] };
+    if (label) label.textContent = new Date(selectedHomeDay + "T12:00:00").toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    const total = entry.appts.length + entry.events.length;
+    if (countEl) countEl.textContent = `${total} item${total !== 1 ? "s" : ""}`;
+    if (!total) { panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">Nothing booked this day.</p>'; return; }
+    const apptCards = [...entry.appts].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)).map((a) => {
+      const time = a.startAt ? new Date(a.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      return `
+        <button class="hub-entry kind-appt" type="button" data-appt-submission="${escapeHtml(a.submissionId || "")}">
+          <span class="he-top"><span class="he-kind">Appointment</span><span class="appt-time">${escapeHtml(time)}</span></span>
+          <span class="name">${escapeHtml(a.clientName || "Unnamed")}</span>
+          <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))} · ${escapeHtml(a.status || "")}</span>
+        </button>`;
+    }).join("");
+    const evCards = entry.events.map((ev) => `
+        <button class="hub-entry kind-event" type="button" data-home-event="${escapeHtml(ev.slug)}">
+          <span class="he-top"><span class="he-kind">Event</span><span class="appt-time">${escapeHtml(ev.startsAt ? new Date(ev.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "")}</span></span>
+          <span class="name">${escapeHtml(ev.title)}</span>
+          <span class="appt-meta">${ev.paidSeats || 0}/${ev.capacity || 0} seats · ${rsvpsForEvent(ev).length} RSVPs</span>
+        </button>`).join("");
+    panel.innerHTML = apptCards + evCards;
   }
 
   function renderList() {
     const tabTypes = currentTabTypes();
     let visible = submissions.filter((s) => tabTypes.includes(s.type));
+    if (statusValue) visible = visible.filter((s) => s.status === statusValue);
     if (typeValue) visible = visible.filter((s) => s.type === typeValue);
 
     if (!visible.length) {
@@ -1335,9 +1674,10 @@ ${meetingLines}
 
   function renderEventCard(ev) {
     const dollars = ((Number(ev.priceCents) || 0) / 100).toFixed(2);
-    const stats = `${ev.paidSeats || 0} / ${ev.capacity || 0} seats sold` +
+    const isFree = (Number(ev.priceCents) || 0) <= 0;
+    const stats = `${isFree ? "Free · " : ""}${ev.paidSeats || 0} / ${ev.capacity || 0} seats ${isFree ? "registered" : "sold"}` +
       (ev.pendingOrders ? ` · ${ev.pendingOrders} pending` : "") +
-      ` · ${ev.paidOrders || 0} paid order${(ev.paidOrders === 1) ? "" : "s"}`;
+      ` · ${ev.paidOrders || 0} ${isFree ? "registration" : "paid order"}${(ev.paidOrders === 1) ? "" : "s"}`;
     return `
       <section class="schedule-section is-open" data-collapse-section>
         <button class="section-toggle" type="button">${escapeHtml(ev.title)} — ${escapeHtml((ev.status || "").toUpperCase())}</button>
@@ -1358,7 +1698,7 @@ ${meetingLines}
                 <input data-field="endsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(ev.endsAt))}">
               </div>
               <div class="field">
-                <label>Price (per seat)</label>
+                <label>Price per seat (0 = free)</label>
                 <input data-field="price" type="number" min="0" step="0.01" value="${escapeHtml(dollars)}">
               </div>
               <div class="field">
@@ -1421,7 +1761,7 @@ ${meetingLines}
                 <input data-field="endsAt" type="datetime-local">
               </div>
               <div class="field">
-                <label>Price (per seat)</label>
+                <label>Price per seat (0 = free)</label>
                 <input data-field="price" type="number" min="0" step="0.01" value="0.00">
               </div>
               <div class="field">
@@ -1467,12 +1807,13 @@ ${meetingLines}
     const body = document.getElementById("eventsManagerBody");
     try {
       const payload = await api("/api/admin/events");
-      const events = payload.events || [];
+      events = payload.events || [];
       const existing = events.length
         ? events.map(renderEventCard).join("")
         : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events yet. Create your first one below.</p>';
       body.innerHTML = renderCreateEventCard() + existing;
       enhanceControls(detailEl);
+      if (activeTab === "events" && !listPane.classList.contains("hidden")) renderEventsList();
     } catch (error) {
       body.innerHTML = `<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message)}</p>`;
     }
@@ -1524,7 +1865,7 @@ ${meetingLines}
 
   function dayStatsFromAppointments() {
     const stats = new Map();
-    for (const a of appointments) {
+    for (const a of scopedAppointments()) {
       if (!a.startAt) continue;
       const key = dayKey(a.startAt);
       const hours = a.endAt ? Math.max(0, (new Date(a.endAt) - new Date(a.startAt)) / 3600000) : 0;
@@ -1579,9 +1920,10 @@ ${meetingLines}
     const countEl = document.getElementById("apptDayCount");
     if (!panel) return;
 
+    const scoped = scopedAppointments();
     const filtered = dayFilter
-      ? appointments.filter((a) => dayKey(a.startAt) === dayFilter)
-      : [...appointments].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+      ? scoped.filter((a) => dayKey(a.startAt) === dayFilter)
+      : [...scoped].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
 
     if (label) {
       label.textContent = dayFilter
@@ -1712,11 +2054,22 @@ ${meetingLines}
   }
 
   async function renderAvailabilityManager() {
+    const config = AVAILABILITY_CONFIGS[activeTab] || AVAILABILITY_CONFIGS.tattoo;
+    const scopeLabel = activeTab === "studio" ? "Studio" : "Tattoo & Consultation";
+    const weeklyGroupsHtml = config.groups.map((group) => `
+          <div class="schedule-group is-open" data-collapse-group>
+            <button class="schedule-group-toggle" type="button">${escapeHtml(group.label)}</button>
+            <div class="schedule-group-body">
+              <p class="contact">${escapeHtml(group.note)}</p>
+              <div id="${group.containerId}"></div>
+            </div>
+          </div>`).join("");
+    const sessionTypeOptionsHtml = config.sessionTypeOptions.map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join("");
     detailEl.innerHTML = `
       <div class="availability-manager">
         <div class="detail-head">
-          <span class="pill">Booking / Availability</span>
-          <h2>Availability Windows</h2>
+          <span class="pill">${escapeHtml(scopeLabel)} / Availability</span>
+          <h2>${escapeHtml(scopeLabel)} Availability</h2>
           <p class="contact">Set recurring weekly hours once. Use exceptions only for extra days, closed days, or unusual blocks.</p>
         </div>
       <section class="schedule-section is-open" data-collapse-section>
@@ -1770,20 +2123,7 @@ ${meetingLines}
         <section class="schedule-section" data-collapse-section>
           <button class="section-toggle" type="button">Weekly Schedule</button>
           <div class="section-body">
-          <div class="schedule-group is-open" data-collapse-group>
-            <button class="schedule-group-toggle" type="button">Tattooing Hours</button>
-            <div class="schedule-group-body">
-              <p class="contact">Applies to Quarter, Half, and Full sessions.</p>
-              <div id="weeklyRulesTattooing"></div>
-            </div>
-          </div>
-          <div class="schedule-group is-open" data-collapse-group>
-            <button class="schedule-group-toggle" type="button">Consultation Hours</button>
-            <div class="schedule-group-body">
-              <p class="contact">Applies to in-person and virtual consultations, and in-person build sessions.</p>
-              <div id="weeklyRulesConsultation"></div>
-            </div>
-          </div>
+          ${weeklyGroupsHtml}
           <button class="button save-schedule" type="submit">Save Schedule</button>
           </div>
         </section>
@@ -1806,7 +2146,7 @@ ${meetingLines}
             </div>
             <div class="field">
               <label for="walkInNote">Note</label>
-              <input id="walkInNote" placeholder="Small flash, build consults, or studio note">
+              <input id="walkInNote" placeholder="${escapeHtml(config.walkInPlaceholder)}">
             </div>
             <button class="button" type="submit">Add Walk-In Window</button>
           </form>
@@ -1854,15 +2194,7 @@ ${meetingLines}
         </div>
         <div class="field">
           <label for="availabilityType">Session Type</label>
-          <select id="availabilityType">
-              <option value="">Any tattoo session</option>
-              <option value="consult_in_person">In-Person Consultation</option>
-              <option value="consult_virtual">Virtual Consultation</option>
-              <option value="build_in_person">In-Person Build Session</option>
-              <option value="tattoo_quarter">Quarter Session</option>
-            <option value="tattoo_half">Half Session</option>
-            <option value="tattoo_full">Full Session</option>
-          </select>
+          <select id="availabilityType">${sessionTypeOptionsHtml}</select>
         </div>
         <div class="field">
           <label for="availabilityCapacity">Same-Time Capacity</label>
@@ -1951,14 +2283,15 @@ ${meetingLines}
         </div>
       </div>
     `;
-    document.getElementById("weeklyRulesTattooing").innerHTML = rules
-      .filter((rule) => (rule.category || "tattooing") === "tattooing")
-      .map(renderRule)
-      .join("");
-    document.getElementById("weeklyRulesConsultation").innerHTML = rules
-      .filter((rule) => rule.category === "consultation")
-      .map(renderRule)
-      .join("");
+    const config = AVAILABILITY_CONFIGS[activeTab] || AVAILABILITY_CONFIGS.tattoo;
+    config.groups.forEach((group) => {
+      const container = document.getElementById(group.containerId);
+      if (!container) return;
+      container.innerHTML = rules
+        .filter((rule) => (rule.category || "tattooing") === group.category)
+        .map(renderRule)
+        .join("");
+    });
     enhanceControls(detailEl);
   }
 
@@ -2100,11 +2433,16 @@ ${meetingLines}
     }
 
     setStatus("Loading");
-    const query = statusValue ? `?status=${encodeURIComponent(statusValue)}` : "";
-    const payload = await api(`/api/admin/submissions${query}`);
+    const payload = await api(`/api/admin/submissions?limit=100`);
     const appointmentPayload = await api("/api/admin/booking/appointments");
     submissions = payload.submissions || [];
     appointments = appointmentPayload.appointments || [];
+    try {
+      const eventsPayload = await api("/api/admin/events");
+      events = eventsPayload.events || [];
+    } catch {
+      events = [];
+    }
     setStatus(`${submissions.length} loaded`);
   }
 
@@ -2127,6 +2465,15 @@ ${meetingLines}
   });
 
   listEl.addEventListener("click", (event) => {
+    const eventRow = event.target.closest("[data-event-slug]");
+    if (eventRow) {
+      selectedEventSlug = eventRow.dataset.eventSlug;
+      activeId = "";
+      buildSubnav();
+      renderEventsList();
+      renderEventDetail(selectedEventSlug);
+      return;
+    }
     const button = event.target.closest("[data-id]");
     if (!button) return;
     activeId = button.dataset.id;
@@ -2736,21 +3083,81 @@ ${meetingLines}
   toolbarEl.addEventListener("change", (event) => {
     if (event.target.id === "statusFilter") {
       statusValue = event.target.value;
-      loadAndRender().catch((error) => setStatus(error.message));
+      renderList();
+      if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); }
     } else if (event.target.id === "typeFilter") {
       typeValue = event.target.value;
       renderList();
       if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); }
     }
   });
-  toolbarEl.addEventListener("click", (event) => {
-    if (event.target.id === "eventSetupBtn") {
+  subnavEl.addEventListener("click", (event) => {
+    const subviewBtn = event.target.closest("[data-subview]");
+    if (subviewBtn) { setSubView(subviewBtn.dataset.subview); return; }
+    if (event.target.closest("[data-events-home]")) {
+      selectedEventSlug = "";
       activeId = "";
-      renderList();
+      buildSubnav();
+      renderEventsList();
+      renderEventsManager().catch((error) => setStatus(error.message));
+      return;
+    }
+    if (event.target.closest("[data-event-setup]")) {
+      selectedEventSlug = "";
+      activeId = "";
+      buildSubnav();
+      renderEventsList();
       renderEventsManager().catch((error) => setStatus(error.message));
     }
   });
+  // Home hub + event-detail navigation (separate listener; uses unique attrs).
+  detailEl.addEventListener("click", (event) => {
+    const homeDay = event.target.closest("[data-home-day]");
+    if (homeDay) {
+      const clicked = homeDay.dataset.homeDay;
+      selectedHomeDay = selectedHomeDay === clicked ? "" : clicked;
+      const byDay = homeEntriesByDay();
+      document.querySelectorAll("#homeCalendar [data-home-day]").forEach((b) => b.classList.toggle("selected", b.dataset.homeDay === selectedHomeDay));
+      renderHomeDay(byDay);
+      return;
+    }
+    if (event.target.id === "homePrevMonth" || event.target.id === "homeNextMonth") {
+      const select = document.getElementById("homeMonthSelect");
+      const options = Array.from(select?.options || []).map((o) => o.value);
+      const current = options.indexOf(homeMonth);
+      const next = event.target.id === "homePrevMonth" ? current - 1 : current + 1;
+      if (options[next]) { homeMonth = options[next]; selectedHomeDay = ""; renderHome(); }
+      return;
+    }
+    const apptEntry = event.target.closest("[data-appt-submission]");
+    if (apptEntry) {
+      const id = apptEntry.dataset.apptSubmission;
+      if (id) goToSubmission(id);
+      return;
+    }
+    const homeEvent = event.target.closest("[data-home-event]");
+    if (homeEvent) {
+      activeTab = "events";
+      subView = "requests";
+      selectedEventSlug = homeEvent.dataset.homeEvent;
+      activeId = "";
+      renderActiveTab();
+      return;
+    }
+    const rsvpEntry = event.target.closest("[data-id]");
+    if (rsvpEntry && activeTab === "events") {
+      const id = rsvpEntry.dataset.id;
+      const submission = submissions.find((s) => s.id === id);
+      if (submission) { activeId = id; renderDetail(submission); }
+    }
+  });
   detailEl.addEventListener("change", (event) => {
+    if (event.target.id === "homeMonthSelect") {
+      homeMonth = event.target.value;
+      selectedHomeDay = "";
+      renderHome();
+      return;
+    }
     if (event.target.id !== "previewMonthSelect") return;
     availabilityPreviewMonth = event.target.value;
     selectedCalendarDay = "";

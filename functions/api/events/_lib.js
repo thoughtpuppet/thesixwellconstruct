@@ -378,6 +378,7 @@ function publicEventView(event, taken) {
     location: event.location,
     priceCents: event.priceCents,
     priceFormatted: formatMoney(event.priceCents, event.currency),
+    free: event.priceCents <= 0,
     currency: event.currency,
     capacity: event.capacity,
     maxSeatsPerOrder: event.maxSeatsPerOrder,
@@ -539,7 +540,9 @@ export async function handleEventCheckout(request, env, slug) {
       );
     }
 
-    if (!eventsSquareConfigured(env)) {
+    const isFree = event.priceCents <= 0;
+
+    if (!isFree && !eventsSquareConfigured(env)) {
       return errorResponse("Ticket checkout is not configured yet.", 503);
     }
 
@@ -559,7 +562,7 @@ export async function handleEventCheckout(request, env, slug) {
       );
     }
 
-    const amountCents = event.priceCents * seats;
+    const amountCents = isFree ? 0 : event.priceCents * seats;
     const ticketId = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -569,6 +572,32 @@ export async function handleEventCheckout(request, env, slug) {
       amountCents,
       currency: event.currency,
     };
+
+    // Free events skip Square entirely: register the seat, mark it paid, and
+    // send the confirmation. No payment link, no "continue to payment".
+    if (isFree) {
+      await db
+        .prepare(
+          `INSERT INTO event_tickets (
+            id, event_id, contact_name, contact_email, contact_phone, seats,
+            amount_cents, currency, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+        )
+        .bind(ticketId, event.id, name, email, phone, seats, amountCents, event.currency, now, now)
+        .run();
+
+      // Mirror into the studio submissions console before marking paid so the
+      // mirror gets moved to booked.
+      await recordEventSubmission(db, env, request, { event, ticket, name, email, phone });
+
+      const ticketRow = await db
+        .prepare("SELECT * FROM event_tickets WHERE id = ?")
+        .bind(ticketId)
+        .first();
+      await markTicketPaid(db, env, request, ticketRow, { free: true }, null);
+
+      return json({ ok: true, ticketId, registered: true, checkoutUrl: null });
+    }
 
     let paymentLink;
     try {

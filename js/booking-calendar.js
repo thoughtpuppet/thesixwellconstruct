@@ -59,6 +59,8 @@
       apiBookingTypeIds = [],
       walkInEmptyMessage = "No walk-in windows are currently set. Book a consultation or check back soon.",
       onBookingTypeChange,
+      contextUrl = "/api/booking/public-consultation/context",
+      checkoutUrl = "/api/booking/public-consultation/checkout",
     } = options;
 
     const previewParams = new URLSearchParams(window.location.search);
@@ -327,7 +329,7 @@
           const params = apiBookingTypeIds.length
             ? `?type=${apiBookingTypeIds.map(encodeURIComponent).join("&type=")}`
             : "";
-          const response = await fetch(`/api/booking/public-consultation/context${params}`, { cache: "no-store" });
+          const response = await fetch(`${contextUrl}${params}`, { cache: "no-store" });
           payload = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
         }
@@ -417,7 +419,7 @@
       formError.style.display = "none";
       try {
         const data = Object.fromEntries(new FormData(form).entries());
-        const response = await fetch("/api/booking/public-consultation/checkout", {
+        const response = await fetch(checkoutUrl, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(data)

@@ -16,6 +16,7 @@ const PUBLIC_TYPES = new Set([
   "build_brief",
   "art_acquisition",
   "consultation",
+  "studio_booking",
 ]);
 
 const REQUIRED_FIELDS_BY_TYPE = {

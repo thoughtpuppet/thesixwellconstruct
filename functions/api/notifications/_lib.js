@@ -78,10 +78,15 @@ const CONSULTATION_BOOKING_TYPE_IDS = [
   VIRTUAL_CONSULTATION_BOOKING_TYPE_ID,
   BUILD_SESSION_BOOKING_TYPE_ID,
 ];
+// Studio bookings are the construct's own product (not the tattoo house).
+const STUDIO_BOOKING_TYPE_IDS = ["studio_visit", "studio_gathering", "studio_rental"];
 const CONFIRMATION_PATHS = {
   [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/consultation/",
   [VIRTUAL_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/virtual-consultation/",
   [BUILD_SESSION_BOOKING_TYPE_ID]: "/booking/confirmed/build/",
+  studio_visit: "/booking/confirmed/studio/",
+  studio_gathering: "/booking/confirmed/studio/",
+  studio_rental: "/booking/confirmed/studio/",
 };
 
 function appointmentConfirmationUrl(env, request, appointment) {
@@ -617,9 +622,47 @@ async function sendBuildSessionConfirmed(env, request, appointment, options = {}
   });
 }
 
+async function sendStudioBookingConfirmed(env, request, appointment, options = {}) {
+  const identity = eventsEmailIdentity(env);
+  const text = [
+    `Hi ${appointment.clientName || "there"},`,
+    "",
+    "Your studio booking at the six.well construct is confirmed.",
+    "",
+    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    `Booking: ${appointment.bookingTypeLabel}`,
+    `Deposit: ${formatMoney(appointment.depositCents, appointment.currency)} received - this holds your date; any balance is settled with the studio.`,
+    "",
+    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
+    "",
+    "We'll reach out with anything you need ahead of your time in the space. Reply to this email with questions.",
+    "",
+    "Thank you,",
+    "the six.well construct",
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    fromEmail: identity.fromEmail,
+    fromName: identity.fromName,
+    replyTo: identity.replyTo,
+    subject: "Your studio booking at the six.well construct is confirmed",
+    text,
+    templateKey: "studio_booking_confirmed",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: options.idempotencyKey || `appointment_confirmed:${appointment.id}`,
+  });
+}
+
 export async function notifyAppointmentConfirmed(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   if (!appointment.clientEmail) return { ok: false, skipped: true };
+
+  if (STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId)) {
+    return sendStudioBookingConfirmed(env, request, appointment, options);
+  }
 
   switch (appointment.bookingTypeId) {
     case IN_PERSON_CONSULTATION_BOOKING_TYPE_ID:

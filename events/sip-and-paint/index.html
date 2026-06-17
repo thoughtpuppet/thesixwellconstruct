@@ -107,7 +107,7 @@
     var SLUG = "sip-and-paint";
     var params = new URLSearchParams(window.location.search);
     var previewMode = params.get("preview") === "1";
-    var priceCents = 0, currency = "USD";
+    var priceCents = 0, currency = "USD", isFree = false;
     var els = {
       desc: document.getElementById("ev-desc"),
       when: document.getElementById("ev-when"),
@@ -138,15 +138,16 @@
     function clearError() { els.err.style.display = "none"; }
     function updateTotal() {
       var n = Number(els.seats.value) || 1;
-      els.total.textContent = money(priceCents * n);
+      els.total.textContent = isFree ? "Free" : money(priceCents * n);
     }
 
     function applyContext(ev) {
       priceCents = ev.priceCents; currency = ev.currency;
+      isFree = ev.free || (Number(ev.priceCents) || 0) <= 0;
       if (ev.description) els.desc.textContent = ev.description;
       els.when.textContent = fmtWhen(ev.startsAt);
       els.where.textContent = ev.location || "Shared after booking";
-      els.price.textContent = ev.priceFormatted + " per seat";
+      els.price.textContent = isFree ? "Free" : ev.priceFormatted + " per seat";
       els.seatsLeft.textContent = ev.soldOut ? "Sold out" : (ev.seatsRemaining + " of " + ev.capacity);
 
       if (!ev.open) {
@@ -166,7 +167,13 @@
       els.seats.addEventListener("change", updateTotal);
       updateTotal();
       els.btn.disabled = false;
-      els.btn.textContent = previewMode ? "Continue to payment (preview)" : "Continue to payment";
+      if (isFree) {
+        els.btn.textContent = previewMode ? "Register (preview)" : "Register";
+        var fn = document.querySelector(".form-note");
+        if (fn) fn.textContent = "This event is free. Register to reserve your seat — you'll get a confirmation by email.";
+      } else {
+        els.btn.textContent = previewMode ? "Continue to payment (preview)" : "Continue to payment";
+      }
     }
 
     function failContext(message) {
@@ -185,6 +192,9 @@
         priceFormatted: "$45.00",
         capacity: 20, maxSeatsPerOrder: 4,
       };
+      if (state === "free") {
+        return Object.assign(base, { priceCents: 0, priceFormatted: "$0.00", free: true, seatsRemaining: 12, soldOut: false, open: true });
+      }
       if (state === "soldout") {
         return Object.assign(base, { seatsRemaining: 0, soldOut: true, open: false });
       }
@@ -225,7 +235,7 @@
       }
 
       els.btn.disabled = true;
-      els.btn.textContent = "Sending you to Square…";
+      els.btn.textContent = isFree ? "Registering…" : "Sending you to Square…";
       fetch("/api/events/" + SLUG + "/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -233,13 +243,19 @@
       })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {
-          if (!res.ok || !res.d.checkoutUrl) throw new Error(res.d.error || "Unable to start checkout.");
-          window.location.href = res.d.checkoutUrl;
+          if (!res.ok) throw new Error(res.d.error || "Unable to register.");
+          if (res.d.checkoutUrl) {
+            window.location.href = res.d.checkoutUrl;
+          } else if (res.d.registered && res.d.ticketId) {
+            window.location.href = "/events/confirmed/?ticket=" + encodeURIComponent(res.d.ticketId);
+          } else {
+            throw new Error(res.d.error || "Unable to register.");
+          }
         })
         .catch(function (e) {
           showError(e.message || "Something went wrong. Please try again.");
           els.btn.disabled = false;
-          els.btn.textContent = "Continue to payment";
+          els.btn.textContent = isFree ? "Register" : "Continue to payment";
         });
     });
   })();

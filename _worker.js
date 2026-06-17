@@ -47,7 +47,10 @@ import {
   handleCreateBookingHold,
   handlePublicConsultationCheckout,
   handlePublicConsultationContext,
+  handlePublicStudioCheckout,
+  handlePublicStudioContext,
   handleSquareWebhook,
+  handleStudioSquareWebhook,
 } from "./functions/api/booking/_lib.js";
 import {
   handleEventsApi,
@@ -430,6 +433,16 @@ async function handleBookingApi(request, env) {
     return handlePublicConsultationCheckout(request, env);
   }
 
+  if (pathname === "/api/booking/public-studio/context") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handlePublicStudioContext(request, env);
+  }
+
+  if (pathname === "/api/booking/public-studio/checkout") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handlePublicStudioCheckout(request, env);
+  }
+
   if (pathname === "/api/booking/confirm") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleConfirmBooking(request, env);
@@ -562,6 +575,11 @@ export default {
     if (url.pathname === "/api/square-events/webhook") {
       if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
       return handleEventsSquareWebhook(request, env);
+    }
+
+    if (url.pathname === "/api/square-studio/webhook") {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handleStudioSquareWebhook(request, env);
     }
 
     if (url.pathname.startsWith("/api/admin/events")) {

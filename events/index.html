@@ -175,7 +175,7 @@
       feed.innerHTML = events.map(function (ev, index) {
         var img = IMAGES[ev.slug] || DEFAULT_IMAGE;
         var seats = seatsLabel(ev);
-        var price = ev.priceFormatted ? ev.priceFormatted + " / seat" : "ticketed";
+        var price = ev.free ? "Free" : (ev.priceFormatted ? ev.priceFormatted + " / seat" : "ticketed");
         var kicker = ev.open ? "open for booking" : (ev.soldOut ? "sold out" : "booking closed");
         var ctaHref = ev.open ? ' href="/events/' + encodeURIComponent(ev.slug) + '/"' : "";
         var ctaLabel = ev.open ? "Reserve a seat" : (ev.soldOut ? "Sold out" : "Closed");

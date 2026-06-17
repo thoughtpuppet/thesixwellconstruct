@@ -15,9 +15,15 @@ const BOOKING_STATUSES = new Set([
 const PUBLIC_CONSULTATION_BOOKING_TYPE_IDS = ["consult_in_person", "build_in_person", "consult_virtual"];
 const VIRTUAL_CONSULTATION_BOOKING_TYPE_ID = "consult_virtual";
 
+// Studio bookings (open visits / private gatherings / external rentals) are
+// deposit-based and route to a dedicated Square location, but otherwise reuse
+// the tattoo deposit appointment pipeline.
+const STUDIO_BOOKING_TYPE_IDS = ["studio_visit", "studio_gathering", "studio_rental"];
+
 const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
   tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full"],
   consultation: ["consult_in_person", "consult_virtual", "build_in_person"],
+  studio: STUDIO_BOOKING_TYPE_IDS,
 };
 
 // Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.
@@ -27,6 +33,9 @@ const CONFIRMATION_PATHS = {
   consult_in_person: "/booking/confirmed/consultation/",
   consult_virtual: "/booking/confirmed/virtual-consultation/",
   build_in_person: "/booking/confirmed/build/",
+  studio_visit: "/booking/confirmed/studio/",
+  studio_gathering: "/booking/confirmed/studio/",
+  studio_rental: "/booking/confirmed/studio/",
 };
 
 function confirmationPathForBookingType(bookingTypeId) {
@@ -1309,6 +1318,318 @@ export async function handlePublicConsultationCheckout(request, env) {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Public studio booking (open visits / gatherings / external rentals) */
+/* Mirrors the public consultation pipeline; deposits route to the      */
+/* dedicated studio Square location via createSquarePaymentLink.         */
+/* ------------------------------------------------------------------ */
+
+async function studioBookingTypes(db, requestedTypeIds = STUDIO_BOOKING_TYPE_IDS) {
+  const ids = (requestedTypeIds || []).filter((id) => STUDIO_BOOKING_TYPE_IDS.includes(id));
+  const allowedIds = ids.length ? ids : STUDIO_BOOKING_TYPE_IDS;
+  const placeholders = allowedIds.map(() => "?").join(", ");
+  const result = await db
+    .prepare(
+      `SELECT * FROM booking_types
+       WHERE id IN (${placeholders}) AND active = 1
+       ORDER BY sort_order ASC, label ASC`
+    )
+    .bind(...allowedIds)
+    .all();
+  return (result.results || []).map(normalizeBookingType);
+}
+
+function studioClientFromBody(body) {
+  const firstName = asString(body.firstName || body.first_name);
+  const lastName = asString(body.lastName || body.last_name);
+  const name = asString(body.name) || [firstName, lastName].filter(Boolean).join(" ").trim();
+  return {
+    name,
+    email: asString(body.email).toLowerCase(),
+    phone: asOptionalString(body.phone),
+    organization: asOptionalString(body.organization),
+    details: asOptionalString(body.details || body.message),
+    understand: asString(body.understand),
+  };
+}
+
+function validatePublicStudio(body) {
+  if (asString(body._gotcha)) return { spam: true };
+  const client = studioClientFromBody(body);
+  if (!client.name) return { error: "Name is required." };
+  if (!client.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client.email)) {
+    return { error: "A valid email is required." };
+  }
+  if (client.understand !== "yes") {
+    return { error: "Please acknowledge the studio booking terms." };
+  }
+  if (!STUDIO_BOOKING_TYPE_IDS.includes(asString(body.bookingTypeId))) {
+    return { error: "Please select a studio booking type." };
+  }
+  if (!asString(body.availabilityWindowId)) {
+    return { error: "Please select an available time." };
+  }
+  return { client };
+}
+
+export async function handlePublicStudioContext(request, env) {
+  try {
+    const db = requireBookingDb(env);
+    const requestedTypes = new URL(request.url).searchParams.getAll("type");
+    const bookingTypes = await studioBookingTypes(db, requestedTypes);
+    if (!bookingTypes.length) {
+      return errorResponse("Studio booking is not configured.", 503);
+    }
+    const windows = await listPublicWindows(db, bookingTypes);
+    return json({
+      ok: true,
+      bookingType: bookingTypes[0],
+      bookingTypes,
+      availabilityWindows: windows,
+      walkInWindows: [],
+    });
+  } catch (error) {
+    return errorResponse("Unable to load studio availability.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+async function createPublicStudioSubmission(db, body, client, bookingType) {
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const payload = {
+    type: "studio_booking",
+    source_path: "/booking/studio/",
+    subject: "New Studio Booking Request",
+    firstName: asString(body.firstName || body.first_name),
+    lastName: asString(body.lastName || body.last_name),
+    name: client.name,
+    email: client.email,
+    phone: client.phone || "",
+    organization: client.organization || "",
+    details: client.details || "",
+    availability_window_id: asString(body.availabilityWindowId),
+    booking_type_id: bookingType.id,
+    booking_type_label: bookingType.label,
+    deposit_label: formatMoney(bookingType.deposit_cents, bookingType.currency || "USD"),
+    understand: client.understand,
+  };
+  const contact = {
+    name: client.name,
+    email: client.email,
+    phone: client.phone || "",
+  };
+
+  await db
+    .prepare(
+      `INSERT INTO submissions (
+        id, type, status, source_path, subject, contact_name, contact_email,
+        contact_phone, contact_json, payload_json, request_meta_json,
+        files_json, internal_notes, booking_url, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      "studio_booking",
+      "approved",
+      "/booking/studio/",
+      payload.subject,
+      client.name,
+      client.email,
+      client.phone || null,
+      JSON.stringify(contact),
+      JSON.stringify(payload),
+      JSON.stringify({ publicBooking: true }),
+      "[]",
+      client.details || "",
+      "",
+      now,
+      now
+    )
+    .run();
+
+  await db
+    .prepare(
+      `INSERT INTO submission_events (
+        id, submission_id, event_type, actor, note, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      crypto.randomUUID(),
+      id,
+      "created",
+      "system",
+      "Created from public studio booking checkout.",
+      now
+    )
+    .run();
+
+  return id;
+}
+
+async function createPublicStudioAppointment(db, body) {
+  const bookingTypeId = asString(body.bookingTypeId);
+  const bookingType = await db
+    .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(bookingTypeId)
+    .first();
+  if (!bookingType || !STUDIO_BOOKING_TYPE_IDS.includes(bookingType.id)) {
+    return { error: "Studio booking is not configured." };
+  }
+
+  const validation = validatePublicStudio(body);
+  if (validation.spam) return { spam: true };
+  if (validation.error) return validation;
+
+  const windowId = asString(body.availabilityWindowId);
+  const existingForClient = await db
+    .prepare(
+      `SELECT * FROM appointments
+       WHERE booking_type_id = ?
+         AND availability_window_id = ?
+         AND lower(client_email) = ?
+         AND status IN ('pending_deposit', 'deposit_pending')
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .bind(bookingType.id, windowId, validation.client.email)
+    .first();
+  if (existingForClient) {
+    return {
+      appointment: normalizeAppointment(existingForClient),
+      bookingType: normalizeBookingType(bookingType),
+      existing: true,
+    };
+  }
+
+  const availability = await ensureAvailable(db, windowId, bookingType.id);
+  if (availability.error) return availability;
+
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const submissionId = await createPublicStudioSubmission(
+    db,
+    body,
+    validation.client,
+    bookingType
+  );
+  await db
+    .prepare(
+      `INSERT INTO appointments (
+        id, submission_id, booking_token_id, booking_type_id, availability_window_id,
+        status, client_name, client_email, client_phone, start_at, end_at,
+        deposit_cents, tip_cents, currency, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      id,
+      submissionId,
+      null,
+      bookingType.id,
+      availability.window.id,
+      "pending_deposit",
+      validation.client.name,
+      validation.client.email,
+      validation.client.phone,
+      availability.window.start_at,
+      availability.window.end_at,
+      bookingType.deposit_cents,
+      0,
+      bookingType.currency || "USD",
+      now,
+      now
+    )
+    .run();
+
+  const appointment = await selectAppointmentWithMeeting(db, id);
+  return { appointment: normalizeAppointment(appointment), bookingType: normalizeBookingType(bookingType) };
+}
+
+export async function handlePublicStudioCheckout(request, env) {
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const result = await createPublicStudioAppointment(db, body);
+    if (result.spam) return json({ ok: true, spam: true });
+    if (result.error) return errorResponse(result.error, 400);
+    if (result.existing && result.appointment.squareCheckoutUrl) {
+      return json({
+        ok: true,
+        checkoutUrl: result.appointment.squareCheckoutUrl,
+        appointmentId: result.appointment.id,
+      });
+    }
+
+    let paymentLink;
+    try {
+      paymentLink = await createSquarePaymentLink(request, env, result.appointment, result.bookingType);
+    } catch (error) {
+      await db
+        .prepare("UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?")
+        .bind("deposit_pending", new Date().toISOString(), result.appointment.id)
+        .run();
+      return errorResponse("Deposit checkout is not configured yet.", 503, {
+        detail: error.message,
+        appointment: result.appointment,
+      });
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `UPDATE appointments
+         SET status = ?, square_order_id = ?, square_payment_link_id = ?,
+             square_checkout_url = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        "deposit_pending",
+        paymentLink.order_id || null,
+        paymentLink.id || null,
+        paymentLink.url,
+        now,
+        result.appointment.id
+      )
+      .run();
+
+    await db
+      .prepare(
+        `INSERT INTO deposit_payments (
+          id, appointment_id, provider, provider_checkout_id, provider_order_id,
+          amount_cents, tip_cents, currency, status, raw_json, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        result.appointment.id,
+        "square",
+        paymentLink.id || null,
+        paymentLink.order_id || null,
+        result.appointment.depositCents,
+        0,
+        result.appointment.currency,
+        "pending",
+        JSON.stringify(paymentLink),
+        now,
+        now
+      )
+      .run();
+
+    return json({
+      ok: true,
+      checkoutUrl: paymentLink.url,
+      appointmentId: result.appointment.id,
+    });
+  } catch (error) {
+    return errorResponse("Unable to start studio booking checkout.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
 export async function handleCreateBookingHold(request, env) {
   const body = await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
@@ -1344,6 +1665,22 @@ function squareConfigured(env) {
   return Boolean(env.SQUARE_ACCESS_TOKEN && env.SQUARE_LOCATION_ID);
 }
 
+function isStudioBookingType(bookingTypeId) {
+  return STUDIO_BOOKING_TYPE_IDS.includes(bookingTypeId);
+}
+
+// Studio bookings settle to a dedicated Square location (own bank/EIN) while
+// sharing the same Square API token — the same isolation events use.
+function squareLocationForBookingType(env, bookingTypeId) {
+  return isStudioBookingType(bookingTypeId)
+    ? asString(env.SQUARE_STUDIO_LOCATION_ID)
+    : asString(env.SQUARE_LOCATION_ID);
+}
+
+function squareConfiguredForBookingType(env, bookingTypeId) {
+  return Boolean(env.SQUARE_ACCESS_TOKEN && squareLocationForBookingType(env, bookingTypeId));
+}
+
 function readinessItem(id, label, ready, message, details = {}) {
   return {
     id,
@@ -1370,6 +1707,10 @@ async function tableReady(db, tableName) {
 
 function squareWebhookNotificationUrl(request, env) {
   return asString(env.SQUARE_WEBHOOK_NOTIFICATION_URL) || `${baseUrlFromRequest(request)}/api/square/webhook`;
+}
+
+function studioSquareWebhookNotificationUrl(request, env) {
+  return asString(env.SQUARE_STUDIO_WEBHOOK_NOTIFICATION_URL) || `${baseUrlFromRequest(request)}/api/square-studio/webhook`;
 }
 
 function timingSafeEqual(left, right) {
@@ -1401,15 +1742,32 @@ async function squareWebhookSignature(rawBody, signatureKey, notificationUrl) {
   return btoa(binary);
 }
 
-async function verifySquareWebhookRequest(request, env, rawBody) {
-  const signatureKey = asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY);
+async function verifySquareSignature(request, rawBody, signatureKey, notificationUrl) {
   if (!signatureKey) return { ok: false, status: 503, error: "Square webhook is not configured." };
   const squareSignature = request.headers.get("x-square-hmacsha256-signature") || "";
-  const expected = await squareWebhookSignature(rawBody, signatureKey, squareWebhookNotificationUrl(request, env));
+  const expected = await squareWebhookSignature(rawBody, signatureKey, notificationUrl);
   if (!timingSafeEqual(expected, squareSignature)) {
     return { ok: false, status: 403, error: "Invalid Square webhook signature." };
   }
   return { ok: true };
+}
+
+async function verifySquareWebhookRequest(request, env, rawBody) {
+  return verifySquareSignature(
+    request,
+    rawBody,
+    asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY),
+    squareWebhookNotificationUrl(request, env)
+  );
+}
+
+async function verifyStudioSquareWebhookRequest(request, env, rawBody) {
+  return verifySquareSignature(
+    request,
+    rawBody,
+    asString(env.SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY),
+    studioSquareWebhookNotificationUrl(request, env)
+  );
 }
 
 function squareMoney(amount, currency) {
@@ -1428,7 +1786,7 @@ function squareLineItem(name, amount, currency) {
 }
 
 async function createSquarePaymentLink(request, env, appointment, bookingType) {
-  if (!squareConfigured(env)) {
+  if (!squareConfiguredForBookingType(env, bookingType.id)) {
     throw new Error("Square is not configured.");
   }
 
@@ -1445,7 +1803,7 @@ async function createSquarePaymentLink(request, env, appointment, bookingType) {
     body: JSON.stringify({
       idempotency_key: appointment.id,
       order: {
-        location_id: env.SQUARE_LOCATION_ID,
+        location_id: squareLocationForBookingType(env, bookingType.id),
         line_items: [
           squareLineItem(
             FULL_PAYMENT_BOOKING_TYPE_IDS.includes(bookingType.id)
@@ -1951,49 +2309,64 @@ function webhookLooksPaid(payload, order) {
   return orderLooksPaid(order) || payment?.status === "COMPLETED";
 }
 
+async function processSquareWebhookPayload(request, env, rawBody) {
+  const payload = JSON.parse(rawBody || "{}");
+  const orderId = webhookOrderId(payload);
+  if (!orderId) return json({ ok: true, ignored: true, reason: "No Square order id." });
+
+  const db = requireBookingDb(env);
+  const appointmentRow = await db
+    .prepare("SELECT * FROM appointments WHERE square_order_id = ? ORDER BY created_at DESC LIMIT 1")
+    .bind(orderId)
+    .first();
+  if (!appointmentRow) return json({ ok: true, ignored: true, reason: "No matching appointment." });
+
+  const order = await fetchSquareOrder(env, orderId);
+  if (!webhookLooksPaid(payload, order)) {
+    await db
+      .prepare(
+        `UPDATE deposit_payments
+         SET status = ?, provider_payment_id = COALESCE(?, provider_payment_id),
+             raw_json = ?, updated_at = ?
+         WHERE appointment_id = ?`
+      )
+      .bind("pending", webhookPaymentId(payload) || null, JSON.stringify(order || payload), new Date().toISOString(), appointmentRow.id)
+      .run();
+    return json({ ok: true, paid: false, appointmentId: appointmentRow.id });
+  }
+
+  const appointment = await confirmPaidAppointment(
+    db,
+    env,
+    request,
+    appointmentRow,
+    order || payload,
+    webhookPaymentId(payload)
+  );
+  return json({ ok: true, paid: true, appointmentId: appointment.id });
+}
+
 export async function handleSquareWebhook(request, env) {
-  let rawBody = "";
   try {
-    rawBody = await request.text();
+    const rawBody = await request.text();
     const signature = await verifySquareWebhookRequest(request, env, rawBody);
     if (!signature.ok) return errorResponse(signature.error, signature.status);
-
-    const payload = JSON.parse(rawBody || "{}");
-    const orderId = webhookOrderId(payload);
-    if (!orderId) return json({ ok: true, ignored: true, reason: "No Square order id." });
-
-    const db = requireBookingDb(env);
-    const appointmentRow = await db
-      .prepare("SELECT * FROM appointments WHERE square_order_id = ? ORDER BY created_at DESC LIMIT 1")
-      .bind(orderId)
-      .first();
-    if (!appointmentRow) return json({ ok: true, ignored: true, reason: "No matching appointment." });
-
-    const order = await fetchSquareOrder(env, orderId);
-    if (!webhookLooksPaid(payload, order)) {
-      await db
-        .prepare(
-          `UPDATE deposit_payments
-           SET status = ?, provider_payment_id = COALESCE(?, provider_payment_id),
-               raw_json = ?, updated_at = ?
-           WHERE appointment_id = ?`
-        )
-        .bind("pending", webhookPaymentId(payload) || null, JSON.stringify(order || payload), new Date().toISOString(), appointmentRow.id)
-        .run();
-      return json({ ok: true, paid: false, appointmentId: appointmentRow.id });
-    }
-
-    const appointment = await confirmPaidAppointment(
-      db,
-      env,
-      request,
-      appointmentRow,
-      order || payload,
-      webhookPaymentId(payload)
-    );
-    return json({ ok: true, paid: true, appointmentId: appointment.id });
+    return await processSquareWebhookPayload(request, env, rawBody);
   } catch (error) {
     return errorResponse("Unable to process Square webhook.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleStudioSquareWebhook(request, env) {
+  try {
+    const rawBody = await request.text();
+    const signature = await verifyStudioSquareWebhookRequest(request, env, rawBody);
+    if (!signature.ok) return errorResponse(signature.error, signature.status);
+    return await processSquareWebhookPayload(request, env, rawBody);
+  } catch (error) {
+    return errorResponse("Unable to process studio Square webhook.", 500, {
       detail: error.message,
     });
   }

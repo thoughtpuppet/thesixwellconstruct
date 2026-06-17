@@ -8,6 +8,11 @@ SQUARE_LOCATION_ID=replace-with-your-square-location-id
 SQUARE_ENVIRONMENT=sandbox
 SQUARE_WEBHOOK_NOTIFICATION_URL=https://thesixwellconstruct.com/api/square/webhook
 SQUARE_WEBHOOK_SIGNATURE_KEY=replace-with-your-square-webhook-signature-key
+# Studio bookings (open visits / gatherings / external rentals): dedicated
+# Square location + webhook (own bank/EIN), same SQUARE_ACCESS_TOKEN as above.
+SQUARE_STUDIO_LOCATION_ID=replace-with-your-studio-square-location-id
+SQUARE_STUDIO_WEBHOOK_NOTIFICATION_URL=https://thesixwellconstruct.com/api/square-studio/webhook
+SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY=replace-with-your-studio-square-webhook-signature-key
 STUDIO_CALENDAR_LOCATION=364 Nelson Street SW, Atlanta, GA 30313
 STUDIO_CONTACT_PHONE=(770) 820-5800
 ZOOM_ACCOUNT_ID=replace-with-your-zoom-account-id
