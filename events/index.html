@@ -70,17 +70,13 @@
         <p class="section-copy">What is currently open, what is forming, and where participation may be useful.</p>
       </header>
       <div class="feature-grid">
-        <article class="feature-card is-large" style="--feature-image:url('/assets/paintings/DECISION%204AM.jpg')">
-          <span class="tile-kicker" id="sp-kicker">open for booking</span>
-          <h3 id="sp-title">Sip &amp; Paint</h3>
-          <p id="sp-desc">A guided evening of painting, drinks, and slow looking inside the construct. Canvas, paint, and a glass are provided — bring nothing but yourself.</p>
-          <div class="meta-row">
-            <span class="meta-pill" id="sp-when">date to be announced</span>
-            <span class="meta-pill" id="sp-price">ticketed</span>
-            <span class="meta-pill seats-pill" id="sp-seats">checking seats…</span>
-          </div>
-          <a class="event-cta" id="sp-cta" href="/events/sip-and-paint/">Reserve a seat</a>
-        </article>
+        <div id="events-feed" class="events-feed">
+          <article class="feature-card is-large" style="--feature-image:url('/assets/paintings/DECISION%204AM.jpg')">
+            <span class="tile-kicker">live container</span>
+            <h3>Loading events…</h3>
+            <p>Pulling the current calendar.</p>
+          </article>
+        </div>
         <div class="status-grid">
           <article class="status-card">
             <h3>Open-call channel</h3>
@@ -140,37 +136,74 @@
   </main>
   <script>
   (function () {
+    var feed = document.getElementById("events-feed");
+    // Optional per-slug artwork; events without a match get a neutral default.
+    var IMAGES = {
+      "sip-and-paint": "/assets/paintings/DECISION%204AM.jpg",
+    };
+    var DEFAULT_IMAGE = "/assets/paintings/DECISION%204AM.jpg";
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c];
+      });
+    }
     function fmtWhen(value) {
-      if (!value) return null;
+      if (!value) return "date to be announced";
       try {
         return new Date(value).toLocaleString("en-US", {
           timeZone: "America/New_York", weekday: "short", month: "short",
           day: "numeric", hour: "numeric", minute: "2-digit",
         });
-      } catch (e) { return null; }
+      } catch (e) { return "date to be announced"; }
     }
-    fetch("/api/events/sip-and-paint/context")
+    function seatsLabel(ev) {
+      if (ev.soldOut) return { text: "sold out", soldout: true };
+      if (!ev.open) return { text: "booking closed", soldout: true };
+      return { text: ev.seatsRemaining + " seat" + (ev.seatsRemaining === 1 ? "" : "s") + " left", soldout: false };
+    }
+    function renderEmpty(message) {
+      feed.innerHTML =
+        '<article class="feature-card is-large" style="--feature-image:url(\'' + DEFAULT_IMAGE + '\')">' +
+        '<span class="tile-kicker">live container</span>' +
+        '<h3>Nothing open right now</h3>' +
+        '<p>' + escapeHtml(message) + '</p>' +
+        '</article>';
+    }
+    function renderEvents(events) {
+      if (!events.length) { renderEmpty("No public gatherings are open for booking yet. Check back as the calendar firms up."); return; }
+      feed.innerHTML = events.map(function (ev, index) {
+        var img = IMAGES[ev.slug] || DEFAULT_IMAGE;
+        var seats = seatsLabel(ev);
+        var price = ev.priceFormatted ? ev.priceFormatted + " / seat" : "ticketed";
+        var kicker = ev.open ? "open for booking" : (ev.soldOut ? "sold out" : "booking closed");
+        var ctaHref = ev.open ? ' href="/events/' + encodeURIComponent(ev.slug) + '/"' : "";
+        var ctaLabel = ev.open ? "Reserve a seat" : (ev.soldOut ? "Sold out" : "Closed");
+        var ctaStyle = ev.open ? "" : ' style="opacity:0.5;pointer-events:none;"';
+        return '' +
+          '<article class="feature-card' + (index === 0 ? " is-large" : "") + '" style="--feature-image:url(\'' + img + '\')">' +
+          '<span class="tile-kicker">' + escapeHtml(kicker) + '</span>' +
+          '<h3>' + escapeHtml(ev.title) + '</h3>' +
+          '<p>' + escapeHtml(ev.description || "") + '</p>' +
+          '<div class="meta-row">' +
+          '<span class="meta-pill">' + escapeHtml(fmtWhen(ev.startsAt)) + '</span>' +
+          '<span class="meta-pill">' + escapeHtml(price) + '</span>' +
+          '<span class="meta-pill seats-pill"' + (seats.soldout ? ' data-state="soldout"' : "") + '>' + escapeHtml(seats.text) + '</span>' +
+          '</div>' +
+          '<a class="event-cta"' + ctaHref + ctaStyle + '>' + escapeHtml(ctaLabel) + '</a>' +
+          '</article>';
+      }).join("");
+    }
+
+    fetch("/api/events")
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (!data || !data.event) return;
-        var ev = data.event;
-        var when = fmtWhen(ev.startsAt);
-        if (when) document.getElementById("sp-when").textContent = when;
-        if (ev.priceFormatted) document.getElementById("sp-price").textContent = ev.priceFormatted + " / seat";
-        var seats = document.getElementById("sp-seats");
-        var cta = document.getElementById("sp-cta");
-        if (ev.soldOut || !ev.open) {
-          seats.textContent = ev.soldOut ? "sold out" : "booking closed";
-          seats.setAttribute("data-state", "soldout");
-          cta.textContent = ev.soldOut ? "Sold out" : "Closed";
-          cta.removeAttribute("href");
-          cta.style.opacity = "0.5";
-          cta.style.pointerEvents = "none";
-        } else {
-          seats.textContent = ev.seatsRemaining + " seat" + (ev.seatsRemaining === 1 ? "" : "s") + " left";
-        }
+        if (!data || !Array.isArray(data.events)) { renderEmpty("Events couldn't be loaded right now — please check back shortly."); return; }
+        renderEvents(data.events);
       })
-      .catch(function () {});
+      .catch(function () {
+        renderEmpty("Events couldn't be loaded right now — please check back shortly.");
+      });
   })();
   </script>
   <script src="/js/transition.js"></script>

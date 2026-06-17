@@ -90,6 +90,25 @@
     return '<div class="detail-row"><span class="detail-key">' + escapeHtml(key) + '</span><span>' + escapeHtml(value) + '</span></div>';
   }
 
+  const ctaRow = document.querySelector(".cta-row");
+  let calendarAdded = false;
+
+  // Square's webhook usually lands within seconds; poll a few times before
+  // asking the visitor to refresh, so most pending -> paid flips are invisible.
+  const POLL_INTERVAL_MS = 2500;
+  const MAX_POLLS = 6;
+  let polls = 0;
+
+  function addCalendarLink() {
+    if (calendarAdded || !ctaRow) return;
+    calendarAdded = true;
+    const link = document.createElement("a");
+    link.className = "cta-primary";
+    link.href = "/api/events/tickets/" + encodeURIComponent(ticketId) + "/calendar";
+    link.textContent = "Add to calendar";
+    ctaRow.insertBefore(link, ctaRow.firstChild);
+  }
+
   async function load() {
     if (!ticketId) throw new Error("Ticket reference is missing.");
     const response = await fetch("/api/events/tickets/" + encodeURIComponent(ticketId));
@@ -97,13 +116,16 @@
     if (!response.ok) throw new Error(payload.error || "Unable to confirm this ticket.");
     const ticket = payload.ticket;
     const paid = ticket.status === "paid";
+    const cancelled = ticket.status === "cancelled";
 
     badge.classList.toggle("pending", !paid);
-    badgeText.textContent = paid ? "Ticket Confirmed" : "Payment Pending";
-    title.textContent = paid ? "You're in." : "Your ticket is waiting on payment.";
+    badgeText.textContent = paid ? "Ticket Confirmed" : (cancelled ? "Ticket Cancelled" : "Payment Pending");
+    title.textContent = paid ? "You're in." : (cancelled ? "This ticket was cancelled." : "Your ticket is waiting on payment.");
     lead.textContent = paid
       ? "Your seat is confirmed and paid. A confirmation email is on its way — keep an eye out for any direct follow-up before the night."
-      : "Square hasn't returned a paid order yet. If you just paid, refresh this page in a moment.";
+      : cancelled
+        ? "This ticket has been cancelled. If a refund is due, it has been issued to your original payment method."
+        : "Square hasn't returned a paid order yet. We're checking automatically — this can take a few seconds.";
 
     const rows = [
       renderRow("Event", ticket.eventTitle),
@@ -115,14 +137,30 @@
       renderRow("Status", ticket.status),
     ];
     details.innerHTML = rows.filter(Boolean).join("");
+
+    if (paid && ticket.eventStartsAt) addCalendarLink();
+    return ticket.status;
   }
 
-  load().catch(function(error){
-    badge.classList.add("pending");
-    badgeText.textContent = "Confirmation Issue";
-    title.textContent = "This ticket could not be confirmed.";
-    lead.textContent = error.message;
-  });
+  function run() {
+    load()
+      .then(function(status){
+        if (status === "pending" && polls < MAX_POLLS) {
+          polls += 1;
+          setTimeout(run, POLL_INTERVAL_MS);
+        } else if (status === "pending") {
+          lead.textContent = "Square still hasn't returned a paid order. If you just paid, refresh this page in a moment.";
+        }
+      })
+      .catch(function(error){
+        badge.classList.add("pending");
+        badgeText.textContent = "Confirmation Issue";
+        title.textContent = "This ticket could not be confirmed.";
+        lead.textContent = error.message;
+      });
+  }
+
+  run();
 })();
 </script>
 <script src="/js/transition.js"></script>

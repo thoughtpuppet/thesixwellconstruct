@@ -76,6 +76,10 @@
               <input type="email" id="email" name="email" autocomplete="email" required>
             </div>
             <div class="field">
+              <label for="phone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+              <input type="tel" id="phone" name="phone" autocomplete="tel">
+            </div>
+            <div class="field">
               <label for="seats">Seats</label>
               <select id="seats" name="seats"></select>
             </div>
@@ -176,6 +180,7 @@
       clearError();
       var name = document.getElementById("name").value.trim();
       var email = document.getElementById("email").value.trim();
+      var phone = document.getElementById("phone").value.trim();
       var seats = Number(els.seats.value) || 1;
       var gotcha = els.form.querySelector('[name="_gotcha"]').value;
       if (!name) return showError("Please enter your name.");
@@ -186,7 +191,7 @@
       fetch("/api/events/" + SLUG + "/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name, email: email, seats: seats, _gotcha: gotcha }),
+        body: JSON.stringify({ name: name, email: email, phone: phone, seats: seats, _gotcha: gotcha }),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {

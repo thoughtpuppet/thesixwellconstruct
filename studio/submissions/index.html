@@ -309,6 +309,7 @@
     <div class="header-actions">
       <span class="status" id="status">Locked</span>
       <button class="button" id="availabilityBtn" type="button">Availability</button>
+      <button class="button" id="eventsBtn" type="button">Events</button>
       <button class="button" id="refreshBtn" type="button">Refresh</button>
       <button class="button" id="lockBtn" type="button">Lock</button>
     </div>
@@ -365,6 +366,7 @@
   const refreshBtn = document.getElementById("refreshBtn");
   const lockBtn = document.getElementById("lockBtn");
   const availabilityBtn = document.getElementById("availabilityBtn");
+  const eventsBtn = document.getElementById("eventsBtn");
   const statusFilter = document.getElementById("statusFilter");
   const typeFilter = document.getElementById("typeFilter");
   const bookingPreviewKey = "swc_booking_admin_preview";
@@ -1108,6 +1110,13 @@ ${meetingLines}
 
   function textReminderCopy(submission) {
     const name = submission.contactName || payloadValue(submission, "name") || "there";
+    if (submission.type === "event_rsvp") {
+      const eventTitle = payloadValue(submission, "event_title") || "the event";
+      if (submission.status === "booked") {
+        return `Hi ${name}, this is the six.well construct. Your spot for ${eventTitle} is confirmed and paid. See you there — reply here if anything changes.`;
+      }
+      return `Hi ${name}, this is the six.well construct. We saw your RSVP for ${eventTitle}. Your seat is held once Square payment clears — reply here if you need a hand.`;
+    }
     const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
     const appointment = latestAppointmentFor(submission.id);
     if (appointment && appointment.status === "confirmed") {
@@ -1143,6 +1152,19 @@ ${meetingLines}
   function renderDetail(submission) {
     const isProtected = submission.status === "booked" || submission.status === "paid";
     const hasAppointment = !!latestAppointmentFor(submission.id);
+    const isEvent = submission.type === "event_rsvp";
+    const eventTicketId = isEvent ? payloadValue(submission, "ticket_id") : "";
+    const eventPaid = isEvent && submission.status === "booked";
+    const eventBlock = isEvent ? `
+            <p style="font-family:var(--sans);font-size:11px;color:var(--dim);">
+              Public event RSVP — paid through Square Events. No tattoo booking link applies.
+            </p>
+            <div class="booking-actions">
+              ${eventPaid ? `<button class="button" type="button" data-resend-event-ticket="${escapeHtml(eventTicketId)}">Resend Ticket Email</button>` : ""}
+              ${eventTicketId ? `<button class="button danger-button" type="button" data-cancel-event-ticket="${escapeHtml(eventTicketId)}">${eventPaid ? "Cancel Ticket &amp; Refund" : "Cancel Ticket"}</button>` : ""}
+            </div>
+            <input id="bookingUrl" type="hidden" value="">
+          ` : "";
     detailEl.innerHTML = `
       <div class="detail-head">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -1170,7 +1192,7 @@ ${meetingLines}
           </select>
         </div>
         <div class="field">
-          ${hasAppointment ? `
+          ${isEvent ? eventBlock : hasAppointment ? `
             <p style="font-family:var(--sans);font-size:11px;color:var(--dim);">
               This consultation was booked directly through the public calendar.
               No booking access link is needed — see Appointment Payment above.
@@ -1249,6 +1271,89 @@ ${meetingLines}
     if (date.toString() === "Invalid Date") return "";
     const offset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+  }
+
+  function eventStatusOptions(current) {
+    return ["draft", "open", "closed"].map((value) =>
+      `<option value="${value}" ${value === current ? "selected" : ""}>${value.toUpperCase()}</option>`
+    ).join("");
+  }
+
+  function renderEventCard(ev) {
+    const dollars = ((Number(ev.priceCents) || 0) / 100).toFixed(2);
+    const stats = `${ev.paidSeats || 0} / ${ev.capacity || 0} seats sold` +
+      (ev.pendingOrders ? ` · ${ev.pendingOrders} pending` : "") +
+      ` · ${ev.paidOrders || 0} paid order${(ev.paidOrders === 1) ? "" : "s"}`;
+    return `
+      <section class="schedule-section is-open" data-collapse-section>
+        <button class="section-toggle" type="button">${escapeHtml(ev.title)} — ${escapeHtml((ev.status || "").toUpperCase())}</button>
+        <div class="section-body">
+          <p class="contact">${escapeHtml(stats)}</p>
+          <form data-event-form="${escapeHtml(ev.slug)}">
+            <div class="schedule-grid">
+              <div class="field">
+                <label>Status</label>
+                <select data-field="status">${eventStatusOptions(ev.status)}</select>
+              </div>
+              <div class="field">
+                <label>Starts</label>
+                <input data-field="startsAt" type="datetime-local" value="${escapeHtml(formatDateTimeInput(ev.startsAt))}">
+              </div>
+              <div class="field">
+                <label>Price (USD per seat)</label>
+                <input data-field="price" type="number" min="0" step="0.01" value="${escapeHtml(dollars)}">
+              </div>
+              <div class="field">
+                <label>Capacity</label>
+                <input data-field="capacity" type="number" min="0" step="1" value="${escapeHtml(String(ev.capacity || 0))}">
+              </div>
+              <div class="field">
+                <label>Max Seats / Order</label>
+                <input data-field="maxSeatsPerOrder" type="number" min="1" step="1" value="${escapeHtml(String(ev.maxSeatsPerOrder || 1))}">
+              </div>
+              <div class="field wide-field">
+                <label>Title</label>
+                <input data-field="title" value="${escapeHtml(ev.title || "")}">
+              </div>
+              <div class="field wide-field">
+                <label>Location</label>
+                <input data-field="location" value="${escapeHtml(ev.location || "")}">
+              </div>
+              <div class="field wide-field">
+                <label>Description</label>
+                <textarea data-field="description" rows="3">${escapeHtml(ev.description || "")}</textarea>
+              </div>
+            </div>
+            <button class="button save-schedule" type="submit">Save Event</button>
+          </form>
+        </div>
+      </section>
+    `;
+  }
+
+  async function renderEventsManager() {
+    activeId = "";
+    detailEl.innerHTML = `
+      <div class="availability-manager">
+        <div class="detail-head">
+          <span class="pill">Public / Events</span>
+          <h2>Ticketed Events</h2>
+          <p class="contact">Flip an event between draft, open, and closed; adjust date, price, capacity, and copy. Seat counts reflect paid tickets only. Manage individual RSVPs from the submissions list (filter by EVENT RSVP).</p>
+        </div>
+        <div id="eventsManagerBody"><p class="empty" style="font-family:var(--sans);font-size:11px;">Loading events.</p></div>
+      </div>
+    `;
+    const body = document.getElementById("eventsManagerBody");
+    try {
+      const payload = await api("/api/admin/events");
+      const events = payload.events || [];
+      body.innerHTML = events.length
+        ? events.map(renderEventCard).join("")
+        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events found. Seed one via migration, then manage it here.</p>';
+      enhanceControls(detailEl);
+    } catch (error) {
+      body.innerHTML = `<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message)}</p>`;
+    }
   }
 
   function editAvailabilityPayload(form) {
@@ -2019,6 +2124,37 @@ ${meetingLines}
       return;
     }
 
+    const resendEventTicket = event.target.closest("[data-resend-event-ticket]");
+    if (resendEventTicket) {
+      const eventTicketId = resendEventTicket.dataset.resendEventTicket;
+      setStatus("Resending ticket email");
+      await api("/api/admin/notifications/resend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ templateKey: "event_ticket_paid", eventTicketId }),
+      });
+      setStatus("Ticket email resent");
+      return;
+    }
+
+    const cancelEventTicket = event.target.closest("[data-cancel-event-ticket]");
+    if (cancelEventTicket) {
+      const eventTicketId = cancelEventTicket.dataset.cancelEventTicket;
+      const refund = window.confirm("Cancel this ticket. Click OK to also issue a Square refund (paid tickets only), or Cancel to cancel without refunding.");
+      setStatus("Cancelling ticket");
+      const result = await api(`/api/admin/events/tickets/${encodeURIComponent(eventTicketId)}/cancel`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refund }),
+      });
+      const refundNote = result.refund && result.refund.attempted
+        ? (result.refund.ok ? " · refunded" : ` · refund failed (${result.refund.error || "manual refund needed"})`)
+        : "";
+      await loadSubmissions();
+      setStatus(`Ticket cancelled${refundNote}`);
+      return;
+    }
+
     const deleteButton = event.target.closest("[data-delete-window]");
     if (deleteButton) {
       const id = deleteButton.dataset.deleteWindow;
@@ -2288,6 +2424,32 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const eventForm = event.target.closest("[data-event-form]");
+    if (eventForm) {
+      event.preventDefault();
+      const slug = eventForm.dataset.eventForm;
+      const fieldValue = (name) => eventForm.querySelector(`[data-field="${name}"]`)?.value ?? "";
+      const startsLocal = fieldValue("startsAt");
+      setStatus("Saving event");
+      await api(`/api/admin/events/${encodeURIComponent(slug)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: fieldValue("status"),
+          title: fieldValue("title"),
+          location: fieldValue("location"),
+          description: fieldValue("description"),
+          startsAt: startsLocal ? localDateTimeToIso(startsLocal) : "",
+          priceCents: Math.round((Number(fieldValue("price")) || 0) * 100),
+          capacity: Number(fieldValue("capacity")) || 0,
+          maxSeatsPerOrder: Number(fieldValue("maxSeatsPerOrder")) || 1,
+        }),
+      });
+      await renderEventsManager();
+      setStatus("Event saved");
+      return;
+    }
+
     const editForm = event.target.closest("[data-edit-form]");
     if (editForm) {
       event.preventDefault();
@@ -2408,6 +2570,7 @@ ${meetingLines}
 
   refreshBtn.addEventListener("click", () => loadSubmissions().catch((error) => setStatus(error.message)));
   availabilityBtn.addEventListener("click", () => renderAvailabilityManager().catch((error) => setStatus(error.message)));
+  eventsBtn.addEventListener("click", () => renderEventsManager().catch((error) => setStatus(error.message)));
   statusFilter.addEventListener("change", () => loadSubmissions().catch((error) => setStatus(error.message)));
   typeFilter.addEventListener("change", () => { renderList(); if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); } });
   detailEl.addEventListener("change", (event) => {

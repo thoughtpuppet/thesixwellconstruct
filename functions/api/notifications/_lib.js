@@ -42,6 +42,21 @@ function replyToAddress(env) {
   return env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO;
 }
 
+// Events are a separate brand (the six.well construct) from the tattoo house.
+// They settle to their own Square account, so their email identity is distinct
+// too. Falls back to the events Square reply address, then the studio default.
+const DEFAULT_EVENTS_FROM_NAME = "the six.well construct";
+
+function eventsEmailIdentity(env) {
+  const fromEmail =
+    env.EVENTS_FROM_EMAIL || env.NOTIFICATION_FROM_EMAIL || DEFAULT_FROM_ADDRESS;
+  return {
+    fromEmail,
+    fromName: env.EVENTS_FROM_NAME || DEFAULT_EVENTS_FROM_NAME,
+    replyTo: env.EVENTS_REPLY_TO || fromEmail,
+  };
+}
+
 function publicBaseUrl(env, request) {
   if (env.PUBLIC_SITE_URL) return String(env.PUBLIC_SITE_URL).replace(/\/+$/g, "");
   if (request) {
@@ -287,8 +302,11 @@ async function sendTransactionalEmail(env, message) {
   try {
     const response = await env.EMAIL.send({
       to: message.to,
-      from: { email: fromAddress(env), name: fromName(env) },
-      replyTo: replyToAddress(env),
+      from: {
+        email: message.fromEmail || fromAddress(env),
+        name: message.fromName || fromName(env),
+      },
+      replyTo: message.replyTo || replyToAddress(env),
       subject: message.subject,
       text: message.text,
       html: message.html || textToHtml(message.text),
@@ -679,6 +697,25 @@ export async function handleAdminResendNotification(request, env) {
     const appointmentId = asString(
       body.appointmentId || (sourceDelivery?.related_type === "appointment" ? sourceDelivery.related_id : "")
     );
+    const eventTicketId = asString(
+      body.eventTicketId || (sourceDelivery?.related_type === "event_ticket" ? sourceDelivery.related_id : "")
+    );
+
+    if (templateKey === "event_ticket_paid") {
+      if (!eventTicketId) return errorResponse("Missing event ticket id.", 400);
+      const ticketRow = await db
+        .prepare("SELECT * FROM event_tickets WHERE id = ?")
+        .bind(eventTicketId)
+        .first();
+      if (!ticketRow) return errorResponse("Event ticket not found.", 404);
+      if (ticketRow.status !== "paid") {
+        return errorResponse("Only paid tickets can receive a confirmation resend.", 400);
+      }
+      const delivery = await notifyEventTicketPaid(env, request, ticketRow, {
+        idempotencyKey: resendKey(`event_ticket_paid:${ticketRow.id}`),
+      });
+      return json({ ok: Boolean(delivery.ok), delivery });
+    }
 
     if (templateKey === "submission_received") {
       const submission = await selectSubmission(db, submissionId);
@@ -772,7 +809,7 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow) {
   });
 }
 
-export async function notifyEventTicketPaid(env, request, ticketRow) {
+export async function notifyEventTicketPaid(env, request, ticketRow, options = {}) {
   const email = ticketRow.contact_email || ticketRow.contactEmail || "";
   if (!email) return { ok: false, skipped: true };
 
@@ -790,6 +827,16 @@ export async function notifyEventTicketPaid(env, request, ticketRow) {
   const title = event?.title || "the event";
   const whenLine = event?.starts_at ? `When: ${formatDate(event.starts_at)}` : null;
   const whereLine = event?.location ? `Where: ${event.location}` : null;
+  const confirmationUrl = publicUrl(
+    env,
+    request,
+    `/events/confirmed/?ticket=${encodeURIComponent(ticketRow.id)}`
+  );
+  const calendarUrl = publicUrl(
+    env,
+    request,
+    `/api/events/tickets/${encodeURIComponent(ticketRow.id)}/calendar`
+  );
 
   const text = [
     `Hi ${ticketRow.contact_name || "there"},`,
@@ -799,6 +846,9 @@ export async function notifyEventTicketPaid(env, request, ticketRow) {
     `Seats reserved: ${seats}`,
     whenLine,
     whereLine,
+    "",
+    `Your ticket: ${confirmationUrl}`,
+    event?.starts_at ? `Add to calendar: ${calendarUrl}` : null,
     "",
     "Your spot is confirmed and paid. Reply to this email if anything changes or you have questions before the night.",
     "",
@@ -810,13 +860,142 @@ export async function notifyEventTicketPaid(env, request, ticketRow) {
 
   return sendTransactionalEmail(env, {
     to: email,
+    ...eventsEmailIdentity(env),
     subject: `You're booked — ${title}`,
     text,
     templateKey: "event_ticket_paid",
     relatedType: "event_ticket",
     relatedId: ticketRow.id,
-    idempotencyKey: `event_ticket_paid:${ticketRow.id}`,
+    idempotencyKey: options.idempotencyKey || `event_ticket_paid:${ticketRow.id}`,
   });
+}
+
+export async function notifyEventTicketCancelled(env, request, ticketRow, options = {}) {
+  const email = ticketRow.contact_email || ticketRow.contactEmail || "";
+  if (!email) return { ok: false, skipped: true };
+
+  const db = notificationDb(env);
+  let event = null;
+  if (db) {
+    event = await db
+      .prepare("SELECT title, starts_at, location FROM events WHERE id = ?")
+      .bind(ticketRow.event_id)
+      .first()
+      .catch(() => null);
+  }
+
+  const title = event?.title || ticketRow.event_title || "the event";
+  const whenLine = event?.starts_at ? `Was scheduled: ${formatDate(event.starts_at)}` : null;
+  const refundLine = options.refunded
+    ? "A full refund has been issued to your original payment method. It may take a few business days to appear."
+    : "If you were charged, a refund will be handled separately — reply to this email if you have any questions.";
+
+  const text = [
+    `Hi ${ticketRow.contact_name || "there"},`,
+    "",
+    `Your ticket for ${title} has been cancelled.`,
+    "",
+    whenLine,
+    "",
+    refundLine,
+    "",
+    "Sorry to miss you this time — reply to this email if you'd like help getting into a future gathering.",
+    "",
+    "the six.well construct",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  return sendTransactionalEmail(env, {
+    to: email,
+    ...eventsEmailIdentity(env),
+    subject: `Your ticket for ${title} was cancelled`,
+    text,
+    templateKey: "event_ticket_cancelled",
+    relatedType: "event_ticket",
+    relatedId: ticketRow.id,
+    idempotencyKey: `event_ticket_cancelled:${ticketRow.id}`,
+  });
+}
+
+export async function sendDueEventTicketReminders(env) {
+  const db = notificationDb(env);
+  if (!db) return { sent: 0, skipped: 0, failed: 0 };
+
+  const now = new Date();
+  const from = new Date(now.getTime() + 23 * 60 * 60 * 1000).toISOString();
+  const to = new Date(now.getTime() + 25 * 60 * 60 * 1000).toISOString();
+
+  try {
+    const result = await db
+      .prepare(
+        `SELECT t.*, e.title AS event_title, e.starts_at AS event_starts_at,
+                e.location AS event_location
+         FROM event_tickets t
+         JOIN events e ON e.id = t.event_id
+         WHERE t.status = 'paid'
+           AND e.starts_at >= ?
+           AND e.starts_at < ?
+         ORDER BY e.starts_at ASC
+         LIMIT 100`
+      )
+      .bind(from, to)
+      .all();
+
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const row of result.results || []) {
+      if (!row.contact_email) { skipped += 1; continue; }
+      const seats = Number(row.seats) || 1;
+      const title = row.event_title || "your event";
+      const calendarUrl = publicUrl(
+        env,
+        null,
+        `/api/events/tickets/${encodeURIComponent(row.id)}/calendar`
+      );
+      const text = [
+        `Hi ${row.contact_name || "there"},`,
+        "",
+        `Reminder: ${title} is tomorrow.`,
+        "",
+        `When: ${formatDate(row.event_starts_at)}`,
+        row.event_location ? `Where: ${row.event_location}` : null,
+        `Seats reserved: ${seats}`,
+        "",
+        `Add to calendar: ${calendarUrl}`,
+        "",
+        "Looking forward to seeing you. Reply to this email if anything has changed.",
+        "",
+        "the six.well construct",
+      ]
+        .filter((line) => line !== null)
+        .join("\n");
+      const delivery = await sendTransactionalEmail(env, {
+        to: row.contact_email,
+        ...eventsEmailIdentity(env),
+        subject: `Reminder: ${title} is tomorrow`,
+        text,
+        templateKey: "event_ticket_reminder_24h",
+        relatedType: "event_ticket",
+        relatedId: row.id,
+        idempotencyKey: `event_ticket_reminder_24h:${row.id}`,
+      });
+      if (delivery.skipped) skipped += 1;
+      else if (delivery.ok) {
+        sent += 1;
+        await db
+          .prepare("UPDATE event_tickets SET reminder_sent_at = ? WHERE id = ?")
+          .bind(new Date().toISOString(), row.id)
+          .run()
+          .catch(() => {});
+      } else failed += 1;
+    }
+    return { sent, skipped, failed };
+  } catch (error) {
+    console.warn("Unable to send due event reminders.", error.message);
+    return { sent: 0, skipped: 0, failed: 1, error: error.message };
+  }
 }
 
 export async function sendDueAppointmentReminders(env) {

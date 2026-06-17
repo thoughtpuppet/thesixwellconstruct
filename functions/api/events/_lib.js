@@ -13,9 +13,17 @@
 //   POST /api/events/:slug/checkout  -> create ticket + Square payment link
 //   POST /api/square-events/webhook  -> confirm paid ticket (separate signing key)
 
-import { notifyEventTicketPaid } from "../notifications/_lib.js";
+import {
+  notifyEventTicketPaid,
+  notifyEventTicketCancelled,
+} from "../notifications/_lib.js";
 
 const SQUARE_VERSION = "2026-05-20";
+
+// Pending checkouts older than this are swept by the hourly reaper: if Square
+// never recorded a payment, the held ticket + its mirror submission are cleared
+// so the admin inbox and seat math stay clean.
+const STALE_PENDING_MINUTES = 120;
 
 /* ------------------------------------------------------------------ */
 /* Shared helpers (kept local so events stays self-contained)          */
@@ -59,6 +67,25 @@ function requireEventsDb(env) {
   const db = env.SUBMISSIONS_DB || null;
   if (!db) throw new Error("Missing D1 binding SUBMISSIONS_DB.");
   return db;
+}
+
+function adminTokenFromRequest(request) {
+  const authorization = request.headers.get("authorization") || "";
+  if (authorization.toLowerCase().startsWith("bearer ")) {
+    return authorization.slice(7).trim();
+  }
+  return new URL(request.url).searchParams.get("token") || "";
+}
+
+// Reuses the studio submissions admin token so the events console shares one
+// credential with the rest of /studio.
+function requireEventsAdmin(request, env) {
+  const expected = env.SUBMISSIONS_ADMIN_TOKEN;
+  if (!expected) return errorResponse("Admin events are not configured.", 503);
+  if (adminTokenFromRequest(request) !== expected) {
+    return errorResponse("Unauthorized.", 401);
+  }
+  return null;
 }
 
 async function readJsonOrForm(request) {
@@ -234,6 +261,43 @@ async function fetchEventsSquareOrder(env, orderId) {
   return payload.order || null;
 }
 
+async function refundEventSquarePayment(env, ticketRow) {
+  // Best-effort full refund of a paid ticket. Returns { ok, refundId, error }.
+  const paymentId = asString(ticketRow.square_payment_id);
+  if (!eventsSquareConfigured(env)) {
+    return { ok: false, error: "Events Square is not configured." };
+  }
+  if (!paymentId) {
+    return { ok: false, error: "No Square payment id on file; refund manually." };
+  }
+  try {
+    const response = await fetch(`${eventsSquareBaseUrl(env)}/v2/refunds`, {
+      method: "POST",
+      headers: {
+        "Square-Version": SQUARE_VERSION,
+        Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        idempotency_key: `refund:${ticketRow.id}`,
+        payment_id: paymentId,
+        amount_money: {
+          amount: Number(ticketRow.amount_cents) || 0,
+          currency: ticketRow.currency || "USD",
+        },
+        reason: "Event ticket cancelled by studio.",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { ok: false, error: payload.errors?.[0]?.detail || "Square refund failed." };
+    }
+    return { ok: true, refundId: payload.refund?.id || null };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
 function orderLooksPaid(order) {
   if (!order) return false;
   const netDue = Number(order.net_amount_due_money?.amount ?? 1);
@@ -324,9 +388,104 @@ function publicEventView(event, taken) {
   };
 }
 
+function icsDate(value, fallbackDate) {
+  const date = value ? new Date(value) : fallbackDate;
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function icsEscape(value) {
+  return String(value ?? "").replace(/[\\,;]/g, (c) => `\\${c}`).replace(/\n/g, "\\n");
+}
+
+// Minimal single-event VCALENDAR for the "add to calendar" link.
+function buildEventIcs(ticketRow) {
+  const start = new Date(ticketRow.event_starts_at || ticketRow.eventStartsAt || Date.now());
+  const end = ticketRow.event_ends_at
+    ? new Date(ticketRow.event_ends_at)
+    : new Date(start.getTime() + 3 * 60 * 60 * 1000);
+  const dtStart = icsDate(start.toISOString());
+  const dtEnd = icsDate(end.toISOString());
+  const stamp = icsDate(new Date().toISOString());
+  const title = ticketRow.event_title || ticketRow.eventTitle || "Event";
+  const location = ticketRow.event_location || ticketRow.eventLocation || "";
+  const seats = Number(ticketRow.seats) || 1;
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//the six.well construct//events//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${ticketRow.id}@thesixwellconstruct.com`,
+    `DTSTAMP:${stamp}`,
+    dtStart ? `DTSTART:${dtStart}` : "",
+    dtEnd ? `DTEND:${dtEnd}` : "",
+    `SUMMARY:${icsEscape(title)}`,
+    location ? `LOCATION:${icsEscape(location)}` : "",
+    `DESCRIPTION:${icsEscape(`${seats} seat${seats === 1 ? "" : "s"} reserved with the six.well construct.`)}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].filter(Boolean);
+  return lines.join("\r\n");
+}
+
 /* ------------------------------------------------------------------ */
 /* Public handlers                                                     */
 /* ------------------------------------------------------------------ */
+
+// GET /api/events -> all bookable (non-draft) events, soonest first.
+export async function handleEventsList(request, env) {
+  try {
+    const db = requireEventsDb(env);
+    const result = await db
+      .prepare(
+        `SELECT * FROM events WHERE status != 'draft'
+         ORDER BY (starts_at IS NULL), starts_at ASC`
+      )
+      .all();
+    const rows = result.results || [];
+    const events = [];
+    for (const row of rows) {
+      const event = normalizeEvent(row);
+      const taken = await seatsTaken(db, event.id);
+      events.push(publicEventView(event, taken));
+    }
+    return json({ events });
+  } catch (error) {
+    return errorResponse("Unable to load events.", 500, { detail: error.message });
+  }
+}
+
+export async function handleEventTicketCalendar(request, env, ticketId) {
+  try {
+    const db = requireEventsDb(env);
+    const row = await db
+      .prepare(
+        `SELECT t.id, t.seats, t.status,
+                e.title AS event_title, e.starts_at AS event_starts_at,
+                e.ends_at AS event_ends_at, e.location AS event_location
+         FROM event_tickets t
+         JOIN events e ON e.id = t.event_id
+         WHERE t.id = ?`
+      )
+      .bind(ticketId)
+      .first();
+    if (!row) return errorResponse("Ticket not found.", 404);
+    if (row.status !== "paid") {
+      return errorResponse("Calendar file is available once payment clears.", 409);
+    }
+    return new Response(buildEventIcs(row), {
+      headers: {
+        "content-type": "text/calendar; charset=utf-8",
+        "content-disposition": `attachment; filename="event-${row.id}.ics"`,
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    return errorResponse("Unable to build calendar file.", 500, { detail: error.message });
+  }
+}
 
 export async function handleEventContext(request, env, slug) {
   try {
@@ -615,16 +774,275 @@ export async function handleEventsSquareWebhook(request, env) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Maintenance (called from the scheduled handler)                     */
+/* ------------------------------------------------------------------ */
+
+// Sweep stale 'pending' tickets: if Square never recorded a payment, clear the
+// held ticket and its mirror submission so the inbox and seat math stay clean.
+// Paid-but-missed checkouts (webhook lost) are reconciled to 'paid' instead.
+export async function reapStalePendingTickets(env) {
+  const db = env.SUBMISSIONS_DB || null;
+  if (!db) return { reaped: 0, recovered: 0, failed: 0 };
+
+  const cutoff = new Date(Date.now() - STALE_PENDING_MINUTES * 60 * 1000).toISOString();
+  let reaped = 0;
+  let recovered = 0;
+  let failed = 0;
+
+  try {
+    const result = await db
+      .prepare(
+        `SELECT * FROM event_tickets
+         WHERE status = 'pending' AND created_at < ?
+         ORDER BY created_at ASC LIMIT 100`
+      )
+      .bind(cutoff)
+      .all();
+
+    for (const row of result.results || []) {
+      try {
+        // Last-chance reconciliation in case the webhook never landed.
+        if (row.square_order_id) {
+          const order = await fetchEventsSquareOrder(env, row.square_order_id);
+          if (orderLooksPaid(order)) {
+            await markTicketPaid(db, env, null, row, order, "");
+            recovered += 1;
+            continue;
+          }
+        }
+        const now = new Date().toISOString();
+        await db
+          .prepare(
+            `UPDATE event_tickets
+             SET status = 'cancelled', cancelled_at = COALESCE(cancelled_at, ?), updated_at = ?
+             WHERE id = ?`
+          )
+          .bind(now, now, row.id)
+          .run();
+        // Remove the mirror submission unless it already converted.
+        await db
+          .prepare(
+            `DELETE FROM submissions
+             WHERE type = 'event_rsvp'
+               AND status NOT IN ('booked', 'paid')
+               AND json_extract(payload_json, '$.ticket_id') = ?`
+          )
+          .bind(row.id)
+          .run();
+        reaped += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn("Unable to reap pending event ticket.", row.id, error.message);
+      }
+    }
+  } catch (error) {
+    console.warn("Unable to query stale pending event tickets.", error.message);
+    return { reaped, recovered, failed: failed + 1, error: error.message };
+  }
+  return { reaped, recovered, failed };
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin handlers                                                      */
+/* ------------------------------------------------------------------ */
+
+const ADMIN_EVENT_STATUSES = new Set(["draft", "open", "closed"]);
+
+async function eventStats(db, eventId) {
+  const row = await db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN status = 'paid' THEN seats ELSE 0 END), 0) AS paid_seats,
+         COALESCE(SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END), 0) AS paid_orders,
+         COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_orders
+       FROM event_tickets WHERE event_id = ?`
+    )
+    .bind(eventId)
+    .first();
+  return {
+    paidSeats: Number(row?.paid_seats) || 0,
+    paidOrders: Number(row?.paid_orders) || 0,
+    pendingOrders: Number(row?.pending_orders) || 0,
+  };
+}
+
+export async function handleAdminEventsList(request, env) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+  try {
+    const db = requireEventsDb(env);
+    const result = await db
+      .prepare("SELECT * FROM events ORDER BY (starts_at IS NULL), starts_at ASC")
+      .all();
+    const events = [];
+    for (const row of result.results || []) {
+      const event = normalizeEvent(row);
+      const stats = await eventStats(db, event.id);
+      events.push({
+        ...event,
+        priceFormatted: formatMoney(event.priceCents, event.currency),
+        ...stats,
+        seatsRemaining: Math.max(0, event.capacity - stats.paidSeats),
+      });
+    }
+    return json({ events });
+  } catch (error) {
+    return errorResponse("Unable to load events.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminEventUpdate(request, env, slug) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  const body = await readJsonOrForm(request);
+  if (!body) return errorResponse("Expected JSON or form data.", 400);
+
+  if (body.status !== undefined && !ADMIN_EVENT_STATUSES.has(asString(body.status))) {
+    return errorResponse("Status must be draft, open, or closed.", 400);
+  }
+
+  try {
+    const db = requireEventsDb(env);
+    const event = await getEventBySlug(db, slug);
+    if (!event) return errorResponse("Event not found.", 404);
+
+    // Only update the fields actually provided.
+    const fields = [];
+    const values = [];
+    const setField = (column, value) => { fields.push(`${column} = ?`); values.push(value); };
+
+    if (body.title !== undefined) setField("title", asString(body.title) || event.title);
+    if (body.description !== undefined) setField("description", asString(body.description));
+    if (body.location !== undefined) setField("location", asString(body.location));
+    if (body.startsAt !== undefined) setField("starts_at", asString(body.startsAt) || null);
+    if (body.endsAt !== undefined) setField("ends_at", asString(body.endsAt) || null);
+    if (body.priceCents !== undefined) setField("price_cents", Math.max(0, Math.floor(Number(body.priceCents) || 0)));
+    if (body.currency !== undefined) setField("currency", asString(body.currency) || "USD");
+    if (body.capacity !== undefined) setField("capacity", Math.max(0, Math.floor(Number(body.capacity) || 0)));
+    if (body.maxSeatsPerOrder !== undefined) {
+      setField("max_seats_per_order", Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 1)));
+    }
+    if (body.status !== undefined) setField("status", asString(body.status));
+
+    if (!fields.length) return errorResponse("No fields to update.", 400);
+
+    setField("updated_at", new Date().toISOString());
+    values.push(event.id);
+    await db
+      .prepare(`UPDATE events SET ${fields.join(", ")} WHERE id = ?`)
+      .bind(...values)
+      .run();
+
+    const updated = await getEventBySlug(db, slug);
+    const stats = await eventStats(db, updated.id);
+    return json({
+      event: {
+        ...updated,
+        priceFormatted: formatMoney(updated.priceCents, updated.currency),
+        ...stats,
+        seatsRemaining: Math.max(0, updated.capacity - stats.paidSeats),
+      },
+    });
+  } catch (error) {
+    return errorResponse("Unable to update event.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminEventTicketCancel(request, env, ticketId) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  const body = (await readJsonOrForm(request)) || {};
+  const shouldRefund = body.refund === undefined ? true : Boolean(body.refund);
+
+  try {
+    const db = requireEventsDb(env);
+    const row = await db
+      .prepare(
+        `SELECT t.*, e.title AS event_title, e.starts_at AS event_starts_at,
+                e.location AS event_location
+         FROM event_tickets t
+         JOIN events e ON e.id = t.event_id
+         WHERE t.id = ?`
+      )
+      .bind(ticketId)
+      .first();
+    if (!row) return errorResponse("Ticket not found.", 404);
+    if (row.status === "cancelled") {
+      return json({ ok: true, alreadyCancelled: true });
+    }
+
+    const wasPaid = row.status === "paid";
+    let refund = { ok: false, skipped: true };
+    if (wasPaid && shouldRefund) {
+      refund = await refundEventSquarePayment(env, row);
+    }
+
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `UPDATE event_tickets
+         SET status = 'cancelled', cancelled_at = ?,
+             refund_id = COALESCE(?, refund_id), updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(now, refund.refundId || null, now, row.id)
+      .run();
+
+    // Archive the mirror submission so it leaves the active queue.
+    await db
+      .prepare(
+        `UPDATE submissions SET status = 'archived', updated_at = ?
+         WHERE type = 'event_rsvp'
+           AND json_extract(payload_json, '$.ticket_id') = ?`
+      )
+      .bind(now, row.id)
+      .run()
+      .catch(() => {});
+
+    if (wasPaid) {
+      await notifyEventTicketCancelled(env, request, row, { refunded: refund.ok }).catch(
+        (error) => console.warn("Event cancellation email failed.", error.message)
+      );
+    }
+
+    return json({
+      ok: true,
+      cancelled: true,
+      wasPaid,
+      refund: shouldRefund
+        ? { attempted: wasPaid, ok: refund.ok, refundId: refund.refundId || null, error: refund.error || null }
+        : { attempted: false },
+    });
+  } catch (error) {
+    return errorResponse("Unable to cancel ticket.", 500, { detail: error.message });
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Router (called from _worker.js)                                     */
 /* ------------------------------------------------------------------ */
 
 export async function handleEventsApi(request, env) {
   const url = new URL(request.url);
   const { method } = request;
-  // /api/events/:slug/(context|checkout)  or  /api/events/tickets/:id
+  // /api/events                              -> list bookable events
+  // /api/events/:slug/(context|checkout)     -> single event
+  // /api/events/tickets/:id                  -> ticket status
+  // /api/events/tickets/:id/calendar         -> .ics download
   const parts = url.pathname.split("/").filter(Boolean); // ["api","events",...]
 
+  if (!parts[2]) {
+    if (method !== "GET") return errorResponse("Method not allowed.", 405);
+    return handleEventsList(request, env);
+  }
+
   if (parts[2] === "tickets" && parts[3]) {
+    if (parts[4] === "calendar") {
+      if (method !== "GET") return errorResponse("Method not allowed.", 405);
+      return handleEventTicketCalendar(request, env, parts[3]);
+    }
     if (method !== "GET") return errorResponse("Method not allowed.", 405);
     return handleEventTicketStatus(request, env, parts[3]);
   }
@@ -643,4 +1061,26 @@ export async function handleEventsApi(request, env) {
   }
 
   return errorResponse("Unknown events API route.", 404);
+}
+
+// Admin surface: /api/admin/events , /api/admin/events/:slug ,
+// /api/admin/events/tickets/:id/cancel
+export async function handleAdminEventsApi(request, env) {
+  const url = new URL(request.url);
+  const { method } = request;
+  const parts = url.pathname.split("/").filter(Boolean); // ["api","admin","events",...]
+
+  if (!parts[3]) {
+    if (method !== "GET") return errorResponse("Method not allowed.", 405);
+    return handleAdminEventsList(request, env);
+  }
+
+  if (parts[3] === "tickets" && parts[4] && parts[5] === "cancel") {
+    if (method !== "POST") return errorResponse("Method not allowed.", 405);
+    return handleAdminEventTicketCancel(request, env, parts[4]);
+  }
+
+  const slug = parts[3];
+  if (method !== "PATCH") return errorResponse("Method not allowed.", 405);
+  return handleAdminEventUpdate(request, env, slug);
 }
