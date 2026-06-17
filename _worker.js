@@ -51,15 +51,17 @@ import {
 } from "./functions/api/booking/_lib.js";
 import {
   handleEventsApi,
+  handleAdminEventsApi,
   handleEventsSquareWebhook,
+  reapStalePendingTickets,
 } from "./functions/api/events/_lib.js";
 import {
   handleAdminResendNotification,
   sendDueAppointmentReminders,
+  sendDueEventTicketReminders,
 } from "./functions/api/notifications/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
-  "/about",
   "/film",
   "/music",
   "/writings"
@@ -562,7 +564,11 @@ export default {
       return handleEventsSquareWebhook(request, env);
     }
 
-    if (url.pathname.startsWith("/api/events/")) {
+    if (url.pathname.startsWith("/api/admin/events")) {
+      return handleAdminEventsApi(request, env);
+    }
+
+    if (url.pathname === "/api/events" || url.pathname.startsWith("/api/events/")) {
       return handleEventsApi(request, env);
     }
 
@@ -599,5 +605,7 @@ export default {
   },
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(sendDueAppointmentReminders(env));
+    ctx.waitUntil(sendDueEventTicketReminders(env));
+    ctx.waitUntil(reapStalePendingTickets(env));
   },
 };
