@@ -156,7 +156,7 @@
     var feed = document.getElementById("events-feed");
     // Optional per-slug artwork; events without a match get a neutral default.
     var IMAGES = {
-      "signal-horizons": "/assets/paintings/DECISION%204AM.jpg",
+      "signal-symbol": "/assets/paintings/DECISION%204AM.jpg",
     };
     var DEFAULT_IMAGE = "/assets/paintings/DECISION%204AM.jpg";
 
@@ -239,7 +239,7 @@
       else if (state === "empty") { renderEvents([]); }
       else {
         renderEvents([
-          { slug: "signal-horizons", title: "Signal Horizons", description: "A sensory mark-making gathering with prompts, simple materials, and no drawing experience needed.", startsAt: "2026-07-25T19:00:00-04:00", priceFormatted: "$45.00", seatsRemaining: 12, capacity: 20, soldOut: false, open: true },
+          { slug: "signal-symbol", title: "Signal & Symbol", description: "A sensory mark-making gathering where prompts become visual responses through each person's horizon of memory, mood, and imagination.", startsAt: "2026-07-25T19:00:00-04:00", priceFormatted: "$45.00", seatsRemaining: 12, capacity: 20, soldOut: false, open: true },
           { slug: "open-studio", title: "Open Studio Night", description: "Temporary access to process, works in progress, and material decisions.", startsAt: "2026-08-08T18:00:00-04:00", priceFormatted: "$20.00", seatsRemaining: 0, capacity: 15, soldOut: true, open: false },
         ]);
       }

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Signal Horizons is a sensory mark-making gathering where participants respond to readings, sounds, textures, tastes, and prompts through simple visual responses. No drawing experience needed.">
-<title>Signal Horizons | Six.Well Construct</title>
+<meta name="description" content="Signal &amp; Symbol is a sensory mark-making gathering where participants respond to readings, sounds, textures, tastes, and prompts through simple visual responses. No drawing experience needed.">
+<title>Signal &amp; Symbol | Six.Well Construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -283,7 +283,7 @@
     <section class="venture-hero signal-hero" aria-labelledby="page-title">
       <div>
         <span class="venture-kicker">guided gathering</span>
-        <h1 class="venture-title" id="page-title">Signal Horizons.</h1>
+        <h1 class="venture-title" id="page-title">Signal &amp; Symbol.</h1>
         <span class="signal-subtitle">A sensory mark-making gathering.</span>
       </div>
       <div class="hero-copy">
@@ -301,8 +301,9 @@
         <div class="signal-stack">
           <article class="signal-panel" id="what">
             <span class="micro-kicker">what it is</span>
-            <h2>What is Signal Horizons?</h2>
-            <p>Signal Horizons is a guided creative gathering where participants respond to sensory prompts through drawing, color, line, symbol, and mark-making.</p>
+            <h2>What is Signal &amp; Symbol?</h2>
+            <p>Signal &amp; Symbol is a guided creative gathering where participants respond to sensory prompts through drawing, color, line, symbol, and mark-making.</p>
+            <p>A signal is the prompt placed in the room. A symbol is the visual response that rises from it. The horizon is what each person brings to that encounter: memory, mood, imagination, culture, attention, and the atmosphere already living in them.</p>
             <p>Prompts may include short readings, music, textures, tastes, objects, or other sensory experiences. Each person receives the same prompt, but what appears in the mind may be completely different.</p>
             <p>The goal is not to draw well. The goal is to respond honestly.</p>
           </article>
@@ -340,7 +341,7 @@
           <article class="signal-panel" id="not">
             <span class="micro-kicker">clear edges</span>
             <h2>What It Is Not</h2>
-            <p>Signal Horizons is not a drawing class, paint night, critique session, therapy session, or stage for proving anything.</p>
+            <p>Signal &amp; Symbol is not a drawing class, paint night, critique session, therapy session, or stage for proving anything.</p>
             <p>You will not be asked to make something impressive. You will not be graded, corrected, or told what your work means.</p>
           </article>
 
@@ -369,7 +370,7 @@
 
           <article class="final-band" id="join">
             <span class="micro-kicker">next session</span>
-            <h2 class="section-title">Join the next Signal Horizons session.</h2>
+            <h2 class="section-title">Join the next Signal &amp; Symbol session.</h2>
             <p>Come as you are. Listen, sense, imagine, and mark what appears.</p>
             <div>
               <a class="signal-cta" href="#reserve">Reserve a seat</a>
@@ -455,10 +456,10 @@
 
   <script>
   (function () {
-    var SLUG = "signal-horizons";
-    var API_CONTEXT_PATH = "/api/events/signal-horizons/context";
-    var API_CHECKOUT_PATH = "/api/events/signal-horizons/checkout";
-    var API_WAITLIST_PATH = "/api/events/signal-horizons/waitlist";
+    var SLUG = "signal-symbol";
+    var API_CONTEXT_PATH = "/api/events/signal-symbol/context";
+    var API_CHECKOUT_PATH = "/api/events/signal-symbol/checkout";
+    var API_WAITLIST_PATH = "/api/events/signal-symbol/waitlist";
     var params = new URLSearchParams(window.location.search);
     var previewMode = params.get("preview") === "1";
     var priceCents = 0, currency = "USD", isFree = false;
@@ -522,7 +523,7 @@
     function applyContext(ev) {
       priceCents = ev.priceCents; currency = ev.currency;
       isFree = ev.free || (Number(ev.priceCents) || 0) <= 0;
-      document.title = "Signal Horizons | Six.Well Construct";
+      document.title = "Signal & Symbol | Six.Well Construct";
       els.date.textContent = eventDate(ev.startsAt);
       els.time.textContent = eventTime(ev.startsAt);
       els.where.textContent = ev.location || "Atlanta, GA";
@@ -570,13 +571,13 @@
       els.where.textContent = "Atlanta, GA";
       els.price.textContent = "TBA";
       els.capacity.textContent = "Limited seating";
-      showStatePanel("The Signal Horizons session details could not be loaded. Return to the events board or contact the studio from the main site.");
+      showStatePanel("The Signal & Symbol session details could not be loaded. Return to the events board or contact the studio from the main site.");
       showError(message || "This session could not be loaded.");
     }
 
     function previewContext(state) {
       var base = {
-        title: "Signal Horizons",
+        title: "Signal & Symbol",
         description: "A sensory mark-making gathering.",
         startsAt: "2026-07-25T19:00:00-04:00",
         location: "Atlanta, GA - exact address shared after booking",

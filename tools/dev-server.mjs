@@ -42,7 +42,7 @@ const checkRoutes = [
   ["/construct-map/", 200],
   ["/events/", 200],
   ["/events/cultandshift/", 200],
-  ["/events/signal-horizons/", 200],
+  ["/events/signal-symbol/", 200],
   ["/events/example-created-in-studio/", 200],
   ["/events/confirmed/", 200],
   ["/music/", 302],

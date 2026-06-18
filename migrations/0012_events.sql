@@ -1,4 +1,4 @@
--- Public ticketed events (e.g. Sip & Paint). Isolated from the tattoo booking
+-- Public ticketed events and guided gatherings. Isolated from the tattoo booking
 -- tables and paid through a dedicated Square account (SQUARE_EVENTS_* secrets).
 
 CREATE TABLE IF NOT EXISTS events (
@@ -48,19 +48,18 @@ CREATE INDEX IF NOT EXISTS idx_event_tickets_square_order
 CREATE INDEX IF NOT EXISTS idx_event_tickets_email
   ON event_tickets(contact_email);
 
--- Seed the Sip & Paint event. PLACEHOLDER values — update price_cents,
--- capacity, starts_at, and location to the real details, then set status='open'.
+-- Seed the Signal & Symbol event. Placeholder values can be edited in Studio.
 INSERT OR IGNORE INTO events (
   id, slug, title, description, starts_at, location,
   price_cents, currency, capacity, max_seats_per_order, status,
   created_at, updated_at
 ) VALUES (
-  'evt_sip_and_paint',
-  'sip-and-paint',
-  'Sip & Paint',
-  'An evening of guided painting, drinks, and slow looking inside the construct. Bring nothing but yourself — canvas, paint, and a glass are provided.',
+  'evt_signal_symbol',
+  'signal-symbol',
+  'Signal & Symbol',
+  'A guided sensory mark-making gathering where prompts become visual responses through each person''s horizon of memory, mood, and imagination. No drawing experience needed.',
   '2026-07-25T19:00:00-04:00',
-  'the six.well construct — location shared after booking',
+  'Atlanta, GA - exact address shared after booking',
   4500,
   'USD',
   20,
