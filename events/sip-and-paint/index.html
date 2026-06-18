@@ -34,7 +34,17 @@
   button.submit-btn:disabled{ opacity:0.5; cursor:not-allowed; }
   .form-note { color:var(--text-muted); font-family:var(--font-serif); font-size:13px; line-height:1.6; }
   .form-error { color:var(--color-tattooing); font-family:var(--font-sans); font-size:13px; margin:0; display:none; }
+  .form-success { color:var(--venture-accent); font-family:var(--font-sans); font-size:13px; margin:0; display:none; }
   .honeypot { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  .event-info-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+  .event-info-card { border-top:5px solid var(--ring-faint); padding-top:14px; min-width:0; }
+  .event-info-card h3 { margin:0 0 8px; color:var(--venture-accent); font-family:var(--font-display); font-size:14px; text-transform:uppercase; letter-spacing:0.08em; }
+  .event-info-card p { margin:0; color:var(--text-muted); font-family:var(--font-serif); font-size:14px; line-height:1.65; overflow-wrap:anywhere; }
+  .waitlist-panel { display:none; border-top:5px solid var(--ring-faint); padding-top:18px; margin-top:28px; }
+  .waitlist-panel.is-visible { display:block; }
+  .ticket-state-panel { display:none; border:5px solid var(--ring-faint); padding:18px; color:var(--text-muted); font-family:var(--font-serif); line-height:1.6; }
+  .ticket-state-panel.is-visible { display:block; }
+  @media (max-width:820px){ .event-info-grid{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body class="venture-page" data-venture="events">
@@ -65,7 +75,7 @@
           </div>
         </div>
 
-        <div>
+        <div id="ticketPanel">
           <form class="ticket-form" id="ticketForm" novalidate>
             <div class="field">
               <label for="name">Your name</label>
@@ -89,7 +99,59 @@
             <p class="form-error" id="formError"></p>
             <p class="form-note">Payment is handled by Square on the next screen. Seats are released if payment is not completed.</p>
           </form>
+          <div class="ticket-state-panel" id="ticketStatePanel"></div>
         </div>
+      </div>
+    </section>
+
+    <section class="section" id="details">
+      <header class="section-head">
+        <div>
+          <span class="section-kicker">before you book</span>
+          <h2 class="section-title">Details</h2>
+        </div>
+        <p class="section-copy" id="eventDetailIntro">Everything that helps the night feel less mysterious before you commit.</p>
+      </header>
+      <div class="event-info-grid" id="eventInfoGrid"></div>
+      <div class="waitlist-panel" id="waitlist">
+        <header class="section-head">
+          <div>
+            <span class="section-kicker">waitlist</span>
+            <h2 class="section-title">Get Notified</h2>
+          </div>
+          <p class="section-copy">If a seat opens, or if another date is added, this is the list the studio can work from first.</p>
+        </header>
+        <form class="ticket-form" id="waitlistForm" novalidate>
+          <div class="field">
+            <label for="waitName">Your name</label>
+            <input type="text" id="waitName" name="name" autocomplete="name" required>
+          </div>
+          <div class="field">
+            <label for="waitEmail">Email</label>
+            <input type="email" id="waitEmail" name="email" autocomplete="email" required>
+          </div>
+          <div class="field">
+            <label for="waitPhone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+            <input type="tel" id="waitPhone" name="phone" autocomplete="tel">
+          </div>
+          <div class="field">
+            <label for="waitSeats">Seats wanted</label>
+            <select id="waitSeats" name="seats">
+              <option value="1">1 seat</option>
+              <option value="2">2 seats</option>
+              <option value="3">3 seats</option>
+              <option value="4">4 seats</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="waitNote">Note <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+            <input type="text" id="waitNote" name="note">
+          </div>
+          <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <button type="submit" class="submit-btn" id="waitlistBtn">Join waitlist</button>
+          <p class="form-error" id="waitlistError"></p>
+          <p class="form-success" id="waitlistSuccess"></p>
+        </form>
       </div>
     </section>
 
@@ -130,11 +192,24 @@
       form: document.getElementById("ticketForm"),
       title: document.getElementById("page-title"),
       note: document.getElementById("ev-note"),
+      ticketState: document.getElementById("ticketStatePanel"),
+      eventInfo: document.getElementById("eventInfoGrid"),
+      detailIntro: document.getElementById("eventDetailIntro"),
+      waitlist: document.getElementById("waitlist"),
+      waitlistForm: document.getElementById("waitlistForm"),
+      waitlistBtn: document.getElementById("waitlistBtn"),
+      waitlistErr: document.getElementById("waitlistError"),
+      waitlistSuccess: document.getElementById("waitlistSuccess"),
     };
 
     function money(cents) {
       return new Intl.NumberFormat("en-US", { style: "currency", currency: currency || "USD" })
         .format((Number(cents) || 0) / 100);
+    }
+    function escapeHtml(value) {
+      return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c];
+      });
     }
     function fmtWhen(value) {
       if (!value) return "Date to be announced";
@@ -147,9 +222,29 @@
     }
     function showError(msg) { els.err.textContent = msg; els.err.style.display = "block"; }
     function clearError() { els.err.style.display = "none"; }
+    function showWaitlistError(msg) { els.waitlistErr.textContent = msg; els.waitlistErr.style.display = "block"; els.waitlistSuccess.style.display = "none"; }
+    function showWaitlistSuccess(msg) { els.waitlistSuccess.textContent = msg; els.waitlistSuccess.style.display = "block"; els.waitlistErr.style.display = "none"; }
+    function clearWaitlistMessages() { els.waitlistErr.style.display = "none"; els.waitlistSuccess.style.display = "none"; }
     function updateTotal() {
       var n = Number(els.seats.value) || 1;
       els.total.textContent = isFree ? "Free" : money(priceCents * n);
+    }
+    function renderInfo(ev) {
+      var cards = [
+        ["What is included", ev.included || "Event materials and final details are confirmed by email."],
+        ["Arrival", ev.arrivalNotes || "Arrive a few minutes early so the room can start together."],
+        ["Access", ev.accessibilityNotes || "Reply after booking if you need seating, sensory, or access accommodations."],
+        ["Policy", ev.cancellationPolicy || "If plans change, reply as early as possible so the studio can help."],
+      ];
+      els.detailIntro.textContent = ev.details || "Everything that helps the night feel less mysterious before you commit.";
+      els.eventInfo.innerHTML = cards.map(function (card) {
+        return '<article class="event-info-card"><h3>' + escapeHtml(card[0]) + '</h3><p>' + escapeHtml(card[1]) + '</p></article>';
+      }).join("");
+    }
+    function showStatePanel(message) {
+      els.form.style.display = "none";
+      els.ticketState.classList.add("is-visible");
+      els.ticketState.textContent = message;
     }
 
     function applyContext(ev) {
@@ -162,12 +257,17 @@
       els.where.textContent = ev.location || "Shared after booking";
       els.price.textContent = isFree ? "Free" : ev.priceFormatted + " per seat";
       els.seatsLeft.textContent = ev.soldOut ? "Sold out" : (ev.seatsRemaining + " of " + ev.capacity);
+      renderInfo(ev);
+      els.waitlist.classList.toggle("is-visible", !ev.open && ev.waitlistEnabled !== false);
 
       if (!ev.open) {
         els.btn.textContent = ev.soldOut ? "Sold out" : "Booking closed";
         els.btn.disabled = true;
         els.seats.disabled = true;
         updateTotal();
+        showStatePanel(ev.soldOut
+          ? "This event is sold out. Join the waitlist below if you want first notice when a seat opens or another date is added."
+          : "Booking is closed for this event. Join the waitlist below if you want a follow-up about future openings.");
         return;
       }
       var max = Math.min(ev.maxSeatsPerOrder, ev.seatsRemaining);
@@ -193,6 +293,14 @@
 
     function failContext(message) {
       els.btn.textContent = "Unavailable";
+      showStatePanel("The event details could not be loaded. Try returning to the events board, or contact the studio from the main site.");
+      renderInfo({
+        details: "The event details could not be loaded.",
+        included: "Try again from the events board.",
+        arrivalNotes: "If you already booked, use the link in your confirmation email.",
+        accessibilityNotes: "Contact the studio from the main site if you need help.",
+        cancellationPolicy: "No booking changes were made.",
+      });
       showError(message || "This event could not be loaded.");
     }
 
@@ -206,6 +314,12 @@
         priceCents: 4500, currency: "USD",
         priceFormatted: "$45.00",
         capacity: 20, maxSeatsPerOrder: 4,
+        details: "A guided painting night with room for slow looking, conversation, and leaving with a finished canvas.",
+        included: "Canvas, paint, guided session, and one hosted drink are included.",
+        arrivalNotes: "Plan to arrive 10 minutes early so the room can begin together.",
+        accessibilityNotes: "Reply after booking if you need seating, sensory, or access accommodations.",
+        cancellationPolicy: "Tickets are refundable only if the studio cancels the event. If you cannot attend, reply as early as possible and we will try to help.",
+        waitlistEnabled: true,
       };
       if (state === "free") {
         return Object.assign(base, { priceCents: 0, priceFormatted: "$0.00", free: true, seatsRemaining: 12, soldOut: false, open: true });
@@ -271,6 +385,45 @@
           showError(e.message || "Something went wrong. Please try again.");
           els.btn.disabled = false;
           els.btn.textContent = isFree ? "Register" : "Continue to payment";
+        });
+    });
+
+    els.waitlistForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      clearWaitlistMessages();
+      var name = document.getElementById("waitName").value.trim();
+      var email = document.getElementById("waitEmail").value.trim();
+      var phone = document.getElementById("waitPhone").value.trim();
+      var seats = Number(document.getElementById("waitSeats").value) || 1;
+      var note = document.getElementById("waitNote").value.trim();
+      var gotcha = els.waitlistForm.querySelector('[name="_gotcha"]').value;
+      if (!name) return showWaitlistError("Please enter your name.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showWaitlistError("Please enter a valid email.");
+
+      if (previewMode) {
+        showWaitlistSuccess("Preview mode - waitlist signup is disabled, but this is the saved state visitors will see.");
+        return;
+      }
+
+      els.waitlistBtn.disabled = true;
+      els.waitlistBtn.textContent = "Joining...";
+      fetch("/api/events/" + SLUG + "/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name, email: email, phone: phone, seats: seats, note: note, _gotcha: gotcha }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.d.error || "Unable to join the waitlist.");
+          showWaitlistSuccess("You're on the waitlist. Keep an eye on your email for any opening or future date.");
+          els.waitlistForm.reset();
+        })
+        .catch(function (e) {
+          showWaitlistError(e.message || "Something went wrong. Please try again.");
+        })
+        .finally(function () {
+          els.waitlistBtn.disabled = false;
+          els.waitlistBtn.textContent = "Join waitlist";
         });
     });
   })();

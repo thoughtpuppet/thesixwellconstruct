@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cult &amp; Shift - the six.well construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<style>
+  :root {
+    --venture-color: var(--color-events);
+    --venture-accent: var(--color-events);
+    --venture-dim: var(--color-events-dim);
+    --venture-wash: rgba(0, 93, 37, 0.1);
+  }
+  .event-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,440px); gap:42px; align-items:start; }
+  .stack { display:grid; gap:22px; }
+  .line-panel { border-top:5px solid var(--ring-faint); }
+  .detail-row { display:grid; grid-template-columns:140px minmax(0,1fr); gap:16px; border-bottom:5px solid var(--ring-faint); padding:14px 0; color:var(--text-muted); font-family:var(--font-serif); line-height:1.55; }
+  .detail-key, .field label, .form-title { color:var(--venture-dim); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
+  .form-card { border:5px solid var(--ring-faint); padding:18px; display:grid; gap:16px; }
+  .form-card form { display:grid; gap:14px; }
+  .field { display:grid; gap:8px; }
+  .field input, .field select, .field textarea { width:100%; background:transparent; border:5px solid var(--ring-faint); color:var(--text); font-family:var(--font-sans); font-size:15px; padding:12px 14px; }
+  .field textarea { min-height:110px; resize:vertical; line-height:1.5; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:var(--venture-accent); }
+  .total-line { display:flex; justify-content:space-between; gap:18px; align-items:baseline; border-top:5px solid var(--ring-faint); padding-top:14px; color:var(--text-muted); font-family:var(--font-serif); }
+  .total-line strong { color:var(--text); font-family:var(--font-display); font-size:20px; }
+  .submit-btn { min-height:50px; border:5px solid var(--venture-accent); background:transparent; color:var(--text); font-family:var(--font-display); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; cursor:pointer; }
+  .submit-btn:hover:not(:disabled) { background:var(--venture-accent); color:#0e0e0e; }
+  .submit-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .form-note, .form-message { color:var(--text-muted); font-family:var(--font-serif); font-size:13px; line-height:1.55; margin:0; }
+  .form-message[data-state="error"] { color:var(--color-tattooing); }
+  .form-message[data-state="ok"] { color:var(--venture-accent); }
+  .honeypot { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  @media (max-width:900px) {
+    .event-grid { grid-template-columns:1fr; }
+    .detail-row { grid-template-columns:1fr; gap:4px; }
+  }
+</style>
+</head>
+<body class="venture-page" data-venture="events">
+  <div class="venture-grain" aria-hidden="true"></div>
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">recurring showcase</span>
+        <h1 class="venture-title" id="page-title">Cult &amp; Shift.</h1>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-lede">A ticketed showcase night with an open mic lane and an intermission held by a prebooked artist or performer.</p>
+        <p class="hero-note">Buy a seat to attend, or request an open-mic slot for the night. The host assigns final times and sends performer details by email.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="/events/">all events</a>
+          <a class="venture-link" href="#open-mic">open mic</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="event-grid">
+        <div class="stack">
+          <div class="line-panel">
+            <div class="detail-row"><span class="detail-key">When</span><span id="ev-when">Loading</span></div>
+            <div class="detail-row"><span class="detail-key">Where</span><span id="ev-where">Loading</span></div>
+            <div class="detail-row"><span class="detail-key">Ticket</span><span id="ev-price">Loading</span></div>
+            <div class="detail-row"><span class="detail-key">Seats left</span><span id="ev-seats">Loading</span></div>
+            <div class="detail-row"><span class="detail-key">Night shape</span><span>Audience entry, open mic sequence, intermission feature, then the closing run.</span></div>
+          </div>
+
+          <article class="form-card" id="open-mic">
+            <span class="form-title">Open Mic Request</span>
+            <form id="micForm" novalidate>
+              <div class="field">
+                <label for="performerName">Performer name</label>
+                <input id="performerName" name="performerName" autocomplete="name" required>
+              </div>
+              <div class="field">
+                <label for="performerEmail">Email</label>
+                <input id="performerEmail" name="performerEmail" type="email" autocomplete="email" required>
+              </div>
+              <div class="field">
+                <label for="performerPhone">Phone</label>
+                <input id="performerPhone" name="performerPhone" type="tel" autocomplete="tel">
+              </div>
+              <div class="field">
+                <label for="actType">Act type</label>
+                <input id="actType" name="actType" placeholder="poem, song, monologue, movement, reading">
+              </div>
+              <div class="field">
+                <label for="pieceTitle">Piece title</label>
+                <input id="pieceTitle" name="pieceTitle">
+              </div>
+              <div class="field">
+                <label for="requestedSlot">Requested time</label>
+                <input id="requestedSlot" name="requestedSlot" placeholder="early, after intermission, around 8:30, etc.">
+              </div>
+              <div class="field">
+                <label for="notes">Setup / notes</label>
+                <textarea id="notes" name="notes" placeholder="Tell us anything needed for the piece, timing, intro, or setup."></textarea>
+              </div>
+              <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
+              <button class="submit-btn" type="submit" id="micBtn">Request a slot</button>
+              <p class="form-message" id="micMessage"></p>
+              <p class="form-note">Requests are not final until the host assigns a slot. You will receive an email with your time and performer notes.</p>
+            </form>
+          </article>
+        </div>
+
+        <aside class="form-card">
+          <span class="form-title">Tickets</span>
+          <form id="ticketForm" novalidate>
+            <div class="field">
+              <label for="name">Your name</label>
+              <input id="name" name="name" autocomplete="name" required>
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" autocomplete="email" required>
+            </div>
+            <div class="field">
+              <label for="phone">Phone</label>
+              <input id="phone" name="phone" type="tel" autocomplete="tel">
+            </div>
+            <div class="field">
+              <label for="seats">Seats</label>
+              <select id="seats" name="seats"></select>
+            </div>
+            <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <div class="total-line"><span>Total</span><strong id="total">-</strong></div>
+            <button class="submit-btn" type="submit" id="ticketBtn" disabled>Loading</button>
+            <p class="form-message" id="ticketMessage"></p>
+            <p class="form-note" id="ticketNote">Tickets are confirmed after registration or Square payment clears.</p>
+          </form>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>&copy; the six.well construct</p>
+      <div class="page-links">
+        <a href="/events/">events</a>
+        <a href="/">return to construct</a>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+  (function () {
+    var SLUG = "cultandshift";
+    var priceCents = 0, currency = "USD", isFree = false;
+    var ticketOpen = false;
+    var els = {
+      when: document.getElementById("ev-when"),
+      where: document.getElementById("ev-where"),
+      price: document.getElementById("ev-price"),
+      seatsLeft: document.getElementById("ev-seats"),
+      seats: document.getElementById("seats"),
+      total: document.getElementById("total"),
+      ticketBtn: document.getElementById("ticketBtn"),
+      ticketForm: document.getElementById("ticketForm"),
+      ticketMessage: document.getElementById("ticketMessage"),
+      ticketNote: document.getElementById("ticketNote"),
+      micForm: document.getElementById("micForm"),
+      micBtn: document.getElementById("micBtn"),
+      micMessage: document.getElementById("micMessage"),
+    };
+
+    function money(cents) {
+      return new Intl.NumberFormat("en-US", { style:"currency", currency: currency || "USD" }).format((Number(cents) || 0) / 100);
+    }
+    function fmtWhen(value) {
+      if (!value) return "Date to be announced";
+      try {
+        return new Date(value).toLocaleString("en-US", {
+          timeZone:"America/New_York", weekday:"long", month:"long",
+          day:"numeric", hour:"numeric", minute:"2-digit", timeZoneName:"short",
+        });
+      } catch (error) { return "Date to be announced"; }
+    }
+    function message(el, text, state) {
+      el.textContent = text || "";
+      el.dataset.state = state || "";
+    }
+    function updateTotal() {
+      var n = Number(els.seats.value) || 1;
+      els.total.textContent = isFree ? "Free" : money(priceCents * n);
+    }
+    function applyEvent(ev) {
+      priceCents = ev.priceCents || 0;
+      currency = ev.currency || "USD";
+      isFree = ev.free || priceCents <= 0;
+      ticketOpen = Boolean(ev.open);
+      els.when.textContent = fmtWhen(ev.startsAt);
+      els.where.textContent = ev.location || "Shared after booking";
+      els.price.textContent = isFree ? "Free" : ev.priceFormatted + " per seat";
+      els.seatsLeft.textContent = ev.soldOut ? "Sold out" : (ev.seatsRemaining + " of " + ev.capacity);
+      els.seats.innerHTML = "";
+      if (!ticketOpen) {
+        els.ticketBtn.disabled = true;
+        els.ticketBtn.textContent = ev.soldOut ? "Sold out" : "Tickets closed";
+        els.ticketNote.textContent = "Open this event in Studio to set date, price, capacity, and ticket status.";
+        updateTotal();
+        return;
+      }
+      var max = Math.min(ev.maxSeatsPerOrder || 1, ev.seatsRemaining || 0);
+      for (var i = 1; i <= max; i += 1) {
+        var opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = i + (i === 1 ? " seat" : " seats");
+        els.seats.appendChild(opt);
+      }
+      els.seats.addEventListener("change", updateTotal);
+      updateTotal();
+      els.ticketBtn.disabled = false;
+      els.ticketBtn.textContent = isFree ? "Register" : "Continue to payment";
+      els.ticketNote.textContent = isFree ? "Register to reserve your seat." : "Payment is handled by Square on the next screen.";
+    }
+
+    fetch("/api/events/" + SLUG + "/context")
+      .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
+        applyEvent(res.d.event);
+      })
+      .catch(function (error) {
+        els.when.textContent = "Date to be announced";
+        els.where.textContent = "the six.well construct";
+        els.price.textContent = "Tickets not open yet";
+        els.seatsLeft.textContent = "-";
+        els.ticketBtn.disabled = true;
+        els.ticketBtn.textContent = "Tickets closed";
+        message(els.ticketMessage, error.message || "Tickets are not open yet.", "error");
+      });
+
+    els.ticketForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      message(els.ticketMessage, "", "");
+      if (!ticketOpen) return message(els.ticketMessage, "Tickets are not open yet.", "error");
+      var name = document.getElementById("name").value.trim();
+      var email = document.getElementById("email").value.trim();
+      var phone = document.getElementById("phone").value.trim();
+      var seats = Number(els.seats.value) || 1;
+      var gotcha = els.ticketForm.querySelector("[name='_gotcha']").value;
+      if (!name) return message(els.ticketMessage, "Please enter your name.", "error");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return message(els.ticketMessage, "Please enter a valid email.", "error");
+      els.ticketBtn.disabled = true;
+      els.ticketBtn.textContent = isFree ? "Registering" : "Sending to Square";
+      fetch("/api/events/" + SLUG + "/checkout", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ name:name, email:email, phone:phone, seats:seats, _gotcha:gotcha }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.d.error || "Unable to reserve tickets.");
+          if (res.d.checkoutUrl) window.location.href = res.d.checkoutUrl;
+          else if (res.d.ticketId) window.location.href = "/events/confirmed/?ticket=" + encodeURIComponent(res.d.ticketId) + "&event=" + encodeURIComponent(SLUG);
+        })
+        .catch(function (error) {
+          message(els.ticketMessage, error.message || "Unable to reserve tickets.", "error");
+          els.ticketBtn.disabled = false;
+          els.ticketBtn.textContent = isFree ? "Register" : "Continue to payment";
+        });
+    });
+
+    els.micForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      message(els.micMessage, "", "");
+      var performerName = document.getElementById("performerName").value.trim();
+      var performerEmail = document.getElementById("performerEmail").value.trim();
+      if (!performerName) return message(els.micMessage, "Please enter your performer name.", "error");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(performerEmail)) return message(els.micMessage, "Please enter a valid email.", "error");
+      els.micBtn.disabled = true;
+      els.micBtn.textContent = "Sending";
+      fetch("/api/events/" + SLUG + "/open-mic", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
+          performerName: performerName,
+          performerEmail: performerEmail,
+          performerPhone: document.getElementById("performerPhone").value.trim(),
+          actType: document.getElementById("actType").value.trim(),
+          pieceTitle: document.getElementById("pieceTitle").value.trim(),
+          requestedSlot: document.getElementById("requestedSlot").value.trim(),
+          notes: document.getElementById("notes").value.trim(),
+          _gotcha: els.micForm.querySelector("[name='_gotcha']").value,
+        }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.d.error || "Unable to save request.");
+          els.micForm.reset();
+          message(els.micMessage, "Request received. The host will assign the final slot by email.", "ok");
+        })
+        .catch(function (error) { message(els.micMessage, error.message || "Unable to save request.", "error"); })
+        .finally(function () {
+          els.micBtn.disabled = false;
+          els.micBtn.textContent = "Request a slot";
+        });
+    });
+  })();
+  </script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

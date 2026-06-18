@@ -16,6 +16,7 @@
 import {
   notifyEventTicketPaid,
   notifyEventTicketCancelled,
+  notifyEventOpenMicSlotAssigned,
 } from "../notifications/_lib.js";
 
 const SQUARE_VERSION = "2026-05-20";
@@ -347,6 +348,14 @@ function normalizeEvent(row) {
     capacity: Number(row.capacity) || 0,
     maxSeatsPerOrder: Number(row.max_seats_per_order) || 4,
     status: row.status || "draft",
+    imageUrl: row.image_url || "",
+    details: row.details || "",
+    included: row.included || "",
+    arrivalNotes: row.arrival_notes || "",
+    accessibilityNotes: row.accessibility_notes || "",
+    cancellationPolicy: row.cancellation_policy || "",
+    contactNote: row.contact_note || "",
+    waitlistEnabled: row.waitlist_enabled !== 0,
   };
 }
 
@@ -368,12 +377,42 @@ async function seatsTaken(db, eventId) {
   return Number(row?.taken) || 0;
 }
 
-function publicEventView(event, taken) {
-  const seatsRemaining = Math.max(0, event.capacity - taken);
+async function ticketStats(db, eventId) {
+  const row = await db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN status = 'paid' THEN seats ELSE 0 END), 0) AS paid_seats,
+         COALESCE(SUM(CASE WHEN status = 'pending' THEN seats ELSE 0 END), 0) AS pending_seats,
+         COALESCE(SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END), 0) AS paid_orders,
+         COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_orders
+       FROM event_tickets WHERE event_id = ?`
+    )
+    .bind(eventId)
+    .first();
+  return {
+    paidSeats: Number(row?.paid_seats) || 0,
+    pendingSeats: Number(row?.pending_seats) || 0,
+    paidOrders: Number(row?.paid_orders) || 0,
+    pendingOrders: Number(row?.pending_orders) || 0,
+  };
+}
+
+function publicEventView(event, stats = {}) {
+  const paidSeats = Number(stats.paidSeats) || 0;
+  const pendingSeats = Number(stats.pendingSeats) || 0;
+  const seatsHeld = paidSeats + pendingSeats;
+  const seatsRemaining = Math.max(0, event.capacity - seatsHeld);
   return {
     slug: event.slug,
     title: event.title,
     description: event.description,
+    details: event.details,
+    included: event.included,
+    arrivalNotes: event.arrivalNotes,
+    accessibilityNotes: event.accessibilityNotes,
+    cancellationPolicy: event.cancellationPolicy,
+    contactNote: event.contactNote,
+    imageUrl: event.imageUrl,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
     location: event.location,
@@ -383,10 +422,16 @@ function publicEventView(event, taken) {
     currency: event.currency,
     capacity: event.capacity,
     maxSeatsPerOrder: event.maxSeatsPerOrder,
+    paidSeats,
+    pendingSeats,
+    paidOrders: Number(stats.paidOrders) || 0,
+    pendingOrders: Number(stats.pendingOrders) || 0,
+    holdMinutes: STALE_PENDING_MINUTES,
     seatsRemaining,
     soldOut: seatsRemaining <= 0,
     status: event.status,
     open: event.status === "open" && seatsRemaining > 0,
+    waitlistEnabled: event.waitlistEnabled,
   };
 }
 
@@ -450,8 +495,8 @@ export async function handleEventsList(request, env) {
     const events = [];
     for (const row of rows) {
       const event = normalizeEvent(row);
-      const taken = await seatsTaken(db, event.id);
-      events.push(publicEventView(event, taken));
+      const stats = await ticketStats(db, event.id);
+      events.push(publicEventView(event, stats));
     }
     return json({ events });
   } catch (error) {
@@ -496,8 +541,8 @@ export async function handleEventContext(request, env, slug) {
     if (!event || event.status === "draft") {
       return errorResponse("Event not found.", 404);
     }
-    const taken = await seatsTaken(db, event.id);
-    return json({ event: publicEventView(event, taken) });
+    const stats = await ticketStats(db, event.id);
+    return json({ event: publicEventView(event, stats) });
   } catch (error) {
     return errorResponse("Unable to load event.", 500, { detail: error.message });
   }
@@ -547,11 +592,10 @@ export async function handleEventCheckout(request, env, slug) {
       return errorResponse("Ticket checkout is not configured yet.", 503);
     }
 
-    // Capacity guard against paid tickets. Concurrent pending checkouts can
-    // still oversell slightly under heavy contention; the webhook is the final
-    // source of truth and a sold-out paid count blocks new orders.
-    const taken = await seatsTaken(db, event.id);
-    const seatsRemaining = Math.max(0, event.capacity - taken);
+    // Capacity guard against paid tickets plus active pending Square holds.
+    // The scheduled reaper clears abandoned pending holds after the hold window.
+    const stats = await ticketStats(db, event.id);
+    const seatsRemaining = Math.max(0, event.capacity - stats.paidSeats - stats.pendingSeats);
     if (seatsRemaining <= 0) {
       return errorResponse("This event is sold out.", 409, { soldOut: true });
     }
@@ -644,6 +688,135 @@ export async function handleEventCheckout(request, env, slug) {
     });
   } catch (error) {
     return errorResponse("Unable to create ticket.", 500, { detail: error.message });
+  }
+}
+
+export async function handleEventWaitlist(request, env, slug) {
+  const body = await readJsonOrForm(request);
+  if (!body) return errorResponse("Expected JSON or form data.", 400);
+
+  if (asString(body._gotcha)) {
+    return json({ ok: true, spam: true });
+  }
+
+  const name = asString(body.name || body.fullName);
+  const email = normalizeEmail(body.email);
+  const phone = asString(body.phone) || null;
+  const seats = Math.max(1, Math.floor(Number(body.seats) || 1));
+  const note = asString(body.note);
+
+  if (!name) return errorResponse("Name is required.", 400);
+  if (!email || !isLikelyEmail(email)) {
+    return errorResponse("A valid email is required.", 400);
+  }
+
+  try {
+    const db = requireEventsDb(env);
+    const event = await getEventBySlug(db, slug);
+    if (!event || event.status === "draft") {
+      return errorResponse("Event not found.", 404);
+    }
+    if (!event.waitlistEnabled) {
+      return errorResponse("The waitlist is not open for this event.", 409);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `INSERT INTO event_waitlist (
+          id, event_id, contact_name, contact_email, contact_phone,
+          seats_requested, note, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`
+      )
+      .bind(id, event.id, name, email, phone, seats, note, now, now)
+      .run();
+
+    return json({ ok: true, waitlistId: id });
+  } catch (error) {
+    return errorResponse("Unable to join the waitlist.", 500, { detail: error.message });
+  }
+}
+
+function normalizeOpenMicSignup(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    eventId: row.event_id || row.eventId || "",
+    eventSlug: row.event_slug || row.eventSlug || "",
+    eventTitle: row.event_title || row.eventTitle || "",
+    performerName: row.performer_name || row.performerName || "",
+    performerEmail: row.performer_email || row.performerEmail || "",
+    performerPhone: row.performer_phone || row.performerPhone || "",
+    actType: row.act_type || row.actType || "",
+    pieceTitle: row.piece_title || row.pieceTitle || "",
+    notes: row.notes || "",
+    requestedSlot: row.requested_slot || row.requestedSlot || null,
+    assignedSlot: row.assigned_slot || row.assignedSlot || null,
+    slotDurationMinutes: Number(row.slot_duration_minutes || row.slotDurationMinutes || 5),
+    status: row.status || "requested",
+    slotEmailSentAt: row.slot_email_sent_at || row.slotEmailSentAt || null,
+    createdAt: row.created_at || row.createdAt || null,
+    updatedAt: row.updated_at || row.updatedAt || null,
+  };
+}
+
+export async function handleEventOpenMicSignup(request, env, slug) {
+  const body = await readJsonOrForm(request);
+  if (!body) return errorResponse("Expected JSON or form data.", 400);
+
+  if (asString(body._gotcha)) {
+    return json({ ok: true, spam: true });
+  }
+
+  const performerName = asString(body.performerName || body.name);
+  const performerEmail = normalizeEmail(body.performerEmail || body.email);
+  const performerPhone = asString(body.performerPhone || body.phone) || null;
+  const actType = asString(body.actType);
+  const pieceTitle = asString(body.pieceTitle);
+  const notes = asString(body.notes);
+  const requestedSlot = asString(body.requestedSlot) || null;
+
+  if (!performerName) return errorResponse("Name is required.", 400);
+  if (!performerEmail || !isLikelyEmail(performerEmail)) {
+    return errorResponse("A valid email is required.", 400);
+  }
+
+  try {
+    const db = requireEventsDb(env);
+    const event = await getEventBySlug(db, slug);
+    if (!event || event.status === "draft") {
+      return errorResponse("Event not found.", 404);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db
+      .prepare(
+        `INSERT INTO event_open_mic_signups (
+          id, event_id, performer_name, performer_email, performer_phone,
+          act_type, piece_title, notes, requested_slot, assigned_slot,
+          slot_duration_minutes, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 5, 'requested', ?, ?)`
+      )
+      .bind(
+        id,
+        event.id,
+        performerName,
+        performerEmail,
+        performerPhone,
+        actType,
+        pieceTitle,
+        notes,
+        requestedSlot,
+        now,
+        now
+      )
+      .run();
+
+    return json({ ok: true, signupId: id });
+  } catch (error) {
+    return errorResponse("Unable to save open mic signup.", 500, { detail: error.message });
   }
 }
 
@@ -882,17 +1055,38 @@ async function eventStats(db, eventId) {
   const row = await db
     .prepare(
       `SELECT
-         COALESCE(SUM(CASE WHEN status = 'paid' THEN seats ELSE 0 END), 0) AS paid_seats,
-         COALESCE(SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END), 0) AS paid_orders,
-         COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_orders
-       FROM event_tickets WHERE event_id = ?`
+         COALESCE(SUM(CASE WHEN t.status = 'paid' THEN t.seats ELSE 0 END), 0) AS paid_seats,
+         COALESCE(SUM(CASE WHEN t.status = 'pending' THEN t.seats ELSE 0 END), 0) AS pending_seats,
+         COALESCE(SUM(CASE WHEN t.status = 'paid' THEN 1 ELSE 0 END), 0) AS paid_orders,
+         COALESCE(SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_orders,
+         COALESCE(w.waitlist_count, 0) AS waitlist_count
+       FROM event_tickets t
+       LEFT JOIN (
+         SELECT event_id, COUNT(*) AS waitlist_count
+         FROM event_waitlist
+         WHERE status = 'new'
+         GROUP BY event_id
+       ) w ON w.event_id = ?
+       WHERE t.event_id = ?`
     )
-    .bind(eventId)
-    .first();
+    .bind(eventId, eventId)
+    .first()
+    .catch(async () => {
+      const stats = await ticketStats(db, eventId);
+      return {
+        paid_seats: stats.paidSeats,
+        pending_seats: stats.pendingSeats,
+        paid_orders: stats.paidOrders,
+        pending_orders: stats.pendingOrders,
+        waitlist_count: 0,
+      };
+    });
   return {
     paidSeats: Number(row?.paid_seats) || 0,
+    pendingSeats: Number(row?.pending_seats) || 0,
     paidOrders: Number(row?.paid_orders) || 0,
     pendingOrders: Number(row?.pending_orders) || 0,
+    waitlistCount: Number(row?.waitlist_count) || 0,
   };
 }
 
@@ -912,7 +1106,7 @@ export async function handleAdminEventsList(request, env) {
         ...event,
         priceFormatted: formatMoney(event.priceCents, event.currency),
         ...stats,
-        seatsRemaining: Math.max(0, event.capacity - stats.paidSeats),
+        seatsRemaining: Math.max(0, event.capacity - stats.paidSeats - stats.pendingSeats),
       });
     }
     return json({ events });
@@ -960,8 +1154,10 @@ export async function handleAdminEventCreate(request, env) {
         `INSERT INTO events (
           id, slug, title, description, starts_at, ends_at, location,
           price_cents, currency, capacity, max_seats_per_order, status,
+          image_url, details, included, arrival_notes, accessibility_notes,
+          cancellation_policy, contact_note, waitlist_enabled,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         id,
@@ -976,6 +1172,14 @@ export async function handleAdminEventCreate(request, env) {
         Math.max(0, Math.floor(Number(body.capacity) || 0)),
         Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 4)),
         ADMIN_EVENT_STATUSES.has(asString(body.status)) ? asString(body.status) : "draft",
+        asString(body.imageUrl),
+        asString(body.details),
+        asString(body.included),
+        asString(body.arrivalNotes),
+        asString(body.accessibilityNotes),
+        asString(body.cancellationPolicy),
+        asString(body.contactNote),
+        body.waitlistEnabled === false ? 0 : 1,
         now,
         now
       )
@@ -988,7 +1192,7 @@ export async function handleAdminEventCreate(request, env) {
         ...created,
         priceFormatted: formatMoney(created.priceCents, created.currency),
         ...stats,
-        seatsRemaining: Math.max(0, created.capacity - stats.paidSeats),
+        seatsRemaining: Math.max(0, created.capacity - stats.paidSeats - stats.pendingSeats),
       },
     }, { status: 201 });
   } catch (error) {
@@ -1029,6 +1233,14 @@ export async function handleAdminEventUpdate(request, env, slug) {
       setField("max_seats_per_order", Math.max(1, Math.floor(Number(body.maxSeatsPerOrder) || 1)));
     }
     if (body.status !== undefined) setField("status", asString(body.status));
+    if (body.imageUrl !== undefined) setField("image_url", asString(body.imageUrl));
+    if (body.details !== undefined) setField("details", asString(body.details));
+    if (body.included !== undefined) setField("included", asString(body.included));
+    if (body.arrivalNotes !== undefined) setField("arrival_notes", asString(body.arrivalNotes));
+    if (body.accessibilityNotes !== undefined) setField("accessibility_notes", asString(body.accessibilityNotes));
+    if (body.cancellationPolicy !== undefined) setField("cancellation_policy", asString(body.cancellationPolicy));
+    if (body.contactNote !== undefined) setField("contact_note", asString(body.contactNote));
+    if (body.waitlistEnabled !== undefined) setField("waitlist_enabled", body.waitlistEnabled ? 1 : 0);
 
     if (!fields.length) return errorResponse("No fields to update.", 400);
 
@@ -1046,7 +1258,7 @@ export async function handleAdminEventUpdate(request, env, slug) {
         ...updated,
         priceFormatted: formatMoney(updated.priceCents, updated.currency),
         ...stats,
-        seatsRemaining: Math.max(0, updated.capacity - stats.paidSeats),
+        seatsRemaining: Math.max(0, updated.capacity - stats.paidSeats - stats.pendingSeats),
       },
     });
   } catch (error) {
@@ -1125,6 +1337,256 @@ export async function handleAdminEventTicketCancel(request, env, ticketId) {
   }
 }
 
+export async function handleAdminEventTicketReconcile(request, env, ticketId) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireEventsDb(env);
+    const row = await db
+      .prepare("SELECT * FROM event_tickets WHERE id = ?")
+      .bind(ticketId)
+      .first();
+    if (!row) return errorResponse("Ticket not found.", 404);
+    if (row.status !== "pending") {
+      return json({ ok: true, status: row.status, reconciled: false });
+    }
+    if (!row.square_order_id) {
+      return errorResponse("This pending ticket has no Square order id.", 409);
+    }
+
+    const order = await fetchEventsSquareOrder(env, row.square_order_id);
+    if (orderLooksPaid(order)) {
+      await markTicketPaid(db, env, request, row, order, "");
+      return json({ ok: true, status: "paid", reconciled: true });
+    }
+    return json({ ok: true, status: "pending", reconciled: false });
+  } catch (error) {
+    return errorResponse("Unable to reconcile ticket.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminEventWaitlistList(request, env, slug) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireEventsDb(env);
+    const event = await getEventBySlug(db, slug);
+    if (!event) return errorResponse("Event not found.", 404);
+    const result = await db
+      .prepare(
+        `SELECT *
+         FROM event_waitlist
+         WHERE event_id = ?
+         ORDER BY
+           CASE status WHEN 'new' THEN 0 WHEN 'contacted' THEN 1 ELSE 2 END,
+           created_at ASC`
+      )
+      .bind(event.id)
+      .all();
+    return json({
+      event: { id: event.id, slug: event.slug, title: event.title },
+      waitlist: (result.results || []).map((row) => ({
+        id: row.id,
+        contactName: row.contact_name || "",
+        contactEmail: row.contact_email || "",
+        contactPhone: row.contact_phone || "",
+        seatsRequested: Number(row.seats_requested) || 1,
+        note: row.note || "",
+        status: row.status || "new",
+        createdAt: row.created_at || "",
+      })),
+    });
+  } catch (error) {
+    return errorResponse("Unable to load waitlist.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminEventsReadiness(request, env) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  const checks = [];
+  const add = (id, label, ready, detail, meta = {}) => {
+    checks.push({ id, label, status: ready ? "ready" : "needs_attention", ready, detail, ...meta });
+  };
+
+  add(
+    "square_events",
+    "Square Events checkout",
+    eventsSquareConfigured(env),
+    eventsSquareConfigured(env)
+      ? `Checkout can create ${env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox"} event payment links.`
+      : "Missing SQUARE_ACCESS_TOKEN or SQUARE_EVENTS_LOCATION_ID."
+  );
+  add(
+    "square_events_webhook",
+    "Square Events webhook",
+    Boolean(asString(env.SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY)),
+    asString(env.SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY)
+      ? `Webhook URL: ${asString(env.SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL) || "/api/square-events/webhook"}`
+      : "Missing SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY."
+  );
+  add(
+    "email",
+    "Event email identity",
+    Boolean(env.EMAIL),
+    env.EMAIL ? "Transactional event emails can be sent." : "Missing EMAIL binding."
+  );
+
+  try {
+    const db = requireEventsDb(env);
+    const staleCutoff = new Date(Date.now() - STALE_PENDING_MINUTES * 60 * 1000).toISOString();
+    const tables = await db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM events) AS events_count,
+           (SELECT COUNT(*) FROM event_tickets WHERE status = 'pending') AS pending_count,
+           (SELECT COUNT(*) FROM event_tickets WHERE status = 'pending' AND created_at < ?) AS stale_pending_count,
+           (SELECT COUNT(*) FROM event_waitlist WHERE status = 'new') AS waitlist_count`
+      )
+      .bind(staleCutoff)
+      .first();
+    add("d1_tables", "D1 event tables", true, `${tables?.events_count || 0} events, ${tables?.pending_count || 0} pending holds, ${tables?.waitlist_count || 0} waitlist entries.`);
+    add("stale_holds", "Stale pending holds", Number(tables?.stale_pending_count) === 0, `${tables?.stale_pending_count || 0} pending holds are older than ${STALE_PENDING_MINUTES} minutes.`);
+  } catch (error) {
+    add("d1_tables", "D1 event tables", false, error.message);
+  }
+
+  return json({
+    ready: checks.every((check) => check.ready),
+    checkedAt: new Date().toISOString(),
+    holdMinutes: STALE_PENDING_MINUTES,
+    checks,
+  });
+}
+
+export async function handleAdminEventOpenMicList(request, env, slug) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireEventsDb(env);
+    const event = await getEventBySlug(db, slug);
+    if (!event) return errorResponse("Event not found.", 404);
+
+    const result = await db
+      .prepare(
+        `SELECT s.*, e.slug AS event_slug, e.title AS event_title
+         FROM event_open_mic_signups s
+         JOIN events e ON e.id = s.event_id
+         WHERE s.event_id = ?
+         ORDER BY
+           CASE WHEN s.assigned_slot IS NULL THEN 1 ELSE 0 END,
+           s.assigned_slot ASC,
+           s.created_at ASC`
+      )
+      .bind(event.id)
+      .all();
+
+    return json({
+      event: {
+        id: event.id,
+        slug: event.slug,
+        title: event.title,
+        startsAt: event.startsAt,
+        location: event.location,
+      },
+      signups: (result.results || []).map(normalizeOpenMicSignup),
+    });
+  } catch (error) {
+    return errorResponse("Unable to load open mic signups.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminEventOpenMicUpdate(request, env, slug, signupId) {
+  const authError = requireEventsAdmin(request, env);
+  if (authError) return authError;
+
+  const body = await readJsonOrForm(request);
+  if (!body) return errorResponse("Expected JSON or form data.", 400);
+
+  try {
+    const db = requireEventsDb(env);
+    const event = await getEventBySlug(db, slug);
+    if (!event) return errorResponse("Event not found.", 404);
+
+    const existing = await db
+      .prepare(
+        `SELECT s.*, e.slug AS event_slug, e.title AS event_title,
+                e.starts_at AS event_starts_at, e.location AS event_location
+         FROM event_open_mic_signups s
+         JOIN events e ON e.id = s.event_id
+         WHERE s.id = ? AND e.id = ?`
+      )
+      .bind(signupId, event.id)
+      .first();
+    if (!existing) return errorResponse("Open mic signup not found.", 404);
+
+    const status = asString(body.status || existing.status || "requested");
+    if (!["requested", "scheduled", "cancelled"].includes(status)) {
+      return errorResponse("Status must be requested, scheduled, or cancelled.", 400);
+    }
+
+    const assignedSlot =
+      body.assignedSlot !== undefined ? (asString(body.assignedSlot) || null) : existing.assigned_slot;
+    const slotDurationMinutes =
+      body.slotDurationMinutes !== undefined
+        ? Math.max(1, Math.floor(Number(body.slotDurationMinutes) || 5))
+        : Number(existing.slot_duration_minutes) || 5;
+    const notes = body.notes !== undefined ? asString(body.notes) : existing.notes || "";
+    const now = new Date().toISOString();
+
+    await db
+      .prepare(
+        `UPDATE event_open_mic_signups
+         SET assigned_slot = ?, slot_duration_minutes = ?, status = ?,
+             notes = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(assignedSlot, slotDurationMinutes, status, notes, now, signupId)
+      .run();
+
+    let updated = await db
+      .prepare(
+        `SELECT s.*, e.slug AS event_slug, e.title AS event_title,
+                e.starts_at AS event_starts_at, e.location AS event_location
+         FROM event_open_mic_signups s
+         JOIN events e ON e.id = s.event_id
+         WHERE s.id = ?`
+      )
+      .bind(signupId)
+      .first();
+
+    let delivery = null;
+    if (body.sendEmail) {
+      delivery = await notifyEventOpenMicSlotAssigned(env, request, updated, {
+        id: event.id,
+        slug: event.slug,
+        title: event.title,
+        starts_at: event.startsAt,
+        location: event.location,
+      }, {
+        idempotencyKey: `event_open_mic_slot:${signupId}:${assignedSlot || "unscheduled"}:${crypto.randomUUID()}`,
+      });
+
+      if (delivery?.ok) {
+        await db
+          .prepare("UPDATE event_open_mic_signups SET slot_email_sent_at = ?, updated_at = ? WHERE id = ?")
+          .bind(now, now, signupId)
+          .run()
+          .catch(() => {});
+        updated = { ...updated, slot_email_sent_at: now };
+      }
+    }
+
+    return json({ ok: true, signup: normalizeOpenMicSignup(updated), delivery });
+  } catch (error) {
+    return errorResponse("Unable to update open mic signup.", 500, { detail: error.message });
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Router (called from _worker.js)                                     */
 /* ------------------------------------------------------------------ */
@@ -1164,6 +1626,14 @@ export async function handleEventsApi(request, env) {
     if (method !== "POST") return errorResponse("Method not allowed.", 405);
     return handleEventCheckout(request, env, slug);
   }
+  if (action === "waitlist") {
+    if (method !== "POST") return errorResponse("Method not allowed.", 405);
+    return handleEventWaitlist(request, env, slug);
+  }
+  if (action === "open-mic") {
+    if (method !== "POST") return errorResponse("Method not allowed.", 405);
+    return handleEventOpenMicSignup(request, env, slug);
+  }
 
   return errorResponse("Unknown events API route.", 404);
 }
@@ -1181,12 +1651,35 @@ export async function handleAdminEventsApi(request, env) {
     return errorResponse("Method not allowed.", 405);
   }
 
+  if (parts[3] === "readiness") {
+    if (method !== "GET") return errorResponse("Method not allowed.", 405);
+    return handleAdminEventsReadiness(request, env);
+  }
+
   if (parts[3] === "tickets" && parts[4] && parts[5] === "cancel") {
     if (method !== "POST") return errorResponse("Method not allowed.", 405);
     return handleAdminEventTicketCancel(request, env, parts[4]);
   }
 
+  if (parts[3] === "tickets" && parts[4] && parts[5] === "reconcile") {
+    if (method !== "POST") return errorResponse("Method not allowed.", 405);
+    return handleAdminEventTicketReconcile(request, env, parts[4]);
+  }
+
   const slug = parts[3];
+  if (parts[4] === "waitlist") {
+    if (method !== "GET") return errorResponse("Method not allowed.", 405);
+    return handleAdminEventWaitlistList(request, env, slug);
+  }
+  if (parts[4] === "open-mic") {
+    if (parts[5]) {
+      if (method !== "PATCH") return errorResponse("Method not allowed.", 405);
+      return handleAdminEventOpenMicUpdate(request, env, slug, parts[5]);
+    }
+    if (method !== "GET") return errorResponse("Method not allowed.", 405);
+    return handleAdminEventOpenMicList(request, env, slug);
+  }
+
   if (method !== "PATCH") return errorResponse("Method not allowed.", 405);
   return handleAdminEventUpdate(request, env, slug);
 }

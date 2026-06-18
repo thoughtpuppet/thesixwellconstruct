@@ -860,7 +860,7 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
   let event = null;
   if (db) {
     event = await db
-      .prepare("SELECT title, starts_at, location FROM events WHERE id = ?")
+      .prepare("SELECT title, slug, starts_at, location FROM events WHERE id = ?")
       .bind(ticketRow.event_id)
       .first()
       .catch(() => null);
@@ -870,11 +870,10 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
   const title = event?.title || "the event";
   const whenLine = event?.starts_at ? `When: ${formatDate(event.starts_at)}` : null;
   const whereLine = event?.location ? `Where: ${event.location}` : null;
-  const confirmationUrl = publicUrl(
-    env,
-    request,
-    `/events/confirmed/?ticket=${encodeURIComponent(ticketRow.id)}`
-  );
+  const confirmationPath =
+    `/events/confirmed/?ticket=${encodeURIComponent(ticketRow.id)}` +
+    (event?.slug ? `&event=${encodeURIComponent(event.slug)}` : "");
+  const confirmationUrl = publicUrl(env, request, confirmationPath);
   const calendarUrl = publicUrl(
     env,
     request,
@@ -961,6 +960,49 @@ export async function notifyEventTicketCancelled(env, request, ticketRow, option
   });
 }
 
+export async function notifyEventOpenMicSlotAssigned(env, request, signupRow, eventRow, options = {}) {
+  const email = signupRow.performer_email || signupRow.performerEmail || "";
+  if (!email) return { ok: false, skipped: true };
+
+  const event = eventRow || {};
+  const title = event.title || event.event_title || "Cult & Shift";
+  const eventWhen = event.starts_at || event.startsAt || "";
+  const eventLocation = event.location || "";
+  const assignedSlot = signupRow.assigned_slot || signupRow.assignedSlot || "";
+  const duration = Number(signupRow.slot_duration_minutes || signupRow.slotDurationMinutes || 5);
+  const performerName = signupRow.performer_name || signupRow.performerName || "there";
+  const showUrl = publicUrl(env, request, `/events/${encodeURIComponent(event.slug || "cultandshift")}/`);
+
+  const text = [
+    `Hi ${performerName},`,
+    "",
+    `Your open-mic slot for ${title} is scheduled.`,
+    "",
+    eventWhen ? `Event: ${formatDate(eventWhen)}` : null,
+    assignedSlot ? `Your slot: ${formatDate(assignedSlot)}` : "Your slot: assigned by the host",
+    duration ? `Planned slot length: ${duration} minutes` : null,
+    eventLocation ? `Where: ${eventLocation}` : null,
+    "",
+    "Please arrive early enough to check in before your slot. Bring anything you need for your piece, and reply to this email if your setup changes.",
+    "",
+    `Event page: ${showUrl}`,
+    "",
+    "See you there,",
+    "the six.well construct",
+  ].filter((line) => line !== null).join("\n");
+
+  return sendTransactionalEmail(env, {
+    to: email,
+    ...eventsEmailIdentity(env),
+    subject: `${title} open mic slot`,
+    text,
+    templateKey: "event_open_mic_slot",
+    relatedType: "event_open_mic_signup",
+    relatedId: signupRow.id,
+    idempotencyKey: options.idempotencyKey || `event_open_mic_slot:${signupRow.id}:${assignedSlot || "unscheduled"}`,
+  });
+}
+
 export async function sendDueEventTicketReminders(env) {
   const db = notificationDb(env);
   if (!db) return { sent: 0, skipped: 0, failed: 0 };
@@ -977,6 +1019,7 @@ export async function sendDueEventTicketReminders(env) {
          FROM event_tickets t
          JOIN events e ON e.id = t.event_id
          WHERE t.status = 'paid'
+           AND t.reminder_sent_at IS NULL
            AND e.starts_at >= ?
            AND e.starts_at < ?
          ORDER BY e.starts_at ASC

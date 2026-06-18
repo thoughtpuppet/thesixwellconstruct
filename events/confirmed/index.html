@@ -156,6 +156,7 @@
     }
     const paid = ticket.status === "paid";
     const cancelled = ticket.status === "cancelled";
+    const paymentLabel = paid ? "received" : (cancelled ? "cancelled" : "pending");
     setEventBackLink(ticket.eventSlug);
 
     badge.classList.toggle("pending", !paid);
@@ -173,7 +174,7 @@
       ticket.eventLocation ? renderRow("Where", ticket.eventLocation) : "",
       renderRow("Name", ticket.contactName),
       renderRow("Seats", ticket.seats),
-      renderRow("Paid", ticket.amountFormatted + " / " + (paid ? "received" : "pending")),
+      renderRow(cancelled ? "Amount" : "Paid", ticket.amountFormatted + " / " + paymentLabel),
       renderRow("Status", ticket.status),
     ];
     details.innerHTML = rows.filter(Boolean).join("");

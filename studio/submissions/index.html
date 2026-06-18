@@ -1163,6 +1163,81 @@
     ));
   }
 
+  function isCultAndShift(ev) {
+    return ev && ev.slug === "cultandshift";
+  }
+
+  function generatedOpenMicSlot(startsAt, index) {
+    if (!startsAt) return "";
+    const date = new Date(startsAt);
+    if (date.toString() === "Invalid Date") return "";
+    // Default open-mic lane begins after audience arrival and the first host beat.
+    date.setMinutes(date.getMinutes() + 45 + (index * 7));
+    return formatDateTimeInput(date.toISOString());
+  }
+
+  function renderOpenMicSignupCard(signup, ev, index) {
+    const assignedInput = formatDateTimeInput(signup.assignedSlot);
+    const generated = generatedOpenMicSlot(ev.startsAt, index);
+    return `
+      <form class="availability-item" data-open-mic-form="${escapeHtml(signup.id)}" data-event-slug="${escapeHtml(ev.slug)}" data-generated-slot="${escapeHtml(generated)}">
+        <span class="pill">${escapeHtml((signup.status || "requested").toUpperCase())}</span>
+        <div class="contact">
+          <strong>${escapeHtml(signup.performerName || "Unnamed performer")}</strong><br>
+          ${escapeHtml(signup.performerEmail || "")}${signup.performerPhone ? `<br>${escapeHtml(signup.performerPhone)}` : ""}
+        </div>
+        <div class="meta">
+          ${escapeHtml(signup.actType || "open mic")} ${signup.pieceTitle ? ` / ${escapeHtml(signup.pieceTitle)}` : ""}<br>
+          Requested: ${escapeHtml(signup.requestedSlot || "no preference")}<br>
+          ${signup.slotEmailSentAt ? `Slot email sent: ${escapeHtml(formatDate(signup.slotEmailSentAt))}` : "Slot email not sent"}
+        </div>
+        ${signup.notes ? `<div class="value">${escapeHtml(signup.notes)}</div>` : ""}
+        <div class="schedule-grid">
+          <div class="field">
+            <label>Status</label>
+            <select data-open-mic-field="status">
+              ${["requested","scheduled","cancelled"].map((status) => `<option value="${status}" ${status === signup.status ? "selected" : ""}>${status.toUpperCase()}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label>Assigned Slot</label>
+            <input data-open-mic-field="assignedSlot" type="datetime-local" value="${escapeHtml(assignedInput)}">
+          </div>
+          <div class="field">
+            <label>Minutes</label>
+            <input data-open-mic-field="slotDurationMinutes" type="number" min="1" step="1" value="${escapeHtml(String(signup.slotDurationMinutes || 5))}">
+          </div>
+          <div class="field wide-field">
+            <label>Performer Notes</label>
+            <textarea data-open-mic-field="notes" rows="3">${escapeHtml(signup.notes || "")}</textarea>
+          </div>
+        </div>
+        <div class="booking-actions">
+          <button class="button" type="button" data-generate-open-mic-slot>Generate Slot</button>
+          <button class="button" type="submit">Save Slot</button>
+          <button class="button" type="submit" data-send-open-mic-email="1">Save + Email Performer</button>
+        </div>
+      </form>
+    `;
+  }
+
+  async function renderCultAndShiftOpenMic(slug) {
+    const container = document.getElementById("openMicPanel");
+    if (!container) return;
+    container.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">Loading open mic requests.</p>';
+    try {
+      const payload = await api(`/api/admin/events/${encodeURIComponent(slug)}/open-mic`);
+      const ev = eventBySlug(slug) || payload.event || { slug };
+      const signups = payload.signups || [];
+      container.innerHTML = signups.length
+        ? signups.map((signup, index) => renderOpenMicSignupCard(signup, ev, index)).join("")
+        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No open mic requests yet.</p>';
+      enhanceControls(container);
+    } catch (error) {
+      container.innerHTML = `<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message || "Could not load open mic requests.")}</p>`;
+    }
+  }
+
   function renderEventsTab() {
     toolbarEl.innerHTML = "";
     renderEventsList();
@@ -1191,7 +1266,7 @@
           <span class="meta">${escapeHtml(formatDate(ev.startsAt))}</span>
           <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
             <span class="date">${count} RSVP${count !== 1 ? "s" : ""}</span>
-            <span class="meta">${ev.paidSeats || 0}/${ev.capacity || 0} seats</span>
+            <span class="meta">${ev.paidSeats || 0}/${ev.capacity || 0} paid${ev.pendingSeats ? ` · ${ev.pendingSeats} held` : ""}</span>
           </span>
         </button>`;
     }).join("");
@@ -1219,6 +1294,7 @@
         <h2>${escapeHtml(ev.title)}</h2>
         <p class="contact">
           ${escapeHtml(formatDate(ev.startsAt))}${ev.location ? `<br>${escapeHtml(ev.location)}` : ""}<br>
+          ${ev.seatsRemaining || 0} seats available${ev.pendingSeats ? ` · ${ev.pendingSeats} held in checkout` : ""}${ev.waitlistCount ? ` · ${ev.waitlistCount} waitlist` : ""}<br>
           ${ev.paidSeats || 0} / ${ev.capacity || 0} seats sold · ${escapeHtml(money(ev.priceCents || 0, ev.currency || "USD"))} per seat
         </p>
         <div class="booking-actions">
@@ -1229,7 +1305,41 @@
       <div class="review-card">
         <div class="review-card-header">RSVPs (${rsvps.length})</div>
         <div style="display:grid;gap:8px;">${cards}</div>
-      </div>`;
+      </div>
+      <div class="review-card" id="eventWaitlistCard">
+        <div class="review-card-header">Waitlist</div>
+        <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading waitlist.</p>
+      </div>
+      ${isCultAndShift(ev) ? `
+        <div class="review-card">
+          <div class="review-card-header">Open Mic Signups</div>
+          <p class="contact" style="margin-top:0;">Separate performer lane for Cult & Shift. Generate an assigned time, save it, then email the performer once the run is set.</p>
+          <div id="openMicPanel" class="availability-list"></div>
+        </div>` : ""}`;
+    renderEventWaitlist(ev.slug);
+    if (isCultAndShift(ev)) renderCultAndShiftOpenMic(ev.slug);
+  }
+
+  async function renderEventWaitlist(slug) {
+    const card = document.getElementById("eventWaitlistCard");
+    if (!card) return;
+    try {
+      const payload = await api(`/api/admin/events/${encodeURIComponent(slug)}/waitlist`);
+      const waitlist = payload.waitlist || [];
+      const rows = waitlist.length ? waitlist.map((entry) => `
+        <div class="hub-entry" style="cursor:default;">
+          <span class="he-top">
+            <span class="name">${escapeHtml(entry.contactName || "Unnamed")}</span>
+            <span class="pill">${escapeHtml(entry.status || "new")}</span>
+          </span>
+          <span class="meta">${escapeHtml(entry.contactEmail || "")}${entry.contactPhone ? ` · ${escapeHtml(entry.contactPhone)}` : ""} · ${entry.seatsRequested || 1} seat${Number(entry.seatsRequested) === 1 ? "" : "s"}</span>
+          ${entry.note ? `<span class="contact">${escapeHtml(entry.note)}</span>` : ""}
+        </div>
+      `).join("") : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No waitlist entries yet.</p>';
+      card.innerHTML = `<div class="review-card-header">Waitlist (${waitlist.length})</div><div style="display:grid;gap:8px;">${rows}</div>`;
+    } catch (error) {
+      card.innerHTML = `<div class="review-card-header">Waitlist</div><p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message)}</p>`;
+    }
   }
 
   /* ---- Home hub calendar ---- */
@@ -1562,6 +1672,7 @@ ${meetingLines}
             </p>
             <div class="booking-actions">
               ${eventPaid ? `<button class="button" type="button" data-resend-event-ticket="${escapeHtml(eventTicketId)}">Resend Ticket Email</button>` : ""}
+              ${eventTicketId && !eventPaid ? `<button class="button" type="button" data-reconcile-event-ticket="${escapeHtml(eventTicketId)}">Reconcile Square Payment</button>` : ""}
               ${eventTicketId ? `<button class="button danger-button" type="button" data-cancel-event-ticket="${escapeHtml(eventTicketId)}">${eventPaid ? "Cancel Ticket &amp; Refund" : "Cancel Ticket"}</button>` : ""}
             </div>
             <input id="bookingUrl" type="hidden" value="">
@@ -1730,8 +1841,43 @@ ${meetingLines}
                 <input data-field="location" value="${escapeHtml(ev.location || "")}">
               </div>
               <div class="field wide-field">
+                <label>Image URL</label>
+                <input data-field="imageUrl" value="${escapeHtml(ev.imageUrl || "")}" placeholder="/assets/paintings/...">
+              </div>
+              <div class="field">
+                <label>Waitlist</label>
+                <select data-field="waitlistEnabled">
+                  <option value="1" ${ev.waitlistEnabled === false ? "" : "selected"}>ENABLED</option>
+                  <option value="0" ${ev.waitlistEnabled === false ? "selected" : ""}>DISABLED</option>
+                </select>
+              </div>
+              <div class="field wide-field">
                 <label>Description</label>
                 <textarea data-field="description" rows="3">${escapeHtml(ev.description || "")}</textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Details Intro</label>
+                <textarea data-field="details" rows="3">${escapeHtml(ev.details || "")}</textarea>
+              </div>
+              <div class="field wide-field">
+                <label>What Is Included</label>
+                <textarea data-field="included" rows="3">${escapeHtml(ev.included || "")}</textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Arrival Notes</label>
+                <textarea data-field="arrivalNotes" rows="3">${escapeHtml(ev.arrivalNotes || "")}</textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Accessibility Notes</label>
+                <textarea data-field="accessibilityNotes" rows="3">${escapeHtml(ev.accessibilityNotes || "")}</textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Cancellation Policy</label>
+                <textarea data-field="cancellationPolicy" rows="3">${escapeHtml(ev.cancellationPolicy || "")}</textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Contact Note</label>
+                <textarea data-field="contactNote" rows="2">${escapeHtml(ev.contactNote || "")}</textarea>
               </div>
             </div>
             <button class="button save-schedule" type="submit">Save Event</button>
@@ -1789,8 +1935,43 @@ ${meetingLines}
                 <input data-field="location">
               </div>
               <div class="field wide-field">
+                <label>Image URL</label>
+                <input data-field="imageUrl" placeholder="/assets/paintings/...">
+              </div>
+              <div class="field">
+                <label>Waitlist</label>
+                <select data-field="waitlistEnabled">
+                  <option value="1" selected>ENABLED</option>
+                  <option value="0">DISABLED</option>
+                </select>
+              </div>
+              <div class="field wide-field">
                 <label>Description</label>
                 <textarea data-field="description" rows="3"></textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Details Intro</label>
+                <textarea data-field="details" rows="3"></textarea>
+              </div>
+              <div class="field wide-field">
+                <label>What Is Included</label>
+                <textarea data-field="included" rows="3"></textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Arrival Notes</label>
+                <textarea data-field="arrivalNotes" rows="3"></textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Accessibility Notes</label>
+                <textarea data-field="accessibilityNotes" rows="3"></textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Cancellation Policy</label>
+                <textarea data-field="cancellationPolicy" rows="3"></textarea>
+              </div>
+              <div class="field wide-field">
+                <label>Contact Note</label>
+                <textarea data-field="contactNote" rows="2"></textarea>
               </div>
             </div>
             <button class="button save-schedule" type="submit">Create Event</button>
@@ -1809,9 +1990,17 @@ ${meetingLines}
           <h2>Ticketed Events</h2>
           <p class="contact">Create a new event, or flip an existing one between draft, open, and closed; adjust date, price, capacity, and copy. Seat counts reflect paid tickets only. Individual RSVPs are listed on the left — select one to manage or refund it.</p>
         </div>
+        <div class="review-card" id="eventsReadinessCard">
+          <div class="review-card-header">Events Readiness</div>
+          <p class="empty" style="font-family:var(--sans);font-size:11px;">Checking events readiness.</p>
+        </div>
         <div id="eventsManagerBody"><p class="empty" style="font-family:var(--sans);font-size:11px;">Loading events.</p></div>
       </div>
     `;
+    loadEventsReadiness().catch((error) => {
+      const card = document.getElementById("eventsReadinessCard");
+      if (card) card.innerHTML = `<div class="review-card-header">Events Readiness</div><p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message)}</p>`;
+    });
     const body = document.getElementById("eventsManagerBody");
     try {
       const payload = await api("/api/admin/events");
@@ -1825,6 +2014,30 @@ ${meetingLines}
     } catch (error) {
       body.innerHTML = `<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">${escapeHtml(error.message)}</p>`;
     }
+  }
+
+  async function loadEventsReadiness() {
+    const card = document.getElementById("eventsReadinessCard");
+    if (!card) return;
+    const payload = await api("/api/admin/events/readiness");
+    const state = payload.ready ? "READY" : "NEEDS ATTENTION";
+    card.innerHTML = `
+      <div class="review-card-header">Events Readiness</div>
+      <div class="booking-readiness-summary">
+        <span class="booking-readiness-state ${payload.ready ? "ready" : "needs_attention"}">${state}</span>
+        <span class="meta">Checked ${escapeHtml(formatDate(payload.checkedAt))}</span>
+        <button class="button" type="button" data-refresh-events-readiness>Refresh Events Readiness</button>
+      </div>
+      <div class="booking-readiness-grid" style="margin-top:12px;">
+        ${(payload.checks || []).map((check) => `
+          <div class="booking-readiness-card ${escapeHtml(check.status)}">
+            <span class="pill">${escapeHtml(check.label)}</span>
+            <strong>${check.ready ? "Ready" : "Needs attention"}</strong>
+            <div class="booking-readiness-detail">${readinessDetailLines(check).map(escapeHtml).join("<br>")}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
   }
 
   function editAvailabilityPayload(form) {
@@ -2507,6 +2720,14 @@ ${meetingLines}
       return;
     }
 
+    const eventsReadinessRefresh = event.target.closest("[data-refresh-events-readiness]");
+    if (eventsReadinessRefresh) {
+      setStatus("Checking events readiness");
+      await loadEventsReadiness();
+      setStatus("Events readiness checked");
+      return;
+    }
+
     const groupToggle = event.target.closest(".schedule-group-toggle");
     if (groupToggle) {
       groupToggle.closest("[data-collapse-group]")?.classList.toggle("is-open");
@@ -2592,6 +2813,25 @@ ${meetingLines}
       return;
     }
 
+    const generateOpenMic = event.target.closest("[data-generate-open-mic-slot]");
+    if (generateOpenMic) {
+      const form = generateOpenMic.closest("[data-open-mic-form]");
+      const slot = form?.dataset.generatedSlot || "";
+      const input = form?.querySelector('[data-open-mic-field="assignedSlot"]');
+      if (!slot) {
+        setStatus("Set the event start time first");
+        return;
+      }
+      if (input) input.value = slot;
+      const statusSelect = form?.querySelector('[data-open-mic-field="status"]');
+      if (statusSelect) {
+        statusSelect.value = "scheduled";
+        statusSelect._customSync?.();
+      }
+      setStatus("Slot generated");
+      return;
+    }
+
     const resendButton = event.target.closest("[data-resend-template]");
     if (resendButton) {
       const templateKey = resendButton.dataset.resendTemplate;
@@ -2619,6 +2859,18 @@ ${meetingLines}
         body: JSON.stringify({ templateKey: "event_ticket_paid", eventTicketId }),
       });
       setStatus("Ticket email resent");
+      return;
+    }
+
+    const reconcileEventTicket = event.target.closest("[data-reconcile-event-ticket]");
+    if (reconcileEventTicket) {
+      const eventTicketId = reconcileEventTicket.dataset.reconcileEventTicket;
+      setStatus("Reconciling Square payment");
+      const result = await api(`/api/admin/events/tickets/${encodeURIComponent(eventTicketId)}/reconcile`, {
+        method: "POST",
+      });
+      await loadAndRender();
+      setStatus(result.reconciled ? "Ticket marked paid from Square" : `Ticket is still ${result.status || "pending"}`);
       return;
     }
 
@@ -2909,6 +3161,34 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const openMicForm = event.target.closest("[data-open-mic-form]");
+    if (openMicForm) {
+      event.preventDefault();
+      const slug = openMicForm.dataset.eventSlug || selectedEventSlug || "cultandshift";
+      const id = openMicForm.dataset.openMicForm;
+      const fieldValue = (name) => openMicForm.querySelector(`[data-open-mic-field="${name}"]`)?.value ?? "";
+      const sendEmail = event.submitter?.dataset.sendOpenMicEmail === "1";
+      setStatus(sendEmail ? "Saving and emailing performer" : "Saving open mic slot");
+      try {
+        await api(`/api/admin/events/${encodeURIComponent(slug)}/open-mic/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            status: fieldValue("status"),
+            assignedSlot: fieldValue("assignedSlot") ? localDateTimeToIso(fieldValue("assignedSlot")) : "",
+            slotDurationMinutes: Number(fieldValue("slotDurationMinutes")) || 5,
+            notes: fieldValue("notes"),
+            sendEmail,
+          }),
+        });
+        await renderCultAndShiftOpenMic(slug);
+        setStatus(sendEmail ? "Performer emailed" : "Open mic slot saved");
+      } catch (error) {
+        setStatus(error.message || "Could not save open mic slot");
+      }
+      return;
+    }
+
     const eventCreateForm = event.target.closest("[data-event-create-form]");
     if (eventCreateForm) {
       event.preventDefault();
@@ -2928,6 +3208,14 @@ ${meetingLines}
             status: fieldValue("status"),
             location: fieldValue("location"),
             description: fieldValue("description"),
+            imageUrl: fieldValue("imageUrl"),
+            details: fieldValue("details"),
+            included: fieldValue("included"),
+            arrivalNotes: fieldValue("arrivalNotes"),
+            accessibilityNotes: fieldValue("accessibilityNotes"),
+            cancellationPolicy: fieldValue("cancellationPolicy"),
+            contactNote: fieldValue("contactNote"),
+            waitlistEnabled: fieldValue("waitlistEnabled") !== "0",
             startsAt: startsLocal ? localDateTimeToIso(startsLocal) : "",
             endsAt: endsLocal ? localDateTimeToIso(endsLocal) : "",
             priceCents: Math.round((Number(fieldValue("price")) || 0) * 100),
@@ -2960,6 +3248,14 @@ ${meetingLines}
           title: fieldValue("title"),
           location: fieldValue("location"),
           description: fieldValue("description"),
+          imageUrl: fieldValue("imageUrl"),
+          details: fieldValue("details"),
+          included: fieldValue("included"),
+          arrivalNotes: fieldValue("arrivalNotes"),
+          accessibilityNotes: fieldValue("accessibilityNotes"),
+          cancellationPolicy: fieldValue("cancellationPolicy"),
+          contactNote: fieldValue("contactNote"),
+          waitlistEnabled: fieldValue("waitlistEnabled") !== "0",
           startsAt: startsLocal ? localDateTimeToIso(startsLocal) : "",
           endsAt: endsLocal ? localDateTimeToIso(endsLocal) : "",
           priceCents: Math.round((Number(fieldValue("price")) || 0) * 100),

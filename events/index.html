@@ -40,6 +40,23 @@
     color: #0e0e0e;
     outline: none;
   }
+  .event-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:18px; }
+  .event-actions .event-cta { margin-top:0; }
+  .event-cta.is-secondary { border-color:var(--ring-faint); color:var(--text-muted); }
+  .event-disabled {
+    display:inline-flex;
+    align-items:center;
+    min-height:48px;
+    border:5px solid var(--ring-faint);
+    padding:0 18px;
+    color:var(--text-muted);
+    background:transparent;
+    font-family:var(--font-display);
+    font-size:11px;
+    font-weight:800;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+  }
   .seats-pill[data-state="soldout"] { color: var(--color-tattooing); }
 </style>
 </head>
@@ -53,7 +70,7 @@
       </div>
       <div class="hero-copy">
         <p class="hero-lede">Gatherings, open calls, temporary rooms, and live experiments attached to the construct.</p>
-        <p class="hero-note">This page is built as a public event board and project doorway. Dates can be added as the calendar firms up without rebuilding the whole route.</p>
+        <p class="hero-note">Current gatherings are listed first. Reserve from an open card, or join the waitlist when a room fills or booking closes.</p>
         <div class="hero-actions">
           <a class="venture-link" href="/about/#construct-accesspoints">access points</a>
           <a class="venture-link" href="/archive/">past record</a>
@@ -163,23 +180,41 @@
       return { text: ev.seatsRemaining + " seat" + (ev.seatsRemaining === 1 ? "" : "s") + " left", soldout: false };
     }
     function renderEmpty(message) {
+      if (String(message || "").toLowerCase().indexOf("couldn") !== -1) {
+        renderError("Events could not be loaded right now. Please check back shortly or contact the studio from the main site.");
+        return;
+      }
       feed.innerHTML =
         '<article class="feature-card is-large" style="--feature-image:url(\'' + DEFAULT_IMAGE + '\')">' +
         '<span class="tile-kicker">live container</span>' +
-        '<h3>Nothing open right now</h3>' +
+        '<h3>No events to show</h3>' +
         '<p>' + escapeHtml(message) + '</p>' +
+        '</article>';
+    }
+    function renderError(message) {
+      feed.innerHTML =
+        '<article class="feature-card is-large" style="--feature-image:url(\'' + DEFAULT_IMAGE + '\')">' +
+        '<span class="tile-kicker">calendar issue</span>' +
+        '<h3>Events could not be loaded</h3>' +
+        '<p>' + escapeHtml(message) + '</p>' +
+        '<div class="event-actions"><a class="event-cta" href="/events/">Try again</a></div>' +
         '</article>';
     }
     function renderEvents(events) {
       if (!events.length) { renderEmpty("No public gatherings are open for booking yet. Check back as the calendar firms up."); return; }
       feed.innerHTML = events.map(function (ev, index) {
-        var img = IMAGES[ev.slug] || DEFAULT_IMAGE;
+        var img = ev.imageUrl || IMAGES[ev.slug] || DEFAULT_IMAGE;
         var seats = seatsLabel(ev);
         var price = ev.free ? "Free" : (ev.priceFormatted ? ev.priceFormatted + " / seat" : "ticketed");
         var kicker = ev.open ? "open for booking" : (ev.soldOut ? "sold out" : "booking closed");
-        var ctaHref = ev.open ? ' href="/events/' + encodeURIComponent(ev.slug) + '/"' : "";
-        var ctaLabel = ev.open ? "Reserve a seat" : (ev.soldOut ? "Sold out" : "Closed");
-        var ctaStyle = ev.open ? "" : ' style="opacity:0.5;pointer-events:none;"';
+        var eventHref = "/events/" + encodeURIComponent(ev.slug) + "/";
+        var primary = ev.open
+          ? '<a class="event-cta" href="' + eventHref + '">Reserve a seat</a>'
+          : '<span class="event-disabled" role="status">' + escapeHtml(ev.soldOut ? "Sold out" : "Booking closed") + '</span>';
+        var details = ev.open ? '' : '<a class="event-cta is-secondary" href="' + eventHref + '">View details</a>';
+        var waitlist = (!ev.open && ev.waitlistEnabled !== false)
+          ? '<a class="event-cta is-secondary" href="' + eventHref + '#waitlist">Join waitlist</a>'
+          : '';
         return '' +
           '<article class="feature-card' + (index === 0 ? " is-large" : "") + '" style="--feature-image:url(\'' + img + '\')">' +
           '<span class="tile-kicker">' + escapeHtml(kicker) + '</span>' +
@@ -190,7 +225,7 @@
           '<span class="meta-pill">' + escapeHtml(price) + '</span>' +
           '<span class="meta-pill seats-pill"' + (seats.soldout ? ' data-state="soldout"' : "") + '>' + escapeHtml(seats.text) + '</span>' +
           '</div>' +
-          '<a class="event-cta"' + ctaHref + ctaStyle + '>' + escapeHtml(ctaLabel) + '</a>' +
+          '<div class="event-actions">' + primary + details + waitlist + '</div>' +
           '</article>';
       }).join("");
     }

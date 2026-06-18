@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
+const apiProxyOrigin = (process.env.SWC_API_ORIGIN || "https://thesixwellconstruct.com").replace(/\/+$/g, "");
 
 const types = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -40,6 +41,7 @@ const checkRoutes = [
   ["/about/contact-press/", 200],
   ["/construct-map/", 200],
   ["/events/", 200],
+  ["/events/cultandshift/", 200],
   ["/events/sip-and-paint/", 200],
   ["/events/example-created-in-studio/", 200],
   ["/events/confirmed/", 200],
@@ -246,6 +248,56 @@ async function handleToolApi(req, res) {
   return false;
 }
 
+function proxyHeaders(req) {
+  const headers = {};
+  for (const [key, value] of Object.entries(req.headers)) {
+    const lower = key.toLowerCase();
+    if (["connection", "host", "content-length", "accept-encoding"].includes(lower)) continue;
+    if (value === undefined) continue;
+    headers[key] = Array.isArray(value) ? value.join(", ") : value;
+  }
+  return headers;
+}
+
+async function handleApiProxy(req, res) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const body = chunks.length ? Buffer.concat(chunks) : undefined;
+  const target = `${apiProxyOrigin}${req.url || "/"}`;
+
+  try {
+    const response = await fetch(target, {
+      method: req.method,
+      headers: proxyHeaders(req),
+      body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
+      redirect: "manual",
+    });
+    const headers = {};
+    for (const [key, value] of response.headers.entries()) {
+      const lower = key.toLowerCase();
+      if (["content-encoding", "content-length", "transfer-encoding"].includes(lower)) continue;
+      headers[key] = value;
+    }
+    headers["x-swc-api-proxy"] = apiProxyOrigin;
+    res.writeHead(response.status, headers);
+    if (req.method === "HEAD") {
+      res.end();
+      return true;
+    }
+    const payload = Buffer.from(await response.arrayBuffer());
+    res.end(payload);
+    return true;
+  } catch (error) {
+    res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({
+      error: "Local API proxy failed.",
+      detail: error.message,
+      origin: apiProxyOrigin,
+    }));
+    return true;
+  }
+}
+
 async function resolveFile(urlPath) {
   let file = safePath(urlPath);
   if (!file) return null;
@@ -274,6 +326,10 @@ const showHidden = process.argv.includes("--show-hidden");
 
 const server = createServer(async (req, res) => {
   if ((req.url || "").startsWith("/__tools/") && await handleToolApi(req, res)) {
+    return;
+  }
+
+  if ((req.url || "").startsWith("/api/") && await handleApiProxy(req, res)) {
     return;
   }
 
