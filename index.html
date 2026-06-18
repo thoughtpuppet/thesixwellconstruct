@@ -93,10 +93,42 @@
   body.is-mobile #back-btn.visible { display: inline-flex; opacity: 0.65; }
   body.is-mobile .node-label { font-size: 13px; }
   body.is-mobile .sub-node-label { font-size: 17px; letter-spacing: 0.04em; }
+  /* Intro float-in — the whole composition eases forward from depth on load,
+     from the viewer's perspective. Works only with what's already on the page
+     (the #stage canvas + overlays), no new elements. */
+  body { perspective: 1500px; }
+  #stage {
+    transform-origin: 50% 50%; will-change: transform, opacity;
+    transition: opacity 2.4s ease, transform 4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  body.intro #stage { opacity: 0; transform: translateZ(-340px); }
+  @media (prefers-reduced-motion: reduce) {
+    #stage { transition: none; }
+    body.intro #stage { opacity: 1; transform: none; }
+  }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
 </head>
-<body>
+<body class="intro">
+<script>
+  // Intro float-in: keep #stage receded until the first paint, then drop the
+  // .intro class so it eases into place. The moment it starts is stamped on
+  // window.__floatStart so the canvas can sync the passing stars to it exactly.
+  // Reduced-motion users skip the move.
+  (function () {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.body.classList.remove('intro'); return;
+    }
+    function start() {
+      if (window.__floatStart != null) return;
+      window.__floatStart = performance.now();
+      document.body.classList.remove('intro');
+    }
+    requestAnimationFrame(function () { requestAnimationFrame(start); });
+    // safety: never leave #stage stuck hidden if rAF is throttled (bg tab, etc.)
+    setTimeout(start, 600);
+  })();
+</script>
 <div id="stage">
   <canvas id="c"></canvas>
   <div id="wordmark">the six.well construct</div>
@@ -1018,6 +1050,81 @@ function drawSubNodes(){
   }
 }
 
+// ── Intro stars ─────────────────────────────────────────────
+// During the float-in entrance, stars already sitting out on the periphery
+// drift outward and rush past the viewer — selling the forward motion without
+// spawning anything from the centre. Reuses the existing amber star look
+// (PARTICLE_COLOR); runs only for the first few seconds, then frees itself.
+// Skipped entirely for reduced-motion users.
+const INTRO_REDUCE = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const INTRO_STAR_COUNT = 46;
+const INTRO_DUR = 4000;                      // ms — matches the #stage float-in transform
+const INTRO_HOLD = 1600;                     // ms they float in place after arriving
+const INTRO_FADE = 3600;                     // ms they then fade out over
+let introStars = null, introDone = INTRO_REDUCE;
+function buildIntroStars(){
+  introStars = [];
+  const REF = Math.hypot(W,H)*0.5;           // ~half the screen diagonal
+  for(let i=0;i<INTRO_STAR_COUNT;i++){
+    const startFrac = 0.30 + Math.random()*0.22;
+    introStars.push({
+      ang: Math.random()*Math.PI*2,
+      startR: startFrac*REF,                                 // begin out on the periphery
+      restR: (startFrac + 0.06 + Math.random()*0.10)*REF,    // drift a little closer, then stop
+      sizeBase: 1.0 + Math.random()*1.4,
+      maxA: 0.2 + Math.random()*0.3,
+      // gentle float, matching the existing ring particles
+      orbitSpeed: (Math.random()*0.000035 + 0.00001) * (Math.random()<0.5?1:-1),
+      floatAmpX: 2 + Math.random()*4, floatAmpY: 2 + Math.random()*4,
+      floatPX: 12000 + Math.random()*10000, floatPY: 14000 + Math.random()*10000,
+      floatOX: Math.random()*Math.PI*2, floatOY: Math.random()*Math.PI*2,
+    });
+  }
+}
+function drawIntroStars(){
+  if(introDone) return;
+  // Synced to the float-in: stars drift CLOSER as the viewer floats in, ease to
+  // a stop when it settles, then float gently (like the ring particles) and fade.
+  const fs = window.__floatStart;
+  if(fs == null) return;                      // float-in hasn't begun yet
+  if(!introStars) buildIntroStars();
+  const elapsed = performance.now() - fs;
+  if(elapsed >= INTRO_DUR + INTRO_HOLD + INTRO_FADE){ introDone = true; introStars = null; return; }
+  const rt = ringTransform();
+  const ccx = rt.x, ccy = rt.y;
+  ctx.save();
+  ctx.fillStyle = PARTICLE_COLOR;
+  for(let i=0;i<introStars.length;i++){
+    const s = introStars[i];
+    const ang = s.ang + s.orbitSpeed*elapsed;
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const fx = s.floatAmpX * Math.sin((elapsed/s.floatPX)*Math.PI*2 + s.floatOX) * scale;
+    const fy = s.floatAmpY * Math.sin((elapsed/s.floatPY)*Math.PI*2 + s.floatOY) * scale;
+    let dist, radius, alpha;
+    if(elapsed <= INTRO_DUR){
+      // approach: decelerate to rest, synced with the float settling
+      const p = elapsed/INTRO_DUR;
+      const e = 1 - Math.pow(1-p, 3);          // easeOutCubic
+      dist = s.startR + (s.restR - s.startR)*e;
+      radius = (s.sizeBase*scale)*(1 + e*0.8); // a touch larger as it comes closer
+      alpha = s.maxA * (p<0.05 ? p/0.05 : 1);  // already there — minimal fade-in
+    } else {
+      // settled: float in place, then fade out like an ordinary particle
+      const localT = elapsed - INTRO_DUR;
+      dist = s.restR;
+      radius = s.sizeBase*scale*1.8;
+      alpha = s.maxA * (1 - clamp01((localT - INTRO_HOLD)/INTRO_FADE));
+    }
+    if(alpha<=0.01) continue;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(ccx + ca*dist + fx, ccy + sa*dist + fy, radius, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
 function tick(ts){
   if(!lastT)lastT=ts;const dt=Math.min(ts-lastT,50);lastT=ts;time+=dt;slowOrbit+=dt;
   const logoHoverTarget=(logoHover&&expandProgress<0.08)?1:0;
@@ -1078,6 +1185,8 @@ function tick(ts){
   else if(state==='expanding'){drawTravelingDots(expandProgress);if(expandProgress>=XFADE_START)drawSettledNodes(expandProgress);}
   else if(state==='expanded'){drawSettledNodes(1);drawSubNodes();}
   else if(state==='collapsing'){drawCollapsingNodes(collapseProgress);}
+
+  drawIntroStars();
 
   requestAnimationFrame(tick);
 }
