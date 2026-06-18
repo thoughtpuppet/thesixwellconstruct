@@ -42,7 +42,7 @@ const checkRoutes = [
   ["/construct-map/", 200],
   ["/events/", 200],
   ["/events/cultandshift/", 200],
-  ["/events/sip-and-paint/", 200],
+  ["/events/signal-horizons/", 200],
   ["/events/example-created-in-studio/", 200],
   ["/events/confirmed/", 200],
   ["/music/", 302],
@@ -133,6 +133,13 @@ function isEventDetailRoute(urlPath) {
   );
 }
 
+function eventDetailRouteFile(urlPath) {
+  const normalized = normalizeRoute(urlPath);
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length !== 2 || parts[0] !== "events") return null;
+  return path.resolve(root, "events", parts[1], "index.html");
+}
+
 function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
@@ -170,7 +177,7 @@ function safePath(urlPath) {
   if (localOnlyFile) return path.resolve(root, localOnlyFile);
 
   const clean = decoded === "/" ? "/index.html" : decoded;
-  if (isEventDetailRoute(clean)) return path.resolve(root, "events/sip-and-paint/index.html");
+  if (isEventDetailRoute(clean)) return eventDetailRouteFile(clean);
   const resolved = path.resolve(root, "." + clean);
   if (!resolved.startsWith(root)) return null;
   return resolved;

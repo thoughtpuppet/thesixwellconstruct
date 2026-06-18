@@ -193,6 +193,13 @@ function isEventDetailPagePath(pathname) {
   );
 }
 
+function eventDetailAssetPath(pathname) {
+  const normalizedPath = normalizePath(pathname);
+  const parts = normalizedPath.split("/").filter(Boolean);
+  if (parts.length !== 2 || parts[0] !== "events") return "/events/index.html";
+  return `/events/${parts[1]}/index.html`;
+}
+
 function isHiddenByHomeOnlyMode(pathname) {
   if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
   const normalizedPath = normalizePath(pathname);
@@ -631,7 +638,7 @@ export default {
     }
 
     if (isEventDetailPagePath(url.pathname)) {
-      return env.ASSETS.fetch(assetRequest(request, "/events/sip-and-paint/index.html"));
+      return env.ASSETS.fetch(assetRequest(request, eventDetailAssetPath(url.pathname)));
     }
 
     return env.ASSETS.fetch(assetRequest(request, assetPathForRequest(url.pathname)));

@@ -1,4 +1,4 @@
-// Public ticketed events (Sip & Paint, etc.).
+// Public ticketed events and guided gatherings.
 //
 // Mirrors the Square hosted-checkout + webhook pattern from
 // functions/api/booking/_lib.js, but isolated:

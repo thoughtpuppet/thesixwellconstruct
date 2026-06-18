@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Signal Horizons is a sensory mark-making gathering where participants respond to readings, sounds, textures, tastes, and prompts through simple visual responses. No drawing experience needed.">
+<title>Signal Horizons | Six.Well Construct</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/venture-pages.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<style>
+  :root {
+    --venture-color: var(--color-events);
+    --venture-accent: var(--color-events);
+    --venture-dim: var(--color-events-dim);
+    --venture-wash: rgba(0, 93, 37, 0.1);
+    --paper-line: rgba(255, 231, 202, 0.12);
+    --paper-field: rgba(255, 231, 202, 0.035);
+  }
+  .signal-hero {
+    position: relative;
+    overflow: hidden;
+  }
+  .signal-hero::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 14px;
+    height: 46px;
+    pointer-events: none;
+    background:
+      linear-gradient(to bottom, transparent 0 35%, var(--paper-line) 35% 42%, transparent 42% 100%),
+      linear-gradient(to bottom, transparent 0 64%, rgba(0, 93, 37, 0.26) 64% 70%, transparent 70% 100%);
+    opacity: 0.85;
+  }
+  .signal-subtitle {
+    display: inline-block;
+    margin-top: 14px;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    font-size: 22px;
+    line-height: 1.4;
+  }
+  .signal-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+    gap: 46px;
+    align-items: start;
+  }
+  .signal-stack { display: grid; gap: 34px; }
+  .signal-panel {
+    border-top: 5px solid var(--ring-faint);
+    padding-top: 18px;
+  }
+  .signal-panel h2,
+  .booking-card h2 {
+    margin: 0 0 14px;
+    color: var(--venture-accent);
+    font-family: var(--font-display);
+    font-size: 34px;
+    line-height: 1;
+  }
+  .signal-panel p {
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 1.72;
+  }
+  .signal-panel p + p { margin-top: 14px; }
+  .session-steps {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .session-steps li {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+    border-top: 5px solid var(--ring-faint);
+    padding-top: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    line-height: 1.62;
+  }
+  .step-num {
+    color: var(--venture-dim);
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .prompt-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .prompt-card {
+    min-height: 120px;
+    border: 5px solid var(--ring-faint);
+    padding: 16px;
+    background:
+      linear-gradient(90deg, transparent 0 19px, var(--paper-field) 19px 20px, transparent 20px 100%),
+      linear-gradient(180deg, transparent 0 31px, var(--paper-field) 31px 32px, transparent 32px 100%);
+    background-size: 40px 40px;
+  }
+  .prompt-card h3,
+  .detail-key,
+  .field label,
+  .micro-kicker {
+    color: var(--venture-dim);
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .prompt-card h3 { margin: 0 0 8px; }
+  .prompt-card p {
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    font-size: 14px;
+    line-height: 1.58;
+  }
+  .detail-panel { border-top: 5px solid var(--ring-faint); }
+  .detail-row {
+    display: grid;
+    grid-template-columns: 138px minmax(0, 1fr);
+    gap: 16px;
+    border-bottom: 5px solid var(--ring-faint);
+    padding: 14px 0;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    line-height: 1.55;
+  }
+  .booking-card {
+    position: sticky;
+    top: 24px;
+    border: 5px solid var(--ring-faint);
+    padding: 20px;
+    background: rgba(14, 14, 14, 0.74);
+  }
+  form.ticket-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .field label { display: block; margin-bottom: 8px; }
+  .field input,
+  .field select {
+    width: 100%;
+    background: transparent;
+    border: 5px solid var(--ring-faint);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    padding: 12px 14px;
+  }
+  .field input:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--venture-accent);
+  }
+  .total-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: baseline;
+    border-top: 5px solid var(--ring-faint);
+    padding-top: 14px;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+  }
+  .total-line strong {
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 22px;
+  }
+  button.submit-btn,
+  .signal-cta {
+    min-height: 52px;
+    border: 5px solid var(--venture-accent);
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background var(--duration-base) var(--ease-out), color var(--duration-base) var(--ease-out);
+  }
+  button.submit-btn { width: 100%; }
+  button.submit-btn:hover:not(:disabled),
+  .signal-cta:hover,
+  .signal-cta:focus-visible {
+    background: var(--venture-accent);
+    color: #0e0e0e;
+    outline: none;
+  }
+  button.submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .signal-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px;
+    text-decoration: none;
+  }
+  .form-note,
+  .form-error,
+  .form-success,
+  .ticket-state-panel {
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0;
+  }
+  .form-error { color: var(--color-tattooing); display: none; }
+  .form-success { color: var(--venture-accent); display: none; }
+  .ticket-state-panel {
+    display: none;
+    border: 5px solid var(--ring-faint);
+    padding: 18px;
+  }
+  .ticket-state-panel.is-visible { display: block; }
+  .waitlist-panel {
+    display: none;
+    border-top: 5px solid var(--ring-faint);
+    padding-top: 18px;
+    margin-top: 20px;
+  }
+  .waitlist-panel.is-visible { display: block; }
+  .honeypot {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .final-band {
+    display: grid;
+    gap: 16px;
+    border-top: 5px solid var(--ring-faint);
+    padding-top: 22px;
+  }
+  .final-band p {
+    max-width: 680px;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    font-size: 16px;
+    line-height: 1.72;
+    margin: 0;
+  }
+  @media (max-width: 900px) {
+    .signal-grid { grid-template-columns: 1fr; }
+    .booking-card { position: relative; top: auto; }
+  }
+  @media (max-width: 720px) {
+    .prompt-grid { grid-template-columns: 1fr; }
+    .detail-row,
+    .session-steps li { grid-template-columns: 1fr; gap: 6px; }
+    .signal-hero::after { bottom: 4px; }
+    .signal-subtitle { font-size: 18px; }
+    .signal-panel h2,
+    .booking-card h2 { font-size: 26px; }
+  }
+</style>
+</head>
+<body class="venture-page" data-venture="events">
+  <div class="venture-grain" aria-hidden="true"></div>
+  <main class="venture-shell entrance-fade">
+    <section class="venture-hero signal-hero" aria-labelledby="page-title">
+      <div>
+        <span class="venture-kicker">guided gathering</span>
+        <h1 class="venture-title" id="page-title">Signal Horizons.</h1>
+        <span class="signal-subtitle">A sensory mark-making gathering.</span>
+      </div>
+      <div class="hero-copy">
+        <p class="hero-lede">You'll listen, feel, observe, and respond with simple materials. No drawing experience needed.</p>
+        <p class="hero-note" id="ev-note">This is not about making good art. It is about noticing what appears.</p>
+        <div class="hero-actions">
+          <a class="venture-link" href="#reserve">reserve a seat</a>
+          <a class="venture-link" href="/events/">all events</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="signal-grid">
+        <div class="signal-stack">
+          <article class="signal-panel" id="what">
+            <span class="micro-kicker">what it is</span>
+            <h2>What is Signal Horizons?</h2>
+            <p>Signal Horizons is a guided creative gathering where participants respond to sensory prompts through drawing, color, line, symbol, and mark-making.</p>
+            <p>Prompts may include short readings, music, textures, tastes, objects, or other sensory experiences. Each person receives the same prompt, but what appears in the mind may be completely different.</p>
+            <p>The goal is not to draw well. The goal is to respond honestly.</p>
+          </article>
+
+          <article class="signal-panel" id="session">
+            <span class="micro-kicker">session shape</span>
+            <h2>How the Session Works</h2>
+            <ol class="session-steps">
+              <li><span class="step-num">01</span><span>Arrive and choose simple drawing materials.</span></li>
+              <li><span class="step-num">02</span><span>Receive a sensory prompt.</span></li>
+              <li><span class="step-num">03</span><span>Pause, notice what appears, and create a visual response.</span></li>
+              <li><span class="step-num">04</span><span>Repeat with several prompts.</span></li>
+              <li><span class="step-num">05</span><span>Optionally share what showed up for you.</span></li>
+              <li><span class="step-num">06</span><span>Leave with your response pages, unless you choose to contribute them to the archive.</span></li>
+            </ol>
+          </article>
+
+          <article class="signal-panel" id="materials">
+            <span class="micro-kicker">dry materials</span>
+            <h2>Materials Provided</h2>
+            <div class="prompt-grid">
+              <article class="prompt-card"><h3>Drawing tools</h3><p>Markers, colored pencils, graphite pencils, erasers, and sharpeners.</p></article>
+              <article class="prompt-card"><h3>Surfaces</h3><p>Paper, drawing boards, or table surfaces for keeping the session simple and easy to manage.</p></article>
+            </div>
+            <p>No paint will be used. This is a dry-material session designed to stay simple, accessible, and low-pressure.</p>
+          </article>
+
+          <article class="signal-panel" id="for">
+            <span class="micro-kicker">who it is for</span>
+            <h2>Who This Is For</h2>
+            <p>This gathering is for curious people, artists, non-artists, writers, thinkers, listeners, overthinkers, quiet observers, and anyone interested in how the mind turns experience into image.</p>
+            <p>You do not need to know how to draw. You only need to be willing to notice what comes up.</p>
+          </article>
+
+          <article class="signal-panel" id="not">
+            <span class="micro-kicker">clear edges</span>
+            <h2>What It Is Not</h2>
+            <p>Signal Horizons is not a drawing class, paint night, critique session, therapy session, or stage for proving anything.</p>
+            <p>You will not be asked to make something impressive. You will not be graded, corrected, or told what your work means.</p>
+          </article>
+
+          <article class="signal-panel" id="archive">
+            <span class="micro-kicker">optional record</span>
+            <h2>The Archive</h2>
+            <p>Some visual responses may be photographed or documented as part of the ongoing Six.Well Construct archive. Participation in documentation is optional. Guests may opt out, remain anonymous, or decide after the session.</p>
+          </article>
+
+          <article class="signal-panel" id="details">
+            <span class="micro-kicker">event details</span>
+            <h2>Event Details</h2>
+            <div class="detail-panel">
+              <div class="detail-row"><span class="detail-key">Date</span><span id="ev-date">TBA</span></div>
+              <div class="detail-row"><span class="detail-key">Time</span><span id="ev-time">TBA</span></div>
+              <div class="detail-row"><span class="detail-key">Location</span><span id="ev-where">Atlanta, GA</span></div>
+              <div class="detail-row"><span class="detail-key">Duration</span><span id="ev-duration">Approximately 90-120 minutes</span></div>
+              <div class="detail-row"><span class="detail-key">Capacity</span><span id="ev-capacity">Limited seating</span></div>
+              <div class="detail-row"><span class="detail-key">Price</span><span id="ev-price">TBA</span></div>
+              <div class="detail-row"><span class="detail-key">Materials</span><span>Provided</span></div>
+              <div class="detail-row"><span class="detail-key">Experience</span><span>None needed</span></div>
+              <div class="detail-row"><span class="detail-key">Bring</span><span>Come as you are.</span></div>
+              <div class="detail-row"><span class="detail-key">Access</span><span id="ev-access">Reply after booking if you need seating, sensory, or access accommodations.</span></div>
+            </div>
+          </article>
+
+          <article class="final-band" id="join">
+            <span class="micro-kicker">next session</span>
+            <h2 class="section-title">Join the next Signal Horizons session.</h2>
+            <p>Come as you are. Listen, sense, imagine, and mark what appears.</p>
+            <div>
+              <a class="signal-cta" href="#reserve">Reserve a seat</a>
+            </div>
+          </article>
+        </div>
+
+        <aside class="booking-card" id="reserve" aria-labelledby="booking-title">
+          <span class="micro-kicker">booking</span>
+          <h2 id="booking-title">Reserve a Seat</h2>
+          <form class="ticket-form" id="ticketForm" novalidate>
+            <div class="field">
+              <label for="name">Your name</label>
+              <input type="text" id="name" name="name" autocomplete="name" required>
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input type="email" id="email" name="email" autocomplete="email" required>
+            </div>
+            <div class="field">
+              <label for="phone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+              <input type="tel" id="phone" name="phone" autocomplete="tel">
+            </div>
+            <div class="field">
+              <label for="seats">Seats</label>
+              <select id="seats" name="seats"></select>
+            </div>
+            <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <div class="total-line"><span>Total</span><strong id="total">-</strong></div>
+            <button type="submit" class="submit-btn" id="submitBtn" disabled>Loading</button>
+            <p class="form-error" id="formError"></p>
+            <p class="form-note" id="formNote">Payment is handled by Square on the next screen. Seats are released if payment is not completed.</p>
+          </form>
+          <div class="ticket-state-panel" id="ticketStatePanel"></div>
+
+          <div class="waitlist-panel" id="waitlist">
+            <span class="micro-kicker">updates</span>
+            <h2>Get Event Updates</h2>
+            <form class="ticket-form" id="waitlistForm" novalidate>
+              <div class="field">
+                <label for="waitName">Your name</label>
+                <input type="text" id="waitName" name="name" autocomplete="name" required>
+              </div>
+              <div class="field">
+                <label for="waitEmail">Email</label>
+                <input type="email" id="waitEmail" name="email" autocomplete="email" required>
+              </div>
+              <div class="field">
+                <label for="waitPhone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+                <input type="tel" id="waitPhone" name="phone" autocomplete="tel">
+              </div>
+              <div class="field">
+                <label for="waitSeats">Seats wanted</label>
+                <select id="waitSeats" name="seats">
+                  <option value="1">1 seat</option>
+                  <option value="2">2 seats</option>
+                  <option value="3">3 seats</option>
+                  <option value="4">4 seats</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="waitNote">Note <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
+                <input type="text" id="waitNote" name="note">
+              </div>
+              <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
+              <button type="submit" class="submit-btn" id="waitlistBtn">Get updates</button>
+              <p class="form-error" id="waitlistError"></p>
+              <p class="form-success" id="waitlistSuccess"></p>
+            </form>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>&copy; the six.well construct</p>
+      <div class="page-links">
+        <a href="/events/">events</a>
+        <a href="/">return to construct</a>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+  (function () {
+    var SLUG = "signal-horizons";
+    var API_CONTEXT_PATH = "/api/events/signal-horizons/context";
+    var API_CHECKOUT_PATH = "/api/events/signal-horizons/checkout";
+    var API_WAITLIST_PATH = "/api/events/signal-horizons/waitlist";
+    var params = new URLSearchParams(window.location.search);
+    var previewMode = params.get("preview") === "1";
+    var priceCents = 0, currency = "USD", isFree = false;
+    var els = {
+      date: document.getElementById("ev-date"),
+      time: document.getElementById("ev-time"),
+      where: document.getElementById("ev-where"),
+      price: document.getElementById("ev-price"),
+      capacity: document.getElementById("ev-capacity"),
+      access: document.getElementById("ev-access"),
+      seats: document.getElementById("seats"),
+      total: document.getElementById("total"),
+      btn: document.getElementById("submitBtn"),
+      err: document.getElementById("formError"),
+      form: document.getElementById("ticketForm"),
+      note: document.getElementById("ev-note"),
+      formNote: document.getElementById("formNote"),
+      ticketState: document.getElementById("ticketStatePanel"),
+      waitlist: document.getElementById("waitlist"),
+      waitlistForm: document.getElementById("waitlistForm"),
+      waitlistBtn: document.getElementById("waitlistBtn"),
+      waitlistErr: document.getElementById("waitlistError"),
+      waitlistSuccess: document.getElementById("waitlistSuccess"),
+    };
+
+    function money(cents) {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: currency || "USD" })
+        .format((Number(cents) || 0) / 100);
+    }
+    function eventDate(value) {
+      if (!value) return "TBA";
+      try {
+        return new Date(value).toLocaleDateString("en-US", {
+          timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric",
+        });
+      } catch (e) { return "TBA"; }
+    }
+    function eventTime(value) {
+      if (!value) return "TBA";
+      try {
+        return new Date(value).toLocaleTimeString("en-US", {
+          timeZone: "America/New_York", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        });
+      } catch (e) { return "TBA"; }
+    }
+    function showError(msg) { els.err.textContent = msg; els.err.style.display = "block"; }
+    function clearError() { els.err.style.display = "none"; }
+    function showWaitlistError(msg) { els.waitlistErr.textContent = msg; els.waitlistErr.style.display = "block"; els.waitlistSuccess.style.display = "none"; }
+    function showWaitlistSuccess(msg) { els.waitlistSuccess.textContent = msg; els.waitlistSuccess.style.display = "block"; els.waitlistErr.style.display = "none"; }
+    function clearWaitlistMessages() { els.waitlistErr.style.display = "none"; els.waitlistSuccess.style.display = "none"; }
+    function updateTotal() {
+      var n = Number(els.seats.value) || 1;
+      els.total.textContent = isFree ? "Free" : money(priceCents * n);
+    }
+    function showStatePanel(message) {
+      els.form.style.display = "none";
+      els.ticketState.classList.add("is-visible");
+      els.ticketState.textContent = message;
+    }
+
+    function applyContext(ev) {
+      priceCents = ev.priceCents; currency = ev.currency;
+      isFree = ev.free || (Number(ev.priceCents) || 0) <= 0;
+      document.title = "Signal Horizons | Six.Well Construct";
+      els.date.textContent = eventDate(ev.startsAt);
+      els.time.textContent = eventTime(ev.startsAt);
+      els.where.textContent = ev.location || "Atlanta, GA";
+      els.price.textContent = isFree ? "Free" : (ev.priceFormatted ? ev.priceFormatted + " per seat" : "Ticketed");
+      els.capacity.textContent = ev.soldOut ? "Sold out" : (ev.seatsRemaining + " of " + ev.capacity + " seats available");
+      if (ev.accessibilityNotes) els.access.textContent = ev.accessibilityNotes;
+      els.waitlist.classList.toggle("is-visible", !ev.open && ev.waitlistEnabled !== false);
+
+      if (!ev.open) {
+        els.btn.textContent = ev.soldOut ? "Sold out" : "Join the next session";
+        els.btn.disabled = true;
+        els.seats.disabled = true;
+        updateTotal();
+        showStatePanel(ev.soldOut
+          ? "This session is full. Get event updates below if you want first notice when a seat opens or another date is added."
+          : "Booking is not open for this session. Get event updates below if you want notice when the next date is ready.");
+        return;
+      }
+
+      var max = Math.min(ev.maxSeatsPerOrder, ev.seatsRemaining);
+      els.seats.innerHTML = "";
+      for (var i = 1; i <= max; i++) {
+        var opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = i + (i === 1 ? " seat" : " seats");
+        els.seats.appendChild(opt);
+      }
+      els.seats.addEventListener("change", updateTotal);
+      updateTotal();
+      els.btn.disabled = false;
+      if (isFree) {
+        els.btn.textContent = previewMode ? "Register (preview)" : "Register";
+        els.formNote.textContent = "This session is free. Register to reserve your seat - you'll get a confirmation by email.";
+      } else {
+        els.btn.textContent = previewMode ? "Continue to payment (preview)" : "Continue to payment";
+        els.formNote.textContent = "Payment is handled by Square on the next screen. Seats are released if payment is not completed.";
+      }
+    }
+
+    function failContext(message) {
+      els.btn.textContent = "Unavailable";
+      els.btn.disabled = true;
+      els.date.textContent = "TBA";
+      els.time.textContent = "TBA";
+      els.where.textContent = "Atlanta, GA";
+      els.price.textContent = "TBA";
+      els.capacity.textContent = "Limited seating";
+      showStatePanel("The Signal Horizons session details could not be loaded. Return to the events board or contact the studio from the main site.");
+      showError(message || "This session could not be loaded.");
+    }
+
+    function previewContext(state) {
+      var base = {
+        title: "Signal Horizons",
+        description: "A sensory mark-making gathering.",
+        startsAt: "2026-07-25T19:00:00-04:00",
+        location: "Atlanta, GA - exact address shared after booking",
+        priceCents: 4500,
+        currency: "USD",
+        priceFormatted: "$45.00",
+        capacity: 20,
+        maxSeatsPerOrder: 4,
+        accessibilityNotes: "Reply after booking if you need seating, sensory, or access accommodations.",
+        waitlistEnabled: true,
+      };
+      if (state === "free") {
+        return Object.assign(base, { priceCents: 0, priceFormatted: "$0.00", free: true, seatsRemaining: 12, soldOut: false, open: true });
+      }
+      if (state === "soldout") {
+        return Object.assign(base, { seatsRemaining: 0, soldOut: true, open: false });
+      }
+      if (state === "closed") {
+        return Object.assign(base, { seatsRemaining: 8, soldOut: false, open: false });
+      }
+      return Object.assign(base, { seatsRemaining: 12, soldOut: false, open: true });
+    }
+
+    if (previewMode) {
+      var state = params.get("state") || "open";
+      if (state === "error") failContext("This session could not be loaded.");
+      else applyContext(previewContext(state));
+    } else {
+      fetch(API_CONTEXT_PATH)
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
+          applyContext(res.d.event);
+        })
+        .catch(function (e) { failContext(e.message); });
+    }
+
+    els.form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      clearError();
+      var name = document.getElementById("name").value.trim();
+      var email = document.getElementById("email").value.trim();
+      var phone = document.getElementById("phone").value.trim();
+      var seats = Number(els.seats.value) || 1;
+      var gotcha = els.form.querySelector('[name="_gotcha"]').value;
+      if (!name) return showError("Please enter your name.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError("Please enter a valid email.");
+
+      if (previewMode) {
+        showError("Preview mode - checkout is disabled. Your selection: " + seats + " seat" + (seats === 1 ? "" : "s") + ".");
+        return;
+      }
+
+      els.btn.disabled = true;
+      els.btn.textContent = isFree ? "Registering..." : "Sending you to Square...";
+      fetch(API_CHECKOUT_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name, email: email, phone: phone, seats: seats, _gotcha: gotcha }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.d.error || "Unable to register.");
+          if (res.d.checkoutUrl) {
+            window.location.href = res.d.checkoutUrl;
+          } else if (res.d.registered && res.d.ticketId) {
+            window.location.href = "/events/confirmed/?ticket=" + encodeURIComponent(res.d.ticketId) + "&event=" + encodeURIComponent(SLUG);
+          } else {
+            throw new Error(res.d.error || "Unable to register.");
+          }
+        })
+        .catch(function (e) {
+          showError(e.message || "Something went wrong. Please try again.");
+          els.btn.disabled = false;
+          els.btn.textContent = isFree ? "Register" : "Continue to payment";
+        });
+    });
+
+    els.waitlistForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      clearWaitlistMessages();
+      var name = document.getElementById("waitName").value.trim();
+      var email = document.getElementById("waitEmail").value.trim();
+      var phone = document.getElementById("waitPhone").value.trim();
+      var seats = Number(document.getElementById("waitSeats").value) || 1;
+      var note = document.getElementById("waitNote").value.trim();
+      var gotcha = els.waitlistForm.querySelector('[name="_gotcha"]').value;
+      if (!name) return showWaitlistError("Please enter your name.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showWaitlistError("Please enter a valid email.");
+
+      if (previewMode) {
+        showWaitlistSuccess("Preview mode - event update signup is disabled, but this is the saved state visitors will see.");
+        return;
+      }
+
+      els.waitlistBtn.disabled = true;
+      els.waitlistBtn.textContent = "Saving...";
+      fetch(API_WAITLIST_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name, email: email, phone: phone, seats: seats, note: note, _gotcha: gotcha }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.d.error || "Unable to save your update request.");
+          showWaitlistSuccess("You're on the update list. Keep an eye on your email for openings or future dates.");
+          els.waitlistForm.reset();
+        })
+        .catch(function (e) {
+          showWaitlistError(e.message || "Something went wrong. Please try again.");
+        })
+        .finally(function () {
+          els.waitlistBtn.disabled = false;
+          els.waitlistBtn.textContent = "Get updates";
+        });
+    });
+  })();
+  </script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>
