@@ -302,6 +302,21 @@ select option:checked {
     text-align: left !important;
   }
 
+  /* tattoo index — hero stays centered on phones (overrides the left-align above) */
+  body[data-venture="tattooing"] .hero {
+    align-items: center !important;
+  }
+  body[data-venture="tattooing"] .hero-left,
+  body[data-venture="tattooing"] .hero-right {
+    align-items: center !important;
+    text-align: center !important;
+  }
+  body[data-venture="tattooing"] .hero-desc,
+  body[data-venture="tattooing"] .hero-note,
+  body[data-venture="tattooing"] .hero-label {
+    text-align: center !important;
+  }
+
   /* ── Filter rows — let them flex-wrap with comfortable touch targets ── */
   nav.filters {
     margin-bottom: 24px !important;
