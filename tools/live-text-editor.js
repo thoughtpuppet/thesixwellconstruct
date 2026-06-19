@@ -89,6 +89,10 @@
   var reviewDrawer = null;
   var originalRecords = {};
   var controlSelectionRange = null;
+  var resizeObserver = null;
+  var resizeSaveTimers = new WeakMap();
+  var activeResizeElement = null;
+  var resizeDrag = null;
 
   var TEXT_SELECTOR = [
     '[data-copy-id]',
@@ -349,6 +353,10 @@
       color: element.style.color || '',
       fontFamily: element.style.fontFamily || '',
       fontSize: element.style.fontSize || '',
+      width: element.style.width || '',
+      height: element.style.height || '',
+      maxWidth: element.style.maxWidth || '',
+      display: element.style.display || '',
       opacity: element.style.opacity || '',
       textTransform: element.style.textTransform || '',
       textAlign: element.style.textAlign || ''
@@ -360,13 +368,17 @@
     element.style.color = styles.color || '';
     element.style.fontFamily = styles.fontFamily || '';
     element.style.fontSize = styles.fontSize || '';
+    element.style.width = styles.width || '';
+    element.style.height = styles.height || '';
+    element.style.maxWidth = styles.maxWidth || '';
+    element.style.display = styles.display || '';
     element.style.opacity = styles.opacity || '';
     element.style.textTransform = styles.textTransform || '';
     element.style.textAlign = styles.textAlign || '';
   }
 
   function hasMeaningfulStyles(styles) {
-    return Boolean(styles && (styles.color || styles.fontFamily || styles.fontSize || styles.opacity || styles.textTransform || styles.textAlign));
+    return Boolean(styles && (styles.color || styles.fontFamily || styles.fontSize || styles.width || styles.height || styles.maxWidth || styles.display || styles.opacity || styles.textTransform || styles.textAlign));
   }
 
   function normalizeRecord(record) {
@@ -715,6 +727,75 @@
     applyInlineStyle(element, 'fontSize', value);
   }
 
+  function enableBoxResize(element) {
+    if (!element) {
+      updateStatus('select text');
+      return;
+    }
+    activeElement = element;
+    activeResizeElement = element;
+    ensureResizableBox(element);
+    element.classList.add('is-live-resizing');
+    saveElement(element);
+    updateStatus('box resize');
+  }
+
+  function normalizeFontSizeValue(value) {
+    var raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'default') return '';
+    if (/^\d+(\.\d+)?$/.test(raw)) return raw + 'px';
+    if (/^\d+(\.\d+)?(px|rem|em|vw|vh|%)$/.test(raw)) return raw;
+    return '';
+  }
+
+  function ensureResizableBox(element) {
+    if (!element) return;
+    var computed = window.getComputedStyle(element);
+    if (computed.display === 'inline') element.style.display = 'inline-block';
+    element.style.maxWidth = 'none';
+    if (!element.style.width) element.style.width = Math.ceil(element.getBoundingClientRect().width) + 'px';
+    if (!element.style.height) element.style.height = Math.ceil(element.getBoundingClientRect().height) + 'px';
+  }
+
+  function saveResizedElement(element, rect) {
+    if (!element || !isEnabled || !element.hasAttribute('data-live-edit-id')) return;
+    ensureResizableBox(element);
+    element.style.width = Math.max(24, Math.round(rect.width)) + 'px';
+    element.style.height = Math.max(20, Math.round(rect.height)) + 'px';
+    saveElement(element);
+    updateStatus('resized');
+  }
+
+  function watchEditableResizes() {
+    if (resizeObserver) resizeObserver.disconnect();
+    if (!isEnabled || !window.ResizeObserver) return;
+
+    resizeObserver = new ResizeObserver(function(entries) {
+      entries.forEach(function(entry) {
+        var element = entry.target;
+        if (!element || element !== activeResizeElement) return;
+        var rect = entry.contentRect;
+        window.clearTimeout(resizeSaveTimers.get(element));
+        resizeSaveTimers.set(element, window.setTimeout(function() {
+          saveResizedElement(element, rect);
+        }, 220));
+      });
+    });
+
+    editableElements.forEach(function(element) {
+      resizeObserver.observe(element);
+    });
+  }
+
+  function stopWatchingEditableResizes() {
+    if (resizeObserver) resizeObserver.disconnect();
+    if (activeResizeElement) activeResizeElement.classList.remove('is-live-resizing');
+    resizeObserver = null;
+    activeResizeElement = null;
+    resizeDrag = null;
+  }
+
   function applyStrengthToElement(element, value) {
     applyBlockStyle(element, 'opacity', value);
   }
@@ -764,7 +845,7 @@
   }
 
   function sanitizeStyle(sourceStyle) {
-    var allowed = ['color', 'font-family', 'font-size', 'opacity', 'text-transform', 'text-align'];
+    var allowed = ['color', 'font-family', 'font-size', 'width', 'height', 'max-width', 'display', 'opacity', 'text-transform', 'text-align'];
     var output = [];
     String(sourceStyle || '').split(';').forEach(function(part) {
       var index = part.indexOf(':');
@@ -774,6 +855,9 @@
       if (!value || allowed.indexOf(name) === -1) return;
       if (/url\s*\(|expression\s*\(/i.test(value)) return;
       if (name === 'font-size' && !/^(0|[1-9]\d{0,2})(\.\d{1,2})?(px|rem|em|%)$/i.test(value)) return;
+      if ((name === 'width' || name === 'height') && !/^(0|[1-9]\d{0,3})(\.\d{1,2})?(px|rem|em|vw|vh|%)$/i.test(value)) return;
+      if (name === 'max-width' && value !== 'none' && !/^(0|[1-9]\d{0,3})(\.\d{1,2})?(px|rem|em|vw|vh|%)$/i.test(value)) return;
+      if (name === 'display' && value !== 'block' && value !== 'inline-block') return;
       if (name === 'opacity' && !/^(0(\.\d{1,3})?|1(\.0{1,3})?)$/.test(value)) return;
       output.push(name + ': ' + value);
     });
@@ -833,14 +917,16 @@
     var style = document.createElement('style');
     style.id = 'live-text-editor-styles';
     style.textContent = [
-      'body.live-text-editing [data-live-edit-id]{outline:1px dashed rgba(252,184,103,.42);outline-offset:3px;cursor:text;}',
+      'body.live-text-editing [data-live-edit-id]{outline:1px dashed rgba(252,184,103,.42);outline-offset:3px;cursor:text;min-width:24px;min-height:20px;}',
+      'body.live-text-editing [data-live-edit-id].is-live-resizing{resize:both;max-width:none!important;overflow:auto!important;cursor:text;}',
       'body.live-text-editing [data-live-edit-id]:hover,body.live-text-editing [data-live-edit-id]:focus{outline-color:#FCB867;background:rgba(252,184,103,.08);}',
       'body.live-text-editing [data-live-edit-id]:focus{box-shadow:0 0 0 4px rgba(252,184,103,.12);}',
       '#live-text-editor{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:8px;width:auto;max-width:calc(100vw - 36px);padding:8px;border:1px solid rgba(252,184,103,.32);background:rgba(14,14,14,.94);backdrop-filter:blur(16px);color:#FFE7CA;font-family:Inter,Arial,sans-serif;font-size:11px;line-height:1;box-shadow:0 14px 34px rgba(0,0,0,.36);}',
       '#live-text-editor .tool-section,#live-text-style-panel .tool-section{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;}',
       '#live-text-editor .tool-label,#live-text-style-panel .tool-label{color:rgba(255,231,202,.48);font-family:Georgia,Times New Roman,serif;text-transform:lowercase;}',
       '#live-text-editor button,#live-text-style-panel button{min-height:30px;border:1px solid rgba(252,184,103,.26);background:transparent;color:inherit;padding:0 10px;font:inherit;font-weight:700;text-transform:uppercase;letter-spacing:0;cursor:pointer;}',
-      '#live-text-style-panel select{min-height:30px;max-width:148px;border:1px solid rgba(252,184,103,.26);background:#0e0e0e;color:#FFE7CA;padding:0 8px;font:inherit;}',
+      '#live-text-style-panel select,#live-text-style-panel input{min-height:30px;max-width:148px;border:1px solid rgba(252,184,103,.26);background:#0e0e0e;color:#FFE7CA;padding:0 8px;font:inherit;}',
+      '#live-text-style-panel .font-size-input{width:92px;}',
       '#live-text-style-panel .font-picker{position:relative;display:grid;gap:6px;min-width:158px;}',
       '#live-text-style-panel .font-picker-toggle{width:100%;text-align:left;text-transform:none;font-size:13px;}',
       '#live-text-style-panel .font-picker-menu{display:none;grid-template-columns:1fr;gap:4px;min-width:190px;max-height:190px;overflow:auto;padding:6px;border:1px solid rgba(252,184,103,.26);background:#0e0e0e;}',
@@ -870,7 +956,7 @@
       '#live-text-review pre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;color:rgba(255,231,202,.78);font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;}',
       '#live-text-review button{min-height:30px;border:1px solid rgba(252,184,103,.26);background:transparent;color:#FFE7CA;padding:0 10px;font:700 11px/1 Inter,Arial,sans-serif;text-transform:uppercase;cursor:pointer;}',
       '#live-text-review button:hover{border-color:#FCB867;color:#FCB867;}',
-      '@media(max-width:760px){#live-text-editor{left:18px;right:18px;transform:none;justify-content:flex-start;overflow-x:auto;}#live-text-style-panel{left:18px;right:18px;transform:none;width:auto;grid-template-columns:1fr;}#live-text-style-panel select{max-width:100%;}}'
+      '@media(max-width:760px){#live-text-editor{left:18px;right:18px;transform:none;justify-content:flex-start;overflow-x:auto;}#live-text-style-panel{left:18px;right:18px;transform:none;width:auto;grid-template-columns:1fr;}#live-text-style-panel select,#live-text-style-panel input{max-width:100%;}}'
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -930,6 +1016,42 @@
       select.value = '';
     });
     return select;
+  }
+
+  function makeFontSizeInput(onChange) {
+    var input = document.createElement('input');
+    input.className = 'font-size-input';
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.placeholder = 'Size px';
+    input.setAttribute('aria-label', 'Font size');
+    input.addEventListener('pointerdown', function() {
+      input._liveEditTarget = captureControlTarget();
+    });
+    input.addEventListener('focus', function() {
+      if (!input._liveEditTarget) input._liveEditTarget = captureControlTarget();
+    });
+    input.addEventListener('keydown', function(event) {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      commitFontSizeInput(input, onChange);
+    });
+    input.addEventListener('change', function() {
+      commitFontSizeInput(input, onChange);
+    });
+    return input;
+  }
+
+  function commitFontSizeInput(input, onChange) {
+    var value = normalizeFontSizeValue(input.value);
+    if (input.value.trim() && !value) {
+      updateStatus('bad size');
+      return;
+    }
+    restoreControlSelection();
+    onChange(value, input._liveEditTarget || getEditableFromSelection());
+    input._liveEditTarget = null;
+    input.value = '';
   }
 
   function makeFontPicker(options, onChange) {
@@ -1043,21 +1165,8 @@
     ], function(value, target) {
       applyFontToElement(target || getEditableFromSelection(), value === 'default' ? '' : value);
     }));
-    styleSection.appendChild(makeSelect('Font size', [
-      { label: 'Size', value: '' },
-      { label: 'Default size', value: 'default' },
-      { label: '12 px', value: '12px' },
-      { label: '14 px', value: '14px' },
-      { label: '16 px', value: '16px' },
-      { label: '18 px', value: '18px' },
-      { label: '20 px', value: '20px' },
-      { label: '24 px', value: '24px' },
-      { label: '32 px', value: '32px' },
-      { label: '48 px', value: '48px' },
-      { label: '64 px', value: '64px' },
-      { label: '96 px', value: '96px' }
-    ], function(value, target) {
-      applyFontSizeToElement(target || getEditableFromSelection(), value === 'default' ? '' : value);
+    styleSection.appendChild(makeFontSizeInput(function(value, target) {
+      applyFontSizeToElement(target || getEditableFromSelection(), value);
     }));
     styleSection.appendChild(makeSelect('Text strength', [
       { label: 'Strength', value: '' },
@@ -1114,6 +1223,13 @@
     breakButton.title = 'Insert line break';
     breakButton.setAttribute('aria-label', 'Insert line break');
     styleSection.appendChild(breakButton);
+
+    var boxButton = makeButton('Box', function(target) {
+      enableBoxResize(target || getEditableFromSelection());
+    });
+    boxButton.title = 'Enable resizing on selected text box';
+    boxButton.setAttribute('aria-label', 'Enable resizing on selected text box');
+    styleSection.appendChild(boxButton);
 
     styleSection.appendChild(makeButton('Clear', function(target) {
       clearFormatting(target || getEditableFromSelection());
@@ -1644,6 +1760,12 @@
       element.spellcheck = isEnabled;
     });
 
+    if (isEnabled) {
+      watchEditableResizes();
+    } else {
+      stopWatchingEditableResizes();
+    }
+
     var toggle = document.getElementById('live-text-editor-toggle');
     if (toggle) toggle.classList.toggle('is-active', isEnabled);
     updateStatus(isEnabled ? 'editing' : 'off');
@@ -1656,6 +1778,7 @@
       element.contentEditable = 'false';
       element.removeAttribute('data-live-edit-id');
     });
+    stopWatchingEditableResizes();
     activeElement = null;
     isHydrated = false;
     hydrateSavedText();

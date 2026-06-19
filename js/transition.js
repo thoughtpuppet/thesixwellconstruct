@@ -101,6 +101,7 @@
       title.style.transform = '';
       title.style.transformOrigin = '';
       title.style.width = '';
+      title.style.removeProperty('font-size');
       title.style.display = title.style.display || 'inline-block';
 
       var parentRect = title.parentElement.getBoundingClientRect();
@@ -110,10 +111,11 @@
       var titleWidth = title.scrollWidth;
       if (!availableWidth || !titleWidth || titleWidth <= availableWidth) return;
 
-      var scale = Math.max(0.42, Math.min(1, availableWidth / titleWidth));
-      title.style.transformOrigin = 'left center';
-      title.style.transform = 'scaleX(' + scale.toFixed(3) + ')';
-      title.style.width = (100 / scale).toFixed(3) + '%';
+      var computedSize = parseFloat(window.getComputedStyle(title).fontSize);
+      if (!computedSize) return;
+
+      var scale = Math.max(0.58, Math.min(1, availableWidth / titleWidth));
+      title.style.setProperty('font-size', Math.floor(computedSize * scale) + 'px', 'important');
     });
   }
 
