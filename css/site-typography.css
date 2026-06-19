@@ -60,6 +60,26 @@ h6,
   line-height: 0.9 !important;
 }
 
+body[data-venture="tattooing"] .intro h1,
+body[data-venture="tattooing"] .hero-title,
+body[data-venture="tattooing"] .page-title,
+body[data-venture="tattooing"] .gate-title,
+body[data-venture="tattooing"] .series-title,
+.tattoos-page .hero-copy h1 {
+  max-width: 100%;
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+}
+
+body[data-venture="tattooing"] .intro h1 br,
+body[data-venture="tattooing"] .hero-title br,
+body[data-venture="tattooing"] .page-title br,
+body[data-venture="tattooing"] .gate-title br,
+body[data-venture="tattooing"] .series-title br {
+  display: none !important;
+}
+
 #wordmark,
 #construct-corner span {
   text-transform: none !important;

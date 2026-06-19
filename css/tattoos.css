@@ -46,6 +46,10 @@
   letter-spacing: -0.05em;
   line-height: 0.88;
   text-transform: uppercase;
+  max-width: 100%;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .tattoos-page .hero-copy .hero-lead,

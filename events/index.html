@@ -88,7 +88,7 @@
       </header>
       <div class="feature-grid">
         <div id="events-feed" class="events-feed">
-          <article class="feature-card is-large" style="--feature-image:url('/assets/paintings/DECISION%204AM.jpg')">
+          <article class="feature-card is-large">
             <span class="tile-kicker">live container</span>
             <h3>Loading events…</h3>
             <p>Pulling the current calendar.</p>
@@ -154,12 +154,6 @@
   <script>
   (function () {
     var feed = document.getElementById("events-feed");
-    // Optional per-slug artwork; events without a match get a neutral default.
-    var IMAGES = {
-      "signal-symbol": "/assets/paintings/DECISION%204AM.jpg",
-    };
-    var DEFAULT_IMAGE = "/assets/paintings/DECISION%204AM.jpg";
-
     function escapeHtml(value) {
       return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c];
@@ -179,13 +173,17 @@
       if (!ev.open) return { text: "booking closed", soldout: true };
       return { text: ev.seatsRemaining + " seat" + (ev.seatsRemaining === 1 ? "" : "s") + " left", soldout: false };
     }
+    function eventImageUrl(ev) {
+      if (ev.slug === "signal-symbol") return "";
+      return ev.imageUrl || "";
+    }
     function renderEmpty(message) {
       if (String(message || "").toLowerCase().indexOf("couldn") !== -1) {
         renderError("Events could not be loaded right now. Please check back shortly or contact the studio from the main site.");
         return;
       }
       feed.innerHTML =
-        '<article class="feature-card is-large" style="--feature-image:url(\'' + DEFAULT_IMAGE + '\')">' +
+        '<article class="feature-card is-large">' +
         '<span class="tile-kicker">live container</span>' +
         '<h3>No events to show</h3>' +
         '<p>' + escapeHtml(message) + '</p>' +
@@ -193,7 +191,7 @@
     }
     function renderError(message) {
       feed.innerHTML =
-        '<article class="feature-card is-large" style="--feature-image:url(\'' + DEFAULT_IMAGE + '\')">' +
+        '<article class="feature-card is-large">' +
         '<span class="tile-kicker">calendar issue</span>' +
         '<h3>Events could not be loaded</h3>' +
         '<p>' + escapeHtml(message) + '</p>' +
@@ -203,7 +201,8 @@
     function renderEvents(events) {
       if (!events.length) { renderEmpty("No public gatherings are open for booking yet. Check back as the calendar firms up."); return; }
       feed.innerHTML = events.map(function (ev, index) {
-        var img = ev.imageUrl || IMAGES[ev.slug] || DEFAULT_IMAGE;
+        var img = eventImageUrl(ev);
+        var imageStyle = img ? ' style="--feature-image:url(\'' + img + '\')"' : "";
         var seats = seatsLabel(ev);
         var price = ev.free ? "Free" : (ev.priceFormatted ? ev.priceFormatted + " / seat" : "ticketed");
         var kicker = ev.open ? "open for booking" : (ev.soldOut ? "sold out" : "booking closed");
@@ -216,7 +215,7 @@
           ? '<a class="event-cta is-secondary" href="' + eventHref + '#waitlist">Join waitlist</a>'
           : '';
         return '' +
-          '<article class="feature-card' + (index === 0 ? " is-large" : "") + '" style="--feature-image:url(\'' + img + '\')">' +
+          '<article class="feature-card' + (index === 0 ? " is-large" : "") + '"' + imageStyle + '>' +
           '<span class="tile-kicker">' + escapeHtml(kicker) + '</span>' +
           '<h3>' + escapeHtml(ev.title) + '</h3>' +
           '<p>' + escapeHtml(ev.description || "") + '</p>' +

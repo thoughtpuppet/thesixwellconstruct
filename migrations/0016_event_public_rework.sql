@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_event_waitlist_email
 
 UPDATE events
 SET
-  image_url = CASE WHEN image_url = '' AND slug = 'signal-symbol' THEN '/assets/paintings/DECISION%204AM.jpg' ELSE image_url END,
+  image_url = CASE WHEN slug = 'signal-symbol' THEN '' ELSE image_url END,
   details = CASE WHEN details = '' AND slug = 'signal-symbol' THEN 'Signal & Symbol is a guided creative gathering where participants respond to sensory prompts through drawing, color, line, symbol, and mark-making. The horizon is what each person brings to that encounter: memory, mood, imagination, culture, attention, and atmosphere.' ELSE details END,
   included = CASE WHEN included = '' AND slug = 'signal-symbol' THEN 'Markers, colored pencils, graphite pencils, paper, erasers, sharpeners, and drawing boards or table surfaces are provided. No paint will be used.' ELSE included END,
   arrival_notes = CASE WHEN arrival_notes = '' AND slug = 'signal-symbol' THEN 'Plan to arrive a few minutes early, choose simple drawing materials, and settle in before the first prompt.' ELSE arrival_notes END,

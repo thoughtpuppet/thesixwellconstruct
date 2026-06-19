@@ -11,7 +11,7 @@ SET
     ELSE location
   END,
   image_url = CASE
-    WHEN image_url = '' OR image_url = '/assets/paintings/DECISION%204AM.jpg' THEN '/assets/paintings/DECISION%204AM.jpg'
+    WHEN image_url = '/assets/paintings/DECISION%204AM.jpg' THEN ''
     ELSE image_url
   END,
   details = 'Signal & Symbol is a guided creative gathering where participants respond to sensory prompts through drawing, color, line, symbol, and mark-making. A signal is the prompt placed in the room. A symbol is the visual response that rises from it. The horizon is what each person brings to that encounter: memory, mood, imagination, culture, attention, and atmosphere. The goal is not to draw well. The goal is to respond honestly.',

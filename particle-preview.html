@@ -92,12 +92,7 @@
   #back-btn svg { display: block; opacity: 0.7; }
   body.is-mobile #back-btn.visible { display: inline-flex; opacity: 0.65; }
   body.is-mobile .node-label { font-size: 13px; }
-  body.is-mobile .sub-node-label {
-    font-size: clamp(11px, 3.2vw, 13px);
-    letter-spacing: 0.03em;
-    max-width: min(96px, 28vw);
-    line-height: 1.18;
-  }
+  body.is-mobile .sub-node-label { font-size: 17px; letter-spacing: 0.04em; }
   /* Intro float-in is now a JS content-dolly drawn on the canvas (see
      introContentScale): the field zooms in from depth while the canvas stays
      full-viewport, so it always fills the screen — no CSS transform that would
@@ -179,9 +174,8 @@ function resize() {
   scale = computeScale(W, H);
   isMobile = w < 900;
   document.body.classList.toggle('is-mobile', isMobile);
-  // Rebuild the eye field + tiny-star dusting to fill the current viewport.
+  // Rebuild the eye field so it bleeds past the edges of the current viewport.
   buildEyeRings();
-  buildTinyStars();
   // Invalidate cached eye tints so they redraw at new scale on first frame
   eyeTint1 = null; eyeTint2 = null;
 }
@@ -243,10 +237,36 @@ let tinyStars = [];
 // Subtle dusting of tiny stars filling the whole space. Rebuilt on resize to
 // cover the viewport even at the most zoomed-out point of the intro dolly.
 function buildTinyStars(){
+  const R = (Math.hypot(W,H)/2)/INTRO_MIN + 120;
+  const count = Math.max(140, Math.min(520, Math.round((2*R)*(2*R) / (135*135))));
   tinyStars = [];
+  for(let i=0;i<count;i++){
+    tinyStars.push({
+      sx:(Math.random()*2-1)*R, sy:(Math.random()*2-1)*R,
+      par: 0.10 + Math.random()*1.15,     // depth (≈PAR_FAR..PAR_NEAR; literal avoids load-order TDZ)
+      size: 0.4 + Math.random()*1.1,
+      alpha: 0.05 + Math.random()*0.14,
+      tw: Math.random()*Math.PI*2, twS: 0.0004 + Math.random()*0.0009
+    });
+  }
 }
+// Drawn behind the eyes. Rides the same depth camera + intro dolly, and pushes
+// outward when the ring opens (openEnv).
 function drawTinyStars(t){
-  return;
+  if(!tinyStars.length) return;
+  const push = 1 + STAR_PUSH * openEnv();
+  ctx.fillStyle = 'rgb(255,238,214)';   // warm starlight; per-star alpha via globalAlpha
+  for(let i=0;i<tinyStars.length;i++){
+    const s = tinyStars[i];
+    const cam = camFor(s.par), dol = dollyAt(s.par);
+    const m = _ics * dol * push;
+    const px = cx + s.sx*m + cam.x, py = cy + s.sy*m + cam.y;
+    if(px < -4 || px > W+4 || py < -4 || py > H+4) continue;   // cull off-screen
+    const tw = 0.75 + 0.25*Math.sin(t*s.twS + s.tw);
+    ctx.globalAlpha = s.alpha * tw;
+    ctx.beginPath(); ctx.arc(px, py, s.size*scale, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 resize();   // initial sizing — now safe: BASE_EYE_RINGS/buildEyeRings exist
 
@@ -382,9 +402,9 @@ function drawEyes(t) {
   });
 }
 
-const RING_COLOR='#6D3D15',BASE_RING_OUTER=68,BASE_RING_INNER=49,BASE_DOT_RADIUS=9.5;
+const RING_COLOR='#6D3D15',BASE_RING_OUTER=56,BASE_RING_INNER=40,BASE_DOT_RADIUS=7.5;
 const DOT_COLOR='#FCB867',PARTICLE_COLOR='#FCB867',BG_COLOR='#0e0e0e';
-const BASE_NODE_SIZE=19;
+const BASE_NODE_SIZE=15;
 const BASE_DOT_POSITIONS=[[-18,-28],[18,-28],[-18,0],[18,0],[-18,28],[18,28]];
 // Scaled accessors — recomputed each frame from current viewport `scale`
 function RING_OUTER() { return BASE_RING_OUTER * scale; }
@@ -417,20 +437,34 @@ const DOT_R=0xFC,DOT_G=0xB8,DOT_B=0x67;
 let dotStartX=new Array(VENTURES.length).fill(0),dotStartY=new Array(VENTURES.length).fill(0);
 
 // Particle field — tunable constants
-const MAX_P_BASE = 0;              // particles disabled on the home canvas
-const STAR_COUNT_MUL = 0;
+// PREVIEW NOTE: several are `let` (not `const`) so the on-page tuning panel can adjust
+// them live. When porting to index.html, bake the chosen values back as `const`.
+let   MAX_P_BASE = 300;            // base particle cap (dense dust)
+const STAR_COUNT_MUL = 1.7;        // 0..2 — multiplies cap (stars slider, dense)
 const DEPTH_VAR = 1.35;            // 0..1.6 — particle size variance (depth slider, deep)
 const PARTICLE_SPEED = 1.4;        // motion speed multiplier (paired with pulse)
 const SPAWN_INT = 180, particles=[];
-function getMaxP(){return 0;}
+// Flow-field motion — turbulent drift + dispersal pulse + strong cursor scatter
+let   FLOW_TURB = 0.9;             // turbulence magnitude of the curl drift
+let   FLOW_OUTWARD = 0.4;          // steady outward dispersal bias
+let   FLOW_MOTION = 0.06;          // integration step scale
+const BREATH_RATE = 0.00018;       // slow gather→scatter pulse speed (~35s period)
+let   BREATH_AMT = 0.5;            // how much the breath modulates the outward bias
+const CURSOR_RADIUS = 130;         // strong-scatter influence radius (screen px, * scale)
+let   CURSOR_PUSH = 2.4;           // repel strength
+const CURSOR_SWIRL = 1.3;          // tangential swirl strength
+let   SIZE_MUL = 1;                // PREVIEW grain multiplier (scales drawn dot radius)
+function getMaxP(){const c=Math.max(8, Math.round(MAX_P_BASE*STAR_COUNT_MUL));return isMobile?Math.round(c*0.5):c;}
 
-function spawnP(pre){
+// Initialise (or recycle) a particle in place. `pre` spreads the initial fill across
+// the whole field; live respawns start near the ring so the field still emanates from it.
+function initP(p, pre){
   const ro = RING_OUTER();
-  const close=Math.random()<0.4, minD=close?8:80, maxD=close?90:370;
   const dv = DEPTH_VAR;
-  const baseSize = 2 + Math.random()*3.8;
-  const mid = 3.9;
-  const size = mid + (baseSize - mid) * (0.6 + dv*0.9);
+  // Finer grain — mostly small dust, a few larger (nearer) particles.
+  const baseSize = 0.7 + Math.pow(Math.random(), 1.7) * 2.6;
+  const mid = 1.6;
+  const size = Math.max(0.5, mid + (baseSize - mid) * (0.6 + dv*0.9));
   // On mobile when the stack is open, scatter the spawn origin along the stack
   // so particles populate the full vertical column instead of clustering at center.
   let originY = 0;
@@ -438,33 +472,23 @@ function spawnP(pre){
     const stackTop = H*0.24, stackBot = H*0.94;
     originY = (stackTop + Math.random() * (stackBot - stackTop)) - cy;
   }
-  const p={
-    originYOff: originY,
-    angle:Math.random()*Math.PI*2,
-    dist:ro,
-    targetDist: ro + minD + Math.random()*(maxD-minD),
-    orbitSpeed:(Math.random()*0.000035+0.00001)*(Math.random()<0.5?1:-1),
-    driftSpeed:0.003+Math.random()*0.007,
-    size: Math.max(0.6, size),
-    maxAlpha:0.15+Math.random()*0.38,
-    floatAmpX:4+Math.random()*9,
-    floatAmpY:4+Math.random()*9,
-    floatPX:12000+Math.random()*10000,
-    floatPY:14000+Math.random()*10000,
-    floatOX:Math.random()*Math.PI*2,
-    floatOY:Math.random()*Math.PI*2,
-    fadeInDur:800+Math.random()*600,
-    fadeOutDur:1400+Math.random()*1000,
-    age:0, totalLife:null, reached:false
-  };
-  if(pre){
-    const fr=Math.random();
-    p.dist = ro + fr*(p.targetDist-ro);
-    p.age = fr*(p.fadeInDur+3000);
-    if(p.dist>=p.targetDist){p.reached=true;p.totalLife=p.age+4000+Math.random()*8000;}
-  }
-  particles.push(p);
+  // World position in layout units relative to center (analogous to the old polar `dist`).
+  const a = Math.random()*Math.PI*2;
+  const maxLU = Math.max(W,H) * 0.5 / Math.max(scale, 0.0001);
+  const startR = pre ? (ro + Math.random()*(maxLU-ro)) : (ro + Math.random()*ro*0.7);
+  p.wx = Math.cos(a)*startR;
+  p.wy = Math.sin(a)*startR;
+  p.vx = 0; p.vy = 0;
+  p.originYOff = originY;
+  p.spin = Math.random()<0.5 ? 1 : -1;
+  p.size = size;
+  p.maxAlpha = 0.12 + Math.random()*0.40;
+  p.fadeInDur = 800 + Math.random()*700;
+  p.fadeOutDur = 1400 + Math.random()*1100;
+  p.totalLife = 5000 + Math.random()*9000;
+  p.age = pre ? Math.random()*p.totalLife*0.85 : 0;
 }
+function spawnP(pre){ const p={}; initP(p, pre); particles.push(p); }
 let spawnTimer=0;
 let _particlesSeeded=false;
 function seedParticles(){
@@ -478,39 +502,58 @@ function updateParticles(dt,t){
   seedParticles();
   dt = dt * PARTICLE_SPEED;
   const cap=getMaxP();
+  // Maintain population: grow toward cap, trim if a resize lowered it (e.g. mobile).
   spawnTimer+=dt;
   if(spawnTimer>=SPAWN_INT && particles.length<cap){spawnP(false);spawnTimer=0;}
-  if(particles.length>cap*1.05){
-    const overflow = particles.length - cap;
-    for(let i=0;i<overflow;i++){
-      const p=particles[i];
-      if(p.reached && p.totalLife) p.totalLife = Math.min(p.totalLife, p.age + 800);
-    }
-  }
+  if(particles.length>cap){particles.splice(cap, particles.length-cap);}
+
   const moodDot = PARTICLE_COLOR;
-  const _push = 1 + STAR_PUSH * openEnv();   // radial spread when the ring opens
-  for(let i=particles.length-1;i>=0;i--){
+  const _push = 1 + STAR_PUSH * openEnv();                     // radial spread when the ring opens
+  const breath = 1 + BREATH_AMT * Math.sin(t * BREATH_RATE);   // slow gather→scatter pulse
+  const maxR = Math.max(W,H) * 0.62 / Math.max(scale, 0.0001); // field edge in layout units
+  const R = CURSOR_RADIUS * scale;
+  for(let i=0;i<particles.length;i++){
     const p=particles[i];
-    p.age+=dt; p.angle+=p.orbitSpeed*dt;
-    if(!p.reached){
-      p.dist+=p.driftSpeed*dt;
-      if(p.dist>=p.targetDist){p.dist=p.targetDist;p.reached=true;p.totalLife=p.age+4000+Math.random()*8000;}
-    }
-    if(p.reached&&p.age>=p.totalLife){particles.splice(i,1);continue;}
-    let alpha;
-    if(!p.reached){alpha=Math.min(p.age/p.fadeInDur,1)*p.maxAlpha;}
-    else{const tl=p.totalLife-p.age;alpha=tl<p.fadeOutDur?(tl/p.fadeOutDur)*p.maxAlpha:p.maxAlpha;}
-    const fx=p.floatAmpX*Math.sin((t/p.floatPX)*Math.PI*2+p.floatOX);
-    const fy=p.floatAmpY*Math.sin((t/p.floatPY)*Math.PI*2+p.floatOY);
+    p.age+=dt;
+    const r=Math.hypot(p.wx,p.wy)||1;
+    // Recycle in place when the particle dies or drifts past the field edge.
+    if(p.age>=p.totalLife || r>maxR){ initP(p,false); continue; }
+
+    // Turbulent flow direction + outward dispersal bias (breath-modulated), eased for inertia.
+    const ang = flowAngle(p.wx, p.wy, t);
+    const outx = p.wx/r, outy = p.wy/r;
+    const sz = 0.45 + p.size*0.28;                  // bigger = nearer = faster (depth)
+    const desVx = (Math.cos(ang)*FLOW_TURB + outx*FLOW_OUTWARD*breath) * sz;
+    const desVy = (Math.sin(ang)*FLOW_TURB + outy*FLOW_OUTWARD*breath) * sz;
+    p.vx += (desVx - p.vx) * 0.06;
+    p.vy += (desVy - p.vy) * 0.06;
+
     // Depth: bigger particles are nearer — parallax & dolly more than small ones.
     const sPar = sizeParallax(p.size);
     const camP = camFor(sPar), dollyP = dollyAt(sPar);
-    const _pd = p.dist*scale*dollyP*_ics*_push;
-    const px = cx + Math.cos(p.angle)*_pd + fx*scale + camP.x;
-    const py = cy + (p.originYOff || 0) + Math.sin(p.angle)*_pd + fy*scale + camP.y;
-    ctx.globalAlpha=alpha;
-    ctx.beginPath();ctx.arc(px,py,p.size*scale*dollyP*_ics,0,Math.PI*2);
-    ctx.fillStyle=moodDot;ctx.fill();
+    const m = scale*dollyP*_ics*_push;
+    const px = cx + p.wx*m + camP.x;
+    const py = cy + (p.originYOff || 0) + p.wy*m + camP.y;
+
+    // Strong cursor scatter — firm repel + swirl; the eased velocity leaves a settling wake.
+    if(mouseSeen){
+      const mdx=px-mouseX, mdy=py-mouseY, md=Math.hypot(mdx,mdy);
+      if(md<R){
+        const f=1-md/R, imp=f*f, nx=mdx/(md||1), ny=mdy/(md||1);
+        p.vx += (nx*CURSOR_PUSH - ny*CURSOR_SWIRL*p.spin) * imp / scale;
+        p.vy += (ny*CURSOR_PUSH + nx*CURSOR_SWIRL*p.spin) * imp / scale;
+      }
+    }
+
+    p.wx += p.vx * dt * FLOW_MOTION;
+    p.wy += p.vy * dt * FLOW_MOTION;
+
+    const fin = Math.min(p.age/p.fadeInDur, 1);
+    const rem = p.totalLife - p.age;
+    const fout = rem < p.fadeOutDur ? Math.max(rem/p.fadeOutDur, 0) : 1;
+    ctx.globalAlpha = p.maxAlpha * fin * fout;
+    ctx.beginPath(); ctx.arc(px, py, p.size*SIZE_MUL*scale*dollyP*_ics, 0, Math.PI*2);
+    ctx.fillStyle=moodDot; ctx.fill();
   }
   ctx.globalAlpha=1;
 }
@@ -572,6 +615,14 @@ function camFor(par){ const e=cameraEnv(); return {x:camX*par*e, y:camY*par*e}; 
 function dollyAt(par){ return 1 + (0.045*Math.sin(time/17000))*par; }
 // Map a particle's drawn size to a parallax depth (bigger = nearer = moves more).
 function sizeParallax(sz){ return lerp(PAR_FAR, PAR_NEAR, clamp01((sz-0.6)/6.8)); }
+// Flow field — cheap layered-sine pseudo-curl that drives the turbulent particle drift.
+// Returns an angle (radians) sampled at a world point; the field slowly evolves with t.
+function flowAngle(x,y,t){
+  return (Math.sin(x*0.0090 + t*0.00022)
+        + Math.cos(y*0.0110 - t*0.00019)
+        + Math.sin((x+y)*0.0070 + t*0.00013)
+        + Math.cos((x-y)*0.0060 - t*0.00009)) * 1.4;
+}
 // Intro content-dolly: the whole field zooms in from INTRO_MIN→1 on load while
 // the canvas stays full-viewport (so it always fills the screen — no edge cut).
 // Returns 1 once finished, or when there's no intro (reduced motion stamps far past).
@@ -624,46 +675,12 @@ function getRingEdgeForNode(v){
   if(isMobile){const rt=ringTransform();return{x:rt.x,y:rt.y+RING_OUTER()*rt.s};}
   const a=toRad(v.angle)+slowOrbit*0.00004;return{x:cx+Math.cos(a)*RING_OUTER(),y:cy+Math.sin(a)*RING_OUTER()};
 }
-function getDotScreenPos(i){
-  const rt=ringTransform();
-  const dotHoverScale=1+0.08*easeOutSoft(logoHoverP);
-  const d=[BASE_DOT_POSITIONS[i][0]*scale*dotHoverScale,BASE_DOT_POSITIONS[i][1]*scale*dotHoverScale];
-  const angle=Math.atan2(d[1],d[0])+dotOrbit;
-  const dist=Math.hypot(d[0],d[1])+Math.sin(time*0.025+i*1.1)*1.5*scale;
-  const s=rt.s*_ics;
-  return{x:rt.x+Math.cos(angle)*dist*s,y:rt.y+Math.sin(angle)*dist*s};
-}
-function getDotCurrentPos(i){return getDotScreenPos(i);}
-function getDotTargetPos(i){return getDotScreenPos(i);}
+function getDotCurrentPos(i){const d=DOT_POS(i);const angle=Math.atan2(d[1],d[0])+time*0.003;const r=Math.hypot(d[0],d[1]);return{x:cx+Math.cos(angle)*r,y:cy+Math.sin(angle)*r};}
+function getDotTargetPos(i){const d=DOT_POS(i);const angle=Math.atan2(d[1],d[0])+time*0.003;const r=Math.hypot(d[0],d[1]);return{x:cx+Math.cos(angle)*r,y:cy+Math.sin(angle)*r};}
 function isOverCenter(mx,my){const rt=ringTransform();const _c=camFor(PAR_CENTER);return Math.hypot(mx-(rt.x+_c.x),my-(rt.y+_c.y))<Math.max(44,65*scale*rt.s);}
 function isOverLogo(mx,my){if(state==='expanded'||state==='collapsing')return false;if(expandProgress>0.35)return false;const rt=ringTransform();const _c=camFor(PAR_CENTER);return Math.hypot(mx-(rt.x+_c.x),my-(rt.y+_c.y))<RING_OUTER()*rt.s+Math.max(10,14*scale);}
-function nodeScreenPos(i){const _c=camFor(PAR_CENTER);return{x:nodeX[i]+_c.x,y:nodeY[i]+_c.y};}
-function isInsidePaddedRect(mx,my,rect,pad){
-  return mx>=rect.left-pad&&mx<=rect.right+pad&&my>=rect.top-pad&&my<=rect.bottom+pad;
-}
-function getHoveredNode(mx,my){
-  if(expandProgress<0.8||state==='collapsing')return -1;
-  if(isMobile&&subNodeState!=='idle'&&activeVentureIdx>=0){
-    const p=nodeScreenPos(activeVentureIdx);
-    if(Math.hypot(mx-p.x,my-p.y)<Math.max(36,42*scale))return activeVentureIdx;
-    const el=nodeLabelEls[activeVentureIdx];
-    if(el&&Number(el.style.opacity||0)>0.04&&isInsidePaddedRect(mx,my,el.getBoundingClientRect(),10))return activeVentureIdx;
-    return -1;
-  }
-  const r=Math.max(36,42*scale);
-  for(let i=0;i<VENTURES.length;i++){
-    const p=nodeScreenPos(i);
-    if(Math.hypot(mx-p.x,my-p.y)<r)return i;
-  }
-  for(let i=0;i<nodeLabelEls.length;i++){
-    const el=nodeLabelEls[i];
-    if(!el||Number(el.style.opacity||0)<=0.04)continue;
-    if(isInsidePaddedRect(mx,my,el.getBoundingClientRect(),10))return i;
-  }
-  return -1;
-}
+function getHoveredNode(mx,my){if(expandProgress<0.8||state==='collapsing')return -1;const _c=camFor(PAR_CENTER);const r=Math.max(26,30*scale);for(let i=0;i<VENTURES.length;i++)if(Math.hypot(mx-(nodeX[i]+_c.x),my-(nodeY[i]+_c.y))<r)return i;return -1;}
 function triggerCollapse(){
-  outgoingSubNodeSets = [];
   // Instantly clear any open pathways — parent is about to move
   if(subNodeState!=='idle'){
     subNodeState='idle';activeVentureIdx=-1;
@@ -739,8 +756,7 @@ stage.addEventListener('click',e=>{
       }
       subNodeCollapseProgress=0;subNodeState='collapsing';subNodeHP.fill(0);
     }else{
-      // Different/new entry: old pathways return home while the new set opens.
-      if(activeVentureIdx>=0&&subNodeState!=='idle') queueOutgoingSubNodes(activeVentureIdx);
+      // Different/new entry: immediately open pathways (any previous set vanishes)
       activeVentureIdx=hn;
       subNodeProgress=0;subNodeState='expanding';subNodeHP.fill(0);
       subNodeLabelEls.forEach(el=>el.style.opacity='0');
@@ -933,8 +949,8 @@ const SUB_SHAPES = {
 };
 
 // Pathway animation + sizing constants
-const BASE_SUB_NODE_RADIUS = 12;
-const BASE_SUB_NODE_DIST   = 88;
+const BASE_SUB_NODE_RADIUS = 9;
+const BASE_SUB_NODE_DIST   = 75;
 function SUB_NODE_RADIUS(){
   // On mobile during a takeover, pathway dots scale up so they're easy to see and tap.
   if(isMobile && activeVentureIdx >= 0 && subNodeState !== 'idle'){
@@ -964,7 +980,6 @@ const subNodeY             = new Array(MAX_SUBNODES).fill(0);
 const subNodeHP            = new Array(MAX_SUBNODES).fill(0); // hover progress per pathway
 const subNodeCollapseStartX= new Array(MAX_SUBNODES).fill(0);
 const subNodeCollapseStartY= new Array(MAX_SUBNODES).fill(0);
-let outgoingSubNodeSets    = [];
 
 // Build pathway label DOM elements (Georgia-first serif, lowercase)
 const subNodeLabelsDiv = document.getElementById('sub-node-labels');
@@ -1013,18 +1028,6 @@ function getHoveredSubNode(mx, my){
     if(Math.hypot(mx - subNodeX[i], my - subNodeY[i]) < Math.max(24,28*scale)) return i;
   }
   return -1;
-}
-
-function queueOutgoingSubNodes(ventureIdx){
-  if(ventureIdx < 0 || subNodeState === 'idle') return;
-  const subs = SUB_NODE_DATA[VENTURES[ventureIdx].name];
-  if(!subs || !subs.length) return;
-  outgoingSubNodeSets.push({
-    ventureIdx,
-    x: subNodeX.slice(0, subs.length),
-    y: subNodeY.slice(0, subs.length),
-    progress: 0
-  });
 }
 
 // ── Shape drawing: sacred geometry path for each construct entry ───────────
@@ -1179,7 +1182,7 @@ function drawSubNodes(){
         el.style.color = subColor;
         el.style.opacity = String(ep * (0.65 + subNodeHP[i] * 0.25));
         el.style.left = sx + 'px';
-        el.style.top  = (sy + SUB_NODE_RADIUS() + (isMobile ? 8 : 5)) + 'px';
+        el.style.top  = (sy + SUB_NODE_RADIUS() + 5) + 'px';
       } else if(el){
         el.style.opacity = '0';
       }
@@ -1209,42 +1212,10 @@ function drawSubNodes(){
         subNodeLabelEls[i].style.transform = 'translate(-50%, 0)';
         subNodeLabelEls[i].style.opacity = String((1 - cp) * 0.65);
         subNodeLabelEls[i].style.left = sx + 'px';
-        subNodeLabelEls[i].style.top  = (sy + SUB_NODE_RADIUS() + (isMobile ? 8 : 5)) + 'px';
+        subNodeLabelEls[i].style.top  = (sy + SUB_NODE_RADIUS() + 5) + 'px';
       }
     });
   }
-}
-
-function updateOutgoingSubNodes(dt){
-  for(let i=outgoingSubNodeSets.length-1;i>=0;i--){
-    const set=outgoingSubNodeSets[i];
-    set.progress=Math.min(set.progress+dt*SUB_COLLAPSE_SPEED,1);
-    if(set.progress>=1) outgoingSubNodeSets.splice(i,1);
-  }
-}
-
-function drawOutgoingSubNodes(){
-  if(!outgoingSubNodeSets.length) return;
-  outgoingSubNodeSets.forEach(set=>{
-    const v=VENTURES[set.ventureIdx];
-    const subs=SUB_NODE_DATA[v.name];
-    const shape=SUB_SHAPES[v.name];
-    const cp=easeInOut(set.progress);
-    const destX=nodeX[set.ventureIdx], destY=nodeY[set.ventureIdx];
-    subs.forEach((sub,i)=>{
-      const sx=lerp(set.x[i],destX,cp);
-      const sy=lerp(set.y[i],destY,cp);
-      const alpha=(1-cp)*0.72;
-      if(alpha<=0.01) return;
-      const drawR=lerp(BASE_SUB_NODE_RADIUS*scale,3,cp);
-      ctx.save();
-      ctx.globalAlpha=alpha;
-      ctx.fillStyle=sub.color||v.color;
-      drawSubShape(sx,sy,drawR,shape);
-      ctx.fill();
-      ctx.restore();
-    });
-  });
 }
 
 // ── Intro stars ─────────────────────────────────────────────
@@ -1254,7 +1225,7 @@ function drawOutgoingSubNodes(){
 // (PARTICLE_COLOR); runs only for the first few seconds, then frees itself.
 // Skipped entirely for reduced-motion users.
 const INTRO_REDUCE = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-const INTRO_STAR_COUNT = 0;
+const INTRO_STAR_COUNT = 46;
 const INTRO_DUR = 4000;                      // ms — matches the #stage float-in transform
 const INTRO_HOLD = 1600;                     // ms they float in place after arriving
 const INTRO_FADE = 3600;                     // ms they then fade out over
@@ -1364,8 +1335,6 @@ function tick(ts){
     }
   }
 
-  updateOutgoingSubNodes(dt);
-
   // Pathway hover progress
   for(let i=0;i<MAX_SUBNODES;i++){
     const t=hoveredSubNode===i?1:0;
@@ -1390,14 +1359,13 @@ function tick(ts){
 
   // ── Render ──
   ctx.fillStyle=BG_COLOR;ctx.fillRect(0,0,W,H);
-  drawTinyStars(time);
   drawEyes(time);
   updateParticles(dt,time);
   drawRing();
 
   if(state==='idle'||state==='hover-logo'){drawDots(1);}
   else if(state==='expanding'){drawTravelingDots(expandProgress);if(expandProgress>=XFADE_START)drawSettledNodes(expandProgress);}
-  else if(state==='expanded'){drawSettledNodes(1);drawOutgoingSubNodes();drawSubNodes();}
+  else if(state==='expanded'){drawSettledNodes(1);drawSubNodes();}
   else if(state==='collapsing'){drawCollapsingNodes(collapseProgress);}
 
   drawIntroStars();
@@ -1448,6 +1416,59 @@ requestAnimationFrame(tick);
 </script>
 
 
+
+<!-- ===== PREVIEW-ONLY tuning panel (do NOT port to index.html) ===== -->
+<div id="tunePanel" style="position:fixed;top:12px;right:12px;z-index:99999;background:rgba(14,14,14,0.86);border:1px solid rgba(252,184,103,0.3);border-radius:10px;padding:10px 12px;width:230px;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#FCB867;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;">
+  <div id="tuneHead" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px;letter-spacing:.05em;">
+    <span>PARTICLE TUNING</span><span id="tuneToggle" style="opacity:.6;">hide ▾</span>
+  </div>
+  <div id="tuneBody"></div>
+  <button id="tuneCopy" style="margin-top:8px;width:100%;background:transparent;border:1px solid rgba(252,184,103,0.4);color:#FCB867;border-radius:6px;padding:5px;font:11px ui-monospace,Menlo,Consolas,monospace;cursor:pointer;">copy values</button>
+  <pre id="tuneOut" style="margin:8px 0 0;white-space:pre-wrap;font-size:10px;color:rgba(252,184,103,.7);"></pre>
+</div>
+<script>
+(function(){
+  var body=document.getElementById('tuneBody');
+  var defs=[
+    {label:'count',      min:80,  max:520,  step:10,    get:function(){return MAX_P_BASE;},  set:function(v){MAX_P_BASE=v; particles.length=0; _particlesSeeded=false;}, fmt:function(){return Math.round(MAX_P_BASE*STAR_COUNT_MUL)+' / '+MAX_P_BASE;}},
+    {label:'turbulence', min:0,   max:2,    step:0.05,  get:function(){return FLOW_TURB;},   set:function(v){FLOW_TURB=v;}},
+    {label:'dispersal',  min:0,   max:1.2,  step:0.05,  get:function(){return FLOW_OUTWARD;},set:function(v){FLOW_OUTWARD=v;}},
+    {label:'drift spd',  min:0.02,max:0.14, step:0.005, get:function(){return FLOW_MOTION;}, set:function(v){FLOW_MOTION=v;}, dp:3},
+    {label:'pulse',      min:0,   max:1,    step:0.05,  get:function(){return BREATH_AMT;},  set:function(v){BREATH_AMT=v;}},
+    {label:'cursor',     min:0,   max:5,    step:0.1,   get:function(){return CURSOR_PUSH;}, set:function(v){CURSOR_PUSH=v;}, dp:1},
+    {label:'grain',      min:0.5, max:2.5,  step:0.05,  get:function(){return SIZE_MUL;},    set:function(v){SIZE_MUL=v;}}
+  ];
+  defs.forEach(function(d){
+    var row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:6px;margin:3px 0;';
+    var name=document.createElement('span'); name.textContent=d.label; name.style.cssText='flex:0 0 60px;';
+    var input=document.createElement('input'); input.type='range'; input.min=d.min; input.max=d.max; input.step=d.step; input.value=d.get();
+    input.style.cssText='flex:1;accent-color:#FCB867;height:14px;cursor:pointer;';
+    var val=document.createElement('span'); val.style.cssText='flex:0 0 52px;text-align:right;opacity:.85;';
+    function show(){ val.textContent = d.fmt ? d.fmt() : (+d.get()).toFixed(d.dp!=null?d.dp:2); }
+    show();
+    input.addEventListener('input', function(){ d.set(parseFloat(input.value)); show(); });
+    row.appendChild(name); row.appendChild(input); row.appendChild(val);
+    body.appendChild(row);
+  });
+  var out=document.getElementById('tuneOut');
+  document.getElementById('tuneCopy').addEventListener('click', function(){
+    var s='MAX_P_BASE='+MAX_P_BASE+' FLOW_TURB='+(+FLOW_TURB).toFixed(2)+' FLOW_OUTWARD='+(+FLOW_OUTWARD).toFixed(2)
+         +' FLOW_MOTION='+(+FLOW_MOTION).toFixed(3)+' BREATH_AMT='+(+BREATH_AMT).toFixed(2)
+         +' CURSOR_PUSH='+(+CURSOR_PUSH).toFixed(1)+' SIZE_MUL='+(+SIZE_MUL).toFixed(2);
+    out.textContent=s;
+    if(navigator.clipboard) navigator.clipboard.writeText(s).catch(function(){});
+  });
+  var collapsed=false;
+  document.getElementById('tuneHead').addEventListener('click', function(){
+    collapsed=!collapsed;
+    body.style.display=collapsed?'none':'';
+    document.getElementById('tuneCopy').style.display=collapsed?'none':'';
+    out.style.display=collapsed?'none':'';
+    document.getElementById('tuneToggle').textContent=collapsed?'show ▸':'hide ▾';
+  });
+})();
+</script>
 
 </body>
 </html>

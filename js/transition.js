@@ -89,6 +89,42 @@
     });
   }
 
+  function fitHeroTitles() {
+    if (!document.body.matches('[data-venture="tattooing"]')) return;
+
+    var titles = document.querySelectorAll(
+      '.intro h1, .hero-title, .page-title, .gate-title, .series-title, .tattoos-page .hero-copy h1'
+    );
+
+    titles.forEach(function(title) {
+      if (!title || !title.parentElement) return;
+      title.style.transform = '';
+      title.style.transformOrigin = '';
+      title.style.width = '';
+      title.style.display = title.style.display || 'inline-block';
+
+      var parentRect = title.parentElement.getBoundingClientRect();
+      var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      var availableWidth = title.parentElement.clientWidth || viewportWidth;
+      availableWidth = Math.min(availableWidth, viewportWidth - parentRect.left - 8);
+      var titleWidth = title.scrollWidth;
+      if (!availableWidth || !titleWidth || titleWidth <= availableWidth) return;
+
+      var scale = Math.max(0.42, Math.min(1, availableWidth / titleWidth));
+      title.style.transformOrigin = 'left center';
+      title.style.transform = 'scaleX(' + scale.toFixed(3) + ')';
+      title.style.width = (100 / scale).toFixed(3) + '%';
+    });
+  }
+
+  fitHeroTitles();
+  window.addEventListener('resize', fitHeroTitles, { passive: true });
+  window.addEventListener('load', fitHeroTitles);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fitHeroTitles).catch(function() {});
+  }
+  setTimeout(fitHeroTitles, 250);
+
   if (document.readyState === 'loading') {
     /* Script ran early — wait for DOM to be ready */
     document.addEventListener('DOMContentLoaded', runEntrance);

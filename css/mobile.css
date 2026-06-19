@@ -240,6 +240,16 @@ select option:checked {
     overflow-wrap: break-word;
   }
 
+  body[data-venture="tattooing"] .intro h1,
+  body[data-venture="tattooing"] .hero-title,
+  body[data-venture="tattooing"] .page-title,
+  body[data-venture="tattooing"] .gate-title,
+  body[data-venture="tattooing"] .series-title {
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+  }
+
   /* Live-editor copy edits can pin a fixed px size on a span inside a
      hero title; on phones that overrides the responsive clamp above. */
   .intro h1 span[style*="font-size"],

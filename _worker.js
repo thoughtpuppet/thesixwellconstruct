@@ -73,7 +73,38 @@ const HIDDEN_PUBLIC_PATHS = [
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_HOME_PATHS = new Set(["/", "/index.html"]);
 const PUBLIC_ERROR_PATHS = new Set(["/404", "/404.html"]);
-const PUBLIC_ARCHIVE_PATHS = new Set(["/archive", "/archive/", "/archive/index.html"]);
+const PUBLIC_ARCHIVE_PATHS = new Set([
+  "/archive",
+  "/archive/",
+  "/archive/index.html",
+  "/archive/about",
+  "/archive/about/",
+  "/archive/about/index.html",
+  "/archive/art",
+  "/archive/art/",
+  "/archive/art/index.html",
+  "/archive/events",
+  "/archive/events/",
+  "/archive/events/index.html",
+  "/archive/film",
+  "/archive/film/",
+  "/archive/film/index.html",
+  "/archive/merch",
+  "/archive/merch/",
+  "/archive/merch/index.html",
+  "/archive/music",
+  "/archive/music/",
+  "/archive/music/index.html",
+  "/archive/sixwell-construct",
+  "/archive/sixwell-construct/",
+  "/archive/sixwell-construct/index.html",
+  "/archive/tattoos",
+  "/archive/tattoos/",
+  "/archive/tattoos/index.html",
+  "/archive/writings",
+  "/archive/writings/",
+  "/archive/writings/index.html",
+]);
 const PUBLIC_CONSTRUCT_MAP_PATHS = new Set(["/construct-map", "/construct-map/", "/construct-map/index.html"]);
 
 function notFound(message = "Not found.") {

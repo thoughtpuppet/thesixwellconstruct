@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Home Particle Depth Preview</title>
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --amber: #FCB867;
+    --panel: rgba(14, 14, 14, 0.76);
+    --line: rgba(252, 184, 103, 0.24);
+    --text: rgba(252, 184, 103, 0.84);
+  }
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: Inter, Arial, sans-serif; overflow: hidden; }
+  iframe {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    opacity: var(--home-opacity, 1);
+    pointer-events: auto;
+  }
+  canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+  }
+  .controls {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 5;
+    width: min(420px, calc(100vw - 32px));
+    max-height: min(620px, calc(100vh - 32px));
+    overflow: auto;
+    padding: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(10px);
+  }
+  .controls h1 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    line-height: 1.2;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 132px 1fr 62px;
+    gap: 8px 10px;
+    align-items: center;
+  }
+  label {
+    font-size: 10px;
+    line-height: 1.25;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--amber); }
+  .value {
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    opacity: 0.86;
+  }
+  .row {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  button {
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: rgba(252, 184, 103, 0.08);
+    color: var(--text);
+    font-size: 10px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  button:hover { background: rgba(252, 184, 103, 0.15); }
+  .hint {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11px;
+    line-height: 1.35;
+    color: rgba(252, 184, 103, 0.54);
+  }
+  @media (max-width: 680px) {
+    .controls { left: 10px; right: 10px; bottom: 10px; width: auto; max-height: 42vh; }
+  }
+</style>
+</head>
+<body>
+<iframe id="homeFrame" src="/" title="Real home screen preview"></iframe>
+<canvas id="scene"></canvas>
+<section class="controls" aria-label="Particle depth controls">
+  <h1>Particle Depth Preview</h1>
+  <div class="grid" id="controls"></div>
+</section>
+<script>
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, dpr = 1, cx = 0, cy = 0;
+let particles = [];
+let last = 0, time = 0, pullStart = performance.now(), ringStart = performance.now() - 1e7;
+
+const settings = {
+  farDensity: 260,
+  midDensity: 120,
+  nearDensity: 42,
+  nearSize: 2.8,
+  nearSpeed: 1.35,
+  pullStrength: 1.0,
+  pullDuration: 8.5,
+  fieldDrift: 0.55,
+  gridOpacity: 0.055,
+  gridScale: 64,
+  matrixOpacity: 0.035,
+  centerVoid: 78,
+  homeOpacity: 1,
+  homeDim: 0.18,
+  ringPush: 0.22,
+  ringPushDelay: 0,
+  ringPushDuration: 1.8,
+  ringDepthBias: 1.0
+};
+
+const controls = [
+  ['farDensity', 'far dust', 80, 520, 1],
+  ['midDensity', 'mid stars', 30, 260, 1],
+  ['nearDensity', 'near passers', 0, 110, 1],
+  ['nearSize', 'near size', 0.8, 6.5, 0.1],
+  ['nearSpeed', 'near speed', 0.2, 3.4, 0.05],
+  ['pullStrength', 'viewer pull', 0, 2.6, 0.05],
+  ['pullDuration', 'pull duration', 2, 18, 0.25],
+  ['fieldDrift', 'ambient drift', 0, 1.6, 0.05],
+  ['gridOpacity', 'matrix grid', 0, 0.18, 0.005],
+  ['gridScale', 'grid spacing', 28, 120, 1],
+  ['matrixOpacity', 'matrix specks', 0, 0.14, 0.005],
+  ['centerVoid', 'center breathing room', 0, 180, 1],
+  ['homeOpacity', 'home opacity', 0, 1, 0.01],
+  ['homeDim', 'home dim', 0, 0.75, 0.01],
+  ['ringPush', 'ring star push', 0, 0.8, 0.01],
+  ['ringPushDelay', 'push delay', 0, 1.5, 0.01],
+  ['ringPushDuration', 'push duration', 0.3, 5, 0.05],
+  ['ringDepthBias', 'depth response', 0, 2.5, 0.05]
+];
+
+function makeControls() {
+  const root = document.getElementById('controls');
+  controls.forEach(([key, label, min, max, step]) => {
+    const l = document.createElement('label');
+    l.textContent = label;
+    const wrap = document.createElement('div');
+    const input = document.createElement('input');
+    const val = document.createElement('div');
+    input.type = 'range';
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    input.value = settings[key];
+    val.className = 'value';
+    val.textContent = format(settings[key]);
+    input.addEventListener('input', () => {
+      settings[key] = Number(input.value);
+      val.textContent = format(settings[key]);
+      if (key === 'homeOpacity') document.documentElement.style.setProperty('--home-opacity', settings.homeOpacity);
+      if (key.includes('Density')) buildParticles();
+    });
+    wrap.appendChild(input);
+    root.appendChild(l);
+    root.appendChild(wrap);
+    root.appendChild(val);
+  });
+  const row = document.createElement('div');
+  row.className = 'row';
+  const replay = document.createElement('button');
+  replay.textContent = 'replay pull';
+  replay.addEventListener('click', replayPull);
+  const home = document.createElement('button');
+  home.textContent = 'reload home';
+  home.addEventListener('click', () => {
+    document.getElementById('homeFrame').src = '/?depth-preview=' + Date.now();
+  });
+  const ring = document.createElement('button');
+  ring.textContent = 'replay ring';
+  ring.addEventListener('click', replayRing);
+  const reseed = document.createElement('button');
+  reseed.textContent = 'reseed';
+  reseed.addEventListener('click', buildParticles);
+  row.append(replay, ring, home, reseed);
+  root.appendChild(row);
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.textContent = 'The real homepage is running underneath this overlay. Replay ring to tune the restored radial star push during expansion.';
+  root.appendChild(hint);
+}
+
+function replayPull() {
+  pullStart = performance.now();
+  document.getElementById('homeFrame').src = '/?depth-preview=' + Date.now();
+}
+
+function replayRing() {
+  ringStart = performance.now();
+  try {
+    const frame = document.getElementById('homeFrame');
+    const doc = frame.contentDocument;
+    const stage = doc && doc.getElementById('stage');
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    stage.dispatchEvent(new MouseEvent('click', {
+      bubbles: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2
+    }));
+  } catch (e) {
+    // Preview-only helper: if iframe access is unavailable, the overlay still replays.
+  }
+}
+
+function format(n) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+}
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildParticles();
+}
+
+function spawn(layer) {
+  const maxR = Math.hypot(W, H) * 0.74;
+  const minR = settings.centerVoid;
+  let angle = Math.random() * Math.PI * 2;
+  let r = minR + Math.pow(Math.random(), layer === 'far' ? 0.72 : 0.9) * (maxR - minR);
+  if (layer === 'near') r = minR + Math.pow(Math.random(), 0.55) * (maxR - minR);
+  const depth = layer === 'far' ? 0.18 + Math.random() * 0.18
+    : layer === 'mid' ? 0.45 + Math.random() * 0.28
+    : 0.82 + Math.random() * 0.46;
+  const baseSize = layer === 'far' ? 0.35 + Math.random() * 0.7
+    : layer === 'mid' ? 0.65 + Math.random() * 1.25
+    : settings.nearSize * (0.55 + Math.random() * 0.9);
+  return {
+    layer,
+    angle,
+    r,
+    depth,
+    size: baseSize,
+    alpha: layer === 'far' ? 0.04 + Math.random() * 0.09 : layer === 'mid' ? 0.08 + Math.random() * 0.18 : 0.16 + Math.random() * 0.28,
+    drift: (Math.random() * 2 - 1) * (layer === 'near' ? 0.00012 : 0.00005),
+    tw: Math.random() * Math.PI * 2,
+    vx: (Math.random() * 2 - 1) * 0.08,
+    vy: (Math.random() * 2 - 1) * 0.08
+  };
+}
+
+function buildParticles() {
+  particles = [];
+  for (let i = 0; i < settings.farDensity; i++) particles.push(spawn('far'));
+  for (let i = 0; i < settings.midDensity; i++) particles.push(spawn('mid'));
+  for (let i = 0; i < settings.nearDensity; i++) particles.push(spawn('near'));
+}
+
+function pullEnvelope() {
+  const p = Math.min(1, (performance.now() - pullStart) / (settings.pullDuration * 1000));
+  return 1 - Math.pow(1 - p, 3);
+}
+
+function ringPushEnvelope() {
+  const elapsed = (performance.now() - ringStart) / 1000 - settings.ringPushDelay;
+  if (elapsed <= 0) return 0;
+  const p = Math.min(1, elapsed / settings.ringPushDuration);
+  return 1 - Math.pow(1 - p, 3);
+}
+
+function drawGrid() {
+  if (settings.gridOpacity <= 0 && settings.matrixOpacity <= 0) return;
+  ctx.save();
+  const driftX = Math.sin(time * 0.00012) * 8;
+  const driftY = Math.cos(time * 0.0001) * 8;
+  const gap = settings.gridScale;
+  ctx.strokeStyle = `rgba(252,184,103,${settings.gridOpacity})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = ((-gap + driftX) % gap); x <= W + gap; x += gap) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+  }
+  for (let y = ((-gap + driftY) % gap); y <= H + gap; y += gap) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+  if (settings.matrixOpacity > 0) {
+    ctx.fillStyle = `rgba(252,184,103,${settings.matrixOpacity})`;
+    for (let y = gap * 0.5; y < H; y += gap) {
+      for (let x = gap * 0.5; x < W; x += gap) {
+        const pulse = 0.55 + 0.45 * Math.sin(time * 0.0007 + x * 0.03 + y * 0.017);
+        if (pulse > 0.82) ctx.fillRect(x + driftX * 0.4, y + driftY * 0.4, 1.5, 1.5);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function drawParticle(p, dt) {
+  const env = pullEnvelope() * settings.pullStrength;
+  const ringPush = 1 + settings.ringPush * ringPushEnvelope() * (1 + p.depth * settings.ringDepthBias);
+  p.angle += p.drift * dt * settings.fieldDrift;
+  const nearBoost = p.layer === 'near' ? settings.nearSpeed : p.layer === 'mid' ? 0.42 : 0.12;
+  const travel = env * p.depth * nearBoost;
+  const rr = p.r * (1 + travel * 1.08) * ringPush;
+  const parX = Math.sin(time * 0.00018) * 18 * p.depth * settings.fieldDrift;
+  const parY = Math.cos(time * 0.00014) * 12 * p.depth * settings.fieldDrift;
+  let x = cx + Math.cos(p.angle) * rr + parX;
+  let y = cy + Math.sin(p.angle) * rr + parY;
+  if (x < -80 || x > W + 80 || y < -80 || y > H + 80) {
+    Object.assign(p, spawn(p.layer));
+    p.r *= 0.55;
+    return;
+  }
+  const tw = 0.75 + 0.25 * Math.sin(time * 0.0012 + p.tw);
+  const size = p.size * (1 + travel * (p.layer === 'near' ? 2.2 : 0.75));
+  ctx.globalAlpha = p.alpha * tw * (p.layer === 'near' ? 1 : 0.9);
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fillStyle = '#FCB867';
+  ctx.fill();
+}
+
+function draw(ts) {
+  if (!last) last = ts;
+  const dt = Math.min(ts - last, 48);
+  last = ts;
+  time += dt;
+  ctx.clearRect(0, 0, W, H);
+  if (settings.homeDim > 0) {
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = `rgba(14,14,14,${settings.homeDim})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  drawGrid();
+  particles.sort((a, b) => a.depth - b.depth);
+  for (const p of particles) drawParticle(p, dt);
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(draw);
+}
+
+makeControls();
+resize();
+window.addEventListener('resize', resize);
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
