@@ -30,11 +30,6 @@
 
   /* ── HEADER ── */
   header.top{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:flex-end;padding:var(--s5) var(--s6);min-height:72px;}
-  .breadcrumb{display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;}
-  .breadcrumb-link{color:var(--text-dim);transition:color var(--t-fast);}
-  .breadcrumb-link:hover{color:var(--accent);}
-  .breadcrumb-sep,.breadcrumb-current{color:var(--text-dim);}
-  .breadcrumb-current{color:var(--signal);opacity:0.8;}
   .nav-inquire{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(110,4,4,0.4);padding:8px 16px;transition:background var(--t-fast),border-color var(--t-fast);}
   .nav-inquire:hover{background:rgba(110,4,4,0.06);border-color:var(--signal);}
 
@@ -67,6 +62,20 @@
   .coming-soon-cta{justify-self:start;display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(110,4,4,0.4);padding:12px 24px;margin-top:var(--s2);transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
   .coming-soon-cta:hover{background:rgba(110,4,4,0.06);border-color:var(--signal);color:var(--accent);}
 
+  /* ── DOOR TABS (Build a Brief | Draw a Maze) ── */
+  .door-tabs{display:grid;grid-template-columns:1fr 1fr;gap:1px;border:5px solid var(--ring-faint);margin-bottom:var(--s6);}
+  .door-tab{padding:var(--s5) var(--s6);text-align:left;border-right:5px solid var(--ring-faint);transition:background var(--t-fast);display:flex;flex-direction:column;gap:6px;}
+  .door-tab:last-child{border-right:none;}
+  .door-tab:hover{background:rgba(110,4,4,0.04);}
+  .door-tab.active{background:rgba(110,4,4,0.08);}
+  .door-tab-num{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.7;}
+  .door-tab-name{font-family:var(--sans);font-weight:900;font-size:clamp(18px,2.4vw,26px);letter-spacing:-0.02em;text-transform:uppercase;color:var(--text);}
+  .door-tab.active .door-tab-name{color:var(--accent);}
+  .door-tab-sub{font-family:var(--serif);font-size:12px;line-height:1.6;color:var(--text-mute);}
+
+  .door{display:none;}
+  .door.active{display:block;}
+
   /* ── BUILDER WRAP ── */
   .builder-wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;border-top:5px solid var(--ring-faint);}
 
@@ -87,24 +96,36 @@
   .symbol-card:hover{border-color:var(--ring-soft);background:rgba(110,4,4,0.03);}
   .symbol-card.selected{border-color:var(--signal);background:rgba(110,4,4,0.07);}
   .symbol-card[data-hidden="true"]{display:none;}
+
+  /* symbol mark (plain SVG or drawn glyph) */
+  .symbol-mark{display:flex;align-items:center;justify-content:flex-start;height:72px;color:var(--text-mute);transition:color var(--t-fast);}
+  .symbol-card:hover .symbol-mark,.symbol-card.selected .symbol-mark{color:var(--accent);}
+  .symbol-mark svg{width:64px;height:64px;display:block;}
+  .symbol-mark img{max-width:72px;max-height:72px;display:block;}
+
   .symbol-cat{font-family:var(--sans);font-weight:700;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.65;}
   .symbol-name{font-family:var(--sans);font-weight:900;font-size:14px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--text);}
   .symbol-meaning{font-family:var(--serif);font-size:12px;line-height:1.65;color:var(--text-mute);flex:1;}
+
+  /* "seen in" example strip */
+  .symbol-examples{display:flex;flex-direction:column;gap:6px;margin-top:var(--s2);}
+  .symbol-examples-label{font-family:var(--sans);font-weight:700;font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text-dim);}
+  .symbol-examples-row{display:flex;gap:6px;flex-wrap:wrap;}
+  .symbol-example{width:38px;height:38px;border:1px solid var(--ring-faint);overflow:hidden;flex-shrink:0;}
+  .symbol-example img{width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(0.2);}
+
   .symbol-indicator{display:flex;justify-content:flex-end;margin-top:var(--s2);}
   .symbol-indicator span{font-size:20px;line-height:1;color:var(--ring-soft);transition:color var(--t-fast);}
   .symbol-card.selected .symbol-indicator span{color:var(--signal);}
-  .symbol-card.selected .symbol-indicator span::before{content:"✓";}
+  .symbol-card.selected .symbol-indicator span::before{content:"\2713";}
   .symbol-card:not(.selected) .symbol-indicator span::before{content:"+";}
 
   /* ── BRIEF PANEL ── */
   .brief-col{position:sticky;top:72px;height:calc(100vh - 72px);overflow-y:auto;padding:var(--s6);display:flex;flex-direction:column;gap:var(--s4);}
-
   .brief-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:var(--s4);border-bottom:5px solid var(--ring-faint);}
   .brief-heading{font-family:var(--serif);font-size:10px;letter-spacing:0.28em;text-transform:uppercase;color:var(--text-dim);}
   .brief-count{font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.08em;color:var(--signal);}
-
   .brief-empty{font-family:var(--serif);font-size:13px;line-height:1.75;color:var(--text-dim);padding:var(--s5) 0;}
-
   .brief-items{list-style:none;display:flex;flex-direction:column;gap:var(--s2);}
   .brief-item{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);padding:var(--s3);border:5px solid var(--ring-faint);}
   .brief-item-left{display:flex;flex-direction:column;gap:3px;}
@@ -112,15 +133,20 @@
   .brief-item-name{font-family:var(--sans);font-weight:900;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--text);}
   .brief-item-remove{font-size:18px;line-height:1;color:var(--text-dim);padding:2px 6px;transition:color var(--t-fast);flex-shrink:0;}
   .brief-item-remove:hover{color:var(--signal);}
-
   .brief-spacer{flex:1;}
-
   .brief-limit{font-family:var(--serif);font-size:12px;line-height:1.6;color:var(--text-dim);padding:var(--s3);border:5px solid var(--ring-faint);display:none;}
   .brief-limit.visible{display:block;}
-
   .brief-begin{display:block;width:100%;text-align:center;padding:var(--s3) var(--s4);font-family:var(--serif);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);border:5px solid var(--signal);background:transparent;transition:background var(--t-fast),color var(--t-fast);}
   .brief-begin:hover:not([disabled]){background:var(--signal);color:var(--bg);}
   .brief-begin[disabled]{color:var(--text-dim);border-color:var(--ring-faint);cursor:default;}
+
+  /* ── MAZE DOOR ── */
+  .maze-door{border-top:5px solid var(--ring-faint);padding:var(--s7) 0;display:grid;gap:var(--s5);max-width:780px;}
+  .maze-door-title{font-family:var(--sans);font-weight:900;font-size:clamp(24px,3.4vw,40px);letter-spacing:-0.03em;line-height:0.96;text-transform:uppercase;color:var(--accent);}
+  .maze-door-body{font-size:14px;line-height:1.75;color:var(--text-mute);max-width:600px;}
+  .maze-door-cta{justify-self:start;display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid var(--signal);padding:14px 28px;transition:background var(--t-fast),color var(--t-fast);}
+  .maze-door-cta:hover{background:var(--signal);color:var(--bg);}
+  .maze-door-note{font-family:var(--serif);font-size:12px;color:var(--text-dim);}
 
   /* ── FORM SECTION ── */
   .build-form-section{border-top:5px solid var(--ring-faint);padding:var(--s7) 0 var(--s8);}
@@ -128,13 +154,11 @@
   .form-kicker{font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.7;margin-bottom:var(--s3);}
   .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(28px,4vw,52px);letter-spacing:-0.03em;line-height:0.94;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s4);}
   .form-note{font-size:14px;line-height:1.75;color:var(--text-mute);max-width:640px;}
-
   .selected-summary{background:rgba(110,4,4,0.06);border:5px solid rgba(110,4,4,0.3);padding:var(--s5);margin-bottom:var(--s6);display:none;}
   .selected-summary.visible{display:block;}
   .summary-label{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);margin-bottom:var(--s4);}
   .summary-tags{display:flex;flex-wrap:wrap;gap:var(--s2);}
   .summary-tag{font-family:var(--sans);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text);border:5px solid var(--ring-soft);padding:4px 10px;}
-
   .field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
   .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
   .field.full{grid-column:1 / -1;}
@@ -167,6 +191,9 @@
     .hero,.process{grid-template-columns:1fr;}
     .process-step{border-right:none;border-bottom:5px solid var(--ring-faint);}
     .process-step:last-child{border-bottom:none;}
+    .door-tabs{grid-template-columns:1fr;}
+    .door-tab{border-right:none;border-bottom:5px solid var(--ring-faint);}
+    .door-tab:last-child{border-bottom:none;}
     .builder-wrap{grid-template-columns:1fr;}
     .symbol-col{padding:var(--s5) 0;border-right:none;border-bottom:5px solid var(--ring-faint);}
     .brief-col{position:static;height:auto;border-top:5px solid var(--ring-faint);}
@@ -183,6 +210,22 @@
   @media(max-width:700px){
     header.top{position:sticky;padding:var(--s3) var(--s4);min-height:60px;align-items:center;}
   }
+
+  /* ── KIOSK (studio terminal) ── */
+  body.kiosk header.top,
+  body.kiosk footer.bottom,
+  body.kiosk .hero,
+  body.kiosk .process,
+  body.kiosk .studio-aside,
+  body.kiosk #construct-corner,
+  body.kiosk #cnav-chip,
+  body.kiosk #construct-nav,
+  body.kiosk #cnav-mobile-overlay,
+  body.kiosk .construct-breadcrumb{display:none !important;}
+  body.kiosk main{padding-top:var(--s5);}
+  body.kiosk .symbol-card,body.kiosk .door-tab,body.kiosk .chip{min-height:56px;}
+  .kiosk-startover{display:none;position:fixed;right:20px;bottom:20px;z-index:200;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--bg);background:var(--signal);border:5px solid var(--signal);padding:14px 24px;cursor:pointer;}
+  body.kiosk .kiosk-startover{display:inline-flex;align-items:center;gap:8px;}
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
 </head>
@@ -210,20 +253,20 @@
       <div>
         <h1 class="page-title" data-copy-id="build-page-title">Build Yours.</h1>
       </div>
-      <p class="hero-desc" data-copy-id="build-hero-desc">Instead of arriving with a folder of references, you draw from the visual language of the work itself. Select the symbols and elements that carry meaning for you, build a brief, and submit it for review. The result is a design that speaks the same language as the paintings, the writings, and the archive.</p>
+      <p class="hero-desc" data-copy-id="build-hero-desc">Instead of arriving with a folder of references, you draw from the visual language of the work itself. Choose meaningful symbols to build a brief, or draw your own maze — then submit it for review. The result is a design that speaks the same language as the paintings, the writings, and the archive.</p>
     </section>
 
     <!-- PROCESS -->
     <div class="process" aria-label="How it works">
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-1-num">I</p>
-        <h3 class="step-title" data-copy-id="build-step-browse-title">Browse the language</h3>
-        <p class="step-body" data-copy-id="build-step-browse-body">Explore the symbols, marks, and elements from the visual system. Each carries a meaning. Read them slowly.</p>
+        <h3 class="step-title" data-copy-id="build-step-browse-title">Enter the language</h3>
+        <p class="step-body" data-copy-id="build-step-browse-body">Read the symbols and what they carry, or step into the maze studio. Each path draws from the same visual system.</p>
       </div>
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-2-num">II</p>
-        <h3 class="step-title" data-copy-id="build-step-select-title">Select what fits</h3>
-        <p class="step-body" data-copy-id="build-step-select-body">Choose up to six elements that feel right for what you want to carry. Your selections form the brief.</p>
+        <h3 class="step-title" data-copy-id="build-step-select-title">Build or draw</h3>
+        <p class="step-body" data-copy-id="build-step-select-body">Choose up to six elements that feel right, or compose a maze of your own. Either becomes your brief.</p>
       </div>
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-3-num">III</p>
@@ -234,94 +277,116 @@
 
     <p class="studio-aside" data-copy-id="build-studio-aside">There is an option to do this in-person at the art.pill Tattoo House studio. <a href="/tattoos/build/in-person/">Learn more.</a></p>
 
-    <!-- COMING SOON (Build Your Own is not yet open) -->
-    <section class="coming-soon" aria-label="Build Your Own status">
+    <!-- COMING SOON (shown publicly until the builder opens; ?preview reveals the hub) -->
+    <section class="coming-soon" id="comingSoon" aria-label="Build Your Own status">
       <p class="coming-soon-kicker">Opening soon</p>
       <h2 class="coming-soon-title">The builder is<br>being finished.</h2>
-      <p class="coming-soon-body">Build Your Own is almost ready. The symbol language and the in-person build session are being finalized before this path opens. If you already know you want to work from the visual language, begin an inquiry and say so — your note carries into review.</p>
+      <p class="coming-soon-body">Build Your Own is almost ready. The symbol language, the maze studio, and the in-person build session are being finalized before this path opens. If you already know you want to work from the visual language, begin an inquiry and say so — your note carries into review.</p>
       <a class="coming-soon-cta" href="/tattoos/inquire/">Begin an inquiry →</a>
     </section>
 
-    <!-- BUILDER (hidden until Build Your Own opens) -->
-    <div class="builder-wrap" style="display:none">
+    <!-- BUILD HUB (hidden until Build Your Own opens; ?preview reveals it) -->
+    <div id="buildHub" style="display:none">
 
-      <!-- SYMBOL BROWSER -->
-      <div class="symbol-col">
-
-        <div class="filter-row" id="filterRow" role="group" aria-label="Filter by category"></div>
-
-        <div class="symbol-grid" id="symbolGrid" aria-label="Symbol library"></div>
-
-      </div>
-
-      <!-- BRIEF PANEL -->
-      <div class="brief-col" role="complementary" aria-label="Your build brief">
-        <div class="brief-header">
-          <span class="brief-heading">your build</span>
-          <span class="brief-count" id="briefCount">0 of 6</span>
-        </div>
-
-        <p class="brief-empty" id="briefEmpty" data-copy-id="build-brief-empty">Select symbols from the library to begin building your brief. Each piece you choose carries its meaning into the design.</p>
-
-        <ul class="brief-items" id="briefItems" aria-live="polite"></ul>
-
-        <p class="brief-limit" id="briefLimit" data-copy-id="build-brief-limit">Six elements selected. Remove one to add another, or proceed with this build.</p>
-
-        <div class="brief-spacer"></div>
-
-        <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form">
-          Build this brief →
+      <!-- DOOR TABS -->
+      <div class="door-tabs" role="tablist" aria-label="Choose how to build">
+        <button type="button" class="door-tab active" id="doorTabBrief" role="tab" aria-selected="true" aria-controls="doorBrief">
+          <span class="door-tab-num">Path I</span>
+          <span class="door-tab-name">Build a Brief</span>
+          <span class="door-tab-sub">Select meaningful symbols from the visual language.</span>
+        </button>
+        <button type="button" class="door-tab" id="doorTabMaze" role="tab" aria-selected="false" aria-controls="doorMaze">
+          <span class="door-tab-num">Path II</span>
+          <span class="door-tab-name">Draw a Maze</span>
+          <span class="door-tab-sub">Compose your own maze in the drawing studio.</span>
         </button>
       </div>
 
-    </div><!-- /builder-wrap -->
+      <!-- DOOR: BUILD A BRIEF -->
+      <div class="door active" id="doorBrief" role="tabpanel" aria-labelledby="doorTabBrief">
 
-    <!-- FORM (hidden until Build Your Own opens) -->
-    <section class="build-form-section" id="build-form" aria-label="Build Your Own submission form" style="display:none">
-      <div class="form-header">
-        <p class="form-kicker" data-copy-id="build-form-kicker">Submit your brief</p>
-        <h2 class="form-title" data-copy-id="build-form-title">From the language<br>to the skin.</h2>
-        <p class="form-note" data-copy-id="build-form-note">Your selected elements will carry into this form automatically. Add placement, intent, and contact details. Briefs are reviewed before a private token booking link is sent.</p>
-      </div>
+        <div class="builder-wrap">
+          <!-- SYMBOL BROWSER -->
+          <div class="symbol-col">
+            <div class="filter-row" id="filterRow" role="group" aria-label="Filter by category"></div>
+            <div class="symbol-grid" id="symbolGrid" aria-label="Symbol library"></div>
+          </div>
 
-      <!-- Selected symbols summary (shown when selections exist) -->
-      <div class="selected-summary" id="selectedSummary" aria-live="polite">
-        <p class="summary-label">Selected elements</p>
-        <div class="summary-tags" id="summaryTags"></div>
-      </div>
-
-      <form id="buildBriefForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
-        <input type="hidden" name="type" value="build_brief">
-        <input type="hidden" name="source_path" value="/tattoos/build/">
-        <input type="hidden" name="project_category" value="build-your-own">
-        <input type="hidden" name="selected_elements" id="selectedElements">
-        <input type="hidden" name="subject" value="New Art.Pill Build Your Own brief">
-        <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
-
-        <div class="field-grid">
-          <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
-          <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
-          <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
-          <div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" autocomplete="tel"></div>
-          <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
-          <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
-          <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
-          <div class="field"><label for="intent">Design intent</label><input id="intent" name="intent" placeholder="What should the piece carry or mean?"></div>
-          <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="form-status" style="margin-top:6px;">Optional. Body reference or placement images only — not mood boards.</p></div>
-          <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
+          <!-- BRIEF PANEL -->
+          <div class="brief-col" role="complementary" aria-label="Your build brief">
+            <div class="brief-header">
+              <span class="brief-heading">your build</span>
+              <span class="brief-count" id="briefCount">0 of 6</span>
+            </div>
+            <p class="brief-empty" id="briefEmpty" data-copy-id="build-brief-empty">Select symbols from the library to begin building your brief. Each piece you choose carries its meaning into the design.</p>
+            <ul class="brief-items" id="briefItems" aria-live="polite"></ul>
+            <p class="brief-limit" id="briefLimit" data-copy-id="build-brief-limit">Six elements selected. Remove one to add another, or proceed with this build.</p>
+            <div class="brief-spacer"></div>
+            <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form">
+              Build this brief →
+            </button>
+          </div>
         </div>
 
-        <label class="check">
-          <input type="checkbox" name="review_consent" value="yes" required>
-          <span class="check-label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
-        </label>
+        <!-- FORM -->
+        <section class="build-form-section" id="build-form" aria-label="Build Your Own submission form">
+          <div class="form-header">
+            <p class="form-kicker" data-copy-id="build-form-kicker">Submit your brief</p>
+            <h2 class="form-title" data-copy-id="build-form-title">From the language<br>to the skin.</h2>
+            <p class="form-note" data-copy-id="build-form-note">Your selected elements will carry into this form automatically. Add placement, intent, and contact details. Briefs are reviewed before a private token booking link is sent.</p>
+          </div>
 
-        <div class="submit-row">
-          <button class="submit-btn" type="submit" id="submitBtn">Submit Brief</button>
-          <p class="form-status" id="formStatus">Reviewed within a few days. Booking access follows if it's a fit.</p>
+          <div class="selected-summary" id="selectedSummary" aria-live="polite">
+            <p class="summary-label">Selected elements</p>
+            <div class="summary-tags" id="summaryTags"></div>
+          </div>
+
+          <form id="buildBriefForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+            <input type="hidden" name="type" value="build_brief">
+            <input type="hidden" name="source_path" value="/tattoos/build/">
+            <input type="hidden" name="project_category" value="build-your-own">
+            <input type="hidden" name="selected_elements" id="selectedElements">
+            <input type="hidden" name="subject" value="New Art.Pill Build Your Own brief">
+            <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
+
+            <div class="field-grid">
+              <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+              <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+              <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+              <div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" autocomplete="tel"></div>
+              <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
+              <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
+              <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
+              <div class="field"><label for="intent">Design intent</label><input id="intent" name="intent" placeholder="What should the piece carry or mean?"></div>
+              <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="form-status" style="margin-top:6px;">Optional. Body reference or placement images only — not mood boards.</p></div>
+              <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
+            </div>
+
+            <label class="check">
+              <input type="checkbox" name="review_consent" value="yes" required>
+              <span class="check-label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
+            </label>
+
+            <div class="submit-row">
+              <button class="submit-btn" type="submit" id="submitBtn">Submit Brief</button>
+              <p class="form-status" id="formStatus">Reviewed within a few days. Booking access follows if it's a fit.</p>
+            </div>
+          </form>
+        </section>
+
+      </div><!-- /doorBrief -->
+
+      <!-- DOOR: DRAW A MAZE -->
+      <div class="door" id="doorMaze" role="tabpanel" aria-labelledby="doorTabMaze">
+        <div class="maze-door">
+          <h2 class="maze-door-title">The Maze Studio.</h2>
+          <p class="maze-door-body">Compose your own maze — paths, rooms, thresholds, and the shapes of the visual language — on an open drawing surface. When it carries what you mean, write a short note and submit it the same way as a brief.</p>
+          <a class="maze-door-cta" href="/tattoos/build/maze/">Open the Maze Studio →</a>
+          <p class="maze-door-note">The maze studio is part of this build and opens in the same flow.</p>
         </div>
-      </form>
-    </section>
+      </div><!-- /doorMaze -->
+
+    </div><!-- /buildHub -->
 
   </main>
 
@@ -330,172 +395,64 @@
     <a href="/tattoos/">← back to Art.Pill</a>
   </footer>
 
+  <button type="button" class="kiosk-startover" id="kioskStartOver">Start over</button>
+
+  <!-- Preview gate + kiosk mode. Public sees "coming soon"; ?preview reveals the
+       hub; ?kiosk reveals it and runs as a studio terminal (no chrome, idle reset). -->
   <script>
-  /* ============================================================
-     SYMBOL LIBRARY
-     Add, edit, or reorder symbols here. Each entry becomes a
-     browsable, selectable card in the builder.
-  ============================================================ */
-  const SYMBOLS = [
-    // MAZE
-    { id: "maze-path",      category: "MAZE",        name: "The Path",      meaning: "A route that loops back. For those who return to the same place until the meaning shifts." },
-    { id: "maze-room",      category: "MAZE",        name: "The Room",      meaning: "An enclosed space. It holds something without releasing it." },
-    { id: "maze-exit",      category: "MAZE",        name: "The Exit",      meaning: "The way out that may or may not open when you reach it." },
-    { id: "maze-threshold", category: "MAZE",        name: "The Threshold", meaning: "The boundary between two states, made permanent on the body." },
-    // Sairoglyphs
-    { id: "sairo-origin",   category: "Sairoglyphs", name: "Origin Mark",   meaning: "First glyph in the private alphabet. Beginning. The first line drawn." },
-    { id: "sairo-double",   category: "Sairoglyphs", name: "The Double",    meaning: "Reflection or echo. Two things that are the same, seen from different sides." },
-    { id: "sairo-hold",     category: "Sairoglyphs", name: "The Hold",      meaning: "A binding mark. What keeps something close without crushing it." },
-    { id: "sairo-carry",    category: "Sairoglyphs", name: "The Carry",     meaning: "Movement across time. A thing brought from one place and held in another." },
-    // Figural
-    { id: "fig-eye",        category: "Figural",     name: "The Eye",       meaning: "Witness. Something that sees and keeps seeing long after the moment passes." },
-    { id: "fig-hand",       category: "Figural",     name: "The Hand",      meaning: "What makes. What holds. What releases. The mark of the maker." },
-    { id: "fig-figure",     category: "Figural",     name: "The Figure",    meaning: "A body moving through meaning. Not arrived — always in transit." },
-    { id: "fig-dissolve",   category: "Figural",     name: "Dissolution",   meaning: "The moment something stops being solid. Not loss — transformation." },
-    // Ritual
-    { id: "rit-dot",        category: "Ritual",      name: "The Dot",       meaning: "The smallest unit of presence. A mark that says: I was here." },
-    { id: "rit-thread",     category: "Ritual",      name: "The Thread",    meaning: "A line connecting two things across distance. Memory, or obligation." },
-    { id: "rit-vessel",     category: "Ritual",      name: "The Vessel",    meaning: "What holds without spilling. Container of the unnamed thing." },
-    { id: "rit-signal",     category: "Ritual",      name: "The Signal",    meaning: "What you send out, not knowing if it will return." },
-  ];
-
-  const MAX_SELECTIONS = 6;
-  const CATEGORIES = ["All", ...new Set(SYMBOLS.map(s => s.category))];
-
-  let selected = new Set();
-  let activeCategory = "All";
-
-  const filterRow   = document.getElementById("filterRow");
-  const symbolGrid  = document.getElementById("symbolGrid");
-  const briefItems  = document.getElementById("briefItems");
-  const briefEmpty  = document.getElementById("briefEmpty");
-  const briefCount  = document.getElementById("briefCount");
-  const briefLimit  = document.getElementById("briefLimit");
-  const briefBegin  = document.getElementById("briefBegin");
-  const selInput    = document.getElementById("selectedElements");
-  const selSummary  = document.getElementById("selectedSummary");
-  const summaryTags = document.getElementById("summaryTags");
-
-  /* ── FILTERS ── */
-  function buildFilters() {
-    CATEGORIES.forEach(cat => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "chip" + (cat === "All" ? " active" : "");
-      btn.innerHTML = `<span class="chip-label">${cat}</span>`;
-      btn.addEventListener("click", () => {
-        activeCategory = cat;
-        document.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.querySelector(".chip-label").textContent === cat));
-        filterSymbols();
-      });
-      filterRow.appendChild(btn);
-    });
-  }
-
-  function filterSymbols() {
-    document.querySelectorAll(".symbol-card").forEach(card => {
-      const show = activeCategory === "All" || card.dataset.category === activeCategory;
-      card.dataset.hidden = show ? "false" : "true";
-    });
-  }
-
-  /* ── SYMBOL CARDS ── */
-  function buildSymbols() {
-    SYMBOLS.forEach(sym => {
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "symbol-card";
-      card.dataset.id = sym.id;
-      card.dataset.category = sym.category;
-      card.dataset.name = sym.name;
-      card.dataset.hidden = "false";
-      card.setAttribute("aria-pressed", "false");
-      card.innerHTML = `
-        <span class="symbol-cat">${sym.category}</span>
-        <span class="symbol-name">${sym.name}</span>
-        <span class="symbol-meaning">${sym.meaning}</span>
-        <span class="symbol-indicator"><span></span></span>
-      `;
-      card.addEventListener("click", () => toggleSymbol(sym, card));
-      symbolGrid.appendChild(card);
-    });
-  }
-
-  /* ── SELECTION LOGIC ── */
-  function toggleSymbol(sym, card) {
-    if (selected.has(sym.id)) {
-      selected.delete(sym.id);
-      card.classList.remove("selected");
-      card.setAttribute("aria-pressed", "false");
-    } else {
-      if (selected.size >= MAX_SELECTIONS) return;
-      selected.add(sym.id);
-      card.classList.add("selected");
-      card.setAttribute("aria-pressed", "true");
+  (function(){
+    var params = new URLSearchParams(location.search);
+    var isKiosk = params.has('kiosk');
+    var isPreview = isKiosk || params.has('preview');
+    var coming = document.getElementById('comingSoon');
+    var hub = document.getElementById('buildHub');
+    if (isPreview) {
+      if (coming) coming.style.display = 'none';
+      if (hub) hub.style.display = 'block';
     }
-    updateBrief();
-  }
-
-  function removeSymbol(id) {
-    selected.delete(id);
-    const card = symbolGrid.querySelector(`[data-id="${id}"]`);
-    if (card) { card.classList.remove("selected"); card.setAttribute("aria-pressed", "false"); }
-    updateBrief();
-  }
-
-  function updateBrief() {
-    const count = selected.size;
-
-    // count label
-    briefCount.textContent = `${count} of ${MAX_SELECTIONS}`;
-
-    // empty state
-    briefEmpty.style.display = count === 0 ? "block" : "none";
-
-    // limit notice
-    briefLimit.classList.toggle("visible", count >= MAX_SELECTIONS);
-
-    // brief items
-    briefItems.innerHTML = "";
-    selected.forEach(id => {
-      const sym = SYMBOLS.find(s => s.id === id);
-      if (!sym) return;
-      const li = document.createElement("li");
-      li.className = "brief-item";
-      li.innerHTML = `
-        <div class="brief-item-left">
-          <span class="brief-item-cat">${sym.category}</span>
-          <span class="brief-item-name">${sym.name}</span>
-        </div>
-        <button class="brief-item-remove" type="button" aria-label="Remove ${sym.name}">×</button>
-      `;
-      li.querySelector(".brief-item-remove").addEventListener("click", () => removeSymbol(id));
-      briefItems.appendChild(li);
-    });
-
-    // begin button
-    briefBegin.disabled = count === 0;
-
-    // update form hidden input + summary
-    const names = [...selected].map(id => SYMBOLS.find(s => s.id === id)?.name).filter(Boolean);
-    selInput.value = names.join(", ");
-
-    // summary block in form
-    selSummary.classList.toggle("visible", count > 0);
-    summaryTags.innerHTML = names.map(n => `<span class="summary-tag">${n}</span>`).join("");
-  }
-
-  /* ── SCROLL TO FORM ── */
-  briefBegin.addEventListener("click", () => {
-    document.getElementById("build-form").scrollIntoView({ behavior: "smooth", block: "start" });
-    setTimeout(() => document.getElementById("firstName").focus({ preventScroll: true }), 600);
-  });
-
-  /* ── INIT ── */
-  buildFilters();
-  buildSymbols();
-  updateBrief();
+    if (isKiosk) {
+      document.body.classList.add('kiosk');
+      var mazeCta = document.querySelector('.maze-door-cta');
+      if (mazeCta) mazeCta.setAttribute('href', '/tattoos/build/maze/?kiosk=1');
+      function reset(){ location.href = '/tattoos/build/?kiosk=1'; }
+      var startOver = document.getElementById('kioskStartOver');
+      if (startOver) startOver.addEventListener('click', reset);
+      var idle;
+      function bump(){ clearTimeout(idle); idle = setTimeout(reset, 150000); }
+      ['click','keydown','touchstart','mousemove'].forEach(function(ev){
+        document.addEventListener(ev, bump, { passive: true });
+      });
+      bump();
+    }
+  })();
   </script>
+
+  <!-- Door tab switching -->
+  <script>
+  (function(){
+    var tabs = [
+      { tab: document.getElementById('doorTabBrief'), panel: document.getElementById('doorBrief') },
+      { tab: document.getElementById('doorTabMaze'),  panel: document.getElementById('doorMaze') }
+    ];
+    function activate(which){
+      tabs.forEach(function(t){
+        var on = t === which;
+        if (!t.tab || !t.panel) return;
+        t.tab.classList.toggle('active', on);
+        t.tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.panel.classList.toggle('active', on);
+      });
+    }
+    tabs.forEach(function(t){
+      if (t.tab) t.tab.addEventListener('click', function(){ activate(t); });
+    });
+  })();
+  </script>
+
+  <!-- Brief builder -->
+  <script src="/js/build-builder.js"></script>
+
+  <!-- Brief submission handler -->
   <script>
   (function(){
     var form = document.getElementById("buildBriefForm");

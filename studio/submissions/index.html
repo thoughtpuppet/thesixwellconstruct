@@ -386,7 +386,7 @@
   const bookingPreviewKey = "swc_booking_admin_preview";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const TAB_TYPES = {
-    tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "special_project", "consultation", "in_person_consultation"],
+    tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "consultation", "in_person_consultation"],
     studio: ["studio_booking"],
     art: ["art_acquisition", "art_inquiry"],
     events: ["event_rsvp"],
@@ -782,6 +782,20 @@
       `);
     }
 
+    if (t === "maze_design") {
+      return card("Build a Maze", `
+        <div class="grid">
+          ${field("Placement", p("placement"))}
+          ${field("Size / Scale", p("scale"))}
+          ${field("Timeline", p("timeline"))}
+          ${field("Instagram", p("instagram"))}
+          ${field("Source", submission.sourcePath || "")}
+        </div>
+        <div class="field" style="margin-top:16px;"><label>Maze Explanation</label><div class="value full">${escapeHtml(p("maze_explanation"))}</div></div>
+        ${p("message") ? `<div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>` : ""}
+      `);
+    }
+
     if (t === "consultation" || t === "in_person_consultation") {
       return card("Consultation", `
         <div class="grid">
@@ -1051,7 +1065,7 @@
     const statusOptions = [["", "ALL STATUSES"], ["new", "NEW"], ["reviewing", "REVIEWING"], ["approved", "APPROVED"], ["declined", "DECLINED"], ["booked", "BOOKED"], ["archived", "ARCHIVED"]];
     let html = `<select id="statusFilter" aria-label="Filter by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     if (activeTab === "tattoo") {
-      const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["special_project", "SPECIAL PROJECT"], ["consultation", "CONSULTATION"]];
+      const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["maze_design", "BUILD A MAZE"], ["special_project", "SPECIAL PROJECT"], ["consultation", "CONSULTATION"]];
       html += `<select id="typeFilter" aria-label="Filter by type">${typeOptions.map(([v, l]) => `<option value="${v}"${v === typeValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     }
     toolbarEl.innerHTML = html;

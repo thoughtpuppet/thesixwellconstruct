@@ -14,6 +14,7 @@ const PUBLIC_TYPES = new Set([
   "flash_claim",
   "special_project",
   "build_brief",
+  "maze_design",
   "art_acquisition",
   "consultation",
   "studio_booking",
@@ -33,6 +34,10 @@ const REQUIRED_FIELDS_BY_TYPE = {
   ],
   build_brief: [
     ["placement", "Placement is required."],
+    ["review_consent", "Review consent is required.", "yes"],
+  ],
+  maze_design: [
+    ["maze_explanation", "A short explanation of your maze is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   special_project: [

@@ -1,0 +1,137 @@
+{
+  "_note": "Art.Pill visual language. Each symbol: a plain-SVG mark (currentColor), its meaning, and 'examples' = real pieces that incorporate it. Replace 'svg' with your own drawn glyph by adding a 'glyph' image path, and curate 'examples' with the actual works that use each mark.",
+  "symbols": [
+    {
+      "id": "maze-path",
+      "category": "MAZE",
+      "name": "The Path",
+      "meaning": "A route that loops back. For those who return to the same place until the meaning shifts.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M22 24 H82 V52 H42 V80 H100'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "maze-room",
+      "category": "MAZE",
+      "name": "The Room",
+      "meaning": "An enclosed space. It holds something without releasing it.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M48 92 H28 V28 H92 V92 H72'/></g><circle cx='60' cy='60' r='8' fill='currentColor'/></svg>",
+      "examples": []
+    },
+    {
+      "id": "maze-exit",
+      "category": "MAZE",
+      "name": "The Exit",
+      "meaning": "The way out that may or may not open when you reach it.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M44 26 V94 M44 26 H72 M44 94 H72'/><path d='M52 60 H96 M83 47 L96 60 L83 73'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "maze-threshold",
+      "category": "MAZE",
+      "name": "The Threshold",
+      "meaning": "The boundary between two states, made permanent on the body.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M30 90 V34 H90 V90'/><path d='M20 90 H100'/><path d='M60 90 V58'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "sairo-origin",
+      "category": "Sairoglyphs",
+      "name": "Origin Mark",
+      "meaning": "First glyph in the private alphabet. Beginning. The first line drawn.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><circle cx='60' cy='32' r='9' fill='currentColor'/><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round'><path d='M60 46 V96'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "sairo-double",
+      "category": "Sairoglyphs",
+      "name": "The Double",
+      "meaning": "Reflection or echo. Two things that are the same, seen from different sides.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M44 28 V92 M76 28 V92'/><path d='M44 60 Q60 76 76 60'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "sairo-hold",
+      "category": "Sairoglyphs",
+      "name": "The Hold",
+      "meaning": "A binding mark. What keeps something close without crushing it.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M42 28 H28 V92 H42 M78 28 H92 V92 H78'/></g><circle cx='60' cy='60' r='10' fill='currentColor'/></svg>",
+      "examples": []
+    },
+    {
+      "id": "sairo-carry",
+      "category": "Sairoglyphs",
+      "name": "The Carry",
+      "meaning": "Movement across time. A thing brought from one place and held in another.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M22 68 H94 M80 54 L94 68 L80 82'/></g><circle cx='42' cy='42' r='9' fill='currentColor'/></svg>",
+      "examples": []
+    },
+    {
+      "id": "fig-eye",
+      "category": "Figural",
+      "name": "The Eye",
+      "meaning": "Witness. Something that sees and keeps seeing long after the moment passes.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'><path d='M16 60 Q60 26 104 60 Q60 94 16 60 Z'/><circle cx='60' cy='60' r='15'/></g><circle cx='60' cy='60' r='6' fill='currentColor'/></svg>",
+      "examples": [
+        { "src": "/assets/eyes/openeye.png", "title": "Open Eye (study)" }
+      ]
+    },
+    {
+      "id": "fig-hand",
+      "category": "Figural",
+      "name": "The Hand",
+      "meaning": "What makes. What holds. What releases. The mark of the maker.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'><path d='M40 94 V62 H82 V94'/><path d='M48 62 V44 M61 62 V40 M74 62 V48'/><path d='M40 74 H28'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "fig-figure",
+      "category": "Figural",
+      "name": "The Figure",
+      "meaning": "A body moving through meaning. Not arrived — always in transit.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><circle cx='60' cy='28' r='10' fill='currentColor'/><g fill='none' stroke='currentColor' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'><path d='M60 38 V70 M60 50 L44 62 M60 50 L78 56 M60 70 L46 96 M60 70 L76 94'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "fig-dissolve",
+      "category": "Figural",
+      "name": "Dissolution",
+      "meaning": "The moment something stops being solid. Not loss — transformation.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='7' stroke-linecap='round'><path d='M26 42 H60 M26 62 H54'/></g><circle cx='74' cy='42' r='4.5' fill='currentColor'/><circle cx='90' cy='46' r='3' fill='currentColor'/><circle cx='70' cy='64' r='3.5' fill='currentColor'/><circle cx='86' cy='70' r='2.5' fill='currentColor'/><circle cx='58' cy='82' r='3' fill='currentColor'/><circle cx='76' cy='88' r='2' fill='currentColor'/></svg>",
+      "examples": []
+    },
+    {
+      "id": "rit-dot",
+      "category": "Ritual",
+      "name": "The Dot",
+      "meaning": "The smallest unit of presence. A mark that says: I was here.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><circle cx='60' cy='60' r='14' fill='currentColor'/></svg>",
+      "examples": []
+    },
+    {
+      "id": "rit-thread",
+      "category": "Ritual",
+      "name": "The Thread",
+      "meaning": "A line connecting two things across distance. Memory, or obligation.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><circle cx='30' cy='38' r='9' fill='currentColor'/><circle cx='90' cy='84' r='9' fill='currentColor'/><g fill='none' stroke='currentColor' stroke-width='7' stroke-linecap='round'><path d='M34 45 Q72 50 86 77'/></g></svg>",
+      "examples": []
+    },
+    {
+      "id": "rit-vessel",
+      "category": "Ritual",
+      "name": "The Vessel",
+      "meaning": "What holds without spilling. Container of the unnamed thing.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><g fill='none' stroke='currentColor' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'><path d='M34 34 H86 L79 82 Q60 96 41 82 Z'/><path d='M34 34 Q60 50 86 34'/></g></svg>",
+      "examples": [
+        { "src": "/assets/paintings/PAINTING CONTAINER.JPG", "title": "Painting Container" }
+      ]
+    },
+    {
+      "id": "rit-signal",
+      "category": "Ritual",
+      "name": "The Signal",
+      "meaning": "What you send out, not knowing if it will return.",
+      "svg": "<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><circle cx='60' cy='80' r='7' fill='currentColor'/><g fill='none' stroke='currentColor' stroke-width='7' stroke-linecap='round'><path d='M40 64 Q60 46 80 64 M30 52 Q60 22 90 52'/></g></svg>",
+      "examples": []
+    }
+  ]
+}
