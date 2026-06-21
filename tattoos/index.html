@@ -195,7 +195,9 @@
   .ledger-body, .ledger-body *,
   .path-body, .path-body *,
   .fit-body, .fit-body *,
-  .booking-cta-body, .booking-cta-body * {
+  .fine-print, .fine-print *,
+  .booking-cta-body, .booking-cta-body *,
+  .booking-cta-note, .booking-cta-note * {
     line-height:1.2 !important;
   }
   /* section-body also carries a `line-height:1.7 !important` from the shared
@@ -203,6 +205,25 @@
   body[data-venture="tattooing"] .section-body,
   body[data-venture="tattooing"] .section-body * {
     line-height:1.2 !important;
+  }
+  /* Desktop has wider columns / larger body sizes, so the 1.2 above still reads
+     loose there — tighten body leading further on the larger viewport. The copy
+     is all-caps (global text-transform), so there are no descenders to collide. */
+  @media (min-width:769px) {
+    .brand-copy, .brand-copy *,
+    .section-body, .section-body *,
+    .note-body, .note-body *,
+    .ledger-body, .ledger-body *,
+    .path-body, .path-body *,
+    .fit-body, .fit-body *,
+    .fine-print, .fine-print *,
+    .booking-cta-body, .booking-cta-body *,
+    .booking-cta-note, .booking-cta-note *,
+    /* outrank the data-venture-scoped section-body rule above */
+    body[data-venture="tattooing"] .section-body,
+    body[data-venture="tattooing"] .section-body * {
+      line-height:1.1 !important;
+    }
   }
   .brand-copy strong {
     color:var(--signal);
@@ -634,7 +655,7 @@
       <div>
         <p class="brand-kicker"><span style="font-size: 16px;"><span style="font-size: 14px;">Owner / <strong><span style="color: rgb(5, 129, 193)">Artist</span></strong></span></span></p>
         <h2 class="brand-title" id="artist-name-title">Saiel Dauhn Solehman</h2>
-        <p class="brand-copy"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 14px"><span style="font-size: 14px">an Atlanta-based interdisciplinary artist whose vision moves through tattooing, painting, film, apparel, and woodworking. Her practice explores mysticism, introspection, communication, psychological tension, and cultural systems through layered symbolism and visual conversations set within vivid, surreal environments.</span></span></span></p>
+        <p class="brand-copy"><span style="font-size: 14px">an Atlanta-based interdisciplinary artist whose visions move through tattooing, painting, film, apparel, and woodworking. Her practice explores mysticism, introspection, communication, psychological tension, and cultural systems through layered symbolism and visual conversations set within vivid, surreal environments.</span></p>
       </div>
     </section>
     <section class="section" id="the-work">
