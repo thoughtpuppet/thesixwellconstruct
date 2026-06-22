@@ -82,13 +82,13 @@
   /* ── SYMBOL COLUMN ── */
   .symbol-col{padding:var(--s6) var(--s6) var(--s7) 0;border-right:5px solid var(--ring-faint);}
 
-  .filter-row{display:flex;align-items:center;gap:var(--s5);flex-wrap:wrap;margin-bottom:var(--s5);}
-  .chip{position:relative;font-family:var(--sans);font-weight:500;font-size:13px;letter-spacing:0.04em;text-transform:lowercase;color:var(--text-mute);padding:var(--s2) 0;background:none;border:none;cursor:pointer;transition:color var(--t-fast);}
-  .chip:hover{color:var(--text);}
-  .chip.active{color:var(--text);}
-  .chip.active .chip-label::after{content:"";position:absolute;left:0;bottom:-1px;width:100%;height:2px;background:var(--venture-color);}
-  .chip.active::before{content:"";position:absolute;left:-10px;top:50%;width:4px;height:4px;border-radius:50%;background:var(--venture-color);transform:translateY(-50%);}
-  .chip-label{position:relative;}
+  .filter-block{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s4);margin-bottom:var(--s5);}
+  .filter-group{display:grid;gap:var(--s2);}
+  .filter-label{font-family:var(--sans);font-weight:900;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-dim);}
+  .filter-select{width:100%;min-height:54px;border:5px solid var(--ring-faint);background:linear-gradient(90deg,rgba(110,4,4,0.16) 0 5px,rgba(14,14,14,0.82) 5px);color:var(--text-mute);font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;padding:0 48px 0 18px;border-radius:0;appearance:none;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast),background var(--t-fast);background-image:linear-gradient(90deg,rgba(110,4,4,0.16) 0 5px,rgba(14,14,14,0.82) 5px),linear-gradient(45deg,transparent 50%,var(--signal) 50%),linear-gradient(135deg,var(--signal) 50%,transparent 50%);background-position:0 0,calc(100% - 24px) 23px,calc(100% - 16px) 23px;background-size:100% 100%,8px 8px,8px 8px;background-repeat:no-repeat;}
+  .filter-select:hover{border-color:var(--ring-soft);color:var(--text);}
+  .filter-select:focus{outline:1px solid var(--signal);border-color:var(--signal);color:var(--text);background-image:linear-gradient(90deg,rgba(110,4,4,0.28) 0 5px,rgba(14,14,14,0.9) 5px),linear-gradient(45deg,transparent 50%,var(--accent) 50%),linear-gradient(135deg,var(--accent) 50%,transparent 50%);}
+  .filter-select option{background:var(--bg);color:var(--text);}
 
   .symbol-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3);}
 
@@ -223,7 +223,7 @@
   body.kiosk #cnav-mobile-overlay,
   body.kiosk .construct-breadcrumb{display:none !important;}
   body.kiosk main{padding-top:var(--s5);}
-  body.kiosk .symbol-card,body.kiosk .door-tab,body.kiosk .chip{min-height:56px;}
+  body.kiosk .symbol-card,body.kiosk .door-tab,body.kiosk .filter-select{min-height:56px;}
   .kiosk-startover{display:none;position:fixed;right:20px;bottom:20px;z-index:200;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--bg);background:var(--signal);border:5px solid var(--signal);padding:14px 24px;cursor:pointer;}
   body.kiosk .kiosk-startover{display:inline-flex;align-items:center;gap:8px;}
 </style>
@@ -308,7 +308,16 @@
         <div class="builder-wrap">
           <!-- SYMBOL BROWSER -->
           <div class="symbol-col">
-            <div class="filter-row" id="filterRow" role="group" aria-label="Filter by category"></div>
+            <div class="filter-block" aria-label="Filter the visual language">
+              <div class="filter-group">
+                <p class="filter-label">Form</p>
+                <select class="filter-select" id="filterRow" aria-label="Filter by form"></select>
+              </div>
+              <div class="filter-group">
+                <p class="filter-label">Theme</p>
+                <select class="filter-select" id="themeFilterRow" aria-label="Filter by theme"></select>
+              </div>
+            </div>
             <div class="symbol-grid" id="symbolGrid" aria-label="Symbol library"></div>
           </div>
 
@@ -316,11 +325,11 @@
           <div class="brief-col" role="complementary" aria-label="Your build brief">
             <div class="brief-header">
               <span class="brief-heading">your build</span>
-              <span class="brief-count" id="briefCount">0 of 6</span>
+              <span class="brief-count" id="briefCount">0 of 12</span>
             </div>
             <p class="brief-empty" id="briefEmpty" data-copy-id="build-brief-empty">Select symbols from the library to begin building your brief. Each piece you choose carries its meaning into the design.</p>
             <ul class="brief-items" id="briefItems" aria-live="polite"></ul>
-            <p class="brief-limit" id="briefLimit" data-copy-id="build-brief-limit">Six elements selected. Remove one to add another, or proceed with this build.</p>
+            <p class="brief-limit" id="briefLimit" data-copy-id="build-brief-limit">Twelve elements selected. Remove one to add another, or proceed with this build.</p>
             <div class="brief-spacer"></div>
             <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form">
               Build this brief →
@@ -357,7 +366,7 @@
               <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
               <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
               <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
-              <div class="field"><label for="intent">Design intent</label><input id="intent" name="intent" placeholder="What should the piece carry or mean?"></div>
+              <div class="field"><label for="intent">Design intent</label><input id="intent" name="direction" placeholder="What should the piece carry or mean?"></div>
               <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="form-status" style="margin-top:6px;">Optional. Body reference or placement images only — not mood boards.</p></div>
               <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
             </div>
@@ -463,6 +472,11 @@
     form.addEventListener("submit", async function(event){
       event.preventDefault();
       if (!form.reportValidity()) return;
+      var selected = document.getElementById("selectedElements");
+      if (selected && !selected.value.trim()) {
+        status.textContent = "Select at least one visual-language element before submitting.";
+        return;
+      }
 
       submitBtn.disabled = true;
       submitBtn.textContent = "Submitting...";

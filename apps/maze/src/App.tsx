@@ -404,7 +404,7 @@ export default function App() {
   });
 
   return (
-    <main className="app tattoo-app">
+    <main className={`app tattoo-app${KIOSK ? " terminal" : ""}`}>
       <header className="topbar">
         <div>
           <span className="eyebrow">Art.Pill Tattoo House</span>
@@ -474,6 +474,11 @@ export default function App() {
         getJson={() => JSON.stringify(state)}
         isEmpty={state.mazeWalls.length === 0 && state.mazeShapes.length === 0}
       />
+      {KIOSK ? (
+        <button type="button" className="kiosk-start-over" onClick={resetMaze}>
+          Start over
+        </button>
+      ) : null}
     </main>
   );
 }

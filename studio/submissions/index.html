@@ -774,7 +774,7 @@
           ${field("Budget", p("budget_range"))}
           ${field("Timeline", p("timeline"))}
           ${field("Instagram", p("instagram"))}
-          ${field("Direction", p("direction"))}
+          ${field("Direction", p("direction") || p("intent"))}
         </div>
         ${p("selected_elements") ? `<div class="field" style="margin-top:16px;"><label>Selected Elements</label><div class="value full">${escapeHtml(p("selected_elements"))}</div></div>` : ""}
         <div class="field" style="margin-top:16px;"><label>Brief / Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>

@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Language Editor</title>
+<style>
+  :root{
+    --bg:#11100f;--panel:#181614;--line:#38261b;--line-soft:rgba(109,61,21,.34);
+    --text:#ffe7ca;--muted:rgba(255,231,202,.62);--dim:rgba(255,231,202,.38);
+    --signal:#8f1717;--accent:#fcb867;--good:#7fbf8f;--bad:#e06b60;
+    --sans:Inter,Arial,sans-serif;--serif:Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:var(--serif)}
+  body{display:grid;grid-template-rows:auto 1fr}
+  button,input,textarea,select{font:inherit}
+  button{cursor:pointer}
+  .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 24px;border-bottom:4px solid var(--line);background:rgba(17,16,15,.96);backdrop-filter:blur(10px)}
+  .title{font-family:var(--sans);font-size:18px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;color:var(--accent)}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
+  .btn{border:3px solid var(--line-soft);background:transparent;color:var(--text);padding:9px 13px;font-family:var(--sans);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{border-color:var(--signal);color:var(--signal)}
+  .btn.primary:hover{background:var(--signal);color:var(--bg)}
+  .btn.danger{border-color:rgba(224,107,96,.55);color:var(--bad)}
+  .status{font-family:var(--sans);font-size:11px;letter-spacing:.04em;color:var(--dim)}
+  .layout{display:grid;grid-template-columns:320px minmax(0,1fr);min-height:0}
+  .sidebar{border-right:4px solid var(--line);padding:18px;background:#0f0e0d;overflow:auto}
+  .search{width:100%;border:3px solid var(--line-soft);background:#151311;color:var(--text);padding:12px;margin-bottom:14px}
+  .list{display:grid;gap:8px}
+  .item{display:grid;gap:4px;width:100%;text-align:left;border:3px solid var(--line-soft);background:transparent;color:var(--text);padding:12px}
+  .item.active{border-color:var(--signal);background:rgba(143,23,23,.12)}
+  .item-name{font-family:var(--sans);font-weight:900;font-size:12px;text-transform:uppercase}
+  .item-meta{font-family:var(--sans);font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+  .editor{padding:24px;overflow:auto}
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;align-items:start}
+  .section{border-top:4px solid var(--line);padding-top:18px;margin-bottom:24px}
+  .section-title{font-family:var(--sans);font-size:12px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  .fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .field{display:grid;gap:7px}
+  .field.full{grid-column:1/-1}
+  label{font-family:var(--sans);font-size:10px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+  input,textarea{width:100%;border:3px solid var(--line-soft);background:#151311;color:var(--text);padding:11px 12px;border-radius:0}
+  textarea{min-height:92px;resize:vertical}
+  input:focus,textarea:focus{outline:1px solid var(--signal);border-color:var(--signal)}
+  .hint{font-family:var(--sans);font-size:11px;line-height:1.55;color:var(--dim);margin:8px 0 0}
+  .split-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .asset-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+  .asset-preview{display:none;margin-top:8px;max-width:140px;max-height:96px;border:2px solid var(--line-soft);object-fit:contain;background:#0f0e0d}
+  .asset-preview.visible{display:block}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .chip{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--line-soft);padding:5px 8px;font-family:var(--sans);font-size:11px;color:var(--muted)}
+  .chip button{border:0;background:transparent;color:var(--dim);font-size:14px;line-height:1;padding:0}
+  .repeater{display:grid;gap:10px}
+  .example-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:10px;align-items:end}
+  .preview{position:sticky;top:92px;border:4px solid var(--line);padding:18px;background:#151311}
+  .mark{height:120px;display:flex;align-items:center;justify-content:center;color:var(--muted);border:3px solid var(--line-soft);margin-bottom:14px;overflow:hidden}
+  .mark svg{width:86px;height:86px}
+  .mark img{max-width:100%;max-height:112px;object-fit:contain}
+  .preview-name{font-family:var(--sans);font-weight:900;font-size:17px;text-transform:uppercase;margin:0 0 6px;color:var(--text)}
+  .preview-cat{font-family:var(--sans);font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--signal);margin:0 0 12px}
+  .preview-meaning{font-size:13px;line-height:1.7;color:var(--muted);margin:0 0 14px}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap}
+  .thumb{width:54px;height:54px;border:2px solid var(--line-soft);object-fit:cover;background:#0f0e0d}
+  .empty{padding:40px;border:4px solid var(--line);color:var(--dim);font-family:var(--sans);letter-spacing:.06em;text-transform:uppercase}
+  .file-input{display:none}
+  @media(max-width:900px){
+    .layout,.grid{grid-template-columns:1fr}
+    .sidebar{border-right:0;border-bottom:4px solid var(--line);max-height:42vh}
+    .preview{position:static}
+    .fields,.example-row{grid-template-columns:1fr}
+    .top{align-items:flex-start;flex-direction:column}
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <div class="title">Build Language Editor</div>
+    <div class="status" id="status">Loading /assets/build/symbols.json</div>
+  </div>
+  <div class="actions">
+    <input class="file-input" id="importFile" type="file" accept="application/json,.json">
+    <button class="btn" id="importBtn" type="button">Import JSON</button>
+    <button class="btn" id="addBtn" type="button">Add Symbol</button>
+    <button class="btn" id="copyBtn" type="button">Copy JSON</button>
+    <button class="btn" id="downloadBtn" type="button">Download</button>
+    <button class="btn primary" id="saveBtn" type="button">Save As</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <input class="search" id="search" placeholder="Search symbols, categories, themes">
+    <div class="list" id="list"></div>
+  </aside>
+
+  <section class="editor" id="editor"></section>
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  const DATA_URL = "/assets/build/symbols.json";
+  const $ = (id) => document.getElementById(id);
+  const state = { data: { _note: "", symbols: [] }, index: 0, query: "", dirty: false };
+
+  const status = $("status");
+  const list = $("list");
+  const editor = $("editor");
+
+  function esc(value){
+    return String(value == null ? "" : value)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  function slug(value){
+    return String(value || "new-symbol").trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"") || "new-symbol";
+  }
+
+  function assetPath(file, folder){
+    const dot = file.name.lastIndexOf(".");
+    const base = dot > -1 ? file.name.slice(0, dot) : file.name;
+    const ext = dot > -1 ? file.name.slice(dot).toLowerCase() : "";
+    return `/assets/build/${folder}/${slug(base)}${ext}`;
+  }
+
+  function previewFile(file, img){
+    if (!file || !img) return;
+    img.src = URL.createObjectURL(file);
+    img.classList.add("visible");
+  }
+
+  function setStatus(message, tone){
+    status.textContent = message;
+    status.style.color = tone === "bad" ? "var(--bad)" : tone === "good" ? "var(--good)" : "var(--dim)";
+  }
+
+  function selected(){
+    return state.data.symbols[state.index] || null;
+  }
+
+  function markDirty(){
+    state.dirty = true;
+    validate();
+    renderList();
+    renderPreview();
+  }
+
+  function normalizeSymbol(sym){
+    sym.id = sym.id || slug(sym.name);
+    sym.category = sym.category || "";
+    sym.name = sym.name || "";
+    sym.themes = Array.isArray(sym.themes) ? sym.themes : [];
+    sym.meaning = sym.meaning || "";
+    sym.svg = sym.svg || "";
+    sym.glyph = sym.glyph || "";
+    sym.examples = Array.isArray(sym.examples) ? sym.examples : [];
+    sym.examples = sym.examples.map((ex) => ({
+      title: ex.title || "",
+      src: ex.src || ex.image || ""
+    }));
+    return sym;
+  }
+
+  function normalizeData(data){
+    const symbols = Array.isArray(data.symbols) ? data.symbols : [];
+    state.data = {
+      _note: data._note || "Art.Pill visual language.",
+      symbols: symbols.map(normalizeSymbol)
+    };
+    state.index = Math.min(state.index, Math.max(0, state.data.symbols.length - 1));
+  }
+
+  function validate(){
+    const ids = new Map();
+    const duplicates = [];
+    state.data.symbols.forEach((sym) => {
+      if (!sym.id) return;
+      if (ids.has(sym.id)) duplicates.push(sym.id);
+      ids.set(sym.id, true);
+    });
+    if (duplicates.length) {
+      setStatus("Duplicate IDs: " + [...new Set(duplicates)].join(", "), "bad");
+      return false;
+    }
+    setStatus(state.dirty ? "Unsaved changes" : "Loaded", state.dirty ? "" : "good");
+    return true;
+  }
+
+  function filteredSymbols(){
+    const q = state.query.trim().toLowerCase();
+    if (!q) return state.data.symbols.map((sym, index) => ({ sym, index }));
+    return state.data.symbols
+      .map((sym, index) => ({ sym, index }))
+      .filter(({ sym }) => [sym.id, sym.name, sym.category, sym.meaning, ...(sym.themes || [])].join(" ").toLowerCase().includes(q));
+  }
+
+  function renderList(){
+    const rows = filteredSymbols();
+    list.innerHTML = rows.map(({ sym, index }) => `
+      <button class="item ${index === state.index ? "active" : ""}" type="button" data-index="${index}">
+        <span class="item-name">${esc(sym.name || sym.id || "Untitled")}</span>
+        <span class="item-meta">${esc(sym.category || "No category")} / ${(sym.themes || []).length} themes</span>
+      </button>
+    `).join("");
+    list.querySelectorAll(".item").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.index = Number(button.dataset.index);
+        render();
+      });
+    });
+  }
+
+  function renderPreview(){
+    const sym = selected();
+    const box = document.querySelector("[data-preview]");
+    if (!box || !sym) return;
+    const mark = sym.glyph
+      ? `<img src="${esc(sym.glyph)}" alt="">`
+      : (sym.svg || "<span>No mark yet</span>");
+    const examples = (sym.examples || [])
+      .filter((ex) => ex.src)
+      .slice(0, 6)
+      .map((ex) => `<img class="thumb" src="${esc(ex.src)}" alt="${esc(ex.title || sym.name)}">`)
+      .join("");
+    box.innerHTML = `
+      <div class="mark">${mark}</div>
+      <p class="preview-cat">${esc(sym.category || "No category")}</p>
+      <h2 class="preview-name">${esc(sym.name || "Untitled")}</h2>
+      <p class="preview-meaning">${esc(sym.meaning || "No meaning written yet.")}</p>
+      <div class="chips">${(sym.themes || []).map((theme) => `<span class="chip">${esc(theme)}</span>`).join("")}</div>
+      <div class="thumbs">${examples}</div>
+    `;
+  }
+
+  function renderThemeChips(sym){
+    return (sym.themes || []).map((theme, index) => `
+      <span class="chip">${esc(theme)} <button type="button" data-remove-theme="${index}" aria-label="Remove ${esc(theme)}">x</button></span>
+    `).join("");
+  }
+
+  function renderExamples(sym){
+    return (sym.examples || []).map((ex, index) => `
+      <div class="example-row" data-example="${index}">
+        <div class="field"><label>Example title</label><input value="${esc(ex.title)}" data-example-title="${index}"></div>
+        <div class="field">
+          <label>Image path</label>
+          <div class="asset-row">
+            <input value="${esc(ex.src)}" data-example-src="${index}" placeholder="/assets/build/examples/name.jpg">
+            <button class="btn" type="button" data-pick-example="${index}">Pick</button>
+          </div>
+          <input class="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" data-example-file="${index}">
+          <img class="asset-preview" data-example-preview="${index}" alt="">
+        </div>
+        <button class="btn danger" type="button" data-remove-example="${index}">Delete</button>
+      </div>
+    `).join("");
+  }
+
+  function renderEditor(){
+    const sym = selected();
+    if (!sym) {
+      editor.innerHTML = `<div class="empty">No symbols yet. Add one to begin.</div>`;
+      return;
+    }
+
+    editor.innerHTML = `
+      <div class="grid">
+        <div>
+          <section class="section">
+            <h2 class="section-title">Symbol</h2>
+            <div class="fields">
+              <div class="field"><label>ID</label><input id="fieldId" value="${esc(sym.id)}"></div>
+              <div class="field"><label>Name</label><input id="fieldName" value="${esc(sym.name)}"></div>
+              <div class="field"><label>Category</label><input id="fieldCategory" value="${esc(sym.category)}" list="categoryList"></div>
+              <div class="field">
+                <label>Glyph image path</label>
+                <div class="asset-row">
+                  <input id="fieldGlyph" value="${esc(sym.glyph)}" placeholder="/assets/build/glyphs/name.png">
+                  <button class="btn" id="pickGlyphBtn" type="button">Pick</button>
+                </div>
+                <input class="file-input" id="glyphFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+                <img class="asset-preview" id="glyphPreview" alt="">
+              </div>
+              <div class="field full"><label>Meaning</label><textarea id="fieldMeaning">${esc(sym.meaning)}</textarea></div>
+              <div class="field full"><label>Fallback SVG</label><textarea id="fieldSvg">${esc(sym.svg)}</textarea></div>
+            </div>
+            <datalist id="categoryList">${[...new Set(state.data.symbols.map((s) => s.category).filter(Boolean))].map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist>
+          </section>
+
+          <section class="section">
+            <h2 class="section-title">Themes</h2>
+            <div class="split-row">
+              <input id="themeInput" placeholder="protection, memory, threshold">
+              <button class="btn" id="addThemeBtn" type="button">Add Theme</button>
+            </div>
+            <p class="hint">Use short client-facing words. Separate multiple themes with commas.</p>
+            <div class="chips" id="themeChips">${renderThemeChips(sym)}</div>
+          </section>
+
+          <section class="section">
+            <h2 class="section-title">Examples</h2>
+            <div class="repeater" id="examples">${renderExamples(sym)}</div>
+            <button class="btn" id="addExampleBtn" type="button">Add Example</button>
+          </section>
+
+          <section class="section">
+            <button class="btn danger" id="deleteBtn" type="button">Delete Symbol</button>
+          </section>
+        </div>
+        <aside class="preview" data-preview></aside>
+      </div>
+    `;
+
+    bindFields(sym);
+    renderPreview();
+  }
+
+  function bindFields(sym){
+    const bind = (id, key, transform) => {
+      const input = $(id);
+      input.addEventListener("input", () => {
+        sym[key] = transform ? transform(input.value) : input.value;
+        if (key === "name" && !sym.id) sym.id = slug(input.value);
+        markDirty();
+      });
+    };
+    bind("fieldId", "id", slug);
+    bind("fieldName", "name");
+    bind("fieldCategory", "category");
+    bind("fieldGlyph", "glyph");
+    bind("fieldMeaning", "meaning");
+    bind("fieldSvg", "svg");
+
+    $("pickGlyphBtn").addEventListener("click", () => $("glyphFile").click());
+    $("glyphFile").addEventListener("change", (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      sym.glyph = assetPath(file, "glyphs");
+      $("fieldGlyph").value = sym.glyph;
+      previewFile(file, $("glyphPreview"));
+      markDirty();
+      setStatus(`Place ${file.name} in assets/build/glyphs/`, "");
+    });
+
+    $("addThemeBtn").addEventListener("click", () => {
+      const input = $("themeInput");
+      const values = input.value.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
+      sym.themes = [...new Set([...(sym.themes || []), ...values])];
+      input.value = "";
+      markDirty();
+      renderEditor();
+    });
+
+    document.querySelectorAll("[data-remove-theme]").forEach((button) => {
+      button.addEventListener("click", () => {
+        sym.themes.splice(Number(button.dataset.removeTheme), 1);
+        markDirty();
+        renderEditor();
+      });
+    });
+
+    $("addExampleBtn").addEventListener("click", () => {
+      sym.examples.push({ title: "", src: "" });
+      markDirty();
+      renderEditor();
+    });
+
+    document.querySelectorAll("[data-example-title]").forEach((input) => {
+      input.addEventListener("input", () => {
+        sym.examples[Number(input.dataset.exampleTitle)].title = input.value;
+        markDirty();
+      });
+    });
+    document.querySelectorAll("[data-example-src]").forEach((input) => {
+      input.addEventListener("input", () => {
+        sym.examples[Number(input.dataset.exampleSrc)].src = input.value;
+        markDirty();
+      });
+    });
+    document.querySelectorAll("[data-pick-example]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const fileInput = document.querySelector(`[data-example-file="${button.dataset.pickExample}"]`);
+        if (fileInput) fileInput.click();
+      });
+    });
+    document.querySelectorAll("[data-example-file]").forEach((input) => {
+      input.addEventListener("change", (event) => {
+        const index = Number(input.dataset.exampleFile);
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        sym.examples[index].src = assetPath(file, "examples");
+        const pathInput = document.querySelector(`[data-example-src="${index}"]`);
+        if (pathInput) pathInput.value = sym.examples[index].src;
+        previewFile(file, document.querySelector(`[data-example-preview="${index}"]`));
+        markDirty();
+        setStatus(`Place ${file.name} in assets/build/examples/`, "");
+      });
+    });
+    document.querySelectorAll("[data-remove-example]").forEach((button) => {
+      button.addEventListener("click", () => {
+        sym.examples.splice(Number(button.dataset.removeExample), 1);
+        markDirty();
+        renderEditor();
+      });
+    });
+
+    $("deleteBtn").addEventListener("click", () => {
+      if (!confirm("Delete this symbol?")) return;
+      state.data.symbols.splice(state.index, 1);
+      state.index = Math.max(0, state.index - 1);
+      markDirty();
+      render();
+    });
+  }
+
+  function render(){
+    renderList();
+    renderEditor();
+    validate();
+  }
+
+  function addSymbol(){
+    const next = normalizeSymbol({
+      id: "new-symbol",
+      name: "New Symbol",
+      category: "Unsorted",
+      themes: [],
+      meaning: "",
+      svg: "",
+      glyph: "",
+      examples: []
+    });
+    state.data.symbols.push(next);
+    state.index = state.data.symbols.length - 1;
+    markDirty();
+    render();
+  }
+
+  function serialized(){
+    const clean = {
+      _note: state.data._note,
+      symbols: state.data.symbols.map((sym) => {
+        const out = {
+          id: sym.id,
+          category: sym.category,
+          name: sym.name,
+          themes: sym.themes || [],
+          meaning: sym.meaning,
+          svg: sym.svg,
+          examples: (sym.examples || []).filter((ex) => ex.src || ex.title).map((ex) => ({ src: ex.src, title: ex.title }))
+        };
+        if (sym.glyph) out.glyph = sym.glyph;
+        return out;
+      })
+    };
+    return JSON.stringify(clean, null, 2) + "\n";
+  }
+
+  function download(){
+    if (!validate()) return;
+    const blob = new Blob([serialized()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "symbols.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    state.dirty = false;
+    validate();
+  }
+
+  async function saveAs(){
+    if (!validate()) return;
+    if (!window.showSaveFilePicker) {
+      download();
+      return;
+    }
+    const handle = await window.showSaveFilePicker({
+      suggestedName: "symbols.json",
+      types: [{ description: "JSON", accept: { "application/json": [".json"] } }]
+    });
+    const writable = await handle.createWritable();
+    await writable.write(serialized());
+    await writable.close();
+    state.dirty = false;
+    validate();
+  }
+
+  async function copyJson(){
+    if (!validate()) return;
+    await navigator.clipboard.writeText(serialized());
+    setStatus("JSON copied", "good");
+  }
+
+  async function loadFromText(text){
+    normalizeData(JSON.parse(text));
+    state.dirty = false;
+    render();
+  }
+
+  async function loadDefault(){
+    try {
+      const res = await fetch(DATA_URL, { cache: "no-cache" });
+      if (!res.ok) throw new Error("Unable to load " + DATA_URL);
+      await loadFromText(await res.text());
+    } catch (err) {
+      normalizeData({ _note: "Art.Pill visual language.", symbols: [] });
+      setStatus("Use Import JSON to load symbols.json", "bad");
+      render();
+    }
+  }
+
+  $("search").addEventListener("input", (event) => {
+    state.query = event.target.value;
+    renderList();
+  });
+  $("addBtn").addEventListener("click", addSymbol);
+  $("downloadBtn").addEventListener("click", download);
+  $("saveBtn").addEventListener("click", () => saveAs().catch((err) => setStatus(err.message, "bad")));
+  $("copyBtn").addEventListener("click", () => copyJson().catch((err) => setStatus(err.message, "bad")));
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    try {
+      await loadFromText(await file.text());
+    } catch (err) {
+      setStatus("Import failed: " + err.message, "bad");
+    }
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (!state.dirty) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
+  loadDefault();
+})();
+</script>
+</body>
+</html>

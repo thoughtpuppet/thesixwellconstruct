@@ -2,16 +2,29 @@
    ART.PILL "BUILD A BRIEF" — visual-language symbol builder
    Data-driven from /assets/build/symbols.json.
    Each symbol renders its mark + meaning + "seen in" examples.
-   Selections (max 6) form the brief carried into the submission form.
+   Selections (max 12) form the brief carried into the submission form.
 ============================================================ */
 (function () {
   "use strict";
 
-  const MAX_SELECTIONS = 6;
+  const MAX_SELECTIONS = 12;
   const DATA_URL = "/assets/build/symbols.json";
+  const PUBLIC_THEMES = [
+    "protection",
+    "memory",
+    "transformation",
+    "body",
+    "threshold",
+    "devotion",
+    "movement",
+    "witness",
+    "release",
+    "identity",
+  ];
 
   const el = (id) => document.getElementById(id);
   const filterRow = el("filterRow");
+  const themeFilterRow = el("themeFilterRow");
   const symbolGrid = el("symbolGrid");
   const briefItems = el("briefItems");
   const briefEmpty = el("briefEmpty");
@@ -28,6 +41,7 @@
   const byId = new Map();
   const selected = new Set();
   let activeCategory = "All";
+  let activeTheme = "All";
 
   function escapeHtml(value) {
     return String(value)
@@ -38,34 +52,47 @@
   }
 
   /* ── FILTERS ── */
+  function buildSelect(select, values, activeValue, onSelect) {
+    if (!select) return;
+    select.innerHTML = values
+      .map(
+        (value) =>
+          `<option value="${escapeHtml(value)}"${
+            value === activeValue ? " selected" : ""
+          }>${escapeHtml(value)}</option>`
+      )
+      .join("");
+    select.addEventListener("change", () => {
+      onSelect(select.value);
+      filterSymbols();
+    });
+  }
+
   function buildFilters() {
-    const categories = ["All", ...new Set(SYMBOLS.map((s) => s.category))];
-    filterRow.innerHTML = "";
-    categories.forEach((cat) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "chip" + (cat === "All" ? " active" : "");
-      btn.innerHTML = `<span class="chip-label">${escapeHtml(cat)}</span>`;
-      btn.addEventListener("click", () => {
-        activeCategory = cat;
-        document
-          .querySelectorAll(".chip")
-          .forEach((c) =>
-            c.classList.toggle(
-              "active",
-              c.querySelector(".chip-label").textContent === cat
-            )
-          );
-        filterSymbols();
-      });
-      filterRow.appendChild(btn);
+    const categories = [
+      "All",
+      ...new Set(SYMBOLS.map((s) => s.category).filter(Boolean)),
+    ];
+    const availableThemes = new Set(
+      SYMBOLS.flatMap((s) => (Array.isArray(s.themes) ? s.themes : [])).filter(Boolean)
+    );
+    const themes = ["All", ...PUBLIC_THEMES.filter((theme) => availableThemes.has(theme))];
+
+    buildSelect(filterRow, categories, activeCategory, (value) => {
+      activeCategory = value;
+    });
+    buildSelect(themeFilterRow, themes, activeTheme, (value) => {
+      activeTheme = value;
     });
   }
 
   function filterSymbols() {
     document.querySelectorAll(".symbol-card").forEach((card) => {
-      const show =
+      const themes = (card.dataset.themes || "").split("|").filter(Boolean);
+      const categoryMatch =
         activeCategory === "All" || card.dataset.category === activeCategory;
+      const themeMatch = activeTheme === "All" || themes.includes(activeTheme);
+      const show = categoryMatch && themeMatch;
       card.dataset.hidden = show ? "false" : "true";
     });
   }
@@ -78,7 +105,7 @@
       .map((ex) => {
         const title = escapeHtml(ex.title || sym.name);
         return `<span class="symbol-example" title="${title}"><img src="${escapeHtml(
-          ex.src
+          ex.src || ex.image || ""
         )}" alt="${title}" loading="lazy"></span>`;
       })
       .join("");
@@ -103,6 +130,7 @@
       card.className = "symbol-card";
       card.dataset.id = sym.id;
       card.dataset.category = sym.category;
+      card.dataset.themes = Array.isArray(sym.themes) ? sym.themes.join("|") : "";
       card.dataset.name = sym.name;
       card.dataset.hidden = "false";
       card.setAttribute("aria-pressed", "false");
