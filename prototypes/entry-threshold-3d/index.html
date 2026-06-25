@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Entry Threshold 3D Prototype</title>
+  <style>
+    * { box-sizing: border-box; }
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #0b0806;
+      color: #20140d;
+      font-family: Georgia, "Times New Roman", serif;
+      -webkit-font-smoothing: antialiased;
+      touch-action: none;
+    }
+
+    #entry-root,
+    #home-reveal,
+    #home-frame {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #entry-root {
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0b0806;
+      transition: opacity 980ms cubic-bezier(0.16, 1, 0.3, 1), visibility 980ms step-end;
+    }
+
+    #frame-stage {
+      position: relative;
+      width: min(100vw, calc(100vh * 507 / 386));
+      height: min(100vh, calc(100vw * 386 / 507));
+      overflow: hidden;
+      background: #e6c996;
+      box-shadow: 0 0 120px rgba(0, 0, 0, 0.42);
+    }
+
+    #reference-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      object-fit: fill;
+      object-position: center center;
+      user-select: none;
+      pointer-events: none;
+      transition: transform 1500ms cubic-bezier(0.16, 1, 0.3, 1), filter 1500ms cubic-bezier(0.16, 1, 0.3, 1), opacity 900ms ease;
+    }
+
+    #entry-root.is-pulling #reference-bg {
+      transform: scale(2.35) translate(-9%, 2%);
+      filter: blur(2px) brightness(0.48);
+    }
+
+    #entry-root.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    #entry-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 2;
+      cursor: grab;
+    }
+
+    #entry-root.is-dragging #entry-canvas { cursor: grabbing; }
+    #entry-root.is-pressable #entry-canvas { cursor: pointer; }
+
+    #ui-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    .entry-button {
+      position: absolute;
+      right: max(16px, env(safe-area-inset-right));
+      bottom: max(16px, env(safe-area-inset-bottom));
+      pointer-events: auto;
+      border: 1px solid rgba(46, 27, 16, 0.42);
+      background: rgba(239, 225, 194, 0.58);
+      color: rgba(21, 13, 9, 0.66);
+      padding: 8px 11px;
+      border-radius: 3px;
+      font: 700 10px/1.1 Arial, sans-serif;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      cursor: pointer;
+      backdrop-filter: blur(5px);
+    }
+
+    .entry-button:focus-visible {
+      outline: 2px solid rgba(147, 11, 8, 0.72);
+      outline-offset: 3px;
+    }
+
+    #entry-status {
+      position: absolute;
+      left: 50%;
+      bottom: max(19px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      min-width: 18ch;
+      text-align: center;
+      color: rgba(36, 22, 13, 0.46);
+      font: 700 9px/1.4 Arial, sans-serif;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    #home-reveal {
+      z-index: 1;
+      background: #0e0e0e;
+      opacity: 0;
+      transition: opacity 1200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #home-reveal.is-visible { opacity: 1; }
+
+    #home-frame {
+      border: 0;
+      background: #0e0e0e;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #entry-root,
+      #home-reveal {
+        transition-duration: 240ms;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section id="home-reveal" aria-label="Copied homepage">
+    <iframe id="home-frame" title="Copied Six Well Construct homepage" src="homepage-copy/index.html"></iframe>
+  </section>
+
+  <main id="entry-root" aria-label="3D entry threshold prototype">
+    <div id="frame-stage">
+      <img id="reference-bg" src="./assets/reference/frame_01.png" alt="">
+      <canvas id="entry-canvas"></canvas>
+    </div>
+    <div id="ui-layer">
+      <div id="entry-status" aria-live="polite">place the six stones</div>
+      <button class="entry-button" id="skip-entry" type="button">Enter</button>
+    </div>
+  </main>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

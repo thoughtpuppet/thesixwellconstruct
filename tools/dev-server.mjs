@@ -22,6 +22,7 @@ const types = new Map([
   [".webp", "image/webp"],
   [".svg", "image/svg+xml; charset=utf-8"],
   [".ico", "image/x-icon"],
+  [".wav", "audio/wav"],
 ]);
 
 const checkRoutes = [

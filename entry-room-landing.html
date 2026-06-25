@@ -121,10 +121,73 @@
      introContentScale): the field zooms in from depth while the canvas stays
      full-viewport, so it always fills the screen — no CSS transform that would
      shrink the canvas and reveal its edges. window.__floatStart drives it. */
+  body.entry-room-active #stage {
+    opacity: 0;
+    visibility: hidden;
+  }
+  body.entry-room-complete #stage {
+    opacity: 1;
+    visibility: visible;
+  }
+  body.entry-room-active #live-text-editor {
+    display: none !important;
+  }
+  #entry-room-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    overflow: hidden;
+    background: #c48a47;
+    touch-action: none;
+  }
+  #entry-room-overlay.is-finished {
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 900ms cubic-bezier(0.16, 1, 0.3, 1), visibility 900ms step-end;
+  }
+  #entry-room-canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+    cursor: grab;
+  }
+  #entry-room-overlay.is-dragging #entry-room-canvas { cursor: grabbing; }
+  #entry-room-overlay.is-pressable #entry-room-canvas { cursor: pointer; }
+  #entry-room-shade {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 47% 46%, rgba(255, 218, 147, 0.10), transparent 32%),
+      radial-gradient(circle at 84% 82%, rgba(0, 0, 0, 0.20), transparent 24%),
+      linear-gradient(90deg, rgba(58, 28, 8, 0.18), transparent 27%, rgba(0, 0, 0, 0.18));
+    mix-blend-mode: multiply;
+  }
+  #entry-room-status {
+    position: fixed;
+    left: 50%;
+    bottom: max(18px, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 10001;
+    color: rgba(34, 19, 8, 0.42);
+    font-family: var(--font-serif);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 400ms ease, color 400ms ease;
+  }
+  #entry-room-overlay.is-started #entry-room-status { opacity: 1; }
+  #entry-room-overlay.is-pressable #entry-room-status { color: rgba(108, 4, 4, 0.68); }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
 </head>
-<body class="intro">
+<body class="intro entry-room-active">
 <script>
   // Intro float-in: keep #stage receded until the first paint, then drop the
   // .intro class so it eases into place. The moment it starts is stamped on
@@ -146,6 +209,11 @@
     setTimeout(start, 600);
   })();
 </script>
+<div id="entry-room-overlay" aria-label="construct threshold room">
+  <canvas id="entry-room-canvas"></canvas>
+  <div id="entry-room-shade"></div>
+  <div id="entry-room-status">place the six stones</div>
+</div>
 <div id="stage">
   <canvas id="c"></canvas>
   <div id="wordmark">the six.well construct</div>
@@ -1577,5 +1645,489 @@ requestAnimationFrame(tick);
 
 
 
+<script type="module">
+import * as THREE from './prototypes/entry-threshold-3d/vendor/three.module.js';
+
+(() => {
+  const overlay = document.getElementById('entry-room-overlay');
+  const canvas3d = document.getElementById('entry-room-canvas');
+  const status = document.getElementById('entry-room-status');
+  if (!overlay || !canvas3d) return;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xc38a45);
+  scene.fog = new THREE.Fog(0xc38a45, 5.8, 10.5);
+
+  const camera = new THREE.PerspectiveCamera(39, 1, 0.1, 60);
+  camera.position.set(0.08, 0.08, 5.15);
+  camera.lookAt(0.1, -0.05, -2.35);
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas: canvas3d,
+    antialias: true,
+    alpha: false,
+    powerPreference: 'high-performance'
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+
+  const amber = 0xc38a45;
+  const amberDark = 0x8d5728;
+  const black = 0x050403;
+  const red = 0x6e0404;
+  const room = new THREE.Group();
+  scene.add(room);
+
+  function makePlasterTexture(base = '#b87938', grain = '#d6a35c') {
+    const size = 512;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const g = c.getContext('2d');
+    g.fillStyle = base;
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 5200; i++) {
+      const a = Math.random() * 0.12;
+      g.fillStyle = Math.random() > 0.48
+        ? `rgba(255,220,152,${a})`
+        : `rgba(64,32,12,${a})`;
+      const r = Math.random() * 1.8 + 0.35;
+      g.beginPath();
+      g.arc(Math.random() * size, Math.random() * size, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    const glow = g.createRadialGradient(210, 175, 16, 210, 175, 420);
+    glow.addColorStop(0, 'rgba(255,221,145,0.22)');
+    glow.addColorStop(1, 'rgba(56,27,9,0.13)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(c);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2.6, 2.0);
+    return texture;
+  }
+
+  const plaster = new THREE.MeshStandardMaterial({
+    color: amber,
+    roughness: 0.93,
+    metalness: 0,
+    map: makePlasterTexture()
+  });
+  const darkerPlaster = new THREE.MeshStandardMaterial({
+    color: amberDark,
+    roughness: 0.96,
+    metalness: 0,
+    map: makePlasterTexture('#9a612f', '#cb9651')
+  });
+  const matteBlack = new THREE.MeshStandardMaterial({
+    color: black,
+    roughness: 0.62,
+    metalness: 0.05
+  });
+  const orbMat = new THREE.MeshStandardMaterial({
+    color: black,
+    roughness: 0.36,
+    metalness: 0.2
+  });
+  const redMat = new THREE.MeshStandardMaterial({
+    color: red,
+    emissive: red,
+    emissiveIntensity: 0.12,
+    roughness: 0.48,
+    metalness: 0.08
+  });
+
+  function plane(w, h, material, x, y, z, rx = 0, ry = 0) {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 80, 64), material);
+    mesh.position.set(x, y, z);
+    mesh.rotation.set(rx, ry, 0);
+    mesh.receiveShadow = true;
+    room.add(mesh);
+    return mesh;
+  }
+
+  const backWall = plane(7.2, 4.3, plaster, 0, 0.35, -2.75);
+  const leftWall = plane(4.3, 4.3, darkerPlaster, -3.55, 0.35, -0.62, 0, Math.PI / 2);
+  const floor = plane(7.2, 5.4, plaster, 0, -1.8, -0.35, -Math.PI / 2, 0);
+
+  const cornerLine = new THREE.Mesh(
+    new THREE.BoxGeometry(0.025, 4.2, 0.025),
+    new THREE.MeshBasicMaterial({ color: 0x5f3417, transparent: true, opacity: 0.3 })
+  );
+  cornerLine.position.set(-3.54, 0.34, -2.74);
+  room.add(cornerLine);
+
+  const floorLine = new THREE.Mesh(
+    new THREE.BoxGeometry(7.0, 0.02, 0.025),
+    new THREE.MeshBasicMaterial({ color: 0x593116, transparent: true, opacity: 0.22 })
+  );
+  floorLine.position.set(-0.02, -1.78, -2.73);
+  room.add(floorLine);
+
+  const keyLight = new THREE.PointLight(0xffd08a, 28, 9, 1.4);
+  keyLight.position.set(-1.25, 2.4, 1.15);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(1024, 1024);
+  scene.add(keyLight);
+  scene.add(new THREE.HemisphereLight(0xffd8a4, 0x321a0b, 1.8));
+  const doorLight = new THREE.PointLight(0x180804, 8, 3.5, 1.7);
+  doorLight.position.set(1.88, -0.85, -2.25);
+  scene.add(doorLight);
+
+  function archShape(width, height) {
+    const shape = new THREE.Shape();
+    const r = width / 2;
+    const straightTop = height - r;
+    shape.moveTo(-r, -height / 2);
+    shape.lineTo(r, -height / 2);
+    shape.lineTo(r, straightTop - height / 2);
+    shape.absarc(0, straightTop - height / 2, r, 0, Math.PI, false);
+    shape.lineTo(-r, -height / 2);
+    return shape;
+  }
+
+  const doorX = 1.64;
+  const doorY = -0.83;
+  const doorZ = -2.715;
+  const doorW = 0.92;
+  const doorH = 1.76;
+  const voidDoor = new THREE.Mesh(new THREE.ShapeGeometry(archShape(doorW, doorH), 52), new THREE.MeshBasicMaterial({ color: black }));
+  voidDoor.position.set(doorX, doorY, doorZ + 0.012);
+  room.add(voidDoor);
+
+  const doorLip = new THREE.Mesh(
+    new THREE.TorusGeometry(0.49, 0.035, 12, 64, Math.PI),
+    new THREE.MeshStandardMaterial({ color: 0x5a3318, roughness: 0.86 })
+  );
+  doorLip.position.set(doorX, doorY + 0.42, doorZ + 0.028);
+  doorLip.rotation.z = Math.PI;
+  room.add(doorLip);
+  const leftJamb = new THREE.Mesh(new THREE.BoxGeometry(0.058, 1.2, 0.055), doorLip.material);
+  const rightJamb = leftJamb.clone();
+  leftJamb.position.set(doorX - doorW / 2, doorY - 0.18, doorZ + 0.03);
+  rightJamb.position.set(doorX + doorW / 2, doorY - 0.18, doorZ + 0.03);
+  room.add(leftJamb, rightJamb);
+
+  const sockets = [];
+  const socketGroup = new THREE.Group();
+  room.add(socketGroup);
+  const socketStartX = doorX - 0.28;
+  const socketStartY = doorY + 1.45;
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 2; col++) {
+      const index = row * 2 + col;
+      const x = socketStartX + col * 0.44;
+      const y = socketStartY - row * 0.33;
+      const z = doorZ + 0.045;
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.13, 48), new THREE.MeshBasicMaterial({ color: 0x2d1608, transparent: true, opacity: 0.42 }));
+      shadow.position.z = -0.002;
+      const hollow = new THREE.Mesh(new THREE.CircleGeometry(0.088, 48), new THREE.MeshBasicMaterial({ color: 0x251105 }));
+      hollow.position.z = 0.006;
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.101, 0.02, 12, 48), new THREE.MeshStandardMaterial({ color: 0x9c6331, roughness: 0.82 }));
+      rim.position.z = 0.025;
+      g.add(shadow, hollow, rim);
+      socketGroup.add(g);
+      sockets.push({ index, group: g, position: g.position.clone(), filledBy: null, rim, hollow });
+    }
+  }
+
+  const sealCenter = sockets.reduce((acc, s) => acc.add(s.position), new THREE.Vector3()).multiplyScalar(1 / sockets.length);
+  const seal = new THREE.Group();
+  seal.position.copy(sealCenter);
+  seal.visible = false;
+  room.add(seal);
+  const sealRing = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.026, 12, 96), redMat);
+  sealRing.position.z = 0.13;
+  seal.add(sealRing);
+  const stoneBack = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.16, 80), new THREE.MeshStandardMaterial({ color: 0x3a2117, roughness: 0.82 }));
+  stoneBack.rotation.x = Math.PI / 2;
+  stoneBack.position.z = 0.07;
+  stoneBack.visible = false;
+  seal.add(stoneBack);
+
+  function addSphere(radius, x, y, z, material = orbMat) {
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 40, 28), material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    room.add(mesh);
+    return mesh;
+  }
+
+  const startPositions = [
+    [-2.9, 1.22, -1.05],
+    [-1.25, 1.12, -1.42],
+    [-2.9, -0.22, -1.18],
+    [-1.82, 0.36, -1.18],
+    [-0.55, -0.2, -1.25],
+    [-1.45, -0.88, -0.8]
+  ];
+  const tokens = startPositions.map((p, index) => {
+    const mesh = addSphere(0.12, p[0], p[1], p[2]);
+    mesh.userData.tokenIndex = index;
+    return {
+      index,
+      mesh,
+      base: new THREE.Vector3(...p),
+      velocity: new THREE.Vector3(),
+      socket: null,
+      dragging: false,
+      dragOffset: new THREE.Vector3()
+    };
+  });
+  const bigOrb = addSphere(0.34, 2.9, -1.45, -0.85);
+  bigOrb.scale.set(1.04, 1.04, 1.04);
+
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x1a0d06, transparent: true, opacity: 0.22, depthWrite: false });
+  const shadows = tokens.concat([{ mesh: bigOrb }]).map((item) => {
+    const s = new THREE.Mesh(new THREE.CircleGeometry(item.mesh.geometry.parameters.radius * 1.85, 36), shadowMat.clone());
+    s.rotation.x = -Math.PI / 2;
+    s.position.set(item.mesh.position.x + 0.08, -1.775, item.mesh.position.z + 0.2);
+    room.add(s);
+    return { source: item.mesh, mesh: s };
+  });
+
+  const spillCount = 360;
+  const spillPositions = new Float32Array(spillCount * 3);
+  const spillVelocities = [];
+  for (let i = 0; i < spillCount; i++) {
+    const spread = Math.random();
+    spillPositions[i * 3] = doorX + (Math.random() - 0.5) * 0.34 + spread * (Math.random() - 0.2) * 0.9;
+    spillPositions[i * 3 + 1] = -1.55 + Math.random() * 0.82 * (1 - spread * 0.45);
+    spillPositions[i * 3 + 2] = doorZ + 0.15 + Math.random() * 0.75;
+    spillVelocities.push(new THREE.Vector3((Math.random() - 0.48) * 0.04, Math.random() * 0.035, Math.random() * 0.035));
+  }
+  const spillGeometry = new THREE.BufferGeometry();
+  spillGeometry.setAttribute('position', new THREE.BufferAttribute(spillPositions, 3));
+  const spill = new THREE.Points(spillGeometry, new THREE.PointsMaterial({
+    color: black,
+    size: 0.026,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.92
+  }));
+  room.add(spill);
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 1.36);
+  const hit = new THREE.Vector3();
+  let activeToken = null;
+  let started = false;
+  let completed = false;
+  let pushing = false;
+  let pushStart = 0;
+  const clock = new THREE.Clock();
+
+  function resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.fov = w < 720 ? 46 : 39;
+    camera.position.x = w < 720 ? 0.22 : 0.08;
+    camera.position.z = w < 720 ? 5.85 : 5.15;
+    camera.updateProjectionMatrix();
+  }
+
+  function setPointer(event) {
+    const r = canvas3d.getBoundingClientRect();
+    pointer.x = ((event.clientX - r.left) / r.width) * 2 - 1;
+    pointer.y = -((event.clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+  }
+
+  function unlockAudio() {
+    if (started) return;
+    started = true;
+    overlay.classList.add('is-started');
+    if (typeof window.playStartupOnce === 'function') window.playStartupOnce();
+  }
+
+  function updateStatus() {
+    if (!status) return;
+    const filled = sockets.filter((s) => s.filledBy !== null).length;
+    status.textContent = completed ? 'press the seal' : `place the six stones ${filled}/6`;
+  }
+
+  function completeSeal() {
+    if (completed) return;
+    completed = true;
+    overlay.classList.add('is-pressable');
+    seal.visible = true;
+    stoneBack.visible = true;
+    tokens.forEach((token) => {
+      token.mesh.material = redMat;
+      token.mesh.position.z = token.socket.position.z + 0.17;
+    });
+    sockets.forEach((socket) => {
+      socket.rim.material = redMat;
+      socket.hollow.material = new THREE.MeshBasicMaterial({ color: 0x1d0303 });
+    });
+    updateStatus();
+  }
+
+  function pointerDown(event) {
+    unlockAudio();
+    setPointer(event);
+    if (completed) {
+      const sealHits = raycaster.intersectObjects([sealRing, stoneBack, ...tokens.map((t) => t.mesh)], false);
+      if (sealHits.length) {
+        pushing = true;
+        pushStart = performance.now();
+        overlay.classList.remove('is-pressable');
+      }
+      return;
+    }
+    const draggable = tokens.filter((token) => !token.socket).map((token) => token.mesh);
+    const hits = raycaster.intersectObjects(draggable, false);
+    if (!hits.length) return;
+    const token = tokens[hits[0].object.userData.tokenIndex];
+    activeToken = token;
+    token.dragging = true;
+    overlay.classList.add('is-dragging');
+    setPointer(event);
+    raycaster.ray.intersectPlane(dragPlane, hit);
+    token.dragOffset.copy(token.mesh.position).sub(hit);
+    try { canvas3d.setPointerCapture(event.pointerId); } catch {}
+  }
+
+  function pointerMove(event) {
+    if (!activeToken) return;
+    setPointer(event);
+    if (raycaster.ray.intersectPlane(dragPlane, hit)) {
+      activeToken.mesh.position.copy(hit).add(activeToken.dragOffset);
+      activeToken.mesh.position.x = THREE.MathUtils.clamp(activeToken.mesh.position.x, -3.12, 2.55);
+      activeToken.mesh.position.y = THREE.MathUtils.clamp(activeToken.mesh.position.y, -1.18, 1.55);
+      activeToken.mesh.position.z = THREE.MathUtils.clamp(activeToken.mesh.position.z, -1.95, -1.12);
+    }
+  }
+
+  function nearestSocket(token) {
+    let best = null;
+    sockets.forEach((socket) => {
+      if (socket.filledBy !== null) return;
+      const target = socket.position.clone();
+      target.z = token.mesh.position.z;
+      const d = token.mesh.position.distanceTo(target);
+      if (!best || d < best.d) best = { socket, d };
+    });
+    return best && best.d < 0.72 ? best.socket : null;
+  }
+
+  function pointerUp(event) {
+    if (!activeToken) return;
+    const token = activeToken;
+    const socket = nearestSocket(token);
+    if (socket) {
+      socket.filledBy = token.index;
+      token.socket = socket;
+      token.dragging = false;
+      token.mesh.position.copy(socket.position).add(new THREE.Vector3(0, 0, 0.16));
+      if (sockets.every((s) => s.filledBy !== null)) completeSeal();
+    } else {
+      token.dragging = false;
+    }
+    activeToken = null;
+    overlay.classList.remove('is-dragging');
+    updateStatus();
+    try { canvas3d.releasePointerCapture(event.pointerId); } catch {}
+  }
+
+  function revealHome() {
+    document.body.classList.remove('entry-room-active');
+    document.body.classList.add('entry-room-complete');
+    overlay.classList.add('is-finished');
+    setTimeout(() => {
+      overlay.remove();
+    }, 1000);
+  }
+
+  function animate() {
+    const now = performance.now();
+    const elapsed = clock.getElapsedTime();
+    const delta = Math.min(clock.getDelta(), 0.033);
+
+    tokens.forEach((token, index) => {
+      if (!token.dragging && !token.socket && !pushing) {
+        token.mesh.position.x = token.base.x + Math.sin(elapsed * 0.42 + index * 1.8) * 0.045;
+        token.mesh.position.y = token.base.y + Math.cos(elapsed * 0.56 + index * 1.3) * 0.055;
+        token.mesh.position.z = token.base.z + Math.sin(elapsed * 0.38 + index) * 0.035;
+      }
+      token.mesh.rotation.y += delta * 0.7;
+    });
+    bigOrb.rotation.y += delta * 0.25;
+    bigOrb.position.y = -1.45 + Math.sin(elapsed * 0.34) * 0.012;
+
+    shadows.forEach(({ source, mesh }) => {
+      const height = THREE.MathUtils.clamp(source.position.y + 1.78, 0.12, 3.2);
+      const radius = source.geometry.parameters.radius || 0.12;
+      mesh.position.x = source.position.x + height * 0.08;
+      mesh.position.z = source.position.z + height * 0.05;
+      mesh.scale.setScalar(1 + height * 0.62);
+      mesh.material.opacity = THREE.MathUtils.clamp(0.28 / height * radius * 7.5, 0.05, 0.28);
+    });
+
+    const pos = spillGeometry.attributes.position.array;
+    for (let i = 0; i < spillCount; i++) {
+      const k = i * 3;
+      pos[k] += spillVelocities[i].x * delta;
+      pos[k + 1] += Math.sin(elapsed * 1.2 + i) * 0.00045 + spillVelocities[i].y * delta;
+      pos[k + 2] += spillVelocities[i].z * delta;
+      if (pos[k + 1] > -0.55 || pos[k + 2] > -1.58 || Math.random() < 0.001) {
+        pos[k] = doorX + (Math.random() - 0.5) * 0.26;
+        pos[k + 1] = -1.48 + Math.random() * 0.45;
+        pos[k + 2] = doorZ + 0.12 + Math.random() * 0.2;
+      }
+    }
+    spillGeometry.attributes.position.needsUpdate = true;
+
+    if (completed && !pushing) {
+      sealRing.scale.setScalar(1 + Math.sin(elapsed * 2.4) * 0.018);
+      stoneBack.position.z = 0.052 + Math.sin(elapsed * 1.5) * 0.006;
+    }
+
+    if (pushing) {
+      const t = THREE.MathUtils.clamp((now - pushStart) / 1800, 0, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      camera.position.lerpVectors(new THREE.Vector3(0.08, 0.08, 5.15), new THREE.Vector3(doorX, -0.6, -2.15), ease);
+      camera.lookAt(doorX, -0.62, -2.95);
+      seal.scale.setScalar(1 - ease * 0.74);
+      seal.position.z = sealCenter.z - ease * 0.34;
+      seal.children.forEach((child) => {
+        if (child.material) {
+          child.material.transparent = true;
+          child.material.opacity = Math.max(0, 1 - ease * 1.35);
+        }
+      });
+      tokens.forEach((token) => {
+        token.mesh.material.transparent = true;
+        token.mesh.material.opacity = Math.max(0, 1 - ease * 1.25);
+      });
+      spill.material.opacity = 0.92 + ease * 0.08;
+      if (t >= 1) revealHome();
+    }
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+
+  canvas3d.addEventListener('pointerdown', pointerDown);
+  canvas3d.addEventListener('pointermove', pointerMove);
+  canvas3d.addEventListener('pointerup', pointerUp);
+  canvas3d.addEventListener('pointercancel', pointerUp);
+  window.addEventListener('resize', resize);
+  updateStatus();
+  resize();
+  animate();
+})();
+</script>
 </body>
 </html>

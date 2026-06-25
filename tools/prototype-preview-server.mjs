@@ -18,6 +18,7 @@ const types = new Map([
   [".jpg", "image/jpeg"],
   [".jpeg", "image/jpeg"],
   [".webp", "image/webp"],
+  [".wav", "audio/wav"],
 ]);
 
 function resolveRequest(url) {

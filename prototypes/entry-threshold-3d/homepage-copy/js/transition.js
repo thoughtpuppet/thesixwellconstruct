@@ -1,0 +1,254 @@
+/* ============================================================
+   transition.js — the six.well construct
+   ============================================================
+   Handles fade-to-black page transitions across all mediums.
+
+   HOW TO USE:
+   Add this script to the bottom of every medium page's
+   <body>, after transitions.css is loaded:
+     <script src="/js/transition.js"></script>
+
+   That's it. It handles everything automatically:
+   - Injects the fade overlay div
+   - Fades in on page load (revealing the page)
+   - Intercepts all internal links
+   - Fades out before navigating away
+
+   WHAT COUNTS AS AN "INTERNAL" LINK:
+   Any <a href> that points to the same domain
+   (thesixwellconstruct.com or localhost for dev).
+   External links (Shopify checkout, Substack, etc.)
+   navigate normally without the fade.
+   ============================================================ */
+
+(function() {
+
+  /* ── TIMING ───────────────────────────────────────────────
+     Must match the transition duration in transitions.css.
+     If you change one, change both.
+  ────────────────────────────────────────────────────────── */
+  const FADE_DURATION_MS = 500;
+
+
+  /* ── OVERLAY SETUP ────────────────────────────────────────
+     The overlay may already exist — medium pages include a
+     tiny inline script right after <body> opens that creates
+     it immediately (before any content renders) to prevent
+     the blink on page entry.
+
+     If it exists: grab it and ensure it's visible.
+     If not: create it now (fallback — shouldn't happen in
+     production but safe to handle).
+  ────────────────────────────────────────────────────────── */
+
+  var overlay = document.getElementById('construct-fade');
+
+  if (!overlay) {
+    /* Fallback: create if the inline script didn't run */
+    overlay = document.createElement('div');
+    overlay.id = 'construct-fade';
+    document.body.appendChild(overlay);
+  }
+
+  /* Ensure the overlay is fully covering while page loads.
+     Also clear any inline pointer-events set by the early
+     script so CSS classes can control it without being
+     overridden by inline style specificity. */
+  overlay.style.pointerEvents = '';
+  overlay.classList.remove('is-hidden');
+  overlay.classList.add('is-visible');
+
+
+  /* ── PAGE ENTRANCE ────────────────────────────────────────
+     transition.js loads at the bottom of <body>, which means
+     DOMContentLoaded has almost certainly already fired by the
+     time this code runs. Listening for it would register an
+     event that never fires — keeping the overlay opaque forever.
+
+     Fix: check readyState first. If the document is already
+     parsed ('interactive') or fully loaded ('complete'), run
+     the fade immediately. Only fall back to the event listener
+     if somehow the script runs very early ('loading').
+  ────────────────────────────────────────────────────────── */
+
+  function runEntrance() {
+    /* Two rAF frames ensures the browser has committed a
+       paint with the overlay visible before we start fading */
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+
+        overlay.classList.remove('is-visible');
+        overlay.classList.add('is-hidden');
+
+        /* After fade completes, trigger entrance animations */
+        setTimeout(function() {
+          document.body.classList.add('entrance-active');
+        }, FADE_DURATION_MS);
+
+      });
+    });
+  }
+
+  function fitHeroTitles() {
+    if (!document.body.matches('[data-venture="tattooing"]')) return;
+
+    var titles = document.querySelectorAll(
+      '.intro h1, .hero-title, .page-title, .gate-title, .series-title, .tattoos-page .hero-copy h1'
+    );
+
+    titles.forEach(function(title) {
+      if (!title || !title.parentElement) return;
+      title.style.transform = '';
+      title.style.transformOrigin = '';
+      title.style.width = '';
+      title.style.removeProperty('font-size');
+      title.style.display = title.style.display || 'inline-block';
+
+      var parentRect = title.parentElement.getBoundingClientRect();
+      var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      var availableWidth = title.parentElement.clientWidth || viewportWidth;
+      availableWidth = Math.min(availableWidth, viewportWidth - parentRect.left - 8);
+      var titleWidth = title.scrollWidth;
+      if (!availableWidth || !titleWidth || titleWidth <= availableWidth) return;
+
+      var computedSize = parseFloat(window.getComputedStyle(title).fontSize);
+      if (!computedSize) return;
+
+      var scale = Math.max(0.58, Math.min(1, availableWidth / titleWidth));
+      title.style.setProperty('font-size', Math.floor(computedSize * scale) + 'px', 'important');
+    });
+  }
+
+  fitHeroTitles();
+  window.addEventListener('resize', fitHeroTitles, { passive: true });
+  window.addEventListener('load', fitHeroTitles);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(fitHeroTitles).catch(function() {});
+  }
+  setTimeout(fitHeroTitles, 250);
+
+  if (document.readyState === 'loading') {
+    /* Script ran early — wait for DOM to be ready */
+    document.addEventListener('DOMContentLoaded', runEntrance);
+  } else {
+    /* DOM already parsed — run immediately */
+    runEntrance();
+  }
+
+
+  /* ── LINK INTERCEPTION ────────────────────────────────────
+     Listen for all clicks on the document.
+     If the clicked element (or its parent) is an internal
+     link, intercept it: fade to black first, then navigate.
+  ────────────────────────────────────────────────────────── */
+
+  document.addEventListener('click', function(e) {
+
+    // Walk up the DOM from the clicked element to find
+    // an <a> tag — handles clicks on children of links
+    // (e.g. clicking an <img> inside an <a>)
+    let target = e.target;
+    while (target && target.tagName !== 'A') {
+      target = target.parentElement;
+    }
+
+    // No <a> found in the chain — ignore
+    if (!target) return;
+
+    const href = target.getAttribute('href');
+
+    // Ignore links with no href, hash-only links (#section),
+    // and links with special modifiers (new tab, ctrl+click)
+    if (!href) return;
+    if (href.startsWith('#')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (target.target === '_blank') return;
+
+    // Check if this is an internal link
+    if (isInternalLink(href)) {
+
+      // Prevent the default immediate navigation
+      e.preventDefault();
+
+      // Fade to black, then navigate after fade completes
+      fadeOutThenNavigate(href);
+
+    }
+    // External links fall through to normal browser behavior
+
+  });
+
+
+  /* ── HELPERS ──────────────────────────────────────────────*/
+
+  /*
+   * isInternalLink(href)
+   * Returns true if the href points to the same site.
+   * Handles relative paths (/tattooing), absolute paths
+   * with the site domain, and localhost for dev.
+   */
+  function isInternalLink(href) {
+
+    // Relative paths are always internal
+    if (href.startsWith('/')) return true;
+
+    // Absolute URL — check if hostname matches
+    try {
+      const url = new URL(href);
+      const currentHost = window.location.hostname;
+      return (
+        url.hostname === currentHost ||
+        url.hostname === 'thesixwellconstruct.com' ||
+        url.hostname === 'www.thesixwellconstruct.com'
+      );
+    } catch (e) {
+      // URL parsing failed — treat as external to be safe
+      return false;
+    }
+
+  }
+
+  /*
+   * fadeOutThenNavigate(href)
+   * Fades the overlay back to opaque, then navigates.
+   */
+  function fadeOutThenNavigate(href) {
+
+    // Block further clicks during transition
+    overlay.classList.remove('is-hidden');
+    overlay.classList.add('is-visible');
+
+    // Navigate after the fade completes
+    setTimeout(function() {
+      window.location.href = href;
+    }, FADE_DURATION_MS);
+
+  }
+
+  /* ── EXPOSE NAVIGATION FOR EXTERNAL USE ──────────────────
+     construct-corner.js calls window._constructFade('/')
+     to trigger the shared fade before navigating home.
+     Exposed here so both scripts share one fade system.
+  ────────────────────────────────────────────────────────── */
+  window._constructFade = fadeOutThenNavigate;
+
+  /* ── LOCAL PROTOTYPE TEXT EDITOR ─────────────────────────
+     Loads the optional canvas-like copy editor once per page.
+     It stays inert until ?edit=1 is present or Cmd/Ctrl+Shift+E
+     is pressed, so production visitors get the normal site.
+  ────────────────────────────────────────────────────────── */
+  var isLocalHost = (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '::1'
+  );
+
+  if (isLocalHost && !document.querySelector('script[data-live-text-editor]')) {
+    var liveTextEditor = document.createElement('script');
+    liveTextEditor.src = '/js/live-text-editor.js?v=' + Date.now();
+    liveTextEditor.defer = true;
+    liveTextEditor.setAttribute('data-live-text-editor', 'true');
+    document.body.appendChild(liveTextEditor);
+  }
+
+})(); // end IIFE — keeps all variables out of global scope

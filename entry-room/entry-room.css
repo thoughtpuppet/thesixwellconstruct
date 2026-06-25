@@ -19,8 +19,8 @@ body.entry-room-page {
 }
 
 .entry-shell {
-  --orb-size: 42px;
-  --socket-size: 42px;
+  --room-warmth: rgba(176, 96, 24, 0.24);
+  --room-shadow: rgba(24, 11, 4, 0.33);
   position: relative;
   width: 100vw;
   height: 100vh;
@@ -29,6 +29,21 @@ body.entry-room-page {
   isolation: isolate;
   touch-action: none;
   user-select: none;
+}
+
+.entry-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 56% 30%, rgba(255, 182, 80, 0.18), transparent 34%),
+    radial-gradient(circle at 31% 43%, rgba(201, 113, 29, 0.14), transparent 42%),
+    radial-gradient(circle at 48% 55%, transparent 0 36%, var(--room-shadow) 84%),
+    linear-gradient(180deg, rgba(94, 43, 8, 0.2), rgba(38, 17, 5, 0.28)),
+    var(--room-warmth);
+  mix-blend-mode: soft-light;
 }
 
 .room-background {
@@ -41,98 +56,308 @@ body.entry-room-page {
   object-fit: cover;
   object-position: center center;
   pointer-events: none;
+  filter: brightness(0.76) sepia(0.44) saturate(1.52) contrast(1.09) hue-rotate(-9deg);
 }
 
-.interaction-layer {
-  position: absolute;
+.orb-field {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.socket-field {
+  position: fixed;
   inset: 0;
   z-index: 1;
-  overflow: hidden;
-  touch-action: none;
+  pointer-events: none;
 }
 
-.socket {
+.entry-socket {
+  --socket-x: 50%;
+  --socket-y: 50%;
+  --socket-size: clamp(24px, 3.1vw, 42px);
   position: absolute;
-  left: var(--x);
-  top: var(--y);
+  left: var(--socket-x);
+  top: var(--socket-y);
   width: var(--socket-size);
   height: var(--socket-size);
   border-radius: 50%;
   transform: translate(-50%, -50%);
+  border: 2px solid transparent;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.entry-socket.is-target {
+  border-color: rgba(255, 182, 80, 0.8);
+  box-shadow: 0 0 12px rgba(255, 182, 80, 0.5), inset 0 0 8px rgba(255, 182, 80, 0.2);
+}
+
+.entry-socket.is-filled {
+  border-color: rgba(110, 4, 4, 0.6);
+}
+
+.entry-socket::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(110, 4, 4, 0);
+  opacity: 0;
+  transition: all 180ms ease;
+}
+
+.entry-socket.is-target::before {
+  opacity: 1;
+  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.4), 0 0 16px rgba(255, 182, 80, 0.6), inset 0 0 12px rgba(255, 182, 80, 0.3);
+}
+
+.entry-socket.is-filled::before {
+  opacity: 1;
+  box-shadow: inset 0 6px 12px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 0, 0, 0.3), inset 0 0 8px rgba(0, 0, 0, 0.2);
+}
+
+.entry-socket[data-socket="1"] {
+  --socket-x: 74.6%;
+  --socket-y: 6.6%;
+}
+
+.entry-socket[data-socket="2"] {
+  --socket-x: 80.8%;
+  --socket-y: 6.6%;
+}
+
+.entry-socket[data-socket="3"] {
+  --socket-x: 74.6%;
+  --socket-y: 19.2%;
+}
+
+.entry-socket[data-socket="4"] {
+  --socket-x: 80.8%;
+  --socket-y: 19.2%;
+}
+
+.entry-socket[data-socket="5"] {
+  --socket-x: 74.6%;
+  --socket-y: 31.4%;
+}
+
+.entry-socket[data-socket="6"] {
+  --socket-x: 80.8%;
+  --socket-y: 31.4%;
+}
+
+.entry-orb {
+  --orb-x: 50%;
+  --orb-y: 50%;
+  --orb-size: clamp(30px, 3.7vw, 54px);
+  --orb-scale: 1;
+  --drift-x: 7px;
+  --drift-y: -9px;
+  --drift-rotate: 1.5deg;
+  --drift-duration: 9s;
+  --drift-delay: 0s;
+  --shadow-x: 11px;
+  --shadow-y: 30px;
+  --shadow-scale-x: 2.12;
+  --shadow-scale-y: 0.5;
+  --shadow-opacity: 0.46;
+  position: absolute;
+  left: var(--orb-x);
+  top: var(--orb-y);
+  width: var(--orb-size);
+  height: var(--orb-size);
+  transform: translate(-50%, -50%) scale(var(--orb-scale));
+  transform-origin: center;
+  animation: orb-drift var(--drift-duration) ease-in-out var(--drift-delay) infinite alternate;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  will-change: transform;
+}
+
+.entry-orb::before,
+.entry-orb::after {
+  content: "";
+  position: absolute;
   pointer-events: none;
+}
+
+.entry-orb::before {
+  inset: 0;
+  z-index: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 22%, rgba(38, 38, 34, 0.62), rgba(5, 5, 5, 0.96) 23%, #000 70%),
+    radial-gradient(circle at 74% 78%, #000, transparent 54%),
+    #000;
+  box-shadow:
+    inset -8px -12px 18px rgba(0, 0, 0, 0.94),
+    inset 3px 3px 6px rgba(102, 86, 58, 0.055),
+    0 8px 22px rgba(0, 0, 0, 0.48);
+}
+
+.entry-orb::after {
+  z-index: 0;
+  left: 50%;
+  top: 50%;
+  width: 90%;
+  height: 58%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, var(--shadow-opacity)), rgba(0, 0, 0, 0) 68%);
+  filter: blur(6px);
+  transform: translate(calc(-50% + var(--shadow-x)), calc(-50% + var(--shadow-y))) scale(var(--shadow-scale-x), var(--shadow-scale-y));
+}
+
+.entry-orb[data-orb="1"] {
+  --orb-x: 7.07%;
+  --orb-y: 21.32%;
+  --orb-size: clamp(30px, 3.35vw, 48px);
+  --drift-x: 6px;
+  --drift-y: -8px;
+  --drift-duration: 9.8s;
+  --drift-delay: -1.6s;
+  --shadow-x: 13px;
+  --shadow-y: 31px;
+  --shadow-scale-x: 2.04;
+}
+
+.entry-orb[data-orb="2"] {
+  --orb-x: 41.65%;
+  --orb-y: 10.44%;
+  --orb-size: clamp(28px, 3.1vw, 45px);
+  --drift-x: -5px;
+  --drift-y: 8px;
+  --drift-duration: 10.7s;
+  --drift-delay: -3.3s;
+  --shadow-x: 9px;
+  --shadow-y: 29px;
+  --shadow-opacity: 0.43;
+}
+
+.entry-orb[data-orb="3"] {
+  --orb-x: 27.58%;
+  --orb-y: 37.14%;
+  --orb-size: clamp(30px, 3.45vw, 50px);
+  --drift-x: 7px;
+  --drift-y: 6px;
+  --drift-duration: 11.4s;
+  --drift-delay: -5.2s;
+  --shadow-x: 10px;
+  --shadow-y: 31px;
+  --shadow-opacity: 0.45;
+}
+
+.entry-orb[data-orb="4"] {
+  --orb-x: 13.75%;
+  --orb-y: 69.45%;
+  --orb-size: clamp(38px, 4.55vw, 66px);
+  --orb-scale: 1.07;
+  --drift-x: -7px;
+  --drift-y: -7px;
+  --drift-duration: 9.3s;
+  --drift-delay: -2.4s;
+  --shadow-x: 12px;
+  --shadow-y: 42px;
+  --shadow-scale-x: 2.26;
+  --shadow-opacity: 0.52;
+}
+
+.entry-orb[data-orb="5"] {
+  --orb-x: 43.40%;
+  --orb-y: 90.77%;
+  --orb-size: clamp(44px, 5.25vw, 76px);
+  --orb-scale: 1.1;
+  --drift-x: 5px;
+  --drift-y: -11px;
+  --drift-duration: 8.8s;
+  --drift-delay: -4s;
+  --shadow-x: 0px;
+  --shadow-y: 58px;
+  --shadow-scale-x: 2.45;
+  --shadow-scale-y: 0.42;
+  --shadow-opacity: 0.58;
+}
+
+.entry-orb[data-orb="6"] {
+  --orb-x: 55.96%;
+  --orb-y: 56.15%;
+  --orb-size: clamp(40px, 4.75vw, 69px);
+  --orb-scale: 1.08;
+  --drift-x: -6px;
+  --drift-y: 9px;
+  --drift-duration: 10.1s;
+  --drift-delay: -6.1s;
+  --shadow-x: 11px;
+  --shadow-y: 45px;
+  --shadow-scale-x: 2.3;
+}
+
+@keyframes orb-drift {
+  0% {
+    transform: translate(-50%, -50%) translate3d(calc(var(--drift-x) * -0.45), calc(var(--drift-y) * -0.55), 0) rotate(calc(var(--drift-rotate) * -1)) scale(var(--orb-scale));
+  }
+
+  55% {
+    transform: translate(-50%, -50%) translate3d(calc(var(--drift-x) * 0.32), calc(var(--drift-y) * 0.5), 0) rotate(0deg) scale(var(--orb-scale));
+  }
+
+  100% {
+    transform: translate(-50%, -50%) translate3d(var(--drift-x), var(--drift-y), 0) rotate(var(--drift-rotate)) scale(var(--orb-scale));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry-orb {
+    animation: none;
+  }
+}
+
+body.orb-ambient-active .entry-orb {
+  animation: none;
+}
+
+.entry-orb.is-dragging {
+  z-index: 5;
+  cursor: grabbing;
+  animation: none;
+  filter: brightness(1.05);
+}
+
+.entry-orb.is-locked {
+  --orb-size: clamp(22px, 2.8vw, 38px);
+  --shadow-opacity: 0;
+  z-index: 3;
+  cursor: default;
+  animation: none;
+  filter: brightness(0.82) contrast(1.15);
+  transition:
+    left 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    top 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 360ms ease;
+}
+
+.entry-orb.is-locked::before {
+  background:
+    radial-gradient(circle at 35% 25%, rgba(24, 24, 22, 0.52), rgba(3, 3, 3, 0.98) 30%, #000 72%),
+    #000;
+  box-shadow:
+    inset 4px 5px 8px rgba(0, 0, 0, 0.84),
+    inset -2px -3px 4px rgba(42, 34, 22, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.42);
+}
+
+.entry-orb.is-locked::after {
   opacity: 0;
 }
 
-.orb {
-  position: absolute;
-  left: var(--x);
-  top: var(--y);
-  width: var(--orb-size);
-  height: var(--orb-size);
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  appearance: none;
-  background:
-    radial-gradient(circle at 34% 28%, rgba(52, 49, 43, 0.74), rgba(11, 10, 9, 0.86) 37%, #020202 72%),
-    #030303;
+body.entry-room-complete .entry-orb.is-locked::before {
   box-shadow:
-    inset 5px 7px 9px rgba(255, 255, 255, 0.035),
-    inset -9px -12px 18px rgba(0, 0, 0, 0.72),
-    0 12px 18px rgba(0, 0, 0, 0.31),
-    0 3px 5px rgba(0, 0, 0, 0.38);
-  cursor: grab;
-  transform: translate(-50%, -50%) scale(1);
-  transition:
-    left 260ms cubic-bezier(0.2, 0.78, 0.2, 1),
-    top 260ms cubic-bezier(0.2, 0.78, 0.2, 1),
-    transform 220ms ease,
-    filter 220ms ease,
-    box-shadow 220ms ease;
-  will-change: left, top, transform;
-}
-
-.orb::after {
-  content: "";
-  position: absolute;
-  inset: 19%;
-  border-radius: inherit;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.06), transparent 62%);
-  opacity: 0.36;
-  pointer-events: none;
-}
-
-.orb:focus-visible {
-  outline: 2px solid rgba(255, 230, 195, 0.72);
-  outline-offset: 5px;
-}
-
-.orb.is-dragging {
-  z-index: 3;
-  cursor: grabbing;
-  transform: translate(-50%, -50%) scale(1.08);
-  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
-  filter: brightness(1.08);
-  box-shadow:
-    inset 5px 7px 9px rgba(255, 255, 255, 0.04),
-    inset -9px -12px 18px rgba(0, 0, 0, 0.72),
-    0 18px 24px rgba(0, 0, 0, 0.36),
-    0 5px 9px rgba(0, 0, 0, 0.46);
-}
-
-.orb.is-locked {
-  cursor: default;
-  filter: brightness(0.66) saturate(0.86);
-  transform: translate(-50%, -50%) scale(0.72);
-  box-shadow:
-    inset 7px 9px 13px rgba(0, 0, 0, 0.92),
-    inset -3px -4px 7px rgba(255, 226, 174, 0.055),
-    0 0 0 3px rgba(0, 0, 0, 0.16),
-    0 1px 4px rgba(0, 0, 0, 0.42);
-}
-
-.orb.is-locked::after {
-  opacity: 0.08;
+    inset 4px 5px 8px rgba(0, 0, 0, 0.9),
+    inset -2px -3px 4px rgba(42, 34, 22, 0.12),
+    0 0 10px rgba(0, 0, 0, 0.2);
 }
 
 body.entry-room-page #live-text-editor,

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orb Socket Interactive</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .background-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .background-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center center;
+            display: block;
+        }
+
+        .interaction-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+
+        .interaction-layer.dragging {
+            cursor: grabbing;
+        }
+
+        /* Draggable orbs */
+        .orb {
+            position: absolute;
+            width: 5%;
+            aspect-ratio: 1;
+            min-width: 60px;
+            max-width: 80px;
+            background: radial-gradient(circle at 30% 30%, #333, #0a0a0a);
+            border-radius: 50%;
+            cursor: grab;
+            touch-action: none;
+            box-shadow:
+                0 8px 16px rgba(0, 0, 0, 0.6),
+                inset -2px -2px 4px rgba(0, 0, 0, 0.8),
+                inset 2px 2px 4px rgba(255, 255, 255, 0.1);
+            transition: all 0.1s ease-out;
+            will-change: transform;
+            z-index: 10;
+        }
+
+        .orb:hover:not(.locked) {
+            box-shadow:
+                0 12px 24px rgba(0, 0, 0, 0.7),
+                inset -2px -2px 4px rgba(0, 0, 0, 0.9),
+                inset 2px 2px 6px rgba(255, 255, 255, 0.15);
+            transform: scale(1.08);
+        }
+
+        .orb.locked {
+            cursor: not-allowed;
+            box-shadow:
+                inset 0 4px 8px rgba(0, 0, 0, 0.95),
+                inset 0 -2px 4px rgba(255, 255, 255, 0.05);
+            transform: scale(0.92);
+            background: radial-gradient(circle at 30% 30%, #1a1a1a, #050505);
+        }
+
+        .orb.locked::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 35% 35%, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.4));
+            border-radius: 50%;
+        }
+
+        /* Invisible socket zones */
+        .socket {
+            position: absolute;
+            width: 5%;
+            aspect-ratio: 1;
+            min-width: 60px;
+            max-width: 80px;
+            border-radius: 50%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .socket.occupied::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: rgba(110, 4, 4, 0.2);
+            pointer-events: none;
+        }
+
+        /* Drag preview indicator */
+        .drag-preview {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 5;
+        }
+
+        .orb.dragging + .drag-preview {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .orb {
+                min-width: 50px;
+                max-width: 70px;
+            }
+
+            .socket {
+                min-width: 50px;
+                max-width: 70px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .orb {
+                min-width: 40px;
+                max-width: 60px;
+            }
+
+            .socket {
+                min-width: 40px;
+                max-width: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-container">
+        <img class="background-image" id="bg-image" src="../assets/images/room-background.jpg" alt="Room with sockets" onerror="this.style.display='none'">
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #8B6F47 0%, #6B5338 100%); display: none;" id="placeholder-bg"></div>
+        <div class="interaction-layer">
+            <!-- Sockets (invisible drop zones) positioned above doorway -->
+            <div class="socket" id="socket-0" style="left: 56%; top: 20%; transform: translate(-50%, -50%);"></div>
+            <div class="socket" id="socket-1" style="left: 64%; top: 20%; transform: translate(-50%, -50%);"></div>
+            <div class="socket" id="socket-2" style="left: 72%; top: 20%; transform: translate(-50%, -50%);"></div>
+            <div class="socket" id="socket-3" style="left: 56%; top: 28%; transform: translate(-50%, -50%);"></div>
+            <div class="socket" id="socket-4" style="left: 64%; top: 28%; transform: translate(-50%, -50%);"></div>
+            <div class="socket" id="socket-5" style="left: 72%; top: 28%; transform: translate(-50%, -50%);"></div>
+
+            <!-- Draggable orbs (start positions) -->
+            <div class="orb" id="orb-0" style="left: 20%; top: 50%; transform: translate(-50%, -50%); z-index: 20;"></div>
+            <div class="orb" id="orb-1" style="left: 30%; top: 60%; transform: translate(-50%, -50%); z-index: 20;"></div>
+            <div class="orb" id="orb-2" style="left: 40%; top: 45%; transform: translate(-50%, -50%); z-index: 20;"></div>
+            <div class="orb" id="orb-3" style="left: 80%; top: 65%; transform: translate(-50%, -50%); z-index: 20;"></div>
+            <div class="orb" id="orb-4" style="left: 85%; top: 40%; transform: translate(-50%, -50%); z-index: 20;"></div>
+            <div class="orb" id="orb-5" style="left: 75%; top: 50%; transform: translate(-50%, -50%); z-index: 20;"></div>
+        </div>
+    </div>
+
+    <script>
+        class OrbSocket {
+            constructor() {
+                this.orbs = new Map();
+                this.sockets = new Map();
+                this.snapDistance = 80; // pixels
+                this.dragging = null;
+                this.dragOffset = { x: 0, y: 0 };
+                this.socketStates = new Map();
+
+                this.audioContext = null;
+                this.initAudio();
+                this.initOrbs();
+                this.initSockets();
+                this.bindEvents();
+            }
+
+            initAudio() {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.audioContext = new AudioContext();
+                } catch (e) {
+                    console.log('Web Audio API not supported');
+                }
+            }
+
+            playClickSound() {
+                if (!this.audioContext) return;
+
+                const now = this.audioContext.currentTime;
+                const osc = this.audioContext.createOscillator();
+                const gain = this.audioContext.createGain();
+
+                osc.connect(gain);
+                gain.connect(this.audioContext.destination);
+
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.1);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+
+                osc.start(now);
+                osc.stop(now + 0.1);
+            }
+
+            initOrbs() {
+                document.querySelectorAll('.orb').forEach((element) => {
+                    const id = element.id;
+                    const rect = element.getBoundingClientRect();
+                    const container = element.parentElement.parentElement;
+                    const containerRect = container.getBoundingClientRect();
+
+                    this.orbs.set(id, {
+                        element,
+                        id,
+                        locked: false,
+                        startPos: {
+                            x: (rect.left - containerRect.left) / containerRect.width,
+                            y: (rect.top - containerRect.top) / containerRect.height,
+                        },
+                        currentPos: {
+                            x: (rect.left - containerRect.left) / containerRect.width,
+                            y: (rect.top - containerRect.top) / containerRect.height,
+                        },
+                        assignedSocket: null,
+                    });
+                });
+            }
+
+            initSockets() {
+                document.querySelectorAll('.socket').forEach((element) => {
+                    const id = element.id;
+                    const rect = element.getBoundingClientRect();
+                    const container = element.parentElement.parentElement;
+                    const containerRect = container.getBoundingClientRect();
+
+                    this.sockets.set(id, {
+                        element,
+                        id,
+                        occupied: false,
+                        pos: {
+                            x: (rect.left - containerRect.left) / containerRect.width,
+                            y: (rect.top - containerRect.top) / containerRect.height,
+                        },
+                    });
+                    this.socketStates.set(id, false);
+                });
+            }
+
+            getContainerRect() {
+                return document.querySelector('.background-container').getBoundingClientRect();
+            }
+
+            getOrbScreenPos(orb) {
+                const containerRect = this.getContainerRect();
+                return {
+                    x: orb.currentPos.x * containerRect.width + containerRect.left,
+                    y: orb.currentPos.y * containerRect.height + containerRect.top,
+                };
+            }
+
+            getSocketScreenPos(socket) {
+                const containerRect = this.getContainerRect();
+                return {
+                    x: socket.pos.x * containerRect.width + containerRect.left,
+                    y: socket.pos.y * containerRect.height + containerRect.top,
+                };
+            }
+
+            distance(p1, p2) {
+                const dx = p1.x - p2.x;
+                const dy = p1.y - p2.y;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            findNearestSocket(orbPos) {
+                let nearest = null;
+                let minDist = this.snapDistance;
+
+                this.sockets.forEach((socket) => {
+                    if (socket.occupied) return;
+
+                    const socketScreenPos = this.getSocketScreenPos(socket);
+                    const dist = this.distance(orbPos, socketScreenPos);
+
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearest = socket;
+                    }
+                });
+
+                return nearest;
+            }
+
+            snapOrbToSocket(orb, socket) {
+                const containerRect = this.getContainerRect();
+                const orbWidth = orb.element.getBoundingClientRect().width;
+                const socketSize = socket.element.getBoundingClientRect().width;
+
+                orb.currentPos.x = socket.pos.x;
+                orb.currentPos.y = socket.pos.y;
+                orb.assignedSocket = socket.id;
+                orb.locked = true;
+
+                this.updateOrbPosition(orb);
+                socket.occupied = true;
+                socket.element.classList.add('occupied');
+
+                orb.element.classList.add('locked');
+                this.playClickSound();
+            }
+
+            returnOrbToStart(orb) {
+                orb.currentPos.x = orb.startPos.x;
+                orb.currentPos.y = orb.startPos.y;
+                this.updateOrbPosition(orb);
+            }
+
+            updateOrbPosition(orb) {
+                const xPercent = orb.currentPos.x * 100;
+                const yPercent = orb.currentPos.y * 100;
+                orb.element.style.left = xPercent + '%';
+                orb.element.style.top = yPercent + '%';
+            }
+
+            bindEvents() {
+                document.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+                document.addEventListener('pointermove', (e) => this.onPointerMove(e));
+                document.addEventListener('pointerup', (e) => this.onPointerUp(e));
+                window.addEventListener('resize', () => this.handleResize());
+            }
+
+            onPointerDown(e) {
+                const orb = Array.from(this.orbs.values()).find(
+                    (o) => o.element === e.target || o.element.contains(e.target)
+                );
+
+                if (!orb || orb.locked) return;
+
+                this.dragging = orb;
+                const rect = orb.element.getBoundingClientRect();
+                this.dragOffset = {
+                    x: e.clientX - rect.left - rect.width / 2,
+                    y: e.clientY - rect.top - rect.height / 2,
+                };
+
+                orb.element.classList.add('dragging');
+                document.querySelector('.interaction-layer').classList.add('dragging');
+            }
+
+            onPointerMove(e) {
+                if (!this.dragging) return;
+
+                const containerRect = this.getContainerRect();
+                const x = e.clientX - containerRect.left - this.dragOffset.x;
+                const y = e.clientY - containerRect.top - this.dragOffset.y;
+
+                this.dragging.currentPos.x = Math.max(0, Math.min(1, x / containerRect.width));
+                this.dragging.currentPos.y = Math.max(0, Math.min(1, y / containerRect.height));
+
+                this.updateOrbPosition(this.dragging);
+            }
+
+            onPointerUp(e) {
+                if (!this.dragging) return;
+
+                const orbScreenPos = this.getOrbScreenPos(this.dragging);
+                const nearestSocket = this.findNearestSocket(orbScreenPos);
+
+                if (nearestSocket) {
+                    this.snapOrbToSocket(this.dragging, nearestSocket);
+                } else {
+                    this.returnOrbToStart(this.dragging);
+                }
+
+                this.dragging.element.classList.remove('dragging');
+                document.querySelector('.interaction-layer').classList.remove('dragging');
+                this.dragging = null;
+            }
+
+            handleResize() {
+                this.initOrbs();
+                this.initSockets();
+            }
+        }
+
+        // Handle missing background image
+        document.getElementById('bg-image').addEventListener('error', function() {
+            document.getElementById('placeholder-bg').style.display = 'block';
+            this.style.display = 'none';
+        });
+
+        // Initialize on load
+        window.addEventListener('load', () => {
+            new OrbSocket();
+        });
+
+        // Fallback initialization if load event already fired
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                new OrbSocket();
+            });
+        } else {
+            new OrbSocket();
+        }
+    </script>
+</body>
+</html>
