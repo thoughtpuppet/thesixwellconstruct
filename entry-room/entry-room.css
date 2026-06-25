@@ -1,0 +1,141 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body.entry-room-page {
+  margin: 0;
+  background: #120c07;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+.entry-shell {
+  --orb-size: 42px;
+  --socket-size: 42px;
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+  touch-action: none;
+  user-select: none;
+}
+
+.room-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  pointer-events: none;
+}
+
+.interaction-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.socket {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--socket-size);
+  height: var(--socket-size);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.orb {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--orb-size);
+  height: var(--orb-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(52, 49, 43, 0.74), rgba(11, 10, 9, 0.86) 37%, #020202 72%),
+    #030303;
+  box-shadow:
+    inset 5px 7px 9px rgba(255, 255, 255, 0.035),
+    inset -9px -12px 18px rgba(0, 0, 0, 0.72),
+    0 12px 18px rgba(0, 0, 0, 0.31),
+    0 3px 5px rgba(0, 0, 0, 0.38);
+  cursor: grab;
+  transform: translate(-50%, -50%) scale(1);
+  transition:
+    left 260ms cubic-bezier(0.2, 0.78, 0.2, 1),
+    top 260ms cubic-bezier(0.2, 0.78, 0.2, 1),
+    transform 220ms ease,
+    filter 220ms ease,
+    box-shadow 220ms ease;
+  will-change: left, top, transform;
+}
+
+.orb::after {
+  content: "";
+  position: absolute;
+  inset: 19%;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.06), transparent 62%);
+  opacity: 0.36;
+  pointer-events: none;
+}
+
+.orb:focus-visible {
+  outline: 2px solid rgba(255, 230, 195, 0.72);
+  outline-offset: 5px;
+}
+
+.orb.is-dragging {
+  z-index: 3;
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.08);
+  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+  filter: brightness(1.08);
+  box-shadow:
+    inset 5px 7px 9px rgba(255, 255, 255, 0.04),
+    inset -9px -12px 18px rgba(0, 0, 0, 0.72),
+    0 18px 24px rgba(0, 0, 0, 0.36),
+    0 5px 9px rgba(0, 0, 0, 0.46);
+}
+
+.orb.is-locked {
+  cursor: default;
+  filter: brightness(0.66) saturate(0.86);
+  transform: translate(-50%, -50%) scale(0.72);
+  box-shadow:
+    inset 7px 9px 13px rgba(0, 0, 0, 0.92),
+    inset -3px -4px 7px rgba(255, 226, 174, 0.055),
+    0 0 0 3px rgba(0, 0, 0, 0.16),
+    0 1px 4px rgba(0, 0, 0, 0.42);
+}
+
+.orb.is-locked::after {
+  opacity: 0.08;
+}
+
+body.entry-room-page #live-text-editor,
+body.entry-room-page #live-text-style-panel {
+  display: none !important;
+}

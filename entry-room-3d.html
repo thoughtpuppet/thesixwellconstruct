@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c1007">
+<title>entry room 3D - the six.well construct</title>
+<link rel="stylesheet" href="/css/transitions.css">
+<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js" } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(circle at 48% 55%, rgba(224,170,105,.28), transparent 42%),
+      linear-gradient(135deg, #2c190b 0%, #1c1007 58%, #0d0804 100%);
+    color: #fff1d4;
+    font-family: Inter, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; cursor: crosshair; isolation: isolate; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .vignette {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background:
+      radial-gradient(circle at 46% 56%, transparent 0 50%, rgba(15,9,4,.10) 78%, rgba(5,3,2,.30) 100%),
+      linear-gradient(90deg, rgba(5,3,2,.07), transparent 24% 82%, rgba(5,3,2,.11));
+    mix-blend-mode: multiply;
+  }
+  .frame-index {
+    position: fixed; top: clamp(18px, 4vw, 34px); left: clamp(18px, 4vw, 34px); z-index: 4;
+    color: rgba(255,241,212,.92); font-size: clamp(24px, 4.2vw, 34px); font-weight: 400; line-height: 1;
+    text-shadow: 0 1px 24px rgba(0,0,0,.35);
+  }
+  .return-link {
+    position: fixed; right: clamp(18px, 4vw, 34px); bottom: max(18px, env(safe-area-inset-bottom, 0px)); z-index: 4;
+    color: rgba(255,231,202,.36); font-size: 12px; font-weight: 900; letter-spacing: -.04em; text-decoration: none;
+  }
+  .return-link:hover { color: rgba(252,184,103,.86); }
+  body #live-text-editor, body #live-text-style-panel { display: none !important; }
+  @media (max-width: 700px) { main { cursor: default; } .return-link { font-size: 11px; } }
+</style>
+</head>
+<body>
+<main aria-label="Interactive 3D entry room prototype">
+  <div class="frame-index" aria-hidden="true">1</div>
+  <canvas id="entry-canvas"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+  <a class="return-link" href="/" data-transition>the six.well construct</a>
+</main>
+<script src="/js/transition.js"></script>
+<script type="module">
+import * as THREE from "three";
+
+const canvas = document.querySelector("#entry-canvas");
+const shell = document.querySelector("main");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1c1007);
+scene.fog = new THREE.FogExp2(0x3a210e, 0.096);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.38;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const room = new THREE.Group();
+scene.add(room);
+const pointer = { x: 0, y: 0, targetX: 0, targetY: 0 };
+const roomState = { breath: 0, spill: 0, doorPull: 0 };
+const view = { camX: .08, camY: 1.68, camZ: 6.15, lookX: .18, lookY: 1.48, lookZ: -3.18, parallaxX: .34, parallaxY: .14 };
+
+function makePlasterTexture(size = 512, base = "#c98f51") {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(size * .56, size * .52, size * .06, size * .48, size * .48, size * .82);
+  g.addColorStop(0, "#e4b274"); g.addColorStop(.44, base); g.addColorStop(1, "#a87239");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
+  const image = ctx.getImageData(0, 0, size, size);
+  const data = image.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const grain = (Math.random() - .5) * 34;
+      const wave = Math.sin(x * .021 + y * .013) * 4;
+      data[i] = Math.max(0, Math.min(255, data[i] + grain + wave));
+      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + grain * .72 + wave));
+      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + grain * .38));
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  ctx.globalAlpha = .16;
+  for (let i = 0; i < 1600; i++) {
+    ctx.fillStyle = Math.random() > .45 ? "#f3c680" : "#67401f";
+    ctx.beginPath();
+    ctx.arc(Math.random() * size, Math.random() * size, Math.random() * 1.8 + .25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function archPath(path, x, floorY, w, h) {
+  const r = w / 2, shoulderY = h - r;
+  path.moveTo(x - r, floorY);
+  path.lineTo(x - r, shoulderY);
+  path.bezierCurveTo(x - r, shoulderY + r * .58, x - r * .58, h, x, h);
+  path.bezierCurveTo(x + r * .58, h, x + r, shoulderY + r * .58, x + r, shoulderY);
+  path.lineTo(x + r, floorY);
+  path.lineTo(x - r, floorY);
+}
+
+function doorWallShape() {
+  const shape = new THREE.Shape();
+  shape.moveTo(-5.7, 0); shape.lineTo(5.7, 0); shape.lineTo(5.7, 5.6); shape.lineTo(-5.7, 5.6); shape.lineTo(-5.7, 0);
+  const hole = new THREE.Path();
+  archPath(hole, 2.38, 0, 1.05, 1.98);
+  shape.holes.push(hole);
+  return shape;
+}
+
+function archShape(x = 2.38, y = 0, w = 1.05, h = 1.98) {
+  const shape = new THREE.Shape();
+  archPath(shape, x, y, w, h);
+  return shape;
+}
+
+function archRimShape() {
+  const outer = new THREE.Shape();
+  archPath(outer, 2.38, -.015, 1.26, 2.15);
+  const inner = new THREE.Path();
+  archPath(inner, 2.38, .035, 1, 2);
+  outer.holes.push(inner);
+  return outer;
+}
+
+const plasterBump = makePlasterTexture(256, "#b98248");
+const plasterMaterial = new THREE.MeshStandardMaterial({
+  map: makePlasterTexture(512, "#c98f51"),
+  bumpMap: plasterBump,
+  bumpScale: .035,
+  roughness: .92,
+  color: 0xd5a061
+});
+const floorMaterial = plasterMaterial.clone();
+floorMaterial.color = new THREE.Color(0xd29a59);
+floorMaterial.map = makePlasterTexture(512, "#cf9556");
+
+const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(8.8, 5.6, 32, 22), plasterMaterial.clone());
+leftWall.position.set(-2.32, 2.8, -.35);
+leftWall.rotation.y = Math.PI / 2;
+room.add(leftWall);
+
+const backWall = new THREE.Mesh(new THREE.ShapeGeometry(doorWallShape(), 64), plasterMaterial.clone());
+backWall.position.set(0, 0, -3.82);
+room.add(backWall);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(11.4, 8.8, 54, 54), floorMaterial);
+floor.position.set(0, 0, -.04);
+floor.rotation.x = -Math.PI / 2;
+room.add(floor);
+
+const seamMat = new THREE.MeshBasicMaterial({ color: 0x6b3f1e, transparent: true, opacity: .34 });
+const corner = new THREE.Mesh(new THREE.BoxGeometry(.035, 5.56, .035), new THREE.MeshBasicMaterial({ color: 0x5b351a, transparent: true, opacity: .38 }));
+corner.position.set(-2.325, 2.8, -3.805);
+room.add(corner);
+const backSeam = new THREE.Mesh(new THREE.BoxGeometry(11.15, .025, .035), seamMat);
+backSeam.position.set(0, .028, -3.79);
+room.add(backSeam);
+const leftSeam = new THREE.Mesh(new THREE.BoxGeometry(.035, .025, 8.55), seamMat);
+leftSeam.position.set(-2.305, .028, -.11);
+room.add(leftSeam);
+
+const inkMaterial = new THREE.MeshStandardMaterial({ color: 0x030201, roughness: 1, emissive: 0x020100, emissiveIntensity: .16 });
+const doorBlack = new THREE.Mesh(new THREE.ShapeGeometry(archShape(), 40), inkMaterial);
+doorBlack.position.set(0, 0, -3.855);
+room.add(doorBlack);
+
+const rim = new THREE.Mesh(new THREE.ShapeGeometry(archRimShape(), 48), new THREE.MeshStandardMaterial({
+  color: 0xa66c35, roughness: .96, bumpMap: plasterBump, bumpScale: .025
+}));
+rim.position.set(0, 0, -3.725);
+room.add(rim);
+
+const holes = new THREE.Group();
+const holeMaterial = new THREE.MeshStandardMaterial({ color: 0x8a5628, roughness: .94, bumpMap: plasterBump, bumpScale: .02 });
+const darkMaterial = new THREE.MeshBasicMaterial({ color: 0x1a0e07 });
+for (let row = 0; row < 3; row++) {
+  for (let col = 0; col < 2; col++) {
+    const x = 2.08 + col * .52, y = 3.02 - row * .42;
+    const dark = new THREE.Mesh(new THREE.CircleGeometry(.098, 30), darkMaterial);
+    dark.position.set(x, y, -3.712);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(.12, .035, 12, 30), holeMaterial);
+    ring.position.set(x, y, -3.705);
+    holes.add(dark, ring);
+  }
+}
+room.add(holes);
+
+const spillCount = 2600;
+const spillPositions = new Float32Array(spillCount * 3);
+const spillSeeds = new Float32Array(spillCount * 4);
+for (let i = 0; i < spillCount; i++) {
+  const spread = Math.pow(Math.random(), 1.85);
+  const angle = (Math.random() - .5) * Math.PI * .88;
+  const distance = spread * 1.55;
+  const x = 2.38 + Math.sin(angle) * distance * .95 + (Math.random() - .5) * .24;
+  const z = -3.48 + Math.cos(angle) * distance + Math.random() * .3;
+  const y = Math.pow(Math.random(), 3.2) * 1.35;
+  spillPositions[i * 3] = x;
+  spillPositions[i * 3 + 1] = Math.max(.025, y);
+  spillPositions[i * 3 + 2] = z;
+  spillSeeds.set([x, spillPositions[i * 3 + 1], z, Math.random() * Math.PI * 2], i * 4);
+}
+const spillGeometry = new THREE.BufferGeometry();
+spillGeometry.setAttribute("position", new THREE.BufferAttribute(spillPositions, 3));
+const spillMaterial = new THREE.PointsMaterial({ color: 0x030201, size: .035, sizeAttenuation: true, transparent: true, opacity: .92, depthWrite: false });
+const spill = new THREE.Points(spillGeometry, spillMaterial);
+room.add(spill);
+
+const dustPositions = new Float32Array(520 * 3);
+for (let i = 0; i < 520; i++) {
+  dustPositions[i * 3] = -3.4 + Math.random() * 6.8;
+  dustPositions[i * 3 + 1] = .18 + Math.random() * 3.4;
+  dustPositions[i * 3 + 2] = -3.7 + Math.random() * 5.8;
+}
+const dustGeometry = new THREE.BufferGeometry();
+dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
+const dust = new THREE.Points(dustGeometry, new THREE.PointsMaterial({ color: 0xf5c57b, size: .012, transparent: true, opacity: .18, depthWrite: false }));
+room.add(dust);
+
+scene.add(new THREE.HemisphereLight(0xffd7a5, 0x3a1b09, 2.35));
+const sun = new THREE.DirectionalLight(0xffc98b, 5.2);
+sun.position.set(-3.1, 5.8, 4.2);
+scene.add(sun);
+const doorLight = new THREE.PointLight(0x070302, 5.8, 4, 2.2);
+doorLight.position.set(2.36, .72, -3.05);
+scene.add(doorLight);
+const warmFloorLight = new THREE.PointLight(0xf4b46d, 3.2, 5.6, 2);
+warmFloorLight.position.set(-1.9, 1.05, 2.4);
+scene.add(warmFloorLight);
+
+function resize() {
+  const width = shell.clientWidth || window.innerWidth;
+  const height = shell.clientHeight || window.innerHeight;
+  const narrow = width < 700;
+  camera.aspect = width / height;
+  camera.fov = narrow ? 58 : 42;
+  Object.assign(view, narrow
+    ? { camX: 1.42, camY: 1.56, camZ: 7.35, lookX: 1.76, lookY: 1.34, lookZ: -3.2, parallaxX: .18, parallaxY: .09 }
+    : { camX: .08, camY: 1.68, camZ: 6.15, lookX: .18, lookY: 1.48, lookZ: -3.18, parallaxX: .34, parallaxY: .14 });
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height, false);
+}
+
+function updatePointer(event) {
+  const rect = shell.getBoundingClientRect();
+  pointer.targetX = ((event.clientX - rect.left) / rect.width - .5) * 2;
+  pointer.targetY = ((event.clientY - rect.top) / rect.height - .5) * 2;
+}
+
+function pulseDoor() {
+  if (!window.gsap) {
+    roomState.doorPull = 1;
+    return;
+  }
+  gsap.killTweensOf(roomState);
+  gsap.to(roomState, { doorPull: 1, spill: 1, duration: .45, ease: "power3.out" });
+  gsap.to(roomState, { doorPull: 0, spill: 0, duration: 1.8, delay: .25, ease: "sine.out" });
+}
+
+shell.addEventListener("pointermove", updatePointer);
+shell.addEventListener("pointerdown", (event) => { updatePointer(event); pulseDoor(); });
+window.addEventListener("resize", resize);
+resize();
+
+if (window.gsap) {
+  gsap.from(camera.position, { z: 7.8, y: 1.42, duration: 2.2, ease: "power3.out" });
+  gsap.from(room.rotation, { y: -.045, duration: 2.4, ease: "power2.out" });
+  gsap.from(".frame-index", { opacity: 0, y: -8, duration: .9, delay: .35, ease: "power2.out" });
+}
+
+function animate(time = 0) {
+  const seconds = time * .001;
+  pointer.x += (pointer.targetX - pointer.x) * .055;
+  pointer.y += (pointer.targetY - pointer.y) * .055;
+  roomState.breath = Math.sin(seconds * .82) * .5 + .5;
+  camera.position.set(view.camX + pointer.x * view.parallaxX, view.camY - pointer.y * view.parallaxY, view.camZ - roomState.doorPull * .36);
+  camera.lookAt(view.lookX + pointer.x * .18, view.lookY - pointer.y * .08, view.lookZ);
+  doorBlack.scale.setScalar(1 + roomState.doorPull * .055);
+  inkMaterial.emissiveIntensity = .12 + roomState.doorPull * .18;
+  spillMaterial.size = .033 + roomState.doorPull * .015;
+  spillMaterial.opacity = .82 + roomState.doorPull * .16;
+  dust.material.opacity = .12 + roomState.breath * .08;
+  doorLight.intensity = 5.6 + roomState.doorPull * 5.4 + roomState.breath * .7;
+  const positions = spill.geometry.attributes.position.array;
+  for (let i = 0; i < spillCount; i++) {
+    const s = i * 4, t = i * 3;
+    const phase = spillSeeds[s + 3] + seconds * (.35 + roomState.spill * 1.2);
+    positions[t] = spillSeeds[s] + roomState.spill * Math.sin(phase * .7) * .1;
+    positions[t + 1] = Math.max(.018, spillSeeds[s + 1] + Math.sin(phase) * .018 * (1 + roomState.spill * 3.8));
+    positions[t + 2] = spillSeeds[s + 2] + roomState.spill * Math.cos(phase) * .08;
+  }
+  spill.geometry.attributes.position.needsUpdate = true;
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
