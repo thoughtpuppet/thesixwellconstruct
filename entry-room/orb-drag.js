@@ -13,8 +13,8 @@
   function percentFromPoint(x, y) {
     const rect = field.getBoundingClientRect();
     return {
-      x: Math.min(98, Math.max(2, ((x - rect.left) / rect.width) * 100)),
-      y: Math.min(98, Math.max(2, ((y - rect.top) / rect.height) * 100))
+      x: Math.min(rect.width - 20, Math.max(20, x - rect.left)),
+      y: Math.min(rect.height - 20, Math.max(20, y - rect.top))
     };
   }
 
@@ -28,8 +28,8 @@
   }
 
   function setOrbPosition(orb, position) {
-    orb.style.setProperty('--orb-x', `${position.x.toFixed(2)}%`);
-    orb.style.setProperty('--orb-y', `${position.y.toFixed(2)}%`);
+    orb.style.setProperty('--orb-x', `${position.x.toFixed(0)}px`);
+    orb.style.setProperty('--orb-y', `${position.y.toFixed(0)}px`);
   }
 
   function resetInlineMotion(orb) {
@@ -154,11 +154,12 @@
   }
 
   orbs.forEach((orb) => {
-    const styles = getComputedStyle(orb);
+    const rect = orb.getBoundingClientRect();
+    const fieldRect = field.getBoundingClientRect();
     orbState.set(orb, {
       home: {
-        x: parseFloat(styles.getPropertyValue('--orb-x')) || 50,
-        y: parseFloat(styles.getPropertyValue('--orb-y')) || 50
+        x: rect.left - fieldRect.left + rect.width / 2,
+        y: rect.top - fieldRect.top + rect.height / 2
       },
       locked: false
     });
