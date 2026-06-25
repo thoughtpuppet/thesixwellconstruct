@@ -325,7 +325,6 @@ body.orb-ambient-active .entry-orb {
 }
 
 .entry-orb.is-locked {
-  --orb-size: 30px;
   --shadow-opacity: 0;
   z-index: 3;
   cursor: default;
@@ -334,8 +333,6 @@ body.orb-ambient-active .entry-orb {
   transition:
     left 360ms cubic-bezier(0.16, 1, 0.3, 1),
     top 360ms cubic-bezier(0.16, 1, 0.3, 1),
-    width 360ms cubic-bezier(0.16, 1, 0.3, 1),
-    height 360ms cubic-bezier(0.16, 1, 0.3, 1),
     filter 360ms ease;
 }
 
