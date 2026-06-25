@@ -46,12 +46,13 @@ body.entry-room-page {
 }
 
 .room-background {
-  position: fixed;
-  inset: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
   z-index: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 1280px;
+  height: 800px;
   object-fit: cover;
   object-position: center center;
   pointer-events: none;
