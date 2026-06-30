@@ -18,6 +18,11 @@
     --venture-dim: var(--color-events-dim);
     --venture-wash: rgba(0, 93, 37, 0.1);
   }
+  .cult-hero .venture-title {
+    font-size: clamp(46px, 8.8vw, 136px);
+    line-height: 0.9;
+    white-space: nowrap;
+  }
   .event-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,440px); gap:42px; align-items:start; }
   .stack { display:grid; gap:22px; }
   .line-panel { border-top:5px solid var(--ring-faint); }
@@ -41,24 +46,17 @@
   @media (max-width:900px) {
     .event-grid { grid-template-columns:1fr; }
     .detail-row { grid-template-columns:1fr; gap:4px; }
+    .cult-hero .venture-title { font-size: clamp(30px, 9.4vw, 44px); }
   }
 </style>
 </head>
 <body class="venture-page" data-venture="events">
   <div class="venture-grain" aria-hidden="true"></div>
   <main class="venture-shell entrance-fade">
-    <section class="venture-hero" aria-labelledby="page-title">
+    <section class="venture-hero cult-hero" aria-labelledby="page-title">
       <div>
         <span class="venture-kicker">recurring showcase</span>
         <h1 class="venture-title" id="page-title">Cult &amp; Shift.</h1>
-      </div>
-      <div class="hero-copy">
-        <p class="hero-lede">A ticketed showcase night with an open mic lane and an intermission held by a prebooked artist or performer.</p>
-        <p class="hero-note">Buy a seat to attend, or request an open-mic slot for the night. The host assigns final times and sends performer details by email.</p>
-        <div class="hero-actions">
-          <a class="venture-link" href="/events/">all events</a>
-          <a class="venture-link" href="#open-mic">open mic</a>
-        </div>
       </div>
     </section>
 

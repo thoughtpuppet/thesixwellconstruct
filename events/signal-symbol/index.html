@@ -25,6 +25,11 @@
     position: relative;
     overflow: hidden;
   }
+  .signal-hero .venture-title {
+    font-size: clamp(46px, 8.6vw, 132px);
+    line-height: 0.9;
+    white-space: nowrap;
+  }
   .signal-hero::after {
     content: "";
     position: absolute;
@@ -271,6 +276,7 @@
     .detail-row,
     .session-steps li { grid-template-columns: 1fr; gap: 6px; }
     .signal-hero::after { bottom: 4px; }
+    .signal-hero .venture-title { font-size: clamp(30px, 9.2vw, 42px); }
     .signal-subtitle { font-size: 18px; }
     .signal-panel h2,
     .booking-card h2 { font-size: 26px; }
@@ -285,14 +291,6 @@
         <span class="venture-kicker">guided gathering</span>
         <h1 class="venture-title" id="page-title">Signal &amp; Symbol.</h1>
         <span class="signal-subtitle">A sensory mark-making gathering.</span>
-      </div>
-      <div class="hero-copy">
-        <p class="hero-lede">You'll listen, feel, observe, and respond with simple materials. No drawing experience needed.</p>
-        <p class="hero-note" id="ev-note">This is not about making good art. It is about noticing what appears.</p>
-        <div class="hero-actions">
-          <a class="venture-link" href="#reserve">reserve a seat</a>
-          <a class="venture-link" href="/events/">all events</a>
-        </div>
       </div>
     </section>
 

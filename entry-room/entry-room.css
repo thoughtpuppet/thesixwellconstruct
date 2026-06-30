@@ -60,14 +60,14 @@ body.entry-room-page {
 }
 
 .orb-field {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: auto;
 }
 
 .socket-field {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;

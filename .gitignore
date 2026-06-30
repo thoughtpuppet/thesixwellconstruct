@@ -7,3 +7,11 @@
 .DS_Store
 **/.DS_Store
 Sequence 01_1.gif
+
+# Local Playwright capture artifacts and local test outputs
+.playwright-cli/
+output/
+mobile-preview-*.err.log
+mobile-preview-*.out.log
+.claude/settings.local.json
+tools/entry-room-3d-viewport-checks.ps1
