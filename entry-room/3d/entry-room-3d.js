@@ -210,9 +210,9 @@ const COMPLETION_RIPPLE_COUNT = 6;
 const COMPLETION_RING_COLOR = 0xcf3418;
 const COMPLETION_RING_BODY_COLOR = 0x8a2416;
 const COMPLETION_RING_SETTLED_COLOR = 0x000000;
-const RING_COLOR_PAUSE_AFTER_EMERGENCE = 2;
-const RING_PALETTE_COLOR_DURATION = 1.2;
-const RING_SETTLE_FADE_DURATION = 1.5;
+const RING_COLOR_PAUSE_AFTER_EMERGENCE = 0.35;
+const RING_PALETTE_COLOR_DURATION = 0.22;
+const RING_SETTLE_FADE_DURATION = 0.55;
 const RING_PALETTE_COLORS = [
   COMPLETION_RING_COLOR, 0xff9500, 0xffd60a, 0x34c759, 0x2dd4bf, 0x0a84ff, 0xbf5af2
 ];
@@ -222,6 +222,7 @@ const WRONG_SHAPE_FLASH_DURATION = 420;
 const RING_SETTLE_SEQUENCE_DURATION = RING_COLOR_PAUSE_AFTER_EMERGENCE
   + (RING_PALETTE_COLORS.length - 1) * RING_PALETTE_COLOR_DURATION
   + RING_SETTLE_FADE_DURATION;
+const SHAPE_STREAM_START_TIME = RING_SETTLED_TIME + RING_SETTLE_SEQUENCE_DURATION;
 const SHAPE_LOCK_START_DELAY = 3; // extra pause after the ring settles before the lock cycles in
 
 function readFeedbackEnabled() {
@@ -363,6 +364,11 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
     count: shapeStream.items.length,
     settled: shapeStream.items.filter((i) => i.settled).length,
     full: shapeStream.full,
+    tuning: {
+      minSize: +SHAPE_STREAM.minSize.toFixed(3),
+      maxSize: +SHAPE_STREAM.maxSize.toFixed(3),
+      colors: SHAPE_STREAM_COLORS.map(colorHex)
+    },
     landingPhase: (() => {
       const phase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
       const zone = shapeStream.zones[0];
@@ -1077,17 +1083,22 @@ const completionEffects = (() => {
 const SHAPE_STREAM = {
   enabled: true,
   maxShapes: 980,      // hard cap for performance
-  spawnInterval: 0.055, // seconds between spawns
+  spawnInterval: 0.10, // seconds between spawns
   gravity: -17,        // world units / s^2
-  minSize: 0.22,       // shape radius (world units)
-  maxSize: 0.22,
+  minSize: 0.30,       // shape radius (world units)
+  maxSize: 0.30,
   depthRatio: 0.55,    // prism thickness relative to radius
   vxSpread: 0.48,      // jitter around the ballistic aim velocity (+/-)
   vyPop: 1.15,         // initial upward pop range
   spawnBurst: 2.55,
+  spawnClearance: 0.72, // radius multiples to push new bodies out of the aperture
+  spawnSideJitter: 0.42,
   spawnDownwardBias: 0.62,
   aimCompensation: 1.55,
   farAimCompensation: 1.25,
+  landingSteerDuration: 1.25,
+  landingSteerStrength: 3.8,
+  landingSteerMaxSpeed: 14,
   maxLaunchSpeed: 18.5,
   maxUpwardSpeed: 0.95,
   maxAngularSpeed: 4.8,
@@ -1095,18 +1106,19 @@ const SHAPE_STREAM = {
   angularDamping: 5.2,
   floorFriction: 2.8,
   wallFriction: 0.22,
+  frontBoundaryClearance: 1.15,
   shapeFriction: 2.35,
-  phaseMinDuration: 3,
-  phaseBlendDuration: 1.1,
+  phaseMinDuration: 1.8,
+  phaseBlendDuration: 0.18,
   landingPhases: [
-    { name: 'source', duration: 4.2, followSource: true, widthSpread: 0.10, depthSpread: 0.08 },
-    { name: 'back-center', duration: 5.4, widthT: 0.54, depthT: 0.22, widthSpread: 0.32, depthSpread: 0.11 },
-    { name: 'back-right', duration: 5.6, widthT: 0.88, depthT: 0.34, widthSpread: 0.20, depthSpread: 0.12 },
-    { name: 'center', duration: 5.6, widthT: 0.55, depthT: 0.58, widthSpread: 0.25, depthSpread: 0.16 },
-    { name: 'right', duration: 6.2, widthT: 0.94, depthT: 0.64, widthSpread: 0.16, depthSpread: 0.18 },
-    { name: 'front-right', duration: 6.2, widthT: 0.92, depthT: 0.96, widthSpread: 0.18, depthSpread: 0.07 },
-    { name: 'front-fill', duration: 7.2, widthT: 0.52, depthT: 0.97, widthSpread: 0.48, depthSpread: 0.08 },
-    { name: 'left', duration: 5.6, widthT: 0.23, depthT: 0.66, widthSpread: 0.22, depthSpread: 0.16 }
+    { name: 'source', duration: 0.8, followSource: true, widthSpread: 0.10, depthSpread: 0.08 },
+    { name: 'back-center', duration: 2.0, widthT: 0.172, depthT: 0.078, widthSpread: 0.36, depthSpread: 0.05 },
+    { name: 'front-fill', duration: 2.2, widthT: 0.578, depthT: 0.990, widthSpread: 0.64, depthSpread: 0.22 },
+    { name: 'center', duration: 1.9, widthT: 0.438, depthT: 0.297, widthSpread: 0.39, depthSpread: 0.16 },
+    { name: 'front-right', duration: 2.1, widthT: 0.920, depthT: 0.990, widthSpread: 0.19, depthSpread: 0.22 },
+    { name: 'back-right', duration: 2.0, widthT: 0.781, depthT: 0.250, widthSpread: 0.31, depthSpread: 0.19 },
+    { name: 'left', duration: 2.0, widthT: 0.040, depthT: 0.940, widthSpread: 0.24, depthSpread: 0.24 },
+    { name: 'right', duration: 2.0, widthT: 0.940, depthT: 0.640, widthSpread: 0.27, depthSpread: 0.30 }
   ],
   settleLinearThreshold: 0.055,
   settleAngularThreshold: 0.18,
@@ -1119,20 +1131,21 @@ const SHAPE_STREAM = {
 };
 SHAPE_STREAM.phaseCrowdHeight = SHAPE_STREAM.maxSize * 7;
 const SHAPE_STREAM_COLORS = [
-  0xeb0c00, 0xff7300, 0xffbb00, 0x00c230,
-  0x00b7b7, 0x0a84ff, 0xbf5af2
+  0xd01006, 0xf06c00, 0xffbb00, 0x008a22,
+  0x00ced1, 0x006eff, 0xcb5cff
 ];
 const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
   desktop: {
     floor: {
       // One continuous floor field.
-      frontLeft: { x: -0.03, y: 0.976 },
-      frontRight: { x: 1.03, y: 0.984 },
-      backLeft: { x: 0.07, y: 0.740 },
-      backRight: { x: 0.94, y: 0.800 },
-      apex: { x: 0.58, y: 0.665 },
+      frontLeft: { x: 0.0036, y: 0.9890 },
+      frontRight: { x: 0.9980, y: 0.9970 },
+      backLeft: { x: 0.5557, y: 0.6334 },
+      leftCorner: { x: 0.005, y: 0.860 },
+      backRight: { x: 0.9974, y: 0.8321 },
+      apex: { x: 0.5480, y: 0.8230 },
       zFront: CONFIG.homeZ + 0.46,
-      zBack: CONFIG.homeZ - 0.34,
+      zBack: CONFIG.homeZ - 0.29,
       weight: 1
     }
   },
@@ -1141,6 +1154,7 @@ const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
       frontLeft: { x: -0.02, y: 0.972 },
       frontRight: { x: 1.02, y: 0.978 },
       backLeft: { x: 0.10, y: 0.745 },
+      leftCorner: { x: 0.030, y: 0.860 },
       backRight: { x: 0.90, y: 0.765 },
       apex: { x: 0.525, y: 0.675 },
       zFront: CONFIG.homeZ + 0.42,
@@ -1150,11 +1164,17 @@ const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
   }
 };
 
+const SHAPE_STREAM_LEFT_CORNER_DEPTH_T = 0.5;
+
 function cloneShapeStreamFloorLayouts(layouts) {
   const cloneZone = (zone) => ({
     frontLeft: { ...zone.frontLeft },
     frontRight: { ...zone.frontRight },
     backLeft: { ...zone.backLeft },
+    leftCorner: zone.leftCorner ? { ...zone.leftCorner } : {
+      x: (zone.backLeft.x + zone.frontLeft.x) * 0.5,
+      y: (zone.backLeft.y + zone.frontLeft.y) * 0.5
+    },
     backRight: { ...zone.backRight },
     apex: zone.apex ? { ...zone.apex } : null,
     zFront: zone.zFront,
@@ -1229,14 +1249,19 @@ function layoutShapeStream() {
     const frontLeft = viewportToWorld(floorLayout.frontLeft.x, floorLayout.frontLeft.y, floorLayout.zFront);
     const frontRight = viewportToWorld(floorLayout.frontRight.x, floorLayout.frontRight.y, floorLayout.zFront);
     const backLeft = viewportToWorld(floorLayout.backLeft.x, floorLayout.backLeft.y, floorLayout.zBack);
+    const leftCorner = viewportToWorld(
+      floorLayout.leftCorner.x,
+      floorLayout.leftCorner.y,
+      THREE.MathUtils.lerp(floorLayout.zBack, floorLayout.zFront, SHAPE_STREAM_LEFT_CORNER_DEPTH_T)
+    );
     const backRight = viewportToWorld(floorLayout.backRight.x, floorLayout.backRight.y, floorLayout.zBack);
     return {
       name,
       floorLayout,
       buckets: new Float32Array(shapeStream.xBucketCount * shapeStream.depthBucketCount),
       reservations: new Float32Array(shapeStream.xBucketCount * shapeStream.depthBucketCount),
-      xMin: Math.min(frontLeft.x, frontRight.x, backLeft.x, backRight.x),
-      xMax: Math.max(frontLeft.x, frontRight.x, backLeft.x, backRight.x),
+      xMin: Math.min(frontLeft.x, frontRight.x, backLeft.x, leftCorner.x, backRight.x),
+      xMax: Math.max(frontLeft.x, frontRight.x, backLeft.x, leftCorner.x, backRight.x),
       zMin: floorLayout.zBack,
       zMax: floorLayout.zFront,
       frontSpan: Math.max(0.0001, floorLayout.frontRight.x - floorLayout.frontLeft.x),
@@ -1372,9 +1397,11 @@ function rebuildShapeStreamPhysicsBounds() {
     null,
     { friction: SHAPE_STREAM.wallFriction }
   );
+  const frontWallHalfDepth = 0.22;
+  const frontWallGap = SHAPE_STREAM.maxSize * SHAPE_STREAM.frontBoundaryClearance;
   createShapeStreamFixedBody(
-    new THREE.Vector3((xMin + xMax) * 0.5, wallMidY, zMax + 0.22),
-    new THREE.Vector3(xHalf, wallHalfHeight, 0.22),
+    new THREE.Vector3((xMin + xMax) * 0.5, wallMidY, zMax + frontWallGap + frontWallHalfDepth),
+    new THREE.Vector3(xHalf, wallHalfHeight, frontWallHalfDepth),
     null,
     { friction: SHAPE_STREAM.wallFriction }
   );
@@ -1430,7 +1457,7 @@ function shapeStreamLandingPhaseTarget(zone, phase) {
   return {
     name: phase?.name || 'floor',
     widthT: phase?.followSource ? sourceWidthT : THREE.MathUtils.clamp(phase?.widthT ?? 0.5, 0.01, 0.99),
-    depthT: phase?.followSource ? sourceDepthT : THREE.MathUtils.clamp(phase?.depthT ?? 0.5, 0.02, 0.98),
+    depthT: phase?.followSource ? sourceDepthT : THREE.MathUtils.clamp(phase?.depthT ?? 0.5, 0.02, 1),
     widthSpread: phase?.widthSpread ?? 0.22,
     depthSpread: phase?.depthSpread ?? 0.18
   };
@@ -1539,15 +1566,41 @@ function applyShapeStreamReservation(zone, xBucket, zBucket, lift, direction = 1
 
 function shapeStreamRowBounds(zone, depthT) {
   const { floorLayout } = zone;
-  const left = {
-    x: THREE.MathUtils.lerp(floorLayout.backLeft.x, floorLayout.frontLeft.x, depthT),
-    y: THREE.MathUtils.lerp(floorLayout.backLeft.y, floorLayout.frontLeft.y, depthT)
-  };
+  const left = shapeStreamLeftEdgePoint(floorLayout, depthT);
   const right = {
     x: THREE.MathUtils.lerp(floorLayout.backRight.x, floorLayout.frontRight.x, depthT),
     y: THREE.MathUtils.lerp(floorLayout.backRight.y, floorLayout.frontRight.y, depthT)
   };
   return { left, right };
+}
+
+function shapeStreamLeftEdgePoint(floorLayout, depthT) {
+  const leftCorner = floorLayout.leftCorner;
+  if (!leftCorner) {
+    return {
+      x: THREE.MathUtils.lerp(floorLayout.backLeft.x, floorLayout.frontLeft.x, depthT),
+      y: THREE.MathUtils.lerp(floorLayout.backLeft.y, floorLayout.frontLeft.y, depthT)
+    };
+  }
+  if (depthT <= SHAPE_STREAM_LEFT_CORNER_DEPTH_T) {
+    const localT = depthT / Math.max(0.0001, SHAPE_STREAM_LEFT_CORNER_DEPTH_T);
+    return {
+      x: THREE.MathUtils.lerp(floorLayout.backLeft.x, leftCorner.x, localT),
+      y: THREE.MathUtils.lerp(floorLayout.backLeft.y, leftCorner.y, localT)
+    };
+  }
+  const localT = (depthT - SHAPE_STREAM_LEFT_CORNER_DEPTH_T)
+    / Math.max(0.0001, 1 - SHAPE_STREAM_LEFT_CORNER_DEPTH_T);
+  return {
+    x: THREE.MathUtils.lerp(leftCorner.x, floorLayout.frontLeft.x, localT),
+    y: THREE.MathUtils.lerp(leftCorner.y, floorLayout.frontLeft.y, localT)
+  };
+}
+
+function shapeStreamApexPull(depthT, widthT) {
+  const centerWeight = Math.max(0, 1 - Math.abs(widthT - 0.5) / 0.5);
+  const frontRelease = 1 - ease01((depthT - 0.78) / 0.22);
+  return Math.pow(depthT, 1.25) * Math.pow(centerWeight, 0.9) * 0.14 * frontRelease;
 }
 
 function shapeStreamFloorSample(zone, depthT, widthT) {
@@ -1598,22 +1651,32 @@ function pickShapeStreamTargetCell() {
     const centerDepthT = target.depthT;
     const widthSpread = target.widthSpread;
     const depthSpread = target.depthSpread;
+    const frontFocused = centerDepthT >= 0.85;
+    const minDepthT = frontFocused
+      ? Math.max(0.84, centerDepthT - Math.max(0.10, depthSpread * 0.20))
+      : 0.02;
 
-    const sampleCount = centerWidthT > 0.84 ? 24 : 18;
+    const sampleCount = frontFocused ? 30 : (centerWidthT > 0.84 ? 24 : 18);
     for (let i = 0; i < sampleCount; i += 1) {
       const wideThrow = i % 6 === 0 ? 1.36 : 1;
       const edgePull = centerWidthT > 0.84 && i % 4 === 0
         ? Math.random() * 0.08
         : 0;
+      const rawWidthT = i === 0
+        ? centerWidthT
+        : centerWidthT + edgePull + shapeStreamSignedRandom() * widthSpread * wideThrow;
+      const rawDepthT = i === 0
+        ? centerDepthT
+        : centerDepthT + shapeStreamSignedRandom() * depthSpread * wideThrow;
       const widthT = THREE.MathUtils.clamp(
-        centerWidthT + edgePull + shapeStreamSignedRandom() * widthSpread * wideThrow,
+        rawWidthT,
         0.01,
         0.99
       );
       const depthT = THREE.MathUtils.clamp(
-        centerDepthT + shapeStreamSignedRandom() * depthSpread * wideThrow,
-        0.02,
-        0.98
+        rawDepthT,
+        minDepthT,
+        1
       );
       const x = THREE.MathUtils.clamp(
         Math.floor(widthT * shapeStream.xBucketCount),
@@ -1631,7 +1694,7 @@ function pickShapeStreamTargetCell() {
       const score = shapeStreamCrowdedHeight(zone, x, z)
         + continuityPenalty
         + Math.random() * SHAPE_STREAM.maxSize * 0.18;
-      candidates.push({ zoneIndex, x, z, depthT, widthT, score });
+      candidates.push({ zoneIndex, x, z, depthT, widthT, phaseName: target.name, score });
     }
   });
   if (!candidates.length) return { zoneIndex: 0, x: 0, z: shapeStream.depthBucketCount - 1 };
@@ -1655,7 +1718,7 @@ function spawnStreamShape() {
   const targetDepthT = targetCell.depthT ?? THREE.MathUtils.clamp(
     (targetCell.z + Math.random()) / shapeStream.depthBucketCount,
     0.02,
-    0.98
+    1
   );
   const targetWidthT = targetCell.widthT ?? THREE.MathUtils.clamp(
     (targetCell.x + Math.random()) / shapeStream.xBucketCount,
@@ -1673,7 +1736,17 @@ function spawnStreamShape() {
     shapeStream.zMin + size,
     shapeStream.zMax - size
   );
-  const spawnPosition = new THREE.Vector3(center.x, center.y, spawnZ);
+  const throwDir = new THREE.Vector2(targetX - center.x, targetZ - spawnZ);
+  if (throwDir.lengthSq() < 0.0001) throwDir.set(0.35, 1);
+  throwDir.normalize();
+  const sideDir = new THREE.Vector2(-throwDir.y, throwDir.x);
+  const spawnClearance = size * SHAPE_STREAM.spawnClearance;
+  const sideJitter = (Math.random() - 0.5) * size * SHAPE_STREAM.spawnSideJitter;
+  const spawnPosition = new THREE.Vector3(
+    center.x + throwDir.x * spawnClearance + sideDir.x * sideJitter,
+    center.y,
+    spawnZ + throwDir.y * spawnClearance + sideDir.y * sideJitter
+  );
   const flowVector = new THREE.Vector3(targetX - spawnPosition.x, -SHAPE_STREAM.spawnDownwardBias, targetZ - spawnPosition.z);
   if (flowVector.lengthSq() < 0.0001) flowVector.set(1, -0.3, 0.18);
   flowVector.normalize();
@@ -1755,6 +1828,14 @@ function spawnStreamShape() {
     body,
     collider,
     age: 0,
+    target: {
+      x: targetX,
+      y: surfaceY,
+      z: targetZ,
+      widthT: targetWidthT,
+      depthT: targetDepthT,
+      phaseName: targetCell.phaseName || 'floor'
+    },
     targetSurfaceY: surfaceY,
     reservation: {
       zoneIndex: targetCell.zoneIndex,
@@ -1768,16 +1849,41 @@ function spawnStreamShape() {
   });
 }
 
+function steerShapeStreamItem(item, translation, linvel, delta) {
+  if (!item.target || item.body.isSleeping() || item.age > SHAPE_STREAM.landingSteerDuration) return linvel;
+  const heightAboveTarget = translation.y - item.target.y;
+  if (heightAboveTarget <= item.size * 1.05) return linvel;
+
+  const fallSpeed = Math.max(0.9, -linvel.y);
+  const timeToTarget = THREE.MathUtils.clamp(heightAboveTarget / fallSpeed, 0.16, 0.75);
+  const desired = new THREE.Vector2(
+    (item.target.x - translation.x) / timeToTarget,
+    (item.target.z - translation.z) / timeToTarget
+  );
+  if (desired.length() > SHAPE_STREAM.landingSteerMaxSpeed) {
+    desired.setLength(SHAPE_STREAM.landingSteerMaxSpeed);
+  }
+
+  const steerT = THREE.MathUtils.clamp(delta * SHAPE_STREAM.landingSteerStrength, 0, 0.42);
+  const steered = {
+    x: THREE.MathUtils.lerp(linvel.x, desired.x, steerT),
+    y: linvel.y,
+    z: THREE.MathUtils.lerp(linvel.z, desired.y, steerT)
+  };
+  item.body.setLinvel(steered, true);
+  return steered;
+}
+
 function updateShapeStream(delta) {
   if (!SHAPE_STREAM.enabled) return;
   if (!shapeStream.world) return;
 
-  const ringSettled = completionEffects.active
-    && completionEffects.elapsed >= RING_SETTLED_TIME;
+  const ringBlackSettled = completionEffects.active
+    && completionEffects.elapsed >= SHAPE_STREAM_START_TIME;
 
-  if (ringSettled && !shapeStream.full) updateShapeStreamLandingPhase(delta);
+  if (ringBlackSettled && !shapeStream.full) updateShapeStreamLandingPhase(delta);
 
-  if (ringSettled && !shapeStream.full && shapeStream.items.length < SHAPE_STREAM.maxShapes) {
+  if (ringBlackSettled && !shapeStream.full && shapeStream.items.length < SHAPE_STREAM.maxShapes) {
     shapeStream.spawnTimer += delta;
     while (shapeStream.spawnTimer >= SHAPE_STREAM.spawnInterval) {
       shapeStream.spawnTimer -= SHAPE_STREAM.spawnInterval;
@@ -1790,8 +1896,10 @@ function updateShapeStream(delta) {
 
   for (const item of shapeStream.items) {
     item.age += delta;
-    const linvel = item.body.linvel();
+    let linvel = item.body.linvel();
     const angvel = item.body.angvel();
+    const translation = item.body.translation();
+    linvel = steerShapeStreamItem(item, translation, linvel, delta);
     const linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
     const angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
     if (item.age < 0.55) {
@@ -1813,7 +1921,6 @@ function updateShapeStream(delta) {
       item.body.sleep();
     }
 
-    const translation = item.body.translation();
     const rotation = item.body.rotation();
     item.mesh.position.set(translation.x, translation.y, translation.z);
     item.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
@@ -2028,6 +2135,624 @@ function colorNumber(value, fallback) {
 
 function colorHex(value) {
   return `#${Number(value).toString(16).padStart(6, '0')}`;
+}
+
+function updateShapeStreamDerivedTuning() {
+  SHAPE_STREAM.phaseCrowdHeight = SHAPE_STREAM.maxSize * 7;
+}
+
+function formatStreamColors() {
+  return `[ ${SHAPE_STREAM_COLORS.map(colorHex).join(', ')} ]`;
+}
+
+function formatShapeStreamSize() {
+  return `{ minSize: ${SHAPE_STREAM.minSize.toFixed(2)}, maxSize: ${SHAPE_STREAM.maxSize.toFixed(2)} }`;
+}
+
+function formatShapeStreamLandingPhases() {
+  const phaseBlocks = SHAPE_STREAM.landingPhases.map((phase) => {
+    const parts = [
+      `name: '${phase.name}'`,
+      `duration: ${phase.duration.toFixed(1)}`
+    ];
+    if (phase.followSource) {
+      parts.push('followSource: true');
+    } else {
+      parts.push(`widthT: ${Number(phase.widthT ?? 0.5).toFixed(3)}`);
+      parts.push(`depthT: ${Number(phase.depthT ?? 0.5).toFixed(3)}`);
+    }
+    parts.push(`widthSpread: ${Number(phase.widthSpread ?? 0.22).toFixed(2)}`);
+    parts.push(`depthSpread: ${Number(phase.depthSpread ?? 0.18).toFixed(2)}`);
+    return `  { ${parts.join(', ')} }`;
+  });
+  return `[\n${phaseBlocks.join(',\n')}\n]`;
+}
+
+function syncShapeStreamControls() {
+  if (!calibrate) return;
+  const values = {
+    'min-size': SHAPE_STREAM.minSize,
+    'max-size': SHAPE_STREAM.maxSize
+  };
+  Object.entries(values).forEach(([name, value]) => {
+    const input = calibrationConsole?.querySelector(`[data-stream-control="${name}"]`);
+    if (input && document.activeElement !== input) input.value = String(value);
+  });
+  SHAPE_STREAM_COLORS.forEach((color, index) => {
+    const input = calibrationConsole?.querySelector(`[data-stream-color="${index}"]`);
+    if (input && document.activeElement !== input) input.value = colorHex(color);
+  });
+}
+
+function handleShapeStreamControl(input) {
+  const control = input.dataset.streamControl;
+  const numericValue = Number(input.value);
+  if (control === 'min-size' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM.minSize = THREE.MathUtils.clamp(numericValue, 0.05, 0.8);
+    SHAPE_STREAM.maxSize = Math.max(SHAPE_STREAM.maxSize, SHAPE_STREAM.minSize);
+  } else if (control === 'max-size' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM.maxSize = THREE.MathUtils.clamp(numericValue, 0.05, 0.8);
+    SHAPE_STREAM.minSize = Math.min(SHAPE_STREAM.minSize, SHAPE_STREAM.maxSize);
+  }
+  updateShapeStreamDerivedTuning();
+  syncShapeStreamControls();
+  updateCalibrationConsole();
+}
+
+function handleShapeStreamColor(input) {
+  const index = Number(input.dataset.streamColor);
+  if (!Number.isInteger(index) || index < 0 || index >= SHAPE_STREAM_COLORS.length) return;
+  const color = colorNumber(input.value, SHAPE_STREAM_COLORS[index]);
+  SHAPE_STREAM_COLORS[index] = color;
+  shapeStream.palette[index]?.color.setHex(color);
+  syncShapeStreamControls();
+  updateCalibrationConsole();
+}
+
+function syncLandingPhaseControls() {
+  if (!calibrate || !calibrationConsole) return;
+  calibrationConsole.querySelectorAll('[data-phase-control]').forEach((input) => {
+    if (document.activeElement === input) return;
+    const [indexText, field] = String(input.dataset.phaseControl || '').split('.');
+    const phase = SHAPE_STREAM.landingPhases[Number(indexText)];
+    if (!phase || !(field in phase)) return;
+    const digits = field.includes('Spread') ? 2 : 3;
+    input.value = String(+Number(phase[field]).toFixed(digits));
+  });
+}
+
+function handleLandingPhaseControl(input) {
+  const [indexText, field] = String(input.dataset.phaseControl || '').split('.');
+  const index = Number(indexText);
+  const phase = SHAPE_STREAM.landingPhases[index];
+  const numericValue = Number(input.value);
+  if (!phase || phase.followSource || !Number.isFinite(numericValue)) return;
+  if (field === 'widthT' || field === 'depthT') {
+    phase[field] = +THREE.MathUtils.clamp(numericValue, 0, 1).toFixed(3);
+  } else if (field === 'widthSpread' || field === 'depthSpread') {
+    phase[field] = +THREE.MathUtils.clamp(numericValue, 0.02, 0.8).toFixed(2);
+  } else {
+    return;
+  }
+  applyLandingPhaseChange(`${phase.name} landing zone updated`);
+}
+
+const FLOOR_HANDLE_POINTS = [
+  { key: 'frontLeft', label: 'FL' },
+  { key: 'frontRight', label: 'FR' },
+  { key: 'backLeft', label: 'BL' },
+  { key: 'leftCorner', label: 'LC' },
+  { key: 'backRight', label: 'BR' },
+  { key: 'apex', label: 'AP' }
+];
+const FLOOR_CORNER_KEYS = ['frontLeft', 'frontRight', 'backRight', 'backLeft', 'leftCorner'];
+const FLOOR_GRID_STEPS = [0, 0.2, 0.4, 0.6, 0.8, 1];
+const LANDING_PHASE_PICK_STEPS = 64;
+const floorEditor = {
+  visible: false,
+  editing: false,
+  drag: null,
+  svg: null,
+  polygon: null,
+  gridGroup: null,
+  phaseGroup: null,
+  handleGroup: null,
+  handles: new Map()
+};
+
+function activeShapeStreamFloorLayout(layoutName = activeLayoutName) {
+  const layoutSet = SHAPE_STREAM_FLOOR_LAYOUTS[layoutName] || SHAPE_STREAM_FLOOR_LAYOUTS.desktop;
+  return layoutSet.floor || Object.values(layoutSet)[0];
+}
+
+function baseShapeStreamFloorLayout(layoutName = activeLayoutName) {
+  const layoutSet = BASE_SHAPE_STREAM_FLOOR_LAYOUTS[layoutName] || BASE_SHAPE_STREAM_FLOOR_LAYOUTS.desktop;
+  return layoutSet.floor || Object.values(layoutSet)[0];
+}
+
+function copyFloorLayout(target, source) {
+  ['frontLeft', 'frontRight', 'backLeft', 'leftCorner', 'backRight', 'apex'].forEach((key) => {
+    target[key] = { ...source[key] };
+  });
+  target.zFront = source.zFront;
+  target.zBack = source.zBack;
+  target.weight = source.weight;
+}
+
+function floorSvgElement(tagName, attrs = {}) {
+  const element = document.createElementNS('http://www.w3.org/2000/svg', tagName);
+  Object.entries(attrs).forEach(([name, value]) => element.setAttribute(name, value));
+  return element;
+}
+
+function floorLayoutPointToScreen(point) {
+  const rect = root.getBoundingClientRect();
+  return {
+    x: point.x * rect.width,
+    y: point.y * rect.height
+  };
+}
+
+function floorNormSample(floorLayout, depthT, widthT) {
+  const left = shapeStreamLeftEdgePoint(floorLayout, depthT);
+  const right = {
+    x: THREE.MathUtils.lerp(floorLayout.backRight.x, floorLayout.frontRight.x, depthT),
+    y: THREE.MathUtils.lerp(floorLayout.backRight.y, floorLayout.frontRight.y, depthT)
+  };
+  const baseX = THREE.MathUtils.lerp(left.x, right.x, widthT);
+  const baseY = THREE.MathUtils.lerp(left.y, right.y, widthT);
+  const apex = floorLayout.apex || {
+    x: (floorLayout.backLeft.x + floorLayout.backRight.x) * 0.5,
+    y: Math.min(floorLayout.backLeft.y, floorLayout.backRight.y)
+  };
+  const apexPull = shapeStreamApexPull(depthT, widthT);
+  return {
+    x: THREE.MathUtils.lerp(baseX, apex.x, apexPull),
+    y: THREE.MathUtils.lerp(baseY, apex.y, apexPull)
+  };
+}
+
+function floorSampleToScreen(floorLayout, depthT, widthT) {
+  return floorLayoutPointToScreen(floorNormSample(floorLayout, depthT, widthT));
+}
+
+function injectFloorEditorStyles() {
+  if (document.getElementById('entry-floor-editor-style')) return;
+  const style = document.createElement('style');
+  style.id = 'entry-floor-editor-style';
+  style.textContent = `
+    #entry-floor-editor {
+      position: fixed;
+      inset: 0;
+      z-index: 4;
+      display: none;
+      width: 100vw;
+      height: 100vh;
+      overflow: visible;
+      pointer-events: none;
+      font-family: Arial, sans-serif;
+    }
+    #entry-floor-editor.is-visible { display: block; }
+    #entry-floor-editor .entry-floor-fill {
+      fill: rgba(0, 229, 255, 0.10);
+      stroke: rgba(0, 229, 255, 0.86);
+      stroke-width: 1.5;
+      vector-effect: non-scaling-stroke;
+    }
+    #entry-floor-editor .entry-floor-grid {
+      fill: none;
+      stroke: rgba(0, 229, 255, 0.34);
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    #entry-floor-editor .entry-floor-apex-line {
+      fill: none;
+      stroke: rgba(255, 206, 120, 0.68);
+      stroke-dasharray: 5 5;
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    #entry-floor-editor .entry-floor-phase-dot {
+      fill: rgba(255, 206, 120, 0.92);
+      stroke: rgba(12, 7, 4, 0.85);
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+    #entry-floor-editor .entry-floor-phase-spread {
+      fill: rgba(255, 206, 120, 0.08);
+      stroke: rgba(255, 206, 120, 0.56);
+      stroke-dasharray: 4 4;
+      stroke-width: 1;
+      vector-effect: non-scaling-stroke;
+    }
+    #entry-floor-editor .entry-floor-phase-label,
+    #entry-floor-editor .entry-floor-handle text {
+      fill: rgba(255, 238, 210, 0.95);
+      stroke: rgba(12, 7, 4, 0.9);
+      stroke-width: 3;
+      paint-order: stroke fill;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-anchor: middle;
+      dominant-baseline: central;
+      user-select: none;
+    }
+    #entry-floor-editor .entry-floor-phase-handle {
+      pointer-events: none;
+      cursor: default;
+    }
+    #entry-floor-editor .entry-floor-handle {
+      pointer-events: none;
+      cursor: default;
+    }
+    #entry-floor-editor .entry-floor-handle circle {
+      fill: rgba(12, 7, 4, 0.86);
+      stroke: rgba(0, 229, 255, 0.96);
+      stroke-width: 2;
+      vector-effect: non-scaling-stroke;
+    }
+    #entry-floor-editor.is-editing .entry-floor-handle {
+      pointer-events: auto;
+      cursor: grab;
+    }
+    #entry-floor-editor.is-editing .entry-floor-phase-handle {
+      pointer-events: auto;
+      cursor: grab;
+    }
+    #entry-floor-editor.is-editing .entry-floor-handle circle {
+      fill: rgba(0, 229, 255, 0.22);
+      stroke: rgba(255, 238, 210, 0.98);
+    }
+    #entry-floor-editor.is-editing .entry-floor-phase-dot {
+      fill: rgba(255, 206, 120, 0.25);
+      stroke: rgba(255, 238, 210, 0.98);
+    }
+    #entry-floor-editor.is-dragging .entry-floor-handle,
+    #entry-floor-editor.is-dragging .entry-floor-phase-handle { cursor: grabbing; }
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureFloorEditorOverlay() {
+  if (!calibrate) return null;
+  if (floorEditor.svg) return floorEditor.svg;
+  injectFloorEditorStyles();
+  const svg = floorSvgElement('svg', { id: 'entry-floor-editor', 'aria-hidden': 'true' });
+  const gridGroup = floorSvgElement('g', { 'data-floor-grid': 'true' });
+  const polygon = floorSvgElement('polygon', { class: 'entry-floor-fill' });
+  const phaseGroup = floorSvgElement('g', { 'data-floor-phases': 'true' });
+  const handleGroup = floorSvgElement('g', { 'data-floor-handles': 'true' });
+
+  FLOOR_HANDLE_POINTS.forEach(({ key, label }) => {
+    const handle = floorSvgElement('g', { class: 'entry-floor-handle', 'data-floor-handle': key });
+    handle.appendChild(floorSvgElement('circle', { r: key === 'apex' ? 8 : 9 }));
+    const text = floorSvgElement('text', { y: key === 'apex' ? -17 : -19 });
+    text.textContent = label;
+    handle.appendChild(text);
+    handle.addEventListener('pointerdown', floorEditorPointerDown);
+    handleGroup.appendChild(handle);
+    floorEditor.handles.set(key, handle);
+  });
+
+  svg.appendChild(gridGroup);
+  svg.appendChild(polygon);
+  svg.appendChild(phaseGroup);
+  svg.appendChild(handleGroup);
+  svg.addEventListener('pointermove', floorEditorPointerMove);
+  svg.addEventListener('pointerup', floorEditorPointerUp);
+  svg.addEventListener('pointercancel', floorEditorPointerUp);
+  document.body.appendChild(svg);
+
+  floorEditor.svg = svg;
+  floorEditor.gridGroup = gridGroup;
+  floorEditor.polygon = polygon;
+  floorEditor.phaseGroup = phaseGroup;
+  floorEditor.handleGroup = handleGroup;
+  return svg;
+}
+
+function drawFloorEditorGrid(floorLayout) {
+  floorEditor.gridGroup.replaceChildren();
+  FLOOR_GRID_STEPS.forEach((depthT) => {
+    const points = [];
+    for (let i = 0; i <= 10; i += 1) {
+      const p = floorSampleToScreen(floorLayout, depthT, i / 10);
+      points.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+    }
+    floorEditor.gridGroup.appendChild(floorSvgElement('polyline', {
+      class: 'entry-floor-grid',
+      points: points.join(' ')
+    }));
+  });
+  FLOOR_GRID_STEPS.forEach((widthT) => {
+    const points = [];
+    for (let i = 0; i <= 10; i += 1) {
+      const p = floorSampleToScreen(floorLayout, i / 10, widthT);
+      points.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+    }
+    floorEditor.gridGroup.appendChild(floorSvgElement('polyline', {
+      class: 'entry-floor-grid',
+      points: points.join(' ')
+    }));
+  });
+  const apex = floorLayoutPointToScreen(floorLayout.apex);
+  const center = floorSampleToScreen(floorLayout, 0.58, 0.5);
+  floorEditor.gridGroup.appendChild(floorSvgElement('line', {
+    class: 'entry-floor-apex-line',
+    x1: apex.x.toFixed(1),
+    y1: apex.y.toFixed(1),
+    x2: center.x.toFixed(1),
+    y2: center.y.toFixed(1)
+  }));
+}
+
+function drawFloorEditorPhases(floorLayout) {
+  floorEditor.phaseGroup.replaceChildren();
+  SHAPE_STREAM.landingPhases.forEach((phase, index) => {
+    if (phase.followSource || !Number.isFinite(phase.depthT) || !Number.isFinite(phase.widthT)) return;
+    const p = floorSampleToScreen(floorLayout, phase.depthT, phase.widthT);
+    const left = floorSampleToScreen(
+      floorLayout,
+      phase.depthT,
+      THREE.MathUtils.clamp(phase.widthT - (phase.widthSpread ?? 0.22) * 0.5, 0, 1)
+    );
+    const right = floorSampleToScreen(
+      floorLayout,
+      phase.depthT,
+      THREE.MathUtils.clamp(phase.widthT + (phase.widthSpread ?? 0.22) * 0.5, 0, 1)
+    );
+    const back = floorSampleToScreen(
+      floorLayout,
+      THREE.MathUtils.clamp(phase.depthT - (phase.depthSpread ?? 0.18) * 0.5, 0, 1),
+      phase.widthT
+    );
+    const front = floorSampleToScreen(
+      floorLayout,
+      THREE.MathUtils.clamp(phase.depthT + (phase.depthSpread ?? 0.18) * 0.5, 0, 1),
+      phase.widthT
+    );
+    const handle = floorSvgElement('g', {
+      class: 'entry-floor-phase-handle',
+      'data-floor-phase': String(index),
+      transform: `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`
+    });
+    handle.appendChild(floorSvgElement('ellipse', {
+      class: 'entry-floor-phase-spread',
+      rx: Math.max(7, Math.hypot(right.x - left.x, right.y - left.y) * 0.5).toFixed(1),
+      ry: Math.max(6, Math.hypot(front.x - back.x, front.y - back.y) * 0.5).toFixed(1)
+    }));
+    handle.appendChild(floorSvgElement('circle', {
+      class: 'entry-floor-phase-dot',
+      r: 4.5
+    }));
+    const label = floorSvgElement('text', {
+      class: 'entry-floor-phase-label',
+      y: -13
+    });
+    label.textContent = phase.name;
+    handle.appendChild(label);
+    handle.addEventListener('pointerdown', floorEditorPhasePointerDown);
+    floorEditor.phaseGroup.appendChild(handle);
+  });
+}
+
+function syncFloorButtons() {
+  if (!calibrationConsole) return;
+  const toggle = calibrationConsole.querySelector('[data-floor-action="toggle"]');
+  const edit = calibrationConsole.querySelector('[data-floor-action="edit"]');
+  if (toggle) {
+    toggle.textContent = floorEditor.visible ? 'Hide Floor' : 'Show Floor';
+    toggle.setAttribute('aria-pressed', String(floorEditor.visible));
+  }
+  if (edit) {
+    edit.textContent = floorEditor.editing ? 'Stop Edit Floor' : 'Edit Floor';
+    edit.setAttribute('aria-pressed', String(floorEditor.editing));
+  }
+}
+
+function drawFloorEditorOverlay() {
+  if (!calibrate) return;
+  const svg = ensureFloorEditorOverlay();
+  if (!svg) return;
+  const rect = root.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
+  svg.classList.toggle('is-visible', floorEditor.visible || floorEditor.editing);
+  svg.classList.toggle('is-editing', floorEditor.editing);
+  svg.classList.toggle('is-dragging', !!floorEditor.drag);
+  syncFloorButtons();
+  if (!floorEditor.visible && !floorEditor.editing) return;
+
+  const floorLayout = activeShapeStreamFloorLayout();
+  const polygonPoints = FLOOR_CORNER_KEYS
+    .map((key) => floorLayoutPointToScreen(floorLayout[key]))
+    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(' ');
+  floorEditor.polygon.setAttribute('points', polygonPoints);
+  drawFloorEditorGrid(floorLayout);
+  drawFloorEditorPhases(floorLayout);
+  FLOOR_HANDLE_POINTS.forEach(({ key }) => {
+    const handle = floorEditor.handles.get(key);
+    const p = floorLayoutPointToScreen(floorLayout[key]);
+    handle?.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+  });
+}
+
+function syncFloorEditorControls() {
+  if (!calibrate || !calibrationConsole) return;
+  const floorLayout = activeShapeStreamFloorLayout();
+  const values = {
+    'frontLeft.x': floorLayout.frontLeft.x,
+    'frontLeft.y': floorLayout.frontLeft.y,
+    'frontRight.x': floorLayout.frontRight.x,
+    'frontRight.y': floorLayout.frontRight.y,
+    'backLeft.x': floorLayout.backLeft.x,
+    'backLeft.y': floorLayout.backLeft.y,
+    'leftCorner.x': floorLayout.leftCorner.x,
+    'leftCorner.y': floorLayout.leftCorner.y,
+    'backRight.x': floorLayout.backRight.x,
+    'backRight.y': floorLayout.backRight.y,
+    'apex.x': floorLayout.apex.x,
+    'apex.y': floorLayout.apex.y,
+    zBack: floorLayout.zBack,
+    zFront: floorLayout.zFront
+  };
+  Object.entries(values).forEach(([name, value]) => {
+    const input = calibrationConsole.querySelector(`[data-floor-control="${name}"]`);
+    if (input && document.activeElement !== input) input.value = String(+Number(value).toFixed(4));
+  });
+}
+
+function applyFloorEditorChange(message = 'floor updated') {
+  layoutShapeStream();
+  drawFloorEditorOverlay();
+  syncFloorEditorControls();
+  updateCalibrationConsole();
+  status.textContent = `${message} - ${activeLayoutName}`;
+}
+
+function handleFloorControl(input) {
+  const control = input.dataset.floorControl;
+  const numericValue = Number(input.value);
+  if (!Number.isFinite(numericValue)) return;
+  const floorLayout = activeShapeStreamFloorLayout();
+  if (control === 'zBack') {
+    floorLayout.zBack = THREE.MathUtils.clamp(numericValue, -2, 4);
+    if (floorLayout.zBack > floorLayout.zFront - 0.05) {
+      floorLayout.zFront = Math.min(4, floorLayout.zBack + 0.05);
+      floorLayout.zBack = Math.min(floorLayout.zBack, floorLayout.zFront - 0.05);
+    }
+  } else if (control === 'zFront') {
+    floorLayout.zFront = THREE.MathUtils.clamp(numericValue, -2, 4);
+    if (floorLayout.zFront < floorLayout.zBack + 0.05) {
+      floorLayout.zBack = Math.max(-2, floorLayout.zFront - 0.05);
+      floorLayout.zFront = Math.max(floorLayout.zFront, floorLayout.zBack + 0.05);
+    }
+  } else {
+    const [pointKey, axis] = control.split('.');
+    if (!floorLayout[pointKey] || !['x', 'y'].includes(axis)) return;
+    floorLayout[pointKey][axis] = +THREE.MathUtils.clamp(numericValue, -0.5, 1.5).toFixed(4);
+  }
+  applyFloorEditorChange('floor control updated');
+}
+
+function handleFloorAction(action) {
+  if (action === 'toggle') {
+    floorEditor.visible = !floorEditor.visible;
+    if (!floorEditor.visible) floorEditor.editing = false;
+    drawFloorEditorOverlay();
+    status.textContent = floorEditor.visible ? `floor overlay shown - ${activeLayoutName}` : 'floor overlay hidden';
+  } else if (action === 'edit') {
+    floorEditor.editing = !floorEditor.editing;
+    floorEditor.visible = true;
+    drawFloorEditorOverlay();
+    status.textContent = floorEditor.editing ? `floor handles active - ${activeLayoutName}` : `floor handles locked - ${activeLayoutName}`;
+  } else if (action === 'reset-active') {
+    copyFloorLayout(activeShapeStreamFloorLayout(), baseShapeStreamFloorLayout());
+    floorEditor.visible = true;
+    applyFloorEditorChange('floor reset');
+  }
+  updateCalibrationConsole();
+}
+
+function nearestFloorUVForScreen(floorLayout, screenX, screenY) {
+  let best = { widthT: 0.5, depthT: 0.5, distance: Infinity };
+  for (let depthStep = 0; depthStep <= LANDING_PHASE_PICK_STEPS; depthStep += 1) {
+    const depthT = depthStep / LANDING_PHASE_PICK_STEPS;
+    for (let widthStep = 0; widthStep <= LANDING_PHASE_PICK_STEPS; widthStep += 1) {
+      const widthT = widthStep / LANDING_PHASE_PICK_STEPS;
+      const p = floorSampleToScreen(floorLayout, depthT, widthT);
+      const dx = p.x - screenX;
+      const dy = p.y - screenY;
+      const distance = dx * dx + dy * dy;
+      if (distance < best.distance) best = { widthT, depthT, distance };
+    }
+  }
+  return best;
+}
+
+function applyLandingPhaseChange(message = 'landing zone updated') {
+  if (shapeStream.items.length) resetShapeStream();
+  drawFloorEditorOverlay();
+  syncLandingPhaseControls();
+  updateCalibrationConsole();
+  status.textContent = `${message} - ${activeLayoutName}`;
+}
+
+function floorEditorPointerDown(event) {
+  if (!floorEditor.editing) return;
+  const handle = event.currentTarget;
+  floorEditor.drag = {
+    type: 'floor-handle',
+    key: handle.dataset.floorHandle,
+    pointerId: event.pointerId
+  };
+  floorEditor.svg?.setPointerCapture(event.pointerId);
+  drawFloorEditorOverlay();
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function floorEditorPhasePointerDown(event) {
+  if (!floorEditor.editing) return;
+  const index = Number(event.currentTarget.dataset.floorPhase);
+  const phase = SHAPE_STREAM.landingPhases[index];
+  if (!phase || phase.followSource) return;
+  floorEditor.drag = {
+    type: 'phase',
+    index,
+    pointerId: event.pointerId
+  };
+  floorEditor.svg?.setPointerCapture(event.pointerId);
+  drawFloorEditorOverlay();
+  status.textContent = `dragging ${phase.name} landing zone`;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function floorEditorPointerMove(event) {
+  if (!floorEditor.drag || event.pointerId !== floorEditor.drag.pointerId) return;
+  const rect = root.getBoundingClientRect();
+  const floorLayout = activeShapeStreamFloorLayout();
+  if (floorEditor.drag.type === 'phase') {
+    const phase = SHAPE_STREAM.landingPhases[floorEditor.drag.index];
+    if (!phase) return;
+    const nearest = nearestFloorUVForScreen(
+      floorLayout,
+      event.clientX - rect.left,
+      event.clientY - rect.top
+    );
+    phase.widthT = +nearest.widthT.toFixed(3);
+    phase.depthT = +nearest.depthT.toFixed(3);
+    applyLandingPhaseChange(`dragging ${phase.name}`);
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  const point = floorLayout[floorEditor.drag.key];
+  if (!point) return;
+  point.x = +THREE.MathUtils.clamp((event.clientX - rect.left) / Math.max(1, rect.width), -0.5, 1.5).toFixed(4);
+  point.y = +THREE.MathUtils.clamp((event.clientY - rect.top) / Math.max(1, rect.height), -0.5, 1.5).toFixed(4);
+  applyFloorEditorChange(`dragging ${floorEditor.drag.key}`);
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function floorEditorPointerUp(event) {
+  if (!floorEditor.drag || event.pointerId !== floorEditor.drag.pointerId) return;
+  const drag = floorEditor.drag;
+  const label = drag.type === 'phase'
+    ? SHAPE_STREAM.landingPhases[drag.index]?.name || 'landing zone'
+    : drag.key;
+  floorEditor.drag = null;
+  try { floorEditor.svg?.releasePointerCapture(event.pointerId); } catch {}
+  drawFloorEditorOverlay();
+  updateCalibrationConsole();
+  status.textContent = drag.type === 'phase'
+    ? `landing ${label} set - ${activeLayoutName}`
+    : `floor ${label} set - ${activeLayoutName}`;
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 function syncShapeLockControls() {
@@ -2724,6 +3449,7 @@ function formatShapeStreamZone(zone) {
     `frontLeft: { x: ${zone.frontLeft.x.toFixed(4)}, y: ${zone.frontLeft.y.toFixed(4)} },`,
     `frontRight: { x: ${zone.frontRight.x.toFixed(4)}, y: ${zone.frontRight.y.toFixed(4)} },`,
     `backLeft: { x: ${zone.backLeft.x.toFixed(4)}, y: ${zone.backLeft.y.toFixed(4)} },`,
+    `leftCorner: { x: ${zone.leftCorner.x.toFixed(4)}, y: ${zone.leftCorner.y.toFixed(4)} },`,
     `backRight: { x: ${zone.backRight.x.toFixed(4)}, y: ${zone.backRight.y.toFixed(4)} },`,
     `apex: { x: ${zone.apex.x.toFixed(4)}, y: ${zone.apex.y.toFixed(4)} },`,
     `zFront: ${zone.zFront.toFixed(2)}, zBack: ${zone.zBack.toFixed(2)}, weight: ${zone.weight}`
@@ -2738,7 +3464,9 @@ function activeShapeStreamText() {
     '  }'
   ].join('\n'));
   return [
-    `streamColors: [ ${SHAPE_STREAM_COLORS.map(colorHex).join(', ')} ]`,
+    `streamColors: ${formatStreamColors()}`,
+    `streamShapeSize: ${formatShapeStreamSize()}`,
+    `streamLandingPhases: ${formatShapeStreamLandingPhases()}`,
     'streamFloor: {',
     zoneBlocks.join(',\n'),
     '}'
@@ -2803,6 +3531,9 @@ function allLayoutsText() {
       `  sockets: [ ${formatPointList(socketSource)} ],`,
       `  orbHomes: [ ${formatPointList(homeSource)} ],`,
       `  orbShadow: [ ${shadowSource.map(formatShadow).join(', ')} ],`,
+      `  streamColors: ${formatStreamColors()},`,
+      `  streamShapeSize: ${formatShapeStreamSize()},`,
+      `  streamLandingPhases: ${formatShapeStreamLandingPhases()},`,
       `  streamFloor: ${JSON.stringify(streamLayout)},`,
       `  completionRing: ${JSON.stringify(layout.completionRing)},`,
       `  shapeLock: ${JSON.stringify(SHAPE_LOCK_LAYOUTS[name])}`,
@@ -2816,8 +3547,12 @@ function allLayoutsText() {
 
 function updateCalibrationConsole() {
   if (!calibrate || !calibrationOutput) return;
+  syncShapeStreamControls();
+  syncFloorEditorControls();
+  syncLandingPhaseControls();
   syncShapeLockControls();
   syncFeedbackToggle();
+  drawFloorEditorOverlay();
   calibrationOutput.textContent = activeLayoutText();
 }
 
@@ -2875,14 +3610,37 @@ if (calibrate && calibrationConsole) {
     if (ringButton) handleRingAction(ringButton.dataset.ringAction);
     const lockButton = event.target.closest('[data-lock-action]');
     if (lockButton) handleShapeLockAction(lockButton.dataset.lockAction);
+    const floorButton = event.target.closest('[data-floor-action]');
+    if (floorButton) handleFloorAction(floorButton.dataset.floorAction);
   });
   calibrationConsole.addEventListener('input', (event) => {
+    const streamColor = event.target.closest('[data-stream-color]');
+    if (streamColor) {
+      handleShapeStreamColor(streamColor);
+      return;
+    }
+    const streamInput = event.target.closest('[data-stream-control]');
+    if (streamInput) {
+      handleShapeStreamControl(streamInput);
+      return;
+    }
+    const floorInput = event.target.closest('[data-floor-control]');
+    if (floorInput) {
+      handleFloorControl(floorInput);
+      return;
+    }
+    const phaseInput = event.target.closest('[data-phase-control]');
+    if (phaseInput) {
+      handleLandingPhaseControl(phaseInput);
+      return;
+    }
     const input = event.target.closest('[data-lock-control]');
     if (input) handleShapeLockControl(input);
   });
 }
 
-/* ----- calibrate mode: drag the socket rings onto the holes ------- */
+/* ----- calibrate mode: drag ring/floor anchors. Socket dragging is parked for now. ------- */
+const SOCKET_CALIBRATION_ENABLED = false;
 let calActive = null;
 
 function nearestCompletionRing(point) {
@@ -2903,6 +3661,10 @@ function calibrateDown(event) {
     calActive = { type: 'ring' };
     canvas.setPointerCapture(event.pointerId);
     event.preventDefault();
+    return;
+  }
+  if (!SOCKET_CALIBRATION_ENABLED) {
+    status.textContent = 'socket calibration disabled';
     return;
   }
   let best = null;
