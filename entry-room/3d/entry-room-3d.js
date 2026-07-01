@@ -363,6 +363,46 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
     count: shapeStream.items.length,
     settled: shapeStream.items.filter((i) => i.settled).length,
     full: shapeStream.full,
+    landingPhase: (() => {
+      const phase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
+      const zone = shapeStream.zones[0];
+      const target = zone ? shapeStreamActiveLandingTarget(zone) : null;
+      return {
+        index: shapeStream.landingPhaseIndex,
+        name: phase?.name || null,
+        previous: shapeStreamPhaseAt(shapeStream.previousLandingPhaseIndex)?.name || null,
+        elapsed: +shapeStream.landingPhaseElapsed.toFixed(2),
+        blend: +THREE.MathUtils.clamp(
+          shapeStream.landingPhaseBlendElapsed / Math.max(0.001, SHAPE_STREAM.phaseBlendDuration),
+          0,
+          1
+        ).toFixed(2),
+        pressure: +shapeStreamLandingPressure(0).toFixed(2),
+        threshold: +SHAPE_STREAM.phaseCrowdHeight.toFixed(2),
+        target: target ? {
+          widthT: +target.widthT.toFixed(2),
+          depthT: +target.depthT.toFixed(2),
+          widthSpread: +target.widthSpread.toFixed(2),
+          depthSpread: +target.depthSpread.toFixed(2)
+        } : null
+      };
+    })(),
+    zones: shapeStream.zones.map((zone) => zone.name),
+    bounds: {
+      xMin: +shapeStream.xMin.toFixed(2),
+      xMax: +shapeStream.xMax.toFixed(2),
+      zMin: +shapeStream.zMin.toFixed(2),
+      zMax: +shapeStream.zMax.toFixed(2)
+    },
+    depthBands: shapeStream.zones.map((zone) => {
+      const counts = new Array(shapeStream.depthBucketCount).fill(0);
+      shapeStream.items.forEach((item) => {
+        if (item.zoneIndex !== shapeStream.zones.indexOf(zone)) return;
+        const zBucket = shapeStreamZBucketIndex(zone, item.mesh.position.z);
+        counts[zBucket] += 1;
+      });
+      return { zone: zone.name, counts };
+    }),
     spawn: { ...completionEffects.ring.userData.surfacePosition },
     sample: shapeStream.items.slice(0, 3).map((i) => ({
       x: +i.mesh.position.x.toFixed(2),
@@ -1031,7 +1071,7 @@ const completionEffects = (() => {
  * A continuous trickle of solid matte prisms (circle / square / triangle /
  * pentagon / hexagon) emerges from the centre of the completion ring, falls
  * under gravity, and piles up on the floor — gradually filling the room.
- * A coarse heightmap of "buckets" across the room width lets settled shapes
+ * A coarse heightmap of "buckets" across the room floor lets settled shapes
  * stack on one another so the pile mounds naturally instead of overlapping.
  * ================================================================== */
 const SHAPE_STREAM = {
@@ -1046,9 +1086,28 @@ const SHAPE_STREAM = {
   vyPop: 1.15,         // initial upward pop range
   spawnBurst: 2.55,
   spawnDownwardBias: 0.62,
-  maxLaunchSpeed: 5.8,
+  aimCompensation: 1.55,
+  farAimCompensation: 1.25,
+  maxLaunchSpeed: 18.5,
   maxUpwardSpeed: 0.95,
   maxAngularSpeed: 4.8,
+  linearDamping: 1.25,
+  angularDamping: 5.2,
+  floorFriction: 2.8,
+  wallFriction: 0.22,
+  shapeFriction: 2.35,
+  phaseMinDuration: 3,
+  phaseBlendDuration: 1.1,
+  landingPhases: [
+    { name: 'source', duration: 4.2, followSource: true, widthSpread: 0.10, depthSpread: 0.08 },
+    { name: 'back-center', duration: 5.4, widthT: 0.54, depthT: 0.22, widthSpread: 0.32, depthSpread: 0.11 },
+    { name: 'back-right', duration: 5.6, widthT: 0.88, depthT: 0.34, widthSpread: 0.20, depthSpread: 0.12 },
+    { name: 'center', duration: 5.6, widthT: 0.55, depthT: 0.58, widthSpread: 0.25, depthSpread: 0.16 },
+    { name: 'right', duration: 6.2, widthT: 0.94, depthT: 0.64, widthSpread: 0.16, depthSpread: 0.18 },
+    { name: 'front-right', duration: 6.2, widthT: 0.92, depthT: 0.96, widthSpread: 0.18, depthSpread: 0.07 },
+    { name: 'front-fill', duration: 7.2, widthT: 0.52, depthT: 0.97, widthSpread: 0.48, depthSpread: 0.08 },
+    { name: 'left', duration: 5.6, widthT: 0.23, depthT: 0.66, widthSpread: 0.22, depthSpread: 0.16 }
+  ],
   settleLinearThreshold: 0.055,
   settleAngularThreshold: 0.18,
   settleSleepDelay: 0.46,
@@ -1058,76 +1117,35 @@ const SHAPE_STREAM = {
   depthFillFactor: 0.88,
   z: CONFIG.homeZ
 };
+SHAPE_STREAM.phaseCrowdHeight = SHAPE_STREAM.maxSize * 7;
 const SHAPE_STREAM_COLORS = [
   0xeb0c00, 0xff7300, 0xffbb00, 0x00c230,
   0x00b7b7, 0x0a84ff, 0xbf5af2
 ];
 const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
   desktop: {
-    primary: {
-      // Locked to the latest aligned floor export from the current 3D pass.
-      frontLeft: { x: -0.3474, y: 0.8454 },
-      frontRight: { x: 0.9993, y: 0.9546 },
-      backLeft: { x: 0.4007, y: 0.6144 },
-      backRight: { x: 0.9993, y: 0.7764 },
-      apex: { x: 0.7000, y: 0.6144 },
-      zFront: CONFIG.homeZ + 0.18,
-      zBack: CONFIG.homeZ - 0.44,
-      weight: 2
-    },
-    midground: {
-      // Bridge band so the room reads as one continuous pile field.
-      frontLeft: { x: -0.02, y: 0.985 },
-      frontRight: { x: 1.02, y: 0.988 },
-      backLeft: { x: 0.07, y: 0.81 },
-      backRight: { x: 0.90, y: 0.814 },
-      apex: { x: 0.57, y: 0.70 },
-      zFront: CONFIG.homeZ + 0.34,
-      zBack: CONFIG.homeZ - 0.02,
-      weight: 3
-    },
-    foreground: {
-      // Lower-third band to keep the near floor populated.
-      frontLeft: { x: -0.09, y: 1.08 },
-      frontRight: { x: 1.09, y: 1.09 },
-      backLeft: { x: 0.01, y: 0.87 },
-      backRight: { x: 0.97, y: 0.88 },
-      apex: { x: 0.58, y: 0.82 },
-      zFront: CONFIG.homeZ + 0.52,
-      zBack: CONFIG.homeZ + 0.07,
-      weight: 4
+    floor: {
+      // One continuous floor field.
+      frontLeft: { x: -0.03, y: 0.976 },
+      frontRight: { x: 1.03, y: 0.984 },
+      backLeft: { x: 0.07, y: 0.740 },
+      backRight: { x: 0.94, y: 0.800 },
+      apex: { x: 0.58, y: 0.665 },
+      zFront: CONFIG.homeZ + 0.46,
+      zBack: CONFIG.homeZ - 0.34,
+      weight: 1
     }
   },
   mobile: {
-    primary: {
-      frontLeft: { x: 0.020, y: 0.875 },
-      frontRight: { x: 0.980, y: 0.878 },
-      backLeft: { x: 0.195, y: 0.688 },
-      backRight: { x: 0.820, y: 0.700 },
-      apex: { x: 0.515, y: 0.610 },
-      zFront: CONFIG.homeZ + 0.14,
-      zBack: CONFIG.homeZ - 0.26,
-      weight: 2
-    },
-    midground: {
-      frontLeft: { x: -0.03, y: 0.93 },
-      frontRight: { x: 1.03, y: 0.935 },
-      backLeft: { x: 0.10, y: 0.77 },
-      backRight: { x: 0.90, y: 0.776 },
-      apex: { x: 0.53, y: 0.71 },
-      zFront: CONFIG.homeZ + 0.27,
-      zBack: CONFIG.homeZ + 0.00,
-      weight: 3
-    },
-    foreground: {
-      frontLeft: { x: -0.07, y: 1.00 },
-      frontRight: { x: 1.07, y: 1.005 },
-      backLeft: { x: 0.03, y: 0.86 },
-      backRight: { x: 0.97, y: 0.865 },
-      apex: { x: 0.525, y: 0.81 },
-      zFront: CONFIG.homeZ + 0.38,
-      zBack: CONFIG.homeZ + 0.08,
-      weight: 4
+    floor: {
+      frontLeft: { x: -0.02, y: 0.972 },
+      frontRight: { x: 1.02, y: 0.978 },
+      backLeft: { x: 0.10, y: 0.745 },
+      backRight: { x: 0.90, y: 0.765 },
+      apex: { x: 0.525, y: 0.675 },
+      zFront: CONFIG.homeZ + 0.42,
+      zBack: CONFIG.homeZ - 0.28,
+      weight: 1
     }
   }
 };
@@ -1178,8 +1196,8 @@ const shapeStream = (() => {
     flatShading: true
   }));
 
-  const X_BUCKET_COUNT = 38;
-  const DEPTH_BUCKET_COUNT = 8;
+  const X_BUCKET_COUNT = 42;
+  const DEPTH_BUCKET_COUNT = 18;
   const colliderVertices = geometries.map((geometry) => Float32Array.from(geometry.attributes.position.array));
   return {
     geometries,
@@ -1196,6 +1214,10 @@ const shapeStream = (() => {
     zMax: CONFIG.homeZ + 0.66,
     world: null,
     boundaryBodies: [],
+    landingPhaseIndex: 0,
+    landingPhaseElapsed: 0,
+    previousLandingPhaseIndex: 0,
+    landingPhaseBlendElapsed: SHAPE_STREAM.phaseBlendDuration,
     full: false
   };
 })();
@@ -1240,6 +1262,10 @@ function resetShapeStream() {
     zone.reservations.fill(0);
   });
   shapeStream.spawnTimer = 0;
+  shapeStream.landingPhaseIndex = 0;
+  shapeStream.previousLandingPhaseIndex = 0;
+  shapeStream.landingPhaseElapsed = 0;
+  shapeStream.landingPhaseBlendElapsed = SHAPE_STREAM.phaseBlendDuration;
   shapeStream.full = false;
 }
 
@@ -1255,14 +1281,14 @@ function buildShapeStreamColliderDesc(index, size) {
   return hull || RAPIER.ColliderDesc.cuboid(size, size, size * SHAPE_STREAM.depthRatio * 0.5);
 }
 
-function createShapeStreamFixedBody(position, halfExtents, rotation = null) {
+function createShapeStreamFixedBody(position, halfExtents, rotation = null, options = {}) {
   const body = shapeStream.world.createRigidBody(
     RAPIER.RigidBodyDesc.fixed().setTranslation(position.x, position.y, position.z)
   );
   if (rotation) body.setRotation(rapierQuat(rotation), true);
   const collider = RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y, halfExtents.z)
-    .setFriction(1.1)
-    .setRestitution(0.02);
+    .setFriction(options.friction ?? 1.1)
+    .setRestitution(options.restitution ?? 0.02);
   shapeStream.world.createCollider(collider, body);
   shapeStream.boundaryBodies.push(body);
 }
@@ -1275,9 +1301,7 @@ function rebuildShapeStreamPhysicsBounds() {
   shapeStream.boundaryBodies.forEach((body) => shapeStream.world.removeRigidBody(body));
   shapeStream.boundaryBodies.length = 0;
 
-  const primaryZone = shapeStream.zones.find((zone) => zone.name === 'primary') || shapeStream.zones[0];
-  const foregroundZone = shapeStream.zones.find((zone) => zone.name === 'foreground') || primaryZone;
-  const midZone = shapeStream.zones.find((zone) => zone.name === 'midground') || primaryZone;
+  const floorZone = shapeStream.zones.find((zone) => zone.name === 'floor') || shapeStream.zones[0];
   const sampleGrid = [0, 0.2, 0.4, 0.6, 0.8, 1];
   const footprint = [];
   shapeStream.zones.forEach((zone) => {
@@ -1299,10 +1323,10 @@ function rebuildShapeStreamPhysicsBounds() {
   shapeStream.zMax = zMax;
 
   const toVector = (sample) => new THREE.Vector3(sample.x, sample.y, sample.z);
-  const floorFront = toVector(shapeStreamFloorSample(foregroundZone, 0.92, 0.5));
-  const floorBack = toVector(shapeStreamFloorSample(primaryZone, 0.14, 0.5));
-  const floorLeft = toVector(shapeStreamFloorSample(midZone, 0.54, 0.10));
-  const floorRight = toVector(shapeStreamFloorSample(midZone, 0.54, 0.90));
+  const floorFront = toVector(shapeStreamFloorSample(floorZone, 0.92, 0.5));
+  const floorBack = toVector(shapeStreamFloorSample(floorZone, 0.14, 0.5));
+  const floorLeft = toVector(shapeStreamFloorSample(floorZone, 0.54, 0.10));
+  const floorRight = toVector(shapeStreamFloorSample(floorZone, 0.54, 0.90));
 
   const floorCenter = floorFront.clone().add(floorBack).multiplyScalar(0.5);
   const axisZ = floorBack.clone().sub(floorFront).normalize();
@@ -1318,41 +1342,41 @@ function rebuildShapeStreamPhysicsBounds() {
     0.10,
     Math.max(0.85, (zMax - zMin) * 0.56)
   );
-  createShapeStreamFixedBody(floorCenter, floorHalfExtents, floorRotation);
+  createShapeStreamFixedBody(
+    floorCenter,
+    floorHalfExtents,
+    floorRotation,
+    { friction: SHAPE_STREAM.floorFriction }
+  );
 
-  const wallMidY = yMin + 2.02;
-  const wallHalfHeight = 2.55;
+  const wallMidY = 0;
+  const wallHalfHeight = Math.max(6.5, viewport.height * 0.72);
   const zHalf = Math.max(0.65, (zMax - zMin) * 0.66);
   const xHalf = Math.max(0.65, (xMax - xMin) * 0.62);
 
   createShapeStreamFixedBody(
     new THREE.Vector3(xMin - 0.12, wallMidY, floorCenter.z + 0.02),
-    new THREE.Vector3(0.18, wallHalfHeight, zHalf)
+    new THREE.Vector3(0.18, wallHalfHeight, zHalf),
+    null,
+    { friction: SHAPE_STREAM.wallFriction }
   );
   createShapeStreamFixedBody(
     new THREE.Vector3(xMax + 0.12, wallMidY, floorCenter.z + 0.02),
-    new THREE.Vector3(0.18, wallHalfHeight, zHalf)
+    new THREE.Vector3(0.18, wallHalfHeight, zHalf),
+    null,
+    { friction: SHAPE_STREAM.wallFriction }
   );
   createShapeStreamFixedBody(
     new THREE.Vector3((xMin + xMax) * 0.5 + 0.04, wallMidY, zMin - 0.14),
-    new THREE.Vector3(xHalf, wallHalfHeight, 0.18)
+    new THREE.Vector3(xHalf, wallHalfHeight, 0.18),
+    null,
+    { friction: SHAPE_STREAM.wallFriction }
   );
   createShapeStreamFixedBody(
-    new THREE.Vector3((xMin + xMax) * 0.5, yMin + 0.58, zMax + 0.22),
-    new THREE.Vector3(xHalf, 0.72, 0.22)
-  );
-  // Two low retention rails keep the whole room from draining into the front lip.
-  createShapeStreamFixedBody(
-    new THREE.Vector3((xMin + xMax) * 0.5 - 0.04, yMin + 0.18, THREE.MathUtils.lerp(zMin, zMax, 0.54)),
-    new THREE.Vector3(xHalf * 0.7, 0.12, 0.09)
-  );
-  createShapeStreamFixedBody(
-    new THREE.Vector3((xMin + xMax) * 0.5 + 0.06, yMin + 0.12, THREE.MathUtils.lerp(zMin, zMax, 0.34)),
-    new THREE.Vector3(xHalf * 0.54, 0.09, 0.075)
-  );
-  createShapeStreamFixedBody(
-    new THREE.Vector3((xMin + xMax) * 0.5, yMin - 0.22, zMax + 0.56),
-    new THREE.Vector3(xHalf + 0.2, 0.16, 0.72)
+    new THREE.Vector3((xMin + xMax) * 0.5, wallMidY, zMax + 0.22),
+    new THREE.Vector3(xHalf, wallHalfHeight, 0.22),
+    null,
+    { friction: SHAPE_STREAM.wallFriction }
   );
 
   if (shapeStream.items.length) resetShapeStream();
@@ -1385,6 +1409,110 @@ function shapeStreamBucketHeight(zone, xBucket, zBucket) {
 function shapeStreamCrowdedHeight(zone, xBucket, zBucket) {
   const offset = shapeStreamBucketOffset(xBucket, zBucket);
   return zone.buckets[offset] + zone.reservations[offset];
+}
+
+function shapeStreamSignedRandom() {
+  // Triangular-ish distribution: most targets stay near the active pour path,
+  // while occasional wider throws keep the floor from becoming a narrow mound.
+  return ((Math.random() + Math.random() + Math.random()) / 3 - 0.5) * 2;
+}
+
+function shapeStreamPhaseAt(index) {
+  const phases = SHAPE_STREAM.landingPhases;
+  if (!phases.length) return null;
+  return phases[((index % phases.length) + phases.length) % phases.length];
+}
+
+function shapeStreamLandingPhaseTarget(zone, phase) {
+  const source = completionEffects.ring.userData.surfacePosition;
+  const sourceDepthT = THREE.MathUtils.clamp(shapeStreamDepthTForZ(zone, source.z), 0.08, 0.36);
+  const sourceWidthT = THREE.MathUtils.clamp(shapeStreamWidthTForWorldX(zone, source.x, sourceDepthT), 0.08, 0.92);
+  return {
+    name: phase?.name || 'floor',
+    widthT: phase?.followSource ? sourceWidthT : THREE.MathUtils.clamp(phase?.widthT ?? 0.5, 0.01, 0.99),
+    depthT: phase?.followSource ? sourceDepthT : THREE.MathUtils.clamp(phase?.depthT ?? 0.5, 0.02, 0.98),
+    widthSpread: phase?.widthSpread ?? 0.22,
+    depthSpread: phase?.depthSpread ?? 0.18
+  };
+}
+
+function shapeStreamActiveLandingTarget(zone) {
+  const activePhase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
+  const activeTarget = shapeStreamLandingPhaseTarget(zone, activePhase);
+  const previousPhase = shapeStreamPhaseAt(shapeStream.previousLandingPhaseIndex);
+  const blendT = ease01(THREE.MathUtils.clamp(
+    shapeStream.landingPhaseBlendElapsed / Math.max(0.001, SHAPE_STREAM.phaseBlendDuration),
+    0,
+    1
+  ));
+  if (!previousPhase || shapeStream.previousLandingPhaseIndex === shapeStream.landingPhaseIndex || blendT >= 1) {
+    return activeTarget;
+  }
+
+  const previousTarget = shapeStreamLandingPhaseTarget(zone, previousPhase);
+  return {
+    name: activeTarget.name,
+    widthT: THREE.MathUtils.lerp(previousTarget.widthT, activeTarget.widthT, blendT),
+    depthT: THREE.MathUtils.lerp(previousTarget.depthT, activeTarget.depthT, blendT),
+    widthSpread: THREE.MathUtils.lerp(previousTarget.widthSpread, activeTarget.widthSpread, blendT),
+    depthSpread: THREE.MathUtils.lerp(previousTarget.depthSpread, activeTarget.depthSpread, blendT)
+  };
+}
+
+function shapeStreamLandingPressure(zoneIndex = 0) {
+  const zone = shapeStream.zones[zoneIndex] || shapeStream.zones[0];
+  if (!zone) return 0;
+  const phase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
+  const target = shapeStreamLandingPhaseTarget(zone, phase);
+  const centerX = THREE.MathUtils.clamp(
+    Math.floor(target.widthT * shapeStream.xBucketCount),
+    0,
+    shapeStream.xBucketCount - 1
+  );
+  const centerZ = THREE.MathUtils.clamp(
+    Math.floor(target.depthT * shapeStream.depthBucketCount),
+    0,
+    shapeStream.depthBucketCount - 1
+  );
+  const radiusX = Math.max(2, Math.ceil(target.widthSpread * shapeStream.xBucketCount * 0.55));
+  const radiusZ = Math.max(2, Math.ceil(target.depthSpread * shapeStream.depthBucketCount * 0.7));
+  let pressure = 0;
+
+  for (let z = Math.max(0, centerZ - radiusZ); z <= Math.min(shapeStream.depthBucketCount - 1, centerZ + radiusZ); z += 1) {
+    for (let x = Math.max(0, centerX - radiusX); x <= Math.min(shapeStream.xBucketCount - 1, centerX + radiusX); x += 1) {
+      const dx = (x - centerX) / Math.max(1, radiusX);
+      const dz = (z - centerZ) / Math.max(1, radiusZ);
+      if (dx * dx + dz * dz > 1.2) continue;
+      pressure = Math.max(pressure, shapeStreamCrowdedHeight(zone, x, z));
+    }
+  }
+
+  return pressure;
+}
+
+function advanceShapeStreamLandingPhase() {
+  const phases = SHAPE_STREAM.landingPhases;
+  if (!phases.length) return;
+  shapeStream.previousLandingPhaseIndex = shapeStream.landingPhaseIndex;
+  shapeStream.landingPhaseIndex = (shapeStream.landingPhaseIndex + 1) % phases.length;
+  shapeStream.landingPhaseElapsed = 0;
+  shapeStream.landingPhaseBlendElapsed = 0;
+}
+
+function updateShapeStreamLandingPhase(delta) {
+  const phase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
+  if (!phase) return;
+  shapeStream.landingPhaseElapsed += delta;
+  shapeStream.landingPhaseBlendElapsed = Math.min(
+    SHAPE_STREAM.phaseBlendDuration,
+    shapeStream.landingPhaseBlendElapsed + delta
+  );
+
+  const timedOut = shapeStream.landingPhaseElapsed >= phase.duration;
+  const canCrowdSwitch = shapeStream.landingPhaseElapsed >= SHAPE_STREAM.phaseMinDuration;
+  const crowded = canCrowdSwitch
+    && shapeStreamLandingPressure(0) >= SHAPE_STREAM.phaseCrowdHeight;
+  if (timedOut || crowded) advanceShapeStreamLandingPhase();
 }
 
 function applyShapeStreamReservation(zone, xBucket, zBucket, lift, direction = 1) {
@@ -1431,9 +1559,7 @@ function shapeStreamFloorSample(zone, depthT, widthT) {
     y: Math.min(zone.floorLayout.backLeft.y, zone.floorLayout.backRight.y)
   };
   const centerWeight = Math.max(0, 1 - Math.abs(widthT - 0.5) / 0.5);
-  const apexPull = zone.name === 'foreground'
-    ? Math.pow(depthT, 1.1) * Math.pow(centerWeight, 0.7) * 0.28
-    : Math.pow(depthT, 1.8) * Math.pow(centerWeight, 1.35);
+  const apexPull = Math.pow(depthT, 1.25) * Math.pow(centerWeight, 0.9) * 0.14;
   const nx = THREE.MathUtils.lerp(baseX, apex.x, apexPull);
   const ny = THREE.MathUtils.lerp(baseY, apex.y, apexPull);
   const z = THREE.MathUtils.lerp(zone.zMin, zone.zMax, depthT);
@@ -1450,10 +1576,8 @@ function shapeStreamPerspectiveScale(zone, depthT) {
   const row = shapeStreamRowBounds(zone, depthT);
   const rowSpan = Math.max(0.0001, row.right.x - row.left.x) * THREE.MathUtils.lerp(0.72, 1, Math.pow(depthT, 0.9));
   const perspective = rowSpan / zone.frontSpan;
-  const foregroundBoost = zone.name === 'foreground'
-    ? THREE.MathUtils.lerp(1.04, 1.28, Math.pow(depthT, 0.7))
-    : THREE.MathUtils.lerp(0.90, 1.18, Math.pow(depthT, 0.82));
-  return THREE.MathUtils.clamp(perspective * foregroundBoost, 0.52, 1.18);
+  const depthBoost = THREE.MathUtils.lerp(0.90, 1.18, Math.pow(depthT, 0.82));
+  return THREE.MathUtils.clamp(perspective * depthBoost, 0.52, 1.18);
 }
 
 function shapeStreamWidthTForWorldX(zone, worldX, depthT) {
@@ -1465,47 +1589,53 @@ function shapeStreamWidthTForWorldX(zone, worldX, depthT) {
 }
 
 function pickShapeStreamTargetCell() {
-  // Keep each floor region level against its own low point so the foreground
-  // band and the room-depth field can both keep filling instead of one starving
-  // the other once it gets ahead.
+  // Keep one active landing patch at a time. The patch moves on a timed/crowded
+  // rhythm, so the stream spreads without visibly forking at the ring.
   const candidates = [];
   shapeStream.zones.forEach((zone, zoneIndex) => {
-    let zoneMinHeight = Infinity;
-    for (let i = 0; i < zone.buckets.length; i += 1) {
-      const crowded = zone.buckets[i] + zone.reservations[i];
-      if (crowded < zoneMinHeight) zoneMinHeight = crowded;
+    const target = shapeStreamActiveLandingTarget(zone);
+    const centerWidthT = target.widthT;
+    const centerDepthT = target.depthT;
+    const widthSpread = target.widthSpread;
+    const depthSpread = target.depthSpread;
+
+    const sampleCount = centerWidthT > 0.84 ? 24 : 18;
+    for (let i = 0; i < sampleCount; i += 1) {
+      const wideThrow = i % 6 === 0 ? 1.36 : 1;
+      const edgePull = centerWidthT > 0.84 && i % 4 === 0
+        ? Math.random() * 0.08
+        : 0;
+      const widthT = THREE.MathUtils.clamp(
+        centerWidthT + edgePull + shapeStreamSignedRandom() * widthSpread * wideThrow,
+        0.01,
+        0.99
+      );
+      const depthT = THREE.MathUtils.clamp(
+        centerDepthT + shapeStreamSignedRandom() * depthSpread * wideThrow,
+        0.02,
+        0.98
+      );
+      const x = THREE.MathUtils.clamp(
+        Math.floor(widthT * shapeStream.xBucketCount),
+        0,
+        shapeStream.xBucketCount - 1
+      );
+      const z = THREE.MathUtils.clamp(
+        Math.floor(depthT * shapeStream.depthBucketCount),
+        0,
+        shapeStream.depthBucketCount - 1
+      );
+      const widthDist = (widthT - centerWidthT) / Math.max(0.001, widthSpread);
+      const depthDist = (depthT - centerDepthT) / Math.max(0.001, depthSpread);
+      const continuityPenalty = (widthDist * widthDist + depthDist * depthDist) * SHAPE_STREAM.maxSize * 0.24;
+      const score = shapeStreamCrowdedHeight(zone, x, z)
+        + continuityPenalty
+        + Math.random() * SHAPE_STREAM.maxSize * 0.18;
+      candidates.push({ zoneIndex, x, z, depthT, widthT, score });
     }
-    const baseLayerHeight = SHAPE_STREAM.maxSize * 1.15;
-    const layerProgress = THREE.MathUtils.clamp(zoneMinHeight / Math.max(0.001, baseLayerHeight), 0, 1);
-    const tolerance = THREE.MathUtils.lerp(
-      Math.max(SHAPE_STREAM.minSize * SHAPE_STREAM.fillFactor, 0.34),
-      SHAPE_STREAM.maxSize * 2.6,
-      Math.pow(layerProgress, 0.72)
-    );
-    for (let z = 0; z < shapeStream.depthBucketCount; z += 1) {
-      for (let x = 0; x < shapeStream.xBucketCount; x += 1) {
-        const height = shapeStreamCrowdedHeight(zone, x, z);
-          if (height > zoneMinHeight + tolerance) continue;
-          const depthT = (z + 0.5) / shapeStream.depthBucketCount;
-          const centerT = (x + 0.5) / shapeStream.xBucketCount;
-          const centerBias = 1 - Math.abs(centerT - 0.5) / 0.5;
-          const leftLane = 1 - Math.abs(centerT - 0.22) / 0.22;
-          const rightLane = 1 - Math.abs(centerT - 0.78) / 0.22;
-          const laneBias = Math.max(0, centerBias, leftLane, rightLane);
-          const moundBias = 1 - Math.abs(depthT - 0.52) / 0.52;
-          const ringSideBias = 1 - Math.abs(centerT - 0.34) / 0.34;
-          const zoneBias = zone.name === 'foreground'
-            ? 1 + Math.round(depthT * 3) + Math.round(laneBias * 2) + Math.round(layerProgress)
-            : zone.name === 'midground'
-              ? 4 + Math.round(laneBias * 4) + Math.round(moundBias * 4) + Math.round(layerProgress * 2)
-              : 5 + Math.round((1 - depthT) * 4) + Math.round(ringSideBias * 5) + Math.round(laneBias * 2);
-          const repeats = zoneBias * zone.weight;
-          for (let i = 0; i < repeats; i += 1) candidates.push({ zoneIndex, x, z });
-        }
-      }
   });
   if (!candidates.length) return { zoneIndex: 0, x: 0, z: shapeStream.depthBucketCount - 1 };
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  return candidates.reduce((best, candidate) => (candidate.score < best.score ? candidate : best), candidates[0]);
 }
 
 function spawnStreamShape() {
@@ -1520,12 +1650,15 @@ function spawnStreamShape() {
   mesh.scale.setScalar(size);
   mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
-  // Aim each shape at one of the lowest floor cells so the fill spreads across
-  // both the room-depth field and the lower-third foreground overlap.
+  // Aim each shape at one of the lowest cells in the unified floor field.
   const lowest = shapeStreamCrowdedHeight(zone, targetCell.x, targetCell.z);
-  const targetDepthT = (targetCell.z + 0.5) / shapeStream.depthBucketCount;
-  const targetWidthT = THREE.MathUtils.clamp(
-    (targetCell.x + 0.5 + (Math.random() - 0.5) * 0.42) / shapeStream.xBucketCount,
+  const targetDepthT = targetCell.depthT ?? THREE.MathUtils.clamp(
+    (targetCell.z + Math.random()) / shapeStream.depthBucketCount,
+    0.02,
+    0.98
+  );
+  const targetWidthT = targetCell.widthT ?? THREE.MathUtils.clamp(
+    (targetCell.x + Math.random()) / shapeStream.xBucketCount,
     0.01,
     0.99
   );
@@ -1533,10 +1666,17 @@ function spawnStreamShape() {
   const targetX = targetSample.x;
   const targetZ = targetSample.z;
   const center = completionEffects.ring.userData.surfacePosition;
-  const flowVector = new THREE.Vector3(targetX - center.x, -SHAPE_STREAM.spawnDownwardBias, targetZ - center.z);
+  const sourceZ = THREE.MathUtils.clamp(center.z, shapeStream.zMin + size, shapeStream.zMax - size);
+  const spawnZ = THREE.MathUtils.clamp(
+    THREE.MathUtils.lerp(sourceZ, targetZ, 0.22)
+      + (Math.random() - 0.5) * (shapeStream.zMax - shapeStream.zMin) * 0.08,
+    shapeStream.zMin + size,
+    shapeStream.zMax - size
+  );
+  const spawnPosition = new THREE.Vector3(center.x, center.y, spawnZ);
+  const flowVector = new THREE.Vector3(targetX - spawnPosition.x, -SHAPE_STREAM.spawnDownwardBias, targetZ - spawnPosition.z);
   if (flowVector.lengthSq() < 0.0001) flowVector.set(1, -0.3, 0.18);
   flowVector.normalize();
-  const spawnPosition = new THREE.Vector3(center.x, center.y, center.z);
   mesh.position.copy(spawnPosition);
   scene.add(mesh);
 
@@ -1552,19 +1692,27 @@ function spawnStreamShape() {
   const g = Math.abs(SHAPE_STREAM.gravity);
   // t for y(t)=y0+vy0*t-0.5*g*t^2 to reach surfaceY (the larger root).
   const airtime = (vy0 + Math.sqrt(vy0 * vy0 + 2 * g * fall)) / g;
-  const aimVx = (targetX - mesh.position.x) / Math.max(0.25, airtime);
-  const aimVz = (targetZ - mesh.position.z) / Math.max(0.25, airtime);
+  const safeAirtime = Math.max(0.25, airtime);
+  const rightReach = THREE.MathUtils.clamp((targetWidthT - 0.72) / 0.27, 0, 1);
+  const frontReach = THREE.MathUtils.clamp((targetDepthT - 0.70) / 0.28, 0, 1);
+  const backReach = THREE.MathUtils.clamp((0.34 - targetDepthT) / 0.32, 0, 1);
+  const xAimGain = SHAPE_STREAM.aimCompensation
+    + SHAPE_STREAM.farAimCompensation * Math.max(rightReach, frontReach * 0.35);
+  const zAimGain = SHAPE_STREAM.aimCompensation
+    + SHAPE_STREAM.farAimCompensation * Math.max(frontReach, backReach * 0.7);
+  const aimVx = ((targetX - mesh.position.x) / safeAirtime) * xAimGain;
+  const aimVz = ((targetZ - mesh.position.z) / safeAirtime) * zAimGain;
   const burst = {
     x: flowVector.x * SHAPE_STREAM.spawnBurst,
-    y: -Math.abs(flowVector.y) * SHAPE_STREAM.spawnBurst * 0.25,
+    y: -Math.abs(flowVector.y) * SHAPE_STREAM.spawnBurst * 0.12,
     z: flowVector.z * SHAPE_STREAM.spawnBurst
   };
 
   const body = shapeStream.world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(mesh.position.x, mesh.position.y, mesh.position.z)
-      .setLinearDamping(2.75)
-      .setAngularDamping(4.25)
+      .setLinearDamping(SHAPE_STREAM.linearDamping)
+      .setAngularDamping(SHAPE_STREAM.angularDamping)
     );
   body.setRotation(rapierQuat(mesh.quaternion), true);
   const launchVelocity = new THREE.Vector3(
@@ -1594,7 +1742,7 @@ function spawnStreamShape() {
   body.enableCcd(true);
 
   const colliderDesc = buildShapeStreamColliderDesc(geoIndex, size)
-    .setFriction(1.55)
+    .setFriction(SHAPE_STREAM.shapeFriction)
     .setRestitution(0.03)
     .setDensity(1.3);
   const collider = shapeStream.world.createCollider(colliderDesc, body);
@@ -1626,6 +1774,8 @@ function updateShapeStream(delta) {
 
   const ringSettled = completionEffects.active
     && completionEffects.elapsed >= RING_SETTLED_TIME;
+
+  if (ringSettled && !shapeStream.full) updateShapeStreamLandingPhase(delta);
 
   if (ringSettled && !shapeStream.full && shapeStream.items.length < SHAPE_STREAM.maxShapes) {
     shapeStream.spawnTimer += delta;
@@ -2582,18 +2732,15 @@ function formatShapeStreamZone(zone) {
 
 function activeShapeStreamText() {
   const streamLayout = SHAPE_STREAM_FLOOR_LAYOUTS[activeLayoutName] || SHAPE_STREAM_FLOOR_LAYOUTS.desktop;
+  const zoneBlocks = Object.entries(streamLayout).map(([name, zone]) => [
+    `  ${name}: {`,
+    `    ${formatShapeStreamZone(zone)}`,
+    '  }'
+  ].join('\n'));
   return [
     `streamColors: [ ${SHAPE_STREAM_COLORS.map(colorHex).join(', ')} ]`,
     'streamFloor: {',
-    '  primary: {',
-    `    ${formatShapeStreamZone(streamLayout.primary)}`,
-    '  },',
-    '  midground: {',
-    `    ${formatShapeStreamZone(streamLayout.midground)}`,
-    '  },',
-    '  foreground: {',
-    `    ${formatShapeStreamZone(streamLayout.foreground)}`,
-    '  }',
+    zoneBlocks.join(',\n'),
     '}'
   ].join('\n');
 }
@@ -2993,13 +3140,24 @@ if (calibrate) {
 animate();
 if (previewComplete) {
   // Debug-only shortcut for reference checks without changing the real gated flow.
-  const runPreviewCompletion = () => requestAnimationFrame(() => {
+  const runPreviewCompletion = () => {
     settleCompletionInstantly();
-    for (let i = 0; i < 1600; i += 1) updateShapeStream(0.025);
-    shapeStream.full = true;
-    for (let i = 0; i < 900; i += 1) updateShapeStream(0.025);
-    renderer.render(scene, camera);
-  });
+    let warmupSteps = 1600;
+    let settleSteps = 900;
+    const stepChunk = () => {
+      const chunk = 70;
+      for (let i = 0; i < chunk && warmupSteps > 0; i += 1, warmupSteps -= 1) {
+        updateShapeStream(0.025);
+      }
+      if (warmupSteps <= 0) shapeStream.full = true;
+      for (let i = 0; i < chunk && warmupSteps <= 0 && settleSteps > 0; i += 1, settleSteps -= 1) {
+        updateShapeStream(0.025);
+      }
+      renderer.render(scene, camera);
+      if (warmupSteps > 0 || settleSteps > 0) requestAnimationFrame(stepChunk);
+    };
+    requestAnimationFrame(stepChunk);
+  };
   if (roomBgImage?.complete) runPreviewCompletion();
   else roomBgImage?.addEventListener('load', runPreviewCompletion, { once: true });
 }
