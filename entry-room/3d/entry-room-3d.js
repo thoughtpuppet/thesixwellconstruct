@@ -30,16 +30,16 @@ const MOBILE_SOCKETS = [
   { x: 0.7129, y: 0.3112 }, { x: 0.7891, y: 0.3138 }
 ];
 const MOBILE_ORB_HOMES = [
-  { x: 0.1246, y: 0.1095 }, { x: 0.7499, y: 1.2356 },
-  { x: 0.4094, y: -0.3853 }, { x: 0.1583, y: 1.1367 },
-  { x: 0.5039, y: 0.6927 }, { x: 0.9119, y: 0.7072 }
+  { x: 0.1192, y: -0.0316 }, { x: 0.7499, y: 1.2356 },
+  { x: 0.5752, y: -0.5221 }, { x: 0.1583, y: 1.1367 },
+  { x: 0.4685, y: 0.4401 }, { x: 0.9119, y: 0.7072 }
 ];
 const MOBILE_ORB_SHADOW = [
-  { cast: 0.93, skew: 0.02, depth: 1.00, z: 0.00 },
+  { cast: 0.96, skew: 0.02, depth: 1.00, z: 0.00 },
   { cast: 2.58, skew: 0.02, depth: 1.00, z: 0.00 },
   { cast: 1.11, skew: 0.02, depth: 1.00, z: 0.00 },
   { cast: 0.93, skew: 0.02, depth: 1.00, z: 0.00 },
-  { cast: 0.66, skew: 0.02, depth: 1.00, z: 0.00 },
+  { cast: 0.84, skew: 0.02, depth: 1.00, z: 0.00 },
   { cast: 1.14, skew: 0.02, depth: 1.00, z: 0.00 }
 ];
 
@@ -83,19 +83,24 @@ const DESKTOP_COMPLETION_RING = {
   bodyOpacity: 1.0
 };
 const MOBILE_COMPLETION_RING = {
-  x: 0.4745,
-  y: 1.0547,
-  aspectX: 1.22,
-  aspectY: 0.38,
-  radiusPad: 2.75,
-  surfaceZ: 0.10,
-  recessZ: -0.08,
-  bodyOffsetX: 0.00,
-  bodyOffsetY: 0.10,
-  bodyOffsetZ: -0.16,
-  emergeOffsetX: 0.00,
-  emergeOffsetY: 0.42,
-  emergeOffsetZ: -1.34,
+  x: 0.1659,
+  y: -0.2353,
+  patchX: 0.1659,
+  patchY: -0.2353,
+  patchSize: 1.20,
+  fieldSize: 1.55,
+  fieldOpacity: 0.10,
+  aspectX: 0.80,
+  aspectY: 1.02,
+  radiusPad: 1.56,
+  surfaceZ: 0.14,
+  recessZ: -0.10,
+  bodyOffsetX: -0.20,
+  bodyOffsetY: -0.02,
+  bodyOffsetZ: -0.14,
+  emergeOffsetX: -0.14,
+  emergeOffsetY: 0.10,
+  emergeOffsetZ: -1.46,
   startScale: 0.38,
   bodyStartScale: 0.58,
   recessOpacity: 0.66,
@@ -165,12 +170,14 @@ const CONFIG = {
 };
 
 const mobileLayoutQuery = window.matchMedia('(max-aspect-ratio: 3/4)');
+const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 let activeLayoutName = mobileLayoutQuery.matches ? 'mobile' : 'desktop';
 let activeLayout = LAYOUTS[activeLayoutName];
 
 const urlParams = new URLSearchParams(location.search);
 const calibrate = urlParams.has('calibrate');
 const previewComplete = urlParams.has('previewComplete');
+const noNavigate = calibrate && urlParams.has('noNavigate');
 if (calibrate) mountCalibrationHud(document.body);
 
 const canvas = document.getElementById('entry-canvas');
@@ -186,8 +193,6 @@ const calibrationOutput = document.getElementById('calibration-output');
 const calibrationToggle = document.getElementById('cal-toggle');
 const RING_SETTLED_TIME = 4.8;
 const HUD_COLLAPSE_KEY = 'entry3d-hud-collapsed';
-const FEEDBACK_STORAGE_KEY = 'entry3d-feedback-enabled';
-const feedbackQuery = new URLSearchParams(location.search).get('feedback');
 const ROOM_BACKDROP_Z = -0.02;
 const COMPLETION_RING_DEPTH = 0.44;
 const COMPLETION_RING_FRONT_CLEARANCE = 0.08;
@@ -224,36 +229,36 @@ const RING_SETTLE_SEQUENCE_DURATION = RING_COLOR_PAUSE_AFTER_EMERGENCE
   + RING_SETTLE_FADE_DURATION;
 const SHAPE_STREAM_START_TIME = RING_SETTLED_TIME + RING_SETTLE_SEQUENCE_DURATION;
 const SHAPE_LOCK_START_DELAY = 3; // extra pause after the ring settles before the lock cycles in
-
-function readFeedbackEnabled() {
-  if (feedbackQuery != null) {
-    return !['0', 'false', 'off'].includes(String(feedbackQuery).toLowerCase());
-  }
-  try {
-    const stored = localStorage.getItem(FEEDBACK_STORAGE_KEY);
-    if (stored != null) return stored !== '0';
-  } catch {}
-  return true;
-}
+const SHAPE_SPAWN_FEEDBACK_COOLDOWN_MS = 135;
+const SHAPE_IMPACT_FEEDBACK_COOLDOWN_MS = 115;
+const SHAPE_IMPACT_HAPTIC_COOLDOWN_MS = 240;
 
 const interactionFeedback = {
-  enabled: readFeedbackEnabled(),
-  audioContext: null
+  audioContext: null,
+  lastHapticAt: 0,
+  lastShapeSpawnSoundAt: 0,
+  lastShapeImpactSoundAt: 0,
+  counters: {
+    socket: 0,
+    shapeSpawn: 0,
+    shapeImpact: 0,
+    haptic: 0
+  }
 };
 
 const sceneFx = {
   wrongShapeFlashTimer: null
 };
 
-function setFeedbackEnabled(enabled) {
-  interactionFeedback.enabled = !!enabled;
-  try {
-    localStorage.setItem(FEEDBACK_STORAGE_KEY, enabled ? '1' : '0');
-  } catch {}
+function feedbackTimestamp() {
+  return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
 }
 
-function primeSeatFeedback() {
-  if (!interactionFeedback.enabled) return;
+function feedbackAudioState() {
+  return interactionFeedback.audioContext?.state || 'uninitialized';
+}
+
+function primeFeedback() {
   if (!interactionFeedback.audioContext) {
     const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextCtor) return;
@@ -266,9 +271,89 @@ function primeSeatFeedback() {
   if (interactionFeedback.audioContext.state === 'suspended') {
     interactionFeedback.audioContext.resume().catch(() => {});
   }
+  return interactionFeedback.audioContext;
 }
 
-function triggerSeatTone(ctx, startAt = ctx.currentTime) {
+function playFeedbackAudio(callback) {
+  const ctx = primeFeedback();
+  if (!ctx) return;
+  if (ctx.state === 'running') {
+    callback(ctx, ctx.currentTime);
+    return;
+  }
+  if (ctx.state === 'suspended') {
+    ctx.resume()
+      .then(() => {
+        if (ctx.state === 'running') callback(ctx, ctx.currentTime + 0.01);
+      })
+      .catch(() => {});
+  }
+}
+
+function connectFeedbackOutput(ctx, outputNode, pan = 0) {
+  if (typeof ctx.createStereoPanner === 'function') {
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = THREE.MathUtils.clamp(pan, -0.85, 0.85);
+    outputNode.connect(panner);
+    panner.connect(ctx.destination);
+    return;
+  }
+  outputNode.connect(ctx.destination);
+}
+
+function feedbackPanForPosition(position) {
+  if (!position || !viewport?.width) return 0;
+  return THREE.MathUtils.clamp(position.x / Math.max(0.001, viewport.width * 0.5), -0.85, 0.85);
+}
+
+function pulseFeedbackHaptic(pattern, cooldownMs = 0, now = feedbackTimestamp()) {
+  if (!navigator.vibrate) return false;
+  if (cooldownMs > 0 && now - interactionFeedback.lastHapticAt < cooldownMs) return false;
+  try {
+    const accepted = navigator.vibrate(pattern);
+    if (accepted !== false) {
+      interactionFeedback.lastHapticAt = now;
+      interactionFeedback.counters.haptic += 1;
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+function triggerNoiseBurst(ctx, startAt, {
+  duration = 0.045,
+  gain = 0.018,
+  filterType = 'bandpass',
+  frequency = 700,
+  q = 0.8,
+  pan = 0
+} = {}) {
+  const length = Math.max(1, Math.floor(ctx.sampleRate * duration));
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i += 1) {
+    const fade = 1 - i / length;
+    data[i] = (Math.random() * 2 - 1) * fade;
+  }
+
+  const source = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gainNode = ctx.createGain();
+  source.buffer = buffer;
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(frequency, startAt);
+  filter.Q.setValueAtTime(q, startAt);
+  gainNode.gain.setValueAtTime(0.0001, startAt);
+  gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), startAt + Math.min(0.012, duration * 0.28));
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+  source.connect(filter);
+  filter.connect(gainNode);
+  connectFeedbackOutput(ctx, gainNode, pan);
+  source.start(startAt);
+  source.stop(startAt + duration);
+}
+
+function triggerSocketTone(ctx, startAt = ctx.currentTime) {
   const bodyOsc = ctx.createOscillator();
   const bodyGain = ctx.createGain();
   bodyOsc.type = 'triangle';
@@ -278,7 +363,7 @@ function triggerSeatTone(ctx, startAt = ctx.currentTime) {
   bodyGain.gain.exponentialRampToValueAtTime(0.075, startAt + 0.012);
   bodyGain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.12);
   bodyOsc.connect(bodyGain);
-  bodyGain.connect(ctx.destination);
+  connectFeedbackOutput(ctx, bodyGain);
   bodyOsc.start(startAt);
   bodyOsc.stop(startAt + 0.13);
 
@@ -291,31 +376,87 @@ function triggerSeatTone(ctx, startAt = ctx.currentTime) {
   clickGain.gain.exponentialRampToValueAtTime(0.03, startAt + 0.004);
   clickGain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.045);
   clickOsc.connect(clickGain);
-  clickGain.connect(ctx.destination);
+  connectFeedbackOutput(ctx, clickGain);
   clickOsc.start(startAt);
   clickOsc.stop(startAt + 0.05);
 }
 
-function playSeatFeedback() {
-  if (!interactionFeedback.enabled) return;
+function triggerShapeSpawnTick(ctx, startAt, pan = 0, size = SHAPE_STREAM.minSize) {
+  const tickOsc = ctx.createOscillator();
+  const tickGain = ctx.createGain();
+  const pitch = 560 + Math.random() * 260 + THREE.MathUtils.clamp(size, 0.05, 0.7) * 150;
+  tickOsc.type = 'triangle';
+  tickOsc.frequency.setValueAtTime(pitch, startAt);
+  tickOsc.frequency.exponentialRampToValueAtTime(Math.max(180, pitch * 0.52), startAt + 0.035);
+  tickGain.gain.setValueAtTime(0.0001, startAt);
+  tickGain.gain.exponentialRampToValueAtTime(0.014, startAt + 0.004);
+  tickGain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.055);
+  tickOsc.connect(tickGain);
+  connectFeedbackOutput(ctx, tickGain, pan);
+  tickOsc.start(startAt);
+  tickOsc.stop(startAt + 0.06);
 
-  if (navigator.vibrate) {
-    try { navigator.vibrate(18); } catch {}
-  }
+  triggerNoiseBurst(ctx, startAt + 0.002, {
+    duration: 0.032,
+    gain: 0.007,
+    filterType: 'highpass',
+    frequency: 1200,
+    q: 0.5,
+    pan
+  });
+}
 
-  primeSeatFeedback();
-  const ctx = interactionFeedback.audioContext;
-  if (!ctx) return;
-  if (ctx.state === 'running') {
-    triggerSeatTone(ctx);
-    return;
+function triggerShapeImpactThud(ctx, startAt, pan = 0, intensity = 0.4) {
+  const clamped = THREE.MathUtils.clamp(intensity, 0.2, 1);
+  const thudOsc = ctx.createOscillator();
+  const thudGain = ctx.createGain();
+  thudOsc.type = 'triangle';
+  thudOsc.frequency.setValueAtTime(92 - clamped * 18, startAt);
+  thudOsc.frequency.exponentialRampToValueAtTime(44, startAt + 0.085);
+  thudGain.gain.setValueAtTime(0.0001, startAt);
+  thudGain.gain.exponentialRampToValueAtTime(0.018 + clamped * 0.024, startAt + 0.012);
+  thudGain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.12);
+  thudOsc.connect(thudGain);
+  connectFeedbackOutput(ctx, thudGain, pan);
+  thudOsc.start(startAt);
+  thudOsc.stop(startAt + 0.13);
+
+  triggerNoiseBurst(ctx, startAt, {
+    duration: 0.065,
+    gain: 0.008 + clamped * 0.014,
+    filterType: 'lowpass',
+    frequency: 480,
+    q: 0.7,
+    pan
+  });
+}
+
+function playSocketFeedback() {
+  interactionFeedback.counters.socket += 1;
+  pulseFeedbackHaptic(18);
+  playFeedbackAudio((ctx, startAt) => triggerSocketTone(ctx, startAt));
+}
+
+function playShapeSpawnFeedback(position, size) {
+  const now = feedbackTimestamp();
+  if (now - interactionFeedback.lastShapeSpawnSoundAt < SHAPE_SPAWN_FEEDBACK_COOLDOWN_MS) return;
+  interactionFeedback.lastShapeSpawnSoundAt = now;
+  interactionFeedback.counters.shapeSpawn += 1;
+  const pan = feedbackPanForPosition(position);
+  playFeedbackAudio((ctx, startAt) => triggerShapeSpawnTick(ctx, startAt, pan, size));
+}
+
+function playShapeImpactFeedback(intensity, position) {
+  const now = feedbackTimestamp();
+  const clamped = THREE.MathUtils.clamp(intensity, 0.2, 1);
+  if (now - interactionFeedback.lastShapeImpactSoundAt >= SHAPE_IMPACT_FEEDBACK_COOLDOWN_MS) {
+    interactionFeedback.lastShapeImpactSoundAt = now;
+    interactionFeedback.counters.shapeImpact += 1;
+    const pan = feedbackPanForPosition(position);
+    playFeedbackAudio((ctx, startAt) => triggerShapeImpactThud(ctx, startAt, pan, clamped));
   }
-  if (ctx.state === 'suspended') {
-    ctx.resume()
-      .then(() => {
-        if (ctx.state === 'running') triggerSeatTone(ctx, ctx.currentTime + 0.01);
-      })
-      .catch(() => {});
+  if (clamped >= 0.38) {
+    pulseFeedbackHaptic(clamped > 0.68 ? [8, 18, 10] : 12, SHAPE_IMPACT_HAPTIC_COOLDOWN_MS, now);
   }
 }
 
@@ -344,13 +485,20 @@ function resetSceneFx() {
 }
 
 window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
-  setFeedbackEnabled,
-  getFeedbackEnabled: () => interactionFeedback.enabled,
+  setFeedbackEnabled: () => true,
+  getFeedbackEnabled: () => true,
+  __feedback: () => ({
+    enabled: true,
+    audioState: feedbackAudioState(),
+    audioReady: feedbackAudioState() === 'running',
+    haptics: !!navigator.vibrate,
+    counters: { ...interactionFeedback.counters }
+  }),
   getState: () => ({
     layout: activeLayoutName,
     dragging: !!active,
     placed: sockets.filter((s) => s.filledBy != null).length,
-    feedbackEnabled: interactionFeedback.enabled,
+    feedbackEnabled: true,
     orbHomes: orbs.map((orb) => ({
       index: orb.index,
       home: { ...orb.home },
@@ -364,6 +512,22 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
     count: shapeStream.items.length,
     settled: shapeStream.items.filter((i) => i.settled).length,
     full: shapeStream.full,
+    finalGrid: {
+      active: shapeStream.finalGrid.active,
+      animating: shapeStream.finalGrid.animating,
+      phase: shapeStream.finalGrid.phase,
+      progress: +shapeStream.finalGrid.progress.toFixed(2),
+      vacuumProgress: +shapeStream.finalGrid.vacuumProgress.toFixed(2),
+      rows: shapeStream.finalGrid.rows,
+      columns: shapeStream.finalGrid.columns,
+      count: shapeStream.finalGrid.count,
+      visible: shapeStream.finalGrid.visible,
+      vacuumTotal: shapeStream.finalGrid.vacuumTotal,
+      exitPhase: shapeStream.finalGrid.exitPhase,
+      exitProgress: +shapeStream.finalGrid.exitProgress.toFixed(2),
+      viewerPull: +doorwayExit.pullProgress.toFixed(2),
+      navigating: shapeStream.finalGrid.navigating
+    },
     tuning: {
       minSize: +SHAPE_STREAM.minSize.toFixed(3),
       maxSize: +SHAPE_STREAM.maxSize.toFixed(3),
@@ -417,6 +581,7 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
       settled: i.settled
     }))
   }),
+  __previewDoorVacuum: () => previewShapeStreamFinalGrid(),
   __meshes: () => {
     const rect = canvas.getBoundingClientRect();
     const toScreen = (v) => {
@@ -486,6 +651,54 @@ scene.add(fill);
 const orbRim = new THREE.PointLight(0xffe0b8, 11, 45, 2);
 orbRim.position.set(5, 4.5, 5);
 scene.add(orbRim);
+
+const doorwayEyeTexture = new THREE.TextureLoader().load('/assets/eyes/openeye.png');
+doorwayEyeTexture.colorSpace = THREE.SRGBColorSpace;
+const doorwayExit = (() => {
+  const veil = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({
+      color: 0x050302,
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false
+    })
+  );
+  veil.visible = false;
+  veil.renderOrder = 28;
+  scene.add(veil);
+
+  const eye = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({
+      map: doorwayEyeTexture,
+      color: 0xfcb867,
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+      side: THREE.DoubleSide
+    })
+  );
+  eye.visible = false;
+  eye.renderOrder = 30;
+  scene.add(eye);
+
+  return {
+    eye,
+    veil,
+    scale: 0.18,
+    pullProgress: 0,
+    pullOriginX: 50,
+    pullOriginY: 50,
+    pullTranslateX: 0,
+    pullTranslateY: 0,
+    navigationTriggered: false
+  };
+})();
 
 function resize() {
   const rect = canvas.getBoundingClientRect();
@@ -1132,8 +1345,42 @@ const SHAPE_STREAM = {
 SHAPE_STREAM.phaseCrowdHeight = SHAPE_STREAM.maxSize * 7;
 const SHAPE_STREAM_COLORS = [
   0xd01006, 0xf06c00, 0xffbb00, 0x008a22,
-  0x00ced1, 0x006eff, 0xcb5cff
+  0x00ced1, 0x006eff, 0xcb5cff, 0xffcb70,
+  0x814812, 0xfff1e0
 ];
+const SHAPE_STREAM_COLOR_WEIGHTS = [
+  1, 1, 1, 1, 1, 1, 1, 0.45, 0.45, 0.45
+];
+const SHAPE_STREAM_FINAL_GRID = {
+  duration: 2.4,
+  holdDuration: 0.6,
+  vacuumItemDuration: 2.2,
+  vacuumBatchSize: 3,
+  vacuumBatchInterval: 0.075,
+  vacuumDoorZ: 4.75,
+  vacuumApproachScale: 0.92,
+  vacuumSpin: 0.58,
+  vacuumEndScaleFactor: 0.76,
+  cellSizeFactor: 2.45,
+  scaleFactor: 0.42,
+  tiltX: -0.42,
+  tiltY: 0.28,
+  tiltVariation: 0.16,
+  z: 4.6,
+  zStep: 0.00003,
+  eyeRevealDuration: 0.75,
+  eyeHoldDuration: 0.35,
+  pullDuration: 1.25,
+  eyeZ: 4.82,
+  eyeStartScale: 0.18,
+  eyeDoorScale: 0.72,
+  eyePullScale: 0.82,
+  viewerPullScale: 3.65,
+  viewerPullCentering: 0.92,
+  viewerPullVeilOpacity: 0.88,
+  fadeStart: 0.7,
+  homeHref: '/'
+};
 const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
   desktop: {
     floor: {
@@ -1238,7 +1485,26 @@ const shapeStream = (() => {
     landingPhaseElapsed: 0,
     previousLandingPhaseIndex: 0,
     landingPhaseBlendElapsed: SHAPE_STREAM.phaseBlendDuration,
-    full: false
+    full: false,
+    finalGrid: {
+      active: false,
+      animating: false,
+      phase: 'idle',
+      elapsed: 0,
+      progress: 0,
+      holdElapsed: 0,
+      vacuumElapsed: 0,
+      vacuumProgress: 0,
+      rows: 0,
+      columns: 0,
+      count: 0,
+      visible: 0,
+      vacuumTotal: 0,
+      exitPhase: 'idle',
+      exitElapsed: 0,
+      exitProgress: 0,
+      navigating: false
+    }
   };
 })();
 
@@ -1292,6 +1558,24 @@ function resetShapeStream() {
   shapeStream.landingPhaseElapsed = 0;
   shapeStream.landingPhaseBlendElapsed = SHAPE_STREAM.phaseBlendDuration;
   shapeStream.full = false;
+  shapeStream.finalGrid.active = false;
+  shapeStream.finalGrid.animating = false;
+  shapeStream.finalGrid.phase = 'idle';
+  shapeStream.finalGrid.elapsed = 0;
+  shapeStream.finalGrid.progress = 0;
+  shapeStream.finalGrid.holdElapsed = 0;
+  shapeStream.finalGrid.vacuumElapsed = 0;
+  shapeStream.finalGrid.vacuumProgress = 0;
+  shapeStream.finalGrid.rows = 0;
+  shapeStream.finalGrid.columns = 0;
+  shapeStream.finalGrid.count = 0;
+  shapeStream.finalGrid.visible = 0;
+  shapeStream.finalGrid.vacuumTotal = 0;
+  shapeStream.finalGrid.exitPhase = 'idle';
+  shapeStream.finalGrid.exitElapsed = 0;
+  shapeStream.finalGrid.exitProgress = 0;
+  shapeStream.finalGrid.navigating = false;
+  resetShapeStreamDoorwayExit();
 }
 
 function rapierQuat(quaternion) {
@@ -1701,12 +1985,29 @@ function pickShapeStreamTargetCell() {
   return candidates.reduce((best, candidate) => (candidate.score < best.score ? candidate : best), candidates[0]);
 }
 
-function spawnStreamShape() {
-  const geoIndex = Math.floor(Math.random() * shapeStream.geometries.length);
-  const mat = shapeStream.palette[Math.floor(Math.random() * shapeStream.palette.length)];
+function pickShapeStreamMaterial() {
+  const totalWeight = shapeStream.palette.reduce((sum, _mat, index) => (
+    sum + Math.max(0, SHAPE_STREAM_COLOR_WEIGHTS[index] ?? 1)
+  ), 0);
+  let cursor = Math.random() * Math.max(totalWeight, 1);
+  for (let index = 0; index < shapeStream.palette.length; index++) {
+    cursor -= Math.max(0, SHAPE_STREAM_COLOR_WEIGHTS[index] ?? 1);
+    if (cursor <= 0) return shapeStream.palette[index];
+  }
+  return shapeStream.palette[shapeStream.palette.length - 1];
+}
+
+function createShapeStreamMesh(geoIndex = Math.floor(Math.random() * shapeStream.geometries.length)) {
+  const mat = pickShapeStreamMaterial();
   const mesh = new THREE.Mesh(shapeStream.geometries[geoIndex], mat);
-  const size = SHAPE_STREAM.minSize + Math.random() * (SHAPE_STREAM.maxSize - SHAPE_STREAM.minSize);
   mesh.renderOrder = 1;
+  scene.add(mesh);
+  return { mesh, geoIndex };
+}
+
+function spawnStreamShape() {
+  const { mesh, geoIndex } = createShapeStreamMesh();
+  const size = SHAPE_STREAM.minSize + Math.random() * (SHAPE_STREAM.maxSize - SHAPE_STREAM.minSize);
 
   const targetCell = pickShapeStreamTargetCell();
   const zone = shapeStream.zones[targetCell.zoneIndex] || shapeStream.zones[0];
@@ -1845,8 +2146,583 @@ function spawnStreamShape() {
     },
     calmTime: 0,
     bucketCommitted: false,
-    settled: false
+    settled: false,
+    feedbackImpactPlayed: false
   });
+  playShapeSpawnFeedback(spawnPosition, size);
+}
+
+function detachShapeStreamItemPhysics(item) {
+  if (!item?.body) return;
+  if (shapeStream.world) shapeStream.world.removeRigidBody(item.body);
+  item.body = null;
+  item.collider = null;
+  item.reservation = null;
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - THREE.MathUtils.clamp(t, 0, 1), 3);
+}
+
+function easeInCubic(t) {
+  const clamped = THREE.MathUtils.clamp(t, 0, 1);
+  return clamped * clamped * clamped;
+}
+
+function shapeStreamDoorwayExitDuration(name) {
+  if (!reducedMotionQuery.matches) return SHAPE_STREAM_FINAL_GRID[name];
+  if (name === 'eyeRevealDuration') return 0.18;
+  if (name === 'eyeHoldDuration') return 0;
+  if (name === 'pullDuration') return 0.32;
+  return SHAPE_STREAM_FINAL_GRID[name];
+}
+
+function doorwayEyeAspect() {
+  const image = doorwayEyeTexture.image;
+  const width = image?.naturalWidth || image?.width || 1;
+  const height = image?.naturalHeight || image?.height || 1;
+  return width / Math.max(1, height);
+}
+
+function captureDoorwayViewerPullTarget() {
+  const n = worldToNorm(shapeLock.center);
+  const art = artMetrics();
+  const canvasRect = canvas.getBoundingClientRect();
+  const rootRect = root.getBoundingClientRect();
+  const artWidth = Math.max(0.0001, art.width);
+  const artHeight = Math.max(0.0001, art.height);
+  const doorX = canvasRect.left + n.x * canvasRect.width;
+  const doorY = canvasRect.top + n.y * canvasRect.height;
+  doorwayExit.pullOriginX = THREE.MathUtils.clamp(((n.x - art.left) / artWidth) * 100, -20, 120);
+  doorwayExit.pullOriginY = THREE.MathUtils.clamp(((n.y - art.top) / artHeight) * 100, -20, 120);
+  doorwayExit.pullTranslateX = (rootRect.left + rootRect.width * 0.5) - doorX;
+  doorwayExit.pullTranslateY = (rootRect.top + rootRect.height * 0.5) - doorY;
+}
+
+function applyDoorwayViewerPull(progress = doorwayExit.pullProgress) {
+  const t = THREE.MathUtils.clamp(progress, 0, 1);
+  doorwayExit.pullProgress = t;
+  const scale = THREE.MathUtils.lerp(1, SHAPE_STREAM_FINAL_GRID.viewerPullScale, t);
+  const centerT = t * SHAPE_STREAM_FINAL_GRID.viewerPullCentering;
+  const x = doorwayExit.pullTranslateX * centerT;
+  const y = doorwayExit.pullTranslateY * centerT;
+  artStage.style.transformOrigin = `${doorwayExit.pullOriginX.toFixed(2)}% ${doorwayExit.pullOriginY.toFixed(2)}%`;
+  artStage.style.transform = `translate(-50%, -50%) translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) scale(${scale.toFixed(5)})`;
+  artStage.style.willChange = 'transform';
+}
+
+function resetDoorwayViewerPull() {
+  doorwayExit.pullProgress = 0;
+  doorwayExit.pullOriginX = 50;
+  doorwayExit.pullOriginY = 50;
+  doorwayExit.pullTranslateX = 0;
+  doorwayExit.pullTranslateY = 0;
+  artStage.style.transform = '';
+  artStage.style.transformOrigin = '';
+  artStage.style.willChange = '';
+}
+
+function layoutShapeStreamDoorwayExit(scale = doorwayExit.scale) {
+  doorwayExit.scale = scale;
+  doorwayExit.veil.position.set(0, 0, SHAPE_STREAM_FINAL_GRID.eyeZ - 0.02);
+  doorwayExit.veil.scale.set(viewport.width, viewport.height, 1);
+  doorwayExit.eye.position.set(shapeLock.center.x, shapeLock.center.y, SHAPE_STREAM_FINAL_GRID.eyeZ);
+  doorwayExit.eye.rotation.set(0, 0, 0);
+  doorwayExit.eye.scale.set(scale * doorwayEyeAspect(), scale, 1);
+}
+
+function resetShapeStreamDoorwayExit() {
+  resetDoorwayViewerPull();
+  doorwayExit.navigationTriggered = false;
+  doorwayExit.scale = SHAPE_STREAM_FINAL_GRID.eyeStartScale;
+  doorwayExit.eye.visible = false;
+  doorwayExit.eye.material.opacity = 0;
+  doorwayExit.veil.visible = false;
+  doorwayExit.veil.material.opacity = 0;
+}
+
+function startShapeStreamDoorwayExit() {
+  shapeStream.finalGrid.exitPhase = 'reveal';
+  shapeStream.finalGrid.exitElapsed = 0;
+  shapeStream.finalGrid.exitProgress = 0;
+  shapeStream.finalGrid.navigating = false;
+  shapeStream.finalGrid.animating = true;
+  resetDoorwayViewerPull();
+  captureDoorwayViewerPullTarget();
+  applyDoorwayViewerPull(0);
+  doorwayExit.navigationTriggered = false;
+  doorwayExit.eye.visible = true;
+  doorwayExit.veil.visible = true;
+  doorwayExit.eye.material.opacity = 0;
+  doorwayExit.veil.material.opacity = 0;
+  layoutShapeStreamDoorwayExit(SHAPE_STREAM_FINAL_GRID.eyeStartScale);
+}
+
+function triggerShapeStreamDoorwayNavigation() {
+  if (doorwayExit.navigationTriggered) return;
+  doorwayExit.navigationTriggered = true;
+  if (noNavigate) return;
+  shapeStream.finalGrid.navigating = true;
+  status.textContent = 'entering the construct';
+  if (typeof window._constructFade === 'function') {
+    window._constructFade(SHAPE_STREAM_FINAL_GRID.homeHref);
+  } else {
+    window.location.href = SHAPE_STREAM_FINAL_GRID.homeHref;
+  }
+}
+
+function animateShapeStreamDoorwayExit(delta) {
+  const exitPhase = shapeStream.finalGrid.exitPhase;
+  if (exitPhase === 'idle' || exitPhase === 'ready' || exitPhase === 'navigating') return;
+
+  shapeStream.finalGrid.exitElapsed += delta;
+  if (exitPhase === 'reveal') {
+    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('eyeRevealDuration'));
+    const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    const t = easeOutCubic(progress);
+    shapeStream.finalGrid.exitProgress = progress;
+    doorwayExit.eye.visible = true;
+    doorwayExit.veil.visible = true;
+    doorwayExit.eye.material.opacity = t;
+    doorwayExit.veil.material.opacity = THREE.MathUtils.lerp(0, 0.22, t);
+    layoutShapeStreamDoorwayExit(THREE.MathUtils.lerp(
+      SHAPE_STREAM_FINAL_GRID.eyeStartScale,
+      SHAPE_STREAM_FINAL_GRID.eyeDoorScale,
+      t
+    ));
+    if (progress >= 1) {
+      shapeStream.finalGrid.exitPhase = 'hold';
+      shapeStream.finalGrid.exitElapsed = 0;
+      shapeStream.finalGrid.exitProgress = 0;
+    }
+    return;
+  }
+
+  if (exitPhase === 'hold') {
+    const duration = shapeStreamDoorwayExitDuration('eyeHoldDuration');
+    shapeStream.finalGrid.exitProgress = duration <= 0
+      ? 1
+      : THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    doorwayExit.eye.material.opacity = 1;
+    doorwayExit.veil.material.opacity = 0.22;
+    layoutShapeStreamDoorwayExit(SHAPE_STREAM_FINAL_GRID.eyeDoorScale);
+    if (duration <= 0 || shapeStream.finalGrid.exitProgress >= 1) {
+      shapeStream.finalGrid.exitPhase = 'pull';
+      shapeStream.finalGrid.exitElapsed = 0;
+      shapeStream.finalGrid.exitProgress = 0;
+    }
+    return;
+  }
+
+  if (exitPhase === 'pull') {
+    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('pullDuration'));
+    const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    const pullT = easeInCubic(progress);
+    shapeStream.finalGrid.exitProgress = progress;
+    doorwayExit.eye.material.opacity = 1;
+    doorwayExit.veil.material.opacity = THREE.MathUtils.lerp(
+      0.22,
+      SHAPE_STREAM_FINAL_GRID.viewerPullVeilOpacity,
+      pullT
+    );
+    applyDoorwayViewerPull(pullT);
+    layoutShapeStreamDoorwayExit(THREE.MathUtils.lerp(
+      SHAPE_STREAM_FINAL_GRID.eyeDoorScale,
+      SHAPE_STREAM_FINAL_GRID.eyePullScale,
+      pullT
+    ));
+
+    const fadeStart = reducedMotionQuery.matches ? 0.12 : SHAPE_STREAM_FINAL_GRID.fadeStart;
+    if (progress >= fadeStart) triggerShapeStreamDoorwayNavigation();
+    if (progress >= 1) {
+      if (noNavigate) {
+        shapeStream.finalGrid.exitPhase = 'ready';
+        shapeStream.finalGrid.exitProgress = 1;
+        shapeStream.finalGrid.animating = false;
+        status.textContent = `doorway exit ready - ${activeLayoutName}`;
+      } else {
+        shapeStream.finalGrid.exitPhase = 'navigating';
+        shapeStream.finalGrid.exitProgress = 1;
+        shapeStream.finalGrid.animating = false;
+      }
+    }
+  }
+}
+
+function shapeStreamFinalGridMetrics(requiredCount = shapeStream.items.length) {
+  const baseCellSize = Math.max(0.05, SHAPE_STREAM.maxSize * SHAPE_STREAM_FINAL_GRID.cellSizeFactor);
+  const minColumns = Math.max(2, Math.ceil(viewport.width / baseCellSize) + 1);
+  const minRows = Math.max(2, Math.ceil(viewport.height / baseCellSize) + 1);
+  const aspect = viewport.width / Math.max(0.0001, viewport.height);
+  let columns = minColumns;
+  let rows = minRows;
+
+  if (requiredCount > columns * rows) {
+    columns = Math.max(minColumns, Math.ceil(Math.sqrt(requiredCount * aspect)));
+    rows = Math.max(minRows, Math.ceil(requiredCount / columns));
+    while (columns * rows < requiredCount) {
+      if (columns / Math.max(1, rows) < aspect) columns += 1;
+      else rows += 1;
+    }
+  }
+
+  return {
+    columns,
+    rows,
+    count: columns * rows,
+    cellW: viewport.width / Math.max(1, columns - 1),
+    cellH: viewport.height / Math.max(1, rows - 1)
+  };
+}
+
+function shapeStreamFinalGridStartPosition(index) {
+  const source = completionEffects.ring.userData.surfacePosition || new THREE.Vector3();
+  const ring = (index * 2.399963229728653) % (Math.PI * 2);
+  const radius = SHAPE_STREAM.maxSize * (0.25 + (index % 5) * 0.08);
+  return new THREE.Vector3(
+    source.x + Math.cos(ring) * radius,
+    source.y + Math.sin(ring) * radius,
+    SHAPE_STREAM_FINAL_GRID.z - 0.32 - (index % 11) * 0.002
+  );
+}
+
+function shapeStreamFinalGridQuaternion(index) {
+  const waveA = Math.sin(index * 1.713);
+  const waveB = Math.cos(index * 2.171);
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(
+    SHAPE_STREAM_FINAL_GRID.tiltX + waveA * SHAPE_STREAM_FINAL_GRID.tiltVariation,
+    SHAPE_STREAM_FINAL_GRID.tiltY + waveB * SHAPE_STREAM_FINAL_GRID.tiltVariation,
+    waveA * SHAPE_STREAM_FINAL_GRID.tiltVariation * 0.5
+  ));
+}
+
+function addShapeStreamFinalGridItem() {
+  const { mesh, geoIndex } = createShapeStreamMesh();
+  const index = shapeStream.items.length;
+  mesh.position.copy(shapeStreamFinalGridStartPosition(index));
+  mesh.quaternion.setFromEuler(new THREE.Euler(0, 0, Math.sin(index * 1.113) * 0.72));
+  mesh.scale.setScalar(SHAPE_STREAM.minSize);
+  const item = {
+    mesh,
+    size: SHAPE_STREAM.maxSize,
+    geoIndex,
+    zoneIndex: 0,
+    body: null,
+    collider: null,
+    age: 0,
+    target: null,
+    targetSurfaceY: null,
+    reservation: null,
+    calmTime: 0,
+    bucketCommitted: true,
+    settled: true,
+    feedbackImpactPlayed: true,
+    finalGrid: true,
+    finalGridStart: null,
+    finalGridTarget: null,
+    finalGridVacuum: null
+  };
+  shapeStream.items.push(item);
+  return item;
+}
+
+function ensureShapeStreamFinalGridCount(targetCount) {
+  while (shapeStream.items.length < targetCount) addShapeStreamFinalGridItem();
+}
+
+function setShapeStreamFinalGridStartsFromCurrent() {
+  shapeStream.items.forEach((item) => {
+    item.finalGridStart = {
+      position: item.mesh.position.clone(),
+      quaternion: item.mesh.quaternion.clone(),
+      scale: item.mesh.scale.x || item.size || SHAPE_STREAM.minSize
+    };
+  });
+}
+
+function updateShapeStreamFinalGridTargets(captureStarts = false) {
+  if (!shapeStream.finalGrid.active) return;
+  if (shapeStream.finalGrid.phase === 'vacuum' || shapeStream.finalGrid.phase === 'done') return;
+  const metrics = shapeStreamFinalGridMetrics(shapeStream.items.length);
+  ensureShapeStreamFinalGridCount(metrics.count);
+  const settledMetrics = shapeStreamFinalGridMetrics(shapeStream.items.length);
+  const scale = Math.max(settledMetrics.cellW, settledMetrics.cellH) * SHAPE_STREAM_FINAL_GRID.scaleFactor;
+
+  shapeStream.finalGrid.rows = settledMetrics.rows;
+  shapeStream.finalGrid.columns = settledMetrics.columns;
+  shapeStream.finalGrid.count = shapeStream.items.length;
+
+  shapeStream.items.forEach((item, index) => {
+    detachShapeStreamItemPhysics(item);
+    const row = Math.floor(index / settledMetrics.columns);
+    const column = index % settledMetrics.columns;
+    const x = -viewport.width * 0.5 + column * settledMetrics.cellW;
+    const y = viewport.height * 0.5 - row * settledMetrics.cellH;
+    item.mesh.visible = true;
+    item.mesh.renderOrder = 18;
+    item.bucketCommitted = true;
+    item.settled = true;
+    item.finalGrid = true;
+    item.finalGridVacuum = null;
+    if (captureStarts || !item.finalGridStart) {
+      item.finalGridStart = {
+        position: item.mesh.position.clone(),
+        quaternion: item.mesh.quaternion.clone(),
+        scale: item.mesh.scale.x || item.size || SHAPE_STREAM.minSize
+      };
+    }
+    item.finalGridTarget = {
+      position: new THREE.Vector3(x, y, SHAPE_STREAM_FINAL_GRID.z + index * SHAPE_STREAM_FINAL_GRID.zStep),
+      quaternion: shapeStreamFinalGridQuaternion(index),
+      scale
+    };
+  });
+  shapeStream.finalGrid.visible = shapeStream.items.filter((item) => item.mesh.visible).length;
+}
+
+function layoutShapeStreamFinalGrid() {
+  if (!shapeStream.finalGrid.active) return;
+  if (shapeStream.finalGrid.phase === 'vacuum' || shapeStream.finalGrid.phase === 'done') return;
+  updateShapeStreamFinalGridTargets(false);
+  shapeStream.items.forEach((item) => {
+    if (!item.finalGridTarget) return;
+    item.mesh.position.copy(item.finalGridTarget.position);
+    item.mesh.quaternion.copy(item.finalGridTarget.quaternion);
+    item.mesh.scale.setScalar(item.finalGridTarget.scale);
+    item.size = item.finalGridTarget.scale;
+  });
+}
+
+function animateShapeStreamFinalGrid(delta) {
+  if (!shapeStream.finalGrid.active || !shapeStream.finalGrid.animating) return;
+  shapeStream.finalGrid.elapsed += delta;
+  shapeStream.finalGrid.progress = THREE.MathUtils.clamp(
+    shapeStream.finalGrid.elapsed / SHAPE_STREAM_FINAL_GRID.duration,
+    0,
+    1
+  );
+  const t = easeOutCubic(shapeStream.finalGrid.progress);
+  shapeStream.items.forEach((item) => {
+    if (!item.finalGridStart || !item.finalGridTarget) return;
+    item.mesh.position.lerpVectors(item.finalGridStart.position, item.finalGridTarget.position, t);
+    item.mesh.quaternion.copy(item.finalGridStart.quaternion).slerp(item.finalGridTarget.quaternion, t);
+    const scale = THREE.MathUtils.lerp(item.finalGridStart.scale, item.finalGridTarget.scale, t);
+    item.mesh.scale.setScalar(scale);
+    item.size = scale;
+  });
+  if (shapeStream.finalGrid.progress >= 1) {
+    shapeStream.finalGrid.animating = false;
+    shapeStream.finalGrid.elapsed = SHAPE_STREAM_FINAL_GRID.duration;
+    shapeStream.finalGrid.progress = 1;
+    shapeStream.finalGrid.phase = 'hold';
+    shapeStream.finalGrid.holdElapsed = 0;
+    layoutShapeStreamFinalGrid();
+  }
+}
+
+function startShapeStreamFinalGridVacuum() {
+  if (!shapeStream.finalGrid.active || shapeStream.finalGrid.phase === 'vacuum' || shapeStream.finalGrid.phase === 'done') return;
+  const target = new THREE.Vector3(
+    shapeLock.center.x,
+    shapeLock.center.y,
+    SHAPE_STREAM_FINAL_GRID.vacuumDoorZ
+  );
+  const batchSize = Math.max(1, SHAPE_STREAM_FINAL_GRID.vacuumBatchSize);
+  const orderedItems = shapeStream.items
+    .map((item, index) => {
+      const dx = item.mesh.position.x - target.x;
+      const dy = item.mesh.position.y - target.y;
+      return {
+        item,
+        index,
+        distance: Math.hypot(dx, dy),
+        angle: Math.atan2(dy, dx)
+      };
+    })
+    .sort((a, b) => (
+      a.distance - b.distance
+      || a.angle - b.angle
+      || a.index - b.index
+    ));
+
+  shapeStream.finalGrid.phase = 'vacuum';
+  shapeStream.finalGrid.animating = true;
+  shapeStream.finalGrid.vacuumElapsed = 0;
+  shapeStream.finalGrid.vacuumProgress = 0;
+  shapeStream.finalGrid.vacuumTotal = orderedItems.length;
+  orderedItems.forEach(({ item, index, distance, angle }, order) => {
+    const startPosition = item.mesh.position.clone();
+    const startQuaternion = item.mesh.quaternion.clone();
+    const startScale = item.mesh.scale.x || item.size || SHAPE_STREAM.minSize;
+    const batchIndex = Math.floor(order / batchSize);
+    item.mesh.visible = true;
+    item.finalGridVacuum = {
+      startPosition,
+      startQuaternion,
+      startScale,
+      target: target.clone(),
+      startTime: batchIndex * SHAPE_STREAM_FINAL_GRID.vacuumBatchInterval,
+      radius: Math.max(SHAPE_STREAM.maxSize * 0.045, distance * 0.055),
+      spinOffset: angle + order * 0.37,
+      gridIndex: index,
+      spinSign: index % 2 ? -1 : 1
+    };
+  });
+  shapeStream.finalGrid.visible = shapeStream.items.filter((item) => item.mesh.visible).length;
+}
+
+function finishShapeStreamFinalGridVacuum() {
+  shapeStream.finalGrid.phase = 'done';
+  shapeStream.finalGrid.animating = false;
+  shapeStream.finalGrid.vacuumProgress = 1;
+  shapeStream.finalGrid.visible = 0;
+  shapeStream.items.forEach((item) => {
+    item.mesh.visible = false;
+    item.mesh.scale.setScalar(0.0001);
+    scene.remove(item.mesh);
+    item.finalGridVacuum = null;
+  });
+  startShapeStreamDoorwayExit();
+}
+
+function animateShapeStreamVacuum(delta) {
+  if (!shapeStream.finalGrid.active || shapeStream.finalGrid.phase !== 'vacuum') return;
+  shapeStream.finalGrid.vacuumElapsed += delta;
+  let visible = 0;
+  shapeStream.items.forEach((item) => {
+    const vacuum = item.finalGridVacuum;
+    if (!vacuum || !item.mesh.visible) return;
+    const localT = THREE.MathUtils.clamp(
+      (shapeStream.finalGrid.vacuumElapsed - vacuum.startTime) / SHAPE_STREAM_FINAL_GRID.vacuumItemDuration,
+      0,
+      1
+    );
+    if (localT <= 0) {
+      visible += 1;
+      return;
+    }
+
+    const t = easeInCubic(localT);
+    const spinAngle = vacuum.spinOffset + t * Math.PI * 2 * SHAPE_STREAM_FINAL_GRID.vacuumSpin * vacuum.spinSign;
+    const radius = vacuum.radius * Math.sin(localT * Math.PI) * (1 - t * 0.45);
+    const base = new THREE.Vector3().lerpVectors(vacuum.startPosition, vacuum.target, t);
+    base.x += Math.cos(spinAngle) * radius;
+    base.y += Math.sin(spinAngle) * radius * 0.62;
+    base.z += Math.sin(spinAngle * 0.7) * radius * 0.18;
+    item.mesh.position.copy(base);
+
+    const spinQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      t * Math.PI * 1.25 * vacuum.spinSign,
+      t * Math.PI * 0.8 * -vacuum.spinSign,
+      t * Math.PI * 1.45 * vacuum.spinSign
+    ));
+    item.mesh.quaternion.copy(vacuum.startQuaternion)
+      .slerp(shapeStreamFinalGridQuaternion(vacuum.gridIndex), t * 0.18)
+      .multiply(spinQuat);
+
+    const approachT = easeInCubic(THREE.MathUtils.clamp((localT - 0.72) / 0.18, 0, 1));
+    const vanishT = easeInCubic(THREE.MathUtils.clamp((localT - 0.91) / 0.09, 0, 1));
+    const approachScale = THREE.MathUtils.lerp(
+      vacuum.startScale,
+      vacuum.startScale * SHAPE_STREAM_FINAL_GRID.vacuumApproachScale,
+      approachT
+    );
+    const endScale = vacuum.startScale * SHAPE_STREAM_FINAL_GRID.vacuumEndScaleFactor;
+    const scale = THREE.MathUtils.lerp(approachScale, endScale, vanishT);
+    item.mesh.scale.setScalar(scale);
+    item.size = scale;
+
+    if (localT >= 1) {
+      item.mesh.visible = false;
+      scene.remove(item.mesh);
+      item.finalGridVacuum = null;
+      return;
+    }
+    visible += 1;
+  });
+  const total = Math.max(1, shapeStream.finalGrid.vacuumTotal || shapeStream.items.length);
+  shapeStream.finalGrid.visible = visible;
+  shapeStream.finalGrid.vacuumProgress = THREE.MathUtils.clamp((total - visible) / total, 0, 1);
+  if (visible <= 0) finishShapeStreamFinalGridVacuum();
+}
+
+function updateShapeStreamFinalGrid(delta) {
+  if (!shapeStream.finalGrid.active) return;
+  if (shapeStream.finalGrid.phase === 'forming') {
+    animateShapeStreamFinalGrid(delta);
+    return;
+  }
+  if (shapeStream.finalGrid.phase === 'hold') {
+    shapeStream.finalGrid.holdElapsed += delta;
+    if (shapeStream.finalGrid.holdElapsed >= SHAPE_STREAM_FINAL_GRID.holdDuration) {
+      startShapeStreamFinalGridVacuum();
+    }
+    return;
+  }
+  if (shapeStream.finalGrid.phase === 'vacuum') {
+    animateShapeStreamVacuum(delta);
+    return;
+  }
+  if (shapeStream.finalGrid.phase === 'done') {
+    animateShapeStreamDoorwayExit(delta);
+  }
+}
+
+function retargetShapeStreamFinalGrid(restartAnimation = false) {
+  if (!shapeStream.finalGrid.active) return;
+  if (shapeStream.finalGrid.phase === 'done') {
+    if (shapeStream.finalGrid.exitPhase === 'reveal' || shapeStream.finalGrid.exitPhase === 'hold') {
+      captureDoorwayViewerPullTarget();
+    }
+    layoutShapeStreamDoorwayExit();
+    if (
+      shapeStream.finalGrid.exitPhase === 'pull'
+      || shapeStream.finalGrid.exitPhase === 'ready'
+      || shapeStream.finalGrid.exitPhase === 'navigating'
+    ) {
+      applyDoorwayViewerPull();
+    }
+    return;
+  }
+  if (shapeStream.finalGrid.phase === 'vacuum') return;
+  if (restartAnimation && shapeStream.finalGrid.animating) {
+    setShapeStreamFinalGridStartsFromCurrent();
+    shapeStream.finalGrid.elapsed = 0;
+    shapeStream.finalGrid.progress = 0;
+  }
+  updateShapeStreamFinalGridTargets(!shapeStream.finalGrid.animating);
+  if (!shapeStream.finalGrid.animating) layoutShapeStreamFinalGrid();
+}
+
+function activateShapeStreamFinalGrid() {
+  if (shapeStream.finalGrid.active) {
+    retargetShapeStreamFinalGrid(true);
+    return;
+  }
+  shapeStream.finalGrid.active = true;
+  shapeStream.finalGrid.animating = true;
+  shapeStream.finalGrid.phase = 'forming';
+  shapeStream.finalGrid.elapsed = 0;
+  shapeStream.finalGrid.progress = 0;
+  shapeStream.finalGrid.holdElapsed = 0;
+  shapeStream.finalGrid.vacuumElapsed = 0;
+  shapeStream.finalGrid.vacuumProgress = 0;
+  shapeStream.finalGrid.vacuumTotal = 0;
+  shapeStream.finalGrid.exitPhase = 'idle';
+  shapeStream.finalGrid.exitElapsed = 0;
+  shapeStream.finalGrid.exitProgress = 0;
+  shapeStream.finalGrid.navigating = false;
+  resetShapeStreamDoorwayExit();
+  shapeStream.spawnTimer = 0;
+  shapeStream.full = true;
+  shapeStream.zones.forEach((zone) => {
+    zone.reservations.fill(0);
+  });
+  shapeStream.items.forEach(detachShapeStreamItemPhysics);
+  const metrics = shapeStreamFinalGridMetrics(shapeStream.items.length);
+  ensureShapeStreamFinalGridCount(metrics.count);
+  updateShapeStreamFinalGridTargets(true);
+  shapeStream.finalGrid.visible = shapeStream.items.filter((item) => item.mesh.visible).length;
 }
 
 function steerShapeStreamItem(item, translation, linvel, delta) {
@@ -1876,6 +2752,10 @@ function steerShapeStreamItem(item, translation, linvel, delta) {
 
 function updateShapeStream(delta) {
   if (!SHAPE_STREAM.enabled) return;
+  if (shapeStream.finalGrid.active) {
+    updateShapeStreamFinalGrid(delta);
+    return;
+  }
   if (!shapeStream.world) return;
 
   const ringBlackSettled = completionEffects.active
@@ -1902,6 +2782,19 @@ function updateShapeStream(delta) {
     linvel = steerShapeStreamItem(item, translation, linvel, delta);
     const linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
     const angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
+    const targetSurfaceY = item.targetSurfaceY ?? item.target?.y;
+    const nearTargetSurface = targetSurfaceY != null
+      && translation.y <= targetSurfaceY + item.size * 1.18;
+    if (
+      !item.feedbackImpactPlayed
+      && item.age > 0.24
+      && nearTargetSurface
+      && (linvel.y <= -0.18 || linearSpeed > SHAPE_STREAM.settleLinearThreshold * 4)
+    ) {
+      item.feedbackImpactPlayed = true;
+      const impactEnergy = Math.max(Math.abs(linvel.y), linearSpeed * 0.55);
+      playShapeImpactFeedback(THREE.MathUtils.clamp(impactEnergy / 5.5, 0.24, 0.95), translation);
+    }
     if (item.age < 0.55) {
       if (linvel.y > SHAPE_STREAM.maxUpwardSpeed) {
         item.body.setLinvel({ x: linvel.x, y: SHAPE_STREAM.maxUpwardSpeed, z: linvel.z }, true);
@@ -1941,6 +2834,10 @@ function updateShapeStream(delta) {
     }
 
     if (!item.bucketCommitted && item.body.isSleeping()) {
+      if (!item.feedbackImpactPlayed) {
+        item.feedbackImpactPlayed = true;
+        playShapeImpactFeedback(0.34, item.mesh.position);
+      }
       const zone = shapeStream.zones[item.zoneIndex] || shapeStream.zones[0];
       const depthT = shapeStreamDepthTForZ(zone, item.mesh.position.z);
       const widthT = shapeStreamWidthTForWorldX(zone, item.mesh.position.x, depthT);
@@ -2118,6 +3015,28 @@ function setOverlayPreview(visible) {
   });
 }
 
+function setShapeLockSolvedState() {
+  shapeLock.solved = true;
+  shapeLock.progress = SHAPE_LOCK_ORDER.length;
+  shapeLock.previewing = false;
+  shapeLock.group.visible = false;
+  shapeLock.symbols.forEach((mesh) => {
+    mesh.visible = false;
+    mesh.material.opacity = 0;
+  });
+  shapeLock.overlayGroup.visible = false;
+  shapeLock.overlays.forEach((mesh) => { mesh.visible = false; });
+}
+
+function previewShapeStreamFinalGrid() {
+  settleCompletionInstantly();
+  setShapeLockSolvedState();
+  if (shapeStream.finalGrid.active || shapeStream.items.length === 0) resetShapeStream();
+  activateShapeStreamFinalGrid();
+  updateCalibrationConsole();
+  return window.entryRoom3d.__shapeStream().finalGrid;
+}
+
 function handleShapeLockAction(action) {
   if (action === 'preview') {
     setOverlayPreview(true);
@@ -2125,6 +3044,9 @@ function handleShapeLockAction(action) {
   } else if (action === 'clear-preview') {
     setOverlayPreview(false);
     status.textContent = `overlay preview cleared - ${activeLayoutName}`;
+  } else if (action === 'preview-final-grid') {
+    previewShapeStreamFinalGrid();
+    status.textContent = `door vacuum preview - ${activeLayoutName}`;
   }
 }
 
@@ -2849,12 +3771,8 @@ function handleShapeLockClick(event) {
     shapeLock.progress += 1;
     status.textContent = `door sequence ${shapeLock.progress} of ${SHAPE_LOCK_ORDER.length}`;
     if (shapeLock.progress >= SHAPE_LOCK_ORDER.length) {
-      shapeLock.solved = true;
-      shapeLock.group.visible = false;
-      shapeLock.symbols.forEach((mesh) => {
-        mesh.visible = false;
-        mesh.material.opacity = 0;
-      });
+      setShapeLockSolvedState();
+      activateShapeStreamFinalGrid();
       status.textContent = 'door sequence complete';
     } else cycleShapeLockSymbol();
   } else {
@@ -2954,18 +3872,25 @@ function layoutCompletionEffects(holeR, orbR) {
   completionEffects.ring.userData.startOffset.copy(emergeOffset);
   completionEffects.ring.userData.baseScale.set(ringR * ringConfig.aspectX, ringR * ringConfig.aspectY, 1);
 
-  const anchorNorm = worldToNorm(anchor);
+  const patchAnchor = imageToWorld(
+    ringConfig.patchX ?? ringConfig.x,
+    ringConfig.patchY ?? ringConfig.y,
+    anchor.z
+  );
+  const patchNorm = worldToNorm(patchAnchor);
   const art = artMetrics();
   const artWorldWidth = art.width * viewport.width;
   const artWorldHeight = art.height * viewport.height;
-  const anchorArtX = (anchorNorm.x - art.left) / Math.max(0.0001, art.width);
-  const anchorArtY = (anchorNorm.y - art.top) / Math.max(0.0001, art.height);
-  const plugWidth = ringR * ringConfig.aspectX * COMPLETION_PATCH_SIZE;
-  const plugHeight = ringR * ringConfig.aspectY * COMPLETION_PATCH_SIZE;
+  const patchArtX = (patchNorm.x - art.left) / Math.max(0.0001, art.width);
+  const patchArtY = (patchNorm.y - art.top) / Math.max(0.0001, art.height);
+  const patchSize = ringConfig.patchSize ?? COMPLETION_PATCH_SIZE;
+  const fieldSize = ringConfig.fieldSize ?? COMPLETION_FIELD_SIZE;
+  const plugWidth = ringR * ringConfig.aspectX * patchSize;
+  const plugHeight = ringR * ringConfig.aspectY * patchSize;
   const repeatX = THREE.MathUtils.clamp(plugWidth / Math.max(0.0001, artWorldWidth), 0.0001, 1);
   const repeatY = THREE.MathUtils.clamp(plugHeight / Math.max(0.0001, artWorldHeight), 0.0001, 1);
-  const offsetX = THREE.MathUtils.clamp(anchorArtX - repeatX * 0.5, 0, 1 - repeatX);
-  const offsetY = THREE.MathUtils.clamp(anchorArtY - repeatY * 0.5, 0, 1 - repeatY);
+  const offsetX = THREE.MathUtils.clamp(patchArtX - repeatX * 0.5, 0, 1 - repeatX);
+  const offsetY = THREE.MathUtils.clamp(patchArtY - repeatY * 0.5, 0, 1 - repeatY);
 
   completionEffects.imagePlug.position.copy(anchor);
   completionEffects.imagePlug.userData.surfacePosition.copy(anchor);
@@ -3013,12 +3938,12 @@ function layoutCompletionEffects(holeR, orbR) {
     holeR * ringConfig.emergeOffsetY * COMPLETION_PATCH_SHIFT * 0.48,
     holeR * COMPLETION_PATCH_LIFT * 0.42
   );
-  const fieldWidth = ringR * ringConfig.aspectX * COMPLETION_FIELD_SIZE;
-  const fieldHeight = ringR * ringConfig.aspectY * COMPLETION_FIELD_SIZE;
+  const fieldWidth = ringR * ringConfig.aspectX * fieldSize;
+  const fieldHeight = ringR * ringConfig.aspectY * fieldSize;
   const fieldRepeatX = THREE.MathUtils.clamp(fieldWidth / Math.max(0.0001, artWorldWidth), 0.0001, 1);
   const fieldRepeatY = THREE.MathUtils.clamp(fieldHeight / Math.max(0.0001, artWorldHeight), 0.0001, 1);
-  const fieldOffsetX = THREE.MathUtils.clamp(anchorArtX - fieldRepeatX * 0.5, 0, 1 - fieldRepeatX);
-  const fieldOffsetY = THREE.MathUtils.clamp(anchorArtY - fieldRepeatY * 0.5, 0, 1 - fieldRepeatY);
+  const fieldOffsetX = THREE.MathUtils.clamp(patchArtX - fieldRepeatX * 0.5, 0, 1 - fieldRepeatX);
+  const fieldOffsetY = THREE.MathUtils.clamp(patchArtY - fieldRepeatY * 0.5, 0, 1 - fieldRepeatY);
 
   completionEffects.imageField.position.copy(anchor);
   completionEffects.imageField.userData.surfacePosition.copy(anchor);
@@ -3129,7 +4054,7 @@ function finishActiveDrag({ pointerId = activePointer, interrupted = false } = {
       near.s.shadow.visible = true;
       orb.mesh.position.copy(seatWorld(near.s, orb.orbR));
       orb.target = null;
-      playSeatFeedback();
+      playSocketFeedback();
       updateStatus();
     } else if (calibrate) {
       const n = worldToImage(orb.mesh.position);
@@ -3149,7 +4074,7 @@ function finishActiveDrag({ pointerId = activePointer, interrupted = false } = {
 }
 
 function pointerDown(event) {
-  primeSeatFeedback();
+  primeFeedback();
   if (handleShapeLockClick(event)) return;
   if (active && event.pointerId !== activePointer) {
     event.preventDefault();
@@ -3358,7 +4283,8 @@ function updateCompletionEffects(delta) {
     0,
     1
   );
-  completionEffects.imageField.material.opacity = COMPLETION_FIELD_OPACITY * (1 - ease01(fieldFadeT));
+  const fieldOpacity = completionEffects.config.fieldOpacity ?? COMPLETION_FIELD_OPACITY;
+  completionEffects.imageField.material.opacity = fieldOpacity * (1 - ease01(fieldFadeT));
 
   completionEffects.imagePlug.position.copy(completionEffects.imagePlug.userData.surfacePosition)
     .add(completionEffects.imagePlug.userData.startOffset)
@@ -3431,17 +4357,30 @@ function activeOrbShadowText() {
 
 function activeCompletionRingText() {
   const ring = activeLayout.completionRing || DESKTOP_COMPLETION_RING;
-  return [
+  const lines = [
     'completionRing: {',
     `  x: ${ring.x.toFixed(4)}, y: ${ring.y.toFixed(4)},`,
     `  aspectX: ${ring.aspectX.toFixed(2)}, aspectY: ${ring.aspectY.toFixed(2)},`,
     `  radiusPad: ${ring.radiusPad.toFixed(2)}, surfaceZ: ${ring.surfaceZ.toFixed(2)}, recessZ: ${ring.recessZ.toFixed(2)},`,
     `  bodyOffsetX: ${ring.bodyOffsetX.toFixed(2)}, bodyOffsetY: ${ring.bodyOffsetY.toFixed(2)}, bodyOffsetZ: ${ring.bodyOffsetZ.toFixed(2)},`,
     `  emergeOffsetX: ${ring.emergeOffsetX.toFixed(2)}, emergeOffsetY: ${ring.emergeOffsetY.toFixed(2)}, emergeOffsetZ: ${ring.emergeOffsetZ.toFixed(2)},`,
-    `  startScale: ${ring.startScale.toFixed(2)}, bodyStartScale: ${ring.bodyStartScale.toFixed(2)}`,
+    `  startScale: ${ring.startScale.toFixed(2)}, bodyStartScale: ${ring.bodyStartScale.toFixed(2)},`,
+  ];
+  if (ring.patchX != null || ring.patchY != null) {
+    lines.push(`  patchX: ${(ring.patchX ?? ring.x).toFixed(4)}, patchY: ${(ring.patchY ?? ring.y).toFixed(4)},`);
+  }
+  if (ring.patchSize != null || ring.fieldSize != null || ring.fieldOpacity != null) {
+    lines.push(
+      `  patchSize: ${(ring.patchSize ?? COMPLETION_PATCH_SIZE).toFixed(2)}, `
+      + `fieldSize: ${(ring.fieldSize ?? COMPLETION_FIELD_SIZE).toFixed(2)}, `
+      + `fieldOpacity: ${(ring.fieldOpacity ?? COMPLETION_FIELD_OPACITY).toFixed(2)}`
+    );
+  }
+  lines.push(
     '}',
     `ringState: ${completionEffects.active ? `active @ ${completionEffects.elapsed.toFixed(2)}s` : 'hidden'}`
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 function formatShapeStreamZone(zone) {
@@ -3551,17 +4490,8 @@ function updateCalibrationConsole() {
   syncFloorEditorControls();
   syncLandingPhaseControls();
   syncShapeLockControls();
-  syncFeedbackToggle();
   drawFloorEditorOverlay();
   calibrationOutput.textContent = activeLayoutText();
-}
-
-function syncFeedbackToggle() {
-  if (!calibrationConsole) return;
-  const button = calibrationConsole.querySelector('[data-feedback-toggle]');
-  if (!button) return;
-  button.textContent = interactionFeedback.enabled ? 'Feedback On' : 'Feedback Off';
-  button.setAttribute('aria-pressed', String(interactionFeedback.enabled));
 }
 
 async function copyCalibration(kind) {
@@ -3591,6 +4521,7 @@ if (calibrate && calibrationConsole) {
   setHudCollapsed(collapsed);
   calibrationConsole.addEventListener('pointerdown', (event) => event.stopPropagation());
   calibrationConsole.addEventListener('click', (event) => {
+    primeFeedback();
     if (event.target.closest('#cal-toggle')) {
       setHudCollapsed(!calibrationConsole.classList.contains('is-collapsed'));
       return;
@@ -3598,12 +4529,6 @@ if (calibrate && calibrationConsole) {
     const button = event.target.closest('[data-cal-copy]');
     if (button) {
       copyCalibration(button.dataset.calCopy);
-      return;
-    }
-    if (event.target.closest('[data-feedback-toggle]')) {
-      setFeedbackEnabled(!interactionFeedback.enabled);
-      syncFeedbackToggle();
-      status.textContent = interactionFeedback.enabled ? 'seat feedback on' : 'seat feedback off';
       return;
     }
     const ringButton = event.target.closest('[data-ring-action]');
@@ -3893,6 +4818,7 @@ window.addEventListener('resize', () => {
   syncRoomBackdropTexture();
   layout();
   reseatPlaced();
+  retargetShapeStreamFinalGrid(true);
   updateCalibrationConsole();
 });
 if (calibrate) {

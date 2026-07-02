@@ -151,6 +151,8 @@
   <script>
   (function () {
     var SLUG = "cultandshift";
+    var params = new URLSearchParams(window.location.search);
+    var previewMode = params.get("preview") === "1";
     var priceCents = 0, currency = "USD", isFree = false;
     var ticketOpen = false;
     var els = {
@@ -216,25 +218,79 @@
       els.seats.addEventListener("change", updateTotal);
       updateTotal();
       els.ticketBtn.disabled = false;
-      els.ticketBtn.textContent = isFree ? "Register" : "Continue to payment";
+      els.ticketBtn.textContent = isFree
+        ? (previewMode ? "Register (preview)" : "Register")
+        : (previewMode ? "Continue to payment (preview)" : "Continue to payment");
       els.ticketNote.textContent = isFree ? "Register to reserve your seat." : "Payment is handled by Square on the next screen.";
     }
 
-    fetch("/api/events/" + SLUG + "/context")
-      .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
-      .then(function (res) {
-        if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
-        applyEvent(res.d.event);
-      })
-      .catch(function (error) {
-        els.when.textContent = "Date to be announced";
-        els.where.textContent = "the six.well construct";
-        els.price.textContent = "Tickets not open yet";
-        els.seatsLeft.textContent = "-";
-        els.ticketBtn.disabled = true;
-        els.ticketBtn.textContent = "Tickets closed";
-        message(els.ticketMessage, error.message || "Tickets are not open yet.", "error");
-      });
+    function previewEvent(state) {
+      var base = {
+        title: "Cult & Shift",
+        startsAt: "2026-08-08T20:00:00-04:00",
+        location: "the six.well construct - location shared after booking",
+        priceCents: 2000,
+        currency: "USD",
+        priceFormatted: "$20.00",
+        capacity: 44,
+        maxSeatsPerOrder: 4,
+      };
+      if (state === "free") {
+        return Object.assign(base, { priceCents: 0, priceFormatted: "$0.00", free: true, seatsRemaining: 28, soldOut: false, open: true });
+      }
+      if (state === "soldout") {
+        return Object.assign(base, { seatsRemaining: 0, soldOut: true, open: false });
+      }
+      if (state === "closed") {
+        return Object.assign(base, { seatsRemaining: 18, soldOut: false, open: false });
+      }
+      return Object.assign(base, { seatsRemaining: 28, soldOut: false, open: true });
+    }
+
+    function failEvent(messageText) {
+      els.when.textContent = "Date to be announced";
+      els.where.textContent = "the six.well construct";
+      els.price.textContent = "Tickets not open yet";
+      els.seatsLeft.textContent = "-";
+      els.ticketBtn.disabled = true;
+      els.ticketBtn.textContent = "Tickets closed";
+      message(els.ticketMessage, messageText || "Tickets are not open yet.", "error");
+    }
+
+    function applyMicPreview(state) {
+      if (!previewMode) return;
+      els.micBtn.textContent = "Request a slot (preview)";
+      if (!state) return;
+      document.getElementById("performerName").value = "Jordan Rivera";
+      document.getElementById("performerEmail").value = "jordan@example.com";
+      document.getElementById("performerPhone").value = "404-555-0144";
+      document.getElementById("actType").value = "spoken word";
+      document.getElementById("pieceTitle").value = "Small Weather";
+      document.getElementById("requestedSlot").value = "early in the open mic run";
+      document.getElementById("notes").value = "One mic, no backing track. Five minutes is enough.";
+      if (state === "success") {
+        message(els.micMessage, "Preview mode - request received. The host will assign the final slot by email.", "ok");
+      } else if (state === "error") {
+        message(els.micMessage, "Preview mode - unable to save request.", "error");
+      }
+    }
+
+    if (previewMode) {
+      var state = params.get("state") || "open";
+      if (state === "error") failEvent("Preview mode - event details could not be loaded.");
+      else applyEvent(previewEvent(state));
+      applyMicPreview(params.get("mic") || "");
+    } else {
+      fetch("/api/events/" + SLUG + "/context")
+        .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.d.event) throw new Error(res.d.error || "Event unavailable.");
+          applyEvent(res.d.event);
+        })
+        .catch(function (error) {
+          failEvent(error.message || "Tickets are not open yet.");
+        });
+    }
 
     els.ticketForm.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -247,6 +303,10 @@
       var gotcha = els.ticketForm.querySelector("[name='_gotcha']").value;
       if (!name) return message(els.ticketMessage, "Please enter your name.", "error");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return message(els.ticketMessage, "Please enter a valid email.", "error");
+      if (previewMode) {
+        message(els.ticketMessage, "Preview mode - checkout is disabled. Your selection: " + seats + " seat" + (seats === 1 ? "" : "s") + ".", "ok");
+        return;
+      }
       els.ticketBtn.disabled = true;
       els.ticketBtn.textContent = isFree ? "Registering" : "Sending to Square";
       fetch("/api/events/" + SLUG + "/checkout", {
@@ -274,6 +334,14 @@
       var performerEmail = document.getElementById("performerEmail").value.trim();
       if (!performerName) return message(els.micMessage, "Please enter your performer name.", "error");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(performerEmail)) return message(els.micMessage, "Please enter a valid email.", "error");
+      if (previewMode) {
+        if (params.get("mic") === "error") {
+          message(els.micMessage, "Preview mode - unable to save request.", "error");
+        } else {
+          message(els.micMessage, "Preview mode - request received. The host will assign the final slot by email.", "ok");
+        }
+        return;
+      }
       els.micBtn.disabled = true;
       els.micBtn.textContent = "Sending";
       fetch("/api/events/" + SLUG + "/open-mic", {

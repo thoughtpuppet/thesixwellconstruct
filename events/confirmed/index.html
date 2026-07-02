@@ -128,15 +128,28 @@
   // read from the API; the confirmation flow renders exactly as it would live.
   function previewTicket(state) {
     const start = new Date(Date.now() + 26 * 60 * 60 * 1000);
+    const previewEvent = params.get("event") === "cultandshift"
+      ? {
+          title: "Cult & Shift",
+          slug: "cultandshift",
+          amountFormatted: "$40.00",
+          location: "the six.well construct - location shared after booking",
+        }
+      : {
+          title: "Signal & Symbol",
+          slug: "signal-symbol",
+          amountFormatted: "$90.00",
+          location: "the six.well construct - location shared after booking",
+        };
     return {
       id: "demo",
       status: state === "cancelled" ? "cancelled" : (state === "pending" ? "pending" : "paid"),
       seats: 2,
-      amountFormatted: "$90.00",
-      eventTitle: "Signal & Symbol",
-      eventSlug: "signal-symbol",
+      amountFormatted: previewEvent.amountFormatted,
+      eventTitle: previewEvent.title,
+      eventSlug: previewEvent.slug,
       eventStartsAt: start.toISOString(),
-      eventLocation: "the six.well construct — location shared after booking",
+      eventLocation: previewEvent.location,
       contactName: "Jordan Rivera",
       contactEmail: "jordan@example.com",
     };

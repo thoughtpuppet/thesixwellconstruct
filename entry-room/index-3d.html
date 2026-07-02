@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#120c07">
-<title>entry room 3d - the six.well construct</title>
+<title>entry room - the six.well construct</title>
+<link rel="stylesheet" href="/css/transitions.css">
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -308,6 +309,11 @@
     cursor: pointer;
   }
 
+  body.entry-room-page #live-text-editor,
+  body.entry-room-page #live-text-style-panel {
+    display: none !important;
+  }
+
   @media (max-width: 700px) {
     #calibration-console {
       top: auto;
@@ -347,12 +353,12 @@
   }
 </style>
 </head>
-<body>
+<body class="entry-room-page entry-room-3d-page">
 <main id="entry-root" aria-label="3D interactive entry room">
   <div id="art-stage">
     <picture id="room-bg" aria-hidden="true">
-      <source media="(max-aspect-ratio: 3/4)" srcset="../assets/entry-room/frame_01-entry-room-mobile-extended.png">
-      <img src="../assets/entry-room/frame_01-entry-room-desktop-extended.png" alt="">
+      <source media="(max-aspect-ratio: 3/4)" srcset="/assets/entry-room/frame_01-entry-room-mobile-extended.png">
+      <img src="/assets/entry-room/frame_01-entry-room-desktop-extended.png" alt="">
     </picture>
     <canvas id="entry-canvas" tabindex="0"></canvas>
     <div id="frame-stage" aria-hidden="true"></div>
@@ -362,6 +368,7 @@
   </div>
   <div id="entry-status" aria-live="polite" aria-atomic="true"></div>
 </main>
-<script type="module" src="./3d/entry-room-3d.js"></script>
+<script src="/js/transition.js"></script>
+<script type="module" src="/entry-room/3d/entry-room-3d.js"></script>
 </body>
 </html>

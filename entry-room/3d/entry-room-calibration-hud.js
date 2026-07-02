@@ -15,7 +15,6 @@ export function mountCalibrationHud(root = document.body) {
       <div class="calibration-actions">
         <button type="button" data-cal-copy="active">Copy Active</button>
         <button type="button" data-cal-copy="all">Copy All</button>
-        <button type="button" data-feedback-toggle>Feedback</button>
       </div>
       <div class="calibration-actions">
         <button type="button" data-ring-action="replay">Replay Ring</button>
@@ -25,6 +24,7 @@ export function mountCalibrationHud(root = document.body) {
       <div class="calibration-actions">
         <button type="button" data-lock-action="preview">Settled Overlay View</button>
         <button type="button" data-lock-action="clear-preview">Clear Overlay View</button>
+        <button type="button" data-lock-action="preview-final-grid">Preview Door Vacuum</button>
       </div>
       <div class="calibration-actions">
         <button type="button" data-floor-action="toggle">Show Floor</button>
@@ -42,6 +42,9 @@ export function mountCalibrationHud(root = document.body) {
         <label>Color 5 <input type="color" value="#00ced1" data-stream-color="4"></label>
         <label>Color 6 <input type="color" value="#006eff" data-stream-color="5"></label>
         <label>Color 7 <input type="color" value="#cb5cff" data-stream-color="6"></label>
+        <label>Color 8 <input type="color" value="#ffcb70" data-stream-color="7"></label>
+        <label>Color 9 <input type="color" value="#814812" data-stream-color="8"></label>
+        <label>Color 10 <input type="color" value="#fff1e0" data-stream-color="9"></label>
         <h3>Floor editor - active layout</h3>
         <label>Front left X <input type="number" min="-0.5" max="1.5" step="0.001" data-floor-control="frontLeft.x"></label>
         <label>Front left Y <input type="number" min="-0.5" max="1.5" step="0.001" data-floor-control="frontLeft.y"></label>
