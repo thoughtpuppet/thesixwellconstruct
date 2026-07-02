@@ -1115,10 +1115,10 @@ const SHAPE_STREAM = {
     { name: 'back-center', duration: 2.0, widthT: 0.172, depthT: 0.078, widthSpread: 0.36, depthSpread: 0.05 },
     { name: 'front-fill', duration: 2.2, widthT: 0.578, depthT: 0.990, widthSpread: 0.64, depthSpread: 0.22 },
     { name: 'center', duration: 1.9, widthT: 0.438, depthT: 0.297, widthSpread: 0.39, depthSpread: 0.16 },
-    { name: 'front-right', duration: 2.1, widthT: 0.920, depthT: 0.990, widthSpread: 0.19, depthSpread: 0.22 },
-    { name: 'back-right', duration: 2.0, widthT: 0.781, depthT: 0.250, widthSpread: 0.31, depthSpread: 0.19 },
+    { name: 'front-right', duration: 2.1, widthT: 0.990, depthT: 0.990, widthSpread: 0.22, depthSpread: 0.22 },
+    { name: 'back-right', duration: 2.0, widthT: 0.970, depthT: 0.250, widthSpread: 0.23, depthSpread: 0.19 },
     { name: 'left', duration: 2.0, widthT: 0.040, depthT: 0.940, widthSpread: 0.24, depthSpread: 0.24 },
-    { name: 'right', duration: 2.0, widthT: 0.940, depthT: 0.640, widthSpread: 0.27, depthSpread: 0.30 }
+    { name: 'right', duration: 2.0, widthT: 0.985, depthT: 0.640, widthSpread: 0.22, depthSpread: 0.30 }
   ],
   settleLinearThreshold: 0.055,
   settleAngularThreshold: 0.18,
@@ -1139,10 +1139,10 @@ const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
     floor: {
       // One continuous floor field.
       frontLeft: { x: 0.0036, y: 0.9890 },
-      frontRight: { x: 0.9980, y: 0.9970 },
+      frontRight: { x: 1.0240, y: 0.9970 },
       backLeft: { x: 0.5557, y: 0.6334 },
       leftCorner: { x: 0.005, y: 0.860 },
-      backRight: { x: 0.9974, y: 0.8321 },
+      backRight: { x: 1.0200, y: 0.8321 },
       apex: { x: 0.5480, y: 0.8230 },
       zFront: CONFIG.homeZ + 0.46,
       zBack: CONFIG.homeZ - 0.29,
@@ -1152,10 +1152,10 @@ const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
   mobile: {
     floor: {
       frontLeft: { x: -0.02, y: 0.972 },
-      frontRight: { x: 1.02, y: 0.978 },
+      frontRight: { x: 1.045, y: 0.978 },
       backLeft: { x: 0.10, y: 0.745 },
       leftCorner: { x: 0.030, y: 0.860 },
-      backRight: { x: 0.90, y: 0.765 },
+      backRight: { x: 0.935, y: 0.765 },
       apex: { x: 0.525, y: 0.675 },
       zFront: CONFIG.homeZ + 0.42,
       zBack: CONFIG.homeZ - 0.28,
@@ -3909,10 +3909,12 @@ if (previewComplete) {
     const stepChunk = () => {
       const chunk = 70;
       for (let i = 0; i < chunk && warmupSteps > 0; i += 1, warmupSteps -= 1) {
+        updateCompletionEffects(0.025);
         updateShapeStream(0.025);
       }
       if (warmupSteps <= 0) shapeStream.full = true;
       for (let i = 0; i < chunk && warmupSteps <= 0 && settleSteps > 0; i += 1, settleSteps -= 1) {
+        updateCompletionEffects(0.025);
         updateShapeStream(0.025);
       }
       renderer.render(scene, camera);
