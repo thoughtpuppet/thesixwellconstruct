@@ -25,9 +25,23 @@
     --core-top: 0%;
     --core-width: 74.21875%;
     --core-height: 100%;
+    --gravity-warp-blur: 0px;
+    --gravity-warp-contrast: 1;
+    --gravity-warp-brightness: 1;
+    --gravity-warp-saturate: 1;
+    --gravity-warp-origin-x: 50%;
+    --gravity-warp-origin-y: 50%;
     position: fixed;
     inset: 0;
     background: #0b0806;
+  }
+
+  #entry-gravity-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
   }
 
   @media (max-aspect-ratio: 3/4) {
@@ -49,6 +63,17 @@
     height: max(100vh, calc(100vw * var(--art-h) / var(--art-w)));
     transform: translate(-50%, -50%);
     overflow: hidden;
+  }
+
+  #entry-root.is-gravity-warping #art-stage {
+    transform-origin: var(--gravity-warp-origin-x) var(--gravity-warp-origin-y);
+    filter:
+      url("#entry-gravity-warp")
+      blur(var(--gravity-warp-blur))
+      contrast(var(--gravity-warp-contrast))
+      brightness(var(--gravity-warp-brightness))
+      saturate(var(--gravity-warp-saturate));
+    will-change: transform, filter;
   }
 
   #room-bg {
@@ -355,6 +380,12 @@
 </head>
 <body class="entry-room-page entry-room-3d-page">
 <main id="entry-root" aria-label="3D interactive entry room">
+  <svg id="entry-gravity-defs" aria-hidden="true" focusable="false">
+    <filter id="entry-gravity-warp" x="-32%" y="-32%" width="164%" height="164%" color-interpolation-filters="sRGB">
+      <feTurbulence id="entry-gravity-warp-turbulence" type="fractalNoise" baseFrequency="0.010 0.016" numOctaves="2" seed="17" result="warpNoise"></feTurbulence>
+      <feDisplacementMap id="entry-gravity-warp-displacement" in="SourceGraphic" in2="warpNoise" scale="0" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </svg>
   <div id="art-stage">
     <picture id="room-bg" aria-hidden="true">
       <source media="(max-aspect-ratio: 3/4)" srcset="/assets/entry-room/frame_01-entry-room-mobile-extended.png">
