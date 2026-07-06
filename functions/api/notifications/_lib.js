@@ -42,6 +42,10 @@ function replyToAddress(env) {
   return env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO;
 }
 
+function adminNotificationAddress(env) {
+  return replyToAddress(env);
+}
+
 // Events are a separate brand (the six.well construct) from the tattoo house.
 // They settle to their own Square account, so their email identity is distinct
 // too. Falls back to the events Square reply address, then the studio default.
@@ -80,6 +84,13 @@ const CONSULTATION_BOOKING_TYPE_IDS = [
 ];
 // Studio bookings are the construct's own product (not the tattoo house).
 const STUDIO_BOOKING_TYPE_IDS = ["studio_visit", "studio_gathering", "studio_rental"];
+const ADMIN_SUBMISSION_TYPES = new Set([
+  "tattoo_inquiry",
+  "flash_claim",
+  "special_project",
+  "build_brief",
+  "maze_design",
+]);
 const CONFIRMATION_PATHS = {
   [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/consultation/",
   [VIRTUAL_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/virtual-consultation/",
@@ -259,7 +270,7 @@ async function recordDelivery(db, delivery) {
         crypto.randomUUID(),
         delivery.channel,
         delivery.templateKey,
-        delivery.recipient,
+        delivery.recipient || delivery.to,
         delivery.subject || null,
         delivery.relatedType || null,
         delivery.relatedId || null,
@@ -383,6 +394,8 @@ function normalizeSubmission(rowOrSubmission) {
   return {
     id: rowOrSubmission.id,
     type: rowOrSubmission.type,
+    sourcePath: rowOrSubmission.sourcePath || rowOrSubmission.source_path || payload.source_path || "",
+    subject: rowOrSubmission.subject || payload.subject || "",
     contactName: rowOrSubmission.contactName || rowOrSubmission.contact_name || contact.name || "",
     contactEmail: rowOrSubmission.contactEmail || rowOrSubmission.contact_email || contact.email || "",
     contactPhone: rowOrSubmission.contactPhone || rowOrSubmission.contact_phone || contact.phone || "",
@@ -394,6 +407,7 @@ function normalizeAppointment(row) {
   const meetingJoinUrl = row.meeting_join_url || row.meetingJoinUrl || row.meeting?.joinUrl || "";
   return {
     id: row.id,
+    submissionId: row.submission_id || row.submissionId || "",
     bookingTypeId: row.booking_type_id || row.bookingTypeId || "",
     bookingTypeLabel: row.booking_type_label || row.bookingTypeLabel || "Tattoo session",
     clientName: row.client_name || row.clientName || "",
@@ -407,6 +421,85 @@ function normalizeAppointment(row) {
     currency: row.currency || "USD",
     meeting: meetingJoinUrl ? { joinUrl: meetingJoinUrl } : null,
   };
+}
+
+function labelFromKey(key) {
+  return String(key || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function valueSummary(value) {
+  if (value === null || value === undefined || value === "") return "";
+  if (Array.isArray(value)) {
+    return value.map(valueSummary).filter(Boolean).join(", ");
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value).trim();
+}
+
+function compactLine(label, value) {
+  const summary = valueSummary(value);
+  return summary ? `${label}: ${summary}` : "";
+}
+
+function submissionDetailLines(submission) {
+  const payload = submission.payload || {};
+  const fieldsByType = {
+    tattoo_inquiry: [
+      "placement",
+      "size",
+      "budget_range",
+      "timeline",
+      "message",
+      "instagram",
+    ],
+    flash_claim: [
+      "selected_flash",
+      "placement",
+      "claim_bid",
+      "size",
+      "timeline",
+      "message",
+      "instagram",
+    ],
+    special_project: [
+      "project_title",
+      "placement",
+      "budget_range",
+      "timeline",
+      "message",
+      "instagram",
+    ],
+    build_brief: [
+      "selected_elements",
+      "placement",
+      "size",
+      "timeline",
+      "message",
+      "instagram",
+    ],
+    maze_design: [
+      "maze_explanation",
+      "placement",
+      "size",
+      "timeline",
+      "message",
+      "instagram",
+    ],
+  };
+  const preferredFields = fieldsByType[submission.type] || [];
+  return preferredFields
+    .map((key) => compactLine(labelFromKey(key), payload[key]))
+    .filter(Boolean);
+}
+
+function adminAppointmentEligible(appointment) {
+  return !STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
 }
 
 export async function notifySubmissionReceived(env, submission, options = {}) {
@@ -433,6 +526,44 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     relatedType: "submission",
     relatedId: normalized.id,
     idempotencyKey: options.idempotencyKey || `submission_received:${normalized.id}`,
+  });
+}
+
+export async function notifyAdminSubmissionReceived(env, submission, options = {}) {
+  const normalized = normalizeSubmission(submission);
+  if (!ADMIN_SUBMISSION_TYPES.has(normalized.type)) {
+    return { ok: false, skipped: true };
+  }
+
+  const recipient = adminNotificationAddress(env);
+  if (!recipient) return { ok: false, skipped: true };
+
+  const detailLines = submissionDetailLines(normalized);
+  const text = [
+    "New tattoo submission received.",
+    "",
+    compactLine("Type", labelFromKey(normalized.type)),
+    compactLine("Submission ID", normalized.id),
+    compactLine("Source", normalized.sourcePath),
+    compactLine("Subject", normalized.subject),
+    "",
+    "Client",
+    compactLine("Name", normalized.contactName),
+    compactLine("Email", normalized.contactEmail),
+    compactLine("Phone", normalized.contactPhone),
+    "",
+    detailLines.length ? "Project notes" : "",
+    ...detailLines,
+  ].filter((line) => line !== "").join("\n");
+
+  return sendTransactionalEmail(env, {
+    to: recipient,
+    subject: `New tattoo submission: ${labelFromKey(normalized.type)}`,
+    text,
+    templateKey: "admin_submission_received",
+    relatedType: "submission",
+    relatedId: normalized.id,
+    idempotencyKey: options.idempotencyKey || `admin_submission_received:${normalized.id}`,
   });
 }
 
@@ -676,6 +807,49 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow, o
   }
 }
 
+export async function notifyAdminAppointmentConfirmed(env, request, appointmentRow, options = {}) {
+  const appointment = normalizeAppointment(appointmentRow);
+  if (!adminAppointmentEligible(appointment)) return { ok: false, skipped: true };
+
+  const recipient = adminNotificationAddress(env);
+  if (!recipient) return { ok: false, skipped: true };
+
+  const when = [formatDate(appointment.startAt), formatDate(appointment.endAt)]
+    .filter(Boolean)
+    .join(" - ");
+  const text = [
+    "Tattoo booking payment confirmed.",
+    "",
+    compactLine("Booking type", appointment.bookingTypeLabel || appointment.bookingTypeId),
+    compactLine("Appointment ID", appointment.id),
+    compactLine("Submission ID", appointment.submissionId),
+    compactLine("When", when),
+    "",
+    "Client",
+    compactLine("Name", appointment.clientName),
+    compactLine("Email", appointment.clientEmail),
+    compactLine("Phone", appointment.clientPhone),
+    "",
+    "Payment",
+    compactLine("Deposit / fee", `${formatMoney(appointment.depositCents, appointment.currency)} received`),
+    appointment.tipCents ? compactLine("Optional tip", formatMoney(appointment.tipCents, appointment.currency)) : "",
+    compactLine("Total paid", formatMoney(appointment.totalDueCents, appointment.currency)),
+    "",
+    compactLine("Confirmation page", appointmentConfirmationUrl(env, request, appointment)),
+    compactLine("Calendar", appointmentCalendarUrl(env, request, appointment)),
+  ].filter((line) => line !== "").join("\n");
+
+  return sendTransactionalEmail(env, {
+    to: recipient,
+    subject: `Tattoo booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`,
+    text,
+    templateKey: "admin_appointment_confirmed",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: options.idempotencyKey || `admin_appointment_confirmed:${appointment.id}`,
+  });
+}
+
 async function selectSubmission(db, submissionId) {
   return db.prepare("SELECT * FROM submissions WHERE id = ?").bind(submissionId).first();
 }
@@ -769,6 +943,15 @@ export async function handleAdminResendNotification(request, env) {
       return json({ ok: Boolean(delivery.ok), delivery });
     }
 
+    if (templateKey === "admin_submission_received") {
+      const submission = await selectSubmission(db, submissionId);
+      if (!submission) return errorResponse("Submission not found.", 404);
+      const delivery = await notifyAdminSubmissionReceived(env, submission, {
+        idempotencyKey: resendKey(`admin_submission_received:${submission.id}`),
+      });
+      return json({ ok: Boolean(delivery.ok), delivery });
+    }
+
     if (templateKey === "booking_link_created") {
       const submission = await selectSubmission(db, submissionId);
       if (!submission) return errorResponse("Submission not found.", 404);
@@ -784,6 +967,18 @@ export async function handleAdminResendNotification(request, env) {
         allowedBookingTypes: parseJsonField(token?.allowed_booking_types_json, []),
       }, {
         idempotencyKey: resendKey(`booking_link_created:${tokenId}`),
+      });
+      return json({ ok: Boolean(delivery.ok), delivery });
+    }
+
+    if (templateKey === "admin_appointment_confirmed") {
+      const appointment = await selectAppointmentWithMeeting(db, appointmentId);
+      if (!appointment) return errorResponse("Appointment not found.", 404);
+      if (appointment.status !== "confirmed") {
+        return errorResponse("Only confirmed appointments can receive admin confirmation resends.", 400);
+      }
+      const delivery = await notifyAdminAppointmentConfirmed(env, request, appointment, {
+        idempotencyKey: resendKey(`admin_appointment_confirmed:${appointment.id}`),
       });
       return json({ ok: Boolean(delivery.ok), delivery });
     }

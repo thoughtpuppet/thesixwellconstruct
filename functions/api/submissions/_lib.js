@@ -1,4 +1,7 @@
-import { notifySubmissionReceived } from "../notifications/_lib.js";
+import {
+  notifyAdminSubmissionReceived,
+  notifySubmissionReceived,
+} from "../notifications/_lib.js";
 
 const VALID_STATUSES = new Set([
   "new",
@@ -401,6 +404,11 @@ export async function handleCreateSubmission(request, env) {
       .run();
 
     await notifySubmissionReceived(env, {
+      id,
+      ...submission,
+      files: savedFiles,
+    });
+    await notifyAdminSubmissionReceived(env, {
       id,
       ...submission,
       files: savedFiles,

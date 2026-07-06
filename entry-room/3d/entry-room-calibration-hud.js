@@ -96,6 +96,23 @@ export function mountCalibrationHud(root = document.body) {
         <label>Cycle min s <input type="number" min="0.2" max="10" step="0.1" value="3.0" data-lock-control="cycle-min"></label>
         <label>Cycle max s <input type="number" min="0.2" max="10" step="0.1" value="3.0" data-lock-control="cycle-max"></label>
         <label>Fade s <input type="number" min="0.05" max="4" step="0.05" value="0.36" data-lock-control="fade-time"></label>
+        <h3>Door eye exit</h3>
+        <div class="calibration-actions">
+          <button type="button" data-eye-action="preview-open">Show Open Eye</button>
+          <button type="button" data-eye-action="preview-closed">Show Closed Eye</button>
+          <button type="button" data-eye-action="preview-blink">Preview Blink</button>
+          <button type="button" data-eye-action="preview-transition">Preview Break Transition</button>
+          <button type="button" data-eye-action="hide">Hide Eye</button>
+        </div>
+        <label>Eye color <input type="color" value="#fcb867" data-eye-control="eye-color"></label>
+        <label>Eye opacity <input type="number" min="0" max="1" step="0.05" value="1" data-eye-control="eye-opacity"></label>
+        <label>Overlay color <input type="color" value="#050302" data-eye-control="overlay-color"></label>
+        <label>Overlay opacity <input type="number" min="0" max="1" step="0.05" value="0.48" data-eye-control="overlay-opacity"></label>
+        <label>Closed fade s <input type="number" min="0.05" max="4" step="0.05" value="0.58" data-eye-control="closed-reveal-duration"></label>
+        <label>Open fade s <input type="number" min="0.05" max="4" step="0.05" value="0.42" data-eye-control="open-reveal-duration"></label>
+        <label>Blink count <input type="number" min="1" max="16" step="1" value="6" data-eye-control="blink-count"></label>
+        <label>Blink duration s <input type="number" min="0.04" max="1.5" step="0.01" value="0.22" data-eye-control="blink-duration"></label>
+        <label>Break fade s <input type="number" min="0" max="3" step="0.01" value="2.00" data-eye-control="break-handoff-duration"></label>
         <h3>Door position - active layout</h3>
         <label>X <input type="number" min="-0.5" max="1.5" step="0.001" data-lock-control="door-x"></label>
         <label>Y <input type="number" min="-0.5" max="1.5" step="0.001" data-lock-control="door-y"></label>

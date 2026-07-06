@@ -112,7 +112,7 @@ const BASE_LAYOUTS = {
   desktop: {
     image: CORE_IMAGE,
     holeRadiusN: 0.0169,
-    orbRadiusFactor: 0.9,
+    orbRadiusFactor: 1.05,
     // Six holes on the right wall - 2 columns x 3 rows.
     sockets: DESKTOP_SOCKETS,
     orbHomes: DESKTOP_ORB_HOMES,
@@ -531,6 +531,8 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
       exitProgress: +shapeStream.finalGrid.exitProgress.toFixed(2),
       flashCount: shapeStream.finalGrid.flashCount,
       collapseProgress: +shapeStream.finalGrid.collapseProgress.toFixed(2),
+      dissolveProgress: +(shapeStream.finalGrid.dissolveProgress || 0).toFixed(2),
+      portalProgress: +(shapeStream.finalGrid.portalProgress || 0).toFixed(2),
       viewerPull: +doorwayExit.pullProgress.toFixed(2),
       warpPhase: doorwayExit.gravityWarp.phase,
       warpProgress: +doorwayExit.gravityWarp.progress.toFixed(2),
@@ -679,19 +681,97 @@ function createDoorwayRadialVeilTexture() {
   return texture;
 }
 
+function createDoorwayParticleMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+    uniforms: {
+      uOpacity: { value: 1 }
+    },
+    blending: THREE.NormalBlending,
+    vertexShader: `
+      attribute float alpha;
+      attribute float particleSize;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vColor = color;
+        vAlpha = alpha;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        gl_PointSize = particleSize;
+      }
+    `,
+    fragmentShader: `
+      uniform float uOpacity;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vec2 centered = gl_PointCoord - vec2(0.5);
+        float radius = length(centered);
+        if (radius > 0.5) discard;
+        float softness = smoothstep(0.5, 0.22, radius);
+        gl_FragColor = vec4(vColor, vAlpha * uOpacity * softness);
+      }
+    `,
+    vertexColors: true
+  });
+}
+
+function createDoorwayImageBreakMaterial(texture) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      map: { value: texture },
+      uOpacity: { value: 1 }
+    },
+    vertexShader: `
+      attribute float alpha;
+      varying vec2 vUv;
+      varying float vAlpha;
+      void main() {
+        vUv = uv;
+        vAlpha = alpha;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D map;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      varying float vAlpha;
+      void main() {
+        vec4 texel = texture2D(map, vUv);
+        gl_FragColor = vec4(texel.rgb, texel.a * vAlpha * uOpacity);
+      }
+    `
+  });
+}
+
 const doorwayClosedEyeTexture = new THREE.TextureLoader().load('/assets/eyes/closedeye.png');
 doorwayClosedEyeTexture.colorSpace = THREE.SRGBColorSpace;
 const doorwayOpenEyeTexture = new THREE.TextureLoader().load('/assets/eyes/openeye.png');
 doorwayOpenEyeTexture.colorSpace = THREE.SRGBColorSpace;
 const doorwayRadialVeilTexture = createDoorwayRadialVeilTexture();
-const DOORWAY_EYE_COLOR = new THREE.Color(0xfcb867);
-const DOORWAY_EYE_FLASH_COLOR = new THREE.Color(0xfff3cf);
+const DOORWAY_EYE_TUNING = {
+  eyeColor: 0xffd9a8,
+  eyeOpacity: 0.40,
+  overlayColor: 0x050302,
+  overlayOpacity: 0.48
+};
+const DOORWAY_EYE_COLOR = new THREE.Color(DOORWAY_EYE_TUNING.eyeColor);
 const doorwayExit = (() => {
   const gravityVeil = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
     new THREE.MeshBasicMaterial({
       map: doorwayRadialVeilTexture,
-      color: 0x050302,
+      color: DOORWAY_EYE_TUNING.overlayColor,
       transparent: true,
       opacity: 0,
       depthTest: false,
@@ -706,7 +786,7 @@ const doorwayExit = (() => {
   const veil = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
     new THREE.MeshBasicMaterial({
-      color: 0x050302,
+      color: DOORWAY_EYE_TUNING.overlayColor,
       transparent: true,
       opacity: 0,
       depthTest: false,
@@ -718,22 +798,28 @@ const doorwayExit = (() => {
   veil.renderOrder = 28;
   scene.add(veil);
 
-  const eye = new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1),
-    new THREE.MeshBasicMaterial({
-      map: doorwayClosedEyeTexture,
-      color: 0xfcb867,
-      transparent: true,
-      opacity: 0,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-      side: THREE.DoubleSide
-    })
-  );
-  eye.visible = false;
-  eye.renderOrder = 30;
-  scene.add(eye);
+  const eyeGeometry = new THREE.PlaneGeometry(1, 1);
+  const createEye = (texture, renderOrder) => {
+    const eye = new THREE.Mesh(
+      eyeGeometry,
+      new THREE.MeshBasicMaterial({
+        map: texture,
+        color: DOORWAY_EYE_TUNING.eyeColor,
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false,
+        side: THREE.DoubleSide
+      })
+    );
+    eye.visible = false;
+    eye.renderOrder = renderOrder;
+    scene.add(eye);
+    return eye;
+  };
+  const closedEye = createEye(doorwayClosedEyeTexture, 30);
+  const openEye = createEye(doorwayOpenEyeTexture, 30.1);
 
   const voidPlane = new THREE.Mesh(
     new THREE.CircleGeometry(1, 64),
@@ -750,6 +836,63 @@ const doorwayExit = (() => {
   voidPlane.visible = false;
   voidPlane.renderOrder = 29;
   scene.add(voidPlane);
+
+  const dustGeometry = new THREE.BufferGeometry();
+  dustGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+  dustGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(0), 3));
+  const dustPoints = new THREE.Points(
+    dustGeometry,
+    new THREE.PointsMaterial({
+      size: 0.04,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  dustPoints.visible = false;
+  dustPoints.renderOrder = 29.7;
+  scene.add(dustPoints);
+
+  const roomBreakGeometry = new THREE.BufferGeometry();
+  roomBreakGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+  roomBreakGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(0), 2));
+  roomBreakGeometry.setAttribute('alpha', new THREE.BufferAttribute(new Float32Array(0), 1));
+  const roomBreakMaterial = createDoorwayImageBreakMaterial(roomBackdrop.texture);
+  const roomBreakMesh = new THREE.Mesh(roomBreakGeometry, roomBreakMaterial);
+  roomBreakMesh.visible = false;
+  roomBreakMesh.renderOrder = 30.05;
+  scene.add(roomBreakMesh);
+
+  const doorParticleGeometry = new THREE.BufferGeometry();
+  doorParticleGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+  doorParticleGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(0), 3));
+  doorParticleGeometry.setAttribute('alpha', new THREE.BufferAttribute(new Float32Array(0), 1));
+  doorParticleGeometry.setAttribute('particleSize', new THREE.BufferAttribute(new Float32Array(0), 1));
+  const doorParticleMaterial = createDoorwayParticleMaterial();
+  const doorParticlePoints = new THREE.Points(doorParticleGeometry, doorParticleMaterial);
+  doorParticlePoints.visible = false;
+  doorParticlePoints.renderOrder = 30.2;
+  scene.add(doorParticlePoints);
+
+  const blackPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0,
+      depthTest: false,
+      depthWrite: false,
+      toneMapped: false,
+      side: THREE.DoubleSide
+    })
+  );
+  blackPlane.visible = false;
+  blackPlane.renderOrder = 90;
+  scene.add(blackPlane);
 
   const rings = Array.from({ length: 6 }, (_value, index) => {
     const ring = new THREE.Mesh(
@@ -771,21 +914,65 @@ const doorwayExit = (() => {
   });
 
   return {
-    eye,
+    eye: openEye,
+    closedEye,
+    openEye,
     gravityVeil,
     rings,
     veil,
     voidPlane,
+    roomDust: {
+      points: dustPoints,
+      geometry: dustGeometry,
+      starts: null,
+      targets: null,
+      swirls: null,
+      colors: null,
+      count: 0,
+      key: ''
+    },
+    roomShards: {
+      points: roomBreakMesh,
+      geometry: roomBreakGeometry,
+      material: roomBreakMaterial,
+      doorPoints: doorParticlePoints,
+      doorGeometry: doorParticleGeometry,
+      doorMaterial: doorParticleMaterial,
+      starts: null,
+      targets: null,
+      positions: null,
+      uvs: null,
+      alphas: null,
+      cornerOffsets: null,
+      swirls: null,
+      doorStarts: null,
+      doorTargets: null,
+      doorPositions: null,
+      doorColors: null,
+      doorAlphas: null,
+      doorSizes: null,
+      doorBaseSizes: null,
+      doorSwirls: null,
+      count: 0,
+      doorCount: 0,
+      key: ''
+    },
+    blackPlane,
     scale: 0.18,
     voidScale: 0.2,
     pullProgress: 0,
     pullOriginX: 50,
     pullOriginY: 50,
-    pullTranslateX: 0,
-    pullTranslateY: 0,
-    collapseProgress: 0,
-    flashCount: 0,
-    gravityWarp: {
+      pullTranslateX: 0,
+      pullTranslateY: 0,
+      dissolveProgress: 0,
+      portalProgress: 0,
+      flashCount: 0,
+    calibrationPreview: 'none',
+    calibrationBlinkElapsed: 0,
+    calibrationTransitionPreview: false,
+    navigationTimer: null,
+      gravityWarp: {
       phase: 'idle',
       progress: 0,
       intensity: 0,
@@ -1383,6 +1570,7 @@ const completionEffects = (() => {
     imageField,
     active: false,
     elapsed: 0,
+    exitOpacityScale: 1,
     config: activeLayout.completionRing
   };
 })();
@@ -1469,41 +1657,36 @@ const SHAPE_STREAM_FINAL_GRID = {
   tiltVariation: 0.16,
   z: 4.6,
   zStep: 0.00003,
-  closedRevealDuration: 0.58,
-  openRevealDuration: 0.42,
-  flashDuration: 1.32,
-  flashCount: 6,
-  collapseDuration: 0.74,
-  pullDuration: 1.38,
+  closedRevealDuration: 0.10,
+  openRevealDuration: 0.30,
+  blinkCount: 6,
+  blinkDuration: 0.60,
+  postEyeHoldDuration: 0.45,
+  roomBreakDuration: 4.85,
+  roomImageHandoffDuration: 2.00,
+  blackFadeDuration: 0.55,
+  homeFadeHoldDuration: 0.18,
+  homeHref: '/',
+  roomParticlePullDuration: 1.45,
+  roomParticleBatchSize: 72,
+  roomParticleBatchInterval: 0.026,
+  roomParticleOrbitScale: 0.055,
+  doorParticleStartTime: 3.55,
+  doorParticlePullDuration: 0.95,
+  doorParticleBatchSize: 30,
+  doorParticleBatchInterval: 0.012,
+  doorParticleOrbitScale: 0.18,
   eyeZ: 4.82,
-  eyeStartScale: 0.14,
-  eyeClosedScale: 0.48,
   eyeDoorScale: 0.72,
-  eyeCollapseScale: 0.035,
   voidStartScale: 0.24,
   voidDoorScale: 0.78,
   voidPullScale: 5.2,
-  viewerPullScale: 4.05,
-  viewerPullCentering: 1,
-  viewerPullRotate: -1.45,
-  viewerPullVeilOpacity: 0.94,
-  fadeStart: 0.7,
-  homeHref: '/'
-};
-const GRAVITY_WARP_TUNING = {
-  vacuumStart: 0.62,
-  maxFilterScale: 74,
-  reducedMaxFilterScale: 14,
-  maxBlur: 1.35,
-  reducedMaxBlur: 0.28,
-  maxContrast: 1.24,
-  reducedMaxContrast: 1.05,
-  minBrightness: 0.82,
-  reducedMinBrightness: 0.96,
-  maxSaturate: 1.28,
-  reducedMaxSaturate: 1.04,
-  flashScale: 18,
-  reducedFlashScale: 3.5
+  dustDesktopCount: 1450,
+  dustMobileCount: 920,
+  dustReducedCount: 360,
+  roomShardDesktopCount: 7200,
+  roomShardMobileCount: 4200,
+  roomShardReducedCount: 900
 };
 const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
   desktop: {
@@ -1629,6 +1812,8 @@ const shapeStream = (() => {
       exitProgress: 0,
       flashCount: 0,
       collapseProgress: 0,
+      dissolveProgress: 0,
+      portalProgress: 0,
       navigating: false
     }
   };
@@ -1702,6 +1887,8 @@ function resetShapeStream() {
   shapeStream.finalGrid.exitProgress = 0;
   shapeStream.finalGrid.flashCount = 0;
   shapeStream.finalGrid.collapseProgress = 0;
+  shapeStream.finalGrid.dissolveProgress = 0;
+  shapeStream.finalGrid.portalProgress = 0;
   shapeStream.finalGrid.navigating = false;
   resetShapeStreamDoorwayExit();
 }
@@ -2120,21 +2307,22 @@ function pickShapeStreamMaterial() {
   let cursor = Math.random() * Math.max(totalWeight, 1);
   for (let index = 0; index < shapeStream.palette.length; index++) {
     cursor -= Math.max(0, SHAPE_STREAM_COLOR_WEIGHTS[index] ?? 1);
-    if (cursor <= 0) return shapeStream.palette[index];
+    if (cursor <= 0) return { material: shapeStream.palette[index], colorIndex: index };
   }
-  return shapeStream.palette[shapeStream.palette.length - 1];
+  const colorIndex = shapeStream.palette.length - 1;
+  return { material: shapeStream.palette[colorIndex], colorIndex };
 }
 
 function createShapeStreamMesh(geoIndex = Math.floor(Math.random() * shapeStream.geometries.length)) {
-  const mat = pickShapeStreamMaterial();
-  const mesh = new THREE.Mesh(shapeStream.geometries[geoIndex], mat);
+  const { material, colorIndex } = pickShapeStreamMaterial();
+  const mesh = new THREE.Mesh(shapeStream.geometries[geoIndex], material);
   mesh.renderOrder = 1;
   scene.add(mesh);
-  return { mesh, geoIndex };
+  return { mesh, geoIndex, colorIndex };
 }
 
 function spawnStreamShape() {
-  const { mesh, geoIndex } = createShapeStreamMesh();
+  const { mesh, geoIndex, colorIndex } = createShapeStreamMesh();
   const size = SHAPE_STREAM.minSize + Math.random() * (SHAPE_STREAM.maxSize - SHAPE_STREAM.minSize);
 
   const targetCell = pickShapeStreamTargetCell();
@@ -2253,6 +2441,7 @@ function spawnStreamShape() {
     mesh,
     size,
     geoIndex,
+    colorIndex,
     zoneIndex: targetCell.zoneIndex,
     body,
     collider,
@@ -2296,98 +2485,854 @@ function easeInCubic(t) {
   return clamped * clamped * clamped;
 }
 
+function easeInOutCubic(t) {
+  const clamped = THREE.MathUtils.clamp(t, 0, 1);
+  return clamped < 0.5
+    ? 4 * clamped * clamped * clamped
+    : 1 - Math.pow(-2 * clamped + 2, 3) / 2;
+}
+
 function shapeStreamDoorwayExitDuration(name) {
-  if (!reducedMotionQuery.matches) return SHAPE_STREAM_FINAL_GRID[name];
+  if (!reducedMotionQuery.matches || calibrate) return SHAPE_STREAM_FINAL_GRID[name];
   if (name === 'closedRevealDuration') return 0.14;
   if (name === 'openRevealDuration') return 0.12;
-  if (name === 'flashDuration') return 0.36;
-  if (name === 'collapseDuration') return 0.18;
-  if (name === 'pullDuration') return 0.32;
+  if (name === 'blinkDuration') return 0.14;
+  if (name === 'postEyeHoldDuration') return 0.22;
+  if (name === 'roomBreakDuration') return 2.55;
+  if (name === 'blackFadeDuration') return 0.42;
   return SHAPE_STREAM_FINAL_GRID[name];
 }
 
-function setDoorwayEyeTexture(texture) {
-  if (doorwayExit.eye.material.map === texture) return;
-  doorwayExit.eye.material.map = texture;
-  doorwayExit.eye.material.needsUpdate = true;
+function setDoorwayEyeOpacity(closedOpacity = 0, openOpacity = 0, color = DOORWAY_EYE_COLOR, options = {}) {
+  const maxOpacity = THREE.MathUtils.clamp(DOORWAY_EYE_TUNING.eyeOpacity, 0, 1);
+  const closedMaxOpacity = options.closedMaxOpacity ?? maxOpacity;
+  const openMaxOpacity = options.openMaxOpacity ?? maxOpacity;
+  const closed = THREE.MathUtils.clamp(closedOpacity * closedMaxOpacity, 0, 1);
+  const open = THREE.MathUtils.clamp(openOpacity * openMaxOpacity, 0, 1);
+  doorwayExit.closedEye.visible = closed > 0.004;
+  doorwayExit.openEye.visible = open > 0.004;
+  doorwayExit.closedEye.material.opacity = closed;
+  doorwayExit.openEye.material.opacity = open;
+  doorwayExit.closedEye.material.color.copy(color);
+  doorwayExit.openEye.material.color.copy(color);
 }
 
-function doorwayEyeAspect() {
-  const image = doorwayExit.eye.material.map?.image;
+function doorwayOverlayOpacity(baseRatio) {
+  return THREE.MathUtils.clamp(DOORWAY_EYE_TUNING.overlayOpacity * baseRatio, 0, 1);
+}
+
+function applyDoorwayEyeTuning() {
+  DOORWAY_EYE_COLOR.setHex(DOORWAY_EYE_TUNING.eyeColor);
+  doorwayExit.closedEye.material.color.copy(DOORWAY_EYE_COLOR);
+  doorwayExit.openEye.material.color.copy(DOORWAY_EYE_COLOR);
+  doorwayExit.gravityVeil.material.color.setHex(DOORWAY_EYE_TUNING.overlayColor);
+  doorwayExit.veil.material.color.setHex(DOORWAY_EYE_TUNING.overlayColor);
+  doorwayExit.voidPlane.material.color.setHex(DOORWAY_EYE_TUNING.overlayColor);
+}
+
+function doorwayEyeAspect(texture = doorwayOpenEyeTexture) {
+  const image = texture?.image;
   const width = image?.naturalWidth || image?.width || 1;
   const height = image?.naturalHeight || image?.height || 1;
   return width / Math.max(1, height);
 }
 
-function captureDoorwayViewerPullTarget() {
-  const n = worldToNorm(shapeLock.center);
-  const art = artMetrics();
-  const canvasRect = canvas.getBoundingClientRect();
-  const rootRect = root.getBoundingClientRect();
-  const artWidth = Math.max(0.0001, art.width);
-  const artHeight = Math.max(0.0001, art.height);
-  const doorX = canvasRect.left + n.x * canvasRect.width;
-  const doorY = canvasRect.top + n.y * canvasRect.height;
-  doorwayExit.pullOriginX = THREE.MathUtils.clamp(((n.x - art.left) / artWidth) * 100, -20, 120);
-  doorwayExit.pullOriginY = THREE.MathUtils.clamp(((n.y - art.top) / artHeight) * 100, -20, 120);
-  doorwayExit.pullTranslateX = (rootRect.left + rootRect.width * 0.5) - doorX;
-  doorwayExit.pullTranslateY = (rootRect.top + rootRect.height * 0.5) - doorY;
+function doorwayEyeScale() {
+  return SHAPE_STREAM_FINAL_GRID.eyeDoorScale;
 }
 
-function captureDoorwayGravityWarpOrigin() {
-  const n = worldToNorm(shapeLock.center);
-  const art = artMetrics();
-  const artWidth = Math.max(0.0001, art.width);
-  const artHeight = Math.max(0.0001, art.height);
-  doorwayExit.gravityWarp.originX = THREE.MathUtils.clamp(((n.x - art.left) / artWidth) * 100, -20, 120);
-  doorwayExit.gravityWarp.originY = THREE.MathUtils.clamp(((n.y - art.top) / artHeight) * 100, -20, 120);
-  root.style.setProperty('--gravity-warp-origin-x', `${doorwayExit.gravityWarp.originX.toFixed(2)}%`);
-  root.style.setProperty('--gravity-warp-origin-y', `${doorwayExit.gravityWarp.originY.toFixed(2)}%`);
+function doorwayDustRandom(index, salt = 0) {
+  const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453123;
+  return value - Math.floor(value);
 }
 
-function applyDoorwayGravityWarp(phase = 'idle', progress = 0, options = {}) {
-  const rawProgress = THREE.MathUtils.clamp(progress, 0, 1);
-  const rawIntensity = THREE.MathUtils.clamp(options.intensity ?? rawProgress, 0, 1);
-  const rawFlash = THREE.MathUtils.clamp(options.flash ?? 0, 0, 1);
+function doorwayDustCount() {
+  if (reducedMotionQuery.matches) return SHAPE_STREAM_FINAL_GRID.dustReducedCount;
+  return activeLayoutName === 'mobile'
+    ? SHAPE_STREAM_FINAL_GRID.dustMobileCount
+    : SHAPE_STREAM_FINAL_GRID.dustDesktopCount;
+}
+
+function seedDoorwayRoomDust(force = false) {
+  const dust = doorwayExit.roomDust;
+  const count = doorwayDustCount();
+  const center = shapeLock.center;
+  const key = [
+    activeLayoutName,
+    count,
+    viewport.width.toFixed(3),
+    viewport.height.toFixed(3),
+    center.x.toFixed(3),
+    center.y.toFixed(3)
+  ].join(':');
+  if (!force && dust.key === key && dust.count === count) return;
+
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const starts = new Float32Array(count * 3);
+  const targets = new Float32Array(count * 3);
+  const swirls = new Float32Array(count * 4);
+  const doorNorm = worldToNorm(center);
   const reducedMotion = reducedMotionQuery.matches;
-  const intensity = reducedMotion ? Math.min(rawIntensity, 0.45) : rawIntensity;
-  const flash = rawFlash * (reducedMotion ? 0.22 : 1);
-  const maxScale = reducedMotion ? GRAVITY_WARP_TUNING.reducedMaxFilterScale : GRAVITY_WARP_TUNING.maxFilterScale;
-  const maxBlur = reducedMotion ? GRAVITY_WARP_TUNING.reducedMaxBlur : GRAVITY_WARP_TUNING.maxBlur;
-  const maxContrast = reducedMotion ? GRAVITY_WARP_TUNING.reducedMaxContrast : GRAVITY_WARP_TUNING.maxContrast;
-  const minBrightness = reducedMotion ? GRAVITY_WARP_TUNING.reducedMinBrightness : GRAVITY_WARP_TUNING.minBrightness;
-  const maxSaturate = reducedMotion ? GRAVITY_WARP_TUNING.reducedMaxSaturate : GRAVITY_WARP_TUNING.maxSaturate;
-  const flashScale = reducedMotion ? GRAVITY_WARP_TUNING.reducedFlashScale : GRAVITY_WARP_TUNING.flashScale;
-  const filterScale = intensity * maxScale + flash * flashScale;
-  const blur = intensity * maxBlur + flash * (reducedMotion ? 0.08 : 0.42);
-  const contrast = THREE.MathUtils.lerp(1, maxContrast, intensity) + flash * (reducedMotion ? 0.01 : 0.06);
-  const brightness = THREE.MathUtils.lerp(1, minBrightness, intensity) - flash * (reducedMotion ? 0.005 : 0.035);
-  const saturate = THREE.MathUtils.lerp(1, maxSaturate, intensity) + flash * (reducedMotion ? 0.01 : 0.08);
-  const frequencyLift = intensity * (reducedMotion ? 0.006 : 0.022) + flash * (reducedMotion ? 0.001 : 0.006);
-  const freqX = 0.010 + frequencyLift;
-  const freqY = 0.016 + frequencyLift * 1.35;
-  const active = filterScale > 0.2 || blur > 0.01 || intensity > 0.01;
 
-  doorwayExit.gravityWarp.phase = active ? phase : 'idle';
-  doorwayExit.gravityWarp.progress = active ? rawProgress : 0;
-  doorwayExit.gravityWarp.intensity = active ? intensity : 0;
-  doorwayExit.gravityWarp.filterScale = active ? filterScale : 0;
-  doorwayExit.gravityWarp.blur = active ? blur : 0;
-  doorwayExit.gravityWarp.contrast = active ? contrast : 1;
-  doorwayExit.gravityWarp.brightness = active ? brightness : 1;
-  doorwayExit.gravityWarp.saturate = active ? saturate : 1;
+  for (let i = 0; i < count; i += 1) {
+    const o = i * 3;
+    const s = i * 4;
+    let nx = doorwayDustRandom(i, 1);
+    let ny = doorwayDustRandom(i, 2);
+    const nearDoor = Math.abs(nx - doorNorm.x) < 0.12 && Math.abs(ny - doorNorm.y) < 0.16;
+    if (nearDoor) {
+      nx = nx < doorNorm.x ? nx * 0.72 : 1 - (1 - nx) * 0.72;
+      ny = ny < doorNorm.y ? ny * 0.82 : 1 - (1 - ny) * 0.82;
+    }
+    const z = SHAPE_STREAM_FINAL_GRID.eyeZ - 0.24 - doorwayDustRandom(i, 3) * 0.22;
+    const start = viewportToWorld(nx, ny, z);
+    const targetAngle = doorwayDustRandom(i, 4) * Math.PI * 2;
+    const targetRadius = THREE.MathUtils.lerp(0.015, 0.28, Math.pow(doorwayDustRandom(i, 5), 1.8));
+    const target = new THREE.Vector3(
+      center.x + Math.cos(targetAngle) * targetRadius,
+      center.y + Math.sin(targetAngle) * targetRadius * 0.66,
+      SHAPE_STREAM_FINAL_GRID.eyeZ + 0.025 + doorwayDustRandom(i, 6) * 0.035
+    );
 
-  root.classList.toggle('is-gravity-warping', active && gravityWarpDisplacement && gravityWarpTurbulence);
-  root.style.setProperty('--gravity-warp-blur', `${doorwayExit.gravityWarp.blur.toFixed(2)}px`);
-  root.style.setProperty('--gravity-warp-contrast', doorwayExit.gravityWarp.contrast.toFixed(3));
-  root.style.setProperty('--gravity-warp-brightness', doorwayExit.gravityWarp.brightness.toFixed(3));
-  root.style.setProperty('--gravity-warp-saturate', doorwayExit.gravityWarp.saturate.toFixed(3));
-  if (gravityWarpDisplacement) {
-    gravityWarpDisplacement.setAttribute('scale', doorwayExit.gravityWarp.filterScale.toFixed(2));
+    starts[o] = start.x;
+    starts[o + 1] = start.y;
+    starts[o + 2] = start.z;
+    targets[o] = target.x;
+    targets[o + 1] = target.y;
+    targets[o + 2] = target.z;
+    positions[o] = start.x;
+    positions[o + 1] = start.y;
+    positions[o + 2] = start.z;
+
+    swirls[s] = THREE.MathUtils.lerp(0.04, reducedMotion ? 0.18 : 0.62, doorwayDustRandom(i, 7));
+    swirls[s + 1] = doorwayDustRandom(i, 8) * Math.PI * 2;
+    swirls[s + 2] = THREE.MathUtils.lerp(1.2, reducedMotion ? 2.2 : 5.2, doorwayDustRandom(i, 9));
+    swirls[s + 3] = doorwayDustRandom(i, 10) * 0.18;
+
+    const warmth = doorwayDustRandom(i, 11);
+    colors[o] = THREE.MathUtils.lerp(0.28, 1.0, warmth);
+    colors[o + 1] = THREE.MathUtils.lerp(0.13, 0.66, warmth);
+    colors[o + 2] = THREE.MathUtils.lerp(0.04, 0.24, warmth);
   }
-  if (gravityWarpTurbulence) {
-    gravityWarpTurbulence.setAttribute('baseFrequency', `${freqX.toFixed(4)} ${freqY.toFixed(4)}`);
+
+  dust.count = count;
+  dust.key = key;
+  dust.starts = starts;
+  dust.targets = targets;
+  dust.swirls = swirls;
+  dust.colors = colors;
+  dust.positions = positions;
+  dust.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  dust.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  dust.geometry.computeBoundingSphere();
+}
+
+function resetDoorwayRoomDust() {
+  const dust = doorwayExit.roomDust;
+  dust.points.visible = false;
+  dust.points.material.opacity = 0;
+  if (dust.positions && dust.starts) {
+    dust.positions.set(dust.starts);
+    const attr = dust.geometry.getAttribute('position');
+    if (attr) attr.needsUpdate = true;
   }
+}
+
+function updateDoorwayRoomDust(progress = 0, opacityScale = 1) {
+  seedDoorwayRoomDust();
+  const dust = doorwayExit.roomDust;
+  if (!dust.count || !dust.starts || !dust.targets || !dust.positions || !dust.swirls) return;
+  const t = THREE.MathUtils.clamp(progress, 0, 1);
+  const reducedMotion = reducedMotionQuery.matches;
+  const opacityIn = easeOutCubic(THREE.MathUtils.clamp((t - 0.06) / 0.24, 0, 1));
+  const opacityOut = 1 - easeInCubic(THREE.MathUtils.clamp((t - 0.72) / 0.28, 0, 1));
+  const opacity = THREE.MathUtils.clamp(opacityIn * opacityOut * opacityScale, 0, 1);
+  dust.points.visible = opacity > 0.004;
+  dust.points.material.opacity = opacity * (reducedMotion ? 0.36 : 0.72);
+  dust.points.material.size = reducedMotion ? 0.03 : 0.04;
+
+  for (let i = 0; i < dust.count; i += 1) {
+    const o = i * 3;
+    const s = i * 4;
+    const delay = dust.swirls[s + 3];
+    const local = THREE.MathUtils.clamp((t - delay) / Math.max(0.001, 1 - delay * 0.56), 0, 1);
+    const pull = easeInCubic(local);
+    const spiral = Math.sin(local * Math.PI) * (1 - pull * 0.42);
+    const radius = dust.swirls[s] * spiral * (reducedMotion ? 0.34 : 1);
+    const angle = dust.swirls[s + 1] + dust.swirls[s + 2] * local;
+    dust.positions[o] = THREE.MathUtils.lerp(dust.starts[o], dust.targets[o], pull) + Math.cos(angle) * radius;
+    dust.positions[o + 1] = THREE.MathUtils.lerp(dust.starts[o + 1], dust.targets[o + 1], pull) + Math.sin(angle) * radius * 0.72;
+    dust.positions[o + 2] = THREE.MathUtils.lerp(dust.starts[o + 2], dust.targets[o + 2], pull);
+  }
+  const attr = dust.geometry.getAttribute('position');
+  if (attr) attr.needsUpdate = true;
+}
+
+function doorwayRoomShardCount() {
+  if (reducedMotionQuery.matches) return SHAPE_STREAM_FINAL_GRID.roomShardReducedCount;
+  return activeLayoutName === 'mobile'
+    ? SHAPE_STREAM_FINAL_GRID.roomShardMobileCount
+    : SHAPE_STREAM_FINAL_GRID.roomShardDesktopCount;
+}
+
+function clearDoorwayRoomShards() {
+  const shards = doorwayExit.roomShards;
+  shards.points.visible = false;
+  shards.doorPoints.visible = false;
+  shards.material.uniforms.uOpacity.value = 0;
+  shards.doorMaterial.uniforms.uOpacity.value = 0;
+  shards.starts = null;
+  shards.targets = null;
+  shards.positions = null;
+  shards.uvs = null;
+  shards.alphas = null;
+  shards.cornerOffsets = null;
+  shards.swirls = null;
+  shards.doorStarts = null;
+  shards.doorTargets = null;
+  shards.doorPositions = null;
+  shards.doorColors = null;
+  shards.doorAlphas = null;
+  shards.doorSizes = null;
+  shards.doorBaseSizes = null;
+  shards.doorSwirls = null;
+  shards.count = 0;
+  shards.doorCount = 0;
+  shards.key = '';
+  setDoorwayImageShardAttributes(shards.geometry, 0);
+  setDoorwayParticleAttributes(shards.doorGeometry, 0);
+}
+
+function doorwayDoorParticleCount() {
+  return 0;
+}
+
+function doorwayRoomBreakConfiguredDuration() {
+  return Math.max(0.001, shapeStreamDoorwayExitDuration('roomBreakDuration'));
+}
+
+function doorwayRoomImageHandoffDuration() {
+  return Math.min(
+    doorwayRoomBreakConfiguredDuration() * 0.9,
+    Math.max(0, SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration || 0)
+  );
+}
+
+function doorwayRoomParticleBaseQueueDuration() {
+  const count = Math.max(12, doorwayRoomShardCount());
+  const batchSize = Math.max(1, SHAPE_STREAM_FINAL_GRID.roomParticleBatchSize);
+  const batchCount = Math.ceil(count / batchSize) + 3;
+  const batchSpan = Math.max(0, batchCount - 1) * SHAPE_STREAM_FINAL_GRID.roomParticleBatchInterval;
+  return batchSpan
+    + SHAPE_STREAM_FINAL_GRID.roomParticlePullDuration * 1.12
+    + 0.28;
+}
+
+function doorwayRoomParticleQueueDuration() {
+  const baseDuration = doorwayRoomParticleBaseQueueDuration();
+  if (reducedMotionQuery.matches && !calibrate) return Math.max(1.55, baseDuration * 0.42);
+  return baseDuration;
+}
+
+function doorwayRoomBreakPhaseDuration() {
+  return Math.max(
+    doorwayRoomBreakConfiguredDuration(),
+    doorwayRoomImageHandoffDuration() + doorwayRoomParticleQueueDuration()
+  );
+}
+
+function doorwayRoomBreakTimeScale() {
+  return doorwayRoomParticleQueueDuration()
+    / Math.max(0.001, doorwayRoomParticleBaseQueueDuration());
+}
+
+function doorwayRoomImageHandoffProgress(progress = 0) {
+  const duration = doorwayRoomImageHandoffDuration();
+  if (duration <= 0) return progress > 0 ? 1 : 0;
+  const elapsed = THREE.MathUtils.clamp(progress, 0, 1) * doorwayRoomBreakPhaseDuration();
+  return easeInOutCubic(THREE.MathUtils.clamp(elapsed / duration, 0, 1));
+}
+
+function doorwayRoomBreakVacuumElapsed(progress = 0) {
+  const elapsed = THREE.MathUtils.clamp(progress, 0, 1) * doorwayRoomBreakPhaseDuration();
+  return Math.max(0, elapsed - doorwayRoomImageHandoffDuration());
+}
+
+function doorwayRoomBackgroundHideProgress(progress = 0) {
+  const handoff = doorwayRoomImageHandoffProgress(progress);
+  return easeInOutCubic(THREE.MathUtils.clamp((handoff - 0.84) / 0.16, 0, 1));
+}
+
+function doorwayRoomVacuumProgress(progress = 0) {
+  return THREE.MathUtils.clamp(
+    doorwayRoomBreakVacuumElapsed(progress) / Math.max(0.001, doorwayRoomParticleQueueDuration()),
+    0,
+    1
+  );
+}
+
+function doorwayRoomDimmingProgress(progress = 0) {
+  const vacuum = doorwayRoomVacuumProgress(progress);
+  return easeInOutCubic(THREE.MathUtils.clamp((vacuum - 0.04) / 0.86, 0, 1));
+}
+
+function clearDoorwayAmbientDimming() {
+  doorwayExit.gravityVeil.visible = false;
+  doorwayExit.gravityVeil.material.opacity = 0;
+  doorwayExit.veil.visible = false;
+  doorwayExit.veil.material.opacity = 0;
+}
+
+function applyDoorwayAmbientDimming(progress = 0) {
+  const dim = doorwayRoomDimmingProgress(progress);
+  const radialOpacity = doorwayOverlayOpacity((reducedMotionQuery.matches ? 0.20 : 0.34) * dim);
+  const veilOpacity = doorwayOverlayOpacity((reducedMotionQuery.matches ? 0.10 : 0.22) * dim);
+  doorwayExit.gravityVeil.visible = radialOpacity > 0.004;
+  doorwayExit.gravityVeil.material.opacity = radialOpacity;
+  doorwayExit.veil.visible = veilOpacity > 0.004;
+  doorwayExit.veil.material.opacity = veilOpacity;
+}
+
+function assignDoorwayParticleVacuumQueue(records, swirls, stride, options) {
+  const reducedMotion = reducedMotionQuery.matches;
+  const timeScale = doorwayRoomBreakTimeScale();
+  const batchSize = Math.max(1, options.batchSize);
+  records
+    .slice()
+    .sort((a, b) => (
+      a.distance - b.distance
+      || a.angle - b.angle
+      || a.index - b.index
+    ))
+    .forEach((record, order) => {
+      const offset = record.index * stride;
+      const batchIndex = Math.floor(order / batchSize);
+      const startJitter = doorwayDustRandom(record.index, options.jitterSalt) * options.jitter;
+      const durationJitter = THREE.MathUtils.lerp(
+        options.durationJitterMin,
+        options.durationJitterMax,
+        doorwayDustRandom(record.index, options.durationSalt)
+      );
+      const radiusJitter = THREE.MathUtils.lerp(
+        options.radiusJitterMin,
+        options.radiusJitterMax,
+        doorwayDustRandom(record.index, options.radiusSalt)
+      );
+      const spinJitter = THREE.MathUtils.lerp(
+        options.spinJitterMin,
+        options.spinJitterMax,
+        doorwayDustRandom(record.index, options.spinSalt)
+      );
+      swirls[offset] = (options.startOffset + batchIndex * options.batchInterval + startJitter) * timeScale;
+      swirls[offset + 1] = options.pullDuration * durationJitter * timeScale;
+      swirls[offset + 2] = Math.max(options.minRadius, record.distance * options.orbitScale)
+        * radiusJitter
+        * (reducedMotion ? 0.26 : 1);
+      swirls[offset + 3] = record.angle + order * options.angleStep;
+      swirls[offset + 4] = options.spinTurns * spinJitter * (reducedMotion ? 0.28 : 1);
+      swirls[offset + 5] = record.index % 2 ? -1 : 1;
+    });
+}
+
+function setDoorwayParticleAttributes(geometry, count, positions, colors, alphas, sizes) {
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions || new Float32Array(count * 3), 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors || new Float32Array(count * 3), 3));
+  geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas || new Float32Array(count), 1));
+  geometry.setAttribute('particleSize', new THREE.BufferAttribute(sizes || new Float32Array(count), 1));
+  geometry.computeBoundingSphere();
+}
+
+function setDoorwayImageShardAttributes(geometry, count, positions, uvs, alphas) {
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions || new Float32Array(count * 12), 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs || new Float32Array(count * 8), 2));
+  geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas || new Float32Array(count * 4), 1));
+  const IndexArray = count * 4 > 65535 ? Uint32Array : Uint16Array;
+  const indices = new IndexArray(count * 6);
+  for (let i = 0; i < count; i += 1) {
+    const vertex = i * 4;
+    const index = i * 6;
+    indices[index] = vertex;
+    indices[index + 1] = vertex + 1;
+    indices[index + 2] = vertex + 2;
+    indices[index + 3] = vertex;
+    indices[index + 4] = vertex + 2;
+    indices[index + 5] = vertex + 3;
+  }
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.computeBoundingSphere();
+}
+
+function doorwayRoomImageCoverMetrics() {
+  if (!roomBgImage?.complete) return null;
+  const naturalWidth = roomBgImage.naturalWidth || roomBgImage.width || 1;
+  const naturalHeight = roomBgImage.naturalHeight || roomBgImage.height || 1;
+  const rootRect = root.getBoundingClientRect();
+  const containerWidth = rootRect.width || roomBgImage.clientWidth || naturalWidth;
+  const containerHeight = rootRect.height || roomBgImage.clientHeight || naturalHeight;
+  return {
+    imageAspect: naturalWidth / Math.max(1, naturalHeight),
+    containerAspect: containerWidth / Math.max(1, containerHeight)
+  };
+}
+
+function roomImageCoverSampleUv(metrics, x, y) {
+  let u = THREE.MathUtils.clamp(x, 0, 1);
+  let v = THREE.MathUtils.clamp(y, 0, 1);
+  if (!metrics) return { u, v };
+  if (metrics.imageAspect > metrics.containerAspect) {
+    const visibleWidth = THREE.MathUtils.clamp(metrics.containerAspect / metrics.imageAspect, 0.001, 1);
+    u = (1 - visibleWidth) * 0.5 + u * visibleWidth;
+  } else if (metrics.imageAspect < metrics.containerAspect) {
+    const visibleHeight = THREE.MathUtils.clamp(metrics.imageAspect / metrics.containerAspect, 0.001, 1);
+    v = (1 - visibleHeight) * 0.5 + v * visibleHeight;
+  }
+  return { u, v };
+}
+
+function seedDoorwayRoomShards(force = false) {
+  if (!roomBgImage?.complete) return;
+  syncRoomBackdropTexture();
+  const shards = doorwayExit.roomShards;
+  const visible = viewportMetrics();
+  const visibleWidth = Math.max(0.001, visible.width * viewport.width);
+  const visibleHeight = Math.max(0.001, visible.height * viewport.height);
+  const aspect = visibleWidth / visibleHeight;
+  const targetCount = Math.max(12, doorwayRoomShardCount());
+  const columns = Math.max(4, Math.ceil(Math.sqrt(targetCount * aspect)));
+  const rows = Math.max(4, Math.ceil(targetCount / columns));
+  const src = roomBgImage.currentSrc || roomBgImage.src || '';
+  const phaseDuration = doorwayRoomBreakPhaseDuration();
+  const key = [
+    src,
+    activeLayoutName,
+    columns,
+    rows,
+    phaseDuration.toFixed(3),
+    viewport.width.toFixed(3),
+    viewport.height.toFixed(3),
+    visible.left.toFixed(4),
+    visible.top.toFixed(4),
+    visible.width.toFixed(4),
+    visible.height.toFixed(4),
+    shapeLock.center.x.toFixed(3),
+    shapeLock.center.y.toFixed(3),
+    DOORWAY_EYE_TUNING.eyeColor.toString(16)
+  ].join(':');
+  if (!force && shards.key === key && shards.count > 0) return;
+
+  clearDoorwayRoomShards();
+  shards.key = key;
+  shards.material.uniforms.map.value = roomBackdrop.texture;
+  shards.material.needsUpdate = true;
+
+  const door = shapeLock.center;
+  const reducedMotion = reducedMotionQuery.matches;
+  const imageMetrics = doorwayRoomImageCoverMetrics();
+  const count = rows * columns;
+  const positions = new Float32Array(count * 12);
+  const uvs = new Float32Array(count * 8);
+  const alphas = new Float32Array(count * 4);
+  const cornerOffsets = new Float32Array(count * 8);
+  const starts = new Float32Array(count * 3);
+  const targets = new Float32Array(count * 3);
+  const swirls = new Float32Array(count * 6);
+  const roomRecords = [];
+  const cellW = visibleWidth / columns;
+  const cellH = visibleHeight / rows;
+  let index = 0;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const x0 = column / columns;
+      const x1 = (column + 1) / columns;
+      const y0 = row / rows;
+      const y1 = (row + 1) / rows;
+      const localX = (x0 + x1) * 0.5;
+      const localY = (y0 + y1) * 0.5;
+      const nx = visible.left + localX * visible.width;
+      const ny = visible.top + localY * visible.height;
+      const startPosition = toWorld(
+        nx,
+        ny,
+        SHAPE_STREAM_FINAL_GRID.eyeZ - 0.22 - index * 0.000002
+      );
+      const dx = startPosition.x - door.x;
+      const dy = startPosition.y - door.y;
+      const distance = Math.max(0.0001, Math.hypot(dx, dy));
+      const angleToDoor = Math.atan2(dy, dx);
+      const targetAngle = doorwayDustRandom(index, 61) * Math.PI * 2;
+      const targetRadius = THREE.MathUtils.lerp(0.006, 0.14, Math.pow(doorwayDustRandom(index, 62), 1.8));
+      const pullTarget = new THREE.Vector3(
+        door.x + Math.cos(targetAngle) * targetRadius,
+        door.y + Math.sin(targetAngle) * targetRadius * 0.66,
+        SHAPE_STREAM_FINAL_GRID.eyeZ - 0.02 + doorwayDustRandom(index, 63) * 0.05
+      );
+      const offset = index * 3;
+      const vertexOffset = index * 12;
+      const uvOffset = index * 8;
+      const cornerOffset = index * 8;
+      const halfW = cellW * 0.505;
+      const halfH = cellH * 0.505;
+      const cornerData = [
+        [-halfW, halfH, x0, y0],
+        [halfW, halfH, x1, y0],
+        [halfW, -halfH, x1, y1],
+        [-halfW, -halfH, x0, y1]
+      ];
+      starts[offset] = startPosition.x;
+      starts[offset + 1] = startPosition.y;
+      starts[offset + 2] = startPosition.z;
+      targets[offset] = pullTarget.x;
+      targets[offset + 1] = pullTarget.y;
+      targets[offset + 2] = pullTarget.z;
+      cornerData.forEach(([cornerX, cornerY, uvX, uvY], cornerIndex) => {
+        const positionIndex = vertexOffset + cornerIndex * 3;
+        const imageUv = roomImageCoverSampleUv(imageMetrics, uvX, uvY);
+        positions[positionIndex] = startPosition.x + cornerX;
+        positions[positionIndex + 1] = startPosition.y + cornerY;
+        positions[positionIndex + 2] = startPosition.z;
+        cornerOffsets[cornerOffset + cornerIndex * 2] = cornerX;
+        cornerOffsets[cornerOffset + cornerIndex * 2 + 1] = cornerY;
+        uvs[uvOffset + cornerIndex * 2] = imageUv.u;
+        uvs[uvOffset + cornerIndex * 2 + 1] = 1 - imageUv.v;
+        alphas[index * 4 + cornerIndex] = 0;
+      });
+      roomRecords.push({ index, distance, angle: angleToDoor });
+      index += 1;
+    }
+  }
+
+  assignDoorwayParticleVacuumQueue(roomRecords, swirls, 6, {
+    startOffset: 0,
+    batchSize: SHAPE_STREAM_FINAL_GRID.roomParticleBatchSize,
+    batchInterval: SHAPE_STREAM_FINAL_GRID.roomParticleBatchInterval,
+    pullDuration: SHAPE_STREAM_FINAL_GRID.roomParticlePullDuration,
+    orbitScale: SHAPE_STREAM_FINAL_GRID.roomParticleOrbitScale,
+    minRadius: 0.012,
+    angleStep: 0.37,
+    spinTurns: 0.62,
+    jitter: 0.010,
+    jitterSalt: 66,
+    durationSalt: 67,
+    durationJitterMin: 0.92,
+    durationJitterMax: 1.08,
+    radiusSalt: 68,
+    radiusJitterMin: 0.72,
+    radiusJitterMax: 1.18,
+    spinSalt: 69,
+    spinJitterMin: 0.78,
+    spinJitterMax: 1.18
+  });
+
+  shards.count = count;
+  shards.starts = starts;
+  shards.targets = targets;
+  shards.positions = positions;
+  shards.uvs = uvs;
+  shards.alphas = alphas;
+  shards.cornerOffsets = cornerOffsets;
+  shards.swirls = swirls;
+  setDoorwayImageShardAttributes(shards.geometry, count, positions, uvs, alphas);
+
+  const doorCount = doorwayDoorParticleCount();
+  const doorStarts = new Float32Array(doorCount * 3);
+  const doorTargets = new Float32Array(doorCount * 3);
+  const doorPositions = new Float32Array(doorCount * 3);
+  const doorColors = new Float32Array(doorCount * 3);
+  const doorAlphas = new Float32Array(doorCount);
+  const doorSizes = new Float32Array(doorCount);
+  const doorBaseSizes = new Float32Array(doorCount);
+  const doorSwirls = new Float32Array(doorCount * 6);
+  const doorRecords = [];
+  const eyeAspect = doorwayEyeAspect(doorwayOpenEyeTexture);
+  const eyeColor = new THREE.Color(DOORWAY_EYE_TUNING.eyeColor);
+  for (let i = 0; i < doorCount; i += 1) {
+    const offset = i * 3;
+    const angle = doorwayDustRandom(i, 91) * Math.PI * 2;
+    const radius = Math.pow(doorwayDustRandom(i, 92), 0.54) * SHAPE_STREAM_FINAL_GRID.eyeDoorScale * 0.52;
+    const start = new THREE.Vector3(
+      door.x + Math.cos(angle) * radius * eyeAspect * 0.82,
+      door.y + Math.sin(angle) * radius * 0.56,
+      SHAPE_STREAM_FINAL_GRID.eyeZ + 0.006 + doorwayDustRandom(i, 93) * 0.025
+    );
+    const targetAngle = doorwayDustRandom(i, 94) * Math.PI * 2;
+    const targetRadius = THREE.MathUtils.lerp(0.002, 0.08, Math.pow(doorwayDustRandom(i, 95), 2.0));
+    const target = new THREE.Vector3(
+      door.x + Math.cos(targetAngle) * targetRadius,
+      door.y + Math.sin(targetAngle) * targetRadius * 0.65,
+      SHAPE_STREAM_FINAL_GRID.eyeZ + 0.04 + doorwayDustRandom(i, 96) * 0.04
+    );
+    doorStarts[offset] = start.x;
+    doorStarts[offset + 1] = start.y;
+    doorStarts[offset + 2] = start.z;
+    doorPositions[offset] = start.x;
+    doorPositions[offset + 1] = start.y;
+    doorPositions[offset + 2] = start.z;
+    doorTargets[offset] = target.x;
+    doorTargets[offset + 1] = target.y;
+    doorTargets[offset + 2] = target.z;
+    const warmth = THREE.MathUtils.lerp(0.72, 1.18, doorwayDustRandom(i, 97));
+    doorColors[offset] = THREE.MathUtils.clamp(eyeColor.r * warmth, 0, 1);
+    doorColors[offset + 1] = THREE.MathUtils.clamp(eyeColor.g * warmth, 0, 1);
+    doorColors[offset + 2] = THREE.MathUtils.clamp(eyeColor.b * warmth, 0, 1);
+    const baseSize = THREE.MathUtils.lerp(reducedMotion ? 2.2 : 2.8, reducedMotion ? 4.0 : 6.8, doorwayDustRandom(i, 98));
+    doorSizes[i] = baseSize;
+    doorBaseSizes[i] = baseSize;
+    const dx = start.x - door.x;
+    const dy = start.y - door.y;
+    doorRecords.push({
+      index: i,
+      distance: Math.max(0.0001, Math.hypot(dx, dy)),
+      angle: Math.atan2(dy, dx)
+    });
+  }
+  assignDoorwayParticleVacuumQueue(doorRecords, doorSwirls, 6, {
+    startOffset: SHAPE_STREAM_FINAL_GRID.doorParticleStartTime,
+    batchSize: SHAPE_STREAM_FINAL_GRID.doorParticleBatchSize,
+    batchInterval: SHAPE_STREAM_FINAL_GRID.doorParticleBatchInterval,
+    pullDuration: SHAPE_STREAM_FINAL_GRID.doorParticlePullDuration,
+    orbitScale: SHAPE_STREAM_FINAL_GRID.doorParticleOrbitScale,
+    minRadius: 0.014,
+    angleStep: 0.29,
+    spinTurns: 0.54,
+    jitter: 0.006,
+    jitterSalt: 99,
+    durationSalt: 100,
+    durationJitterMin: 0.94,
+    durationJitterMax: 1.10,
+    radiusSalt: 101,
+    radiusJitterMin: 0.76,
+    radiusJitterMax: 1.28,
+    spinSalt: 102,
+    spinJitterMin: 0.78,
+    spinJitterMax: 1.14
+  });
+  shards.doorCount = doorCount;
+  shards.doorStarts = doorStarts;
+  shards.doorTargets = doorTargets;
+  shards.doorPositions = doorPositions;
+  shards.doorColors = doorColors;
+  shards.doorAlphas = doorAlphas;
+  shards.doorSizes = doorSizes;
+  shards.doorBaseSizes = doorBaseSizes;
+  shards.doorSwirls = doorSwirls;
+  setDoorwayParticleAttributes(shards.doorGeometry, doorCount, doorPositions, doorColors, doorAlphas, doorSizes);
+}
+
+function updateDoorwayImageShardSet(options) {
+  const {
+    count,
+    starts,
+    targets,
+    positions,
+    alphas,
+    cornerOffsets,
+    swirls,
+    elapsed,
+    opacityScale,
+    preStartVisible = false
+  } = options;
+  if (!count || !starts || !targets || !positions || !alphas || !cornerOffsets || !swirls) return 0;
+
+  const reducedMotion = reducedMotionQuery.matches;
+  let visibleCount = 0;
+  for (let i = 0; i < count; i += 1) {
+    const offset = i * 3;
+    const vertexOffset = i * 12;
+    const alphaOffset = i * 4;
+    const cornerOffset = i * 8;
+    const swirlOffset = i * 6;
+    const startTime = swirls[swirlOffset];
+    const duration = Math.max(0.001, swirls[swirlOffset + 1]);
+    const rawLocal = (elapsed - startTime) / duration;
+    const local = THREE.MathUtils.clamp(rawLocal, 0, 1);
+    const started = rawLocal > 0;
+    const finished = rawLocal >= 1;
+    const pull = easeInCubic(local);
+    const spinAngle = swirls[swirlOffset + 3]
+      + pull * Math.PI * 2 * swirls[swirlOffset + 4] * swirls[swirlOffset + 5];
+    const orbit = swirls[swirlOffset + 2] * Math.sin(local * Math.PI) * (1 - pull * 0.45);
+    const centerX = THREE.MathUtils.lerp(starts[offset], targets[offset], pull)
+      + Math.cos(spinAngle) * orbit;
+    const centerY = THREE.MathUtils.lerp(starts[offset + 1], targets[offset + 1], pull)
+      + Math.sin(spinAngle) * orbit * 0.62;
+    const centerZ = THREE.MathUtils.lerp(starts[offset + 2], targets[offset + 2], pull)
+      + Math.sin(spinAngle * 0.7) * orbit * 0.18;
+    const opacityIn = preStartVisible
+      ? 1
+      : started
+        ? easeOutCubic(THREE.MathUtils.clamp(local / 0.10, 0, 1))
+        : 0;
+    const opacityOut = 1 - easeInCubic(THREE.MathUtils.clamp((local - 0.84) / 0.16, 0, 1));
+    const opacity = finished ? 0 : THREE.MathUtils.clamp(opacityIn * opacityOut * opacityScale, 0, 1);
+    const shrink = easeInCubic(THREE.MathUtils.clamp((local - 0.78) / 0.22, 0, 1));
+    const scale = THREE.MathUtils.lerp(1, 0.24, shrink);
+    const rotation = started && !reducedMotion
+      ? swirls[swirlOffset + 5] * easeInCubic(local) * Math.PI * 1.08
+      : 0;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+
+    for (let corner = 0; corner < 4; corner += 1) {
+      const cornerIndex = cornerOffset + corner * 2;
+      const positionIndex = vertexOffset + corner * 3;
+      const cornerX = cornerOffsets[cornerIndex] * scale;
+      const cornerY = cornerOffsets[cornerIndex + 1] * scale;
+      positions[positionIndex] = centerX + cornerX * cos - cornerY * sin;
+      positions[positionIndex + 1] = centerY + cornerX * sin + cornerY * cos;
+      positions[positionIndex + 2] = centerZ;
+      alphas[alphaOffset + corner] = opacity;
+    }
+    if (opacity > 0.004) visibleCount += 1;
+  }
+  return visibleCount;
+}
+
+function updateDoorwayVacuumParticleSet(options) {
+  const {
+    count,
+    starts,
+    targets,
+    positions,
+    alphas,
+    sizes,
+    baseSizes,
+    swirls,
+    elapsed,
+    opacityScale,
+    preStartVisible = false
+  } = options;
+  if (!count || !starts || !targets || !positions || !alphas || !sizes || !baseSizes || !swirls) return 0;
+
+  let visibleCount = 0;
+  for (let i = 0; i < count; i += 1) {
+    const offset = i * 3;
+    const swirlOffset = i * 6;
+    const startTime = swirls[swirlOffset];
+    const duration = Math.max(0.001, swirls[swirlOffset + 1]);
+    const rawLocal = (elapsed - startTime) / duration;
+    const local = THREE.MathUtils.clamp(rawLocal, 0, 1);
+    const started = rawLocal > 0;
+    const finished = rawLocal >= 1;
+    const pull = easeInCubic(local);
+    const spinAngle = swirls[swirlOffset + 3]
+      + pull * Math.PI * 2 * swirls[swirlOffset + 4] * swirls[swirlOffset + 5];
+    const orbit = swirls[swirlOffset + 2] * Math.sin(local * Math.PI) * (1 - pull * 0.45);
+
+    positions[offset] = THREE.MathUtils.lerp(starts[offset], targets[offset], pull)
+      + Math.cos(spinAngle) * orbit;
+    positions[offset + 1] = THREE.MathUtils.lerp(starts[offset + 1], targets[offset + 1], pull)
+      + Math.sin(spinAngle) * orbit * 0.62;
+    positions[offset + 2] = THREE.MathUtils.lerp(starts[offset + 2], targets[offset + 2], pull)
+      + Math.sin(spinAngle * 0.7) * orbit * 0.18;
+
+    const opacityIn = preStartVisible
+      ? 1
+      : started
+        ? easeOutCubic(THREE.MathUtils.clamp(local / 0.10, 0, 1))
+        : 0;
+    const opacityOut = 1 - easeInCubic(THREE.MathUtils.clamp((local - 0.84) / 0.16, 0, 1));
+    const opacity = finished ? 0 : THREE.MathUtils.clamp(opacityIn * opacityOut * opacityScale, 0, 1);
+    const shrink = easeInCubic(THREE.MathUtils.clamp((local - 0.78) / 0.22, 0, 1));
+    sizes[i] = baseSizes[i] * THREE.MathUtils.lerp(1, 0.26, shrink);
+    alphas[i] = opacity;
+    if (opacity > 0.004) visibleCount += 1;
+  }
+  return visibleCount;
+}
+
+function updateDoorwayRoomShards(progress = 0, opacityScale = 1) {
+  seedDoorwayRoomShards();
+  const shards = doorwayExit.roomShards;
+  if (!shards.count || !shards.starts || !shards.targets || !shards.positions || !shards.alphas || !shards.cornerOffsets || !shards.swirls) return;
+  const t = THREE.MathUtils.clamp(progress, 0, 1);
+  const elapsed = doorwayRoomBreakVacuumElapsed(t);
+  const handoff = doorwayRoomImageHandoffProgress(t);
+  const effectiveOpacityScale = THREE.MathUtils.clamp(opacityScale, 0, 1) * handoff;
+  const visibleCount = updateDoorwayImageShardSet({
+    count: shards.count,
+    starts: shards.starts,
+    targets: shards.targets,
+    positions: shards.positions,
+    alphas: shards.alphas,
+    cornerOffsets: shards.cornerOffsets,
+    swirls: shards.swirls,
+    elapsed,
+    opacityScale: effectiveOpacityScale,
+    preStartVisible: true
+  });
+  const posAttr = shards.geometry.getAttribute('position');
+  const alphaAttr = shards.geometry.getAttribute('alpha');
+  if (posAttr) posAttr.needsUpdate = true;
+  if (alphaAttr) alphaAttr.needsUpdate = true;
+  shards.material.uniforms.uOpacity.value = 1;
+  shards.points.visible = visibleCount > 0;
+
+  const doorVisibleCount = updateDoorwayVacuumParticleSet({
+    count: shards.doorCount,
+    starts: shards.doorStarts,
+    targets: shards.doorTargets,
+    positions: shards.doorPositions,
+    alphas: shards.doorAlphas,
+    sizes: shards.doorSizes,
+    baseSizes: shards.doorBaseSizes,
+    swirls: shards.doorSwirls,
+    elapsed,
+    opacityScale: effectiveOpacityScale
+  });
+  const doorPosAttr = shards.doorGeometry.getAttribute('position');
+  const doorAlphaAttr = shards.doorGeometry.getAttribute('alpha');
+  const doorSizeAttr = shards.doorGeometry.getAttribute('particleSize');
+  if (doorPosAttr) doorPosAttr.needsUpdate = true;
+  if (doorAlphaAttr) doorAlphaAttr.needsUpdate = true;
+  if (doorSizeAttr) doorSizeAttr.needsUpdate = true;
+  shards.doorMaterial.uniforms.uOpacity.value = 1;
+  shards.doorPoints.visible = doorVisibleCount > 0;
+}
+
+function resetDoorwayRoomBreak() {
+  if (roomBgImage) {
+    roomBgImage.style.opacity = '';
+    roomBgImage.style.filter = '';
+    roomBgImage.style.willChange = '';
+  }
+  const shards = doorwayExit.roomShards;
+  shards.points.visible = false;
+  shards.doorPoints.visible = false;
+  shards.material.uniforms.uOpacity.value = 0;
+  shards.doorMaterial.uniforms.uOpacity.value = 0;
+  if (shards.alphas) {
+    shards.alphas.fill(0);
+    const alphaAttr = shards.geometry.getAttribute('alpha');
+    if (alphaAttr) alphaAttr.needsUpdate = true;
+  }
+  if (shards.doorAlphas) {
+    shards.doorAlphas.fill(0);
+    const doorAlphaAttr = shards.doorGeometry.getAttribute('alpha');
+    if (doorAlphaAttr) doorAlphaAttr.needsUpdate = true;
+  }
+}
+
+function applyDoorwayRoomBreak(progress = 0, fragmentsActive = progress > 0) {
+  if (!roomBgImage) return;
+  const t = THREE.MathUtils.clamp(progress, 0, 1);
+  const hide = fragmentsActive ? doorwayRoomBackgroundHideProgress(t) : 0;
+  const opacity = 1 - hide;
+  roomBgImage.style.opacity = opacity.toFixed(3);
+  roomBgImage.style.filter = '';
+  roomBgImage.style.willChange = 'opacity';
+}
+
+function applyDoorwayBlackFade(progress = 0) {
+  const t = easeInCubic(THREE.MathUtils.clamp(progress, 0, 1));
+  doorwayExit.blackPlane.visible = t > 0.004;
+  doorwayExit.blackPlane.material.opacity = t;
+}
+
+function resetDoorwayBlackFade() {
+  doorwayExit.blackPlane.visible = false;
+  doorwayExit.blackPlane.material.opacity = 0;
 }
 
 function resetDoorwayGravityWarp() {
@@ -2408,19 +3353,6 @@ function resetDoorwayGravityWarp() {
   if (gravityWarpTurbulence) gravityWarpTurbulence.setAttribute('baseFrequency', '0.010 0.016');
 }
 
-function applyDoorwayViewerPull(progress = doorwayExit.pullProgress) {
-  const t = THREE.MathUtils.clamp(progress, 0, 1);
-  doorwayExit.pullProgress = t;
-  const scale = THREE.MathUtils.lerp(1, SHAPE_STREAM_FINAL_GRID.viewerPullScale, t);
-  const centerT = t * SHAPE_STREAM_FINAL_GRID.viewerPullCentering;
-  const x = doorwayExit.pullTranslateX * centerT;
-  const y = doorwayExit.pullTranslateY * centerT;
-  const rotation = SHAPE_STREAM_FINAL_GRID.viewerPullRotate * t;
-  artStage.style.transformOrigin = `${doorwayExit.pullOriginX.toFixed(2)}% ${doorwayExit.pullOriginY.toFixed(2)}%`;
-  artStage.style.transform = `translate(-50%, -50%) translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${rotation.toFixed(3)}deg) scale(${scale.toFixed(5)})`;
-  artStage.style.willChange = 'transform';
-}
-
 function resetDoorwayViewerPull() {
   doorwayExit.pullProgress = 0;
   doorwayExit.pullOriginX = 50;
@@ -2433,30 +3365,10 @@ function resetDoorwayViewerPull() {
 }
 
 function updateDoorwayGravityRings(phase = 'idle', progress = 0) {
-  const count = Math.max(1, SHAPE_STREAM_FINAL_GRID.flashCount);
-  doorwayExit.rings.forEach((ring, index) => {
-    let opacity = 0;
-    let scale = doorwayExit.scale * (1.2 + index * 0.12);
-    if (phase === 'flash') {
-      const raw = progress * count - index;
-      if (raw >= 0 && raw <= 1.08) {
-        const t = THREE.MathUtils.clamp(raw / 1.08, 0, 1);
-        opacity = Math.sin(t * Math.PI) * 0.36;
-        scale = doorwayExit.scale * THREE.MathUtils.lerp(2.65, 0.58, easeInCubic(t));
-      }
-    } else if (phase === 'collapse') {
-      const t = easeInCubic(progress);
-      opacity = (1 - t) * (0.24 + index * 0.018);
-      scale = doorwayExit.scale * THREE.MathUtils.lerp(1.7 - index * 0.08, 0.42 + index * 0.035, t);
-    } else if (phase === 'pull') {
-      const t = easeInCubic(progress);
-      const ripple = Math.sin((progress * 2.4 + index / count) * Math.PI * 2) * 0.06 * (1 - progress);
-      opacity = (1 - progress) * (0.2 + index * 0.012);
-      scale = doorwayExit.scale * (THREE.MathUtils.lerp(2.2 - index * 0.08, 0.52 + index * 0.025, t) + ripple);
-    }
-    ring.visible = opacity > 0.006;
-    ring.material.opacity = opacity;
-    ring.userData.scale = Math.max(0.001, scale);
+  doorwayExit.rings.forEach((ring) => {
+    ring.visible = false;
+    ring.material.opacity = 0;
+    ring.userData.scale = 0;
   });
 }
 
@@ -2468,29 +3380,180 @@ function layoutShapeStreamDoorwayExit(scale = doorwayExit.scale, voidScale = doo
   doorwayExit.gravityVeil.scale.set(radialScale, radialScale, 1);
   doorwayExit.veil.position.set(0, 0, SHAPE_STREAM_FINAL_GRID.eyeZ - 0.02);
   doorwayExit.veil.scale.set(viewport.width, viewport.height, 1);
+  doorwayExit.blackPlane.position.set(0, 0, SHAPE_STREAM_FINAL_GRID.eyeZ + 0.22);
+  doorwayExit.blackPlane.scale.set(viewport.width, viewport.height, 1);
   doorwayExit.voidPlane.position.set(shapeLock.center.x, shapeLock.center.y, SHAPE_STREAM_FINAL_GRID.eyeZ - 0.01);
   doorwayExit.voidPlane.scale.setScalar(voidScale);
-  doorwayExit.eye.position.set(shapeLock.center.x, shapeLock.center.y, SHAPE_STREAM_FINAL_GRID.eyeZ);
-  doorwayExit.eye.rotation.set(0, 0, 0);
-  doorwayExit.eye.scale.set(scale * doorwayEyeAspect(), scale, 1);
+  doorwayExit.closedEye.position.set(shapeLock.center.x, shapeLock.center.y, SHAPE_STREAM_FINAL_GRID.eyeZ);
+  doorwayExit.openEye.position.set(shapeLock.center.x, shapeLock.center.y, SHAPE_STREAM_FINAL_GRID.eyeZ + 0.001);
+  doorwayExit.closedEye.rotation.set(0, 0, 0);
+  doorwayExit.openEye.rotation.set(0, 0, 0);
+  doorwayExit.closedEye.scale.set(scale * doorwayEyeAspect(doorwayClosedEyeTexture), scale, 1);
+  doorwayExit.openEye.scale.set(scale * doorwayEyeAspect(doorwayOpenEyeTexture), scale, 1);
   doorwayExit.rings.forEach((ring, index) => {
     ring.position.set(shapeLock.center.x, shapeLock.center.y, SHAPE_STREAM_FINAL_GRID.eyeZ + 0.002 + index * 0.0002);
     ring.scale.setScalar(ring.userData.scale || scale);
   });
 }
 
-function resetShapeStreamDoorwayExit() {
+function isDoorwayEyeCalibrationPreviewActive() {
+  return calibrate && (
+    doorwayExit.calibrationPreview === 'open'
+    || doorwayExit.calibrationPreview === 'closed'
+    || doorwayExit.calibrationPreview === 'blink'
+  );
+}
+
+function doorwayEyeCalibrationBlinkVisible() {
+  const totalBlinks = Math.max(1, SHAPE_STREAM_FINAL_GRID.blinkCount);
+  const duration = Math.max(0.001, SHAPE_STREAM_FINAL_GRID.blinkDuration * totalBlinks);
+  const progress = THREE.MathUtils.clamp(doorwayExit.calibrationBlinkElapsed / duration, 0, 1);
+  const rawBlink = progress * totalBlinks;
+  const blinkLocal = progress >= 1 ? 1 : rawBlink - Math.floor(rawBlink);
+  return progress < 1 && blinkLocal < 0.5;
+}
+
+function doorwayEyeCalibrationBlinkFrame() {
+  const totalBlinks = Math.max(1, SHAPE_STREAM_FINAL_GRID.blinkCount);
+  const blinkDuration = Math.max(0.001, SHAPE_STREAM_FINAL_GRID.blinkDuration * totalBlinks);
+  const revealDuration = Math.max(0.001, SHAPE_STREAM_FINAL_GRID.openRevealDuration);
+  if (doorwayExit.calibrationBlinkElapsed < blinkDuration) {
+    return {
+      closedOpacity: doorwayEyeCalibrationBlinkVisible() ? 1 : 0,
+      openOpacity: 0,
+      complete: false
+    };
+  }
+  const revealProgress = THREE.MathUtils.clamp(
+    (doorwayExit.calibrationBlinkElapsed - blinkDuration) / revealDuration,
+    0,
+    1
+  );
+  const t = easeOutCubic(revealProgress);
+  return {
+    closedOpacity: 1 - t,
+    openOpacity: t,
+    complete: revealProgress >= 1
+  };
+}
+
+function applyDoorwayEyeCalibrationFrame(closedOpacity = 0, openOpacity = 0, options = {}) {
   resetDoorwayViewerPull();
   resetDoorwayGravityWarp();
-  setDoorwayEyeTexture(doorwayClosedEyeTexture);
+  resetDoorwayRoomBreak();
+  resetDoorwayBlackFade();
+  resetDoorwayRoomDust();
+  doorwayExit.voidPlane.visible = true;
+  doorwayExit.voidPlane.material.color.setHex(DOORWAY_EYE_TUNING.overlayColor);
+  doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.71);
+  doorwayExit.gravityVeil.visible = false;
+  doorwayExit.gravityVeil.material.opacity = 0;
+  doorwayExit.veil.visible = false;
+  doorwayExit.veil.material.opacity = 0;
+  updateDoorwayGravityRings('calibrationPreview', 0);
+  setDoorwayEyeOpacity(closedOpacity, openOpacity, DOORWAY_EYE_COLOR, options);
+  layoutShapeStreamDoorwayExit(
+    doorwayEyeScale(),
+    SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
+  );
+}
+
+function applyDoorwayEyeCalibrationPreview() {
+  if (!isDoorwayEyeCalibrationPreviewActive()) return;
+  if (doorwayExit.calibrationPreview === 'closed') {
+    applyDoorwayEyeCalibrationFrame(1, 0);
+  } else if (doorwayExit.calibrationPreview === 'blink') {
+    const frame = doorwayEyeCalibrationBlinkFrame();
+    applyDoorwayEyeCalibrationFrame(frame.closedOpacity, frame.openOpacity, { openMaxOpacity: 1 });
+  } else {
+    applyDoorwayEyeCalibrationFrame(0, 1, { openMaxOpacity: 1 });
+  }
+}
+
+function showDoorwayEyeCalibrationPreview(mode = 'open') {
+  if (!calibrate) return;
+  clearDoorwayTransitionPreviewState();
+  doorwayExit.calibrationPreview = mode === 'closed' ? 'closed' : 'open';
+  doorwayExit.calibrationBlinkElapsed = 0;
+  applyDoorwayEyeCalibrationPreview();
+  status.textContent = `${doorwayExit.calibrationPreview} eye preview - ${activeLayoutName}`;
+  updateCalibrationConsole();
+}
+
+function startDoorwayEyeBlinkPreview() {
+  if (!calibrate) return;
+  clearDoorwayTransitionPreviewState();
+  doorwayExit.calibrationPreview = 'blink';
+  doorwayExit.calibrationBlinkElapsed = 0;
+  applyDoorwayEyeCalibrationPreview();
+  status.textContent = `blink preview - ${activeLayoutName}`;
+  updateCalibrationConsole();
+}
+
+function hideDoorwayEyeCalibrationPreview() {
+  if (!calibrate) return;
+  clearDoorwayTransitionPreviewState();
+  doorwayExit.calibrationPreview = 'none';
+  doorwayExit.calibrationBlinkElapsed = 0;
+  setDoorwayEyeOpacity(0, 0);
+  doorwayExit.gravityVeil.visible = false;
+  doorwayExit.gravityVeil.material.opacity = 0;
+  doorwayExit.voidPlane.visible = false;
+  doorwayExit.voidPlane.material.opacity = 0;
+  doorwayExit.veil.visible = false;
+  doorwayExit.veil.material.opacity = 0;
+  updateDoorwayGravityRings('calibrationPreview', 0);
+  resetDoorwayRoomDust();
+  resetDoorwayRoomBreak();
+  resetDoorwayBlackFade();
+  status.textContent = `eye preview hidden - ${activeLayoutName}`;
+  updateCalibrationConsole();
+}
+
+function updateDoorwayEyeBlinkPreview(delta) {
+  if (!calibrate || doorwayExit.calibrationPreview !== 'blink') return;
+  doorwayExit.calibrationBlinkElapsed += delta;
+  const totalBlinks = Math.max(1, SHAPE_STREAM_FINAL_GRID.blinkCount);
+  const duration = Math.max(0.001, SHAPE_STREAM_FINAL_GRID.blinkDuration * totalBlinks)
+    + Math.max(0.001, SHAPE_STREAM_FINAL_GRID.openRevealDuration);
+  if (doorwayExit.calibrationBlinkElapsed >= duration) {
+    doorwayExit.calibrationPreview = 'open';
+    doorwayExit.calibrationBlinkElapsed = 0;
+    applyDoorwayEyeCalibrationPreview();
+    status.textContent = `blink preview complete - ${activeLayoutName}`;
+    updateCalibrationConsole();
+    return;
+  }
+  applyDoorwayEyeCalibrationPreview();
+}
+
+function clearDoorwayTransitionPreviewState() {
+  if (!doorwayExit.calibrationTransitionPreview) return;
+  doorwayExit.calibrationTransitionPreview = false;
+  resetShapeStream();
+}
+
+function resetShapeStreamDoorwayExit() {
+  if (doorwayExit.navigationTimer != null) {
+    window.clearTimeout(doorwayExit.navigationTimer);
+    doorwayExit.navigationTimer = null;
+  }
+  resetDoorwayViewerPull();
+  resetDoorwayGravityWarp();
+  resetDoorwayRoomBreak();
+  resetDoorwayBlackFade();
+  resetDoorwayRoomDust();
+  setCompletionExitOpacityScale(1);
   doorwayExit.navigationTriggered = false;
-  doorwayExit.scale = SHAPE_STREAM_FINAL_GRID.eyeStartScale;
+  doorwayExit.calibrationTransitionPreview = false;
+  doorwayExit.calibrationPreview = 'none';
+  doorwayExit.calibrationBlinkElapsed = 0;
+  doorwayExit.scale = doorwayEyeScale();
   doorwayExit.voidScale = SHAPE_STREAM_FINAL_GRID.voidStartScale;
   doorwayExit.flashCount = 0;
-  doorwayExit.collapseProgress = 0;
-  doorwayExit.eye.visible = false;
-  doorwayExit.eye.material.opacity = 0;
-  doorwayExit.eye.material.color.copy(DOORWAY_EYE_COLOR);
+  doorwayExit.dissolveProgress = 0;
+  doorwayExit.portalProgress = 0;
+  setDoorwayEyeOpacity(0, 0);
   doorwayExit.gravityVeil.visible = false;
   doorwayExit.gravityVeil.material.opacity = 0;
   doorwayExit.voidPlane.visible = false;
@@ -2505,40 +3568,117 @@ function resetShapeStreamDoorwayExit() {
 }
 
 function startShapeStreamDoorwayExit() {
+  doorwayExit.calibrationTransitionPreview = false;
+  doorwayExit.calibrationPreview = 'none';
+  doorwayExit.calibrationBlinkElapsed = 0;
   shapeStream.finalGrid.exitPhase = 'closedReveal';
   shapeStream.finalGrid.exitElapsed = 0;
   shapeStream.finalGrid.exitProgress = 0;
   shapeStream.finalGrid.flashCount = 0;
   shapeStream.finalGrid.collapseProgress = 0;
+  shapeStream.finalGrid.dissolveProgress = 0;
+  shapeStream.finalGrid.portalProgress = 0;
   shapeStream.finalGrid.navigating = false;
   shapeStream.finalGrid.animating = true;
   resetDoorwayViewerPull();
-  captureDoorwayViewerPullTarget();
-  captureDoorwayGravityWarpOrigin();
-  applyDoorwayViewerPull(0);
+  resetDoorwayRoomBreak();
+  resetDoorwayBlackFade();
+  resetDoorwayRoomDust();
+  seedDoorwayRoomDust(true);
+  setCompletionExitOpacityScale(1);
   doorwayExit.navigationTriggered = false;
-  doorwayExit.eye.visible = true;
-  doorwayExit.gravityVeil.visible = true;
+  doorwayExit.closedEye.visible = true;
+  doorwayExit.openEye.visible = false;
+  clearDoorwayAmbientDimming();
   doorwayExit.voidPlane.visible = true;
-  doorwayExit.veil.visible = true;
-  doorwayExit.eye.material.opacity = 0;
-  doorwayExit.gravityVeil.material.opacity = 0;
+  setDoorwayEyeOpacity(0, 0);
   doorwayExit.voidPlane.material.opacity = 0;
-  doorwayExit.veil.material.opacity = 0;
-  setDoorwayEyeTexture(doorwayClosedEyeTexture);
-  layoutShapeStreamDoorwayExit(SHAPE_STREAM_FINAL_GRID.eyeStartScale, SHAPE_STREAM_FINAL_GRID.voidStartScale);
+  layoutShapeStreamDoorwayExit(doorwayEyeScale(), SHAPE_STREAM_FINAL_GRID.voidStartScale);
 }
 
-function triggerShapeStreamDoorwayNavigation() {
+function startDoorwayTransitionPreview() {
+  if (!calibrate) return;
+  doorwayExit.calibrationPreview = 'transition';
+  doorwayExit.calibrationBlinkElapsed = 0;
+  doorwayExit.calibrationTransitionPreview = true;
+  doorwayExit.navigationTriggered = false;
+
+  shapeStream.finalGrid.active = true;
+  shapeStream.finalGrid.phase = 'done';
+  shapeStream.finalGrid.animating = true;
+  shapeStream.finalGrid.exitPhase = 'postEyeHold';
+  shapeStream.finalGrid.exitElapsed = 0;
+  shapeStream.finalGrid.exitProgress = 0;
+  shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
+  shapeStream.finalGrid.collapseProgress = 0;
+  shapeStream.finalGrid.dissolveProgress = 0;
+  shapeStream.finalGrid.portalProgress = 0;
+  shapeStream.finalGrid.navigating = false;
+  shapeStream.finalGrid.vacuumProgress = 1;
+  shapeStream.finalGrid.visible = 0;
+
+  shapeStream.items.forEach((item) => {
+    if (item.mesh) item.mesh.visible = false;
+    item.finalGridVacuum = null;
+  });
+  resetDoorwayViewerPull();
+  resetDoorwayGravityWarp();
+  resetDoorwayRoomBreak();
+  resetDoorwayBlackFade();
+  resetDoorwayRoomDust();
+  clearDoorwayRoomShards();
+  setCompletionExitOpacityScale(1);
+  clearDoorwayAmbientDimming();
+  doorwayExit.voidPlane.visible = true;
+  doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.71);
+  setDoorwayEyeOpacity(0, 1, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+  layoutShapeStreamDoorwayExit(
+    doorwayEyeScale(),
+    SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
+  );
+  status.textContent = `break transition preview - ${activeLayoutName}`;
+  updateCalibrationConsole();
+}
+
+function finishShapeStreamDoorwayExitHandoff() {
+  applyDoorwayBlackFade(1);
+  applyDoorwayRoomBreak(1);
+  updateDoorwayRoomShards(1, 0);
+  updateDoorwayRoomDust(1, 0);
+  setCompletionExitOpacityScale(0);
+  shapeStream.finalGrid.exitProgress = 1;
+  shapeStream.finalGrid.collapseProgress = 1;
+  shapeStream.finalGrid.dissolveProgress = 1;
+  shapeStream.finalGrid.portalProgress = 1;
+  shapeStream.finalGrid.animating = false;
+
+  if (noNavigate || doorwayExit.calibrationTransitionPreview) {
+    shapeStream.finalGrid.exitPhase = 'ready';
+    shapeStream.finalGrid.navigating = false;
+    status.textContent = doorwayExit.calibrationTransitionPreview
+      ? `break transition ready - ${activeLayoutName}`
+      : `doorway exit ready - ${activeLayoutName}`;
+    return;
+  }
+
   if (doorwayExit.navigationTriggered) return;
   doorwayExit.navigationTriggered = true;
-  if (noNavigate) return;
+  shapeStream.finalGrid.exitPhase = 'navigating';
   shapeStream.finalGrid.navigating = true;
-  status.textContent = 'entering the construct';
-  if (typeof window._constructFade === 'function') {
-    window._constructFade(SHAPE_STREAM_FINAL_GRID.homeHref);
+  status.textContent = `entering home - ${activeLayoutName}`;
+  const navigateHome = () => {
+    doorwayExit.navigationTimer = null;
+    if (typeof window._constructFade === 'function') {
+      window._constructFade(SHAPE_STREAM_FINAL_GRID.homeHref);
+    } else {
+      window.location.href = SHAPE_STREAM_FINAL_GRID.homeHref;
+    }
+  };
+  const holdMs = Math.max(0, SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration || 0) * 1000;
+  if (holdMs > 0) {
+    doorwayExit.navigationTimer = window.setTimeout(navigateHome, holdMs);
   } else {
-    window.location.href = SHAPE_STREAM_FINAL_GRID.homeHref;
+    navigateHome();
   }
 }
 
@@ -2554,25 +3694,19 @@ function animateShapeStreamDoorwayExit(delta) {
     shapeStream.finalGrid.exitProgress = progress;
     shapeStream.finalGrid.flashCount = 0;
     shapeStream.finalGrid.collapseProgress = 0;
-    setDoorwayEyeTexture(doorwayClosedEyeTexture);
-    doorwayExit.eye.visible = true;
-    doorwayExit.gravityVeil.visible = true;
+    shapeStream.finalGrid.dissolveProgress = 0;
+    shapeStream.finalGrid.portalProgress = 0;
     doorwayExit.voidPlane.visible = true;
-    doorwayExit.veil.visible = true;
-    doorwayExit.eye.material.opacity = t;
-    doorwayExit.eye.material.color.copy(DOORWAY_EYE_COLOR);
-    doorwayExit.gravityVeil.material.opacity = THREE.MathUtils.lerp(0, 0.35, t);
-    doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(0, 0.22, t);
-    doorwayExit.veil.material.opacity = THREE.MathUtils.lerp(0, 0.16, t);
+    setDoorwayEyeOpacity(t, 0);
+    clearDoorwayAmbientDimming();
+    doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(0, doorwayOverlayOpacity(0.46), t);
     updateDoorwayGravityRings('idle', 0);
-    applyDoorwayGravityWarp('closedReveal', progress, { intensity: THREE.MathUtils.lerp(0.22, 0.28, t) });
-    layoutShapeStreamDoorwayExit(THREE.MathUtils.lerp(
-      SHAPE_STREAM_FINAL_GRID.eyeStartScale,
-      SHAPE_STREAM_FINAL_GRID.eyeClosedScale,
-      t
-    ), THREE.MathUtils.lerp(SHAPE_STREAM_FINAL_GRID.voidStartScale, SHAPE_STREAM_FINAL_GRID.voidStartScale * 1.25, t));
+    layoutShapeStreamDoorwayExit(
+      doorwayEyeScale(),
+      THREE.MathUtils.lerp(SHAPE_STREAM_FINAL_GRID.voidStartScale, SHAPE_STREAM_FINAL_GRID.voidStartScale * 1.25, t)
+    );
     if (progress >= 1) {
-      shapeStream.finalGrid.exitPhase = 'openReveal';
+      shapeStream.finalGrid.exitPhase = 'blinkSequence';
       shapeStream.finalGrid.exitElapsed = 0;
       shapeStream.finalGrid.exitProgress = 0;
     }
@@ -2584,131 +3718,151 @@ function animateShapeStreamDoorwayExit(delta) {
     const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
     const t = easeOutCubic(progress);
     shapeStream.finalGrid.exitProgress = progress;
-    setDoorwayEyeTexture(doorwayOpenEyeTexture);
-    doorwayExit.eye.material.opacity = 1;
-    doorwayExit.eye.material.color.copy(DOORWAY_EYE_COLOR);
-    doorwayExit.gravityVeil.material.opacity = THREE.MathUtils.lerp(0.35, 0.48, t);
-    doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(0.22, 0.34, t);
-    doorwayExit.veil.material.opacity = THREE.MathUtils.lerp(0.16, 0.22, t);
+    setDoorwayEyeOpacity(1 - t, t, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    clearDoorwayAmbientDimming();
+    doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(doorwayOverlayOpacity(0.46), doorwayOverlayOpacity(0.71), t);
     updateDoorwayGravityRings('idle', 0);
-    applyDoorwayGravityWarp('openReveal', progress, { intensity: THREE.MathUtils.lerp(0.26, 0.34, t) });
-    layoutShapeStreamDoorwayExit(THREE.MathUtils.lerp(
-      SHAPE_STREAM_FINAL_GRID.eyeClosedScale,
-      SHAPE_STREAM_FINAL_GRID.eyeDoorScale,
-      t
-    ), THREE.MathUtils.lerp(SHAPE_STREAM_FINAL_GRID.voidStartScale * 1.25, SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58, t));
+    layoutShapeStreamDoorwayExit(
+      doorwayEyeScale(),
+      THREE.MathUtils.lerp(SHAPE_STREAM_FINAL_GRID.voidStartScale * 1.25, SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58, t)
+    );
     if (progress >= 1) {
-      shapeStream.finalGrid.exitPhase = 'flash';
+      setDoorwayEyeOpacity(0, 1, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+      shapeStream.finalGrid.exitPhase = 'postEyeHold';
       shapeStream.finalGrid.exitElapsed = 0;
       shapeStream.finalGrid.exitProgress = 0;
     }
     return;
   }
 
-  if (exitPhase === 'flash') {
-    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('flashDuration'));
+  if (exitPhase === 'blinkSequence') {
+    const totalBlinks = Math.max(1, SHAPE_STREAM_FINAL_GRID.blinkCount);
+    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('blinkDuration') * totalBlinks);
     const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
-    const totalFlashes = Math.max(1, SHAPE_STREAM_FINAL_GRID.flashCount);
-    const rawFlash = progress * totalFlashes;
-    const flashLocal = progress >= 1 ? 1 : rawFlash - Math.floor(rawFlash);
-    const pulse = Math.pow(Math.sin(flashLocal * Math.PI), 0.55);
+    const rawBlink = progress * totalBlinks;
+    const blinkLocal = progress >= 1 ? 1 : rawBlink - Math.floor(rawBlink);
+    const eyeVisible = progress < 1 && blinkLocal < 0.5;
+    const completedBlinks = progress >= 1 ? totalBlinks : Math.floor(rawBlink);
     shapeStream.finalGrid.exitProgress = progress;
-    shapeStream.finalGrid.flashCount = Math.min(totalFlashes, Math.ceil(rawFlash));
+    shapeStream.finalGrid.flashCount = completedBlinks;
     shapeStream.finalGrid.collapseProgress = 0;
-    setDoorwayEyeTexture(doorwayOpenEyeTexture);
-    doorwayExit.eye.material.opacity = THREE.MathUtils.lerp(0.76, 1, pulse);
-    doorwayExit.eye.material.color.copy(DOORWAY_EYE_COLOR).lerp(DOORWAY_EYE_FLASH_COLOR, pulse);
-    doorwayExit.gravityVeil.material.opacity = THREE.MathUtils.lerp(0.48, 0.72, pulse);
-    doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(0.34, 0.58, pulse);
-    doorwayExit.veil.material.opacity = THREE.MathUtils.lerp(0.22, 0.44, pulse);
-    updateDoorwayGravityRings('flash', progress);
-    applyDoorwayGravityWarp('flash', progress, {
-      intensity: 0.32 + pulse * 0.14,
-      flash: pulse
-    });
-    applyDoorwayViewerPull(pulse * 0.012);
+    shapeStream.finalGrid.dissolveProgress = 0;
+    shapeStream.finalGrid.portalProgress = 0;
+    setDoorwayEyeOpacity(eyeVisible ? 1 : 0, 0);
+    clearDoorwayAmbientDimming();
+    doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.46);
+    updateDoorwayGravityRings('blinkSequence', progress);
     layoutShapeStreamDoorwayExit(
-      SHAPE_STREAM_FINAL_GRID.eyeDoorScale * (1 + pulse * 0.06),
-      SHAPE_STREAM_FINAL_GRID.voidDoorScale * (0.58 + pulse * 0.1)
+      doorwayEyeScale(),
+      SHAPE_STREAM_FINAL_GRID.voidStartScale * 1.25
     );
     if (progress >= 1) {
-      shapeStream.finalGrid.flashCount = totalFlashes;
-      shapeStream.finalGrid.exitPhase = 'collapse';
+      shapeStream.finalGrid.flashCount = totalBlinks;
+      setDoorwayEyeOpacity(1, 0);
+      shapeStream.finalGrid.exitPhase = 'openReveal';
       shapeStream.finalGrid.exitElapsed = 0;
       shapeStream.finalGrid.exitProgress = 0;
     }
     return;
   }
 
-  if (exitPhase === 'collapse') {
-    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('collapseDuration'));
+  if (exitPhase === 'postEyeHold') {
+    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('postEyeHoldDuration'));
     const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
-    const t = easeInCubic(progress);
-    const vanishT = easeInCubic(THREE.MathUtils.clamp((progress - 0.62) / 0.38, 0, 1));
     shapeStream.finalGrid.exitProgress = progress;
-    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.flashCount;
+    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
+    shapeStream.finalGrid.collapseProgress = 0;
+    shapeStream.finalGrid.dissolveProgress = 0;
+    shapeStream.finalGrid.portalProgress = 0;
+    setDoorwayEyeOpacity(0, 1, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    applyDoorwayRoomBreak(0);
+    setCompletionExitOpacityScale(1);
+    doorwayExit.roomShards.points.visible = false;
+    doorwayExit.roomShards.doorPoints.visible = false;
+    doorwayExit.roomShards.material.uniforms.uOpacity.value = 0;
+    doorwayExit.roomShards.doorMaterial.uniforms.uOpacity.value = 0;
+    applyDoorwayBlackFade(0);
+    clearDoorwayAmbientDimming();
+    doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.71);
+    updateDoorwayGravityRings('idle', 0);
+    layoutShapeStreamDoorwayExit(
+      doorwayEyeScale(),
+      SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
+    );
+    if (progress >= 1) {
+      seedDoorwayRoomShards(true);
+      updateDoorwayRoomShards(0, 1);
+      applyDoorwayRoomBreak(0, true);
+      shapeStream.finalGrid.exitPhase = 'roomBreak';
+      shapeStream.finalGrid.exitElapsed = 0;
+      shapeStream.finalGrid.exitProgress = 0;
+    }
+    return;
+  }
+
+  if (exitPhase === 'roomBreak') {
+    const duration = doorwayRoomBreakPhaseDuration();
+    const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    shapeStream.finalGrid.exitProgress = progress;
+    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
     shapeStream.finalGrid.collapseProgress = progress;
-    setDoorwayEyeTexture(doorwayOpenEyeTexture);
-    doorwayExit.eye.material.opacity = 1 - vanishT;
-    doorwayExit.eye.material.color.copy(DOORWAY_EYE_FLASH_COLOR).lerp(DOORWAY_EYE_COLOR, progress);
-    doorwayExit.gravityVeil.material.opacity = THREE.MathUtils.lerp(0.56, 0.78, t);
-    doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(0.58, 0.94, t);
-    doorwayExit.veil.material.opacity = THREE.MathUtils.lerp(0.36, 0.58, t);
-    updateDoorwayGravityRings('collapse', progress);
-    applyDoorwayGravityWarp('collapse', progress, { intensity: THREE.MathUtils.lerp(0.42, 0.78, t) });
-    applyDoorwayViewerPull(t * 0.035);
+    shapeStream.finalGrid.dissolveProgress = progress;
+    shapeStream.finalGrid.portalProgress = 0;
+    doorwayExit.dissolveProgress = progress;
+    const eyeFadeT = easeInCubic(THREE.MathUtils.clamp(progress / 0.16, 0, 1));
+    setDoorwayEyeOpacity(0, 1 - eyeFadeT, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    updateDoorwayRoomDust(1, 0);
+    updateDoorwayRoomShards(progress);
+    applyDoorwayRoomBreak(progress, true);
+    setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(progress));
+    applyDoorwayBlackFade(0);
+    applyDoorwayAmbientDimming(progress);
+    doorwayExit.voidPlane.visible = false;
+    doorwayExit.voidPlane.material.opacity = 0;
+    updateDoorwayGravityRings('idle', 0);
     layoutShapeStreamDoorwayExit(
-      THREE.MathUtils.lerp(SHAPE_STREAM_FINAL_GRID.eyeDoorScale, SHAPE_STREAM_FINAL_GRID.eyeCollapseScale, t),
-      THREE.MathUtils.lerp(SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.68, SHAPE_STREAM_FINAL_GRID.voidDoorScale * 1.45, t)
+      doorwayEyeScale(),
+      SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
     );
     if (progress >= 1) {
-      doorwayExit.eye.visible = false;
-      shapeStream.finalGrid.exitPhase = 'pull';
+      updateDoorwayRoomShards(1);
+      applyDoorwayRoomBreak(1, true);
+      shapeStream.finalGrid.exitPhase = 'blackFade';
       shapeStream.finalGrid.exitElapsed = 0;
       shapeStream.finalGrid.exitProgress = 0;
     }
     return;
   }
 
-  if (exitPhase === 'pull') {
-    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('pullDuration'));
+  if (exitPhase === 'blackFade') {
+    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('blackFadeDuration'));
     const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
-    const pullT = easeInCubic(progress);
+    const cover = easeInCubic(progress);
     shapeStream.finalGrid.exitProgress = progress;
-    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.flashCount;
+    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
     shapeStream.finalGrid.collapseProgress = 1;
-    doorwayExit.eye.visible = false;
-    doorwayExit.eye.material.opacity = 0;
-    doorwayExit.gravityVeil.material.opacity = THREE.MathUtils.lerp(0.78, 0.98, pullT);
-    doorwayExit.voidPlane.material.opacity = 1;
-    doorwayExit.veil.material.opacity = THREE.MathUtils.lerp(
-      0.58,
-      SHAPE_STREAM_FINAL_GRID.viewerPullVeilOpacity,
-      pullT
-    );
-    updateDoorwayGravityRings('pull', progress);
-    applyDoorwayGravityWarp('pull', progress, { intensity: THREE.MathUtils.lerp(0.78, 1, pullT) });
-    applyDoorwayViewerPull(pullT);
+    shapeStream.finalGrid.dissolveProgress = 1;
+    shapeStream.finalGrid.portalProgress = progress;
+    setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    updateDoorwayRoomShards(1, 1 - cover);
+    updateDoorwayRoomDust(1, 0);
+    applyDoorwayRoomBreak(1, true);
+    setCompletionExitOpacityScale(0);
+    applyDoorwayBlackFade(progress);
+    applyDoorwayAmbientDimming(1);
+    doorwayExit.voidPlane.visible = false;
+    doorwayExit.voidPlane.material.opacity = 0;
+    updateDoorwayGravityRings('idle', 0);
     layoutShapeStreamDoorwayExit(
-      SHAPE_STREAM_FINAL_GRID.eyeCollapseScale,
-      THREE.MathUtils.lerp(SHAPE_STREAM_FINAL_GRID.voidDoorScale * 1.45, SHAPE_STREAM_FINAL_GRID.voidPullScale, pullT)
+      doorwayEyeScale(),
+      SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
     );
-
-    const fadeStart = reducedMotionQuery.matches ? 0.12 : SHAPE_STREAM_FINAL_GRID.fadeStart;
-    if (progress >= fadeStart) triggerShapeStreamDoorwayNavigation();
     if (progress >= 1) {
-      if (noNavigate) {
-        shapeStream.finalGrid.exitPhase = 'ready';
-        shapeStream.finalGrid.exitProgress = 1;
-        shapeStream.finalGrid.animating = false;
-        status.textContent = `doorway exit ready - ${activeLayoutName}`;
-      } else {
-        shapeStream.finalGrid.exitPhase = 'navigating';
-        shapeStream.finalGrid.exitProgress = 1;
-        shapeStream.finalGrid.animating = false;
-      }
+      finishShapeStreamDoorwayExitHandoff();
     }
+    return;
   }
+
 }
 
 function shapeStreamFinalGridMetrics(requiredCount = shapeStream.items.length) {
@@ -2758,8 +3912,31 @@ function shapeStreamFinalGridQuaternion(index) {
   ));
 }
 
+const SHAPE_STREAM_FINAL_GRID_SHAPE_ORDER = [0, 2, 1, 3, 4];
+
+function shapeStreamFinalGridColorIndex(item) {
+  if (Number.isFinite(item.colorIndex)) return item.colorIndex;
+  const paletteIndex = shapeStream.palette.indexOf(item.mesh.material);
+  return paletteIndex >= 0 ? paletteIndex : shapeStream.palette.length;
+}
+
+function shapeStreamFinalGridShapeRank(geoIndex) {
+  const rank = SHAPE_STREAM_FINAL_GRID_SHAPE_ORDER.indexOf(geoIndex);
+  return rank >= 0 ? rank : SHAPE_STREAM_FINAL_GRID_SHAPE_ORDER.length + geoIndex;
+}
+
+function sortedShapeStreamFinalGridItems() {
+  return shapeStream.items
+    .map((item, originalIndex) => ({ item, originalIndex }))
+    .sort((a, b) => (
+      shapeStreamFinalGridColorIndex(a.item) - shapeStreamFinalGridColorIndex(b.item)
+      || shapeStreamFinalGridShapeRank(a.item.geoIndex) - shapeStreamFinalGridShapeRank(b.item.geoIndex)
+      || a.originalIndex - b.originalIndex
+    ));
+}
+
 function addShapeStreamFinalGridItem() {
-  const { mesh, geoIndex } = createShapeStreamMesh();
+  const { mesh, geoIndex, colorIndex } = createShapeStreamMesh();
   const index = shapeStream.items.length;
   mesh.position.copy(shapeStreamFinalGridStartPosition(index));
   mesh.quaternion.setFromEuler(new THREE.Euler(0, 0, Math.sin(index * 1.113) * 0.72));
@@ -2768,6 +3945,7 @@ function addShapeStreamFinalGridItem() {
     mesh,
     size: SHAPE_STREAM.maxSize,
     geoIndex,
+    colorIndex,
     zoneIndex: 0,
     body: null,
     collider: null,
@@ -2814,7 +3992,7 @@ function updateShapeStreamFinalGridTargets(captureStarts = false) {
   shapeStream.finalGrid.columns = settledMetrics.columns;
   shapeStream.finalGrid.count = shapeStream.items.length;
 
-  shapeStream.items.forEach((item, index) => {
+  sortedShapeStreamFinalGridItems().forEach(({ item }, index) => {
     detachShapeStreamItemPhysics(item);
     const row = Math.floor(index / settledMetrics.columns);
     const column = index % settledMetrics.columns;
@@ -2889,7 +4067,6 @@ function startShapeStreamFinalGridVacuum() {
     shapeLock.center.y,
     SHAPE_STREAM_FINAL_GRID.vacuumDoorZ
   );
-  captureDoorwayGravityWarpOrigin();
   const batchSize = Math.max(1, SHAPE_STREAM_FINAL_GRID.vacuumBatchSize);
   const orderedItems = shapeStream.items
     .map((item, index) => {
@@ -2939,7 +4116,7 @@ function finishShapeStreamFinalGridVacuum() {
   shapeStream.finalGrid.animating = false;
   shapeStream.finalGrid.vacuumProgress = 1;
   shapeStream.finalGrid.visible = 0;
-  applyDoorwayGravityWarp('vacuum', 1, { intensity: 0.32 });
+  resetDoorwayGravityWarp();
   shapeStream.items.forEach((item) => {
     item.mesh.visible = false;
     item.mesh.scale.setScalar(0.0001);
@@ -3007,13 +4184,6 @@ function animateShapeStreamVacuum(delta) {
   const total = Math.max(1, shapeStream.finalGrid.vacuumTotal || shapeStream.items.length);
   shapeStream.finalGrid.visible = visible;
   shapeStream.finalGrid.vacuumProgress = THREE.MathUtils.clamp((total - visible) / total, 0, 1);
-  const warpProgress = THREE.MathUtils.clamp(
-    (shapeStream.finalGrid.vacuumProgress - GRAVITY_WARP_TUNING.vacuumStart)
-      / Math.max(0.001, 1 - GRAVITY_WARP_TUNING.vacuumStart),
-    0,
-    1
-  );
-  applyDoorwayGravityWarp('vacuum', warpProgress, { intensity: easeInCubic(warpProgress) * 0.30 });
   if (visible <= 0) finishShapeStreamFinalGridVacuum();
 }
 
@@ -3042,27 +4212,40 @@ function updateShapeStreamFinalGrid(delta) {
 function retargetShapeStreamFinalGrid(restartAnimation = false) {
   if (!shapeStream.finalGrid.active) return;
   if (shapeStream.finalGrid.phase === 'done') {
-    captureDoorwayGravityWarpOrigin();
-    if (
-      shapeStream.finalGrid.exitPhase === 'closedReveal'
-      || shapeStream.finalGrid.exitPhase === 'openReveal'
-      || shapeStream.finalGrid.exitPhase === 'flash'
-      || shapeStream.finalGrid.exitPhase === 'collapse'
-    ) {
-      captureDoorwayViewerPullTarget();
+    const phase = shapeStream.finalGrid.exitPhase;
+    if (phase === 'postEyeHold') {
+      applyDoorwayRoomBreak(0);
+      setCompletionExitOpacityScale(1);
+      clearDoorwayAmbientDimming();
+      doorwayExit.roomShards.points.visible = false;
+      doorwayExit.roomShards.doorPoints.visible = false;
+      doorwayExit.roomShards.material.uniforms.uOpacity.value = 0;
+      doorwayExit.roomShards.doorMaterial.uniforms.uOpacity.value = 0;
+      applyDoorwayBlackFade(0);
+    } else if (phase === 'roomBreak') {
+      const breakProgress = shapeStream.finalGrid.collapseProgress || 0;
+      seedDoorwayRoomShards(true);
+      updateDoorwayRoomShards(breakProgress);
+      applyDoorwayRoomBreak(breakProgress, true);
+      setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(breakProgress));
+      applyDoorwayAmbientDimming(breakProgress);
+      applyDoorwayBlackFade(0);
+      updateDoorwayRoomDust(1, 0);
+    } else if (phase === 'blackFade' || phase === 'ready' || phase === 'navigating') {
+      const blackProgress = phase === 'blackFade' ? shapeStream.finalGrid.portalProgress || 0 : 1;
+      const cover = easeInCubic(blackProgress);
+      seedDoorwayRoomShards(true);
+      updateDoorwayRoomShards(1, phase === 'blackFade' ? 1 - cover : 0);
+      applyDoorwayRoomBreak(1, true);
+      setCompletionExitOpacityScale(0);
+      applyDoorwayAmbientDimming(1);
+      applyDoorwayBlackFade(blackProgress);
+      updateDoorwayRoomDust(1, 0);
     }
     layoutShapeStreamDoorwayExit();
-    if (
-      shapeStream.finalGrid.exitPhase === 'pull'
-      || shapeStream.finalGrid.exitPhase === 'ready'
-      || shapeStream.finalGrid.exitPhase === 'navigating'
-    ) {
-      applyDoorwayViewerPull();
-    }
     return;
   }
   if (shapeStream.finalGrid.phase === 'vacuum') {
-    captureDoorwayGravityWarpOrigin();
     return;
   }
   if (restartAnimation && shapeStream.finalGrid.animating) {
@@ -3093,6 +4276,8 @@ function activateShapeStreamFinalGrid() {
   shapeStream.finalGrid.exitProgress = 0;
   shapeStream.finalGrid.flashCount = 0;
   shapeStream.finalGrid.collapseProgress = 0;
+  shapeStream.finalGrid.dissolveProgress = 0;
+  shapeStream.finalGrid.portalProgress = 0;
   shapeStream.finalGrid.navigating = false;
   resetShapeStreamDoorwayExit();
   shapeStream.spawnTimer = 0;
@@ -3354,6 +4539,7 @@ function layoutShapeLock() {
     mesh.position.set(overlayStartX + index * overlayGap, 0, index * 0.002);
     mesh.scale.setScalar(overlayScale * OVERLAY_VISUAL_SCALE[index]);
   });
+  if (isDoorwayEyeCalibrationPreviewActive()) applyDoorwayEyeCalibrationPreview();
 }
 
 function cycleShapeLockSymbol() {
@@ -3511,6 +4697,73 @@ function handleShapeStreamColor(input) {
   shapeStream.palette[index]?.color.setHex(color);
   syncShapeStreamControls();
   updateCalibrationConsole();
+}
+
+function syncDoorwayEyeControls() {
+  if (!calibrate) return;
+  const values = {
+    'eye-color': colorHex(DOORWAY_EYE_TUNING.eyeColor),
+    'eye-opacity': DOORWAY_EYE_TUNING.eyeOpacity,
+    'overlay-color': colorHex(DOORWAY_EYE_TUNING.overlayColor),
+    'overlay-opacity': DOORWAY_EYE_TUNING.overlayOpacity,
+    'closed-reveal-duration': SHAPE_STREAM_FINAL_GRID.closedRevealDuration,
+    'open-reveal-duration': SHAPE_STREAM_FINAL_GRID.openRevealDuration,
+    'blink-count': SHAPE_STREAM_FINAL_GRID.blinkCount,
+    'blink-duration': SHAPE_STREAM_FINAL_GRID.blinkDuration,
+    'break-handoff-duration': SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration
+  };
+  Object.entries(values).forEach(([name, value]) => {
+    const input = calibrationConsole?.querySelector(`[data-eye-control="${name}"]`);
+    if (input && document.activeElement !== input) input.value = String(value);
+  });
+}
+
+function handleDoorwayEyeControl(input) {
+  const control = input.dataset.eyeControl;
+  const numericValue = Number(input.value);
+  const wasPreviewActive = isDoorwayEyeCalibrationPreviewActive();
+  clearDoorwayTransitionPreviewState();
+  if (control === 'eye-color') {
+    DOORWAY_EYE_TUNING.eyeColor = colorNumber(input.value, DOORWAY_EYE_TUNING.eyeColor);
+  } else if (control === 'eye-opacity' && Number.isFinite(numericValue)) {
+    DOORWAY_EYE_TUNING.eyeOpacity = THREE.MathUtils.clamp(numericValue, 0, 1);
+  } else if (control === 'overlay-color') {
+    DOORWAY_EYE_TUNING.overlayColor = colorNumber(input.value, DOORWAY_EYE_TUNING.overlayColor);
+  } else if (control === 'overlay-opacity' && Number.isFinite(numericValue)) {
+    DOORWAY_EYE_TUNING.overlayOpacity = THREE.MathUtils.clamp(numericValue, 0, 1);
+  } else if (control === 'closed-reveal-duration' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.closedRevealDuration = THREE.MathUtils.clamp(numericValue, 0.05, 4);
+  } else if (control === 'open-reveal-duration' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.openRevealDuration = THREE.MathUtils.clamp(numericValue, 0.05, 4);
+  } else if (control === 'blink-count' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.blinkCount = THREE.MathUtils.clamp(Math.round(numericValue), 1, 16);
+  } else if (control === 'blink-duration' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.blinkDuration = THREE.MathUtils.clamp(numericValue, 0.04, 1.5);
+  } else if (control === 'break-handoff-duration' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration = THREE.MathUtils.clamp(numericValue, 0, 3);
+  }
+  applyDoorwayEyeTuning();
+  if (!isDoorwayEyeCalibrationPreviewActive()) doorwayExit.calibrationPreview = 'open';
+  applyDoorwayEyeCalibrationPreview();
+  if (!wasPreviewActive && isDoorwayEyeCalibrationPreviewActive()) {
+    status.textContent = `${doorwayExit.calibrationPreview} eye preview - ${activeLayoutName}`;
+  }
+  syncDoorwayEyeControls();
+  updateCalibrationConsole();
+}
+
+function handleDoorwayEyeAction(action) {
+  if (action === 'preview-open') {
+    showDoorwayEyeCalibrationPreview('open');
+  } else if (action === 'preview-closed') {
+    showDoorwayEyeCalibrationPreview('closed');
+  } else if (action === 'preview-blink') {
+    startDoorwayEyeBlinkPreview();
+  } else if (action === 'preview-transition') {
+    startDoorwayTransitionPreview();
+  } else if (action === 'hide') {
+    hideDoorwayEyeCalibrationPreview();
+  }
 }
 
 function syncLandingPhaseControls() {
@@ -4532,12 +5785,37 @@ function setCompletionVisibility(visible) {
   completionEffects.rippleField.visible = false;
 }
 
+function setCompletionExitOpacityScale(scale = 1) {
+  const clamped = THREE.MathUtils.clamp(scale, 0, 1);
+  completionEffects.exitOpacityScale = clamped;
+  if (!completionEffects.active) return;
+  const visible = clamped > 0.004;
+  completionEffects.recess.visible = visible;
+  completionEffects.surfaceMask.visible = visible;
+  completionEffects.ringBody.visible = visible;
+  completionEffects.ring.visible = visible;
+  completionEffects.imageField.visible = visible;
+  completionEffects.imagePlug.visible = visible;
+  completionEffects.rippleVideoField.visible = false;
+  completionEffects.rippleField.visible = false;
+  if (!visible) {
+    completionEffects.recess.material.opacity = 0;
+    completionEffects.ringBody.material.opacity = 0;
+    completionEffects.ring.material.opacity = 0;
+    completionEffects.imageField.material.opacity = 0;
+    completionEffects.imagePlug.material.opacity = 0;
+    completionEffects.rippleVideoField.material.opacity = 0;
+    completionEffects.rippleField.material.opacity = 0;
+  }
+}
+
 function resetCompletionState({ keepRootClass = false } = {}) {
   resetShapeLock();
   resetShapeStream();
   resetSceneFx();
   completionEffects.active = false;
   completionEffects.elapsed = 0;
+  completionEffects.exitOpacityScale = 1;
   setCompletionVisibility(false);
   completionEffects.recess.material.opacity = 0;
   completionEffects.ringBody.material.opacity = 0;
@@ -4623,6 +5901,14 @@ function updateCompletionEffects(delta) {
   const t = completionEffects.elapsed;
   const ringT = easePullThrough(t / 3.35);
   const patchT = easePullThrough(t / 4.6);
+  const exitOpacity = completionEffects.exitOpacityScale ?? 1;
+  const completionVisible = exitOpacity > 0.004;
+  completionEffects.recess.visible = completionVisible;
+  completionEffects.surfaceMask.visible = completionVisible;
+  completionEffects.ringBody.visible = completionVisible;
+  completionEffects.ring.visible = completionVisible;
+  completionEffects.imageField.visible = completionVisible;
+  completionEffects.imagePlug.visible = completionVisible;
 
   orbs.forEach((o) => {
     o.mesh.material.color.copy(completionBaseOrbColor);
@@ -4645,13 +5931,13 @@ function updateCompletionEffects(delta) {
   completionEffects.ringBody.position.add(ringBodyTravel);
   completionEffects.ringBody.scale.copy(completionEffects.ringBody.userData.baseScale)
     .multiplyScalar(ringStartScale + (1 - ringStartScale) * ringT);
-  completionEffects.ringBody.material.opacity = 1;
+  completionEffects.ringBody.material.opacity = exitOpacity;
 
   completionEffects.ring.position.copy(completionEffects.ring.userData.surfacePosition)
     .addScaledVector(completionEffects.ring.userData.startOffset, 1 - ringT);
   completionEffects.ring.scale.copy(completionEffects.ring.userData.baseScale)
     .multiplyScalar(ringStartScale + (1 - ringStartScale) * ringT);
-  completionEffects.ring.material.opacity = 1;
+  completionEffects.ring.material.opacity = exitOpacity;
   completionEffects.ring.material.emissiveIntensity = 0;
   updateCompletionRingColor(t);
 
@@ -4666,14 +5952,14 @@ function updateCompletionEffects(delta) {
     1
   );
   const fieldOpacity = completionEffects.config.fieldOpacity ?? COMPLETION_FIELD_OPACITY;
-  completionEffects.imageField.material.opacity = fieldOpacity * (1 - ease01(fieldFadeT));
+  completionEffects.imageField.material.opacity = fieldOpacity * (1 - ease01(fieldFadeT)) * exitOpacity;
 
   completionEffects.imagePlug.position.copy(completionEffects.imagePlug.userData.surfacePosition)
     .add(completionEffects.imagePlug.userData.startOffset)
     .addScaledVector(completionEffects.imagePlug.userData.liftOffset, patchT);
   completionEffects.imagePlug.scale.copy(completionEffects.imagePlug.userData.baseScale)
     .multiplyScalar(1 - (1 - COMPLETION_PATCH_SETTLED_SCALE) * patchT);
-  completionEffects.imagePlug.material.opacity = 1 - ease01(THREE.MathUtils.clamp((patchT - 0.36) / 0.44, 0, 1));
+  completionEffects.imagePlug.material.opacity = (1 - ease01(THREE.MathUtils.clamp((patchT - 0.36) / 0.44, 0, 1))) * exitOpacity;
 
   completionEffects.rippleVideoField.position.copy(completionEffects.rippleVideoField.userData.surfacePosition)
     .add(completionEffects.rippleVideoField.userData.startOffset)
@@ -4805,6 +6091,24 @@ function activeShapeLockText() {
   ].join('\n');
 }
 
+function activeDoorwayEyeText() {
+  const previewName = doorwayExit.calibrationTransitionPreview
+    ? 'transition'
+    : doorwayExit.calibrationPreview;
+  return [
+    'doorwayEyeExit: {',
+    `  eyeColor: ${colorHex(DOORWAY_EYE_TUNING.eyeColor)}, eyeOpacity: ${DOORWAY_EYE_TUNING.eyeOpacity.toFixed(2)},`,
+    `  overlayColor: ${colorHex(DOORWAY_EYE_TUNING.overlayColor)}, overlayOpacity: ${DOORWAY_EYE_TUNING.overlayOpacity.toFixed(2)},`,
+    `  closedFade: ${SHAPE_STREAM_FINAL_GRID.closedRevealDuration.toFixed(2)}s, openFade: ${SHAPE_STREAM_FINAL_GRID.openRevealDuration.toFixed(2)}s,`,
+    `  blinkCount: ${SHAPE_STREAM_FINAL_GRID.blinkCount}, blinkDuration: ${SHAPE_STREAM_FINAL_GRID.blinkDuration.toFixed(2)}s,`,
+    `  postEyeHold: ${SHAPE_STREAM_FINAL_GRID.postEyeHoldDuration.toFixed(2)}s, handoff: ${SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration.toFixed(2)}s, roomBreak: ${doorwayRoomBreakPhaseDuration().toFixed(2)}s, blackFade: ${SHAPE_STREAM_FINAL_GRID.blackFadeDuration.toFixed(2)}s, homeHold: ${SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration.toFixed(2)}s,`,
+    `  roomImagePieces: ${SHAPE_STREAM_FINAL_GRID.roomShardDesktopCount}/${SHAPE_STREAM_FINAL_GRID.roomShardMobileCount}/${SHAPE_STREAM_FINAL_GRID.roomShardReducedCount},`,
+    `  imageBreakFlow: ${SHAPE_STREAM_FINAL_GRID.roomParticlePullDuration.toFixed(2)}s/${SHAPE_STREAM_FINAL_GRID.roomParticleBatchSize}@${SHAPE_STREAM_FINAL_GRID.roomParticleBatchInterval.toFixed(3)}s,`,
+    `  preview: '${previewName}'`,
+    '}'
+  ].join('\n');
+}
+
 function activeParamsText() {
   return [
     `holeRadiusN: ${activeHoleRadiusN().toFixed(4)}`,
@@ -4830,7 +6134,9 @@ function activeLayoutText() {
     '',
     activeCompletionRingText(),
     '',
-    activeShapeLockText()
+    activeShapeLockText(),
+    '',
+    activeDoorwayEyeText()
   ].join('\n');
 }
 
@@ -4872,6 +6178,7 @@ function updateCalibrationConsole() {
   syncFloorEditorControls();
   syncLandingPhaseControls();
   syncShapeLockControls();
+  syncDoorwayEyeControls();
   drawFloorEditorOverlay();
   calibrationOutput.textContent = activeLayoutText();
 }
@@ -4917,6 +6224,11 @@ if (calibrate && calibrationConsole) {
     if (ringButton) handleRingAction(ringButton.dataset.ringAction);
     const lockButton = event.target.closest('[data-lock-action]');
     if (lockButton) handleShapeLockAction(lockButton.dataset.lockAction);
+    const eyeButton = event.target.closest('[data-eye-action]');
+    if (eyeButton) {
+      handleDoorwayEyeAction(eyeButton.dataset.eyeAction);
+      return;
+    }
     const floorButton = event.target.closest('[data-floor-action]');
     if (floorButton) handleFloorAction(floorButton.dataset.floorAction);
   });
@@ -4939,6 +6251,11 @@ if (calibrate && calibrationConsole) {
     const phaseInput = event.target.closest('[data-phase-control]');
     if (phaseInput) {
       handleLandingPhaseControl(phaseInput);
+      return;
+    }
+    const eyeInput = event.target.closest('[data-eye-control]');
+    if (eyeInput) {
+      handleDoorwayEyeControl(eyeInput);
       return;
     }
     const input = event.target.closest('[data-lock-control]');
@@ -5182,6 +6499,7 @@ function animate() {
   });
   updateCompletionEffects(delta);
   updateShapeStream(delta);
+  updateDoorwayEyeBlinkPreview(delta);
   updateShapeLock(delta);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);

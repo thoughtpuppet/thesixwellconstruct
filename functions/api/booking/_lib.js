@@ -1,4 +1,5 @@
 import {
+  notifyAdminAppointmentConfirmed,
   notifyAppointmentCancelled,
   notifyAppointmentConfirmed,
   notifyBookingLinkCreated,
@@ -2165,6 +2166,7 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
     await maybeCreateVirtualMeeting(db, env, appointmentWithMeeting || appointmentRow);
     const appointmentWithType = await selectAppointmentWithMeeting(db, appointment.id);
     await notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow);
+    await notifyAdminAppointmentConfirmed(env, request, appointmentWithType || appointmentRow);
   }
 
   const updated = await selectAppointmentWithMeeting(db, appointment.id);
