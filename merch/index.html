@@ -226,6 +226,126 @@
     margin-bottom:var(--s6);
   }
 
+  .source-filter-select {
+    display:none;
+    width:100%;
+    max-width:360px;
+    min-height:44px;
+    padding:10px 42px 10px 12px;
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:11px;
+    letter-spacing:0.14em;
+    line-height:1.2;
+    text-transform:uppercase;
+  }
+  .source-filter-select.is-enhanced {
+    display:none;
+  }
+  .source-filter-menu {
+    display:none;
+    position:relative;
+    width:100%;
+  }
+  .source-filter-trigger {
+    width:100%;
+    min-height:48px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding:0 16px 0 18px;
+    border:5px solid var(--ring-soft);
+    border-radius:0;
+    background:
+      linear-gradient(90deg,rgba(240,143,21,0.20) 0 5px,rgba(14,14,14,0.88) 5px),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:11px;
+    letter-spacing:0.16em;
+    line-height:1.2;
+    text-align:left;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+  }
+  .source-filter-trigger:hover,
+  .source-filter-trigger:focus-visible,
+  .source-filter-menu.open .source-filter-trigger {
+    border-color:var(--accent-hot);
+    color:var(--accent);
+    outline:none;
+    background:
+      linear-gradient(90deg,rgba(240,143,21,0.32) 0 5px,rgba(14,14,14,0.94) 5px),
+      var(--bg);
+  }
+  .source-filter-arrow {
+    width:12px;
+    height:12px;
+    flex:0 0 auto;
+    border-right:2px solid currentColor;
+    border-bottom:2px solid currentColor;
+    transform:translateY(-3px) rotate(45deg);
+    transition:transform var(--t-fast);
+  }
+  .source-filter-menu.open .source-filter-arrow {
+    transform:translateY(3px) rotate(225deg);
+  }
+  .source-filter-options {
+    display:none;
+    position:absolute;
+    top:calc(100% + 8px);
+    left:0;
+    right:0;
+    z-index:45;
+    max-height:280px;
+    overflow-y:auto;
+    list-style:none;
+    margin:0;
+    padding:0;
+    border:5px solid var(--ring-soft);
+    background:#0b0b0b;
+    box-shadow:0 18px 36px rgba(0,0,0,0.42);
+  }
+  .source-filter-menu.open .source-filter-options {
+    display:block;
+  }
+  .source-filter-option {
+    width:100%;
+    min-height:44px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 14px;
+    border-bottom:2px solid rgba(109,61,21,0.22);
+    color:var(--text-mute);
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:10px;
+    letter-spacing:0.14em;
+    line-height:1.2;
+    text-align:left;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:background var(--t-fast), color var(--t-fast);
+  }
+  .source-filter-option:last-child {
+    border-bottom:0;
+  }
+  .source-filter-option:hover,
+  .source-filter-option:focus-visible,
+  .source-filter-option.is-selected {
+    background:var(--accent-hot);
+    color:var(--bg);
+    outline:none;
+  }
+  .source-filter-options::-webkit-scrollbar { width:8px; }
+  .source-filter-options::-webkit-scrollbar-track { background:#0b0b0b; }
+  .source-filter-options::-webkit-scrollbar-thumb { background:var(--accent-hot); }
+
   .filter-row {
     display:flex; align-items:center;
     gap:var(--s5); flex-wrap:wrap;
@@ -676,7 +796,14 @@
     .intro { flex-direction:column; align-items:flex-start; gap:var(--s4); margin-bottom:var(--s7); }
     .intro p { text-align:left; padding-bottom:0; max-width:none; }
     .filters { gap:var(--s4); }
+    .source-filter-select { display:block; max-width:none; }
+    .source-filter-menu.is-ready { display:block; }
+    .source-filter-select.is-enhanced { display:none; }
+    #sourceRow { display:none; }
     .grid { grid-template-columns:1fr; gap:var(--s6); }
+    .card-meta { flex-wrap:wrap; align-items:flex-start; }
+    .card-name { min-width:0; }
+    .card-price { white-space:normal; text-align:left; }
     .card-cat { gap:10px; }
     .cat-logo { height:20px; max-width:32px; opacity:1; }
     .cat-dot { width:7px; height:7px; }
@@ -695,11 +822,16 @@
     min-height: 60px;
     align-items: center;
   }
+  .source-filter-select { display:block; max-width:none; }
+  .source-filter-menu.is-ready { display:block; }
+  .source-filter-select.is-enhanced { display:none; }
+  #sourceRow { display:none; }
 }
   .brand-band {
     display:grid;
     grid-template-columns:minmax(180px,0.32fr) minmax(0,0.68fr);
-    gap:48px;
+    column-gap:48px;
+    row-gap:18px;
     align-items:start;
     padding:36px;
     margin-top:-40px;
@@ -755,15 +887,60 @@
     max-width:860px;
     text-wrap:balance;
   }
+  .brand-more {
+    grid-column:2;
+    justify-self:end;
+    align-self:end;
+    display:inline-flex;
+    align-items:center;
+    min-height:32px;
+    color:var(--accent-hot);
+    font-family:var(--sans);
+    font-weight:900;
+    font-size:10px;
+    letter-spacing:0.18em;
+    line-height:1;
+    text-transform:uppercase;
+    border-bottom:2px solid rgba(240,143,21,0.42);
+    transition:color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+  }
+  .brand-more:hover,
+  .brand-more:focus-visible {
+    color:var(--accent);
+    border-color:var(--accent);
+    outline:none;
+    transform:translateY(-1px);
+  }
   @media (max-width:1024px) {
     .brand-band { grid-template-columns:1fr; gap:24px; margin-top:-24px; padding:24px; }
+    .brand-more { grid-column:1; }
   }
   @media (max-width:768px) {
     .brand-copy { font-size:17px; line-height:1.5; text-wrap:auto; }
+    .brand-more { justify-self:end; max-width:100%; }
   }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<style>
+  @media (max-width: 700px) {
+    body[data-venture="merch"] .intro h1 {
+      font-size: clamp(78px, 23vw, 118px) !important;
+      line-height: 0.86 !important;
+      letter-spacing: -0.055em !important;
+      white-space: nowrap !important;
+      word-break: normal !important;
+      overflow-wrap: normal !important;
+      max-width: 100%;
+    }
+  }
+
+  @media (max-width: 380px) {
+    body[data-venture="merch"] .intro h1 {
+      font-size: clamp(70px, 23vw, 86px) !important;
+    }
+  }
+</style>
 </head>
 <body data-venture="merch">
   <script>
@@ -809,17 +986,28 @@
 
     <section class="brand-band" aria-labelledby="sixwell-brand-title">
       <div>
-        <p class="brand-kicker">construct commerce / atlanta</p>
+        <p class="brand-kicker"><br></p>
         <div class="brand-lockup">
           <img class="venture-stamp" src="/assets/brand/six-well-clothing.svg.svg" alt="Six.Well Clothing logo" loading="eager">
-          <h2 class="brand-title" id="sixwell-brand-title"><span class="sixwell-letter-six"><span style="font-size: 64px;">six.</span></span><span class="sixwell-letter-we"><span style="font-size: 64px;">we</span></span><span class="sixwell-letter-ll"><span style="font-size: 64px;">ll</span></span></h2>
+          <h2 class="brand-title" id="sixwell-brand-title"><span style="font-size: 64px;"><span style="color: rgb(58, 36, 24)"><span style="color: rgba(240, 143, 21, 0.25)"><span style="color: rgb(58, 36, 24)"><span style="color: rgba(240, 143, 21, 0.25)"><span style="color: rgba(252, 184, 103, 0.64)"><span style="color: rgb(252, 184, 103)">six.</span></span></span></span></span></span></span><span style="font-size: 64px;"><span style="color: rgb(109, 61, 21)"><span style="color: rgb(109, 61, 21)"><span style="color: rgb(252, 184, 103)">we</span></span></span></span><span style="font-size: 64px;"><span style="color: rgb(252, 184, 103)">ll</span></span></h2>
         </div>
       </div>
-      <p class="brand-copy" data-copy-id="merch-brand-copy">the origin of the merch <span style="color: rgb(109, 61, 21);">medium</span> of the construct began with a <span style="color: rgb(240, 143, 21);">clothing-based</span> <span style="color: rgb(0, 113, 235);">installation</span> known as <span style="color: rgb(252, 184, 103);">six.well</span>.</p>
+      <p class="brand-copy" data-copy-id="merch-brand-copy">the merch <span style="color: rgb(109, 61, 21)">medium</span> of the construct began with a <span style="color: rgb(240, 143, 21)">clothing-based</span> <span style="color: rgb(0, 113, 235)">installation</span> known as <span style="color: rgb(252, 184, 103)">six.well</span>.</p>
+      <a class="brand-more" href="/about/six-well/">learn more</a>
     </section>
 
     <!-- filter rows — row 1: source medium, row 2: type (only when source active) -->
-    <nav class="filters" id="filters" role="tablist">
+    <nav class="filters" id="filters" aria-label="merch filters">
+      <select class="source-filter-select" id="sourceFilterSelect" aria-label="filter by source">
+        <option value="all">filter by source</option>
+      </select>
+      <div class="source-filter-menu" id="sourceFilterMenu">
+        <button class="source-filter-trigger" id="sourceFilterTrigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="sourceFilterOptions">
+          <span class="source-filter-value" id="sourceFilterValue">filter by source</span>
+          <span class="source-filter-arrow" aria-hidden="true"></span>
+        </button>
+        <ul class="source-filter-options" id="sourceFilterOptions" role="listbox" aria-label="filter by source"></ul>
+      </div>
       <div class="filter-row" id="sourceRow"></div>
       <div class="filter-row" id="typeRow"></div>
     </nav>

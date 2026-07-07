@@ -480,6 +480,11 @@ export async function initMerchCatalogPage() {
   await cart.refreshCart();
 
   const sourceRowEl = document.getElementById("sourceRow");
+  const sourceSelectEl = document.getElementById("sourceFilterSelect");
+  const sourceMenuEl = document.getElementById("sourceFilterMenu");
+  const sourceTriggerEl = document.getElementById("sourceFilterTrigger");
+  const sourceValueEl = document.getElementById("sourceFilterValue");
+  const sourceOptionsEl = document.getElementById("sourceFilterOptions");
   const typeRowEl = document.getElementById("typeRow");
   const grid = document.getElementById("productGrid");
   const introDesc = document.getElementById("introDesc");
@@ -491,6 +496,8 @@ export async function initMerchCatalogPage() {
   let products = [];
   let activeFilter = "all";
   let activeTypeFilter = "all";
+  const sourceSelectDefaultLabel = "filter by source";
+  let sourceFilterOptions = [{ value: "all", label: sourceSelectDefaultLabel }];
 
   function makeChip(label, count, isActive, srcColor) {
     const button = document.createElement("button");
@@ -505,11 +512,53 @@ export async function initMerchCatalogPage() {
     document.documentElement.style.setProperty("--title-color", color);
   }
 
+  function setSourceMenuOpen(isOpen) {
+    if (!sourceMenuEl || !sourceTriggerEl) return;
+    sourceMenuEl.classList.toggle("open", isOpen);
+    sourceTriggerEl.setAttribute("aria-expanded", String(isOpen));
+  }
+
+  function closeSourceMenu() {
+    setSourceMenuOpen(false);
+  }
+
+  function renderSourceMenu() {
+    if (!sourceMenuEl || !sourceTriggerEl || !sourceValueEl || !sourceOptionsEl) return;
+    sourceMenuEl.classList.add("is-ready");
+    sourceSelectEl?.classList.add("is-enhanced");
+    sourceOptionsEl.innerHTML = "";
+
+    const selectedOption =
+      sourceFilterOptions.find((option) => option.value === activeFilter) || sourceFilterOptions[0];
+    sourceValueEl.textContent = selectedOption?.label || sourceSelectDefaultLabel;
+
+    for (const option of sourceFilterOptions) {
+      const item = document.createElement("li");
+      const isSelected = option.value === activeFilter;
+      item.className = `source-filter-option${isSelected ? " is-selected" : ""}`;
+      item.dataset.value = option.value;
+      item.textContent = option.label;
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(isSelected));
+      item.tabIndex = -1;
+      sourceOptionsEl.appendChild(item);
+    }
+  }
+
   function renderFilters() {
     sourceRowEl.innerHTML = "";
     const allButton = makeChip("all", products.length, activeFilter === "all", "var(--accent)");
     allButton.addEventListener("click", () => setFilter("all"));
     sourceRowEl.appendChild(allButton);
+
+    if (sourceSelectEl) {
+      sourceSelectEl.innerHTML = "";
+      const allOption = document.createElement("option");
+      allOption.value = "all";
+      allOption.textContent = sourceSelectDefaultLabel;
+      sourceSelectEl.appendChild(allOption);
+    }
+    sourceFilterOptions = [{ value: "all", label: sourceSelectDefaultLabel }];
 
     for (const sourceKey of SOURCE_ORDER) {
       const source = SOURCES[sourceKey];
@@ -518,7 +567,20 @@ export async function initMerchCatalogPage() {
       const button = makeChip(source.label, count, activeFilter === sourceKey, source.color);
       button.addEventListener("click", () => setFilter(sourceKey));
       sourceRowEl.appendChild(button);
+
+      if (sourceSelectEl) {
+        const option = document.createElement("option");
+        option.value = sourceKey;
+        option.textContent = `${source.label} (${count})`;
+        sourceSelectEl.appendChild(option);
+      }
+      sourceFilterOptions.push({ value: sourceKey, label: `${source.label} (${count})` });
     }
+
+    if (sourceSelectEl) {
+      sourceSelectEl.value = activeFilter;
+    }
+    renderSourceMenu();
   }
 
   function renderTypeFilters() {
@@ -566,6 +628,36 @@ export async function initMerchCatalogPage() {
     renderTypeFilters();
     renderGrid();
   }
+
+  if (sourceSelectEl) {
+    sourceSelectEl.addEventListener("change", () => setFilter(sourceSelectEl.value || "all"));
+  }
+
+  if (sourceTriggerEl) {
+    sourceTriggerEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setSourceMenuOpen(!sourceMenuEl?.classList.contains("open"));
+    });
+  }
+
+  if (sourceOptionsEl) {
+    sourceOptionsEl.addEventListener("click", (event) => {
+      const option = event.target.closest(".source-filter-option");
+      if (!option) return;
+      setFilter(option.dataset.value || "all");
+      closeSourceMenu();
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!sourceMenuEl?.classList.contains("open")) return;
+    if (sourceMenuEl.contains(event.target)) return;
+    closeSourceMenu();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSourceMenu();
+  });
 
   function getSelection(handle, optionKey, values) {
     const selection = selections[handle] || {};

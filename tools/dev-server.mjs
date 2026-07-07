@@ -37,6 +37,7 @@ const checkRoutes = [
   ["/about/breakdown/", 200],
   ["/about/founder/", 200],
   ["/about/mediums/", 200],
+  ["/about/six-well/", 200],
   ["/about/ways-in/", 200],
   ["/about/current-state/", 200],
   ["/about/contact-press/", 200],
