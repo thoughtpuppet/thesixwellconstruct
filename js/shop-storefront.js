@@ -15,7 +15,7 @@ function tokenColor(name, fallback) {
   return value || fallback;
 }
 
-const MERCH_COLOR = tokenColor("--color-merch", "#F08F15");
+const MERCH_COLOR = tokenColor("--color-merch", "#F08F00");
 
 function readableSourceInk(color) {
   return "#0e0e0e";

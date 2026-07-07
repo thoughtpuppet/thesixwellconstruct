@@ -9,7 +9,7 @@ function tokenColor(name, fallback) {
 export const SOURCES = {
   "six.well": {
     label: "six.well clothing",
-    color: tokenColor("--color-merch", "#F08F15"),
+    color: tokenColor("--color-merch", "#F08F00"),
     statement: "garments from the construct's own hand",
     logo: "/assets/brand/six-well-clothing.svg.svg",
     logoAlt: "Six.Well Clothing logo",

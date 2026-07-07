@@ -35,13 +35,13 @@
   var VENTURES = [
     { key: 'tattooing', label: 'TATTOOING',  token: '--color-tattooing', fallback: '#6E0404', url: '/tattoos/'   },
     { key: 'art',       label: 'ART MAKING', token: '--color-art',       fallback: '#0039BD', url: '/art/'       },
-    { key: 'merch',     label: 'MERCH',      token: '--color-merch',     fallback: '#F08F15', url: '/merch/'     },
+    { key: 'merch',     label: 'MERCH',      token: '--color-merch',     fallback: '#F08F00', url: '/merch/'     },
     { key: 'about',     label: 'ABOUT',      token: '--color-about',     fallback: '#FCB867', url: '/about/' },
     { key: 'events',    label: 'EVENTS',     token: '--color-events',    fallback: '#005D25', url: '/events/'    },
     { key: 'music',     label: 'MUSIC',      token: '--color-music',     fallback: '#A22F8D', url: '/music/'     },
     { key: 'writings',  label: 'WRITINGS',   token: '--color-writings',  fallback: '#FFE7CA', url: '/writings/'  },
     { key: 'archive',   label: 'ARCHIVE',    token: '--color-archive',   fallback: '#6D3D15', url: '/archive/'   },
-    { key: 'film',      label: 'FILM',       token: '--color-film',      fallback: '#328C84', url: '/film/'      },
+    { key: 'film',      label: 'FILM',       token: '--color-film',      fallback: '#00857A', url: '/film/'      },
   ];
 
   function readTokenColor(token, fallback) {

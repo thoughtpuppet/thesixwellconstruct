@@ -12,13 +12,13 @@ The CSS custom property is still named `--venture-color` for compatibility.
 |------------|----------------------------|-----------|
 | tattooing  | `var(--color-tattooing)`   | `#6E0404` |
 | art        | `var(--color-art)`         | `#0039BD` |
-| merch      | `var(--color-merch)`       | `#F08F15` |
+| merch      | `var(--color-merch)`       | `#F08F00` |
 | about      | `var(--color-about)`       | `#FCB867` |
 | events     | `var(--color-events)`      | `#005D25` |
 | music      | `var(--color-music)`       | `#A22F8D` |
 | writings   | `var(--color-writings)`    | `#FFE7CA` |
 | archive    | `var(--color-archive)`     | `#6D3D15` |
-| film       | `var(--color-film)`        | `#328C84` |
+| film       | `var(--color-film)`        | `#00857A` |
 
 The single source of truth for these values is `css/tokens.css`. JavaScript consumers should read the CSS variables instead of keeping separate color mirrors.
 

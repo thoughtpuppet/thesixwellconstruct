@@ -31,13 +31,13 @@
   /* medium fallbacks */
   --color-tattooing: #6E0404;  --color-tattooing-dim: rgba(110,4,4,.25);
   --color-art:       #0039BD;  --color-art-dim:       rgba(0,57,189,.25);
-  --color-merch:     #F08F15;  --color-merch-dim:     rgba(240,143,21,.25);
+  --color-merch:     #F08F00;  --color-merch-dim:     rgba(240,143,0,.25);
   --color-about:     #FCB867;  --color-about-dim:     rgba(252,184,103,.25);
   --color-events:    #005D25;  --color-events-dim:    rgba(0,93,37,.25);
   --color-music:     #A22F8D;  --color-music-dim:     rgba(162,47,141,.25);
   --color-writings:  #FFE7CA;  --color-writings-dim:  rgba(255,231,202,.25);
   --color-archive:   #6D3D15;  --color-archive-dim:   rgba(109,61,21,.25);
-  --color-film:      #328C84;  --color-film-dim:      rgba(50,140,132,.25);
+  --color-film:      #00857A;  --color-film-dim:      rgba(0,133,122,.25);
 
   /* type */
   --font-display: 'Inter',Arial,sans-serif;
@@ -933,13 +933,13 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   var MEDIUMS = [
     {key:'tattooing', name:'Tattooing',  fallback:'#6E0404', label:'TATTOOING'},
     {key:'art',       name:'Art making', fallback:'#0039BD', label:'ART MAKING'},
-    {key:'merch',     name:'Merch',      fallback:'#F08F15', label:'MERCH'},
+    {key:'merch',     name:'Merch',      fallback:'#F08F00', label:'MERCH'},
     {key:'about',     name:'About',      fallback:'#FCB867', label:'ABOUT'},
     {key:'events',    name:'Events',     fallback:'#005D25', label:'EVENTS'},
     {key:'music',     name:'Music',      fallback:'#A22F8D', label:'MUSIC'},
     {key:'writings',  name:'Writings',   fallback:'#FFE7CA', label:'WRITINGS'},
     {key:'archive',   name:'Archive',    fallback:'#6D3D15', label:'ARCHIVE'},
-    {key:'film',      name:'Film',       fallback:'#328C84', label:'FILM'},
+    {key:'film',      name:'Film',       fallback:'#00857A', label:'FILM'},
   ];
   var BASE_TOKENS = ['--color-bg','--color-body','--color-accent','--color-accent-dim'];
   var DEFAULTS = MEDIUMS.map(function(m){return signalDefault(m);});
