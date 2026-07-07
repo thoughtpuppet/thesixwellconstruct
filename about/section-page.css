@@ -97,12 +97,12 @@ a {
 }
 
 .text-link[href^="/tattoos"] { --pill-color: #6E0404; color: #FFE7CA; }
-.text-link[href^="/art"] { --pill-color: #0581C1; color: #FFE7CA; }
-.text-link[href^="/merch"] { --pill-color: #F7A226; }
+.text-link[href^="/art"] { --pill-color: #0071EB; color: #FFE7CA; }
+.text-link[href^="/merch"] { --pill-color: #F08F15; }
 .text-link[href^="/archive"] { --pill-color: #6D3D15; color: #FFE7CA; }
 .text-link[href^="/writings"] { --pill-color: #FFE7CA; }
-.text-link[href^="/events"] { --pill-color: #005d25; color: #FFE7CA; }
-.text-link[href^="/music"] { --pill-color: #A856A1; color: #FFE7CA; }
+.text-link[href^="/events"] { --pill-color: #005D25; color: #FFE7CA; }
+.text-link[href^="/music"] { --pill-color: #A22F8D; color: #FFE7CA; }
 .text-link[href^="/film"] { --pill-color: #328C84; color: #FFE7CA; }
 
 .text-link:hover,

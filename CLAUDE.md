@@ -11,16 +11,16 @@ The CSS custom property is still named `--venture-color` for compatibility.
 | Medium     | CSS token                  | Hex       |
 |------------|----------------------------|-----------|
 | tattooing  | `var(--color-tattooing)`   | `#6E0404` |
-| art        | `var(--color-art)`         | `#0581C1` |
-| merch      | `var(--color-merch)`       | `#F7A226` |
+| art        | `var(--color-art)`         | `#0039BD` |
+| merch      | `var(--color-merch)`       | `#F08F15` |
 | about      | `var(--color-about)`       | `#FCB867` |
-| events     | `var(--color-events)`      | `#005d25` |
-| music      | `var(--color-music)`       | `#A856A1` |
+| events     | `var(--color-events)`      | `#005D25` |
+| music      | `var(--color-music)`       | `#A22F8D` |
 | writings   | `var(--color-writings)`    | `#FFE7CA` |
 | archive    | `var(--color-archive)`     | `#6D3D15` |
 | film       | `var(--color-film)`        | `#328C84` |
 
-The single source of truth for these values is `css/tokens.css` and `js/construct-nav.js`.
+The single source of truth for these values is `css/tokens.css`. JavaScript consumers should read the CSS variables instead of keeping separate color mirrors.
 
 **How to apply:**
 ```css

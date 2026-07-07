@@ -28,20 +28,55 @@
      Single source of truth for all 9 construct entries.
      key:   must match the data-venture attribute on <body>
      label: shown in the hover tooltip
-     color: construct color from the landing system
+     token: color token from css/tokens.css
+     fallback: construct color used if tokens.css is unavailable
      url:   destination when dot is clicked
   ────────────────────────────────────────────────────────── */
   var VENTURES = [
-    { key: 'tattooing', label: 'TATTOOING',  color: '#6E0404', url: '/tattoos/'   },
-    { key: 'art',       label: 'ART MAKING', color: '#0581C1', url: '/art/'       },
-    { key: 'merch',     label: 'MERCH',      color: '#F7A226', url: '/merch/'     },
-    { key: 'about',     label: 'ABOUT',      color: '#FCB867', url: '/about/' },
-    { key: 'events',    label: 'EVENTS',     color: '#005d25', url: '/events/'    },
-    { key: 'music',     label: 'MUSIC',      color: '#A856A1', url: '/music/'     },
-    { key: 'writings',  label: 'WRITINGS',   color: '#FFE7CA', url: '/writings/'  },
-    { key: 'archive',   label: 'ARCHIVE',    color: '#6D3D15', url: '/archive/'   },
-    { key: 'film',      label: 'FILM',       color: '#328C84', url: '/film/'      },
+    { key: 'tattooing', label: 'TATTOOING',  token: '--color-tattooing', fallback: '#6E0404', url: '/tattoos/'   },
+    { key: 'art',       label: 'ART MAKING', token: '--color-art',       fallback: '#0039BD', url: '/art/'       },
+    { key: 'merch',     label: 'MERCH',      token: '--color-merch',     fallback: '#F08F15', url: '/merch/'     },
+    { key: 'about',     label: 'ABOUT',      token: '--color-about',     fallback: '#FCB867', url: '/about/' },
+    { key: 'events',    label: 'EVENTS',     token: '--color-events',    fallback: '#005D25', url: '/events/'    },
+    { key: 'music',     label: 'MUSIC',      token: '--color-music',     fallback: '#A22F8D', url: '/music/'     },
+    { key: 'writings',  label: 'WRITINGS',   token: '--color-writings',  fallback: '#FFE7CA', url: '/writings/'  },
+    { key: 'archive',   label: 'ARCHIVE',    token: '--color-archive',   fallback: '#6D3D15', url: '/archive/'   },
+    { key: 'film',      label: 'FILM',       token: '--color-film',      fallback: '#328C84', url: '/film/'      },
   ];
+
+  function readTokenColor(token, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    return value || fallback;
+  }
+
+  function tokenColorsAvailable() {
+    return !!getComputedStyle(document.documentElement).getPropertyValue('--color-art').trim();
+  }
+
+  function refreshVentureColors() {
+    VENTURES.forEach(function(v) {
+      v.color = readTokenColor(v.token, v.fallback);
+    });
+  }
+
+  function ensureTokenStylesheet(onReady) {
+    if (tokenColorsAvailable()) return;
+
+    var existing = document.querySelector('link[href="/css/tokens.css"], link[href$="/css/tokens.css"]');
+    if (existing) {
+      existing.addEventListener('load', onReady, { once: true });
+      return;
+    }
+
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/css/tokens.css';
+    link.setAttribute('data-construct-token-loader', 'true');
+    link.addEventListener('load', onReady, { once: true });
+    document.head.appendChild(link);
+  }
+
+  refreshVentureColors();
 
   /* ── CONFIGURATION ────────────────────────────────────────
      All visual values live here. Adjust freely.
@@ -111,6 +146,8 @@
     'transition:opacity ' + CONFIG.fadeInDuration + 'ms ease, top 0ms, left 0ms, transform 0ms',
   ].join(';');
 
+
+  var desktopColorBindings = [];
 
   VENTURES.forEach(function(v) {
     var isCurrent = (v.key === currentKey);
@@ -210,6 +247,7 @@
     item.appendChild(label);
     item.appendChild(dot);
     nav.appendChild(item);
+    desktopColorBindings.push({ venture: v, label: label, dot: dot });
   });
 
   document.body.appendChild(nav);
@@ -220,8 +258,9 @@
      previewed chip and full-screen bloom navigation.
   ────────────────────────────────────────────────────────── */
 
-  var SITE_BG = '#0e0e0e';
-  var PARTICLE_COLOR = '#FCB867';
+  var SITE_BG = readTokenColor('--color-bg', '#0e0e0e');
+  var PARTICLE_COLOR = readTokenColor('--color-about', '#FCB867');
+  var WORDMARK_RING_COLOR = readTokenColor('--color-archive', '#6D3D15');
   var MOBILE_RING_RADIUS = 122;
   var MOBILE_BLOOM_DUR = 2200;
   var MOBILE_CLOSE_DUR = 520;
@@ -390,6 +429,31 @@
   var mobileCy = 0;
   var mobileDpr = 1;
   var mobileOrbit = 0;
+
+  function applyTokenColorsToRenderedNav() {
+    refreshVentureColors();
+    SITE_BG = readTokenColor('--color-bg', '#0e0e0e');
+    PARTICLE_COLOR = readTokenColor('--color-about', '#FCB867');
+    WORDMARK_RING_COLOR = readTokenColor('--color-archive', '#6D3D15');
+
+    desktopColorBindings.forEach(function(binding) {
+      binding.label.style.color = binding.venture.color;
+      binding.dot.setAttribute('data-bg-color', binding.venture.color);
+      binding.dot.style.background = binding.venture.color;
+    });
+
+    if (currentVenture) {
+      mChip.style.background = currentVenture.color;
+      mCenterLabel.style.color = currentVenture.color;
+    } else {
+      mChip.style.background = PARTICLE_COLOR;
+    }
+    mScrim.style.background = SITE_BG;
+    mWmText.style.color = PARTICLE_COLOR;
+    mobileNodes.forEach(function(nd) {
+      nd.el.style.color = nd.venture.color;
+    });
+  }
 
   function clamp01(t) { return t < 0 ? 0 : t > 1 ? 1 : t; }
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -603,7 +667,7 @@
     mWmCtx.beginPath();
     mWmCtx.arc(c, c, WM_OUTER, 0, Math.PI * 2);
     mWmCtx.arc(c, c, WM_INNER, 0, Math.PI * 2, true);
-    mWmCtx.fillStyle = '#6D3D15';
+    mWmCtx.fillStyle = WORDMARK_RING_COLOR;
     mWmCtx.fill();
     var orbit = t * 0.003;
     for (var i = 0; i < WM_DOTS.length; i++) {
@@ -886,6 +950,10 @@
   }
 
   applyResponsiveNav();
+  ensureTokenStylesheet(function() {
+    applyTokenColorsToRenderedNav();
+    applyResponsiveNav();
+  });
   window.addEventListener('resize', applyResponsiveNav);
   window.addEventListener('orientationchange', function() {
     setTimeout(applyResponsiveNav, 150);

@@ -1,21 +1,27 @@
 export const DEFAULT_MERCH_QUERY = "tag:construct-merch";
 
+function tokenColor(name, fallback) {
+  if (typeof window === "undefined" || !window.getComputedStyle) return fallback;
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 export const SOURCES = {
   "six.well": {
     label: "six.well clothing",
-    color: "#F7A226",
+    color: tokenColor("--color-merch", "#F08F15"),
     statement: "garments from the construct's own hand",
     logo: "/assets/brand/six-well-clothing.svg.svg",
     logoAlt: "Six.Well Clothing logo",
   },
   thoughtpuppet: {
     label: "thoughtpuppet",
-    color: "#0581C1",
+    color: tokenColor("--color-art", "#0039BD"),
     statement: "objects that carry the paintings outward",
   },
   "art.pill": {
     label: "art.pill Tattoo Supply",
-    color: "#6E0404",
+    color: tokenColor("--color-tattooing", "#6E0404"),
     statement: "materials behind the marks",
     logo: "/assets/brand/art-pill-tattoo-house.svg.svg",
     logoAlt: "art.pill Tattoo House logo",

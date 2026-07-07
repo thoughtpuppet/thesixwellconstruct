@@ -143,12 +143,12 @@
   }
 
   .text-link[href^="/tattoos"] { --pill-color: #6E0404; }
-  .text-link[href^="/art"] { --pill-color: #0581C1; }
-  .text-link[href^="/merch"] { --pill-color: #F7A226; }
+  .text-link[href^="/art"] { --pill-color: #0071EB; }
+  .text-link[href^="/merch"] { --pill-color: #F08F15; }
   .text-link[href^="/archive"] { --pill-color: #6D3D15; }
   .text-link[href^="/writings"] { --pill-color: #FFE7CA; }
-  .text-link[href^="/events"] { --pill-color: #005d25; }
-  .text-link[href^="/music"] { --pill-color: #A856A1; }
+  .text-link[href^="/events"] { --pill-color: #005D25; }
+  .text-link[href^="/music"] { --pill-color: #A22F8D; }
   .text-link[href^="/film"] { --pill-color: #328C84; }
   .text-link[href^="#"] { --pill-color: var(--accent); }
 
@@ -1322,11 +1322,11 @@
 
     const nodes = [
       { key: 'tattooing', label: 'Tattooing', color: '#6E0404', activeColor: '#6E0404', url: '/tattoos/', angle: -90, status: 'live public door', role: 'Art.Pill / mark and body-ritual layer', note: 'What it is: the appointment, the symbolic mark, the client threshold, and the most intimate service surface. Why it matters: it proves the construct can touch real bodies with care, boundaries, and trust.', materials: ['consultations', 'custom inquiry', 'flash', 'healed work', 'aftercare'] },
-      { key: 'art', label: 'Art', color: '#0581C1', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'] },
-      { key: 'merch', label: 'Merch', color: '#F7A226', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'] },
+      { key: 'art', label: 'Art', color: '#0071EB', url: '/art/', angle: -50, status: 'live public door', role: 'visual root system', note: 'What it is: paintings, studies, objects, symbols, and the visual grammar beneath the wider system. Why it matters: it gives tattoos, garments, film, and archive records a shared image vocabulary.', materials: ['paintings', 'studies', 'symbols', 'objects', 'statements'] },
+      { key: 'merch', label: 'Merch', color: '#F08F15', url: '/merch/', angle: -10, status: 'live commerce door', role: 'six.well artifact economy', note: 'What it is: garments, prints, editions, and physical proof of participation. Why it matters: it lets commerce fund the system without reducing the work to generic product.', materials: ['garments', 'prints', 'editions', 'drops', 'release records'] },
       { key: 'about', label: 'About', color: '#FCB867', url: '/about/', angle: 30, status: 'orientation layer', role: 'map / founder / access point', note: 'What it is: the public explanation of the construct. Why it matters: it names what is live, what is incubating, who built it, and which door someone should use first.', materials: ['system map', 'founder page', 'ways in', 'status', 'press language'] },
-      { key: 'events', label: 'Events', color: '#005d25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['gatherings', 'recaps', 'tickets', 'relics', 'ritual calendar'] },
-      { key: 'music', label: 'Music', color: '#A856A1', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'] },
+      { key: 'events', label: 'Events', color: '#005D25', url: '/events/', angle: 70, status: 'incubating public room', role: 'gathering and ritual layer', note: 'What it is: performance rooms, hosted gatherings, annual rituals, and event relics. Why it matters: it makes the construct social, time-based, and physically witnessed.', materials: ['gatherings', 'recaps', 'tickets', 'relics', 'ritual calendar'] },
+      { key: 'music', label: 'Music', color: '#A22F8D', url: '/music/', angle: 110, status: 'incubating atmosphere', role: 'sound and conversation layer', note: 'What it is: performance audio, interviews, scores, loops, and voice fragments. Why it matters: it gives the system atmosphere, cadence, and repeatable social texture.', materials: ['audio', 'scores', 'talks', 'clips', 'transcripts'] },
       { key: 'writings', label: 'Writings', color: '#FFE7CA', url: '/writings/', angle: 150, status: 'thread to launch', role: 'language and letter layer', note: 'What it is: letters, statements, essays, release notes, and field fragments. Why it matters: it keeps the public language alive without forcing every explanation into the first doorway.', materials: ['letters', 'essays', 'notes', 'release context', 'field fragments'] },
       { key: 'archive', label: 'Archive', color: '#6D3D15', url: '/archive/', angle: 190, status: 'live memory system', role: 'record and proof layer', note: 'What it is: process, residue, records, abandoned paths, and older rooms that still speak. Why it matters: it lets the system remember itself instead of disappearing into feeds.', materials: ['records', 'photos', 'process scans', 'timelines', 'source material'] },
       { key: 'film', label: 'Film', color: '#328C84', url: '/film/', angle: 230, status: 'incubating narrative engine', role: 'moving-image and documentation layer', note: 'What it is: campaign footage, studio life, interviews, recaps, and mythic documentation. Why it matters: it makes the world visible as it is being built.', materials: ['short films', 'BTS', 'campaigns', 'recaps', 'lore videos'] }
@@ -1417,11 +1417,11 @@
     const fadeGroup = [selectedCopy, connectionList, stateLabel];
     const highlightRules = [
       { color: '#6E0404', terms: ['Art.Pill', 'tattoo house', 'tattooing', 'tattoo', 'tattoos', 'mark', 'marks', 'body', 'bodies', 'flash', 'aftercare', 'consultation', 'consultations', 'appointment', 'appointments', 'client', 'clients', 'healed work', 'symbolic mark'] },
-      { color: '#0581C1', terms: ['art index', 'acquisition inquiry', 'symbol maps', 'source material', 'visual vocabulary', 'art', 'artist', 'paintings', 'painting', 'studies', 'study', 'symbols', 'symbol', 'visual', 'image', 'images', 'objects', 'object', 'drawings'] },
-      { color: '#F7A226', terms: ['merch', 'garments', 'garment', 'prints', 'print', 'editions', 'edition', 'drops', 'drop', 'commerce', 'product', 'products', 'clothing', 'capsules'] },
+      { color: '#0071EB', terms: ['art index', 'acquisition inquiry', 'symbol maps', 'source material', 'visual vocabulary', 'art', 'artist', 'paintings', 'painting', 'studies', 'study', 'symbols', 'symbol', 'visual', 'image', 'images', 'objects', 'object', 'drawings'] },
+      { color: '#F08F15', terms: ['merch', 'garments', 'garment', 'prints', 'print', 'editions', 'edition', 'drops', 'drop', 'commerce', 'product', 'products', 'clothing', 'capsules'] },
       { color: '#FCB867', terms: ['six.well construct', 'the construct', 'construct', 'six.well', 'about', 'orientation', 'map', 'hierarchy', 'current state', 'access', 'press', 'public language', 'system', 'door', 'doors', 'room', 'rooms', 'routes', 'ways in'] },
-      { color: '#005d25', terms: ['events', 'event', 'gatherings', 'gathering', 'rituals', 'ritual', 'performance', 'performances', 'hosted', 'social', 'annual'] },
-      { color: '#A856A1', terms: ['music', 'sound', 'audio', 'scores', 'score', 'loops', 'loop', 'voice', 'atmosphere', 'cadence'] },
+      { color: '#005D25', terms: ['events', 'event', 'gatherings', 'gathering', 'rituals', 'ritual', 'performance', 'performances', 'hosted', 'social', 'annual'] },
+      { color: '#A22F8D', terms: ['music', 'sound', 'audio', 'scores', 'score', 'loops', 'loop', 'voice', 'atmosphere', 'cadence'] },
       { color: '#FFE7CA', terms: ['writings', 'writing', 'letters', 'letter', 'essays', 'essay', 'language', 'statements', 'statement', 'notes', 'release notes', 'field fragments', 'fragments'] },
       { color: '#6D3D15', terms: ['archive', 'record', 'records', 'proof', 'process', 'evidence', 'residue', 'memory', 'past iterations', 'source material', 'timelines', 'history'] },
       { color: '#328C84', terms: ['film', 'films', 'moving-image', 'documentary', 'documentation', 'footage', 'recaps', 'recap', 'interviews', 'interview', 'campaign', 'campaigns', 'cinematic', 'subject matter'] }

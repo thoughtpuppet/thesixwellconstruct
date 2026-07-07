@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block">
+<link rel="stylesheet" href="/css/tokens.css">
 <style>
   :root {
     --font-inter: 'Inter', Arial, sans-serif;
@@ -489,8 +490,36 @@ function drawEyes(t) {
   });
 }
 
-const RING_COLOR='#6D3D15',BASE_RING_OUTER=68,BASE_RING_INNER=49,BASE_DOT_RADIUS=9.5;
-const DOT_COLOR='#FCB867',PARTICLE_COLOR='#FCB867',BG_COLOR='#0e0e0e';
+function cssToken(name, fallback){
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+function hexRgb(hex){
+  const h = String(hex || '').replace('#','').trim();
+  return {
+    r: parseInt(h.slice(0,2),16) || 0,
+    g: parseInt(h.slice(2,4),16) || 0,
+    b: parseInt(h.slice(4,6),16) || 0,
+  };
+}
+function hexRgba(hex, alpha){
+  const c = hexRgb(hex);
+  return `rgba(${c.r},${c.g},${c.b},${alpha})`;
+}
+const MEDIUM_COLORS = {
+  tattooing: cssToken('--color-tattooing', '#6E0404'),
+  art:       cssToken('--color-art', '#0039BD'),
+  merch:     cssToken('--color-merch', '#F08F15'),
+  about:     cssToken('--color-about', '#FCB867'),
+  events:    cssToken('--color-events', '#005D25'),
+  music:     cssToken('--color-music', '#A22F8D'),
+  writings:  cssToken('--color-writings', '#FFE7CA'),
+  archive:   cssToken('--color-archive', '#6D3D15'),
+  film:      cssToken('--color-film', '#328C84'),
+};
+const RING_COLOR=MEDIUM_COLORS.archive,BASE_RING_OUTER=68,BASE_RING_INNER=49,BASE_DOT_RADIUS=9.5;
+const DOT_COLOR=MEDIUM_COLORS.about,PARTICLE_COLOR=MEDIUM_COLORS.about,BG_COLOR=cssToken('--color-bg', '#0e0e0e');
+const HINT_IDLE_COLOR=hexRgba(MEDIUM_COLORS.about, 0.2);
 const BASE_NODE_SIZE=19;
 const BASE_DOT_POSITIONS=[[-18,-28],[18,-28],[-18,0],[18,0],[-18,28],[18,28]];
 // Scaled accessors — recomputed each frame from current viewport `scale`
@@ -503,15 +532,15 @@ const DOT_POSITIONS = BASE_DOT_POSITIONS; // legacy alias for hover hit-tests ag
 const NODE_SIZE = BASE_NODE_SIZE; // hit-test threshold scales separately
 
 const VENTURES=[
-  {name:'TATTOOS',       color:'#6E0404',angle:0,   dist:250, fromDot:0},
-  {name:'ART MAKING',   color:'#0581C1',angle:40,  dist:250, fromDot:1},
-  {name:'MERCH',         color:'#F7A226',angle:80,  dist:250, fromDot:2},
-  {name:'ABOUT',         color:'#FCB867',angle:120, dist:250, fromDot:-1},
-  {name:'EVENTS',        color:'#005d25',angle:160, dist:250, fromDot:3},
-  {name:'MUSIC',         color:'#A856A1',angle:200, dist:250, fromDot:4},
-  {name:'WRITINGS',      color:'#FFE7CA',angle:240, dist:250, fromDot:-1},
-  {name:'ARCHIVE',       color:'#6D3D15',angle:280, dist:250, fromDot:5},
-  {name:'FILM',          color:'#328C84',angle:320, dist:250, fromDot:-1},
+  {name:'TATTOOS',       color:MEDIUM_COLORS.tattooing,angle:0,   dist:250, fromDot:0},
+  {name:'ART MAKING',   color:MEDIUM_COLORS.art,      angle:40,  dist:250, fromDot:1},
+  {name:'MERCH',         color:MEDIUM_COLORS.merch,    angle:80,  dist:250, fromDot:2},
+  {name:'ABOUT',         color:MEDIUM_COLORS.about,    angle:120, dist:250, fromDot:-1},
+  {name:'EVENTS',        color:MEDIUM_COLORS.events,   angle:160, dist:250, fromDot:3},
+  {name:'MUSIC',         color:MEDIUM_COLORS.music,    angle:200, dist:250, fromDot:4},
+  {name:'WRITINGS',      color:MEDIUM_COLORS.writings, angle:240, dist:250, fromDot:-1},
+  {name:'ARCHIVE',       color:MEDIUM_COLORS.archive,  angle:280, dist:250, fromDot:5},
+  {name:'FILM',          color:MEDIUM_COLORS.film,     angle:320, dist:250, fromDot:-1},
 ];
 
 const TRAVEL_END=0.85,XFADE_START=0.42,DRIFT_OPEN_DURATION=0.22;
@@ -520,7 +549,8 @@ const DRIFTS=VENTURES.map((v,i)=>({ax:4.5+(i*1.7)%3.5,ay:3.5+(i*2.3)%3.5,px:1800
 const HOVER_IN=0.0018,HOVER_OUT=0.0012,CURSOR_FOLLOW=0.055;
 function MAX_PULL(){return 38*scale;}
 const EXPAND_SPEED=0.00034,COLLAPSE_SPEED=0.00055;
-const DOT_R=0xFC,DOT_G=0xB8,DOT_B=0x67;
+const DOT_RGB=hexRgb(DOT_COLOR);
+const DOT_R=DOT_RGB.r,DOT_G=DOT_RGB.g,DOT_B=DOT_RGB.b;
 let dotStartX=new Array(VENTURES.length).fill(0),dotStartY=new Array(VENTURES.length).fill(0);
 
 // Particle field — tunable constants
@@ -1043,12 +1073,12 @@ function drawCollapsingNodes(cp){
 const SUB_NODE_DATA = {
   'TATTOOS':    [{name:'art.pill tattoo house',url:'/tattoos/'},{name:'portfolio',url:'/tattoos/portfolio/'},{name:'flash',url:'/tattoos/flash/'},{name:'special projects',url:'/tattoos/special-projects/'},{name:'booking & inquiry',url:'/tattoos/inquire/'},{name:'process',url:'/tattoos/#booking-process'}],
   'ART MAKING': [{name:'statements',url:'/writings/#featured'},{name:'artist bio',url:'/about/#saiel'},{name:'portfolio',url:'/art/'},{name:'meridian in conflux',url:'/art/#sectionPainting'},{name:'studio visit',url:'/booking/studio-visit/'}],
-  'MERCH':      [{name:'six.well clothing',url:'/merch/?filter=six.well',color:'#F7A226'},{name:'art.pill tattoo supply',url:'/merch/?filter=art.pill',color:'#6E0404'},{name:'thoughtpuppet artifacts',url:'/merch/?filter=thoughtpuppet',color:'#0581C1'},{name:'CULT[&SHIFT] merch',url:'/merch/?filter=cultiv',color:'#005d25'},{name:'all merch',url:'/merch/',color:'#FCB867'}],
+  'MERCH':      [{name:'six.well clothing',url:'/merch/?filter=six.well',color:MEDIUM_COLORS.merch},{name:'art.pill tattoo supply',url:'/merch/?filter=art.pill',color:MEDIUM_COLORS.tattooing},{name:'thoughtpuppet artifacts',url:'/merch/?filter=thoughtpuppet',color:MEDIUM_COLORS.art},{name:'CULT[&SHIFT] merch',url:'/merch/?filter=cultiv',color:MEDIUM_COLORS.events},{name:'all merch',url:'/merch/',color:MEDIUM_COLORS.about}],
   'ABOUT':      [{name:'the construct',url:'/about/#construct'},{name:'saiel / founder',url:'/about/#saiel'},{name:'architecture',url:'/about/#construct-architecture'},{name:'nodes',url:'/about/#access'},{name:'method',url:'/about/#library'},{name:'faq',url:'/about/#faq'}],
   'EVENTS':     [{name:'CULT[&SHIFT]',url:'/events/cultandshift/'},{name:'Signal & Symbol',url:'/events/signal-symbol/'},{name:'calendar',url:'/events/calendar/'},{name:'rent the studio',url:'/booking/studio/'},{name:'archive',url:'/archive/events/'},{name:"solehman's new years",url:'/events/solehmans-new-year/'},{name:'SS&F live audience',url:'/events/ss-and-f-live-audience/'},{name:'open studios',url:'/events/open-studios/'}],
   'MUSIC':      [{name:'ringtones',url:'/music/#listening-surfaces'},{name:'MILOWALKSONWATER',url:'/music/#listening-index'},{name:'scores',url:'/music/#forms'}],
   'WRITINGS':   [{name:'Mindful Darkness',url:'/writings/#reading-paths'},{name:'THE SOLEHMAN LETTERS',url:'https://thesolehmanletters.com'},{name:'essays & notes',url:'/writings/#featured'}],
-  'ARCHIVE':    [{name:'tattoos',url:'/archive/tattoos/',color:'#6E0404'},{name:'art',url:'/archive/art/',color:'#0581C1'},{name:'merch',url:'/archive/merch/',color:'#F7A226'},{name:'events',url:'/archive/events/',color:'#005d25'},{name:'music',url:'/archive/music/',color:'#A856A1'},{name:'writings',url:'/archive/writings/',color:'#FFE7CA'},{name:'film',url:'/archive/film/',color:'#328C84'},{name:'The six.well Construct',url:'/archive/sixwell-construct/',color:'#FCB867'}],
+  'ARCHIVE':    [{name:'tattoos',url:'/archive/tattoos/',color:MEDIUM_COLORS.tattooing},{name:'art',url:'/archive/art/',color:MEDIUM_COLORS.art},{name:'merch',url:'/archive/merch/',color:MEDIUM_COLORS.merch},{name:'events',url:'/archive/events/',color:MEDIUM_COLORS.events},{name:'music',url:'/archive/music/',color:MEDIUM_COLORS.music},{name:'writings',url:'/archive/writings/',color:MEDIUM_COLORS.writings},{name:'film',url:'/archive/film/',color:MEDIUM_COLORS.film},{name:'The six.well Construct',url:'/archive/sixwell-construct/',color:MEDIUM_COLORS.about}],
   'FILM':       [{name:'isolated.take',url:'/film/#projects'},{name:'&friends',url:'/film/#projects'},{name:'animations',url:'/film/#forms'},{name:'sloth99',url:'/film/#status'}],
 };
 
@@ -1472,7 +1502,7 @@ function tick(ts){
 
   // ── Main state machine ──
   if(state==='expanding'){expandProgress=Math.min(expandProgress+dt*EXPAND_SPEED,1);if(expandProgress>=1)state='expanded';}
-  if(state==='collapsing'){collapseProgress=Math.min(collapseProgress+dt*COLLAPSE_SPEED,1);if(collapseProgress>=1){state='idle';expandProgress=0;collapseProgress=0;nodePosInit=false;nodeHP.fill(0);hint.style.opacity='1';hint.style.color='#FCB86733';hint.textContent='';}}
+  if(state==='collapsing'){collapseProgress=Math.min(collapseProgress+dt*COLLAPSE_SPEED,1);if(collapseProgress>=1){state='idle';expandProgress=0;collapseProgress=0;nodePosInit=false;nodeHP.fill(0);hint.style.opacity='1';hint.style.color=HINT_IDLE_COLOR;hint.textContent='';}}
   // Descriptor fades in once expansion is well underway, out on collapse
   wordmarkDesc.style.opacity = String(easeOutSoft(clamp01((expandProgress-0.5)/0.5)) * (1-collapseProgress) * 0.55);
   VENTURES.forEach((v,i)=>{const target=hoveredNode===i?1:0;nodeHP[i]=target>nodeHP[i]?Math.min(nodeHP[i]+dt*HOVER_IN,1):Math.max(nodeHP[i]-dt*HOVER_OUT,0);});

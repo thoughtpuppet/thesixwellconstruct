@@ -44,55 +44,55 @@
   --color-tattooing:        #6E0404;
   --color-tattooing-dim:    rgba(110, 4, 4, 0.25);
   --color-tattooing-bright: #8B3636;
-  --color-tattooing-dark:   #580303;
+  --color-tattooing-dark:   #420202;
 
   /* ART MAKING */
-  --color-art:              #0581C1;
-  --color-art-dim:          rgba(5, 129, 193, 0.25);
-  --color-art-bright:       #379ACD;
-  --color-art-dark:         #04679A;
+  --color-art:              #0039BD;
+  --color-art-dim:          rgba(0, 57, 189, 0.25);
+  --color-art-bright:       #3361CA;
+  --color-art-dark:         #002271;
 
   /* MERCH */
-  --color-merch:            #F7A226;
-  --color-merch-dim:        rgba(247, 162, 38, 0.25);
-  --color-merch-bright:     #F9B551;
-  --color-merch-dark:       #C6821E;
+  --color-merch:            #F08F15;
+  --color-merch-dim:        rgba(240, 143, 21, 0.25);
+  --color-merch-bright:     #F5B429;
+  --color-merch-dark:       #90560D;
 
   /* ABOUT */
   --color-about:            #FCB867;
   --color-about-dim:        rgba(252, 184, 103, 0.25);
   --color-about-bright:     #FDC685;
-  --color-about-dark:       #CA9352;
+  --color-about-dark:       #976E3E;
 
   /* EVENTS */
-  --color-events:           #005d25;
+  --color-events:           #005D25;
   --color-events-dim:       rgba(0, 93, 37, 0.25);
   --color-events-bright:    #337D51;
-  --color-events-dark:      #004A1E;
+  --color-events-dark:      #003816;
 
   /* MUSIC */
-  --color-music:            #A856A1;
-  --color-music-dim:        rgba(168, 86, 161, 0.25);
-  --color-music-bright:     #B978B4;
-  --color-music-dark:       #864581;
+  --color-music:            #A22F8D;
+  --color-music-dim:        rgba(162, 47, 141, 0.25);
+  --color-music-bright:     #B559A4;
+  --color-music-dark:       #611C55;
 
   /* WRITINGS */
   --color-writings:         #FFE7CA;
   --color-writings-dim:     rgba(255, 231, 202, 0.25);
   --color-writings-bright:  #FFECD5;
-  --color-writings-dark:    #CCB9A2;
+  --color-writings-dark:    #998B79;
 
   /* ARCHIVE */
   --color-archive:          #6D3D15;
   --color-archive-dim:      rgba(109, 61, 21, 0.25);
   --color-archive-bright:   #8A6444;
-  --color-archive-dark:     #573111;
+  --color-archive-dark:     #41250D;
 
   /* FILM */
   --color-film:             #328C84;
   --color-film-dim:         rgba(50, 140, 132, 0.25);
   --color-film-bright:      #5BA39D;
-  --color-film-dark:        #28706A;
+  --color-film-dark:        #1E544F;
 
 
   /* ──────────────────────────────────────────────────────────

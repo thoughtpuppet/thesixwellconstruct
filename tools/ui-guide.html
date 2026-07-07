@@ -12,9 +12,9 @@
 /* ============================================================
    UI GUIDE — the six.well construct
    ------------------------------------------------------------
-   Self-contained reference. Values below are COPIED from
-   css/tokens.css — that file (and js/construct-nav.js) remain
-   the single source of truth. If tokens change, update both.
+   Token-backed reference. Fallback values below mirror css/tokens.css
+   so the guide renders immediately, then the tuner syncs from the live
+   tokens file when served through the local dev server.
    ------------------------------------------------------------
    Toolbar: "Edit" toggles contenteditable on the whole document
    so notes can be added inline. "Export PDF" opens the print
@@ -28,13 +28,13 @@
   --color-accent:     #FCB867;
   --color-accent-dim: rgba(252, 184, 103, 0.25);
 
-  /* mediums */
+  /* medium fallbacks */
   --color-tattooing: #6E0404;  --color-tattooing-dim: rgba(110,4,4,.25);
-  --color-art:       #0581C1;  --color-art-dim:       rgba(5,129,193,.25);
-  --color-merch:     #F7A226;  --color-merch-dim:     rgba(247,162,38,.25);
+  --color-art:       #0039BD;  --color-art-dim:       rgba(0,57,189,.25);
+  --color-merch:     #F08F15;  --color-merch-dim:     rgba(240,143,21,.25);
   --color-about:     #FCB867;  --color-about-dim:     rgba(252,184,103,.25);
-  --color-events:    #005d25;  --color-events-dim:    rgba(0,93,37,.25);
-  --color-music:     #A856A1;  --color-music-dim:     rgba(168,86,161,.25);
+  --color-events:    #005D25;  --color-events-dim:    rgba(0,93,37,.25);
+  --color-music:     #A22F8D;  --color-music-dim:     rgba(162,47,141,.25);
   --color-writings:  #FFE7CA;  --color-writings-dim:  rgba(255,231,202,.25);
   --color-archive:   #6D3D15;  --color-archive-dim:   rgba(109,61,21,.25);
   --color-film:      #328C84;  --color-film-dim:      rgba(50,140,132,.25);
@@ -55,6 +55,21 @@
 
   /* guide accent */
   --venture-color: var(--color-accent);
+}
+
+[data-medium="tattooing"] { --medium-color: var(--color-tattooing); --medium-dim: var(--color-tattooing-dim); }
+[data-medium="art"]       { --medium-color: var(--color-art); --medium-dim: var(--color-art-dim); }
+[data-medium="merch"]     { --medium-color: var(--color-merch); --medium-dim: var(--color-merch-dim); }
+[data-medium="about"]     { --medium-color: var(--color-about); --medium-dim: var(--color-about-dim); }
+[data-medium="events"]    { --medium-color: var(--color-events); --medium-dim: var(--color-events-dim); }
+[data-medium="music"]     { --medium-color: var(--color-music); --medium-dim: var(--color-music-dim); }
+[data-medium="writings"]  { --medium-color: var(--color-writings); --medium-dim: var(--color-writings-dim); }
+[data-medium="archive"]   { --medium-color: var(--color-archive); --medium-dim: var(--color-archive-dim); }
+[data-medium="film"]      { --medium-color: var(--color-film); --medium-dim: var(--color-film-dim); }
+
+.demo[data-medium],
+.media-card[data-medium] {
+  --venture-color: var(--medium-color);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -270,6 +285,8 @@ td:first-child { color: var(--color-body); }
 /* dot nav demo */
 .dotnav-demo { display: flex; gap: 30px; align-items: center; }
 .dotnav-demo .dot { width: 17px; height: 17px; border-radius: 50%; opacity: .22; transition: opacity .2s; cursor: pointer; }
+.dotnav-demo .dot[data-medium],
+.map-medium[data-medium] .dot { background: var(--medium-color); }
 .dotnav-demo .dot.current, .dotnav-demo .dot:hover { opacity: 1; }
 
 /* kicker demo levels */
@@ -388,7 +405,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <h1 class="doc-title">UI<br>Guide</h1>
     <p class="doc-sub">Everything needed to make edits to thesixwellconstruct without drifting from the system: colors, type, spacing, components, navigation, page anatomy, language, and known gotchas.</p>
     <div class="doc-meta">
-      <span>source of truth: css/tokens.css + js/construct-nav.js</span>
+      <span>source of truth: css/tokens.css</span>
       <span>last reviewed: June 2026</span>
       <span>export: toolbar → export pdf → enable background graphics</span>
     </div>
@@ -417,14 +434,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <h3>Base palette</h3>
     <div class="swatch-grid">
-      <div class="swatch"><div class="chip" style="background:#0e0e0e; border-bottom:1px solid var(--ring-faint)"></div>
-        <div class="info"><div class="name">Background</div><div class="hex">#0E0E0E</div><div class="token">--color-bg</div></div></div>
-      <div class="swatch"><div class="chip" style="background:#FFE7CA"></div>
-        <div class="info"><div class="name">Body ink</div><div class="hex">#FFE7CA</div><div class="token">--color-body</div></div></div>
-      <div class="swatch"><div class="chip" style="background:#FCB867"></div>
-        <div class="info"><div class="name">Global amber</div><div class="hex">#FCB867</div><div class="token">--color-accent</div></div></div>
-      <div class="swatch"><div class="chip" style="background:rgba(252,184,103,.25)"></div>
-        <div class="info"><div class="name">Amber dim</div><div class="hex">rgba(252,184,103,.25)</div><div class="token">--color-accent-dim</div></div></div>
+      <div class="swatch base-swatch" data-token="--color-bg"><div class="chip" style="border-bottom:1px solid var(--ring-faint)"></div>
+        <div class="info"><div class="name">Background</div><div class="hex"></div><div class="token">--color-bg</div></div></div>
+      <div class="swatch base-swatch" data-token="--color-body"><div class="chip"></div>
+        <div class="info"><div class="name">Body ink</div><div class="hex"></div><div class="token">--color-body</div></div></div>
+      <div class="swatch base-swatch" data-token="--color-accent"><div class="chip"></div>
+        <div class="info"><div class="name">Global amber</div><div class="hex"></div><div class="token">--color-accent</div></div></div>
+      <div class="swatch base-swatch" data-token="--color-accent-dim"><div class="chip"></div>
+        <div class="info"><div class="name">Amber dim</div><div class="hex"></div><div class="token">--color-accent-dim</div></div></div>
     </div>
 
     <div class="rule-note"><strong>Adjust these live:</strong> hit <strong>🎨 Edit colors</strong> in the toolbar (or the button below) to open the inline tuner — tweak any medium's signal color and the brighten/darken steps, watch the swatches above update, then copy the CSS or write it straight back into <code>tokens.css</code>. The editor is hidden when you export the PDF.</div>
@@ -592,14 +609,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <h3>Media card · <code>.media-card</code> (css/media.css)</h3>
     <p class="lead">The universal image card: 4/5 aspect, 5px faint border, hover darkens image + scales down 0.97 + border takes the medium color + overlay slides up. Wide variant <code>.card--wide</code> is 3/2 for sheets and landscapes. Grid: <code>auto-fill minmax(260px,1fr)</code>, 3px gap.</p>
-    <div class="demo" style="--venture-color:#6E0404;">
+    <div class="demo" data-medium="tattooing">
       <div class="media-grid-demo">
         <div class="media-card">
           <span class="card-image">image 4/5</span>
           <span class="card-badge">flash · available</span>
           <span class="card-overlay"><span class="card-title">Piece Title</span><span class="card-sub">sub · metadata</span></span>
         </div>
-        <div class="media-card card--wide" style="--venture-color:#0581C1;">
+        <div class="media-card card--wide" data-medium="art">
           <span class="card-image">.card--wide 3/2</span>
           <span class="card-overlay"><span class="card-title">Sheet Title</span><span class="card-sub">wide variant</span></span>
         </div>
@@ -616,20 +633,20 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <h3>Buttons (tattoos.css pattern)</h3>
     <p class="lead">Inter 700 · 11px · 0.14em tracking · uppercase · 48px min-height · square corners. Primary fills with the medium color and inverts text to background black; secondary is outlined and adopts the medium color on hover. Full-width at ≤640px.</p>
-    <div class="demo" style="--venture-color:#6E0404;">
+    <div class="demo" data-medium="tattooing">
       <a class="btn-primary" href="#components" onclick="return false">Primary action</a>&nbsp;&nbsp;
       <a class="btn-secondary" href="#components" onclick="return false">Secondary action</a>
     </div>
 
     <h3>Venture link · <code>.venture-link</code></h3>
     <p class="lead">Quiet text link with a 5px faint top border; hover fills the border with the medium color and lifts the text to full ink.</p>
-    <div class="demo" style="--venture-color:#0581C1;">
+    <div class="demo" data-medium="art">
       <a class="venture-link-demo" href="#components" onclick="return false">View the work</a>
       <a class="venture-link-demo" href="#components" onclick="return false">Inquire</a>
     </div>
 
     <h3>Kickers, pills, labels</h3>
-    <div class="demo" style="--venture-color:#005d25;">
+    <div class="demo" data-medium="events">
       <span style="display:block; color:var(--venture-color); font-family:var(--font-serif); font-size:10px; letter-spacing:.22em; text-transform:uppercase; margin-bottom:14px;">section kicker · serif 10px wide-tracked</span>
       <span class="meta-pill-demo">meta pill</span>
       <span class="meta-pill-demo">venture-dim top border</span>
@@ -640,7 +657,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <p class="lead">Sections separate with 5px <code>--ring-faint</code> bottom borders and clamp-padded vertical rhythm. Card grids (<code>.feature-grid</code>, <code>.record-grid</code> 3-up, <code>.path-grid</code> 4-up, <code>.status-grid</code> 2-up) share a 5px outer frame with 1px gaps; cards inside have 5px faint top borders and clamp(24–36px) padding. Card headings are Inter 900 18px uppercase in the medium color; card copy is muted 14px/1.75.</p>
 
     <h3>Process list / price cards (tattoos pattern)</h3>
-    <div class="demo" style="--venture-color:#6E0404;">
+    <div class="demo" data-medium="tattooing">
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint);">
         <div style="padding:20px; border-right:1px solid var(--ring-faint);">
           <span style="display:block; color:var(--venture-color); font-family:var(--font-display); font-weight:900; font-size:28px; letter-spacing:-0.04em; margin-bottom:8px;">01</span>
@@ -673,15 +690,15 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <h3>Dot nav (order is canonical)</h3>
     <div class="demo">
       <div class="dotnav-demo">
-        <span class="dot current" style="background:#6E0404" title="TATTOOING"></span>
-        <span class="dot" style="background:#0581C1" title="ART MAKING"></span>
-        <span class="dot" style="background:#F7A226" title="MERCH"></span>
-        <span class="dot" style="background:#FCB867" title="ABOUT"></span>
-        <span class="dot" style="background:#005d25" title="EVENTS"></span>
-        <span class="dot" style="background:#A856A1" title="MUSIC"></span>
-        <span class="dot" style="background:#FFE7CA" title="WRITINGS"></span>
-        <span class="dot" style="background:#6D3D15" title="ARCHIVE"></span>
-        <span class="dot" style="background:#328C84" title="FILM"></span>
+        <span class="dot current" data-medium="tattooing" title="TATTOOING"></span>
+        <span class="dot" data-medium="art" title="ART MAKING"></span>
+        <span class="dot" data-medium="merch" title="MERCH"></span>
+        <span class="dot" data-medium="about" title="ABOUT"></span>
+        <span class="dot" data-medium="events" title="EVENTS"></span>
+        <span class="dot" data-medium="music" title="MUSIC"></span>
+        <span class="dot" data-medium="writings" title="WRITINGS"></span>
+        <span class="dot" data-medium="archive" title="ARCHIVE"></span>
+        <span class="dot" data-medium="film" title="FILM"></span>
       </div>
       <p style="margin-top:14px; color:var(--text-dim); font-size:11px;">tattooing · art · merch · about · events · music · writings · archive · film — hover any dot</p>
     </div>
@@ -791,7 +808,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <h2>Site map</h2>
     <p class="lead">Nine mediums orbit the landing construct (an interactive canvas ring at <code>/</code>). Pathways are the routes inside each medium. Pages currently hidden from the public live in <code>.hidden-pages/</code> and 404 on the live site (managed via <code>/tools/page-visibility.html</code>).</p>
 
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#6E0404"></span><span class="label">Tattooing — Art.Pill Tattoo House</span><span class="url">/tattoos/</span></div>
+    <div class="map-medium" data-medium="tattooing"><div class="head"><span class="dot"></span><span class="label">Tattooing — Art.Pill Tattoo House</span><span class="url">/tattoos/</span></div>
       <ul>
         <li>Flash <code>/tattoos/flash/</code> — maze sheet, ap-* piece pages, claim form <code>/tattoos/flash/claim/</code></li>
         <li>Inquire <code>/tattoos/inquire/</code> — custom <code>/custom/</code>, consultation <code>/consultation/</code> (public booking + Square checkout + Zoom for virtual)</li>
@@ -800,18 +817,18 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         <li>Client path: submission-received → approved <code>/tattoos/approved/</code> → token booking <code>/booking/?token=…</code> → confirmed <code>/booking/confirmed/…</code></li>
         <li>Support: policies, day-of prep, location &amp; parking, portfolio</li>
       </ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#0581C1"></span><span class="label">Art making</span><span class="url">/art/</span></div>
+    <div class="map-medium" data-medium="art"><div class="head"><span class="dot"></span><span class="label">Art making</span><span class="url">/art/</span></div>
       <ul><li>Painting pages (lostmarbles, lust, sloth, homelandsecurity, paranoiafosteredtrauma, thefrustrationsofinnercharos…) · acquisition inquiry <code>/art/acquisitioninquiry.html</code></li></ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#F7A226"></span><span class="label">Merch</span><span class="url">/merch/</span></div>
+    <div class="map-medium" data-medium="merch"><div class="head"><span class="dot"></span><span class="label">Merch</span><span class="url">/merch/</span></div>
       <ul><li>Product pages (hoodie, puffer, print…) · Shopify Storefront via <code>/api/shop/*</code>, tagged <code>construct-merch</code></li></ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#FCB867"></span><span class="label">About</span><span class="url">/about/</span></div>
+    <div class="map-medium" data-medium="about"><div class="head"><span class="dot"></span><span class="label">About</span><span class="url">/about/</span></div>
       <ul><li>Construct-connections prototypes in progress (<code>about-next.html</code>, connection maps)</li></ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#005d25"></span><span class="label">Events</span><span class="url">/events/</span></div><ul><li>Currently hidden (<code>.hidden-pages/events/</code>)</li></ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#A856A1"></span><span class="label">Music</span><span class="url">/music/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#FFE7CA"></span><span class="label">Writings</span><span class="url">/writings/</span></div><ul><li>Long-form — uses <code>--leading-relaxed</code> (1.8)</li></ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#6D3D15"></span><span class="label">Archive</span><span class="url">/archive/</span></div>
+    <div class="map-medium" data-medium="events"><div class="head"><span class="dot"></span><span class="label">Events</span><span class="url">/events/</span></div><ul><li>Currently hidden (<code>.hidden-pages/events/</code>)</li></ul></div>
+    <div class="map-medium" data-medium="music"><div class="head"><span class="dot"></span><span class="label">Music</span><span class="url">/music/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
+    <div class="map-medium" data-medium="writings"><div class="head"><span class="dot"></span><span class="label">Writings</span><span class="url">/writings/</span></div><ul><li>Long-form — uses <code>--leading-relaxed</code> (1.8)</li></ul></div>
+    <div class="map-medium" data-medium="archive"><div class="head"><span class="dot"></span><span class="label">Archive</span><span class="url">/archive/</span></div>
       <ul><li>Generated from Obsidian vault via <code>node tools/build-archive.mjs</code> → <code>assets/archive/records.json</code> (only <code>archive_publish: true</code> + <code>visibility: public</code>)</li></ul></div>
-    <div class="map-medium"><div class="head"><span class="dot" style="background:#328C84"></span><span class="label">Film</span><span class="url">/film/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
+    <div class="map-medium" data-medium="film"><div class="head"><span class="dot"></span><span class="label">Film</span><span class="url">/film/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
 
     <h3>Non-public surfaces</h3>
     <table>
@@ -867,7 +884,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><td><code>data-venture</code> is legacy</td><td>Attribute and <code>--venture-color</code> keep the old name on purpose. Renaming breaks construct-nav, wayfinding, and Shopify tag mapping.</td></tr>
       <tr><td>Two <code>.media-grid</code> definitions</td><td><code>css/media.css</code> defines the card grid (auto-fill 260px); <code>css/venture-pages.css</code> also defines a 2-up <code>.media-grid</code> for media panels. Don't load both on one page without checking which wins.</td></tr>
       <tr><td>Hidden pages</td><td>Hiding/showing is done through <code>/tools/page-visibility.html</code>, which edits <code>_worker.js</code> and moves files to <code>.hidden-pages/</code>. Don't hand-move page files.</td></tr>
-      <tr><td>Token sync</td><td>Colors live in both <code>css/tokens.css</code> and the <code>VENTURES</code> array in <code>js/construct-nav.js</code> (and this guide). A color change must touch all of them.</td></tr>
+      <tr><td>Token sync</td><td><code>css/tokens.css</code> is the palette source. The guide, homepage canvas, and injected dot nav read those variables when served locally. Refresh open pages after saving; use a literal search only for older one-off hardcoded surfaces.</td></tr>
       <tr><td>Push policy</td><td>Never push. The user pushes manually. Work directly on main.</td></tr>
     </table>
   </section>
@@ -908,21 +925,24 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   "use strict";
 
   var MEDIUMS = [
-    {key:'tattooing', name:'Tattooing',  signal:'#6E0404', label:'TATTOOING'},
-    {key:'art',       name:'Art making', signal:'#0581C1', label:'ART MAKING'},
-    {key:'merch',     name:'Merch',      signal:'#F7A226', label:'MERCH'},
-    {key:'about',     name:'About',      signal:'#FCB867', label:'ABOUT'},
-    {key:'events',    name:'Events',     signal:'#005d25', label:'EVENTS'},
-    {key:'music',     name:'Music',      signal:'#A856A1', label:'MUSIC'},
-    {key:'writings',  name:'Writings',   signal:'#FFE7CA', label:'WRITINGS'},
-    {key:'archive',   name:'Archive',    signal:'#6D3D15', label:'ARCHIVE'},
-    {key:'film',      name:'Film',       signal:'#328C84', label:'FILM'},
+    {key:'tattooing', name:'Tattooing',  fallback:'#6E0404', label:'TATTOOING'},
+    {key:'art',       name:'Art making', fallback:'#0039BD', label:'ART MAKING'},
+    {key:'merch',     name:'Merch',      fallback:'#F08F15', label:'MERCH'},
+    {key:'about',     name:'About',      fallback:'#FCB867', label:'ABOUT'},
+    {key:'events',    name:'Events',     fallback:'#005D25', label:'EVENTS'},
+    {key:'music',     name:'Music',      fallback:'#A22F8D', label:'MUSIC'},
+    {key:'writings',  name:'Writings',   fallback:'#FFE7CA', label:'WRITINGS'},
+    {key:'archive',   name:'Archive',    fallback:'#6D3D15', label:'ARCHIVE'},
+    {key:'film',      name:'Film',       fallback:'#328C84', label:'FILM'},
   ];
-  var DEFAULTS = MEDIUMS.map(function(m){return m.signal;});
-  var state = MEDIUMS.map(function(m){return {signal:m.signal, bright:null, dark:null};});
+  var BASE_TOKENS = ['--color-bg','--color-body','--color-accent','--color-accent-dim'];
+  var DEFAULTS = MEDIUMS.map(function(m){return signalDefault(m);});
+  var state = MEDIUMS.map(function(m,i){return {signal:DEFAULTS[i], bright:null, dark:null};});
   var brightPct = 20, darkPct = 20, fileHandle = null;
 
   /* color math */
+  function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function setRootVar(name,value){ if(value){ document.documentElement.style.setProperty(name,value); } }
   function hx(n){ n=Math.max(0,Math.min(255,Math.round(n))); var s=n.toString(16); return s.length<2?'0'+s:s; }
   function parse(h){ h=h.replace('#',''); if(h.length===3){h=h.split('').map(function(c){return c+c;}).join('');}
     return {r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}; }
@@ -933,6 +953,28 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   function bright(i){ return state[i].bright || mixWhite(state[i].signal, brightPct); }
   function dark(i){ return state[i].dark || mixBlack(state[i].signal, darkPct); }
   function dim(i){ return rgba(state[i].signal, 0.25); }
+  function signalDefault(m){
+    var v=cssVar('--color-'+m.key);
+    return v && v.charAt(0)==='#' ? normHex(v) : m.fallback;
+  }
+  function applyStateToCssVars(){
+    MEDIUMS.forEach(function(m,i){
+      setRootVar('--color-'+m.key, state[i].signal.toUpperCase());
+      setRootVar('--color-'+m.key+'-dim', dim(i));
+      setRootVar('--color-'+m.key+'-bright', bright(i).toUpperCase());
+      setRootVar('--color-'+m.key+'-dark', dark(i).toUpperCase());
+    });
+  }
+  function syncBaseSwatches(){
+    document.querySelectorAll('.base-swatch[data-token]').forEach(function(sw){
+      var token=sw.dataset.token;
+      var value=cssVar(token);
+      var chip=sw.querySelector('.chip');
+      var hex=sw.querySelector('.hex');
+      if(chip){ chip.style.background=value; }
+      if(hex){ hex.textContent=value.replace(/\s+/g,' '); }
+    });
+  }
 
   var grid = document.getElementById('medium-swatch-grid');
   var list = document.getElementById('media-list');
@@ -986,6 +1028,8 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
   /* refresh visuals + output */
   function refresh(){
+    applyStateToCssVars();
+    syncBaseSwatches();
     MEDIUMS.forEach(function(m,i){
       var sig=state[i].signal, br=bright(i), dk=dark(i), dm=dim(i);
 
@@ -1036,6 +1080,10 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     status('Loading tokens.css…');
     fetch('/css/tokens.css',{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
       var n=0;
+      BASE_TOKENS.forEach(function(token){
+        var val=matchVar(txt,token);
+        if(val){ setRootVar(token,val); }
+      });
       MEDIUMS.forEach(function(m,i){
         var sig=matchVar(txt,'--color-'+m.key);
         var br=matchVar(txt,'--color-'+m.key+'-bright');
@@ -1081,7 +1129,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       var txt=await (await fileHandle.getFile()).text();
       if(txt.indexOf('--color-tattooing')===-1){ status('That isn\'t tokens.css — pick css/tokens.css.','err'); fileHandle=null; return; }
       var w=await fileHandle.createWritable(); await w.write(buildUpdated(txt)); await w.close();
-      status('Saved ✓  Wrote all 9 ramps into '+fileHandle.name+'.','ok');
+      status('Saved ✓  Wrote all 9 ramps into '+fileHandle.name+'. Refresh open site pages to reload tokens.css.','ok');
     }catch(e){ if(e.name==='AbortError'){status('Save cancelled.');return;} status('Save failed: '+e.message,'err'); }
   }
   function copyCSS(){

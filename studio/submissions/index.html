@@ -42,13 +42,13 @@
   .hub-body { display:grid; grid-template-columns:minmax(280px,1fr) minmax(260px,360px); gap:20px; align-items:start; }
   .hub-cal .day-button { aspect-ratio:1; }
   .day-button.has-appt { border-color:var(--accent); color:var(--accent); }
-  .day-button.has-event { background:rgba(168,86,161,0.28); border-color:#A856A1; color:#FFE7CA; }
-  .day-button.has-both { background:rgba(168,86,161,0.28); border-color:var(--accent); color:var(--accent); }
+  .day-button.has-event { background:rgba(162,47,141,0.28); border-color:#A22F8D; color:#FFE7CA; }
+  .day-button.has-both { background:rgba(162,47,141,0.28); border-color:var(--accent); color:var(--accent); }
   .hub-entry { width:100%; text-align:left; border:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:10px 12px; display:grid; gap:4px; cursor:pointer; }
   .hub-entry:hover { border-color:var(--accent); }
   .hub-entry .he-top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
   .hub-entry .he-kind { font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; }
-  .hub-entry.kind-event .he-kind { color:#A856A1; }
+  .hub-entry.kind-event .he-kind { color:#A22F8D; }
   .hub-entry.kind-appt .he-kind { color:var(--accent); }
   @media (max-width:900px) { .hub-body { grid-template-columns:1fr; } }
   h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
@@ -1408,7 +1408,7 @@
           </div>
           <div class="hub-legend">
             <span class="legend-item"><span class="legend-dot" style="background:var(--accent);border-color:var(--accent);"></span>Appointments</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#A856A1;border-color:#A856A1;"></span>Events</span>
+            <span class="legend-item"><span class="legend-dot" style="background:#A22F8D;border-color:#A22F8D;"></span>Events</span>
           </div>
         </div>
         <div class="hub-body">

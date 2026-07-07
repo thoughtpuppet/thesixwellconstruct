@@ -9,6 +9,14 @@ import {
 
 const CART_STORAGE_KEY = "sixwell-shopify-cart-id";
 
+function tokenColor(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+const MERCH_COLOR = tokenColor("--color-merch", "#F08F15");
+const ABOUT_COLOR = tokenColor("--color-about", "#FCB867");
+
 function normalizeKey(value) {
   return String(value || "")
     .trim()
@@ -489,7 +497,7 @@ export async function initMerchCatalogPage() {
   }
 
   function setHeroState(key) {
-    const color = key === "all" ? "#F7A226" : SOURCES[key]?.color || "#F7A226";
+    const color = key === "all" ? MERCH_COLOR : SOURCES[key]?.color || MERCH_COLOR;
     document.documentElement.style.setProperty("--title-color", color);
   }
 
@@ -577,7 +585,7 @@ export async function initMerchCatalogPage() {
 
     grid.innerHTML = visibleProducts
       .map((product) => {
-        const source = SOURCES[product.sourceVenture] || { color: "#FCB867", label: product.sourceLabel };
+        const source = SOURCES[product.sourceVenture] || { color: ABOUT_COLOR, label: product.sourceLabel };
         const optionValues = resolveOptionValues(product);
         const selection = selections[product.handle] || {};
         const selectedSize = selection.size || getSelection(product.handle, "size", optionValues.size);
@@ -720,7 +728,7 @@ export async function initMerchProductPage(options) {
   const product = await getProductByHandle(options.handle);
   if (!product) throw new Error(`No Shopify product found for handle ${options.handle}.`);
 
-  const source = SOURCES[product.sourceVenture] || { color: "#FCB867", label: product.sourceLabel };
+  const source = SOURCES[product.sourceVenture] || { color: ABOUT_COLOR, label: product.sourceLabel };
   const optionValues = resolveOptionValues(product);
   const selection = {
     size: optionValues.size.length === 1 ? optionValues.size[0] : null,

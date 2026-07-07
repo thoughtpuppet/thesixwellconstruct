@@ -13,7 +13,7 @@
   :root {
     --bg:#0e0e0e; --signal:#6E0404; --ring:#6D3D15;
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
-    --accent:#FCB867; --art:#0581C1; --text:#FFE7CA;
+    --accent:#FCB867; --art:#0071EB; --text:#FFE7CA;
     --text-mute:rgba(255,231,202,0.6); --text-dim:rgba(255,231,202,0.35); --text-ghost:rgba(255,231,202,0.12);
     --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:40px;--s7:64px;--s8:96px;
     --sans:'Inter',Arial,sans-serif;
@@ -28,8 +28,8 @@
   .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");}
 
   header.top{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:flex-end;padding:var(--s5) var(--s6);min-height:72px;}
-  .nav-inquire{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--art);border:5px solid rgba(5,129,193,0.4);padding:8px 16px;transition:background var(--t-fast),border-color var(--t-fast);}
-  .nav-inquire:hover{background:rgba(5,129,193,0.06);border-color:var(--art);}
+  .nav-inquire{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--art);border:5px solid rgba(0,113,235,0.4);padding:8px 16px;transition:background var(--t-fast),border-color var(--t-fast);}
+  .nav-inquire:hover{background:rgba(0,113,235,0.06);border-color:var(--art);}
 
   main{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:var(--s8) var(--s6) var(--s7);}
   .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
@@ -66,7 +66,7 @@
   .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
   .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
-  .submit-btn:hover{background:rgba(5,129,193,0.06);border-color:var(--art);color:var(--art);}
+  .submit-btn:hover{background:rgba(0,113,235,0.06);border-color:var(--art);color:var(--art);}
   .submit-btn:disabled{opacity:0.5;cursor:not-allowed;}
   .form-status{font-size:12px;line-height:1.6;color:var(--text-dim);}
   .payment-holding{padding:var(--s6) 0;}
@@ -215,7 +215,7 @@
             <div class="submit-row">
               <button class="submit-btn" type="submit" id="submitBtn">Continue to Square</button>
             </div>
-            <p class="form-status" id="formError" style="display:none;color:rgba(5,129,193,0.95);margin-top:14px;"></p>
+            <p class="form-status" id="formError" style="display:none;color:rgba(0,113,235,0.95);margin-top:14px;"></p>
           </form>
         </div>
 
