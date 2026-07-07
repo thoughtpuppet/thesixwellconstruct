@@ -24,11 +24,7 @@
   button,input,textarea,select { font:inherit; }
   .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
-  .breadcrumb { display:flex; align-items:center; gap:10px; margin-bottom:var(--s6); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
-  .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
-  .breadcrumb-link:hover { color:var(--accent); }
-  .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
-  main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
+main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .layout { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(380px,560px); gap:72px; align-items:start; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(50px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
@@ -100,6 +96,8 @@
   <header class="top"></header>
   <main>
     <nav class="breadcrumb" aria-label="breadcrumb">
+      <a href="/home/">construct</a>
+      <span class="breadcrumb-sep">/</span>
       <a class="breadcrumb-link" href="/tattoos/flash/">Flash</a>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">Claim</span>
@@ -170,7 +168,7 @@
   </main>
   <footer class="bottom">
     <a href="/tattoos/flash/">&larr; back to flash</a>
-    <a href="/">the six.well construct</a>
+    <a href="/home/">the six.well construct</a>
   </footer>
   <script>
     const els = {

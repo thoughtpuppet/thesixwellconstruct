@@ -71,7 +71,8 @@ const HIDDEN_PUBLIC_PATHS = [
 ];
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
-const PUBLIC_HOME_PATHS = new Set(["/", "/index.html"]);
+const PUBLIC_FRONT_DOOR_PATHS = new Set(["/", "/index.html"]);
+const PUBLIC_HOME_PATHS = new Set(["/home", "/home/", "/home/index.html"]);
 const PUBLIC_ERROR_PATHS = new Set(["/404", "/404.html"]);
 const PUBLIC_ARCHIVE_PATHS = new Set([
   "/archive",
@@ -139,6 +140,10 @@ function assetPathForRequest(pathname) {
   if (pathname.startsWith("/art/") && !hasFileExtension(pathname)) return `${pathname}.html`;
   if (!hasFileExtension(pathname)) return `${pathname}/index.html`;
   return pathname;
+}
+
+function isFrontDoorPath(pathname) {
+  return PUBLIC_FRONT_DOOR_PATHS.has(pathname);
 }
 
 function isHomePath(pathname) {
@@ -657,8 +662,12 @@ export default {
       return handleSubmissionsApi(request, env);
     }
 
+    if (isFrontDoorPath(url.pathname)) {
+      return env.ASSETS.fetch(assetRequest(request, "/entry-room/index.html"));
+    }
+
     if (isHomePath(url.pathname)) {
-      return env.ASSETS.fetch(assetRequest(request, "/index.html"));
+      return env.ASSETS.fetch(assetRequest(request, "/home/index.html"));
     }
 
     if (

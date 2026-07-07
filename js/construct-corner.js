@@ -15,7 +15,7 @@
    The wordmark sits inline to the right, vertically centered
    on the ring's centerline via flexbox.
 
-   Clicking anywhere on the lockup fades to / via transition.js.
+   Clicking anywhere on the lockup fades to /home/ via transition.js.
 
    HOW TO USE:
    Add after transition.js, before </body> on every medium page:
@@ -247,9 +247,9 @@
   ────────────────────────────────────────────────────────── */
   wrapper.addEventListener('click', function() {
     if (typeof window._constructFade === 'function') {
-      window._constructFade('/');
+      window._constructFade('/home/');
     } else {
-      window.location.href = '/';
+      window.location.href = '/home/';
     }
   });
 

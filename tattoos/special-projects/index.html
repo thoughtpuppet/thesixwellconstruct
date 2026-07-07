@@ -46,14 +46,7 @@
     display:flex; align-items:center; justify-content:flex-end;
     padding:var(--s5) var(--s6); min-height:72px;
   }
-  .breadcrumb {
-    display:flex; align-items:center; gap:10px;
-    font-family:var(--serif); font-size:11px; letter-spacing:0.18em; text-transform:uppercase;
-  }
-  .breadcrumb-link { color:var(--text-mute); transition:color var(--t-fast); }
-  .breadcrumb-link:hover { color:var(--accent); }
-  .breadcrumb-sep,.breadcrumb-current { color:var(--text-dim); }
-  .nav-inquire { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); border:5px solid rgba(110,4,4,0.4); padding:8px 16px; transition:background var(--t-fast), border-color var(--t-fast); }
+.nav-inquire { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); border:5px solid rgba(110,4,4,0.4); padding:8px 16px; transition:background var(--t-fast), border-color var(--t-fast); }
   .nav-inquire:hover { background:rgba(110,4,4,0.06); border-color:var(--signal); }
   main {
     position:relative; z-index:2;
@@ -247,18 +240,7 @@
   }
   @media (max-width:768px) {
     header.top { padding:var(--s4) var(--s5); }
-    .breadcrumb {
-      max-width:100%;
-      overflow:hidden;
-      justify-content:flex-end;
-      font-size:10px;
-    }
-    .breadcrumb-link,.breadcrumb-current {
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
-    main { padding:var(--s6) var(--s5); }
+main { padding:var(--s6) var(--s5); }
     .intro { margin-bottom:48px; }
     .page-title {
       font-size:clamp(42px,14vw,58px);
@@ -363,7 +345,7 @@
   </main>
   <footer class="bottom">
     <a href="/tattoos/">&larr; back to Art.Pill</a>
-    <a href="/">the six.well construct</a>
+    <a href="/home/">the six.well construct</a>
   </footer>
   <script>
     var projects = {

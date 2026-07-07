@@ -124,19 +124,7 @@ statement:    "placeholder — replace with real statement text"
     .cart-label   { font-size: 8px;  letter-spacing: 0.10em; }
     .cart-count   { font-size: 8px;  min-width: 8px; }
   }
-  .breadcrumb {
-    position:relative; z-index:2;
-    display:flex; align-items:center; gap:var(--s3);
-    padding:0 var(--s6) var(--s4);
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-  }
-  .breadcrumb a { color:var(--text-dim); transition:color var(--t-fast); }
-  .breadcrumb a:hover { color:var(--text-mute); }
-  .breadcrumb-sep { color:var(--text-ghost); }
-  .breadcrumb-current { color:var(--accent-hot); opacity:0.8; }
-
-  .split {
+.split {
     display:grid; grid-template-columns:1fr 1fr;
     min-height:calc(100vh - 116px);
   }
@@ -273,8 +261,7 @@ statement:    "placeholder — replace with real statement text"
     .split-content { padding:var(--s6) var(--s5) var(--s7); }
     footer.bottom { grid-column:1; }
     header.top { padding:var(--s4) var(--s5); }
-    .breadcrumb { padding:0 var(--s5) var(--s3); font-size:10px; overflow:hidden; }
-  }
+}
 @media (max-width: 700px) {
   header.top {
     position: sticky;
@@ -312,7 +299,7 @@ statement:    "placeholder — replace with real statement text"
   </header>
 
   <nav class="breadcrumb" aria-label="breadcrumb">
-    <a href="/">construct</a>
+    <a href="/home/">construct</a>
     <span class="breadcrumb-sep">/</span>
     <a href="/art/">art making</a>
     <span class="breadcrumb-sep">/</span>

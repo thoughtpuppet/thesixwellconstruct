@@ -274,13 +274,14 @@ td:first-child { color: var(--color-body); }
   text-transform: uppercase; padding-top: 4px;
 }
 
-/* breadcrumb — copied from construct-wayfinding.js */
-.crumb-demo { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-  font-family: var(--font-display); font-size: 10px; font-weight: 800;
-  letter-spacing: .16em; text-transform: uppercase; color: var(--text-dim); }
-.crumb-demo a { color: rgba(255,231,202,.58); text-decoration: none; }
-.crumb-demo a:hover { color: var(--color-accent); }
-.crumb-demo .sep { color: rgba(255,231,202,.28); }
+/* breadcrumb - shared style lives in css/site-typography.css */
+.crumb-demo { display: flex; align-items: center; gap: 12px;
+  font-family: var(--font-serif); font-size: 11px; font-weight: 400;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--text-dim); }
+.crumb-demo a { color: var(--text-dim); text-decoration: none; transition: color .18s cubic-bezier(.2,0,.2,1); }
+.crumb-demo a:hover { color: var(--text-muted); }
+.crumb-demo .sep { color: var(--text-ghost); }
+.crumb-demo .current { color: var(--venture-color); opacity: .8; }
 
 /* dot nav demo */
 .dotnav-demo { display: flex; gap: 30px; align-items: center; }
@@ -558,7 +559,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <div class="ink-row"><div class="spec">--text · 1.0</div><div style="color:var(--text)">Full ink — titles, primary copy</div><div class="spec">#FFE7CA</div></div>
     <div class="ink-row"><div class="spec">--text-muted · .66</div><div style="color:var(--text-muted)">Muted — section copy, descriptions, notes</div><div class="spec">rgba(255,231,202,.66)</div></div>
-    <div class="ink-row"><div class="spec">--text-dim · .38</div><div style="color:var(--text-dim)">Dim — metadata, footers, breadcrumb current page</div><div class="spec">rgba(255,231,202,.38)</div></div>
+    <div class="ink-row"><div class="spec">--text-dim · .38</div><div style="color:var(--text-dim)">Dim — metadata, footers, breadcrumb ancestor links</div><div class="spec">rgba(255,231,202,.38)</div></div>
     <div class="ink-row"><div class="spec">--text-ghost · .16</div><div style="color:var(--text-ghost)">Ghost — empty states, placeholders</div><div class="spec">rgba(255,231,202,.16)</div></div>
     <div class="ink-row"><div class="spec">--ring-soft · .4</div><div><span style="display:inline-block; width:120px; border-top:1px solid var(--ring-soft);"></span> stronger borders, button outlines</div><div class="spec">rgba(109,61,21,.4)</div></div>
     <div class="ink-row"><div class="spec">--ring-faint · .18</div><div><span style="display:inline-block; width:120px; border-top:5px solid var(--ring-faint);"></span> the signature 5px frame on grids, heroes, sections</div><div class="spec">rgba(109,61,21,.18)</div></div>
@@ -597,7 +598,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><th>Width</th><th>What changes</th></tr>
       <tr><td>≤ 1080px</td><td>Heroes, feature grids, cta panels collapse to single column (<code>minmax(0,1fr)</code>); record/path grids go 2-up; process list stacks</td></tr>
       <tr><td>≤ 720px</td><td>Venture shell padding tightens; hero titles re-clamp; record/path/status grids go 1-up; timeline + footer stack</td></tr>
-      <tr><td>≤ 700px</td><td>Breadcrumb/wayfinding footer shrink to 9px and stack; mobile.css guards activate</td></tr>
+      <tr><td>≤ 900px</td><td>Breadcrumb padding follows the Lost Marbles detail-page pattern; mobile.css only expands tap targets</td></tr>
       <tr><td>≤ 640px</td><td>Media grid forces 2-up <code>repeat(2, minmax(0,1fr))</code>; header shell grows to 110px; dot nav drops to 92px; buttons go full-width</td></tr>
       <tr><td>≤ 640px</td><td>Source/medium labels should become solid color badges or keep color in a filled chip; text must use contrast-safe ink, not low-opacity accent text</td></tr>
     </table>
@@ -687,9 +688,9 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <table>
       <tr><th>Piece</th><th>Script</th><th>What it renders</th></tr>
       <tr><td>Fade overlay</td><td><code>js/transition.js</code></td><td><code>#construct-fade</code> — 500ms fade-to-black between pages; must load first (sets <code>window._constructFade</code>)</td></tr>
-      <tr><td>Corner lockup</td><td><code>js/construct-corner.js</code></td><td>Top-left ring (#6D3D15 annulus) + 6 orbiting amber dots + "the six.well construct" wordmark (Inter 900, 19px, −0.05em, #FCB867 at .82). Click returns home. Fades in after 800ms.</td></tr>
+      <tr><td>Corner lockup</td><td><code>js/construct-corner.js</code></td><td>Top-left ring (#6D3D15 annulus) + 6 orbiting amber dots + "the six.well construct" wordmark (Inter 900, 19px, −0.05em, #FCB867 at .82). Click returns to <code>/home/</code>. Fades in after 800ms.</td></tr>
       <tr><td>Medium dot nav</td><td><code>js/construct-nav.js</code></td><td>9 colored 17px dots, top-center, 30px gap. Current medium full opacity, others at .22. Hover shows a 9px Inter 700 label in the medium color.</td></tr>
-      <tr><td>Wayfinding</td><td><code>js/construct-wayfinding.js</code></td><td>Breadcrumb at top of <code>&lt;main&gt;</code> + normalized footer with "Return to construct" / "Back to [medium]" links</td></tr>
+      <tr><td>Wayfinding</td><td><code>js/construct-wayfinding.js</code></td><td>Breadcrumb at top of <code>&lt;main&gt;</code> + normalized footer with "Return to construct" / "Back to [medium]" links; construct/home always points to <code>/home/</code></td></tr>
     </table>
 
     <h3>Dot nav (order is canonical)</h3>
@@ -713,10 +714,10 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <nav class="crumb-demo">
         <a href="#navigation" onclick="return false">Construct</a><span class="sep">/</span>
         <a href="#navigation" onclick="return false">Art.Pill Tattoo House</a><span class="sep">/</span>
-        <span>Flash</span>
+        <span class="current">Flash</span>
       </nav>
     </div>
-    <p class="lead">Inter 800 · 10px · 0.16em tracking · uppercase. Links at .58 ink, current page at .38, separators at .28; hover goes amber. Auto-built from the URL path — segment labels come from <code>SECTION_LABELS</code> in construct-wayfinding.js; <code>ap-*</code> slugs render uppercase.</p>
+    <p class="lead">Georgia · 11px · 0.18em tracking · uppercase. This is shared by hardcoded <code>.breadcrumb</code> rows and generated <code>.construct-breadcrumb</code> rows in <code>css/site-typography.css</code>. Links are dim, separators are ghosted, and the current page uses the local medium accent (<code>--accent-hot</code>, <code>--src-color</code>, <code>--venture</code>, <code>--venture-color</code>, or <code>--signal</code>). The first breadcrumb item is always <strong>construct</strong> and always points to <code>/home/</code>; <code>/</code> is reserved for the entry room.</p>
 
     <h3>Header band</h3>
     <p class="lead">A fixed 88px frosted band (<code>rgba(14,14,14,.85)</code> + 8px blur + 5px faint bottom border) activates behind the lockup and dots on scroll (<code>#construct-header-shell</code> / <code>.construct-header-active</code>). At ≤640px it grows to 110px and the dot row drops to 92px to clear the wrapped lockup.</p>
@@ -776,13 +777,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   &lt;link rel="stylesheet" href="/css/transitions.css"&gt;
   &lt;link rel="stylesheet" href="/css/media.css"&gt;        <span class="c">&lt;!-- if the page has card grids --&gt;</span>
   &lt;link rel="stylesheet" href="/css/mobile.css"&gt;       <span class="c">&lt;!-- mobile guards --&gt;</span>
+  &lt;link rel="stylesheet" href="/css/site-typography.css"&gt; <span class="c">&lt;!-- global type + breadcrumb style --&gt;</span>
   &lt;style&gt;
     :root { <span class="k">--venture-color</span>: var(--color-tattooing); } <span class="c">/* THIS medium's color */</span>
   &lt;/style&gt;
 &lt;/head&gt;
 &lt;body <span class="k">data-venture="tattooing"</span>&gt;   <span class="c">&lt;!-- legacy attr name — required --&gt;</span>
   &lt;main&gt;
-    <span class="c">&lt;!-- breadcrumb is injected here automatically --&gt;</span>
+    <span class="c">&lt;!-- breadcrumb is injected automatically, or hardcode construct / medium / page when needed --&gt;</span>
     ...
   &lt;/main&gt;
   <span class="c">&lt;!-- footer normalized/injected by wayfinding --&gt;</span>
@@ -811,7 +813,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   <section class="guide" id="sitemap">
     <span class="kicker">09 · site map</span>
     <h2>Site map</h2>
-    <p class="lead">Nine mediums orbit the landing construct (an interactive canvas ring at <code>/</code>). Pathways are the routes inside each medium. Pages currently hidden from the public live in <code>.hidden-pages/</code> and 404 on the live site (managed via <code>/tools/page-visibility.html</code>).</p>
+    <p class="lead">Nine mediums orbit the construct home (an interactive canvas ring at <code>/home/</code>). The entry room lives at <code>/</code> as the public threshold. Pathways are the routes inside each medium. Pages currently hidden from the public live in <code>.hidden-pages/</code> and 404 on the live site (managed via <code>/tools/page-visibility.html</code>).</p>
 
     <div class="map-medium" data-medium="tattooing"><div class="head"><span class="dot"></span><span class="label">Tattooing — Art.Pill Tattoo House</span><span class="url">/tattoos/</span></div>
       <ul>

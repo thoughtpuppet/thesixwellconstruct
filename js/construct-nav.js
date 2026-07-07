@@ -827,9 +827,9 @@
 
   function goHomeFromWordmark() {
     if (typeof window._constructFade === 'function') {
-      window._constructFade('/');
+      window._constructFade('/home/');
     } else {
-      window.location.href = '/';
+      window.location.href = '/home/';
     }
   }
 

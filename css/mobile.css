@@ -486,14 +486,6 @@ select option:checked {
     align-items: center;
   }
 
-  /* ── Breadcrumb readability ───────────────────────────── */
-  .breadcrumb {
-    font-size: 10px !important;
-    letter-spacing: 0.16em !important;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
   /* ── Tap target expansion ─────────────────────────────────
      Visuals stay small; the hit area grows via padding (links)
      or an invisible pseudo-element halo (nav dots). */

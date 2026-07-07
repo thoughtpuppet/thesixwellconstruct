@@ -50,24 +50,24 @@
   --color-art:              #0039BD;
   --color-art-dim:          rgba(0, 57, 189, 0.25);
   --color-art-bright:       #0F72DB;
-  --color-art-dark:         #002271;
+  --color-art-dark:         #002884;
 
   /* MERCH */
   --color-merch:            #F08000;
   --color-merch-dim:        rgba(240, 128, 0, 0.25);
-  --color-merch-bright:     #FFB514;
-  --color-merch-dark:       #A55C03;
+  --color-merch-bright:     #FBA613;
+  --color-merch-dark:       #A85A00;
 
   /* ABOUT */
-  --color-about:            #FCB867;
-  --color-about-dim:        rgba(252, 184, 103, 0.25);
-  --color-about-bright:     #FDC685;
+  --color-about:            #FCB467;
+  --color-about-dim:        rgba(252, 180, 103, 0.25);
+  --color-about-bright:     #FDC385;
   --color-about-dark:       #C17D2F;
 
   /* EVENTS */
   --color-events:           #005D25;
   --color-events-dim:       rgba(0, 93, 37, 0.25);
-  --color-events-bright:    #337D51;
+  --color-events-bright:    #397F34;
   --color-events-dark:      #003816;
 
   /* MUSIC */

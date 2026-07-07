@@ -42,6 +42,7 @@
   ────────────────────────────────────────────────────────── */
 
   var overlay = document.getElementById('construct-fade');
+  var pendingNavigationTimer = null;
 
   if (!overlay) {
     /* Fallback: create if the inline script didn't run */
@@ -50,13 +51,48 @@
     document.body.appendChild(overlay);
   }
 
+  function clearPendingNavigation() {
+    if (!pendingNavigationTimer) return;
+    clearTimeout(pendingNavigationTimer);
+    pendingNavigationTimer = null;
+  }
+
+  function clearInlineOverlayState() {
+    overlay.style.opacity = '';
+    overlay.style.pointerEvents = '';
+  }
+
+  function showOverlay() {
+    clearInlineOverlayState();
+    overlay.style.transition = '';
+    overlay.classList.remove('is-hidden');
+    overlay.classList.add('is-visible');
+  }
+
+  function hideOverlay(immediate) {
+    clearInlineOverlayState();
+
+    if (immediate) {
+      var previousTransition = overlay.style.transition;
+      overlay.style.transition = 'none';
+      overlay.classList.remove('is-visible');
+      overlay.classList.add('is-hidden');
+      overlay.offsetHeight;
+      requestAnimationFrame(function() {
+        overlay.style.transition = previousTransition;
+      });
+      return;
+    }
+
+    overlay.style.transition = '';
+    overlay.classList.remove('is-visible');
+    overlay.classList.add('is-hidden');
+  }
+
   /* Ensure the overlay is fully covering while page loads.
-     Also clear any inline pointer-events set by the early
-     script so CSS classes can control it without being
-     overridden by inline style specificity. */
-  overlay.style.pointerEvents = '';
-  overlay.classList.remove('is-hidden');
-  overlay.classList.add('is-visible');
+     Also clear inline state set by early page scripts so CSS
+     classes can control it without specificity fights. */
+  showOverlay();
 
 
   /* ── PAGE ENTRANCE ────────────────────────────────────────
@@ -77,8 +113,7 @@
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
 
-        overlay.classList.remove('is-visible');
-        overlay.classList.add('is-hidden');
+        hideOverlay(false);
 
         /* After fade completes, trigger entrance animations */
         setTimeout(function() {
@@ -134,6 +169,16 @@
     /* DOM already parsed — run immediately */
     runEntrance();
   }
+
+  window.addEventListener('pageshow', function(e) {
+    if (!e.persisted) return;
+    clearPendingNavigation();
+    hideOverlay(true);
+    document.body.classList.add('entrance-active');
+    fitHeroTitles();
+  });
+
+  window.addEventListener('pagehide', clearPendingNavigation);
 
 
   /* ── LINK INTERCEPTION ────────────────────────────────────
@@ -215,18 +260,19 @@
   function fadeOutThenNavigate(href) {
 
     // Block further clicks during transition
-    overlay.classList.remove('is-hidden');
-    overlay.classList.add('is-visible');
+    clearPendingNavigation();
+    showOverlay();
 
     // Navigate after the fade completes
-    setTimeout(function() {
+    pendingNavigationTimer = setTimeout(function() {
+      pendingNavigationTimer = null;
       window.location.href = href;
     }, FADE_DURATION_MS);
 
   }
 
   /* ── EXPOSE NAVIGATION FOR EXTERNAL USE ──────────────────
-     construct-corner.js calls window._constructFade('/')
+     construct-corner.js calls window._constructFade('/home/')
      to trigger the shared fade before navigating home.
      Exposed here so both scripts share one fade system.
   ────────────────────────────────────────────────────────── */

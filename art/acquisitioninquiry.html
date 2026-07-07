@@ -139,20 +139,6 @@
   }
 
   /* ============================================================
-     BREADCRUMB
-  ============================================================ */
-  .breadcrumb {
-    display:flex; align-items:center; gap:var(--s3);
-    margin-bottom:var(--s7);
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-  }
-  .breadcrumb a { color:var(--text-dim); transition:color var(--t-fast); }
-  .breadcrumb a:hover { color:var(--text-mute); }
-  .breadcrumb-sep { color:var(--text-ghost); }
-  .breadcrumb-current { color:var(--src-color); opacity:0.8; }
-
-  /* ============================================================
      PAGE TITLE
   ============================================================ */
   .page-head {
@@ -444,10 +430,10 @@
   <main>
 
     <!-- BREADCRUMB -->
-<nav class="breadcrumb" aria-label="breadcrumb">
-      <a href="../../index.html">construct</a>
+    <nav class="breadcrumb" aria-label="breadcrumb">
+      <a href="/home/">construct</a>
       <span class="breadcrumb-sep">/</span>
-      <a href="index.html">art</a>
+      <a href="/art/">art</a>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">acquisition inquiry</span>
     </nav>
@@ -656,7 +642,7 @@
   <!-- FOOTER -->
   <footer class="bottom">
     <p>&copy; the six.well construct</p>
-    <a href="../../index.html">return to construct</a>
+        <a href="/home/">return to construct</a>
   </footer>
 
   <script>
@@ -812,6 +798,3 @@
 
 </body>
 </html>
-
-
-

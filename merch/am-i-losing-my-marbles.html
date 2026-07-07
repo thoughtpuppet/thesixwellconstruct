@@ -119,22 +119,6 @@
   }
   .wordmark:hover { opacity:1; }
 
-  /* breadcrumb — "merch." in amber, links back */
-  .breadcrumb {
-    position:relative; z-index:2;
-    display:flex; align-items:center; gap:var(--s3);
-    padding:0 var(--s6) var(--s4);
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-  }
-  .breadcrumb-link {
-    color:var(--text-mute);
-    transition:color var(--t-fast);
-  }
-  .breadcrumb-link:hover { color:var(--accent); }
-  .breadcrumb-sep { color:var(--text-dim); }
-  .breadcrumb-current { color:var(--text-dim); }
-
   /* cart toggle */
   .cart-toggle {
     display: flex; align-items: center; gap: var(--s3);
@@ -562,8 +546,7 @@
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     .header-right { gap:var(--s4); }
-    .breadcrumb { padding:0 var(--s4) var(--s3); font-size:10px; overflow:hidden; }
-    .painting-col { height:80vw; }
+.painting-col { height:80vw; }
     .product-col { padding:var(--s5) var(--s4) var(--s6); }
     .source-tag { gap:10px; }
     .source-dot { width:7px; height:7px; }
@@ -605,6 +588,8 @@
   </header>
 
   <nav class="breadcrumb" aria-label="breadcrumb">
+    <a href="/home/">construct</a>
+    <span class="breadcrumb-sep">/</span>
     <a class="breadcrumb-link" href="/merch">merch</a>
     <span class="breadcrumb-sep">/</span>
     <span class="breadcrumb-current">painting</span>
@@ -763,4 +748,3 @@
 
 </body>
 </html>
-

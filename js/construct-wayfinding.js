@@ -60,14 +60,10 @@
     var style = document.createElement('style');
     style.id = 'construct-wayfinding-style';
     style.textContent = [
-      '.construct-breadcrumb{position:relative;z-index:3;display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 32px;font-family:Inter,Arial,sans-serif;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,231,202,.38)}',
-      '.construct-breadcrumb a{color:rgba(255,231,202,.58);text-decoration:none;transition:color .18s cubic-bezier(.2,0,.2,1)}',
-      '.construct-breadcrumb a:hover,.construct-breadcrumb a:focus-visible{color:#FCB867;outline:none}',
-      '.construct-breadcrumb span{color:rgba(255,231,202,.28)}',
       '.construct-wayfinding-footer{position:relative;z-index:3;display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px;margin:56px auto 0;padding:28px 0 0;border-top:5px solid rgba(109,61,21,.18);font-family:Inter,Arial,sans-serif;font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,231,202,.42)}',
       '.construct-wayfinding-footer a{color:rgba(255,231,202,.62);text-decoration:none;transition:color .18s cubic-bezier(.2,0,.2,1)}',
       '.construct-wayfinding-footer a:hover,.construct-wayfinding-footer a:focus-visible{color:#FCB867;outline:none}',
-      '@media(max-width:700px){.construct-breadcrumb,.construct-wayfinding-footer{gap:10px;font-size:9px}.construct-wayfinding-footer{flex-direction:column;align-items:flex-start}}',
+      '@media(max-width:700px){.construct-wayfinding-footer{gap:10px;font-size:9px;flex-direction:column;align-items:flex-start}}',
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -82,7 +78,7 @@
 
   function breadcrumbItems(medium) {
     var parts = location.pathname.split('/').filter(Boolean);
-    var items = [{ label: 'Construct', url: '/' }];
+    var items = [{ label: 'Construct', url: '/home/' }];
     if (medium) items.push({ label: medium.label, url: medium.url });
 
     var mediumRoot = medium ? medium.url.replace(/^\/|\/$/g, '') : '';
@@ -115,6 +111,7 @@
       if (index > 0) {
         var sep = document.createElement('span');
         sep.textContent = '/';
+        sep.className = 'construct-breadcrumb-sep';
         nav.appendChild(sep);
       }
       if (item.url && index < items.length - 1) {
@@ -124,6 +121,7 @@
         nav.appendChild(link);
       } else {
         var current = document.createElement('span');
+        current.className = 'construct-breadcrumb-current';
         current.textContent = item.label;
         nav.appendChild(current);
       }
@@ -150,6 +148,9 @@
       var text = (link.textContent || '').toLowerCase();
       return href === '/' ||
         href === '/index.html' ||
+        href === '/home' ||
+        href === '/home/' ||
+        href === '/home/index.html' ||
         /(^|\/|\.\.\/)index\.html$/i.test(href) ||
         text.indexOf('construct') !== -1;
     });
@@ -159,7 +160,7 @@
         link.remove();
         return;
       }
-      link.setAttribute('href', '/');
+      link.setAttribute('href', '/home/');
       link.textContent = 'Return to construct';
     });
 
@@ -170,9 +171,9 @@
       footer.appendChild(mediumLink);
     }
 
-    if (!footer.querySelector('a[href="/"], a[href="/index.html"]')) {
+    if (!footer.querySelector('a[href="/home/"], a[href="/home"], a[href="/home/index.html"]')) {
       var constructLink = document.createElement('a');
-      constructLink.href = '/';
+      constructLink.href = '/home/';
       constructLink.textContent = 'Return to construct';
       footer.appendChild(constructLink);
     }

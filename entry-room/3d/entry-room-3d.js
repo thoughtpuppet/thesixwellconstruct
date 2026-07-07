@@ -549,6 +549,7 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
       const phase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
       const zone = shapeStream.zones[0];
       const target = zone ? shapeStreamActiveLandingTarget(zone) : null;
+      const pressureInfo = zone ? shapeStreamLandingPressureInfo(0, target) : null;
       return {
         index: shapeStream.landingPhaseIndex,
         name: phase?.name || null,
@@ -559,8 +560,24 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
           0,
           1
         ).toFixed(2),
-        pressure: +shapeStreamLandingPressure(0).toFixed(2),
+        pressure: +(pressureInfo?.pressure || 0).toFixed(2),
+        pressureRatio: +(pressureInfo?.ratio || 0).toFixed(2),
+        averagePressure: +(pressureInfo?.average || 0).toFixed(2),
         threshold: +SHAPE_STREAM.phaseCrowdHeight.toFixed(2),
+        hotElapsed: +shapeStream.pressureHotElapsed.toFixed(2),
+        reservedPressure: +(pressureInfo?.reservedPressure || 0).toFixed(2),
+        inFlightPressure: +(pressureInfo?.inFlightPressure || 0).toFixed(2),
+        hotCell: pressureInfo?.hotCell ? {
+          x: pressureInfo.hotCell.x,
+          z: pressureInfo.hotCell.z,
+          pressure: +pressureInfo.hotCell.pressure.toFixed(2)
+        } : null,
+        stream: {
+          inFlight: shapeStream.metrics.inFlightCount,
+          sleeping: shapeStream.metrics.sleepingCount,
+          spawnIntervalScale: +shapeStream.metrics.spawnIntervalScale.toFixed(2),
+          spillover: !!shapeStream.metrics.spillover
+        },
         target: target ? {
           widthT: +target.widthT.toFixed(2),
           depthT: +target.depthT.toFixed(2),
@@ -1589,6 +1606,7 @@ const SHAPE_STREAM = {
   gravity: -17,        // world units / s^2
   minSize: 0.30,       // shape radius (world units)
   maxSize: 0.30,
+  mobileSizeScale: 0.82,
   depthRatio: 0.55,    // prism thickness relative to radius
   vxSpread: 0.48,      // jitter around the ballistic aim velocity (+/-)
   vyPop: 1.15,         // initial upward pop range
@@ -1601,17 +1619,33 @@ const SHAPE_STREAM = {
   landingSteerDuration: 1.25,
   landingSteerStrength: 3.8,
   landingSteerMaxSpeed: 14,
+  landingSteerImpactFadeHeight: 2.45,
+  landingSteerPressureFadeStart: 0.72,
   maxLaunchSpeed: 18.5,
   maxUpwardSpeed: 0.95,
   maxAngularSpeed: 4.8,
   linearDamping: 1.25,
   angularDamping: 5.2,
+  groundedLinearDrag: 7.2,
+  groundedAngularDrag: 9.5,
+  mobileGroundedDragBoost: 1.22,
   floorFriction: 2.8,
   wallFriction: 0.22,
   frontBoundaryClearance: 1.15,
   shapeFriction: 2.35,
   phaseMinDuration: 1.8,
   phaseBlendDuration: 0.18,
+  emergencyPressureRatio: 1.16,
+  emergencyPhaseDelay: 0.60,
+  targetBaseSamples: 28,
+  targetHotSamples: 58,
+  spilloverPressureRatio: 0.78,
+  mobileSpreadBoost: 1.18,
+  inFlightPressureFactor: 0.74,
+  backpressureStartRatio: 0.66,
+  backpressureMaxScale: 2.05,
+  maxSpawnTimerBank: 2.4,
+  maxSpawnsPerFrame: 4,
   landingPhases: [
     { name: 'source', duration: 0.8, followSource: true, widthSpread: 0.10, depthSpread: 0.08 },
     { name: 'back-center', duration: 2.0, widthT: 0.172, depthT: 0.078, widthSpread: 0.36, depthSpread: 0.05 },
@@ -1666,7 +1700,7 @@ const SHAPE_STREAM_FINAL_GRID = {
   roomImageHandoffDuration: 2.00,
   blackFadeDuration: 0.55,
   homeFadeHoldDuration: 0.18,
-  homeHref: '/',
+  homeHref: '/home/',
   roomParticlePullDuration: 1.45,
   roomParticleBatchSize: 72,
   roomParticleBatchInterval: 0.026,
@@ -1792,6 +1826,18 @@ const shapeStream = (() => {
     landingPhaseElapsed: 0,
     previousLandingPhaseIndex: 0,
     landingPhaseBlendElapsed: SHAPE_STREAM.phaseBlendDuration,
+    pressureHotElapsed: 0,
+    metrics: {
+      pressure: 0,
+      pressureRatio: 0,
+      reservedPressure: 0,
+      inFlightPressure: 0,
+      inFlightCount: 0,
+      sleepingCount: 0,
+      spawnIntervalScale: 1,
+      spillover: false,
+      hotCell: null
+    },
     full: false,
     finalGrid: {
       active: false,
@@ -1837,6 +1883,7 @@ function layoutShapeStream() {
       floorLayout,
       buckets: new Float32Array(shapeStream.xBucketCount * shapeStream.depthBucketCount),
       reservations: new Float32Array(shapeStream.xBucketCount * shapeStream.depthBucketCount),
+      inFlight: new Float32Array(shapeStream.xBucketCount * shapeStream.depthBucketCount),
       xMin: Math.min(frontLeft.x, frontRight.x, backLeft.x, leftCorner.x, backRight.x),
       xMax: Math.max(frontLeft.x, frontRight.x, backLeft.x, leftCorner.x, backRight.x),
       zMin: floorLayout.zBack,
@@ -1862,12 +1909,25 @@ function resetShapeStream() {
   shapeStream.zones.forEach((zone) => {
     zone.buckets.fill(0);
     zone.reservations.fill(0);
+    zone.inFlight?.fill(0);
   });
   shapeStream.spawnTimer = 0;
   shapeStream.landingPhaseIndex = 0;
   shapeStream.previousLandingPhaseIndex = 0;
   shapeStream.landingPhaseElapsed = 0;
   shapeStream.landingPhaseBlendElapsed = SHAPE_STREAM.phaseBlendDuration;
+  shapeStream.pressureHotElapsed = 0;
+  Object.assign(shapeStream.metrics, {
+    pressure: 0,
+    pressureRatio: 0,
+    reservedPressure: 0,
+    inFlightPressure: 0,
+    inFlightCount: 0,
+    sleepingCount: 0,
+    spawnIntervalScale: 1,
+    spillover: false,
+    hotCell: null
+  });
   shapeStream.full = false;
   shapeStream.finalGrid.active = false;
   shapeStream.finalGrid.animating = false;
@@ -2034,7 +2094,99 @@ function shapeStreamBucketHeight(zone, xBucket, zBucket) {
 
 function shapeStreamCrowdedHeight(zone, xBucket, zBucket) {
   const offset = shapeStreamBucketOffset(xBucket, zBucket);
-  return zone.buckets[offset] + zone.reservations[offset];
+  return zone.buckets[offset] + zone.reservations[offset] + (zone.inFlight?.[offset] || 0);
+}
+
+function shapeStreamBucketContributions(xBucket, zBucket, lift, multipliers = {}) {
+  const side = multipliers.side ?? 0.3;
+  const back = multipliers.back ?? SHAPE_STREAM.depthFillFactor * 0.24;
+  const front = multipliers.front ?? SHAPE_STREAM.depthFillFactor * 0.28;
+  const contributions = [{ offset: shapeStreamBucketOffset(xBucket, zBucket), lift }];
+  if (xBucket > 0) {
+    contributions.push({ offset: shapeStreamBucketOffset(xBucket - 1, zBucket), lift: lift * side });
+  }
+  if (xBucket < shapeStream.xBucketCount - 1) {
+    contributions.push({ offset: shapeStreamBucketOffset(xBucket + 1, zBucket), lift: lift * side });
+  }
+  if (zBucket > 0) {
+    contributions.push({ offset: shapeStreamBucketOffset(xBucket, zBucket - 1), lift: lift * back });
+  }
+  if (zBucket < shapeStream.depthBucketCount - 1) {
+    contributions.push({ offset: shapeStreamBucketOffset(xBucket, zBucket + 1), lift: lift * front });
+  }
+  return contributions;
+}
+
+function applyShapeStreamContributions(field, contributions, direction = 1) {
+  contributions.forEach(({ offset, lift }) => {
+    field[offset] = Math.max(0, field[offset] + lift * direction);
+  });
+}
+
+function applyShapeStreamFieldLift(zone, field, xBucket, zBucket, lift, direction = 1, multipliers = {}) {
+  applyShapeStreamContributions(
+    field,
+    shapeStreamBucketContributions(xBucket, zBucket, lift, multipliers),
+    direction
+  );
+}
+
+function shapeStreamBucketForWorld(zone, worldX, worldZ) {
+  const depthT = shapeStreamDepthTForZ(zone, worldZ);
+  const widthT = shapeStreamWidthTForWorldX(zone, worldX, depthT);
+  return {
+    depthT,
+    widthT,
+    xBucket: THREE.MathUtils.clamp(
+      Math.floor(widthT * shapeStream.xBucketCount),
+      0,
+      shapeStream.xBucketCount - 1
+    ),
+    zBucket: shapeStreamZBucketIndex(zone, worldZ)
+  };
+}
+
+function shapeStreamNeighborhoodHeight(zone, xBucket, zBucket) {
+  let total = 0;
+  let peak = 0;
+  let count = 0;
+  for (let z = Math.max(0, zBucket - 1); z <= Math.min(shapeStream.depthBucketCount - 1, zBucket + 1); z += 1) {
+    for (let x = Math.max(0, xBucket - 1); x <= Math.min(shapeStream.xBucketCount - 1, xBucket + 1); x += 1) {
+      const value = shapeStreamCrowdedHeight(zone, x, z);
+      total += value;
+      peak = Math.max(peak, value);
+      count += 1;
+    }
+  }
+  return peak * 0.66 + (total / Math.max(1, count)) * 0.34;
+}
+
+function commitShapeStreamBucket(item) {
+  const zone = shapeStream.zones[item.zoneIndex] || shapeStream.zones[0];
+  if (!zone) return;
+  const bucket = shapeStreamBucketForWorld(zone, item.mesh.position.x, item.mesh.position.z);
+  const lift = item.size * SHAPE_STREAM.fillFactor * 1.08;
+  const contributions = shapeStreamBucketContributions(bucket.xBucket, bucket.zBucket, lift, {
+    side: 0.24,
+    back: SHAPE_STREAM.depthFillFactor * 0.18,
+    front: SHAPE_STREAM.depthFillFactor * 0.22
+  });
+  applyShapeStreamContributions(zone.buckets, contributions, 1);
+  item.bucketContribution = {
+    zoneIndex: item.zoneIndex,
+    contributions
+  };
+  item.bucketCommitted = true;
+  item.settled = true;
+}
+
+function removeShapeStreamBucketContribution(item) {
+  if (!item.bucketContribution) return;
+  const zone = shapeStream.zones[item.bucketContribution.zoneIndex] || shapeStream.zones[0];
+  if (zone) applyShapeStreamContributions(zone.buckets, item.bucketContribution.contributions, -1);
+  item.bucketContribution = null;
+  item.bucketCommitted = false;
+  item.settled = false;
 }
 
 function shapeStreamSignedRandom() {
@@ -2053,12 +2205,20 @@ function shapeStreamLandingPhaseTarget(zone, phase) {
   const source = completionEffects.ring.userData.surfacePosition;
   const sourceDepthT = THREE.MathUtils.clamp(shapeStreamDepthTForZ(zone, source.z), 0.08, 0.36);
   const sourceWidthT = THREE.MathUtils.clamp(shapeStreamWidthTForWorldX(zone, source.x, sourceDepthT), 0.08, 0.92);
+  const phaseName = phase?.name || 'floor';
+  const mobileBoost = activeLayoutName === 'mobile' ? SHAPE_STREAM.mobileSpreadBoost : 1;
+  const sourceBoost = phase?.followSource ? (activeLayoutName === 'mobile' ? 1.34 : 1.16) : 1;
+  const frontBoost = phaseName === 'front-fill' ? (activeLayoutName === 'mobile' ? 1.16 : 1.07) : 1;
+  const rawDepthT = phase?.followSource ? sourceDepthT : THREE.MathUtils.clamp(phase?.depthT ?? 0.5, 0.02, 1);
+  const depthT = activeLayoutName === 'mobile' && rawDepthT > 0.82
+    ? THREE.MathUtils.lerp(rawDepthT, 0.82, 0.38)
+    : rawDepthT;
   return {
-    name: phase?.name || 'floor',
+    name: phaseName,
     widthT: phase?.followSource ? sourceWidthT : THREE.MathUtils.clamp(phase?.widthT ?? 0.5, 0.01, 0.99),
-    depthT: phase?.followSource ? sourceDepthT : THREE.MathUtils.clamp(phase?.depthT ?? 0.5, 0.02, 1),
-    widthSpread: phase?.widthSpread ?? 0.22,
-    depthSpread: phase?.depthSpread ?? 0.18
+    depthT,
+    widthSpread: (phase?.widthSpread ?? 0.22) * mobileBoost * sourceBoost * frontBoost,
+    depthSpread: (phase?.depthSpread ?? 0.18) * (activeLayoutName === 'mobile' ? 1.10 : 1) * sourceBoost * frontBoost
   };
 }
 
@@ -2085,11 +2245,21 @@ function shapeStreamActiveLandingTarget(zone) {
   };
 }
 
-function shapeStreamLandingPressure(zoneIndex = 0) {
+function shapeStreamLandingPressureInfo(zoneIndex = 0, targetOverride = null) {
   const zone = shapeStream.zones[zoneIndex] || shapeStream.zones[0];
-  if (!zone) return 0;
-  const phase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
-  const target = shapeStreamLandingPhaseTarget(zone, phase);
+  if (!zone) {
+    return {
+      pressure: 0,
+      average: 0,
+      ratio: 0,
+      reservedPressure: 0,
+      inFlightPressure: 0,
+      hotCell: null,
+      target: null,
+      samples: 0
+    };
+  }
+  const target = targetOverride || shapeStreamActiveLandingTarget(zone);
   const centerX = THREE.MathUtils.clamp(
     Math.floor(target.widthT * shapeStream.xBucketCount),
     0,
@@ -2103,17 +2273,45 @@ function shapeStreamLandingPressure(zoneIndex = 0) {
   const radiusX = Math.max(2, Math.ceil(target.widthSpread * shapeStream.xBucketCount * 0.55));
   const radiusZ = Math.max(2, Math.ceil(target.depthSpread * shapeStream.depthBucketCount * 0.7));
   let pressure = 0;
+  let total = 0;
+  let samples = 0;
+  let reservedPressure = 0;
+  let inFlightPressure = 0;
+  let hotCell = null;
 
   for (let z = Math.max(0, centerZ - radiusZ); z <= Math.min(shapeStream.depthBucketCount - 1, centerZ + radiusZ); z += 1) {
     for (let x = Math.max(0, centerX - radiusX); x <= Math.min(shapeStream.xBucketCount - 1, centerX + radiusX); x += 1) {
       const dx = (x - centerX) / Math.max(1, radiusX);
       const dz = (z - centerZ) / Math.max(1, radiusZ);
       if (dx * dx + dz * dz > 1.2) continue;
-      pressure = Math.max(pressure, shapeStreamCrowdedHeight(zone, x, z));
+      const offset = shapeStreamBucketOffset(x, z);
+      const cellPressure = shapeStreamCrowdedHeight(zone, x, z);
+      total += cellPressure;
+      samples += 1;
+      if (cellPressure > pressure) {
+        pressure = cellPressure;
+        reservedPressure = zone.reservations[offset] || 0;
+        inFlightPressure = zone.inFlight?.[offset] || 0;
+        hotCell = { zoneIndex, x, z, pressure: cellPressure };
+      }
     }
   }
 
-  return pressure;
+  const threshold = Math.max(0.001, SHAPE_STREAM.phaseCrowdHeight);
+  return {
+    pressure,
+    average: samples ? total / samples : 0,
+    ratio: pressure / threshold,
+    reservedPressure,
+    inFlightPressure,
+    hotCell,
+    target,
+    samples
+  };
+}
+
+function shapeStreamLandingPressure(zoneIndex = 0) {
+  return shapeStreamLandingPressureInfo(zoneIndex).pressure;
 }
 
 function advanceShapeStreamLandingPhase() {
@@ -2123,44 +2321,121 @@ function advanceShapeStreamLandingPhase() {
   shapeStream.landingPhaseIndex = (shapeStream.landingPhaseIndex + 1) % phases.length;
   shapeStream.landingPhaseElapsed = 0;
   shapeStream.landingPhaseBlendElapsed = 0;
+  shapeStream.pressureHotElapsed = 0;
 }
 
 function updateShapeStreamLandingPhase(delta) {
   const phase = shapeStreamPhaseAt(shapeStream.landingPhaseIndex);
-  if (!phase) return;
+  if (!phase) return false;
   shapeStream.landingPhaseElapsed += delta;
   shapeStream.landingPhaseBlendElapsed = Math.min(
     SHAPE_STREAM.phaseBlendDuration,
     shapeStream.landingPhaseBlendElapsed + delta
   );
 
+  const pressureInfo = shapeStreamLandingPressureInfo(0);
+  const pressureRatio = pressureInfo.ratio;
+  shapeStream.pressureHotElapsed = pressureRatio >= SHAPE_STREAM.emergencyPressureRatio
+    ? shapeStream.pressureHotElapsed + delta
+    : Math.max(0, shapeStream.pressureHotElapsed - delta * 1.8);
+
   const timedOut = shapeStream.landingPhaseElapsed >= phase.duration;
   const canCrowdSwitch = shapeStream.landingPhaseElapsed >= SHAPE_STREAM.phaseMinDuration;
-  const crowded = canCrowdSwitch
-    && shapeStreamLandingPressure(0) >= SHAPE_STREAM.phaseCrowdHeight;
-  if (timedOut || crowded) advanceShapeStreamLandingPhase();
+  const crowded = canCrowdSwitch && pressureInfo.pressure >= SHAPE_STREAM.phaseCrowdHeight;
+  const emergencyRelief = shapeStream.pressureHotElapsed >= SHAPE_STREAM.emergencyPhaseDelay
+    && shapeStream.landingPhaseElapsed >= Math.min(0.45, phase.duration * 0.5);
+  if (timedOut || crowded || emergencyRelief) {
+    advanceShapeStreamLandingPhase();
+    return true;
+  }
+  return false;
 }
 
 function applyShapeStreamReservation(zone, xBucket, zBucket, lift, direction = 1) {
-  const reserve = lift * direction;
-  const centerOffset = shapeStreamBucketOffset(xBucket, zBucket);
-  zone.reservations[centerOffset] = Math.max(0, zone.reservations[centerOffset] + reserve);
-  if (xBucket > 0) {
-    const leftOffset = shapeStreamBucketOffset(xBucket - 1, zBucket);
-    zone.reservations[leftOffset] = Math.max(0, zone.reservations[leftOffset] + reserve * 0.3);
-  }
-  if (xBucket < shapeStream.xBucketCount - 1) {
-    const rightOffset = shapeStreamBucketOffset(xBucket + 1, zBucket);
-    zone.reservations[rightOffset] = Math.max(0, zone.reservations[rightOffset] + reserve * 0.3);
-  }
-  if (zBucket > 0) {
-    const backOffset = shapeStreamBucketOffset(xBucket, zBucket - 1);
-    zone.reservations[backOffset] = Math.max(0, zone.reservations[backOffset] + reserve * SHAPE_STREAM.depthFillFactor * 0.24);
-  }
-  if (zBucket < shapeStream.depthBucketCount - 1) {
-    const frontOffset = shapeStreamBucketOffset(xBucket, zBucket + 1);
-    zone.reservations[frontOffset] = Math.max(0, zone.reservations[frontOffset] + reserve * SHAPE_STREAM.depthFillFactor * 0.28);
-  }
+  applyShapeStreamFieldLift(zone, zone.reservations, xBucket, zBucket, lift, direction);
+}
+
+function refreshShapeStreamPressureFields() {
+  let inFlightCount = 0;
+  let sleepingCount = 0;
+  let reservedPressure = 0;
+  let inFlightPressure = 0;
+
+  shapeStream.zones.forEach((zone) => {
+    zone.inFlight?.fill(0);
+    for (let i = 0; i < zone.reservations.length; i += 1) {
+      reservedPressure = Math.max(reservedPressure, zone.reservations[i]);
+    }
+  });
+
+  shapeStream.items.forEach((item) => {
+    if (!item.body || item.finalGrid) return;
+    if (item.body.isSleeping()) {
+      sleepingCount += 1;
+      return;
+    }
+
+    inFlightCount += 1;
+    const zone = shapeStream.zones[item.zoneIndex] || shapeStream.zones[0];
+    if (!zone?.inFlight) return;
+    const translation = item.body.translation();
+    const bucket = shapeStreamBucketForWorld(zone, translation.x, translation.z);
+    const heightAboveTarget = Number.isFinite(item.targetSurfaceY)
+      ? translation.y - item.targetSurfaceY
+      : item.size * 4;
+    const nearSurfaceWeight = THREE.MathUtils.clamp(
+      1.12 - heightAboveTarget / Math.max(0.001, item.size * 6.5),
+      0.22,
+      1
+    );
+    const lift = item.size * SHAPE_STREAM.fillFactor * SHAPE_STREAM.inFlightPressureFactor * nearSurfaceWeight;
+    applyShapeStreamFieldLift(zone, zone.inFlight, bucket.xBucket, bucket.zBucket, lift, 1, {
+      side: 0.22,
+      back: SHAPE_STREAM.depthFillFactor * 0.16,
+      front: SHAPE_STREAM.depthFillFactor * 0.20
+    });
+  });
+
+  shapeStream.zones.forEach((zone) => {
+    if (!zone.inFlight) return;
+    for (let i = 0; i < zone.inFlight.length; i += 1) {
+      inFlightPressure = Math.max(inFlightPressure, zone.inFlight[i]);
+    }
+  });
+
+  const pressureInfo = shapeStreamLandingPressureInfo(0);
+  Object.assign(shapeStream.metrics, {
+    pressure: pressureInfo.pressure,
+    pressureRatio: pressureInfo.ratio,
+    reservedPressure,
+    inFlightPressure,
+    inFlightCount,
+    sleepingCount,
+    spillover: pressureInfo.ratio >= SHAPE_STREAM.spilloverPressureRatio,
+    hotCell: pressureInfo.hotCell
+  });
+  return shapeStream.metrics;
+}
+
+function shapeStreamSpawnIntervalScale() {
+  const pressureT = THREE.MathUtils.clamp(
+    (shapeStream.metrics.pressureRatio - SHAPE_STREAM.backpressureStartRatio)
+      / Math.max(0.001, SHAPE_STREAM.emergencyPressureRatio - SHAPE_STREAM.backpressureStartRatio),
+    0,
+    1
+  );
+  const inFlightLimit = activeLayoutName === 'mobile' ? 70 : 96;
+  const inFlightT = THREE.MathUtils.clamp(
+    (shapeStream.metrics.inFlightCount - inFlightLimit) / inFlightLimit,
+    0,
+    1
+  );
+  const mobilePressureBoost = activeLayoutName === 'mobile' ? pressureT * 0.22 : 0;
+  const scale = 1
+    + pressureT * (SHAPE_STREAM.backpressureMaxScale - 1)
+    + inFlightT * 0.32
+    + mobilePressureBoost;
+  return THREE.MathUtils.clamp(scale, 1, SHAPE_STREAM.backpressureMaxScale + 0.45);
 }
 
 function shapeStreamRowBounds(zone, depthT) {
@@ -2241,32 +2516,57 @@ function shapeStreamWidthTForWorldX(zone, worldX, depthT) {
 }
 
 function pickShapeStreamTargetCell() {
-  // Keep one active landing patch at a time. The patch moves on a timed/crowded
-  // rhythm, so the stream spreads without visibly forking at the ring.
+  // Keep one visible pour path, but let hot cells spill to nearby cooler floor
+  // space so dense fills do not compact into a single physical pile.
   const candidates = [];
+  const pressureRatio = shapeStream.metrics.pressureRatio || 0;
+  const hotT = THREE.MathUtils.clamp(
+    (pressureRatio - SHAPE_STREAM.backpressureStartRatio)
+      / Math.max(0.001, SHAPE_STREAM.emergencyPressureRatio - SHAPE_STREAM.backpressureStartRatio),
+    0,
+    1
+  );
+  const spillover = pressureRatio >= SHAPE_STREAM.spilloverPressureRatio;
+  const mobileBoost = activeLayoutName === 'mobile' ? SHAPE_STREAM.mobileSpreadBoost : 1;
   shapeStream.zones.forEach((zone, zoneIndex) => {
     const target = shapeStreamActiveLandingTarget(zone);
     const centerWidthT = target.widthT;
     const centerDepthT = target.depthT;
-    const widthSpread = target.widthSpread;
-    const depthSpread = target.depthSpread;
+    const sourcePhase = target.name === 'source';
+    const frontFillPhase = target.name === 'front-fill';
+    const spreadBoost = (1 + hotT * 0.58) * mobileBoost;
+    const widthSpread = Math.max(0.08, target.widthSpread * spreadBoost * (sourcePhase ? 1.12 : 1));
+    const depthSpread = Math.max(0.07, target.depthSpread * spreadBoost * (sourcePhase ? 1.18 : 1));
     const frontFocused = centerDepthT >= 0.85;
     const minDepthT = frontFocused
-      ? Math.max(0.84, centerDepthT - Math.max(0.10, depthSpread * 0.20))
+      ? Math.max(0.70, centerDepthT - Math.max(0.18, depthSpread * (spillover ? 1.25 : 0.72)))
       : 0.02;
 
-    const sampleCount = frontFocused ? 30 : (centerWidthT > 0.84 ? 24 : 18);
+    const sampleCount = Math.round(THREE.MathUtils.lerp(
+      SHAPE_STREAM.targetBaseSamples,
+      SHAPE_STREAM.targetHotSamples,
+      hotT
+    )) + (frontFocused ? 12 : 0) + (activeLayoutName === 'mobile' ? 8 : 0);
     for (let i = 0; i < sampleCount; i += 1) {
-      const wideThrow = i % 6 === 0 ? 1.36 : 1;
+      const spillCandidate = spillover && i > sampleCount * 0.68;
+      const wideThrow = spillCandidate ? 2.2 : (i % 5 === 0 ? 1.52 : 1);
       const edgePull = centerWidthT > 0.84 && i % 4 === 0
         ? Math.random() * 0.08
         : 0;
-      const rawWidthT = i === 0
-        ? centerWidthT
-        : centerWidthT + edgePull + shapeStreamSignedRandom() * widthSpread * wideThrow;
-      const rawDepthT = i === 0
-        ? centerDepthT
-        : centerDepthT + shapeStreamSignedRandom() * depthSpread * wideThrow;
+      const rawWidthT = spillCandidate
+        ? THREE.MathUtils.lerp(centerWidthT, Math.random(), 0.72)
+        : (i === 0
+          ? centerWidthT
+          : centerWidthT + edgePull + shapeStreamSignedRandom() * widthSpread * wideThrow);
+      const rawDepthT = spillCandidate
+        ? THREE.MathUtils.lerp(
+          centerDepthT,
+          frontFocused || frontFillPhase ? 0.58 + Math.random() * 0.40 : 0.04 + Math.random() * 0.92,
+          0.68
+        )
+        : (i === 0
+          ? centerDepthT
+          : centerDepthT + shapeStreamSignedRandom() * depthSpread * wideThrow);
       const widthT = THREE.MathUtils.clamp(
         rawWidthT,
         0.01,
@@ -2289,11 +2589,19 @@ function pickShapeStreamTargetCell() {
       );
       const widthDist = (widthT - centerWidthT) / Math.max(0.001, widthSpread);
       const depthDist = (depthT - centerDepthT) / Math.max(0.001, depthSpread);
-      const continuityPenalty = (widthDist * widthDist + depthDist * depthDist) * SHAPE_STREAM.maxSize * 0.24;
-      const score = shapeStreamCrowdedHeight(zone, x, z)
+      const continuityStrength = THREE.MathUtils.lerp(0.23, spillCandidate ? 0.035 : 0.075, hotT);
+      const continuityPenalty = (widthDist * widthDist + depthDist * depthDist) * SHAPE_STREAM.maxSize * continuityStrength;
+      const cellPressure = shapeStreamCrowdedHeight(zone, x, z);
+      const neighborhoodPressure = shapeStreamNeighborhoodHeight(zone, x, z);
+      const hotCellPenalty = cellPressure > SHAPE_STREAM.phaseCrowdHeight * 0.92
+        ? (cellPressure - SHAPE_STREAM.phaseCrowdHeight * 0.92) * 0.42
+        : 0;
+      const score = cellPressure * 0.78
+        + neighborhoodPressure * 0.54
         + continuityPenalty
-        + Math.random() * SHAPE_STREAM.maxSize * 0.18;
-      candidates.push({ zoneIndex, x, z, depthT, widthT, phaseName: target.name, score });
+        + hotCellPenalty
+        + Math.random() * SHAPE_STREAM.maxSize * THREE.MathUtils.lerp(0.20, 0.08, hotT);
+      candidates.push({ zoneIndex, x, z, depthT, widthT, phaseName: target.name, score, pressure: cellPressure });
     }
   });
   if (!candidates.length) return { zoneIndex: 0, x: 0, z: shapeStream.depthBucketCount - 1 };
@@ -2323,7 +2631,8 @@ function createShapeStreamMesh(geoIndex = Math.floor(Math.random() * shapeStream
 
 function spawnStreamShape() {
   const { mesh, geoIndex, colorIndex } = createShapeStreamMesh();
-  const size = SHAPE_STREAM.minSize + Math.random() * (SHAPE_STREAM.maxSize - SHAPE_STREAM.minSize);
+  const sizeScale = activeLayoutName === 'mobile' ? SHAPE_STREAM.mobileSizeScale : 1;
+  const size = (SHAPE_STREAM.minSize + Math.random() * (SHAPE_STREAM.maxSize - SHAPE_STREAM.minSize)) * sizeScale;
 
   const targetCell = pickShapeStreamTargetCell();
   const zone = shapeStream.zones[targetCell.zoneIndex] || shapeStream.zones[0];
@@ -2463,6 +2772,7 @@ function spawnStreamShape() {
     },
     calmTime: 0,
     bucketCommitted: false,
+    bucketContribution: null,
     settled: false,
     feedbackImpactPlayed: false
   });
@@ -2474,6 +2784,7 @@ function detachShapeStreamItemPhysics(item) {
   item.body = null;
   item.collider = null;
   item.reservation = null;
+  item.bucketContribution = null;
 }
 
 function easeOutCubic(t) {
@@ -3567,6 +3878,34 @@ function resetShapeStreamDoorwayExit() {
   doorwayExit.veil.material.opacity = 0;
 }
 
+function restoreDoorwayExitAfterHistoryNavigation() {
+  const finalGrid = shapeStream.finalGrid;
+  const wasInDoorwayExit =
+    doorwayExit.navigationTimer != null
+    || doorwayExit.navigationTriggered
+    || doorwayExit.blackPlane.visible
+    || doorwayExit.gravityWarp.phase !== 'idle'
+    || finalGrid.navigating
+    || finalGrid.exitPhase !== 'idle'
+    || finalGrid.portalProgress > 0
+    || finalGrid.dissolveProgress > 0;
+
+  if (!wasInDoorwayExit) return;
+
+  finalGrid.exitPhase = 'idle';
+  finalGrid.exitElapsed = 0;
+  finalGrid.exitProgress = 0;
+  finalGrid.flashCount = 0;
+  finalGrid.collapseProgress = 0;
+  finalGrid.dissolveProgress = 0;
+  finalGrid.portalProgress = 0;
+  finalGrid.navigating = false;
+  if (finalGrid.phase === 'done') finalGrid.animating = false;
+  resetShapeStreamDoorwayExit();
+  status.textContent = 'entry restored';
+  updateCalibrationConsole();
+}
+
 function startShapeStreamDoorwayExit() {
   doorwayExit.calibrationTransitionPreview = false;
   doorwayExit.calibrationPreview = 'none';
@@ -3955,6 +4294,7 @@ function addShapeStreamFinalGridItem() {
     reservation: null,
     calmTime: 0,
     bucketCommitted: true,
+    bucketContribution: null,
     settled: true,
     feedbackImpactPlayed: true,
     finalGrid: true,
@@ -4295,7 +4635,8 @@ function activateShapeStreamFinalGrid() {
 function steerShapeStreamItem(item, translation, linvel, delta) {
   if (!item.target || item.body.isSleeping() || item.age > SHAPE_STREAM.landingSteerDuration) return linvel;
   const heightAboveTarget = translation.y - item.target.y;
-  if (heightAboveTarget <= item.size * 1.05) return linvel;
+  const stopHeight = item.size * 1.22;
+  if (heightAboveTarget <= stopHeight) return linvel;
 
   const fallSpeed = Math.max(0.9, -linvel.y);
   const timeToTarget = THREE.MathUtils.clamp(heightAboveTarget / fallSpeed, 0.16, 0.75);
@@ -4303,11 +4644,29 @@ function steerShapeStreamItem(item, translation, linvel, delta) {
     (item.target.x - translation.x) / timeToTarget,
     (item.target.z - translation.z) / timeToTarget
   );
-  if (desired.length() > SHAPE_STREAM.landingSteerMaxSpeed) {
-    desired.setLength(SHAPE_STREAM.landingSteerMaxSpeed);
+  const pressureFade = 1 - THREE.MathUtils.clamp(
+    (shapeStream.metrics.pressureRatio - SHAPE_STREAM.landingSteerPressureFadeStart)
+      / Math.max(0.001, SHAPE_STREAM.emergencyPressureRatio - SHAPE_STREAM.landingSteerPressureFadeStart),
+    0,
+    0.55
+  );
+  const impactFade = THREE.MathUtils.clamp(
+    (heightAboveTarget - stopHeight)
+      / Math.max(0.001, item.size * SHAPE_STREAM.landingSteerImpactFadeHeight),
+    0,
+    1
+  );
+  const maxSpeed = SHAPE_STREAM.landingSteerMaxSpeed * THREE.MathUtils.lerp(0.48, 1, impactFade) * pressureFade;
+  if (desired.length() > maxSpeed) {
+    desired.setLength(maxSpeed);
   }
 
-  const steerT = THREE.MathUtils.clamp(delta * SHAPE_STREAM.landingSteerStrength, 0, 0.42);
+  const steerT = THREE.MathUtils.clamp(
+    delta * SHAPE_STREAM.landingSteerStrength * THREE.MathUtils.lerp(0.12, 1, impactFade) * pressureFade,
+    0,
+    0.36
+  );
+  if (steerT <= 0.001) return linvel;
   const steered = {
     x: THREE.MathUtils.lerp(linvel.x, desired.x, steerT),
     y: linvel.y,
@@ -4328,14 +4687,31 @@ function updateShapeStream(delta) {
   const ringBlackSettled = completionEffects.active
     && completionEffects.elapsed >= SHAPE_STREAM_START_TIME;
 
-  if (ringBlackSettled && !shapeStream.full) updateShapeStreamLandingPhase(delta);
+  if (ringBlackSettled && !shapeStream.full) {
+    refreshShapeStreamPressureFields();
+    if (updateShapeStreamLandingPhase(delta)) refreshShapeStreamPressureFields();
+  }
 
   if (ringBlackSettled && !shapeStream.full && shapeStream.items.length < SHAPE_STREAM.maxShapes) {
-    shapeStream.spawnTimer += delta;
-    while (shapeStream.spawnTimer >= SHAPE_STREAM.spawnInterval) {
-      shapeStream.spawnTimer -= SHAPE_STREAM.spawnInterval;
+    const spawnIntervalScale = shapeStreamSpawnIntervalScale();
+    shapeStream.metrics.spawnIntervalScale = spawnIntervalScale;
+    const effectiveSpawnInterval = SHAPE_STREAM.spawnInterval * spawnIntervalScale;
+    shapeStream.spawnTimer = Math.min(
+      shapeStream.spawnTimer + delta,
+      effectiveSpawnInterval * SHAPE_STREAM.maxSpawnTimerBank
+    );
+    let spawnsThisFrame = 0;
+    while (
+      shapeStream.spawnTimer >= effectiveSpawnInterval
+      && spawnsThisFrame < SHAPE_STREAM.maxSpawnsPerFrame
+      && shapeStream.items.length < SHAPE_STREAM.maxShapes
+    ) {
+      shapeStream.spawnTimer -= effectiveSpawnInterval;
       spawnStreamShape();
+      spawnsThisFrame += 1;
     }
+  } else {
+    shapeStream.metrics.spawnIntervalScale = 1;
   }
 
   shapeStream.world.integrationParameters.dt = delta;
@@ -4344,14 +4720,37 @@ function updateShapeStream(delta) {
   for (const item of shapeStream.items) {
     item.age += delta;
     let linvel = item.body.linvel();
-    const angvel = item.body.angvel();
+    let angvel = item.body.angvel();
     const translation = item.body.translation();
     linvel = steerShapeStreamItem(item, translation, linvel, delta);
-    const linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
-    const angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
+    let linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
+    let angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
     const targetSurfaceY = item.targetSurfaceY ?? item.target?.y;
     const nearTargetSurface = targetSurfaceY != null
       && translation.y <= targetSurfaceY + item.size * 1.18;
+    const groundedForStream = targetSurfaceY != null
+      && item.age > 0.34
+      && translation.y <= targetSurfaceY + item.size * 1.42
+      && linvel.y <= 0.28;
+    if (groundedForStream && !item.body.isSleeping()) {
+      const dragBoost = activeLayoutName === 'mobile' ? SHAPE_STREAM.mobileGroundedDragBoost : 1;
+      const linearDragT = 1 - Math.exp(-delta * SHAPE_STREAM.groundedLinearDrag * dragBoost);
+      const angularDragT = 1 - Math.exp(-delta * SHAPE_STREAM.groundedAngularDrag * dragBoost);
+      linvel = {
+        x: THREE.MathUtils.lerp(linvel.x, 0, linearDragT),
+        y: Math.min(linvel.y, 0),
+        z: THREE.MathUtils.lerp(linvel.z, 0, linearDragT)
+      };
+      angvel = {
+        x: THREE.MathUtils.lerp(angvel.x, 0, angularDragT),
+        y: THREE.MathUtils.lerp(angvel.y, 0, angularDragT),
+        z: THREE.MathUtils.lerp(angvel.z, 0, angularDragT)
+      };
+      item.body.setLinvel(linvel, true);
+      item.body.setAngvel(angvel, true);
+      linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
+      angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
+    }
     if (
       !item.feedbackImpactPlayed
       && item.age > 0.24
@@ -4387,7 +4786,11 @@ function updateShapeStream(delta) {
     item.mesh.scale.setScalar(item.size);
 
     const shouldReleaseReservation = item.reservation
-      && (item.body.isSleeping() || item.age > 2.4 || translation.y <= item.targetSurfaceY + item.size * 1.8);
+      && (
+        item.body.isSleeping()
+        || item.age > 3.6
+        || (nearTargetSurface && item.age > 1.3 && linearSpeed <= SHAPE_STREAM.settleLinearThreshold * 7)
+      );
     if (shouldReleaseReservation) {
       const reservedZone = shapeStream.zones[item.reservation.zoneIndex] || shapeStream.zones[0];
       applyShapeStreamReservation(
@@ -4405,26 +4808,9 @@ function updateShapeStream(delta) {
         item.feedbackImpactPlayed = true;
         playShapeImpactFeedback(0.34, item.mesh.position);
       }
-      const zone = shapeStream.zones[item.zoneIndex] || shapeStream.zones[0];
-      const depthT = shapeStreamDepthTForZ(zone, item.mesh.position.z);
-      const widthT = shapeStreamWidthTForWorldX(zone, item.mesh.position.x, depthT);
-      const xBucket = THREE.MathUtils.clamp(
-        Math.floor(widthT * shapeStream.xBucketCount),
-        0,
-        shapeStream.xBucketCount - 1
-      );
-      const zBucket = shapeStreamZBucketIndex(zone, item.mesh.position.z);
-      const lift = item.size * SHAPE_STREAM.fillFactor * 1.08;
-      const centerOffset = shapeStreamBucketOffset(xBucket, zBucket);
-      zone.buckets[centerOffset] += lift;
-      if (xBucket > 0) zone.buckets[shapeStreamBucketOffset(xBucket - 1, zBucket)] += lift * 0.24;
-      if (xBucket < shapeStream.xBucketCount - 1) zone.buckets[shapeStreamBucketOffset(xBucket + 1, zBucket)] += lift * 0.24;
-      if (zBucket > 0) zone.buckets[shapeStreamBucketOffset(xBucket, zBucket - 1)] += lift * SHAPE_STREAM.depthFillFactor * 0.18;
-      if (zBucket < shapeStream.depthBucketCount - 1) zone.buckets[shapeStreamBucketOffset(xBucket, zBucket + 1)] += lift * SHAPE_STREAM.depthFillFactor * 0.22;
-      item.bucketCommitted = true;
-      item.settled = true;
+      commitShapeStreamBucket(item);
     } else if (item.bucketCommitted && !item.body.isSleeping()) {
-      item.settled = false;
+      removeShapeStreamBucketContribution(item);
     }
   }
 
@@ -6509,6 +6895,9 @@ resize();
 syncRoomBackdropTexture();
 layout();
 window.addEventListener('blur', () => finishActiveDrag({ interrupted: true }));
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) restoreDoorwayExitAfterHistoryNavigation();
+});
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) finishActiveDrag({ interrupted: true });
 });

@@ -27,6 +27,10 @@ const types = new Map([
 
 const checkRoutes = [
   ["/", 200],
+  ["/index.html", 200],
+  ["/home", 200],
+  ["/home/", 200],
+  ["/entry-room/", 200],
   ["/edit-links.html", 200],
   ["/edit-links", 200],
   ["/edit-links-mac.html", 200],
@@ -104,7 +108,8 @@ const hiddenPublicPaths = new Set([
   "/writings",
 ]);
 const hidePublicPagesExceptHome = false;
-const publicHomePaths = new Set(["/", "/index.html"]);
+const publicFrontDoorPaths = new Set(["/", "/index.html"]);
+const publicHomePaths = new Set(["/home", "/home/", "/home/index.html"]);
 const publicErrorPaths = new Set(["/404", "/404.html"]);
 const publicArchivePaths = new Set([
   "/archive",
@@ -161,6 +166,7 @@ function isPublicPageRoute(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
   const normalized = normalizeRoute(urlPath);
   return (
+    publicFrontDoorPaths.has(decoded) ||
     publicHomePaths.has(decoded) ||
     normalized === "/404" ||
     decoded.endsWith(".html") ||
@@ -190,6 +196,7 @@ function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
   const normalized = normalizeRoute(urlPath);
+  if (publicFrontDoorPaths.has(decoded)) return false;
   if (publicHomePaths.has(decoded)) return false;
   if (publicErrorPaths.has(decoded) || publicErrorPaths.has(normalized)) return false;
   if (publicArchivePaths.has(decoded) || normalized === "/archive") return false;
@@ -212,6 +219,14 @@ function requestPathname(urlPath) {
   return decodeURIComponent((urlPath || "/").split("?")[0].split("#")[0]) || "/";
 }
 
+function isFrontDoorRoute(pathname) {
+  return publicFrontDoorPaths.has(pathname);
+}
+
+function isHomeRoute(pathname) {
+  return publicHomePaths.has(pathname);
+}
+
 function shouldSkipCache(urlPath, ext) {
   const pathname = requestPathname(urlPath);
   return ext === ".html" || ext === ".js" || pathname.startsWith("/__tools/");
@@ -221,6 +236,9 @@ function safePath(urlPath) {
   const decoded = requestPathname(urlPath);
   const localOnlyFile = localOnlyRoutes.get(decoded);
   if (localOnlyFile) return path.resolve(root, localOnlyFile);
+
+  if (isFrontDoorRoute(decoded)) return path.resolve(root, "entry-room", "index.html");
+  if (isHomeRoute(decoded)) return path.resolve(root, "home", "index.html");
 
   const clean = decoded === "/" ? "/index.html" : decoded;
   if (isEventDetailRoute(clean)) return eventDetailRouteFile(clean);
