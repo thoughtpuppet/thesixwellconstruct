@@ -40,10 +40,11 @@
   .hub-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
   .hub-legend { display:flex; gap:14px; flex-wrap:wrap; }
   .hub-body { display:grid; grid-template-columns:minmax(280px,1fr) minmax(260px,360px); gap:20px; align-items:start; }
-  .hub-cal .day-button { aspect-ratio:1; }
-  .day-button.has-appt { border-color:var(--accent); color:var(--accent); }
-  .day-button.has-event { background:rgba(162,47,141,0.28); border-color:#A22F8D; color:#FFE7CA; }
-  .day-button.has-both { background:rgba(162,47,141,0.28); border-color:var(--accent); color:var(--accent); }
+  .hub-cal .day-button { aspect-ratio:1; position:relative; overflow:hidden; }
+  .hub-cal .day-button.has-appt { background:var(--accent); border-color:var(--accent); color:#0e0e0e; }
+  .hub-cal .day-button.has-event { background:#A22F8D; border-color:#A22F8D; color:#FFE7CA; }
+  .hub-cal .day-button.has-both { background:linear-gradient(135deg,var(--accent) 0 50%,#A22F8D 50% 100%); border-color:#FFE7CA; color:#FFE7CA; text-shadow:-1px -1px 0 rgba(14,14,14,0.85),1px -1px 0 rgba(14,14,14,0.85),-1px 1px 0 rgba(14,14,14,0.85),1px 1px 0 rgba(14,14,14,0.85); }
+  .hub-cal .day-button.selected { outline-color:#FFE7CA; box-shadow:inset 0 0 0 2px rgba(14,14,14,0.72); }
   .hub-entry { width:100%; text-align:left; border:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:10px 12px; display:grid; gap:4px; cursor:pointer; }
   .hub-entry:hover { border-color:var(--accent); }
   .hub-entry .he-top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
@@ -1446,8 +1447,9 @@
       const evs = entry?.events.length || 0;
       const cls = appts && evs ? "has-both" : evs ? "has-event" : appts ? "has-appt" : "";
       const sel = key === selectedHomeDay ? " selected" : "";
-      const label = `${appts} appointment${appts !== 1 ? "s" : ""}, ${evs} event${evs !== 1 ? "s" : ""}`;
-      cells.push(`<button class="day-button ${cls}${sel}" type="button" data-home-day="${escapeHtml(key)}" title="${escapeHtml(label)}">${d}</button>`);
+      const dayLabel = new Date(year, month - 1, d, 12).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+      const label = `${dayLabel}: ${appts} booking${appts !== 1 ? "s" : ""}, ${evs} event${evs !== 1 ? "s" : ""}`;
+      cells.push(`<button class="day-button ${cls}${sel}" type="button" data-home-day="${escapeHtml(key)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${d}</button>`);
     }
     cal.innerHTML = `<div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="calendar-grid">${cells.join("")}</div>`;
   }

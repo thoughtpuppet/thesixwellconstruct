@@ -575,6 +575,13 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
         stream: {
           inFlight: shapeStream.metrics.inFlightCount,
           sleeping: shapeStream.metrics.sleepingCount,
+          sleepingAboveSurface: shapeStream.items.filter((item) => {
+            if (!item.body?.isSleeping?.()) return false;
+            const zoneForItem = shapeStream.zones[item.zoneIndex] || shapeStream.zones[0];
+            if (!zoneForItem) return false;
+            const translation = item.body.translation();
+            return translation.y > shapeStreamPhysicalSurfaceY(zoneForItem, translation.x, translation.z) + item.size * 1.35;
+          }).length,
           spawnIntervalScale: +shapeStream.metrics.spawnIntervalScale.toFixed(2),
           spillover: !!shapeStream.metrics.spillover
         },
@@ -1602,37 +1609,37 @@ const completionEffects = (() => {
 const SHAPE_STREAM = {
   enabled: true,
   maxShapes: 980,      // hard cap for performance
-  spawnInterval: 0.10, // seconds between spawns
+  spawnInterval: 0.135, // seconds between spawns
   gravity: -17,        // world units / s^2
   minSize: 0.30,       // shape radius (world units)
   maxSize: 0.30,
   mobileSizeScale: 0.82,
   depthRatio: 0.55,    // prism thickness relative to radius
-  vxSpread: 0.48,      // jitter around the ballistic aim velocity (+/-)
+  vxSpread: 0.58,      // jitter around the ballistic aim velocity (+/-)
   vyPop: 1.15,         // initial upward pop range
-  spawnBurst: 2.55,
+  spawnBurst: 2.18,
   spawnClearance: 0.72, // radius multiples to push new bodies out of the aperture
   spawnSideJitter: 0.42,
   spawnDownwardBias: 0.62,
-  aimCompensation: 1.55,
-  farAimCompensation: 1.25,
-  landingSteerDuration: 1.25,
-  landingSteerStrength: 3.8,
-  landingSteerMaxSpeed: 14,
+  aimCompensation: 1.32,
+  farAimCompensation: 1.02,
+  landingSteerDuration: 0.82,
+  landingSteerStrength: 2.35,
+  landingSteerMaxSpeed: 9.5,
   landingSteerImpactFadeHeight: 2.45,
   landingSteerPressureFadeStart: 0.72,
-  maxLaunchSpeed: 18.5,
+  maxLaunchSpeed: 14.5,
   maxUpwardSpeed: 0.95,
   maxAngularSpeed: 4.8,
-  linearDamping: 1.25,
-  angularDamping: 5.2,
-  groundedLinearDrag: 7.2,
-  groundedAngularDrag: 9.5,
-  mobileGroundedDragBoost: 1.22,
-  floorFriction: 2.8,
-  wallFriction: 0.22,
+  linearDamping: 1.05,
+  angularDamping: 4.2,
+  groundedLinearDrag: 3.15,
+  groundedAngularDrag: 4.4,
+  mobileGroundedDragBoost: 1.08,
+  floorFriction: 1.45,
+  wallFriction: 0.14,
   frontBoundaryClearance: 1.15,
-  shapeFriction: 2.35,
+  shapeFriction: 1.22,
   phaseMinDuration: 1.8,
   phaseBlendDuration: 0.18,
   emergencyPressureRatio: 1.16,
@@ -1651,10 +1658,10 @@ const SHAPE_STREAM = {
     { name: 'back-center', duration: 2.0, widthT: 0.172, depthT: 0.078, widthSpread: 0.36, depthSpread: 0.05 },
     { name: 'front-fill', duration: 2.2, widthT: 0.578, depthT: 0.990, widthSpread: 0.64, depthSpread: 0.22 },
     { name: 'center', duration: 1.9, widthT: 0.438, depthT: 0.297, widthSpread: 0.39, depthSpread: 0.16 },
-    { name: 'front-right', duration: 2.1, widthT: 0.990, depthT: 0.990, widthSpread: 0.22, depthSpread: 0.22 },
-    { name: 'back-right', duration: 2.0, widthT: 0.970, depthT: 0.250, widthSpread: 0.23, depthSpread: 0.19 },
+    { name: 'front-right', duration: 2.1, widthT: 0.900, depthT: 0.900, widthSpread: 0.30, depthSpread: 0.25 },
+    { name: 'back-right', duration: 2.0, widthT: 0.880, depthT: 0.250, widthSpread: 0.27, depthSpread: 0.19 },
     { name: 'left', duration: 2.0, widthT: 0.040, depthT: 0.940, widthSpread: 0.24, depthSpread: 0.24 },
-    { name: 'right', duration: 2.0, widthT: 0.985, depthT: 0.640, widthSpread: 0.22, depthSpread: 0.30 }
+    { name: 'right', duration: 2.0, widthT: 0.915, depthT: 0.620, widthSpread: 0.28, depthSpread: 0.30 }
   ],
   settleLinearThreshold: 0.055,
   settleAngularThreshold: 0.18,
@@ -2161,6 +2168,12 @@ function shapeStreamNeighborhoodHeight(zone, xBucket, zBucket) {
   return peak * 0.66 + (total / Math.max(1, count)) * 0.34;
 }
 
+function shapeStreamPhysicalSurfaceY(zone, worldX, worldZ) {
+  const bucket = shapeStreamBucketForWorld(zone, worldX, worldZ);
+  const sample = shapeStreamFloorSample(zone, bucket.depthT, bucket.widthT);
+  return sample.y + shapeStreamBucketHeight(zone, bucket.xBucket, bucket.zBucket);
+}
+
 function commitShapeStreamBucket(item) {
   const zone = shapeStream.zones[item.zoneIndex] || shapeStream.zones[0];
   if (!zone) return;
@@ -2639,8 +2652,9 @@ function spawnStreamShape() {
   mesh.scale.setScalar(size);
   mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
-  // Aim each shape at one of the lowest cells in the unified floor field.
-  const lowest = shapeStreamCrowdedHeight(zone, targetCell.x, targetCell.z);
+  // Aim at the physical floor/pile height only. Congestion pressure should
+  // influence target choice, not make falling bodies freeze above the floor.
+  const settledLift = shapeStreamBucketHeight(zone, targetCell.x, targetCell.z);
   const targetDepthT = targetCell.depthT ?? THREE.MathUtils.clamp(
     (targetCell.z + Math.random()) / shapeStream.depthBucketCount,
     0.02,
@@ -2686,7 +2700,7 @@ function spawnStreamShape() {
   // targetX/targetZ given the upward pop and gravity. Airtime = time to fall
   // from the spawn height down to the target surface (apex included).
   const vy0 = Math.random() * SHAPE_STREAM.vyPop;
-  const surfaceY = targetSample.y + lowest;
+  const surfaceY = targetSample.y + settledLift;
   const fall = Math.max(0.5, mesh.position.y - surfaceY);
   const g = Math.abs(SHAPE_STREAM.gravity);
   // t for y(t)=y0+vy0*t-0.5*g*t^2 to reach surfaceY (the larger root).
@@ -2770,6 +2784,8 @@ function spawnStreamShape() {
       zBucket: targetCell.z,
       lift: reservedLift
     },
+    touchedSurface: false,
+    supportTime: 0,
     calmTime: 0,
     bucketCommitted: false,
     bucketContribution: null,
@@ -4292,6 +4308,8 @@ function addShapeStreamFinalGridItem() {
     target: null,
     targetSurfaceY: null,
     reservation: null,
+    touchedSurface: true,
+    supportTime: 0,
     calmTime: 0,
     bucketCommitted: true,
     bucketContribution: null,
@@ -4633,7 +4651,12 @@ function activateShapeStreamFinalGrid() {
 }
 
 function steerShapeStreamItem(item, translation, linvel, delta) {
-  if (!item.target || item.body.isSleeping() || item.age > SHAPE_STREAM.landingSteerDuration) return linvel;
+  if (
+    !item.target
+    || item.touchedSurface
+    || item.body.isSleeping()
+    || item.age > SHAPE_STREAM.landingSteerDuration
+  ) return linvel;
   const heightAboveTarget = translation.y - item.target.y;
   const stopHeight = item.size * 1.22;
   if (heightAboveTarget <= stopHeight) return linvel;
@@ -4726,11 +4749,33 @@ function updateShapeStream(delta) {
     let linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
     let angularSpeed = Math.hypot(angvel.x, angvel.y, angvel.z);
     const targetSurfaceY = item.targetSurfaceY ?? item.target?.y;
-    const nearTargetSurface = targetSurfaceY != null
-      && translation.y <= targetSurfaceY + item.size * 1.18;
-    const groundedForStream = targetSurfaceY != null
+    const zone = shapeStream.zones[item.zoneIndex] || shapeStream.zones[0];
+    const physicalSurfaceY = zone
+      ? shapeStreamPhysicalSurfaceY(zone, translation.x, translation.z)
+      : targetSurfaceY;
+    const nearPhysicalSurface = physicalSurfaceY != null
+      && translation.y <= physicalSurfaceY + item.size * 1.18;
+    if (item.body.isSleeping() && !nearPhysicalSurface) {
+      linvel = { x: linvel.x * 0.35, y: -Math.max(0.12, item.size * 0.45), z: linvel.z * 0.35 };
+      angvel = { x: 0, y: 0, z: 0 };
+      item.body.setLinvel(linvel, true);
+      item.body.setAngvel(angvel, true);
+      item.calmTime = 0;
+      linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
+      angularSpeed = 0;
+    }
+    if (nearPhysicalSurface && item.age > 0.24 && linvel.y <= 0.36) {
+      item.touchedSurface = true;
+    }
+    const supportedForSleep = nearPhysicalSurface
+      && item.age > 0.62
+      && Math.abs(linvel.y) <= item.size * 0.82;
+    item.supportTime = supportedForSleep
+      ? item.supportTime + delta
+      : Math.max(0, item.supportTime - delta * 1.8);
+    const groundedForStream = physicalSurfaceY != null
       && item.age > 0.34
-      && translation.y <= targetSurfaceY + item.size * 1.42
+      && translation.y <= physicalSurfaceY + item.size * 1.42
       && linvel.y <= 0.28;
     if (groundedForStream && !item.body.isSleeping()) {
       const dragBoost = activeLayoutName === 'mobile' ? SHAPE_STREAM.mobileGroundedDragBoost : 1;
@@ -4754,7 +4799,7 @@ function updateShapeStream(delta) {
     if (
       !item.feedbackImpactPlayed
       && item.age > 0.24
-      && nearTargetSurface
+      && nearPhysicalSurface
       && (linvel.y <= -0.18 || linearSpeed > SHAPE_STREAM.settleLinearThreshold * 4)
     ) {
       item.feedbackImpactPlayed = true;
@@ -4773,8 +4818,17 @@ function updateShapeStream(delta) {
 
     const nearlyStill = linearSpeed <= SHAPE_STREAM.settleLinearThreshold
       && angularSpeed <= SHAPE_STREAM.settleAngularThreshold;
-    item.calmTime = nearlyStill ? item.calmTime + delta : 0;
-    if (!item.body.isSleeping() && item.age > 0.9 && item.calmTime >= SHAPE_STREAM.settleSleepDelay) {
+    const groundedStill = nearPhysicalSurface
+      && linearSpeed <= SHAPE_STREAM.settleLinearThreshold * 2.6
+      && angularSpeed <= SHAPE_STREAM.settleAngularThreshold * 2.15;
+    item.calmTime = (nearPhysicalSurface ? groundedStill : nearlyStill) ? item.calmTime + delta : 0;
+    if (
+      !item.body.isSleeping()
+      && item.age > 1.35
+      && nearPhysicalSurface
+      && item.supportTime >= 0.34
+      && item.calmTime >= SHAPE_STREAM.settleSleepDelay
+    ) {
       item.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       item.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
       item.body.sleep();
@@ -4789,7 +4843,7 @@ function updateShapeStream(delta) {
       && (
         item.body.isSleeping()
         || item.age > 3.6
-        || (nearTargetSurface && item.age > 1.3 && linearSpeed <= SHAPE_STREAM.settleLinearThreshold * 7)
+        || (nearPhysicalSurface && item.age > 1.3 && linearSpeed <= SHAPE_STREAM.settleLinearThreshold * 7)
       );
     if (shouldReleaseReservation) {
       const reservedZone = shapeStream.zones[item.reservation.zoneIndex] || shapeStream.zones[0];
@@ -4803,7 +4857,7 @@ function updateShapeStream(delta) {
       item.reservation = null;
     }
 
-    if (!item.bucketCommitted && item.body.isSleeping()) {
+    if (!item.bucketCommitted && item.body.isSleeping() && nearPhysicalSurface && item.supportTime >= 0.34) {
       if (!item.feedbackImpactPlayed) {
         item.feedbackImpactPlayed = true;
         playShapeImpactFeedback(0.34, item.mesh.position);
