@@ -30,6 +30,25 @@ export const SOURCES = {
 
 export const SOURCE_ORDER = ["six.well", "thoughtpuppet", "art.pill"];
 
+const SOURCE_ALIASES = {
+  "six well": "six.well",
+  sixwell: "six.well",
+  "six.well clothing": "six.well",
+  "six well clothing": "six.well",
+  clothing: "six.well",
+  merch: "six.well",
+  artpill: "art.pill",
+  "art pill": "art.pill",
+  "art.pill tattoo house": "art.pill",
+  "art.pill tattoo supply": "art.pill",
+  "art pill tattoo house": "art.pill",
+  "art pill tattoo supply": "art.pill",
+  tattooing: "art.pill",
+  tattoo: "art.pill",
+  art: "thoughtpuppet",
+  "art making": "thoughtpuppet",
+};
+
 export const TYPE_LABELS = {
   apparel: "apparel",
   print: "prints",
@@ -159,7 +178,16 @@ function normalizeKey(value) {
   return String(value || "")
     .trim()
     .toLowerCase()
+    .replace(/[_.-]+/g, " ")
     .replace(/\s+/g, " ");
+}
+
+export function canonicalSourceKey(value) {
+  const raw = String(value || "").trim();
+  if (SOURCES[raw]) return raw;
+  const normalized = normalizeKey(raw);
+  if (SOURCES[normalized]) return normalized;
+  return SOURCE_ALIASES[normalized] || raw || null;
 }
 
 export function getPresentation(handle) {
@@ -173,7 +201,7 @@ export function getSource(sourceKey) {
 export function deriveSourceVenture(product) {
   const presentation = getPresentation(product.handle);
   const fromTag = readTagValue(product.tags || [], ["venture:", "source:"]);
-  return presentation.sourceVenture || fromTag || null;
+  return canonicalSourceKey(presentation.sourceVenture || fromTag || product.sourceVenture || product.sourceLabel);
 }
 
 export function deriveProductType(product) {

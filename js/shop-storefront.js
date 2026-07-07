@@ -2,6 +2,7 @@ import {
   SOURCE_ORDER,
   SOURCES,
   PLACEHOLDER_PRODUCTS,
+  canonicalSourceKey,
   getColorHex,
   getPresentation,
   getTypeLabel,
@@ -15,10 +16,14 @@ function tokenColor(name, fallback) {
 }
 
 const MERCH_COLOR = tokenColor("--color-merch", "#F08F15");
-const ABOUT_COLOR = tokenColor("--color-about", "#FCB867");
 
 function readableSourceInk(color) {
   return "#0e0e0e";
+}
+
+function resolveSource(sourceKey) {
+  const key = canonicalSourceKey(sourceKey);
+  return SOURCES[key] || SOURCES["six.well"];
 }
 
 function normalizeKey(value) {
@@ -502,7 +507,7 @@ export async function initMerchCatalogPage() {
   function makeChip(label, count, isActive, srcColor) {
     const button = document.createElement("button");
     button.className = `chip${isActive ? " active" : ""}`;
-    button.style.setProperty("--src-color", srcColor || "var(--accent)");
+    button.style.setProperty("--src-color", srcColor || MERCH_COLOR);
     button.innerHTML = `<span class="chip-label">${label}</span><span class="chip-count">${count}</span>`;
     return button;
   }
@@ -547,7 +552,7 @@ export async function initMerchCatalogPage() {
 
   function renderFilters() {
     sourceRowEl.innerHTML = "";
-    const allButton = makeChip("all", products.length, activeFilter === "all", "var(--accent)");
+    const allButton = makeChip("all", products.length, activeFilter === "all", MERCH_COLOR);
     allButton.addEventListener("click", () => setFilter("all"));
     sourceRowEl.appendChild(allButton);
 
@@ -562,7 +567,7 @@ export async function initMerchCatalogPage() {
 
     for (const sourceKey of SOURCE_ORDER) {
       const source = SOURCES[sourceKey];
-      const count = products.filter((product) => product.sourceVenture === sourceKey).length;
+      const count = products.filter((product) => canonicalSourceKey(product.sourceVenture) === sourceKey).length;
       if (!count) continue;
       const button = makeChip(source.label, count, activeFilter === sourceKey, source.color);
       button.addEventListener("click", () => setFilter(sourceKey));
@@ -587,19 +592,19 @@ export async function initMerchCatalogPage() {
     typeRowEl.innerHTML = "";
     if (activeFilter === "all") return;
 
-    const visibleProducts = products.filter((product) => product.sourceVenture === activeFilter);
+    const visibleProducts = products.filter((product) => canonicalSourceKey(product.sourceVenture) === activeFilter);
     const counts = new Map();
     visibleProducts.forEach((product) => {
       counts.set(product.productType, (counts.get(product.productType) || 0) + 1);
     });
     if (counts.size <= 1) return;
 
-    const allButton = makeChip("all", visibleProducts.length, activeTypeFilter === "all", "var(--accent)");
+    const allButton = makeChip("all", visibleProducts.length, activeTypeFilter === "all", MERCH_COLOR);
     allButton.addEventListener("click", () => setTypeFilter("all"));
     typeRowEl.appendChild(allButton);
 
     for (const [typeKey, count] of counts.entries()) {
-      const button = makeChip(getTypeLabel(typeKey), count, activeTypeFilter === typeKey, "var(--accent)");
+      const button = makeChip(getTypeLabel(typeKey), count, activeTypeFilter === typeKey, MERCH_COLOR);
       button.addEventListener("click", () => setTypeFilter(typeKey));
       typeRowEl.appendChild(button);
     }
@@ -668,7 +673,7 @@ export async function initMerchCatalogPage() {
   function renderGrid() {
     let visibleProducts = products;
     if (activeFilter !== "all") {
-      visibleProducts = visibleProducts.filter((product) => product.sourceVenture === activeFilter);
+      visibleProducts = visibleProducts.filter((product) => canonicalSourceKey(product.sourceVenture) === activeFilter);
     }
     if (activeTypeFilter !== "all") {
       visibleProducts = visibleProducts.filter((product) => product.productType === activeTypeFilter);
@@ -681,7 +686,7 @@ export async function initMerchCatalogPage() {
 
     grid.innerHTML = visibleProducts
       .map((product) => {
-        const source = SOURCES[product.sourceVenture] || { color: ABOUT_COLOR, label: product.sourceLabel };
+        const source = resolveSource(product.sourceVenture);
         const optionValues = resolveOptionValues(product);
         const selection = selections[product.handle] || {};
         const selectedSize = selection.size || getSelection(product.handle, "size", optionValues.size);
@@ -790,7 +795,10 @@ export async function initMerchCatalogPage() {
 
   try {
     grid.innerHTML = `<p class="drawer-empty">loading merch...</p>`;
-    products = await loadCatalog();
+    products = (await loadCatalog()).map((product) => ({
+      ...product,
+      sourceVenture: canonicalSourceKey(product.sourceVenture || product.sourceLabel),
+    }));
     const liveHandles = new Set(products.map((p) => p.handle));
     for (const placeholder of PLACEHOLDER_PRODUCTS) {
       if (!liveHandles.has(placeholder.handle)) products.push(placeholder);
@@ -799,7 +807,7 @@ export async function initMerchCatalogPage() {
     renderTypeFilters();
     renderGrid();
     setHeroState("all");
-    const initFilter = new URLSearchParams(window.location.search).get("filter");
+    const initFilter = canonicalSourceKey(new URLSearchParams(window.location.search).get("filter"));
     if (initFilter && SOURCES[initFilter]) setFilter(initFilter);
   } catch (error) {
     grid.innerHTML = `<p class="drawer-empty">shop is temporarily unavailable: ${error.message || "unknown error"}</p>`;
@@ -824,7 +832,7 @@ export async function initMerchProductPage(options) {
   const product = await getProductByHandle(options.handle);
   if (!product) throw new Error(`No Shopify product found for handle ${options.handle}.`);
 
-  const source = SOURCES[product.sourceVenture] || { color: ABOUT_COLOR, label: product.sourceLabel };
+  const source = resolveSource(product.sourceVenture || product.sourceLabel);
   const optionValues = resolveOptionValues(product);
   const selection = {
     size: optionValues.size.length === 1 ? optionValues.size[0] : null,
