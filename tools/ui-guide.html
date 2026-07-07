@@ -491,6 +491,10 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 }</code></pre>
     <p class="lead">Then use <code>var(--venture-color)</code> for: filter-chip active states (dot + underline), section labels and kicker text, status indicators, active UI states, and hover border colors on cards and interactive elements. The property is still named <code>--venture-color</code> for legacy compatibility — keep the name.</p>
 
+    <div class="rule-note">
+      <strong>Source-label badge rule:</strong> when a small label names a product source or medium, make the source color a solid badge fill and choose readable ink on top. Do not rely on 10px colored text at reduced opacity for blue, red, or other dark signals on phones.
+    </div>
+
     <h3>Where signal vs. dim goes</h3>
     <table>
       <tr><th>Variant</th><th>Use for</th></tr>
@@ -595,6 +599,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><td>≤ 720px</td><td>Venture shell padding tightens; hero titles re-clamp; record/path/status grids go 1-up; timeline + footer stack</td></tr>
       <tr><td>≤ 700px</td><td>Breadcrumb/wayfinding footer shrink to 9px and stack; mobile.css guards activate</td></tr>
       <tr><td>≤ 640px</td><td>Media grid forces 2-up <code>repeat(2, minmax(0,1fr))</code>; header shell grows to 110px; dot nav drops to 92px; buttons go full-width</td></tr>
+      <tr><td>≤ 640px</td><td>Source/medium labels should become solid color badges or keep color in a filled chip; text must use contrast-safe ink, not low-opacity accent text</td></tr>
     </table>
 
     <div class="rule-note danger"><strong>Grid collapse rule:</strong> always write <code>grid-template-columns: minmax(0, 1fr)</code> in mobile collapse rules — never bare <code>1fr</code>. <code>1fr</code> = <code>minmax(auto, 1fr)</code> and cannot shrink below a child's min-content width, which is how long headlines drag 390px phones to desktop scale. See Gotchas.</div>
@@ -885,6 +890,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><td>Two <code>.media-grid</code> definitions</td><td><code>css/media.css</code> defines the card grid (auto-fill 260px); <code>css/venture-pages.css</code> also defines a 2-up <code>.media-grid</code> for media panels. Don't load both on one page without checking which wins.</td></tr>
       <tr><td>Hidden pages</td><td>Hiding/showing is done through <code>/tools/page-visibility.html</code>, which edits <code>_worker.js</code> and moves files to <code>.hidden-pages/</code>. Don't hand-move page files.</td></tr>
       <tr><td>Token sync</td><td><code>css/tokens.css</code> is the palette source. The guide, homepage canvas, and injected dot nav read those variables when served locally. Refresh open pages after saving; use a literal search only for older one-off hardcoded surfaces.</td></tr>
+      <tr><td>Tiny colored labels</td><td>A saturated source color is not automatically legible as small type. Use a solid badge for merch/source labels, with the token color as fill and a computed or chosen readable ink color.</td></tr>
       <tr><td>Push policy</td><td>Never push. The user pushes manually. Work directly on main.</td></tr>
     </table>
   </section>

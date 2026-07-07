@@ -17,6 +17,10 @@ function tokenColor(name, fallback) {
 const MERCH_COLOR = tokenColor("--color-merch", "#F08F15");
 const ABOUT_COLOR = tokenColor("--color-about", "#FCB867");
 
+function readableSourceInk(color) {
+  return "#0e0e0e";
+}
+
 function normalizeKey(value) {
   return String(value || "")
     .trim()
@@ -643,7 +647,7 @@ export async function initMerchCatalogPage() {
             </a>
             <div class="card-cat">
               ${sourceMark}
-              <span class="cat-label" style="color:${source.color}; opacity:0.7">${source.label}</span>
+              <span class="cat-label" style="--label-color:${source.color}; --label-ink:${readableSourceInk(source.color)}">${source.label}</span>
             </div>
             <div class="card-meta">
               <h3 class="card-name"><a href="${cardUrl}" style="color:inherit">${product.title}</a></h3>
@@ -739,8 +743,11 @@ export async function initMerchProductPage(options) {
   if (options.titleEl) options.titleEl.innerHTML = product.title.replace(". ", ".<br>");
   if (options.priceEl) options.priceEl.textContent = moneyText(product.price);
   if (options.editionEl && product.editionText) options.editionEl.textContent = product.editionText;
-  if (options.sourceLabelEl) options.sourceLabelEl.textContent = source.label;
-  if (options.sourceLabelEl) options.sourceLabelEl.style.color = source.color;
+  if (options.sourceLabelEl) {
+    options.sourceLabelEl.textContent = source.label;
+    options.sourceLabelEl.style.setProperty("--label-color", source.color);
+    options.sourceLabelEl.style.setProperty("--label-ink", readableSourceInk(source.color));
+  }
   if (options.sourceDotEl) options.sourceDotEl.style.background = source.color;
   renderProductGallery(product, options);
   if (options.priceNoteEl && product.priceNote) options.priceNoteEl.textContent = product.priceNote;

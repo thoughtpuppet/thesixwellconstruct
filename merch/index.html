@@ -22,7 +22,7 @@
     
     Current sources:
       six.well      #F08F15   garments, construct-originating
-      thoughtpuppet #0071EB   artifacts, ART-originating
+      thoughtpuppet var(--color-art)   artifacts, ART-originating
     
     Adding a new source (e.g. tattooing flash):
       1. add entry to SOURCES constant
@@ -46,6 +46,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 
 <style>
@@ -57,8 +58,8 @@
     --bg-raised: #111111;
     --bg-drawer: #0a0a0a;
 
-    --accent:    #FCB867;            /* wordmark amber */
-    --accent-hot:#F08F15;            /* MERCH medium color — title + six.well source */
+    --accent:    var(--color-accent, #FCB867);            /* wordmark amber */
+    --accent-hot:var(--color-merch, #F08F15);            /* MERCH medium color — title + six.well source */
 
     --ring:      #6D3D15;
     --ring-soft: rgba(109,61,21,0.4);
@@ -205,7 +206,7 @@
     transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
   }
   .sixwell-letter-six { color:#FCB867; }
-  .sixwell-letter-we { color:#0071EB; }
+  .sixwell-letter-we { color:var(--color-art, #0039BD); }
   .sixwell-letter-ll { color:#6E0404; }
   .intro p {
     font-family:var(--serif); font-size:12px;
@@ -449,9 +450,15 @@
     background:var(--src-color, var(--accent));
   }
   .cat-label {
+    display:inline-flex;
+    align-items:center;
+    min-height:22px;
+    padding:4px 8px 5px;
+    background:var(--label-color, var(--src-color, var(--accent)));
+    color:var(--label-ink, var(--bg));
     font-family:var(--serif); font-size:10px;
-    letter-spacing:0.22em; text-transform:uppercase;
-    /* color set inline by JS in medium color */
+    line-height:1;
+    letter-spacing:0.16em; text-transform:uppercase;
   }
 
   .card-meta {
@@ -670,6 +677,15 @@
     .intro p { text-align:left; padding-bottom:0; max-width:none; }
     .filters { gap:var(--s4); }
     .grid { grid-template-columns:1fr; gap:var(--s6); }
+    .card-cat { gap:10px; }
+    .cat-logo { height:20px; max-width:32px; opacity:1; }
+    .cat-dot { width:7px; height:7px; }
+    .cat-label {
+      min-height:26px;
+      padding:6px 10px 7px;
+      font-size:11px;
+      letter-spacing:0.12em;
+    }
     footer.bottom { flex-direction:column; gap:var(--s3); align-items:flex-start; padding:var(--s6) var(--s5); }
   }
 @media (max-width: 700px) {
