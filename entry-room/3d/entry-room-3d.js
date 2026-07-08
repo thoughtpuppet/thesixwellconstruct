@@ -1,6 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { mountCalibrationHud } from './entry-room-calibration-hud.js';
-import RAPIER from 'https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/+esm';
+import RAPIER from './vendor/rapier3d-compat.esm.js';
 
 await RAPIER.init();
 
@@ -1273,6 +1273,7 @@ const orbs = activeLayout.orbHomes.map((p, index) => {
     home: { ...p },
     seated: null,        // socket index when placed
     dragging: false,
+    keyboardActive: false,
     target: null,        // world Vector3 to ease toward (seat / return)
     phase: Math.random() * Math.PI * 2,
     pullX: 0, pullY: 0,  // eased cursor-gravity offset while floating
@@ -1280,12 +1281,29 @@ const orbs = activeLayout.orbHomes.map((p, index) => {
   };
 });
 
+const keyboardFocusRing = new THREE.Mesh(
+  new THREE.RingGeometry(1.14, 1.28, 64),
+  new THREE.MeshBasicMaterial({
+    color: 0xffe8c8,
+    transparent: true,
+    opacity: 0.58,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false
+  })
+);
+keyboardFocusRing.renderOrder = 24;
+keyboardFocusRing.visible = false;
+scene.add(keyboardFocusRing);
+
 function placeOrbAtHome(orb) {
   const home = imageToWorld(orb.home.x, orb.home.y, CONFIG.homeZ);
   orb.mesh.position.copy(home);
   orb.mesh.rotation.set(0, 0, 0);
   orb.target = null;
   orb.dragging = false;
+  orb.keyboardActive = false;
   orb.seated = null;
   orb.pullX = 0;
   orb.pullY = 0;
@@ -1293,6 +1311,7 @@ function placeOrbAtHome(orb) {
 
 function resetOrbPlacements() {
   releaseActivePointer(activePointer);
+  clearKeyboardSelection();
   active = null;
   activePointer = null;
   root.classList.remove('is-dragging');
@@ -6704,7 +6723,7 @@ function layout() {
   orbs.forEach((o) => {
     o.orbR = orbR;
     o.mesh.scale.setScalar(orbR);
-    if (o.seated == null && !o.dragging && !o.target) {
+    if (o.seated == null && !o.dragging && !o.keyboardActive && !o.target) {
       const h = imageToWorld(o.home.x, o.home.y, CONFIG.homeZ);
       o.mesh.position.copy(h);
     }
@@ -6880,6 +6899,8 @@ function reseatPlaced() {
 let active = null, activePointer = null;
 const dragOffset = new THREE.Vector3();
 let pointerWorld = null; // live cursor position in world space, for the idle gravity pull
+let keyboardSelectedOrb = null;
+let keyboardCanvasFocused = false;
 
 function eventToWorld(event, z) {
   const rect = canvas.getBoundingClientRect();
@@ -6919,6 +6940,28 @@ function nearestOpenSocket(orb) {
   return best;
 }
 
+function placementSnapDistance(orb) {
+  return Math.max(orb.orbR * 1.7, 0.07 * coreUnitW());
+}
+
+function seatOrbInSocket(orb, socket) {
+  if (!orb || !socket || socket.filledBy != null) return false;
+  orb.seated = socket.index;
+  socket.filledBy = orb.index;
+  socket.shadow.visible = true;
+  orb.mesh.position.copy(seatWorld(socket, orb.orbR));
+  orb.target = null;
+  orb.dragging = false;
+  orb.keyboardActive = false;
+  playSocketFeedback();
+  updateStatus();
+  return true;
+}
+
+function firstUnseatedOrb() {
+  return orbs.find((orb) => orb.seated == null) || null;
+}
+
 function releaseActivePointer(pointerId) {
   if (pointerId == null) return;
   try { canvas.releasePointerCapture(pointerId); } catch {}
@@ -6944,15 +6987,8 @@ function finishActiveDrag({ pointerId = activePointer, interrupted = false } = {
     }
   } else {
     const near = nearestOpenSocket(orb);
-    const snapDist = Math.max(orb.orbR * 1.7, 0.07 * coreUnitW());
-    if (near && near.d < snapDist) {
-      orb.seated = near.s.index;
-      near.s.filledBy = orb.index;
-      near.s.shadow.visible = true;
-      orb.mesh.position.copy(seatWorld(near.s, orb.orbR));
-      orb.target = null;
-      playSocketFeedback();
-      updateStatus();
+    if (near && near.d < placementSnapDistance(orb)) {
+      seatOrbInSocket(orb, near.s);
     } else if (calibrate) {
       const n = worldToImage(orb.mesh.position);
       orb.home.x = +n.x.toFixed(4);
@@ -6972,6 +7008,7 @@ function finishActiveDrag({ pointerId = activePointer, interrupted = false } = {
 
 function pointerDown(event) {
   primeFeedback();
+  clearKeyboardSelection();
   if (handleShapeLockClick(event)) return;
   if (active && event.pointerId !== activePointer) {
     event.preventDefault();
@@ -6990,6 +7027,111 @@ function pointerDown(event) {
   root.classList.add('is-dragging');
   event.preventDefault();
 }
+
+function clearKeyboardSelection({ returnHome = false } = {}) {
+  if (keyboardSelectedOrb) {
+    keyboardSelectedOrb.keyboardActive = false;
+    if (returnHome && keyboardSelectedOrb.seated == null && !keyboardSelectedOrb.dragging) {
+      keyboardSelectedOrb.target = imageToWorld(keyboardSelectedOrb.home.x, keyboardSelectedOrb.home.y, CONFIG.homeZ);
+    }
+  }
+  keyboardSelectedOrb = null;
+  keyboardFocusRing.visible = false;
+}
+
+function selectKeyboardOrb(orb, announce = true) {
+  if (!orb || orb.seated != null) return null;
+  if (keyboardSelectedOrb && keyboardSelectedOrb !== orb) {
+    keyboardSelectedOrb.keyboardActive = false;
+  }
+  keyboardSelectedOrb = orb;
+  orb.keyboardActive = true;
+  orb.dragging = false;
+  orb.target = null;
+  orb.mesh.position.z = CONFIG.dragZ;
+  if (announce) status.textContent = `orb ${orb.index + 1} selected`;
+  return orb;
+}
+
+function ensureKeyboardSelection(announce = false) {
+  if (keyboardSelectedOrb && keyboardSelectedOrb.seated == null) {
+    return selectKeyboardOrb(keyboardSelectedOrb, announce);
+  }
+  return selectKeyboardOrb(firstUnseatedOrb(), announce);
+}
+
+function selectNextKeyboardOrb() {
+  const next = firstUnseatedOrb();
+  if (next) {
+    selectKeyboardOrb(next, false);
+  } else {
+    clearKeyboardSelection();
+  }
+}
+
+function moveKeyboardOrb(orb, event) {
+  const step = Math.max(orb.orbR * (event.shiftKey ? 0.42 : 1.1), coreUnitW() * (event.shiftKey ? 0.006 : 0.014));
+  if (event.key === 'ArrowLeft') orb.mesh.position.x -= step;
+  if (event.key === 'ArrowRight') orb.mesh.position.x += step;
+  if (event.key === 'ArrowUp') orb.mesh.position.y += step;
+  if (event.key === 'ArrowDown') orb.mesh.position.y -= step;
+  orb.mesh.position.z = CONFIG.dragZ;
+  const hw = viewport.width / 2 - orb.orbR;
+  const hh = viewport.height / 2 - orb.orbR;
+  orb.mesh.position.x = THREE.MathUtils.clamp(orb.mesh.position.x, -hw, hw);
+  orb.mesh.position.y = THREE.MathUtils.clamp(orb.mesh.position.y, -hh, hh);
+  status.textContent = `orb ${orb.index + 1} moved`;
+}
+
+function attemptKeyboardSeat(orb) {
+  const near = nearestOpenSocket(orb);
+  if (near && near.d < placementSnapDistance(orb)) {
+    seatOrbInSocket(orb, near.s);
+    selectNextKeyboardOrb();
+    return true;
+  }
+  status.textContent = `orb ${orb.index + 1} is not close to an open socket`;
+  return false;
+}
+
+function keyboardDown(event) {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const number = Number(event.key);
+  if (Number.isInteger(number) && number >= 1 && number <= orbs.length) {
+    primeFeedback();
+    const orb = orbs[number - 1];
+    if (orb.seated == null) selectKeyboardOrb(orb);
+    else status.textContent = `orb ${number} already placed`;
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Enter'].includes(event.key)) return;
+  primeFeedback();
+  const orb = ensureKeyboardSelection(!keyboardSelectedOrb);
+  if (!orb) return;
+  if (event.key === ' ' || event.key === 'Enter') {
+    attemptKeyboardSeat(orb);
+  } else {
+    moveKeyboardOrb(orb, event);
+  }
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function updateKeyboardFocusRing() {
+  const orb = keyboardCanvasFocused ? keyboardSelectedOrb : null;
+  if (!orb || orb.seated != null || doorwayExit.orbsHidden) {
+    keyboardFocusRing.visible = false;
+    return;
+  }
+  keyboardFocusRing.visible = true;
+  keyboardFocusRing.position.set(orb.mesh.position.x, orb.mesh.position.y, orb.mesh.position.z + orb.orbR + 0.16);
+  keyboardFocusRing.scale.setScalar(orb.orbR);
+  keyboardFocusRing.material.opacity = 0.48 + Math.sin(clock.elapsedTime * 3.2) * 0.1;
+}
+
 function pointerMove(event) {
   pointerWorld = eventToWorld(event, CONFIG.homeZ);
   if (!active || event.pointerId !== activePointer) {
@@ -7711,6 +7853,15 @@ if (calibrate) {
 canvas.addEventListener('pointerdown', pointerDown);
 canvas.addEventListener('pointermove', pointerMove);
 canvas.addEventListener('pointerup', pointerUp);
+canvas.addEventListener('focus', () => {
+  keyboardCanvasFocused = true;
+  if (!active) ensureKeyboardSelection(true);
+});
+canvas.addEventListener('blur', () => {
+  keyboardCanvasFocused = false;
+  clearKeyboardSelection({ returnHome: true });
+});
+canvas.addEventListener('keydown', keyboardDown);
 canvas.addEventListener('pointercancel', (event) => {
   if (active && event.pointerId === activePointer) {
     finishActiveDrag({ pointerId: event.pointerId, interrupted: true });
@@ -7743,7 +7894,7 @@ function animate() {
         o.mesh.position.copy(o.target);
         o.target = null;
       }
-    } else if (o.seated == null && !o.dragging) {
+    } else if (o.seated == null && !o.dragging && !o.keyboardActive) {
       // Readable, unhurried drift for floating orbs. Two overlapping paths keep the
       // movement from looking like a synchronized vertical bob.
       o.phase += delta * 0.9;
@@ -7806,6 +7957,7 @@ function animate() {
   updateShapeStream(delta);
   updateDoorwayEyeBlinkPreview(delta);
   updateShapeLock(delta);
+  updateKeyboardFocusRing();
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }

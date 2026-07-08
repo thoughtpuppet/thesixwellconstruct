@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#120c07">
-<title>entry room - the six.well construct</title>
+<meta name="description" content="The creative ecosystem of Saiel Dauhn Solehman.">
+<link rel="canonical" href="https://thesixwellconstruct.com/">
+<link rel="preload" as="image" href="/assets/entry-room/frame_01-entry-room-mobile-extended.jpg" type="image/jpeg" media="(max-aspect-ratio: 3/4)">
+<link rel="preload" as="image" href="/assets/entry-room/frame_01-entry-room-desktop-extended.jpg" type="image/jpeg" media="(min-aspect-ratio: 3/4)">
+<title>the six.well construct</title>
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   * { box-sizing: border-box; }
@@ -379,6 +383,15 @@
     cursor: pointer;
   }
 
+  #calibration-console .calibration-controls input[type="checkbox"] {
+    justify-self: start;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    accent-color: #00e5ff;
+    cursor: pointer;
+  }
+
   body.entry-room-page #live-text-editor,
   body.entry-room-page #live-text-style-panel {
     display: none !important;
@@ -442,10 +455,10 @@
   </svg>
   <div id="art-stage">
     <picture id="room-bg" aria-hidden="true">
-      <source media="(max-aspect-ratio: 3/4)" srcset="/assets/entry-room/frame_01-entry-room-mobile-extended.png">
-      <img src="/assets/entry-room/frame_01-entry-room-desktop-extended.png" alt="">
+      <source media="(max-aspect-ratio: 3/4)" srcset="/assets/entry-room/frame_01-entry-room-mobile-extended.jpg" type="image/jpeg">
+      <img src="/assets/entry-room/frame_01-entry-room-desktop-extended.jpg" alt="" fetchpriority="high">
     </picture>
-    <canvas id="entry-canvas" tabindex="0"></canvas>
+    <canvas id="entry-canvas" tabindex="0" aria-label="Interactive entry puzzle. Use number keys to select an orb, arrow keys to move it, and Enter to place it."></canvas>
     <div id="frame-stage" aria-hidden="true"></div>
   </div>
   <div id="entry-overlays" aria-hidden="true">

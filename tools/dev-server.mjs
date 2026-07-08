@@ -27,10 +27,14 @@ const types = new Map([
 
 const checkRoutes = [
   ["/", 200],
+  ["/index", 200],
+  ["/index/", 200],
   ["/index.html", 200],
   ["/home", 200],
   ["/home/", 200],
+  ["/entry-room", 200],
   ["/entry-room/", 200],
+  ["/entry-room/index.html", 200],
   ["/edit-links.html", 200],
   ["/edit-links", 200],
   ["/edit-links-mac.html", 200],
@@ -53,7 +57,6 @@ const checkRoutes = [
   ["/events/solehmans-new-year/", 200],
   ["/events/signal-symbol/", 200],
   ["/events/ss-and-f-live-audience/", 200],
-  ["/events/example-created-in-studio/", 200],
   ["/events/confirmed/", 200],
   ["/music/", 302],
   ["/film/", 302],
@@ -108,7 +111,8 @@ const hiddenPublicPaths = new Set([
   "/writings",
 ]);
 const hidePublicPagesExceptHome = false;
-const publicFrontDoorPaths = new Set(["/", "/index.html"]);
+const publicFrontDoorPaths = new Set(["/", "/index", "/index/", "/index.html"]);
+const publicEntryRoomAliasPaths = new Set(["/entry-room", "/entry-room/", "/entry-room/index.html"]);
 const publicHomePaths = new Set(["/home", "/home/", "/home/index.html"]);
 const publicErrorPaths = new Set(["/404", "/404.html"]);
 const publicArchivePaths = new Set([
@@ -167,6 +171,7 @@ function isPublicPageRoute(urlPath) {
   const normalized = normalizeRoute(urlPath);
   return (
     publicFrontDoorPaths.has(decoded) ||
+    publicEntryRoomAliasPaths.has(decoded) ||
     publicHomePaths.has(decoded) ||
     normalized === "/404" ||
     decoded.endsWith(".html") ||
@@ -197,6 +202,7 @@ function isHiddenByHomeOnlyMode(urlPath) {
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
   const normalized = normalizeRoute(urlPath);
   if (publicFrontDoorPaths.has(decoded)) return false;
+  if (publicEntryRoomAliasPaths.has(decoded)) return false;
   if (publicHomePaths.has(decoded)) return false;
   if (publicErrorPaths.has(decoded) || publicErrorPaths.has(normalized)) return false;
   if (publicArchivePaths.has(decoded) || normalized === "/archive") return false;
@@ -220,7 +226,7 @@ function requestPathname(urlPath) {
 }
 
 function isFrontDoorRoute(pathname) {
-  return publicFrontDoorPaths.has(pathname);
+  return publicFrontDoorPaths.has(pathname) || publicEntryRoomAliasPaths.has(pathname);
 }
 
 function isHomeRoute(pathname) {
@@ -237,7 +243,7 @@ function safePath(urlPath) {
   const localOnlyFile = localOnlyRoutes.get(decoded);
   if (localOnlyFile) return path.resolve(root, localOnlyFile);
 
-  if (isFrontDoorRoute(decoded)) return path.resolve(root, "entry-room", "index.html");
+  if (isFrontDoorRoute(decoded)) return path.resolve(root, "index.html");
   if (isHomeRoute(decoded)) return path.resolve(root, "home", "index.html");
 
   const clean = decoded === "/" ? "/index.html" : decoded;
