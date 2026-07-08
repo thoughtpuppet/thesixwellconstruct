@@ -41,16 +41,24 @@
   .hub-legend { display:flex; gap:14px; flex-wrap:wrap; }
   .hub-body { display:grid; grid-template-columns:minmax(280px,1fr) minmax(260px,360px); gap:20px; align-items:start; }
   .hub-cal .day-button { aspect-ratio:1; position:relative; overflow:hidden; }
-  .hub-cal .day-button.has-appt { background:var(--accent); border-color:var(--accent); color:#0e0e0e; }
-  .hub-cal .day-button.has-event { background:#A22F8D; border-color:#A22F8D; color:#FFE7CA; }
-  .hub-cal .day-button.has-both { background:linear-gradient(135deg,var(--accent) 0 50%,#A22F8D 50% 100%); border-color:#FFE7CA; color:#FFE7CA; text-shadow:-1px -1px 0 rgba(14,14,14,0.85),1px -1px 0 rgba(14,14,14,0.85),-1px 1px 0 rgba(14,14,14,0.85),1px 1px 0 rgba(14,14,14,0.85); }
+  .hub-cal .day-button.has-entry { background:var(--hub-day-bg); border:0; color:#FFE7CA; text-shadow:-1px -1px 0 rgba(14,14,14,0.85),1px -1px 0 rgba(14,14,14,0.85),-1px 1px 0 rgba(14,14,14,0.85),1px 1px 0 rgba(14,14,14,0.85); }
+  .hub-cal .day-button .day-fill { position:absolute; inset:0; z-index:0; pointer-events:none; }
+  .hub-cal .day-button .day-fill span { display:block; min-width:0; min-height:0; background:var(--day-fill); }
+  .hub-cal .day-button.split-2 .day-fill { display:grid; grid-template-rows:repeat(2,minmax(0,1fr)); gap:0; }
+  .hub-cal .day-button.split-grid .day-fill { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:0; }
+  .hub-cal .day-button .day-number { position:relative; z-index:1; }
+  .hub-cal .day-button.today { border:2px solid var(--color-about,#FCB467); color:#FFE7CA; }
   .hub-cal .day-button.selected { outline-color:#FFE7CA; box-shadow:inset 0 0 0 2px rgba(14,14,14,0.72); }
+  .hub-legend .legend-dot.tattoo { background:var(--color-tattooing,#6E0404); border-color:var(--color-tattooing,#6E0404); }
+  .hub-legend .legend-dot.art { background:var(--color-art,#0039BD); border-color:var(--color-art,#0039BD); }
+  .hub-legend .legend-dot.events { background:var(--color-events,#005D25); border-color:var(--color-events,#005D25); }
   .hub-entry { width:100%; text-align:left; border:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:10px 12px; display:grid; gap:4px; cursor:pointer; }
   .hub-entry:hover { border-color:var(--accent); }
   .hub-entry .he-top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
   .hub-entry .he-kind { font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; }
-  .hub-entry.kind-event .he-kind { color:#A22F8D; }
-  .hub-entry.kind-appt .he-kind { color:var(--accent); }
+  .hub-entry.kind-tattoo .he-kind { color:var(--color-tattooing-bright,#9A2323); }
+  .hub-entry.kind-art .he-kind { color:var(--color-art-bright,#0F72DB); }
+  .hub-entry.kind-event .he-kind { color:var(--color-events-bright,#397F34); }
   @media (max-width:900px) { .hub-body { grid-template-columns:1fr; } }
   h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
   .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -138,7 +146,8 @@
   .dt-date .calendar-weekdays, .dt-date .calendar-grid { max-width:none; }
   .dt-date .day-button { font-size:10px; cursor:pointer; }
   .day-button:hover:not(.blank):not(:disabled) { border-color:var(--accent); color:var(--accent); }
-  .day-button.today { color:var(--accent); border-color:var(--accent); }
+  .day-button.today { color:var(--color-about,#FCB467); border:2px solid var(--color-about,#FCB467); }
+  .day-button.today:hover:not(.blank):not(:disabled) { border-color:var(--color-about,#FCB467); }
   .dt-date .day-button.selected { background:var(--accent); border-color:var(--accent); color:#1a0e00; outline:none; }
 
   /* AM/PM toggle */
@@ -426,11 +435,20 @@
       walkInPlaceholder: "Open studio note",
     },
   };
+  const HOME_DAY_COLORS = {
+    tattoo: "var(--color-tattooing,#6E0404)",
+    art: "var(--color-art,#0039BD)",
+    event: "var(--color-events,#005D25)",
+  };
+  const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
+  const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
   let appointments = [];
+  let bookingTypes = [];
   let events = [];
   let activeId = "";
+  let activeAppointmentId = "";
   let activeTab = "home";
   let subView = "requests";
   let statusValue = "";
@@ -1063,6 +1081,25 @@
   }
 
   function buildToolbar() {
+    if (activeTab === "studio" && subView === "bookings") {
+      const statusOptions = [
+        ["", "ALL BOOKING STATUSES"],
+        ["confirmed", "CONFIRMED"],
+        ["deposit_pending", "DEPOSIT PENDING"],
+        ["pending_deposit", "PENDING DEPOSIT"],
+        ["cancelled", "CANCELLED"],
+        ["archived", "ARCHIVED"],
+      ];
+      const typeOptions = (AVAILABILITY_CONFIGS.studio.sessionTypeOptions || []).map(([value, label], index) => [
+        value,
+        index === 0 ? "ALL STUDIO TYPES" : label.toUpperCase(),
+      ]);
+      toolbarEl.innerHTML = `
+        <select id="statusFilter" aria-label="Filter studio bookings by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>
+        <select id="typeFilter" aria-label="Filter studio bookings by type">${typeOptions.map(([v, l]) => `<option value="${escapeHtml(v)}"${v === typeValue ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select>`;
+      enhanceControls(toolbarEl);
+      return;
+    }
     const statusOptions = [["", "ALL STATUSES"], ["new", "NEW"], ["reviewing", "REVIEWING"], ["approved", "APPROVED"], ["declined", "DECLINED"], ["booked", "BOOKED"], ["archived", "ARCHIVED"]];
     let html = `<select id="statusFilter" aria-label="Filter by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     if (activeTab === "tattoo") {
@@ -1075,9 +1112,14 @@
 
   function buildSubnav() {
     let html = "";
-    if (activeTab === "tattoo" || activeTab === "studio") {
+    if (activeTab === "tattoo") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
+        <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>`;
+    } else if (activeTab === "studio") {
+      html = `
+        <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
+        <button class="subnav-btn ${subView === "bookings" ? "is-active" : ""}" type="button" data-subview="bookings">Bookings</button>
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>`;
     } else if (activeTab === "events") {
       html = `<button class="subnav-btn ${selectedEventSlug ? "" : "is-active"}" type="button" data-events-home>All Events</button>`;
@@ -1103,7 +1145,21 @@
     activeTab = tabForType(sub.type);
     subView = "requests";
     activeId = id;
+    activeAppointmentId = "";
     selectedEventSlug = activeTab === "events" ? (sub.payload?.event_slug || "") : "";
+    renderActiveTab();
+  }
+
+  function openStudioAppointment(id) {
+    const appointment = appointments.find((item) => item.id === id);
+    if (!appointment || !isStudioAppointment(appointment)) return;
+    activeTab = "studio";
+    subView = "bookings";
+    activeId = "";
+    activeAppointmentId = id;
+    statusValue = "";
+    typeValue = "";
+    selectedEventSlug = "";
     renderActiveTab();
   }
 
@@ -1130,6 +1186,14 @@
     layoutEl.classList.remove("single");
     listPane.classList.remove("hidden");
 
+    if (activeTab === "studio" && subView === "bookings") {
+      buildToolbar();
+      renderStudioBookingList();
+      const active = activeAppointmentId ? appointments.find((a) => a.id === activeAppointmentId) : null;
+      renderStudioAppointmentDetail(active && isStudioAppointment(active) ? active : null);
+      return;
+    }
+
     if (activeTab === "events") {
       renderEventsTab();
       return;
@@ -1146,6 +1210,7 @@
     if (tab === activeTab) return;
     activeTab = tab;
     activeId = "";
+    activeAppointmentId = "";
     typeValue = "";
     subView = "requests";
     selectedCalendarDay = "";
@@ -1157,6 +1222,9 @@
     if (subView === view) return;
     subView = view;
     activeId = "";
+    activeAppointmentId = "";
+    statusValue = "";
+    typeValue = "";
     renderActiveTab();
   }
 
@@ -1369,6 +1437,193 @@
     return appointments.filter((a) => !["cancelled", "archived"].includes(a.status));
   }
 
+  function isStudioAppointment(appointment) {
+    return (AVAILABILITY_CONFIGS.studio.bookingTypeIds || []).includes(appointment?.bookingTypeId);
+  }
+
+  function appointmentRelatedSubmission(appointment) {
+    return appointment?.submissionId
+      ? submissions.find((submission) => submission.id === appointment.submissionId) || null
+      : null;
+  }
+
+  function appointmentTypeLabel(appointment) {
+    return appointment?.bookingTypeLabel || titleize(appointment?.bookingTypeId || "studio booking");
+  }
+
+  function studioBookingAppointments() {
+    return appointments
+      .filter(isStudioAppointment)
+      .sort((a, b) => {
+        const aTime = Date.parse(a.startAt || a.createdAt || "") || 0;
+        const bTime = Date.parse(b.startAt || b.createdAt || "") || 0;
+        return bTime - aTime;
+      });
+  }
+
+  function filteredStudioBookingAppointments() {
+    let visible = studioBookingAppointments();
+    if (statusValue) visible = visible.filter((appointment) => appointment.status === statusValue);
+    if (typeValue) visible = visible.filter((appointment) => appointment.bookingTypeId === typeValue);
+    return visible;
+  }
+
+  function renderStudioBookingList() {
+    const visible = filteredStudioBookingAppointments();
+    if (!visible.length) {
+      listEl.innerHTML = '<p class="empty" style="padding:16px;">No studio bookings found.</p>';
+      return;
+    }
+    listEl.innerHTML = visible.map((appointment) => {
+      const related = appointmentRelatedSubmission(appointment);
+      const sourceLabel = related ? "Linked request" : "Private visit";
+      return `
+        <button class="submission ${appointment.id === activeAppointmentId ? "active" : ""}" type="button" data-studio-appointment-id="${escapeHtml(appointment.id)}">
+          <span class="submission-top">
+            <span class="name">${escapeHtml(appointment.clientName || related?.contactName || "Unnamed")}</span>
+            <span class="pill">${escapeHtml(titleize(appointment.status || "unknown"))}</span>
+          </span>
+          <span class="meta">${escapeHtml(appointmentTypeLabel(appointment))} / ${escapeHtml(appointment.clientEmail || related?.contactEmail || "")}</span>
+          <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span class="date">${escapeHtml(formatDate(appointment.startAt))}</span>
+            <span class="meta">${escapeHtml(sourceLabel)}</span>
+          </span>
+        </button>`;
+    }).join("");
+  }
+
+  function renderStudioAppointmentDetail(appointment) {
+    if (!appointment) {
+      detailEl.innerHTML = '<p class="empty">Select a studio booking to manage details.</p>';
+      return;
+    }
+    const related = appointmentRelatedSubmission(appointment);
+    const currency = appointment.currency || "USD";
+    const depositCents = Number(appointment.depositCents || 0);
+    const tipCents = Number(appointment.tipCents || 0);
+    const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
+    const calendarHref = appointmentIsConfirmed(appointment) ? appointmentCalendarUrl(appointment) : "";
+    const checkoutHref = appointment.squareCheckoutUrl || "";
+    const sourceLabel = related ? "Linked studio booking request" : "Private studio visit / direct calendar booking";
+    const contactName = appointment.clientName || related?.contactName || "Unnamed";
+    const contactEmail = appointment.clientEmail || related?.contactEmail || "";
+    const contactPhone = appointment.clientPhone || related?.contactPhone || "";
+    detailEl.innerHTML = `
+      <div class="detail-head">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="pill">Studio Booking / ${escapeHtml(titleize(appointment.status || "unknown"))}</span>
+          <span class="pill">${escapeHtml(appointmentTypeLabel(appointment))}</span>
+        </div>
+        <h2>${escapeHtml(contactName)}</h2>
+        <p class="contact">
+          ${escapeHtml(contactEmail || "No email on file")}${contactPhone ? `<br>${escapeHtml(contactPhone)}` : ""}<br>
+          ${escapeHtml(formatDate(appointment.startAt))}${appointment.endAt ? ` - ${escapeHtml(formatDate(appointment.endAt))}` : ""}
+        </p>
+        <div class="booking-actions">
+          ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
+          ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
+          ${checkoutHref ? `<a class="button" href="${escapeHtml(checkoutHref)}" target="_blank" rel="noopener noreferrer">Open Square Checkout</a>` : ""}
+          ${appointmentIsPending(appointment) ? `<button class="button danger-button" type="button" data-release-pending="${escapeHtml(appointment.id)}">Release Pending Checkout</button>` : ""}
+          ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}" data-submission-id="${escapeHtml(related?.id || appointment.submissionId || "")}">Resend Confirmation Email</button>` : ""}
+          ${related ? `<button class="button" type="button" data-open-submission="${escapeHtml(related.id)}">View Request</button>` : ""}
+        </div>
+      </div>
+      <div class="grid">
+        ${detailField("Source", sourceLabel)}
+        ${detailField("Booking Type", appointmentTypeLabel(appointment))}
+        ${detailField("Status", titleize(appointment.status || ""))}
+        ${detailField("When", `${formatDate(appointment.startAt)}${appointment.endAt ? `\nEnds: ${formatDate(appointment.endAt)}` : ""}`)}
+        ${detailField("Client", `${contactName}\n${contactEmail}${contactPhone ? `\n${contactPhone}` : ""}`)}
+        ${detailField("Payment", `Reservation/deposit: ${money(depositCents, currency)}\nOptional tip: ${money(tipCents, currency)}\nTotal paid today: ${money(totalCents, currency)}\nSquare order: ${appointment.squareOrderId || "pending"}`)}
+        ${detailField("Appointment ID", appointment.id || "")}
+        ${detailField("Submission ID", related?.id || appointment.submissionId || "No linked submission")}
+      </div>
+      ${related ? `
+        <div class="review-card">
+          <div class="review-card-header">Related Request Snapshot</div>
+          <div class="contact">
+            ${escapeHtml(titleize(related.type || "studio_booking"))} / ${escapeHtml(related.status || "")}<br>
+            ${escapeHtml(related.sourcePath || "")}<br>
+            ${escapeHtml(related.payload?.details || related.payload?.message || related.internalNotes || "No request notes.")}
+          </div>
+        </div>` : ""}
+    `;
+  }
+
+  function refreshStudioBookingViews() {
+    if (activeTab !== "studio" || subView !== "bookings") return;
+    renderStudioBookingList();
+    const active = activeAppointmentId ? appointments.find((appointment) => appointment.id === activeAppointmentId) : null;
+    renderStudioAppointmentDetail(active && isStudioAppointment(active) ? active : null);
+  }
+
+  function homeAppointmentKind(appointment) {
+    return isStudioAppointment(appointment) ? "art" : "tattoo";
+  }
+
+  function homeDayVisualItems(entry) {
+    if (!entry) return [];
+    return [
+      ...entry.appts.map((appointment) => ({
+        at: appointment.startAt,
+        color: HOME_DAY_COLORS[homeAppointmentKind(appointment)],
+      })),
+      ...entry.events.map((event) => ({
+        at: event.startsAt,
+        color: HOME_DAY_COLORS.event,
+      })),
+    ].sort((a, b) => {
+      const aTime = Date.parse(a.at || "") || 0;
+      const bTime = Date.parse(b.at || "") || 0;
+      return aTime - bTime;
+    });
+  }
+
+  function homeDayFillColors(items) {
+    if (items.length <= 2) return items.map((item) => item.color);
+    if (items.length === 3) {
+      return [items[0].color, items[1].color, items[2].color, items[2].color];
+    }
+    return items.slice(0, 4).map((item) => item.color);
+  }
+
+  function homeDayKinds(entry) {
+    if (!entry) return [];
+    const kinds = new Set();
+    if (entry.appts.some((a) => homeAppointmentKind(a) === "tattoo")) kinds.add("tattoo");
+    if (entry.appts.some((a) => homeAppointmentKind(a) === "art")) kinds.add("art");
+    if (entry.events.length) kinds.add("event");
+    return ["tattoo", "art", "event"].filter((kind) => kinds.has(kind));
+  }
+
+  function homeDayClass(entry, itemCount) {
+    const kinds = homeDayKinds(entry);
+    const split = itemCount > 2 ? "split-grid" : itemCount === 2 ? "split-2" : itemCount === 1 ? "split-1" : "";
+    return kinds.length ? `has-entry ${split} ${kinds.map((kind) => `home-${kind}`).join(" ")}` : "";
+  }
+
+  function homeDayStyle(fillColors, itemCount) {
+    if (!itemCount) return "";
+    const fill = itemCount === 1 ? fillColors[0] : "transparent";
+    return ` style="--hub-day-bg:${fill};"`;
+  }
+
+  function homeDayFillHtml(fillColors, itemCount) {
+    if (itemCount <= 1) return "";
+    return `<span class="day-fill" aria-hidden="true">${fillColors.map((color) => `<span style="--day-fill:${escapeHtml(color)};"></span>`).join("")}</span>`;
+  }
+
+  function homeDayCountLabel(dayLabel, entry) {
+    const tattooCount = entry?.appts.filter((a) => homeAppointmentKind(a) === "tattoo").length || 0;
+    const artCount = entry?.appts.filter((a) => homeAppointmentKind(a) === "art").length || 0;
+    const eventCount = entry?.events.length || 0;
+    const parts = [];
+    if (tattooCount) parts.push(`${tattooCount} tattoo appointment${tattooCount !== 1 ? "s" : ""}`);
+    if (artCount) parts.push(`${artCount} art studio booking${artCount !== 1 ? "s" : ""}`);
+    if (eventCount) parts.push(`${eventCount} event${eventCount !== 1 ? "s" : ""}`);
+    return `${dayLabel}: ${parts.length ? parts.join(", ") : "0 bookings, 0 events"}`;
+  }
+
   function homeEntriesByDay() {
     const map = new Map();
     const ensure = (key) => { if (!map.has(key)) map.set(key, { appts: [], events: [] }); return map.get(key); };
@@ -1408,8 +1663,9 @@
             <button class="button icon-button" id="homeNextMonth" type="button" aria-label="Next month">&gt;</button>
           </div>
           <div class="hub-legend">
-            <span class="legend-item"><span class="legend-dot" style="background:var(--accent);border-color:var(--accent);"></span>Appointments</span>
-            <span class="legend-item"><span class="legend-dot" style="background:#A22F8D;border-color:#A22F8D;"></span>Events</span>
+            <span class="legend-item"><span class="legend-dot tattoo"></span>Tattoo Appointments</span>
+            <span class="legend-item"><span class="legend-dot art"></span>Art Studio</span>
+            <span class="legend-item"><span class="legend-dot events"></span>Events</span>
           </div>
         </div>
         <div class="hub-body">
@@ -1438,18 +1694,20 @@
     const [year, month] = homeMonth.split("-").map(Number);
     const firstDay = new Date(year, month - 1, 1);
     const daysInMonth = new Date(year, month, 0).getDate();
+    const todayKey = dayKey(new Date());
     const cells = [];
     for (let b = 0; b < firstDay.getDay(); b += 1) cells.push('<button class="day-button blank" type="button" tabindex="-1" aria-hidden="true"></button>');
     for (let d = 1; d <= daysInMonth; d += 1) {
       const key = `${homeMonth}-${String(d).padStart(2, "0")}`;
       const entry = byDay.get(key);
-      const appts = entry?.appts.length || 0;
-      const evs = entry?.events.length || 0;
-      const cls = appts && evs ? "has-both" : evs ? "has-event" : appts ? "has-appt" : "";
+      const visualItems = homeDayVisualItems(entry);
+      const fillColors = homeDayFillColors(visualItems);
+      const cls = homeDayClass(entry, visualItems.length);
       const sel = key === selectedHomeDay ? " selected" : "";
+      const today = key === todayKey ? " today" : "";
       const dayLabel = new Date(year, month - 1, d, 12).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-      const label = `${dayLabel}: ${appts} booking${appts !== 1 ? "s" : ""}, ${evs} event${evs !== 1 ? "s" : ""}`;
-      cells.push(`<button class="day-button ${cls}${sel}" type="button" data-home-day="${escapeHtml(key)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${d}</button>`);
+      const label = homeDayCountLabel(dayLabel, entry);
+      cells.push(`<button class="day-button ${cls}${today}${sel}" type="button" data-home-day="${escapeHtml(key)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"${homeDayStyle(fillColors, visualItems.length)}>${homeDayFillHtml(fillColors, visualItems.length)}<span class="day-number">${d}</span></button>`);
     }
     cal.innerHTML = `<div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="calendar-grid">${cells.join("")}</div>`;
   }
@@ -1473,9 +1731,11 @@
     if (!total) { panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">Nothing booked this day.</p>'; return; }
     const apptCards = [...entry.appts].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)).map((a) => {
       const time = a.startAt ? new Date(a.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      const kind = homeAppointmentKind(a);
+      const kindLabel = kind === "art" ? "Art Studio" : "Tattoo";
       return `
-        <button class="hub-entry kind-appt" type="button" data-appt-submission="${escapeHtml(a.submissionId || "")}">
-          <span class="he-top"><span class="he-kind">Appointment</span><span class="appt-time">${escapeHtml(time)}</span></span>
+        <button class="hub-entry kind-appt kind-${escapeHtml(kind)}" type="button" data-home-appointment="${escapeHtml(a.id || "")}" data-appt-submission="${escapeHtml(a.submissionId || "")}">
+          <span class="he-top"><span class="he-kind">${escapeHtml(kindLabel)}</span><span class="appt-time">${escapeHtml(time)}</span></span>
           <span class="name">${escapeHtml(a.clientName || "Unnamed")}</span>
           <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))} · ${escapeHtml(a.status || "")}</span>
         </button>`;
@@ -1999,6 +2259,7 @@ ${meetingLines}
 
   async function renderEventsManager() {
     activeId = "";
+    activeAppointmentId = "";
     detailEl.innerHTML = `
       <div class="availability-manager">
         <div class="detail-head">
@@ -2180,6 +2441,10 @@ ${meetingLines}
       const dateStr = a.startAt ? new Date(a.startAt).toLocaleDateString([], { month:"short", day:"numeric" }) : "";
       const deposit = a.depositCents ? money(a.depositCents, a.currency || "USD") : "";
       const meetingLabel = a.meeting?.joinUrl ? "Zoom ready" : a.bookingTypeId === "consult_virtual" ? "Zoom missing" : "";
+      const related = appointmentRelatedSubmission(a);
+      const manageButton = isStudioAppointment(a)
+        ? `<button class="button" type="button" data-manage-studio-appointment="${escapeHtml(a.id)}">Manage Booking</button>`
+        : related ? `<button class="button" type="button" data-open-submission="${escapeHtml(related.id)}">Open Submission</button>` : "";
       return `
         <div class="appt-item">
           <div class="appt-item-top">
@@ -2187,9 +2452,63 @@ ${meetingLines}
             <span class="appt-time">${escapeHtml(dayFilter ? `${start} – ${end}` : `${dateStr} ${start}`)}</span>
           </div>
           <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))}${deposit ? ` · ${deposit} deposit` : ""}${a.status ? ` · ${a.status}` : ""}</span>
+          ${manageButton ? `<div class="booking-actions" style="margin-top:6px;">${manageButton}</div>` : ""}
         </div>
       `;
     }).join("");
+  }
+
+  function priceInputValue(cents) {
+    return ((Number(cents) || 0) / 100).toFixed(2);
+  }
+
+  function priceFieldLabel(type) {
+    return FULL_PAYMENT_BOOKING_TYPE_IDS.includes(type?.id) ? "Reservation Fee" : "Deposit";
+  }
+
+  function scopedBookingTypes() {
+    const ids = new Set((AVAILABILITY_CONFIGS[activeTab]?.bookingTypeIds || []));
+    return bookingTypes
+      .filter((type) => ids.has(type.id))
+      .sort((a, b) => (Number(a.sortOrder || 0) - Number(b.sortOrder || 0)) || String(a.label || "").localeCompare(String(b.label || "")));
+  }
+
+  function renderBookingTypePrices() {
+    const panel = document.getElementById("bookingTypesPanel");
+    if (!panel) return;
+    const visible = scopedBookingTypes();
+    if (!visible.length) {
+      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No booking prices found.</p>';
+      return;
+    }
+    panel.innerHTML = visible.map((type) => `
+      <form class="availability-item" data-booking-type-form="${escapeHtml(type.id)}">
+        <span class="pill">${escapeHtml(type.label || titleize(type.id))}</span>
+        <div class="contact">${escapeHtml(type.description || "")}</div>
+        <div class="meta">${escapeHtml(String(type.durationMinutes || 0))} minutes · ${escapeHtml(priceFieldLabel(type))}: ${escapeHtml(type.depositLabel || money(type.depositCents, type.currency || "USD"))}</div>
+        <div class="schedule-grid">
+          <div class="field">
+            <label>${escapeHtml(priceFieldLabel(type))}</label>
+            <input data-booking-type-field="depositDollars" type="number" min="0" step="0.01" value="${escapeHtml(priceInputValue(type.depositCents))}" required>
+          </div>
+          <div class="field">
+            <label>Currency</label>
+            <div class="value">${escapeHtml(type.currency || "USD")}</div>
+          </div>
+        </div>
+        <div class="booking-actions">
+          <button class="button" type="submit">Save Price</button>
+        </div>
+      </form>
+    `).join("");
+  }
+
+  async function loadBookingTypes() {
+    const panel = document.getElementById("bookingTypesPanel");
+    if (!panel) return;
+    const payload = await api("/api/admin/booking/types");
+    bookingTypes = payload.bookingTypes || [];
+    renderBookingTypePrices();
   }
 
   function readinessDetailLines(check) {
@@ -2314,6 +2633,14 @@ ${meetingLines}
         <div class="section-body">
           <div id="bookingReadinessPanel">
             <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading booking readiness.</p>
+          </div>
+        </div>
+      </section>
+      <section class="schedule-section is-open" data-collapse-section>
+        <button class="section-toggle" type="button">Booking Prices</button>
+        <div class="section-body">
+          <div id="bookingTypesPanel" class="availability-list">
+            <p class="empty" style="font-family:var(--sans);font-size:11px;">Loading booking prices.</p>
           </div>
         </div>
       </section>
@@ -2465,6 +2792,7 @@ ${meetingLines}
     `;
     enhanceControls(detailEl);
     await loadBookingReadiness();
+    await loadBookingTypes();
     await loadSchedule();
     await loadWalkIns();
     await loadAvailabilityPreview();
@@ -2662,6 +2990,43 @@ ${meetingLines}
     return `<div class="field"><label>${escapeHtml(label)}</label><div class="value">${escapeHtml(value)}</div></div>`;
   }
 
+  function applyHomeCalendarPreviewData() {
+    if (!homeCalendarPreview) return false;
+    const previewSubmissionId = "preview-studio-visit-july-4";
+    if (!submissions.some((submission) => submission.id === previewSubmissionId)) {
+      submissions.push({
+        id: previewSubmissionId,
+        type: "studio_booking",
+        status: "booked",
+        contactName: "Preview Studio Visit",
+        contactEmail: "preview@sixwell.local",
+        contactPhone: "",
+        sourcePath: "/booking/studio-visit/?preview=1",
+        bookingUrl: "",
+        payload: {
+          booking_type_id: "studio_visit",
+          booking_type_label: "Open Studio Visit",
+          deposit_label: "$50.00",
+          organization: "Preview",
+          details: "Preview-only studio visit added to show the July 4 calendar split.",
+        },
+      });
+    }
+    if (!appointments.some((appointment) => appointment.id === "preview-studio-visit-july-4-appt")) {
+      appointments.push({
+        id: "preview-studio-visit-july-4-appt",
+        submissionId: previewSubmissionId,
+        bookingTypeId: "studio_visit",
+        bookingTypeLabel: "Open Studio Visit",
+        startAt: "2026-07-04T14:00:00-04:00",
+        endAt: "2026-07-04T15:00:00-04:00",
+        status: "confirmed",
+        clientName: "Preview Studio Visit",
+      });
+    }
+    return true;
+  }
+
   async function loadSubmissions() {
     if (!token) {
       tokenModal.classList.remove("hidden");
@@ -2680,7 +3045,8 @@ ${meetingLines}
     } catch {
       events = [];
     }
-    setStatus(`${submissions.length} loaded`);
+    const previewApplied = applyHomeCalendarPreviewData();
+    setStatus(`${submissions.length} loaded${previewApplied ? " + preview" : ""}`);
   }
 
   async function loadAndRender() {
@@ -2702,10 +3068,20 @@ ${meetingLines}
   });
 
   listEl.addEventListener("click", (event) => {
+    const studioAppointmentRow = event.target.closest("[data-studio-appointment-id]");
+    if (studioAppointmentRow) {
+      activeAppointmentId = studioAppointmentRow.dataset.studioAppointmentId;
+      activeId = "";
+      renderStudioBookingList();
+      const appointment = appointments.find((item) => item.id === activeAppointmentId);
+      renderStudioAppointmentDetail(appointment && isStudioAppointment(appointment) ? appointment : null);
+      return;
+    }
     const eventRow = event.target.closest("[data-event-slug]");
     if (eventRow) {
       selectedEventSlug = eventRow.dataset.eventSlug;
       activeId = "";
+      activeAppointmentId = "";
       buildSubnav();
       renderEventsList();
       renderEventDetail(selectedEventSlug);
@@ -2714,6 +3090,7 @@ ${meetingLines}
     const button = event.target.closest("[data-id]");
     if (!button) return;
     activeId = button.dataset.id;
+    activeAppointmentId = "";
     const submission = submissions.find((item) => item.id === activeId);
     if (submission) {
       renderList();
@@ -2747,6 +3124,18 @@ ${meetingLines}
     const groupToggle = event.target.closest(".schedule-group-toggle");
     if (groupToggle) {
       groupToggle.closest("[data-collapse-group]")?.classList.toggle("is-open");
+      return;
+    }
+
+    const manageStudioAppointment = event.target.closest("[data-manage-studio-appointment]");
+    if (manageStudioAppointment) {
+      openStudioAppointment(manageStudioAppointment.dataset.manageStudioAppointment);
+      return;
+    }
+
+    const openSubmissionButton = event.target.closest("[data-open-submission]");
+    if (openSubmissionButton) {
+      goToSubmission(openSubmissionButton.dataset.openSubmission);
       return;
     }
 
@@ -2789,6 +3178,7 @@ ${meetingLines}
         const submission = submissions.find((item) => item.id === activeId);
         if (submission) renderDetail(submission);
       }
+      refreshStudioBookingViews();
       renderDayAppointments(selectedCalendarDay);
       setStatus("Zoom meeting ready");
       return;
@@ -2808,6 +3198,7 @@ ${meetingLines}
         const submission = submissions.find((item) => item.id === activeId);
         if (submission) renderDetail(submission);
       }
+      refreshStudioBookingViews();
       renderDayAppointments(selectedCalendarDay);
       setStatus("Pending checkout released");
       return;
@@ -3177,6 +3568,32 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const bookingTypeForm = event.target.closest("[data-booking-type-form]");
+    if (bookingTypeForm) {
+      event.preventDefault();
+      const id = bookingTypeForm.dataset.bookingTypeForm;
+      const input = bookingTypeForm.querySelector('[data-booking-type-field="depositDollars"]');
+      const dollars = Number(input?.value || 0);
+      if (!Number.isFinite(dollars) || dollars < 0) {
+        setStatus("Enter a valid price");
+        return;
+      }
+      const depositCents = Math.round(dollars * 100);
+      setStatus("Saving price");
+      const payload = await api(`/api/admin/booking/types/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ depositCents }),
+      });
+      const index = bookingTypes.findIndex((type) => type.id === id);
+      if (index >= 0) bookingTypes[index] = payload.bookingType;
+      else bookingTypes.push(payload.bookingType);
+      renderBookingTypePrices();
+      await loadBookingReadiness();
+      setStatus("Price saved");
+      return;
+    }
+
     const openMicForm = event.target.closest("[data-open-mic-form]");
     if (openMicForm) {
       event.preventDefault();
@@ -3411,10 +3828,20 @@ ${meetingLines}
   toolbarEl.addEventListener("change", (event) => {
     if (event.target.id === "statusFilter") {
       statusValue = event.target.value;
+      if (activeTab === "studio" && subView === "bookings") {
+        renderStudioBookingList();
+        refreshStudioBookingViews();
+        return;
+      }
       renderList();
       if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); }
     } else if (event.target.id === "typeFilter") {
       typeValue = event.target.value;
+      if (activeTab === "studio" && subView === "bookings") {
+        renderStudioBookingList();
+        refreshStudioBookingViews();
+        return;
+      }
       renderList();
       if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); }
     }
@@ -3425,6 +3852,7 @@ ${meetingLines}
     if (event.target.closest("[data-events-home]")) {
       selectedEventSlug = "";
       activeId = "";
+      activeAppointmentId = "";
       buildSubnav();
       renderEventsList();
       renderEventsManager().catch((error) => setStatus(error.message));
@@ -3433,6 +3861,7 @@ ${meetingLines}
     if (event.target.closest("[data-event-setup]")) {
       selectedEventSlug = "";
       activeId = "";
+      activeAppointmentId = "";
       buildSubnav();
       renderEventsList();
       renderEventsManager().catch((error) => setStatus(error.message));
@@ -3457,6 +3886,14 @@ ${meetingLines}
       if (options[next]) { homeMonth = options[next]; selectedHomeDay = ""; renderHome(); }
       return;
     }
+    const homeAppointment = event.target.closest("[data-home-appointment]");
+    if (homeAppointment) {
+      const appointment = appointments.find((item) => item.id === homeAppointment.dataset.homeAppointment);
+      if (appointment && isStudioAppointment(appointment)) {
+        openStudioAppointment(appointment.id);
+        return;
+      }
+    }
     const apptEntry = event.target.closest("[data-appt-submission]");
     if (apptEntry) {
       const id = apptEntry.dataset.apptSubmission;
@@ -3469,6 +3906,7 @@ ${meetingLines}
       subView = "requests";
       selectedEventSlug = homeEvent.dataset.homeEvent;
       activeId = "";
+      activeAppointmentId = "";
       renderActiveTab();
       return;
     }
@@ -3476,7 +3914,7 @@ ${meetingLines}
     if (rsvpEntry && activeTab === "events") {
       const id = rsvpEntry.dataset.id;
       const submission = submissions.find((s) => s.id === id);
-      if (submission) { activeId = id; renderDetail(submission); }
+      if (submission) { activeId = id; activeAppointmentId = ""; renderDetail(submission); }
     }
   });
   detailEl.addEventListener("change", (event) => {

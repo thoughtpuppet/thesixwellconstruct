@@ -29,6 +29,7 @@ import {
   handleAdminGetSchedule,
   handleAdminListAppointments,
   handleAdminListAvailability,
+  handleAdminListBookingTypes,
   handleAdminListSubmissionTokens,
   handleAdminListWalkIns,
   handleAdminReleasePendingAppointment,
@@ -36,6 +37,7 @@ import {
   handleAdminRevokeSubmissionBookingTokens,
   handleAdminCreateWalkIn,
   handleAdminDeleteWalkIn,
+  handleAdminUpdateBookingType,
   handleAdminUpdateWalkIn,
   handleAdminUpdateSchedule,
   handleAdminUpdateAvailability,
@@ -537,6 +539,17 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/admin/booking/readiness") {
     if (method !== "GET") return methodNotAllowed(method, ["GET"]);
     return handleAdminGetBookingReadiness(request, env);
+  }
+
+  if (pathname === "/api/admin/booking/types") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handleAdminListBookingTypes(request, env);
+  }
+
+  const bookingTypeMatch = pathname.match(/^\/api\/admin\/booking\/types\/([^/]+)$/);
+  if (bookingTypeMatch) {
+    if (method !== "PATCH") return methodNotAllowed(method, ["PATCH"]);
+    return handleAdminUpdateBookingType(request, env, decodeURIComponent(bookingTypeMatch[1]));
   }
 
   if (pathname === "/api/admin/booking/walk-ins") {

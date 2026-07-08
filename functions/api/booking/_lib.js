@@ -101,6 +101,16 @@ function parseTipCents(value) {
   return { tipCents: parsed };
 }
 
+function parseDepositCents(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return { error: "Deposit must be a whole dollar-and-cent amount." };
+  }
+  if (parsed < 0) return { error: "Deposit cannot be negative." };
+  if (parsed > 1000000) return { error: "Deposit cannot be more than $10,000." };
+  return { depositCents: parsed };
+}
+
 async function readJsonBody(request) {
   try {
     const body = await request.json();
@@ -2644,6 +2654,62 @@ export async function handleAdminGetBookingReadiness(request, env) {
     });
   } catch (error) {
     return errorResponse("Unable to load booking readiness.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminListBookingTypes(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    const result = await db
+      .prepare(
+        `SELECT * FROM booking_types
+         WHERE venture = ?
+         ORDER BY sort_order ASC, label ASC`
+      )
+      .bind("tattooing")
+      .all();
+    return json({ bookingTypes: (result.results || []).map(normalizeBookingType) });
+  } catch (error) {
+    return errorResponse("Unable to load booking types.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminUpdateBookingType(request, env, id) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  const deposit = parseDepositCents(body.depositCents);
+  if (deposit.error) return errorResponse(deposit.error, 400);
+
+  try {
+    const db = requireBookingDb(env);
+    const existing = await db
+      .prepare("SELECT * FROM booking_types WHERE id = ? AND venture = ?")
+      .bind(id, "tattooing")
+      .first();
+    if (!existing) return errorResponse("Booking type not found.", 404);
+
+    await db
+      .prepare("UPDATE booking_types SET deposit_cents = ?, updated_at = ? WHERE id = ?")
+      .bind(deposit.depositCents, new Date().toISOString(), id)
+      .run();
+
+    const updated = await db
+      .prepare("SELECT * FROM booking_types WHERE id = ?")
+      .bind(id)
+      .first();
+    return json({ bookingType: normalizeBookingType(updated) });
+  } catch (error) {
+    return errorResponse("Unable to update booking type.", 500, {
       detail: error.message,
     });
   }
