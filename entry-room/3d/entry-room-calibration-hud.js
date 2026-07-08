@@ -96,6 +96,17 @@ export function mountCalibrationHud(root = document.body) {
         <label>Cycle min s <input type="number" min="0.2" max="10" step="0.1" value="3.0" data-lock-control="cycle-min"></label>
         <label>Cycle max s <input type="number" min="0.2" max="10" step="0.1" value="3.0" data-lock-control="cycle-max"></label>
         <label>Fade s <input type="number" min="0.05" max="4" step="0.05" value="0.36" data-lock-control="fade-time"></label>
+        <h3>Door shape barrier</h3>
+        <label>Enabled <input type="checkbox" checked data-shape-barrier-control="enabled"></label>
+        <label>Hard collider <input type="checkbox" checked data-shape-barrier-control="hard-collider"></label>
+        <label>X offset <input type="number" min="-0.4" max="0.4" step="0.005" value="0" data-shape-barrier-control="screen-offset-x"></label>
+        <label>Y offset <input type="number" min="-0.4" max="0.4" step="0.005" value="0.005" data-shape-barrier-control="screen-offset-y"></label>
+        <label>Side radius <input type="number" min="0.005" max="0.25" step="0.005" value="0.035" data-shape-barrier-control="screen-half-width"></label>
+        <label>Top pad <input type="number" min="0" max="0.6" step="0.01" value="0.040" data-shape-barrier-control="screen-top-pad"></label>
+        <label>Bottom pad <input type="number" min="0" max="0.8" step="0.01" value="0.050" data-shape-barrier-control="screen-bottom-pad"></label>
+        <label>Target penalty <input type="number" min="0" max="40" step="0.5" value="17.5" data-shape-barrier-control="screen-target-penalty"></label>
+        <label>Push strength <input type="number" min="0" max="30" step="0.5" value="17" data-shape-barrier-control="screen-deflect-strength"></label>
+        <label>Max push speed <input type="number" min="0" max="20" step="0.25" value="8" data-shape-barrier-control="screen-deflect-max-speed"></label>
         <h3>Door eye exit</h3>
         <div class="calibration-actions">
           <button type="button" data-eye-action="preview-open">Show Open Eye</button>
@@ -106,13 +117,18 @@ export function mountCalibrationHud(root = document.body) {
         </div>
         <label>Eye color <input type="color" value="#fcb867" data-eye-control="eye-color"></label>
         <label>Eye opacity <input type="number" min="0" max="1" step="0.05" value="1" data-eye-control="eye-opacity"></label>
-        <label>Overlay color <input type="color" value="#050302" data-eye-control="overlay-color"></label>
+        <label>Overlay color <input type="color" value="#000000" data-eye-control="overlay-color"></label>
         <label>Overlay opacity <input type="number" min="0" max="1" step="0.05" value="0.48" data-eye-control="overlay-opacity"></label>
         <label>Closed fade s <input type="number" min="0.05" max="4" step="0.05" value="0.58" data-eye-control="closed-reveal-duration"></label>
         <label>Open fade s <input type="number" min="0.05" max="4" step="0.05" value="0.42" data-eye-control="open-reveal-duration"></label>
         <label>Blink count <input type="number" min="1" max="16" step="1" value="6" data-eye-control="blink-count"></label>
         <label>Blink duration s <input type="number" min="0.04" max="1.5" step="0.01" value="0.22" data-eye-control="blink-duration"></label>
         <label>Break fade s <input type="number" min="0" max="3" step="0.01" value="2.00" data-eye-control="break-handoff-duration"></label>
+        <label>Site fade s <input type="number" min="0.05" max="3" step="0.01" value="0.37" data-eye-control="site-fade-duration"></label>
+        <label>Page zoom <input type="number" min="1" max="2.2" step="0.01" value="1.80" data-eye-control="page-zoom-scale"></label>
+        <label>Zoom hold s <input type="number" min="0" max="10" step="0.1" value="5.00" data-eye-control="page-zoom-hold"></label>
+        <label>Zoom start <input type="number" min="0" max="0.98" step="0.01" value="0.00" data-eye-control="page-zoom-start"></label>
+        <label>Zoom end <input type="number" min="0.01" max="1" step="0.01" value="1.00" data-eye-control="page-zoom-end"></label>
         <h3>Door position - active layout</h3>
         <label>X <input type="number" min="-0.5" max="1.5" step="0.001" data-lock-control="door-x"></label>
         <label>Y <input type="number" min="-0.5" max="1.5" step="0.001" data-lock-control="door-y"></label>

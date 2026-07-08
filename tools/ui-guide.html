@@ -343,11 +343,13 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 #tuner .tn-head input[type=range] { width: 180px; accent-color: var(--color-accent); }
 #tuner .tn-head .val { font-family: Consolas, Menlo, monospace; font-size: 12px; color: var(--color-body); }
 #tuner .tn-head .note { flex: 1; min-width: 200px; color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+#tuner .tn-section { padding: 12px 20px 0; border-bottom: 1px solid var(--ring-faint); }
+#tuner .tn-section span { display: inline-block; margin-bottom: 10px; font-family: var(--font-display); font-weight: 900; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent); }
 #tuner .media-row { display: grid; grid-template-columns: 140px 1fr; gap: 20px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--ring-faint); }
 #tuner .ident { display: flex; flex-direction: column; gap: 4px; }
 #tuner .ident .nm { font-family: var(--font-display); font-weight: 900; font-size: 14px; letter-spacing: .02em; text-transform: uppercase; }
 #tuner .ident .ky { font-family: Consolas, Menlo, monospace; font-size: 10.5px; color: var(--text-dim); }
-#tuner .stops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#tuner .stops { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 #tuner .stop { border: 1px solid var(--ring-faint); background: var(--surface); }
 #tuner .stop .well { height: 52px; position: relative; display: block; cursor: pointer; }
 #tuner .stop .well.dimwell { cursor: default; }
@@ -359,6 +361,9 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 #tuner .stop .hx { font-family: Consolas, Menlo, monospace; font-size: 10px; color: var(--text-muted); }
 #tuner .stop .reset { font-family: Consolas, Menlo, monospace; font-size: 11px; color: var(--text-dim); cursor: pointer; background: none; border: 0; padding: 2px 4px; }
 #tuner .stop .reset:hover { color: var(--color-accent); }
+#tuner .stop .alpha { display: flex; align-items: center; gap: 8px; padding: 0 8px 8px; }
+#tuner .stop .alpha span { font-family: var(--font-display); font-weight: 700; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); }
+#tuner .stop .alpha input { min-width: 0; width: 100%; accent-color: var(--color-accent); }
 #tuner .tn-out { padding: 18px 20px; border-top: 1px solid var(--ring-faint); }
 #tuner .tn-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 #tuner .tn-actions button { font-family: var(--font-display); font-weight: 700; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; background: none; color: var(--text-muted); border: 1px solid var(--ring-soft); padding: 9px 14px; cursor: pointer; transition: .2s; }
@@ -368,7 +373,10 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 #tuner .tn-status.ok { color: #6fae7c; }
 #tuner .tn-status.err { color: #c97; }
 #tuner pre { margin: 0; max-height: 320px; }
-@media (max-width: 720px) { #tuner .media-row { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  #tuner .media-row { grid-template-columns: 1fr; }
+  #tuner .stops { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 /* ── responsive ── */
 @media (max-width: 720px) {
@@ -445,7 +453,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         <div class="info"><div class="name">Amber dim</div><div class="hex"></div><div class="token">--color-accent-dim</div></div></div>
     </div>
 
-    <div class="rule-note"><strong>Adjust these live:</strong> hit <strong>🎨 Edit colors</strong> in the toolbar (or the button below) to open the inline tuner — tweak any medium's signal color and the brighten/darken steps, watch the swatches above update, then copy the CSS or write it straight back into <code>tokens.css</code>. The editor is hidden when you export the PDF.</div>
+    <div class="rule-note"><strong>Adjust these live:</strong> hit <strong>🎨 Edit colors</strong> in the toolbar (or the button below) to open the inline tuner — tweak the base palette, amber dim opacity, any medium's signal color, and the brighten/darken steps, then copy the CSS or write it straight back into <code>tokens.css</code>. The editor is hidden when you export the PDF.</div>
 
     <h3>Medium signal colors &amp; ramps</h3>
     <p class="lead">Each swatch is a three-stop ramp — <strong>dark</strong> (signal mixed toward black), the <strong>signal</strong> color, and <strong>bright</strong> (mixed toward white) — with the 25% dim variant as the thin strip beneath. Hex labels read dark · signal · bright. These swatches stay in sync with the live tuner.</p>
@@ -470,6 +478,9 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         </div>
         <p class="note">Sliders set how far the auto bright/dark stops move from each signal. Click a stop swatch to override it by hand; use <code>↺</code> to re-derive. The reference swatches above update live.</p>
       </div>
+      <div class="tn-section"><span>Base palette</span></div>
+      <div id="base-list"></div>
+      <div class="tn-section"><span>Medium signal colors</span></div>
       <div id="media-list"></div>
       <div class="tn-out">
         <div class="tn-actions">
@@ -943,7 +954,18 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     {key:'archive',   name:'Archive',    fallback:'#6D3D15', label:'ARCHIVE'},
     {key:'film',      name:'Film',       fallback:'#00857A', label:'FILM'},
   ];
-  var BASE_TOKENS = ['--color-bg','--color-body','--color-accent','--color-accent-dim'];
+  var BASES = [
+    {token:'--color-bg',     name:'Background',   fallback:'#0E0E0E'},
+    {token:'--color-body',   name:'Body ink',     fallback:'#FFE7CA'},
+    {token:'--color-accent', name:'Global amber', fallback:'#FCB867'},
+  ];
+  var BASE_DIM_TOKEN = '--color-accent-dim';
+  var DEFAULT_BASES = {};
+  BASES.forEach(function(b){ DEFAULT_BASES[b.token]=baseDefault(b); });
+  var baseState = {};
+  BASES.forEach(function(b){ baseState[b.token]=DEFAULT_BASES[b.token]; });
+  var DEFAULT_ACCENT_DIM_ALPHA = alphaDefault(cssVar(BASE_DIM_TOKEN), 0.25);
+  var accentDimAlpha = DEFAULT_ACCENT_DIM_ALPHA;
   var DEFAULTS = MEDIUMS.map(function(m){return signalDefault(m);});
   var state = MEDIUMS.map(function(m,i){return {signal:DEFAULTS[i], bright:null, dark:null};});
   var brightPct = 20, darkPct = 20, fileHandle = null;
@@ -965,7 +987,29 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     var v=cssVar('--color-'+m.key);
     return v && v.charAt(0)==='#' ? normHex(v) : m.fallback;
   }
+  function baseDefault(b){
+    var v=cssVar(b.token);
+    return v && v.charAt(0)==='#' ? normHex(v).toUpperCase() : b.fallback;
+  }
+  function alphaDefault(v,fallback){
+    var a=alphaFromRgba(v);
+    return a===null ? fallback : a;
+  }
+  function alphaFromRgba(v){
+    var mm=/rgba?\(\s*[^,]+,\s*[^,]+,\s*[^,]+(?:,\s*([0-9.]+)\s*)?\)/i.exec(v||'');
+    if(!mm){ return null; }
+    if(mm[1]===undefined){ return 1; }
+    var a=parseFloat(mm[1]);
+    return isNaN(a) ? null : Math.max(0,Math.min(1,a));
+  }
+  function alphaText(a){
+    return (Math.round(a*100)/100).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
+  }
+  function baseColor(token){ return (baseState[token] || '').toUpperCase(); }
+  function baseAccentDim(){ return rgba(baseState['--color-accent'], alphaText(accentDimAlpha)); }
   function applyStateToCssVars(){
+    BASES.forEach(function(b){ setRootVar(b.token, baseColor(b.token)); });
+    setRootVar(BASE_DIM_TOKEN, baseAccentDim());
     MEDIUMS.forEach(function(m,i){
       setRootVar('--color-'+m.key, state[i].signal.toUpperCase());
       setRootVar('--color-'+m.key+'-dim', dim(i));
@@ -983,8 +1027,27 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       if(hex){ hex.textContent=value.replace(/\s+/g,' '); }
     });
   }
+  function syncBaseRows(){
+    if(!baseList || !baseList.querySelector('.base-row')){ return; }
+    BASES.forEach(function(b){
+      var stp=baseList.querySelector('.stop[data-base-token="'+b.token+'"]');
+      var val=baseColor(b.token);
+      var inp=stp.querySelector('input[type=color]');
+      inp.value=val;
+      inp.parentElement.style.background=val;
+      stp.querySelector('.hx').textContent=val;
+    });
+    var dm=baseAccentDim();
+    var dimStp=baseList.querySelector('.stop[data-base-token="'+BASE_DIM_TOKEN+'"]');
+    dimStp.querySelector('.dimwell').style.background=dm;
+    dimStp.querySelector('.hx').textContent=Math.round(accentDimAlpha*100)+'%';
+    dimStp.title=dm.replace(/\s+/g,' ');
+    dimStp.querySelector('#accent-dim-alpha').value=accentDimAlpha;
+    dimStp.querySelector('.alpha span').textContent='Opacity';
+  }
 
   var grid = document.getElementById('medium-swatch-grid');
+  var baseList = document.getElementById('base-list');
   var list = document.getElementById('media-list');
   var tuner = document.getElementById('tuner');
 
@@ -1001,6 +1064,34 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   }
 
   /* build editor rows */
+  function buildBaseRows(){
+    baseList.innerHTML = '<div class="media-row base-row">'+
+      '<div class="ident"><span class="nm">Base palette</span><span class="ky">global color tokens</span></div>'+
+      '<div class="stops">'+BASES.map(baseStop).join('')+baseDimStop()+'</div>'+
+    '</div>';
+    baseList.querySelectorAll('input[type=color]').forEach(function(inp){
+      inp.addEventListener('input', function(){
+        baseState[inp.dataset.baseToken]=normHex(inp.value).toUpperCase();
+        refresh();
+      });
+    });
+    var alpha=baseList.querySelector('#accent-dim-alpha');
+    alpha.addEventListener('input', function(){
+      accentDimAlpha=Math.max(0,Math.min(1,parseFloat(alpha.value)||0));
+      refresh();
+    });
+  }
+  function baseStop(b){
+    return '<div class="stop" data-base-token="'+b.token+'">'+
+      '<label class="well"><input type="color" data-base-token="'+b.token+'"></label>'+
+      '<div class="meta"><span class="role">'+b.name+'</span><span class="hx"></span></div></div>';
+  }
+  function baseDimStop(){
+    return '<div class="stop" data-base-token="'+BASE_DIM_TOKEN+'"><span class="well dimwell"></span>'+
+      '<div class="meta"><span class="role">Amber dim</span><span class="hx"></span></div>'+
+      '<label class="alpha"><span>Opacity</span><input id="accent-dim-alpha" type="range" min="0" max="1" step="0.01"></label></div>';
+  }
+
   function buildRows(){
     list.innerHTML = MEDIUMS.map(function(m,i){
       return '<div class="media-row" data-i="'+i+'">'+
@@ -1038,6 +1129,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   function refresh(){
     applyStateToCssVars();
     syncBaseSwatches();
+    syncBaseRows();
     MEDIUMS.forEach(function(m,i){
       var sig=state[i].signal, br=bright(i), dk=dark(i), dm=dim(i);
 
@@ -1069,8 +1161,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
   function renderCSS(){
     var lines=[];
+    var pad=function(s){ while(s.length<26){s+=' ';} return s; };
+    lines.push('  /* BASE */');
+    BASES.forEach(function(b){
+      lines.push('  '+pad(b.token+':')+baseColor(b.token)+';');
+    });
+    lines.push('  '+pad(BASE_DIM_TOKEN+':')+baseAccentDim()+';');
+    lines.push('');
     MEDIUMS.forEach(function(m,i){
-      var pad=function(s){ while(s.length<26){s+=' ';} return s; };
       lines.push('  /* '+m.label+' */');
       lines.push('  '+pad('--color-'+m.key+':')+state[i].signal.toUpperCase()+';');
       lines.push('  '+pad('--color-'+m.key+'-dim:')+dim(i)+';');
@@ -1087,11 +1185,16 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   function loadFromTokens(){
     status('Loading tokens.css…');
     fetch('/css/tokens.css',{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
-      var n=0;
-      BASE_TOKENS.forEach(function(token){
-        var val=matchVar(txt,token);
-        if(val){ setRootVar(token,val); }
+      var n=0, bCount=0;
+      BASES.forEach(function(b){
+        var val=matchVar(txt,b.token);
+        if(val && val.charAt(0)==='#'){
+          baseState[b.token]=normHex(val).toUpperCase();
+          bCount++;
+        }
       });
+      var dimVal=matchVar(txt,BASE_DIM_TOKEN);
+      if(dimVal){ accentDimAlpha=alphaDefault(dimVal, accentDimAlpha); }
       MEDIUMS.forEach(function(m,i){
         var sig=matchVar(txt,'--color-'+m.key);
         var br=matchVar(txt,'--color-'+m.key+'-bright');
@@ -1103,7 +1206,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         state[i].dark  =(dkN && dkN.toLowerCase()!==mixBlack(s,darkPct).toLowerCase())?dkN:null;
       });
       refresh();
-      status('Loaded '+n+' signal colors from tokens.css.','ok');
+      status('Loaded '+bCount+' base colors and '+n+' signal colors from tokens.css.','ok');
     }).catch(function(e){ status('Could not fetch tokens.css ('+e.message+'). Using defaults.','err'); });
   }
   function matchVar(txt,name){
@@ -1118,6 +1221,10 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     return re.test(txt)?txt.replace(re,'$1'+value+'$3'):txt;
   }
   function buildUpdated(txt){
+    BASES.forEach(function(b){
+      txt=setVar(txt,b.token,baseColor(b.token));
+    });
+    txt=setVar(txt,BASE_DIM_TOKEN,baseAccentDim());
     MEDIUMS.forEach(function(m,i){
       txt=setVar(txt,'--color-'+m.key+'-bright', bright(i).toUpperCase());
       txt=setVar(txt,'--color-'+m.key+'-dark', dark(i).toUpperCase());
@@ -1137,15 +1244,17 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       var txt=await (await fileHandle.getFile()).text();
       if(txt.indexOf('--color-tattooing')===-1){ status('That isn\'t tokens.css — pick css/tokens.css.','err'); fileHandle=null; return; }
       var w=await fileHandle.createWritable(); await w.write(buildUpdated(txt)); await w.close();
-      status('Saved ✓  Wrote all 9 ramps into '+fileHandle.name+'. Refresh open site pages to reload tokens.css.','ok');
+      status('Saved ✓  Wrote the base palette and all 9 ramps into '+fileHandle.name+'. Refresh open site pages to reload tokens.css.','ok');
     }catch(e){ if(e.name==='AbortError'){status('Save cancelled.');return;} status('Save failed: '+e.message,'err'); }
   }
   function copyCSS(){
     navigator.clipboard.writeText(document.getElementById('css-out').textContent).then(
-      function(){ status('Copied — paste over the medium-color block in css/tokens.css.','ok'); },
+      function(){ status('Copied — paste over the base and medium color blocks in css/tokens.css.','ok'); },
       function(){ status('Copy failed — select the text manually.','err'); });
   }
   function resetAll(){
+    BASES.forEach(function(b){ baseState[b.token]=DEFAULT_BASES[b.token]; });
+    accentDimAlpha=DEFAULT_ACCENT_DIM_ALPHA;
     state=MEDIUMS.map(function(m,idx){return {signal:DEFAULTS[idx],bright:null,dark:null};});
     brightPct=20; darkPct=20;
     document.getElementById('bright-range').value=20; document.getElementById('bright-val').textContent='20';
@@ -1168,6 +1277,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   document.getElementById('tuner-open').addEventListener('click', openTuner);
 
   buildGrid();
+  buildBaseRows();
   buildRows();
   refresh();          // paint built-in defaults immediately (no blank flash)
   loadFromTokens();   // then sync to the live tokens.css values

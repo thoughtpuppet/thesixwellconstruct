@@ -20,10 +20,10 @@
      The foundation every medium page is built on.
   ────────────────────────────────────────────────────────── */
 
-  --color-bg:         #0e0e0e;   /* site background — near black */
+  --color-bg:         #0E0E0E;   /* site background — near black */
   --color-body:       #FFE7CA;   /* all body text — warm off-white */
-  --color-accent:     #FCB867;   /* global amber — wordmark, landing accents */
-  --color-accent-dim: rgba(252, 184, 103, 0.25); /* amber at low opacity — borders, dividers */
+  --color-accent:     #FCB467;   /* global amber — wordmark, landing accents */
+  --color-accent-dim: rgba(252, 180, 103, 0.25); /* amber at low opacity — borders, dividers */
 
 
   /* ──────────────────────────────────────────────────────────

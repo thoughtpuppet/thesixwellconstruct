@@ -786,8 +786,9 @@ const doorwayRadialVeilTexture = createDoorwayRadialVeilTexture();
 const DOORWAY_EYE_TUNING = {
   eyeColor: 0xffd9a8,
   eyeOpacity: 0.40,
-  overlayColor: 0x050302,
-  overlayOpacity: 0.48
+  overlayColor: 0x000000,
+  overlayOpacity: 0.48,
+  transitionFadeColor: 0x0e0e0e
 };
 const DOORWAY_EYE_COLOR = new THREE.Color(DOORWAY_EYE_TUNING.eyeColor);
 const doorwayExit = (() => {
@@ -905,7 +906,7 @@ const doorwayExit = (() => {
   const blackPlane = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1),
     new THREE.MeshBasicMaterial({
-      color: 0x000000,
+      color: DOORWAY_EYE_TUNING.transitionFadeColor,
       transparent: true,
       opacity: 0,
       depthTest: false,
@@ -984,6 +985,7 @@ const doorwayExit = (() => {
     blackPlane,
     scale: 0.18,
     voidScale: 0.2,
+    orbsHidden: false,
     pullProgress: 0,
     pullOriginX: 50,
     pullOriginY: 50,
@@ -1608,8 +1610,8 @@ const completionEffects = (() => {
  * ================================================================== */
 const SHAPE_STREAM = {
   enabled: true,
-  maxShapes: 980,      // hard cap for performance
-  spawnInterval: 0.135, // seconds between spawns
+  maxShapes: 900,      // hard cap for performance
+  spawnInterval: 0.25, // seconds between spawns
   gravity: -17,        // world units / s^2
   minSize: 0.30,       // shape radius (world units)
   maxSize: 0.30,
@@ -1639,9 +1641,14 @@ const SHAPE_STREAM = {
   floorFriction: 1.45,
   wallFriction: 0.14,
   frontBoundaryClearance: 1.15,
+  doorwayKeepoutEnabled: true,
+  doorwayPhysicalBarrierEnabled: true,
+  doorwayBarrierFriction: 0.025,
+  doorwayBarrierRestitution: 0.10,
   shapeFriction: 1.22,
   phaseMinDuration: 1.8,
   phaseBlendDuration: 0.18,
+  initialLandingPhaseIndex: 4,
   emergencyPressureRatio: 1.16,
   emergencyPhaseDelay: 0.60,
   targetBaseSamples: 28,
@@ -1655,17 +1662,34 @@ const SHAPE_STREAM = {
   maxSpawnsPerFrame: 4,
   landingPhases: [
     { name: 'source', duration: 0.8, followSource: true, widthSpread: 0.10, depthSpread: 0.08 },
-    { name: 'back-center', duration: 2.0, widthT: 0.172, depthT: 0.078, widthSpread: 0.36, depthSpread: 0.05 },
-    { name: 'front-fill', duration: 2.2, widthT: 0.578, depthT: 0.990, widthSpread: 0.64, depthSpread: 0.22 },
-    { name: 'center', duration: 1.9, widthT: 0.438, depthT: 0.297, widthSpread: 0.39, depthSpread: 0.16 },
-    { name: 'front-right', duration: 2.1, widthT: 0.900, depthT: 0.900, widthSpread: 0.30, depthSpread: 0.25 },
-    { name: 'back-right', duration: 2.0, widthT: 0.880, depthT: 0.250, widthSpread: 0.27, depthSpread: 0.19 },
-    { name: 'left', duration: 2.0, widthT: 0.040, depthT: 0.940, widthSpread: 0.24, depthSpread: 0.24 },
-    { name: 'right', duration: 2.0, widthT: 0.915, depthT: 0.620, widthSpread: 0.28, depthSpread: 0.30 }
+    { name: 'back-center', duration: 1.65, widthT: 0.172, depthT: 0.078, widthSpread: 0.36, depthSpread: 0.05 },
+    { name: 'front-fill', duration: 1.95, widthT: 0.578, depthT: 0.990, widthSpread: 0.64, depthSpread: 0.22 },
+    { name: 'center', duration: 1.65, widthT: 0.438, depthT: 0.297, widthSpread: 0.39, depthSpread: 0.16 },
+    { name: 'front-right', duration: 3.0, widthT: 0.990, depthT: 0.900, widthSpread: 0.15, depthSpread: 0.22 },
+    { name: 'back-right', duration: 2.85, widthT: 0.990, depthT: 0.310, widthSpread: 0.15, depthSpread: 0.18 },
+    { name: 'left', duration: 1.75, widthT: 0.040, depthT: 0.940, widthSpread: 0.24, depthSpread: 0.24 },
+    { name: 'right', duration: 3.05, widthT: 0.990, depthT: 0.650, widthSpread: 0.14, depthSpread: 0.30 }
   ],
+  rightLaneMinWidthT: 0.885,
+  rightLaneAimBoost: 0.95,
+  rightLaneUpwardBoost: 0.62,
+  rightLaneMaxUpwardSpeed: 7.25,
+  rightLaneMaxLaunchSpeed: 22.5,
+  rightLaneSteerStrength: 3.20,
+  rightLaneSteerMaxSpeed: 13.5,
+  rightLaneGroundDragScale: 0.28,
+  doorwayBarrierArcClearance: 2.45,
+  doorwayBarrierArcBoostMax: 7.00,
+  doorwayBarrierArcLinearDamping: 0.22,
   settleLinearThreshold: 0.055,
   settleAngularThreshold: 0.18,
   settleSleepDelay: 0.46,
+  pileFreezeMinAge: 2.20,
+  pileFreezeDelay: 0.34,
+  pileFreezeLinearThreshold: 0.34,
+  pileFreezeAngularThreshold: 1.35,
+  pileFreezeSurfaceClearance: 1.70,
+  pileFreezePressureRatio: 0.62,
   restitution: 0.26,   // floor/pile bounce
   wallBounce: 0.46,
   fillFactor: 1.64,    // how much a settled shape raises its bucket
@@ -1705,8 +1729,12 @@ const SHAPE_STREAM_FINAL_GRID = {
   postEyeHoldDuration: 0.45,
   roomBreakDuration: 4.85,
   roomImageHandoffDuration: 2.00,
-  blackFadeDuration: 0.55,
+  blackFadeDuration: 0.37,
   homeFadeHoldDuration: 0.18,
+  pageZoomHoldDuration: 5.00,
+  pageZoomScale: 1.80,
+  pageZoomStart: 0.00,
+  pageZoomEnd: 1.00,
   homeHref: '/home/',
   roomParticlePullDuration: 1.45,
   roomParticleBatchSize: 72,
@@ -1829,9 +1857,9 @@ const shapeStream = (() => {
     zMax: CONFIG.homeZ + 0.66,
     world: null,
     boundaryBodies: [],
-    landingPhaseIndex: 0,
+    landingPhaseIndex: SHAPE_STREAM.initialLandingPhaseIndex,
     landingPhaseElapsed: 0,
-    previousLandingPhaseIndex: 0,
+    previousLandingPhaseIndex: SHAPE_STREAM.initialLandingPhaseIndex,
     landingPhaseBlendElapsed: SHAPE_STREAM.phaseBlendDuration,
     pressureHotElapsed: 0,
     metrics: {
@@ -1919,8 +1947,12 @@ function resetShapeStream() {
     zone.inFlight?.fill(0);
   });
   shapeStream.spawnTimer = 0;
-  shapeStream.landingPhaseIndex = 0;
-  shapeStream.previousLandingPhaseIndex = 0;
+  shapeStream.landingPhaseIndex = THREE.MathUtils.clamp(
+    SHAPE_STREAM.initialLandingPhaseIndex,
+    0,
+    Math.max(0, SHAPE_STREAM.landingPhases.length - 1)
+  );
+  shapeStream.previousLandingPhaseIndex = shapeStream.landingPhaseIndex;
   shapeStream.landingPhaseElapsed = 0;
   shapeStream.landingPhaseBlendElapsed = SHAPE_STREAM.phaseBlendDuration;
   shapeStream.pressureHotElapsed = 0;
@@ -1980,6 +2012,38 @@ function createShapeStreamFixedBody(position, halfExtents, rotation = null, opti
   const collider = RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y, halfExtents.z)
     .setFriction(options.friction ?? 1.1)
     .setRestitution(options.restitution ?? 0.02);
+  shapeStream.world.createCollider(collider, body);
+  shapeStream.boundaryBodies.push(body);
+}
+
+function createShapeStreamDoorwayBarrierBody(options = {}) {
+  const barrier = shapeStreamDoorwayBarrierBounds();
+  if (!barrier) return;
+  const body = shapeStream.world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(
+      barrier.centerWorld.x,
+      barrier.centerWorld.y,
+      barrier.centerWorld.z
+    )
+  );
+  const vertices = [];
+  const segments = 28;
+  [-barrier.halfZ, barrier.halfZ].forEach((z) => {
+    for (let i = 0; i < segments; i += 1) {
+      const theta = (i / segments) * Math.PI * 2;
+      vertices.push(
+        Math.cos(theta) * barrier.halfX,
+        Math.sin(theta) * barrier.halfY,
+        z
+      );
+    }
+  });
+  const collider = (
+    RAPIER.ColliderDesc.convexHull(new Float32Array(vertices))
+    || RAPIER.ColliderDesc.cuboid(barrier.halfX, barrier.halfY, barrier.halfZ)
+  )
+    .setFriction(options.friction ?? SHAPE_STREAM.doorwayBarrierFriction)
+    .setRestitution(options.restitution ?? SHAPE_STREAM.doorwayBarrierRestitution);
   shapeStream.world.createCollider(collider, body);
   shapeStream.boundaryBodies.push(body);
 }
@@ -2071,6 +2135,10 @@ function rebuildShapeStreamPhysicsBounds() {
     null,
     { friction: SHAPE_STREAM.wallFriction }
   );
+
+  if (SHAPE_STREAM.doorwayKeepoutEnabled && SHAPE_STREAM.doorwayPhysicalBarrierEnabled && floorZone) {
+    createShapeStreamDoorwayBarrierBody();
+  }
 
   if (shapeStream.items.length) resetShapeStream();
 }
@@ -2256,6 +2324,195 @@ function shapeStreamActiveLandingTarget(zone) {
     widthSpread: THREE.MathUtils.lerp(previousTarget.widthSpread, activeTarget.widthSpread, blendT),
     depthSpread: THREE.MathUtils.lerp(previousTarget.depthSpread, activeTarget.depthSpread, blendT)
   };
+}
+
+function shapeStreamIsRightLanePhase(phaseName) {
+  return phaseName === 'front-right' || phaseName === 'back-right' || phaseName === 'right';
+}
+
+function shapeStreamDoorwayScreenCenterNorm() {
+  const lockLayout = SHAPE_LOCK_LAYOUTS[activeLayoutName] || SHAPE_LOCK_LAYOUTS.desktop;
+  const barrierLayout = activeDoorwayShapeBarrierLayout();
+  const door = worldToNorm(imageToWorld(lockLayout.x, lockLayout.y, SHAPE_STREAM.z));
+  const unit = shapeStreamDoorwayBarrierUnitNorm();
+  const layoutScale = shapeStreamDoorwayBarrierLayoutScale();
+  return {
+    x: door.x + barrierLayout.offsetX * layoutScale * unit.x,
+    y: door.y + barrierLayout.offsetY * layoutScale * unit.y
+  };
+}
+
+function shapeStreamDoorwayBarrierLayoutScale() {
+  const lockLayout = SHAPE_LOCK_LAYOUTS[activeLayoutName] || SHAPE_LOCK_LAYOUTS.desktop;
+  return (lockLayout.sizeN || SHAPE_LOCK_LAYOUTS.desktop.sizeN)
+    / Math.max(0.001, SHAPE_LOCK_LAYOUTS.desktop.sizeN);
+}
+
+function shapeStreamDoorwayBarrierUnitNorm() {
+  const unitWorld = Math.max(0.001, coreUnitW());
+  return {
+    x: unitWorld / Math.max(0.001, viewport.width),
+    y: unitWorld / Math.max(0.001, viewport.height)
+  };
+}
+
+function shapeStreamDoorwayBarrierBounds() {
+  const barrierLayout = activeDoorwayShapeBarrierLayout();
+  const door = shapeStreamDoorwayScreenCenterNorm();
+  const unit = shapeStreamDoorwayBarrierUnitNorm();
+  const layoutScale = shapeStreamDoorwayBarrierLayoutScale();
+  const halfWidth = Math.max(0.003, barrierLayout.sideRadius * layoutScale * unit.x);
+  const left = door.x - halfWidth;
+  const right = door.x + halfWidth * 1.10;
+  const top = door.y - barrierLayout.topPad * layoutScale * unit.y;
+  const bottom = door.y + barrierLayout.bottomPad * layoutScale * unit.y;
+  const centerNorm = {
+    x: (left + right) * 0.5,
+    y: (top + bottom) * 0.5
+  };
+  const zMin = Number.isFinite(shapeStream.zMin) ? shapeStream.zMin : CONFIG.homeZ - 0.72;
+  const zMax = Number.isFinite(shapeStream.zMax) ? shapeStream.zMax : CONFIG.homeZ + 0.66;
+  const centerWorld = toWorld(centerNorm.x, centerNorm.y, (zMin + zMax) * 0.5);
+  return {
+    left,
+    right,
+    top,
+    bottom,
+    centerNorm,
+    centerWorld,
+    halfX: Math.max(SHAPE_STREAM.maxSize * 0.22, (right - left) * viewport.width * 0.5),
+    halfY: Math.max(SHAPE_STREAM.maxSize * 0.22, (bottom - top) * viewport.height * 0.5),
+    halfZ: Math.max(SHAPE_STREAM.maxSize * 1.8, (zMax - zMin) * 0.72)
+  };
+}
+
+function shapeStreamDoorwayScreenKeepoutInfo(worldPosition) {
+  const barrier = shapeStreamDoorwayBarrierBounds();
+  if (!SHAPE_STREAM.doorwayKeepoutEnabled || !barrier) {
+    return { inside: false, amount: 0, right: 1 };
+  }
+  const point = worldToNorm(worldPosition);
+  const radiusX = Math.max(0.001, (barrier.right - barrier.left) * 0.5);
+  const radiusY = Math.max(0.001, (barrier.bottom - barrier.top) * 0.5);
+  const dx = (point.x - barrier.centerNorm.x) / radiusX;
+  const dy = (point.y - barrier.centerNorm.y) / radiusY;
+  const normalizedDistance = Math.sqrt(dx * dx + dy * dy);
+  const inside = normalizedDistance <= 1;
+  if (!inside) return { inside: false, amount: 0, right: barrier.right, point, barrier };
+  return {
+    inside: true,
+    amount: THREE.MathUtils.clamp(1 - normalizedDistance, 0.24, 1),
+    right: barrier.right,
+    point,
+    barrier
+  };
+}
+
+function shapeStreamDoorwayScreenPenalty(worldPosition) {
+  const keepout = shapeStreamDoorwayScreenKeepoutInfo(worldPosition);
+  if (!keepout.inside) return 0;
+  return SHAPE_STREAM.maxSize * activeDoorwayShapeBarrierLayout().targetPenalty * keepout.amount;
+}
+
+function shapeStreamDoorwayBarrierArcBoost(spawnPosition, targetPosition, launchVy, airtime, size) {
+  if (!SHAPE_STREAM.doorwayKeepoutEnabled) return 0;
+  const barrier = shapeStreamDoorwayBarrierBounds();
+  if (!barrier) return 0;
+
+  const startX = spawnPosition.x;
+  const endX = targetPosition.x;
+  const dx = endX - startX;
+  if (Math.abs(dx) < 0.001) return 0;
+  const startNorm = worldToNorm(spawnPosition);
+  const endNorm = worldToNorm(targetPosition);
+  const dxNorm = endNorm.x - startNorm.x;
+  if (Math.abs(dxNorm) < 0.0001) return 0;
+
+  const barrierLeft = barrier.centerWorld.x - barrier.halfX - size * 0.35;
+  const barrierRight = barrier.centerWorld.x + barrier.halfX + size * 0.35;
+  const movingRight = dx > 0;
+  const crossesBarrierX = movingRight
+    ? startX < barrierRight && endX > barrierLeft
+    : startX > barrierLeft && endX < barrierRight;
+  const screenPadX = Math.max(0.002, (size * 0.35) / Math.max(0.001, viewport.width));
+  const crossesBarrierScreenX = dxNorm > 0
+    ? startNorm.x < barrier.right + screenPadX && endNorm.x > barrier.left - screenPadX
+    : startNorm.x > barrier.left - screenPadX && endNorm.x < barrier.right + screenPadX;
+  if (!crossesBarrierX && !crossesBarrierScreenX) return 0;
+
+  const g = Math.abs(SHAPE_STREAM.gravity);
+  const clearanceY = toWorld(barrier.centerNorm.x, barrier.top, barrier.centerWorld.z).y
+    + size * SHAPE_STREAM.doorwayBarrierArcClearance;
+  const sampleXs = dxNorm > 0
+    ? [barrier.left - screenPadX, barrier.centerNorm.x, barrier.right + screenPadX]
+    : [barrier.right + screenPadX, barrier.centerNorm.x, barrier.left - screenPadX];
+  let neededBoost = 0;
+
+  sampleXs.forEach((sampleX) => {
+    const rawPathT = (sampleX - startNorm.x) / dxNorm;
+    if (rawPathT <= 0.04 || rawPathT >= 0.96) return;
+    const pathT = THREE.MathUtils.clamp(rawPathT, 0.05, 0.94);
+
+    const tAtBarrier = Math.max(0.05, airtime * pathT);
+    const yAtBarrier = spawnPosition.y + launchVy * tAtBarrier - 0.5 * g * tAtBarrier * tAtBarrier;
+    const clearanceGap = clearanceY - yAtBarrier;
+    if (clearanceGap > 0) {
+      neededBoost = Math.max(neededBoost, clearanceGap / tAtBarrier);
+    }
+  });
+
+  if (neededBoost <= 0) return 0;
+
+  return THREE.MathUtils.clamp(
+    neededBoost,
+    0,
+    SHAPE_STREAM.doorwayBarrierArcBoostMax
+  );
+}
+
+function deflectShapeStreamDoorwayItem(item, zone, translation, linvel, physicalSurfaceY, delta) {
+  if (!zone || !item?.body || !SHAPE_STREAM.doorwayKeepoutEnabled) return linvel;
+  const lowEnough = physicalSurfaceY == null
+    || translation.y <= physicalSurfaceY + item.size * 4.2;
+  if (!lowEnough) return linvel;
+
+  const screenKeepout = shapeStreamDoorwayScreenKeepoutInfo(translation);
+  if (!screenKeepout.inside) return linvel;
+
+  const barrier = screenKeepout.barrier;
+  const away = new THREE.Vector2(
+    translation.x - barrier.centerWorld.x,
+    translation.y - barrier.centerWorld.y
+  );
+  if (away.lengthSq() < 0.0001) away.set(-1, -0.18);
+  away.normalize();
+  if (barrier.centerNorm.x > 0.55 && away.x > 0) away.x *= 0.35;
+  const barrierLayout = activeDoorwayShapeBarrierLayout();
+  const deflectStrength = barrierLayout.pushStrength;
+  const deflectMaxSpeed = barrierLayout.maxPushSpeed;
+  const amount = screenKeepout.amount || 0;
+  const desired = new THREE.Vector2(
+    away.x * deflectStrength,
+    away.y * deflectStrength * 0.46
+  );
+  if (desired.length() > deflectMaxSpeed) {
+    desired.setLength(deflectMaxSpeed);
+  }
+
+  const steerT = THREE.MathUtils.clamp(
+    delta * deflectStrength * (0.34 + amount * 0.66),
+    0,
+    0.58
+  );
+  const deflected = {
+    x: THREE.MathUtils.lerp(linvel.x, desired.x, steerT),
+    y: Math.max(THREE.MathUtils.lerp(linvel.y, desired.y, steerT), -item.size * 0.35),
+    z: linvel.z
+  };
+  item.body.setLinvel(deflected, true);
+  item.supportTime = 0;
+  item.calmTime = 0;
+  return deflected;
 }
 
 function shapeStreamLandingPressureInfo(zoneIndex = 0, targetOverride = null) {
@@ -2547,6 +2804,7 @@ function pickShapeStreamTargetCell() {
     const centerDepthT = target.depthT;
     const sourcePhase = target.name === 'source';
     const frontFillPhase = target.name === 'front-fill';
+    const rightLanePhase = shapeStreamIsRightLanePhase(target.name);
     const spreadBoost = (1 + hotT * 0.58) * mobileBoost;
     const widthSpread = Math.max(0.08, target.widthSpread * spreadBoost * (sourcePhase ? 1.12 : 1));
     const depthSpread = Math.max(0.07, target.depthSpread * spreadBoost * (sourcePhase ? 1.18 : 1));
@@ -2609,10 +2867,20 @@ function pickShapeStreamTargetCell() {
       const hotCellPenalty = cellPressure > SHAPE_STREAM.phaseCrowdHeight * 0.92
         ? (cellPressure - SHAPE_STREAM.phaseCrowdHeight * 0.92) * 0.42
         : 0;
+      const doorwayScreenPenalty = shapeStreamDoorwayScreenPenalty(shapeStreamFloorSample(zone, depthT, widthT));
+      const rightLaneMissPenalty = rightLanePhase
+        ? Math.max(0, SHAPE_STREAM.rightLaneMinWidthT - widthT) * SHAPE_STREAM.maxSize * 4.4
+        : 0;
+      const rightLaneEdgeReward = rightLanePhase
+        ? -Math.max(0, widthT - SHAPE_STREAM.rightLaneMinWidthT) * SHAPE_STREAM.maxSize * 0.35
+        : 0;
       const score = cellPressure * 0.78
         + neighborhoodPressure * 0.54
         + continuityPenalty
         + hotCellPenalty
+        + doorwayScreenPenalty
+        + rightLaneMissPenalty
+        + rightLaneEdgeReward
         + Math.random() * SHAPE_STREAM.maxSize * THREE.MathUtils.lerp(0.20, 0.08, hotT);
       candidates.push({ zoneIndex, x, z, depthT, widthT, phaseName: target.name, score, pressure: cellPressure });
     }
@@ -2699,42 +2967,85 @@ function spawnStreamShape() {
   // Ballistic aim: solve for the horizontal velocity that lands the shape near
   // targetX/targetZ given the upward pop and gravity. Airtime = time to fall
   // from the spawn height down to the target surface (apex included).
-  const vy0 = Math.random() * SHAPE_STREAM.vyPop;
+  const rightReach = THREE.MathUtils.clamp((targetWidthT - 0.72) / 0.27, 0, 1);
+  const frontReach = THREE.MathUtils.clamp((targetDepthT - 0.70) / 0.28, 0, 1);
+  const backReach = THREE.MathUtils.clamp((0.34 - targetDepthT) / 0.32, 0, 1);
+  const rightLaneTarget = targetWidthT >= SHAPE_STREAM.rightLaneMinWidthT
+    || shapeStreamIsRightLanePhase(targetCell.phaseName);
+  const rightLaneLift = rightLaneTarget
+    ? SHAPE_STREAM.rightLaneUpwardBoost * THREE.MathUtils.lerp(0.72, 1, rightReach)
+    : 0;
+  const launchYBias = -Math.abs(flowVector.y) * SHAPE_STREAM.spawnBurst * 0.12;
+  let vy0 = Math.random() * SHAPE_STREAM.vyPop + rightLaneLift;
   const surfaceY = targetSample.y + settledLift;
   const fall = Math.max(0.5, mesh.position.y - surfaceY);
   const g = Math.abs(SHAPE_STREAM.gravity);
   // t for y(t)=y0+vy0*t-0.5*g*t^2 to reach surfaceY (the larger root).
-  const airtime = (vy0 + Math.sqrt(vy0 * vy0 + 2 * g * fall)) / g;
-  const safeAirtime = Math.max(0.25, airtime);
-  const rightReach = THREE.MathUtils.clamp((targetWidthT - 0.72) / 0.27, 0, 1);
-  const frontReach = THREE.MathUtils.clamp((targetDepthT - 0.70) / 0.28, 0, 1);
-  const backReach = THREE.MathUtils.clamp((0.34 - targetDepthT) / 0.32, 0, 1);
+  const solveAirtime = (launchVy) => (
+    launchVy + Math.sqrt(launchVy * launchVy + 2 * g * fall)
+  ) / g;
+  let launchVy = vy0 + launchYBias;
+  let safeAirtime = Math.max(0.25, solveAirtime(launchVy));
+  let barrierArcBoost = 0;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const neededArcBoost = shapeStreamDoorwayBarrierArcBoost(
+      spawnPosition,
+      { x: targetX, y: surfaceY, z: targetZ },
+      launchVy,
+      safeAirtime,
+      size
+    );
+    const remainingBoost = SHAPE_STREAM.doorwayBarrierArcBoostMax - barrierArcBoost;
+    const appliedBoost = Math.min(neededArcBoost, Math.max(0, remainingBoost));
+    if (appliedBoost <= 0.001) break;
+    barrierArcBoost += appliedBoost;
+    vy0 += appliedBoost;
+    launchVy += appliedBoost;
+    safeAirtime = Math.max(0.25, solveAirtime(launchVy));
+  }
+  const barrierArcActive = barrierArcBoost > 0;
   const xAimGain = SHAPE_STREAM.aimCompensation
-    + SHAPE_STREAM.farAimCompensation * Math.max(rightReach, frontReach * 0.35);
+    + SHAPE_STREAM.farAimCompensation * Math.max(rightReach, frontReach * 0.35)
+    + (rightLaneTarget ? SHAPE_STREAM.rightLaneAimBoost : 0);
   const zAimGain = SHAPE_STREAM.aimCompensation
     + SHAPE_STREAM.farAimCompensation * Math.max(frontReach, backReach * 0.7);
   const aimVx = ((targetX - mesh.position.x) / safeAirtime) * xAimGain;
   const aimVz = ((targetZ - mesh.position.z) / safeAirtime) * zAimGain;
   const burst = {
     x: flowVector.x * SHAPE_STREAM.spawnBurst,
-    y: -Math.abs(flowVector.y) * SHAPE_STREAM.spawnBurst * 0.12,
+    y: launchYBias,
     z: flowVector.z * SHAPE_STREAM.spawnBurst
   };
+  const highArcLaunch = rightLaneTarget || barrierArcActive;
+  const launchLinearDamping = barrierArcActive
+    ? SHAPE_STREAM.doorwayBarrierArcLinearDamping
+    : SHAPE_STREAM.linearDamping;
 
   const body = shapeStream.world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(mesh.position.x, mesh.position.y, mesh.position.z)
-      .setLinearDamping(SHAPE_STREAM.linearDamping)
+      .setLinearDamping(launchLinearDamping)
       .setAngularDamping(SHAPE_STREAM.angularDamping)
     );
   body.setRotation(rapierQuat(mesh.quaternion), true);
   const launchVelocity = new THREE.Vector3(
     aimVx + burst.x + (Math.random() - 0.5) * SHAPE_STREAM.vxSpread,
-    vy0 + burst.y,
+    launchVy,
     aimVz + burst.z + (Math.random() - 0.5) * SHAPE_STREAM.vxSpread * 0.18
   );
-  if (launchVelocity.length() > SHAPE_STREAM.maxLaunchSpeed) {
-    launchVelocity.setLength(SHAPE_STREAM.maxLaunchSpeed);
+  const launchSpeedLimit = highArcLaunch
+    ? SHAPE_STREAM.rightLaneMaxLaunchSpeed
+    : SHAPE_STREAM.maxLaunchSpeed;
+  if (highArcLaunch) {
+    launchVelocity.y = Math.min(launchVelocity.y, SHAPE_STREAM.rightLaneMaxUpwardSpeed);
+    const planarSpeed = Math.hypot(launchVelocity.x, launchVelocity.z);
+    if (planarSpeed > launchSpeedLimit) {
+      const planarScale = launchSpeedLimit / Math.max(0.0001, planarSpeed);
+      launchVelocity.x *= planarScale;
+      launchVelocity.z *= planarScale;
+    }
+  } else if (launchVelocity.length() > launchSpeedLimit) {
+    launchVelocity.setLength(launchSpeedLimit);
   }
   body.setLinvel(
     {
@@ -2769,6 +3080,12 @@ function spawnStreamShape() {
     body,
     collider,
     age: 0,
+    initialUpwardLimit: highArcLaunch
+      ? Math.min(
+        SHAPE_STREAM.rightLaneMaxUpwardSpeed,
+        Math.max(SHAPE_STREAM.maxUpwardSpeed, launchVelocity.y + 0.08)
+      )
+      : SHAPE_STREAM.maxUpwardSpeed,
     target: {
       x: targetX,
       y: surfaceY,
@@ -2787,6 +3104,7 @@ function spawnStreamShape() {
     touchedSurface: false,
     supportTime: 0,
     calmTime: 0,
+    pileFreezeTime: 0,
     bucketCommitted: false,
     bucketContribution: null,
     settled: false,
@@ -2825,6 +3143,7 @@ function shapeStreamDoorwayExitDuration(name) {
   if (name === 'openRevealDuration') return 0.12;
   if (name === 'blinkDuration') return 0.14;
   if (name === 'postEyeHoldDuration') return 0.22;
+  if (name === 'pageZoomHoldDuration') return 0.9;
   if (name === 'roomBreakDuration') return 2.55;
   if (name === 'blackFadeDuration') return 0.42;
   return SHAPE_STREAM_FINAL_GRID[name];
@@ -2855,6 +3174,7 @@ function applyDoorwayEyeTuning() {
   doorwayExit.gravityVeil.material.color.setHex(DOORWAY_EYE_TUNING.overlayColor);
   doorwayExit.veil.material.color.setHex(DOORWAY_EYE_TUNING.overlayColor);
   doorwayExit.voidPlane.material.color.setHex(DOORWAY_EYE_TUNING.overlayColor);
+  doorwayExit.blackPlane.material.color.setHex(DOORWAY_EYE_TUNING.transitionFadeColor);
 }
 
 function doorwayEyeAspect(texture = doorwayOpenEyeTexture) {
@@ -3039,6 +3359,10 @@ function doorwayRoomBreakConfiguredDuration() {
   return Math.max(0.001, shapeStreamDoorwayExitDuration('roomBreakDuration'));
 }
 
+function doorwayPageZoomHoldDuration() {
+  return Math.max(0, shapeStreamDoorwayExitDuration('pageZoomHoldDuration'));
+}
+
 function doorwayRoomImageHandoffDuration() {
   return Math.min(
     doorwayRoomBreakConfiguredDuration() * 0.9,
@@ -3079,6 +3403,16 @@ function doorwayRoomImageHandoffProgress(progress = 0) {
   if (duration <= 0) return progress > 0 ? 1 : 0;
   const elapsed = THREE.MathUtils.clamp(progress, 0, 1) * doorwayRoomBreakPhaseDuration();
   return easeInOutCubic(THREE.MathUtils.clamp(elapsed / duration, 0, 1));
+}
+
+function doorwayRoomParticleImageProgress() {
+  const phaseDuration = doorwayRoomBreakPhaseDuration();
+  if (phaseDuration <= 0) return 0;
+  return THREE.MathUtils.clamp(doorwayRoomImageHandoffDuration() / phaseDuration, 0, 1);
+}
+
+function doorwayRoomBreakActiveDuration() {
+  return Math.max(0.001, doorwayRoomBreakPhaseDuration() * (1 - doorwayRoomParticleImageProgress()));
 }
 
 function doorwayRoomBreakVacuumElapsed(progress = 0) {
@@ -3691,6 +4025,68 @@ function resetDoorwayViewerPull() {
   artStage.style.willChange = '';
 }
 
+function setDoorwayOrbsHidden(hidden = false) {
+  doorwayExit.orbsHidden = !!hidden;
+  if (!doorwayExit.orbsHidden) {
+    orbs.forEach((orb) => {
+      orb.mesh.visible = true;
+      if (orb.floatShadow) orb.floatShadow.visible = orb.seated == null;
+    });
+    return;
+  }
+  orbs.forEach((orb) => {
+    orb.mesh.visible = false;
+    if (orb.floatShadow) orb.floatShadow.visible = false;
+  });
+}
+
+function doorwayPageZoomProgress(vacuumProgress = 0) {
+  const start = THREE.MathUtils.clamp(SHAPE_STREAM_FINAL_GRID.pageZoomStart, 0, 0.98);
+  const end = THREE.MathUtils.clamp(
+    SHAPE_STREAM_FINAL_GRID.pageZoomEnd,
+    start + 0.01,
+    1
+  );
+  return easeInOutCubic(
+    THREE.MathUtils.clamp((vacuumProgress - start) / Math.max(0.001, end - start), 0, 1)
+  );
+}
+
+function doorwayImageZoomNorm() {
+  const visible = viewportMetrics();
+  return {
+    x: visible.left + visible.width * 0.5,
+    y: visible.top + visible.height * 0.5
+  };
+}
+
+function doorwayPageZoomAnchorNorm(anchor = 'particleImage') {
+  if (anchor === 'door') return worldToNorm(shapeLock.center);
+  return doorwayImageZoomNorm();
+}
+
+function applyDoorwayPageZoom(progress = 0, anchor = 'particleImage') {
+  const t = THREE.MathUtils.clamp(progress, 0, 1);
+  doorwayExit.pullProgress = t;
+  const anchorNorm = doorwayPageZoomAnchorNorm(anchor);
+  const originX = THREE.MathUtils.clamp(anchorNorm.x * 100, 0, 100);
+  const originY = THREE.MathUtils.clamp(anchorNorm.y * 100, 0, 100);
+  doorwayExit.pullOriginX = originX;
+  doorwayExit.pullOriginY = originY;
+  doorwayExit.pullTranslateX = 0;
+  doorwayExit.pullTranslateY = 0;
+
+  if (t <= 0.001) {
+    resetDoorwayViewerPull();
+    return;
+  }
+
+  const scale = THREE.MathUtils.lerp(1, SHAPE_STREAM_FINAL_GRID.pageZoomScale, t);
+  artStage.style.transformOrigin = `${originX.toFixed(2)}% ${originY.toFixed(2)}%`;
+  artStage.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(4)})`;
+  artStage.style.willChange = 'transform';
+}
+
 function updateDoorwayGravityRings(phase = 'idle', progress = 0) {
   doorwayExit.rings.forEach((ring) => {
     ring.visible = false;
@@ -3830,6 +4226,8 @@ function hideDoorwayEyeCalibrationPreview() {
   doorwayExit.veil.visible = false;
   doorwayExit.veil.material.opacity = 0;
   updateDoorwayGravityRings('calibrationPreview', 0);
+  resetDoorwayViewerPull();
+  setDoorwayOrbsHidden(false);
   resetDoorwayRoomDust();
   resetDoorwayRoomBreak();
   resetDoorwayBlackFade();
@@ -3870,6 +4268,7 @@ function resetShapeStreamDoorwayExit() {
   resetDoorwayRoomBreak();
   resetDoorwayBlackFade();
   resetDoorwayRoomDust();
+  setDoorwayOrbsHidden(false);
   setCompletionExitOpacityScale(1);
   doorwayExit.navigationTriggered = false;
   doorwayExit.calibrationTransitionPreview = false;
@@ -3939,6 +4338,7 @@ function startShapeStreamDoorwayExit() {
   resetDoorwayRoomBreak();
   resetDoorwayBlackFade();
   resetDoorwayRoomDust();
+  setDoorwayOrbsHidden(false);
   seedDoorwayRoomDust(true);
   setCompletionExitOpacityScale(1);
   doorwayExit.navigationTriggered = false;
@@ -3961,7 +4361,7 @@ function startDoorwayTransitionPreview() {
   shapeStream.finalGrid.active = true;
   shapeStream.finalGrid.phase = 'done';
   shapeStream.finalGrid.animating = true;
-  shapeStream.finalGrid.exitPhase = 'postEyeHold';
+  shapeStream.finalGrid.exitPhase = 'pageZoomHold';
   shapeStream.finalGrid.exitElapsed = 0;
   shapeStream.finalGrid.exitProgress = 0;
   shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
@@ -3982,11 +4382,17 @@ function startDoorwayTransitionPreview() {
   resetDoorwayBlackFade();
   resetDoorwayRoomDust();
   clearDoorwayRoomShards();
-  setCompletionExitOpacityScale(1);
+  seedDoorwayRoomShards(true);
+  const particleImageProgress = doorwayRoomParticleImageProgress();
+  updateDoorwayRoomShards(particleImageProgress, 1);
+  applyDoorwayRoomBreak(particleImageProgress, true);
+  setDoorwayOrbsHidden(true);
+  setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(particleImageProgress));
   clearDoorwayAmbientDimming();
-  doorwayExit.voidPlane.visible = true;
-  doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.71);
-  setDoorwayEyeOpacity(0, 1, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+  applyDoorwayPageZoom(0);
+  doorwayExit.voidPlane.visible = false;
+  doorwayExit.voidPlane.material.opacity = 0;
+  setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
   layoutShapeStreamDoorwayExit(
     doorwayEyeScale(),
     SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
@@ -3997,9 +4403,11 @@ function startDoorwayTransitionPreview() {
 
 function finishShapeStreamDoorwayExitHandoff() {
   applyDoorwayBlackFade(1);
+  applyDoorwayPageZoom(1);
   applyDoorwayRoomBreak(1);
   updateDoorwayRoomShards(1, 0);
   updateDoorwayRoomDust(1, 0);
+  setDoorwayOrbsHidden(true);
   setCompletionExitOpacityScale(0);
   shapeStream.finalGrid.exitProgress = 1;
   shapeStream.finalGrid.collapseProgress = 1;
@@ -4054,6 +4462,8 @@ function animateShapeStreamDoorwayExit(delta) {
     doorwayExit.voidPlane.visible = true;
     setDoorwayEyeOpacity(t, 0);
     clearDoorwayAmbientDimming();
+    applyDoorwayPageZoom(0);
+    setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(0, doorwayOverlayOpacity(0.46), t);
     updateDoorwayGravityRings('idle', 0);
     layoutShapeStreamDoorwayExit(
@@ -4075,6 +4485,8 @@ function animateShapeStreamDoorwayExit(delta) {
     shapeStream.finalGrid.exitProgress = progress;
     setDoorwayEyeOpacity(1 - t, t, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
     clearDoorwayAmbientDimming();
+    applyDoorwayPageZoom(0);
+    setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(doorwayOverlayOpacity(0.46), doorwayOverlayOpacity(0.71), t);
     updateDoorwayGravityRings('idle', 0);
     layoutShapeStreamDoorwayExit(
@@ -4105,6 +4517,8 @@ function animateShapeStreamDoorwayExit(delta) {
     shapeStream.finalGrid.portalProgress = 0;
     setDoorwayEyeOpacity(eyeVisible ? 1 : 0, 0);
     clearDoorwayAmbientDimming();
+    applyDoorwayPageZoom(0);
+    setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.46);
     updateDoorwayGravityRings('blinkSequence', progress);
     layoutShapeStreamDoorwayExit(
@@ -4138,6 +4552,8 @@ function animateShapeStreamDoorwayExit(delta) {
     doorwayExit.roomShards.doorMaterial.uniforms.uOpacity.value = 0;
     applyDoorwayBlackFade(0);
     clearDoorwayAmbientDimming();
+    applyDoorwayPageZoom(0);
+    setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.71);
     updateDoorwayGravityRings('idle', 0);
     layoutShapeStreamDoorwayExit(
@@ -4146,8 +4562,6 @@ function animateShapeStreamDoorwayExit(delta) {
     );
     if (progress >= 1) {
       seedDoorwayRoomShards(true);
-      updateDoorwayRoomShards(0, 1);
-      applyDoorwayRoomBreak(0, true);
       shapeStream.finalGrid.exitPhase = 'roomBreak';
       shapeStream.finalGrid.exitElapsed = 0;
       shapeStream.finalGrid.exitProgress = 0;
@@ -4155,23 +4569,100 @@ function animateShapeStreamDoorwayExit(delta) {
     return;
   }
 
-  if (exitPhase === 'roomBreak') {
-    const duration = doorwayRoomBreakPhaseDuration();
-    const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+  if (exitPhase === 'pageZoomHold') {
+    const duration = doorwayPageZoomHoldDuration();
+    const progress = duration <= 0
+      ? 1
+      : THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    const particleImageProgress = doorwayRoomParticleImageProgress();
     shapeStream.finalGrid.exitProgress = progress;
     shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
-    shapeStream.finalGrid.collapseProgress = progress;
-    shapeStream.finalGrid.dissolveProgress = progress;
+    shapeStream.finalGrid.collapseProgress = particleImageProgress;
+    shapeStream.finalGrid.dissolveProgress = particleImageProgress;
     shapeStream.finalGrid.portalProgress = 0;
-    doorwayExit.dissolveProgress = progress;
-    const eyeFadeT = easeInCubic(THREE.MathUtils.clamp(progress / 0.16, 0, 1));
-    setDoorwayEyeOpacity(0, 1 - eyeFadeT, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    doorwayExit.dissolveProgress = particleImageProgress;
+    setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
     updateDoorwayRoomDust(1, 0);
-    updateDoorwayRoomShards(progress);
-    applyDoorwayRoomBreak(progress, true);
-    setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(progress));
+    updateDoorwayRoomShards(particleImageProgress, 1);
+    applyDoorwayRoomBreak(particleImageProgress, true);
+    setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(particleImageProgress));
     applyDoorwayBlackFade(0);
-    applyDoorwayAmbientDimming(progress);
+    clearDoorwayAmbientDimming();
+    applyDoorwayPageZoom(easeInOutCubic(progress));
+    setDoorwayOrbsHidden(true);
+    doorwayExit.voidPlane.visible = false;
+    doorwayExit.voidPlane.material.opacity = 0;
+    updateDoorwayGravityRings('idle', 0);
+    layoutShapeStreamDoorwayExit(
+      doorwayEyeScale(),
+      SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
+    );
+    if (progress >= 1) {
+      shapeStream.finalGrid.exitPhase = 'roomVacuum';
+      shapeStream.finalGrid.exitElapsed = 0;
+      shapeStream.finalGrid.exitProgress = 0;
+    }
+    return;
+  }
+
+  if (exitPhase === 'roomBreak') {
+    const particleImageProgress = doorwayRoomParticleImageProgress();
+    const duration = Math.max(0.001, doorwayRoomImageHandoffDuration());
+    const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    const breakProgress = THREE.MathUtils.lerp(0, particleImageProgress, progress);
+    shapeStream.finalGrid.exitProgress = progress;
+    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
+    shapeStream.finalGrid.collapseProgress = breakProgress;
+    shapeStream.finalGrid.dissolveProgress = breakProgress;
+    shapeStream.finalGrid.portalProgress = 0;
+    doorwayExit.dissolveProgress = breakProgress;
+    setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    updateDoorwayRoomDust(1, 0);
+    updateDoorwayRoomShards(breakProgress);
+    applyDoorwayRoomBreak(breakProgress, true);
+    setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(breakProgress));
+    applyDoorwayBlackFade(0);
+    clearDoorwayAmbientDimming();
+    applyDoorwayPageZoom(0);
+    setDoorwayOrbsHidden(true);
+    doorwayExit.voidPlane.visible = false;
+    doorwayExit.voidPlane.material.opacity = 0;
+    updateDoorwayGravityRings('idle', 0);
+    layoutShapeStreamDoorwayExit(
+      doorwayEyeScale(),
+      SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
+    );
+    if (progress >= 1) {
+      updateDoorwayRoomShards(particleImageProgress, 1);
+      applyDoorwayRoomBreak(particleImageProgress, true);
+      shapeStream.finalGrid.exitPhase = 'pageZoomHold';
+      shapeStream.finalGrid.exitElapsed = 0;
+      shapeStream.finalGrid.exitProgress = 0;
+    }
+    return;
+  }
+
+  if (exitPhase === 'roomVacuum') {
+    const particleImageProgress = doorwayRoomParticleImageProgress();
+    const duration = doorwayRoomBreakActiveDuration();
+    const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    const breakProgress = THREE.MathUtils.lerp(particleImageProgress, 1, progress);
+    const vacuumProgress = doorwayRoomVacuumProgress(breakProgress);
+    shapeStream.finalGrid.exitProgress = progress;
+    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
+    shapeStream.finalGrid.collapseProgress = breakProgress;
+    shapeStream.finalGrid.dissolveProgress = breakProgress;
+    shapeStream.finalGrid.portalProgress = 0;
+    doorwayExit.dissolveProgress = breakProgress;
+    setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    updateDoorwayRoomDust(1, 0);
+    updateDoorwayRoomShards(breakProgress);
+    applyDoorwayRoomBreak(breakProgress, true);
+    setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(breakProgress));
+    applyDoorwayBlackFade(0);
+    applyDoorwayAmbientDimming(breakProgress);
+    applyDoorwayPageZoom(Math.max(doorwayExit.pullProgress || 0, doorwayPageZoomProgress(vacuumProgress)));
+    setDoorwayOrbsHidden(true);
     doorwayExit.voidPlane.visible = false;
     doorwayExit.voidPlane.material.opacity = 0;
     updateDoorwayGravityRings('idle', 0);
@@ -4205,6 +4696,8 @@ function animateShapeStreamDoorwayExit(delta) {
     setCompletionExitOpacityScale(0);
     applyDoorwayBlackFade(progress);
     applyDoorwayAmbientDimming(1);
+    applyDoorwayPageZoom(1);
+    setDoorwayOrbsHidden(true);
     doorwayExit.voidPlane.visible = false;
     doorwayExit.voidPlane.material.opacity = 0;
     updateDoorwayGravityRings('idle', 0);
@@ -4580,15 +5073,46 @@ function retargetShapeStreamFinalGrid(restartAnimation = false) {
       doorwayExit.roomShards.material.uniforms.uOpacity.value = 0;
       doorwayExit.roomShards.doorMaterial.uniforms.uOpacity.value = 0;
       applyDoorwayBlackFade(0);
+      applyDoorwayPageZoom(0);
+      setDoorwayOrbsHidden(false);
+    } else if (phase === 'pageZoomHold') {
+      const progress = shapeStream.finalGrid.exitProgress || 0;
+      const particleImageProgress = doorwayRoomParticleImageProgress();
+      seedDoorwayRoomShards(true);
+      updateDoorwayRoomShards(particleImageProgress, 1);
+      applyDoorwayRoomBreak(particleImageProgress, true);
+      setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(particleImageProgress));
+      setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+      clearDoorwayAmbientDimming();
+      applyDoorwayBlackFade(0);
+      updateDoorwayRoomDust(1, 0);
+      applyDoorwayPageZoom(easeInOutCubic(progress));
+      setDoorwayOrbsHidden(true);
     } else if (phase === 'roomBreak') {
       const breakProgress = shapeStream.finalGrid.collapseProgress || 0;
       seedDoorwayRoomShards(true);
       updateDoorwayRoomShards(breakProgress);
       applyDoorwayRoomBreak(breakProgress, true);
       setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(breakProgress));
+      setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+      clearDoorwayAmbientDimming();
+      applyDoorwayBlackFade(0);
+      updateDoorwayRoomDust(1, 0);
+      applyDoorwayPageZoom(0);
+      setDoorwayOrbsHidden(true);
+    } else if (phase === 'roomVacuum') {
+      const breakProgress = shapeStream.finalGrid.collapseProgress || 0;
+      const vacuumProgress = doorwayRoomVacuumProgress(breakProgress);
+      seedDoorwayRoomShards(true);
+      updateDoorwayRoomShards(breakProgress);
+      applyDoorwayRoomBreak(breakProgress, true);
+      setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(breakProgress));
+      setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
       applyDoorwayAmbientDimming(breakProgress);
       applyDoorwayBlackFade(0);
       updateDoorwayRoomDust(1, 0);
+      applyDoorwayPageZoom(Math.max(doorwayExit.pullProgress || 0, doorwayPageZoomProgress(vacuumProgress)));
+      setDoorwayOrbsHidden(true);
     } else if (phase === 'blackFade' || phase === 'ready' || phase === 'navigating') {
       const blackProgress = phase === 'blackFade' ? shapeStream.finalGrid.portalProgress || 0 : 1;
       const cover = easeInCubic(blackProgress);
@@ -4599,6 +5123,8 @@ function retargetShapeStreamFinalGrid(restartAnimation = false) {
       applyDoorwayAmbientDimming(1);
       applyDoorwayBlackFade(blackProgress);
       updateDoorwayRoomDust(1, 0);
+      applyDoorwayPageZoom(1);
+      setDoorwayOrbsHidden(true);
     }
     layoutShapeStreamDoorwayExit();
     return;
@@ -4679,15 +5205,22 @@ function steerShapeStreamItem(item, translation, linvel, delta) {
     0,
     1
   );
-  const maxSpeed = SHAPE_STREAM.landingSteerMaxSpeed * THREE.MathUtils.lerp(0.48, 1, impactFade) * pressureFade;
+  const rightLaneTarget = item.target?.widthT >= SHAPE_STREAM.rightLaneMinWidthT;
+  const steerMaxSpeed = rightLaneTarget
+    ? SHAPE_STREAM.rightLaneSteerMaxSpeed
+    : SHAPE_STREAM.landingSteerMaxSpeed;
+  const steerStrength = rightLaneTarget
+    ? SHAPE_STREAM.rightLaneSteerStrength
+    : SHAPE_STREAM.landingSteerStrength;
+  const maxSpeed = steerMaxSpeed * THREE.MathUtils.lerp(0.48, 1, impactFade) * pressureFade;
   if (desired.length() > maxSpeed) {
     desired.setLength(maxSpeed);
   }
 
   const steerT = THREE.MathUtils.clamp(
-    delta * SHAPE_STREAM.landingSteerStrength * THREE.MathUtils.lerp(0.12, 1, impactFade) * pressureFade,
+    delta * steerStrength * THREE.MathUtils.lerp(0.12, 1, impactFade) * pressureFade,
     0,
-    0.36
+    rightLaneTarget ? 0.48 : 0.36
   );
   if (steerT <= 0.001) return linvel;
   const steered = {
@@ -4755,12 +5288,15 @@ function updateShapeStream(delta) {
       : targetSurfaceY;
     const nearPhysicalSurface = physicalSurfaceY != null
       && translation.y <= physicalSurfaceY + item.size * 1.18;
+    linvel = deflectShapeStreamDoorwayItem(item, zone, translation, linvel, physicalSurfaceY, delta);
+    linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
     if (item.body.isSleeping() && !nearPhysicalSurface) {
       linvel = { x: linvel.x * 0.35, y: -Math.max(0.12, item.size * 0.45), z: linvel.z * 0.35 };
       angvel = { x: 0, y: 0, z: 0 };
       item.body.setLinvel(linvel, true);
       item.body.setAngvel(angvel, true);
       item.calmTime = 0;
+      item.pileFreezeTime = 0;
       linearSpeed = Math.hypot(linvel.x, linvel.y, linvel.z);
       angularSpeed = 0;
     }
@@ -4779,7 +5315,11 @@ function updateShapeStream(delta) {
       && linvel.y <= 0.28;
     if (groundedForStream && !item.body.isSleeping()) {
       const dragBoost = activeLayoutName === 'mobile' ? SHAPE_STREAM.mobileGroundedDragBoost : 1;
-      const linearDragT = 1 - Math.exp(-delta * SHAPE_STREAM.groundedLinearDrag * dragBoost);
+      const rightLaneDrift = item.target?.widthT >= SHAPE_STREAM.rightLaneMinWidthT
+        && translation.x < item.target.x - item.size * 1.25
+        && item.age < SHAPE_STREAM.landingSteerDuration + 1.2;
+      const linearDragScale = rightLaneDrift ? SHAPE_STREAM.rightLaneGroundDragScale : 1;
+      const linearDragT = 1 - Math.exp(-delta * SHAPE_STREAM.groundedLinearDrag * dragBoost * linearDragScale);
       const angularDragT = 1 - Math.exp(-delta * SHAPE_STREAM.groundedAngularDrag * dragBoost);
       linvel = {
         x: THREE.MathUtils.lerp(linvel.x, 0, linearDragT),
@@ -4807,8 +5347,9 @@ function updateShapeStream(delta) {
       playShapeImpactFeedback(THREE.MathUtils.clamp(impactEnergy / 5.5, 0.24, 0.95), translation);
     }
     if (item.age < 0.55) {
-      if (linvel.y > SHAPE_STREAM.maxUpwardSpeed) {
-        item.body.setLinvel({ x: linvel.x, y: SHAPE_STREAM.maxUpwardSpeed, z: linvel.z }, true);
+      const upwardLimit = item.initialUpwardLimit ?? SHAPE_STREAM.maxUpwardSpeed;
+      if (linvel.y > upwardLimit) {
+        item.body.setLinvel({ x: linvel.x, y: upwardLimit, z: linvel.z }, true);
       }
       if (angularSpeed > SHAPE_STREAM.maxAngularSpeed) {
         const scale = SHAPE_STREAM.maxAngularSpeed / Math.max(0.0001, angularSpeed);
@@ -4822,6 +5363,18 @@ function updateShapeStream(delta) {
       && linearSpeed <= SHAPE_STREAM.settleLinearThreshold * 2.6
       && angularSpeed <= SHAPE_STREAM.settleAngularThreshold * 2.15;
     item.calmTime = (nearPhysicalSurface ? groundedStill : nearlyStill) ? item.calmTime + delta : 0;
+    const pileFreezeCandidate = !item.body.isSleeping()
+      && item.age >= SHAPE_STREAM.pileFreezeMinAge
+      && item.touchedSurface
+      && physicalSurfaceY != null
+      && translation.y <= physicalSurfaceY + item.size * SHAPE_STREAM.pileFreezeSurfaceClearance
+      && linvel.y <= item.size * 0.38
+      && linearSpeed <= SHAPE_STREAM.pileFreezeLinearThreshold
+      && angularSpeed <= SHAPE_STREAM.pileFreezeAngularThreshold
+      && (shapeStream.metrics.pressureRatio >= SHAPE_STREAM.pileFreezePressureRatio || item.bucketCommitted);
+    item.pileFreezeTime = pileFreezeCandidate
+      ? item.pileFreezeTime + delta
+      : Math.max(0, (item.pileFreezeTime || 0) - delta * 2.4);
     if (
       !item.body.isSleeping()
       && item.age > 1.35
@@ -4832,6 +5385,12 @@ function updateShapeStream(delta) {
       item.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       item.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
       item.body.sleep();
+    } else if (item.pileFreezeTime >= SHAPE_STREAM.pileFreezeDelay) {
+      item.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      item.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      item.body.sleep();
+      item.calmTime = SHAPE_STREAM.settleSleepDelay;
+      item.supportTime = Math.max(item.supportTime, 0.34);
     }
 
     const rotation = item.body.rotation();
@@ -4877,7 +5436,29 @@ function updateShapeStream(delta) {
 const SHAPE_LOCK_ORDER = ['circle', 'triangle', 'square', 'pentagon', 'hexagon'];
 const SHAPE_LOCK_LAYOUTS = {
   desktop: { x: 0.619, y: 0.555, sizeN: 0.024 },
-  mobile: { x: 0.750, y: 0.600, sizeN: 0.030 }
+  mobile: { x: 0.763, y: 0.600, sizeN: 0.030 }
+};
+const DOORWAY_SHAPE_BARRIER_LAYOUTS = {
+  desktop: {
+    offsetX: 0,
+    offsetY: 0.005,
+    sideRadius: 0.035,
+    topPad: 0.040,
+    bottomPad: 0.050,
+    targetPenalty: 17.50,
+    pushStrength: 17.00,
+    maxPushSpeed: 8.00
+  },
+  mobile: {
+    offsetX: 0.005,
+    offsetY: 0.005,
+    sideRadius: 0.045,
+    topPad: 0.040,
+    bottomPad: 0.050,
+    targetPenalty: 17.50,
+    pushStrength: 17.00,
+    maxPushSpeed: 8.00
+  }
 };
 const SHAPE_LOCK_TUNING = {
   doorColor: 0xdc9b4c,
@@ -4887,6 +5468,11 @@ const SHAPE_LOCK_TUNING = {
   cycleMax: 3.0,
   fadeTime: 0.36
 };
+
+function activeDoorwayShapeBarrierLayout(layoutName = activeLayoutName) {
+  return DOORWAY_SHAPE_BARRIER_LAYOUTS[layoutName] || DOORWAY_SHAPE_BARRIER_LAYOUTS.desktop;
+}
+
 const shapeLockRaycaster = new THREE.Raycaster();
 const shapeLockPointer = new THREE.Vector2();
 const shapeLock = {
@@ -5150,7 +5736,12 @@ function syncDoorwayEyeControls() {
     'open-reveal-duration': SHAPE_STREAM_FINAL_GRID.openRevealDuration,
     'blink-count': SHAPE_STREAM_FINAL_GRID.blinkCount,
     'blink-duration': SHAPE_STREAM_FINAL_GRID.blinkDuration,
-    'break-handoff-duration': SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration
+    'break-handoff-duration': SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration,
+    'site-fade-duration': SHAPE_STREAM_FINAL_GRID.blackFadeDuration,
+    'page-zoom-scale': SHAPE_STREAM_FINAL_GRID.pageZoomScale,
+    'page-zoom-hold': SHAPE_STREAM_FINAL_GRID.pageZoomHoldDuration,
+    'page-zoom-start': SHAPE_STREAM_FINAL_GRID.pageZoomStart,
+    'page-zoom-end': SHAPE_STREAM_FINAL_GRID.pageZoomEnd
   };
   Object.entries(values).forEach(([name, value]) => {
     const input = calibrationConsole?.querySelector(`[data-eye-control="${name}"]`);
@@ -5162,6 +5753,7 @@ function handleDoorwayEyeControl(input) {
   const control = input.dataset.eyeControl;
   const numericValue = Number(input.value);
   const wasPreviewActive = isDoorwayEyeCalibrationPreviewActive();
+  const wasTransitionPreview = doorwayExit.calibrationTransitionPreview;
   clearDoorwayTransitionPreviewState();
   if (control === 'eye-color') {
     DOORWAY_EYE_TUNING.eyeColor = colorNumber(input.value, DOORWAY_EYE_TUNING.eyeColor);
@@ -5181,8 +5773,30 @@ function handleDoorwayEyeControl(input) {
     SHAPE_STREAM_FINAL_GRID.blinkDuration = THREE.MathUtils.clamp(numericValue, 0.04, 1.5);
   } else if (control === 'break-handoff-duration' && Number.isFinite(numericValue)) {
     SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration = THREE.MathUtils.clamp(numericValue, 0, 3);
+  } else if (control === 'site-fade-duration' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.blackFadeDuration = THREE.MathUtils.clamp(numericValue, 0.05, 3);
+  } else if (control === 'page-zoom-scale' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.pageZoomScale = THREE.MathUtils.clamp(numericValue, 1, 2.2);
+  } else if (control === 'page-zoom-hold' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.pageZoomHoldDuration = THREE.MathUtils.clamp(numericValue, 0, 10);
+  } else if (control === 'page-zoom-start' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.pageZoomStart = THREE.MathUtils.clamp(numericValue, 0, 0.98);
+    SHAPE_STREAM_FINAL_GRID.pageZoomEnd = Math.max(
+      SHAPE_STREAM_FINAL_GRID.pageZoomStart + 0.01,
+      SHAPE_STREAM_FINAL_GRID.pageZoomEnd
+    );
+  } else if (control === 'page-zoom-end' && Number.isFinite(numericValue)) {
+    SHAPE_STREAM_FINAL_GRID.pageZoomEnd = THREE.MathUtils.clamp(
+      numericValue,
+      SHAPE_STREAM_FINAL_GRID.pageZoomStart + 0.01,
+      1
+    );
   }
   applyDoorwayEyeTuning();
+  if (wasTransitionPreview) {
+    startDoorwayTransitionPreview();
+    return;
+  }
   if (!isDoorwayEyeCalibrationPreviewActive()) doorwayExit.calibrationPreview = 'open';
   applyDoorwayEyeCalibrationPreview();
   if (!wasPreviewActive && isDoorwayEyeCalibrationPreviewActive()) {
@@ -5253,6 +5867,7 @@ const floorEditor = {
   polygon: null,
   gridGroup: null,
   phaseGroup: null,
+  barrierGroup: null,
   handleGroup: null,
   handles: new Map()
 };
@@ -5330,6 +5945,13 @@ function injectFloorEditorStyles() {
       font-family: Arial, sans-serif;
     }
     #entry-floor-editor.is-visible { display: block; }
+    #entry-floor-editor:not(.is-floor-visible) .entry-floor-fill,
+    #entry-floor-editor:not(.is-floor-visible) .entry-floor-grid,
+    #entry-floor-editor:not(.is-floor-visible) .entry-floor-apex-line,
+    #entry-floor-editor:not(.is-floor-visible) .entry-floor-phase-handle,
+    #entry-floor-editor:not(.is-floor-visible) .entry-floor-handle {
+      display: none;
+    }
     #entry-floor-editor .entry-floor-fill {
       fill: rgba(0, 229, 255, 0.10);
       stroke: rgba(0, 229, 255, 0.86);
@@ -5361,6 +5983,38 @@ function injectFloorEditorStyles() {
       stroke-dasharray: 4 4;
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
+    }
+    #entry-floor-editor .entry-door-shape-barrier {
+      fill: rgba(255, 68, 170, 0.08);
+      stroke: rgba(255, 68, 170, 0.92);
+      stroke-dasharray: 6 5;
+      stroke-width: 1.6;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
+    #entry-floor-editor .entry-door-shape-barrier.is-disabled {
+      fill: rgba(120, 120, 120, 0.04);
+      stroke: rgba(160, 160, 160, 0.48);
+    }
+    #entry-floor-editor .entry-door-shape-barrier-cyan {
+      fill: none;
+      stroke: rgba(0, 229, 255, 0.96);
+      stroke-dasharray: 2 4;
+      stroke-width: 1.2;
+      vector-effect: non-scaling-stroke;
+      pointer-events: none;
+    }
+    #entry-floor-editor .entry-door-shape-barrier-label {
+      fill: rgba(255, 218, 238, 0.96);
+      stroke: rgba(12, 7, 4, 0.9);
+      stroke-width: 3;
+      paint-order: stroke fill;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-anchor: middle;
+      dominant-baseline: central;
+      user-select: none;
     }
     #entry-floor-editor .entry-floor-phase-label,
     #entry-floor-editor .entry-floor-handle text {
@@ -5397,6 +6051,10 @@ function injectFloorEditorStyles() {
       pointer-events: auto;
       cursor: grab;
     }
+    #entry-floor-editor.is-editing .entry-door-shape-barrier {
+      pointer-events: auto;
+      cursor: move;
+    }
     #entry-floor-editor.is-editing .entry-floor-handle circle {
       fill: rgba(0, 229, 255, 0.22);
       stroke: rgba(255, 238, 210, 0.98);
@@ -5406,7 +6064,8 @@ function injectFloorEditorStyles() {
       stroke: rgba(255, 238, 210, 0.98);
     }
     #entry-floor-editor.is-dragging .entry-floor-handle,
-    #entry-floor-editor.is-dragging .entry-floor-phase-handle { cursor: grabbing; }
+    #entry-floor-editor.is-dragging .entry-floor-phase-handle,
+    #entry-floor-editor.is-dragging .entry-door-shape-barrier { cursor: grabbing; }
   `;
   document.head.appendChild(style);
 }
@@ -5419,6 +6078,7 @@ function ensureFloorEditorOverlay() {
   const gridGroup = floorSvgElement('g', { 'data-floor-grid': 'true' });
   const polygon = floorSvgElement('polygon', { class: 'entry-floor-fill' });
   const phaseGroup = floorSvgElement('g', { 'data-floor-phases': 'true' });
+  const barrierGroup = floorSvgElement('g', { 'data-door-shape-barrier': 'true' });
   const handleGroup = floorSvgElement('g', { 'data-floor-handles': 'true' });
 
   FLOOR_HANDLE_POINTS.forEach(({ key, label }) => {
@@ -5435,6 +6095,7 @@ function ensureFloorEditorOverlay() {
   svg.appendChild(gridGroup);
   svg.appendChild(polygon);
   svg.appendChild(phaseGroup);
+  svg.appendChild(barrierGroup);
   svg.appendChild(handleGroup);
   svg.addEventListener('pointermove', floorEditorPointerMove);
   svg.addEventListener('pointerup', floorEditorPointerUp);
@@ -5445,6 +6106,7 @@ function ensureFloorEditorOverlay() {
   floorEditor.gridGroup = gridGroup;
   floorEditor.polygon = polygon;
   floorEditor.phaseGroup = phaseGroup;
+  floorEditor.barrierGroup = barrierGroup;
   floorEditor.handleGroup = handleGroup;
   return svg;
 }
@@ -5534,6 +6196,41 @@ function drawFloorEditorPhases(floorLayout) {
   });
 }
 
+function drawDoorwayShapeBarrierOverlay() {
+  if (!floorEditor.barrierGroup) return;
+  floorEditor.barrierGroup.replaceChildren();
+  const barrier = shapeStreamDoorwayBarrierBounds();
+  if (!barrier) return;
+  const rect = root.getBoundingClientRect();
+  const cx = (barrier.centerNorm.x * rect.width).toFixed(1);
+  const cy = (barrier.centerNorm.y * rect.height).toFixed(1);
+  const rx = (Math.max(0.003, (barrier.right - barrier.left) * 0.5) * rect.width).toFixed(1);
+  const ry = (Math.max(0.003, (barrier.bottom - barrier.top) * 0.5) * rect.height).toFixed(1);
+  const ellipse = floorSvgElement('ellipse', {
+    class: `entry-door-shape-barrier${SHAPE_STREAM.doorwayKeepoutEnabled ? '' : ' is-disabled'}`,
+    cx,
+    cy,
+    rx,
+    ry
+  });
+  ellipse.addEventListener('pointerdown', floorEditorShapeBarrierPointerDown);
+  floorEditor.barrierGroup.appendChild(ellipse);
+  floorEditor.barrierGroup.appendChild(floorSvgElement('ellipse', {
+    class: 'entry-door-shape-barrier-cyan',
+    cx,
+    cy,
+    rx: (Number(rx) + 3).toFixed(1),
+    ry: (Number(ry) + 3).toFixed(1)
+  }));
+  const label = floorSvgElement('text', {
+    class: 'entry-door-shape-barrier-label',
+    x: cx,
+    y: (Number(cy) - Number(ry) - 12).toFixed(1)
+  });
+  label.textContent = SHAPE_STREAM.doorwayPhysicalBarrierEnabled ? 'hard shape barrier' : 'soft shape barrier';
+  floorEditor.barrierGroup.appendChild(label);
+}
+
 function syncFloorButtons() {
   if (!calibrationConsole) return;
   const toggle = calibrationConsole.querySelector('[data-floor-action="toggle"]');
@@ -5553,12 +6250,15 @@ function drawFloorEditorOverlay() {
   const svg = ensureFloorEditorOverlay();
   if (!svg) return;
   const rect = root.getBoundingClientRect();
+  const showFloor = floorEditor.visible || floorEditor.editing;
   svg.setAttribute('viewBox', `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
-  svg.classList.toggle('is-visible', floorEditor.visible || floorEditor.editing);
+  svg.classList.toggle('is-visible', true);
+  svg.classList.toggle('is-floor-visible', showFloor);
   svg.classList.toggle('is-editing', floorEditor.editing);
   svg.classList.toggle('is-dragging', !!floorEditor.drag);
   syncFloorButtons();
-  if (!floorEditor.visible && !floorEditor.editing) return;
+  drawDoorwayShapeBarrierOverlay();
+  if (!showFloor) return;
 
   const floorLayout = activeShapeStreamFloorLayout();
   const polygonPoints = FLOOR_CORNER_KEYS
@@ -5707,10 +6407,54 @@ function floorEditorPhasePointerDown(event) {
   event.stopPropagation();
 }
 
+function floorEditorShapeBarrierPointerDown(event) {
+  if (!floorEditor.editing) return;
+  const barrierLayout = activeDoorwayShapeBarrierLayout();
+  floorEditor.drag = {
+    type: 'shape-barrier',
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startOffsetX: barrierLayout.offsetX,
+    startOffsetY: barrierLayout.offsetY
+  };
+  floorEditor.svg?.setPointerCapture(event.pointerId);
+  drawFloorEditorOverlay();
+  status.textContent = 'dragging door shape barrier';
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 function floorEditorPointerMove(event) {
   if (!floorEditor.drag || event.pointerId !== floorEditor.drag.pointerId) return;
   const rect = root.getBoundingClientRect();
   const floorLayout = activeShapeStreamFloorLayout();
+  if (floorEditor.drag.type === 'shape-barrier') {
+    const barrierLayout = activeDoorwayShapeBarrierLayout();
+    const unit = shapeStreamDoorwayBarrierUnitNorm();
+    const layoutScale = shapeStreamDoorwayBarrierLayoutScale();
+    barrierLayout.offsetX = +THREE.MathUtils.clamp(
+      floorEditor.drag.startOffsetX
+        + ((event.clientX - floorEditor.drag.startClientX) / Math.max(1, rect.width))
+          / Math.max(0.001, unit.x * layoutScale),
+      -0.4,
+      0.4
+    ).toFixed(4);
+    barrierLayout.offsetY = +THREE.MathUtils.clamp(
+      floorEditor.drag.startOffsetY
+        + ((event.clientY - floorEditor.drag.startClientY) / Math.max(1, rect.height))
+          / Math.max(0.001, unit.y * layoutScale),
+      -0.4,
+      0.4
+    ).toFixed(4);
+    syncDoorwayShapeBarrierControls();
+    drawFloorEditorOverlay();
+    updateCalibrationConsole();
+    status.textContent = `dragging door shape barrier - ${activeLayoutName}`;
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
   if (floorEditor.drag.type === 'phase') {
     const phase = SHAPE_STREAM.landingPhases[floorEditor.drag.index];
     if (!phase) return;
@@ -5740,14 +6484,19 @@ function floorEditorPointerUp(event) {
   const drag = floorEditor.drag;
   const label = drag.type === 'phase'
     ? SHAPE_STREAM.landingPhases[drag.index]?.name || 'landing zone'
-    : drag.key;
+    : (drag.type === 'shape-barrier' ? 'door shape barrier' : drag.key);
   floorEditor.drag = null;
   try { floorEditor.svg?.releasePointerCapture(event.pointerId); } catch {}
+  if (drag.type === 'shape-barrier' && SHAPE_STREAM.doorwayPhysicalBarrierEnabled && shapeStream.world) {
+    rebuildShapeStreamPhysicsBounds();
+  }
   drawFloorEditorOverlay();
   updateCalibrationConsole();
   status.textContent = drag.type === 'phase'
     ? `landing ${label} set - ${activeLayoutName}`
-    : `floor ${label} set - ${activeLayoutName}`;
+    : (drag.type === 'shape-barrier'
+      ? `door shape barrier set - ${activeLayoutName}`
+      : `floor ${label} set - ${activeLayoutName}`);
   event.preventDefault();
   event.stopPropagation();
 }
@@ -5770,6 +6519,79 @@ function syncShapeLockControls() {
     const input = calibrationConsole?.querySelector(`[data-lock-control="${name}"]`);
     if (input && document.activeElement !== input) input.value = String(value);
   });
+}
+
+function syncDoorwayShapeBarrierControls() {
+  if (!calibrate) return;
+  const barrierLayout = activeDoorwayShapeBarrierLayout();
+  const values = {
+    enabled: SHAPE_STREAM.doorwayKeepoutEnabled,
+    'hard-collider': SHAPE_STREAM.doorwayPhysicalBarrierEnabled,
+    'screen-offset-x': barrierLayout.offsetX,
+    'screen-offset-y': barrierLayout.offsetY,
+    'screen-half-width': barrierLayout.sideRadius,
+    'screen-top-pad': barrierLayout.topPad,
+    'screen-bottom-pad': barrierLayout.bottomPad,
+    'screen-target-penalty': barrierLayout.targetPenalty,
+    'screen-deflect-strength': barrierLayout.pushStrength,
+    'screen-deflect-max-speed': barrierLayout.maxPushSpeed
+  };
+  Object.entries(values).forEach(([name, value]) => {
+    const input = calibrationConsole?.querySelector(`[data-shape-barrier-control="${name}"]`);
+    if (!input || document.activeElement === input) return;
+    if (input.type === 'checkbox') {
+      input.checked = !!value;
+    } else {
+      input.value = String(+Number(value).toFixed(3));
+    }
+  });
+}
+
+function handleDoorwayShapeBarrierControl(input) {
+  const control = input.dataset.shapeBarrierControl;
+  const numericValue = Number(input.value);
+  const barrierLayout = activeDoorwayShapeBarrierLayout();
+  let needsPhysicsRebuild = false;
+  if (control === 'enabled') {
+    SHAPE_STREAM.doorwayKeepoutEnabled = !!input.checked;
+    needsPhysicsRebuild = true;
+  } else if (control === 'hard-collider') {
+    SHAPE_STREAM.doorwayPhysicalBarrierEnabled = !!input.checked;
+    needsPhysicsRebuild = true;
+  } else if (control === 'screen-offset-x' && Number.isFinite(numericValue)) {
+    barrierLayout.offsetX = THREE.MathUtils.clamp(numericValue, -0.4, 0.4);
+    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    drawFloorEditorOverlay();
+  } else if (control === 'screen-offset-y' && Number.isFinite(numericValue)) {
+    barrierLayout.offsetY = THREE.MathUtils.clamp(numericValue, -0.4, 0.4);
+    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    drawFloorEditorOverlay();
+  } else if (control === 'screen-half-width' && Number.isFinite(numericValue)) {
+    barrierLayout.sideRadius = THREE.MathUtils.clamp(numericValue, 0.005, 0.25);
+    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    drawFloorEditorOverlay();
+  } else if (control === 'screen-top-pad' && Number.isFinite(numericValue)) {
+    barrierLayout.topPad = THREE.MathUtils.clamp(numericValue, 0, 0.6);
+    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    drawFloorEditorOverlay();
+  } else if (control === 'screen-bottom-pad' && Number.isFinite(numericValue)) {
+    barrierLayout.bottomPad = THREE.MathUtils.clamp(numericValue, 0, 0.8);
+    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    drawFloorEditorOverlay();
+  } else if (control === 'screen-target-penalty' && Number.isFinite(numericValue)) {
+    barrierLayout.targetPenalty = THREE.MathUtils.clamp(numericValue, 0, 40);
+  } else if (control === 'screen-deflect-strength' && Number.isFinite(numericValue)) {
+    barrierLayout.pushStrength = THREE.MathUtils.clamp(numericValue, 0, 30);
+  } else if (control === 'screen-deflect-max-speed' && Number.isFinite(numericValue)) {
+    barrierLayout.maxPushSpeed = THREE.MathUtils.clamp(numericValue, 0, 20);
+  } else {
+    return;
+  }
+
+  if (needsPhysicsRebuild && shapeStream.world) rebuildShapeStreamPhysicsBounds();
+  syncDoorwayShapeBarrierControls();
+  updateCalibrationConsole();
+  status.textContent = `door shape barrier updated - ${activeLayoutName}`;
 }
 
 function handleShapeLockControl(input) {
@@ -6531,6 +7353,19 @@ function activeShapeLockText() {
   ].join('\n');
 }
 
+function activeDoorwayShapeBarrierText() {
+  const barrierLayout = activeDoorwayShapeBarrierLayout();
+  return [
+    'doorwayShapeBarrier: {',
+    `  enabled: ${SHAPE_STREAM.doorwayKeepoutEnabled}, hardCollider: ${SHAPE_STREAM.doorwayPhysicalBarrierEnabled},`,
+    `  unit: 'coreWidth', layoutScale: ${shapeStreamDoorwayBarrierLayoutScale().toFixed(3)},`,
+    `  offsetX: ${barrierLayout.offsetX.toFixed(4)}, offsetY: ${barrierLayout.offsetY.toFixed(4)},`,
+    `  sideRadius: ${barrierLayout.sideRadius.toFixed(3)}, topPad: ${barrierLayout.topPad.toFixed(3)}, bottomPad: ${barrierLayout.bottomPad.toFixed(3)},`,
+    `  targetPenalty: ${barrierLayout.targetPenalty.toFixed(2)}, pushStrength: ${barrierLayout.pushStrength.toFixed(2)}, maxPushSpeed: ${barrierLayout.maxPushSpeed.toFixed(2)}`,
+    '}'
+  ].join('\n');
+}
+
 function activeDoorwayEyeText() {
   const previewName = doorwayExit.calibrationTransitionPreview
     ? 'transition'
@@ -6541,7 +7376,8 @@ function activeDoorwayEyeText() {
     `  overlayColor: ${colorHex(DOORWAY_EYE_TUNING.overlayColor)}, overlayOpacity: ${DOORWAY_EYE_TUNING.overlayOpacity.toFixed(2)},`,
     `  closedFade: ${SHAPE_STREAM_FINAL_GRID.closedRevealDuration.toFixed(2)}s, openFade: ${SHAPE_STREAM_FINAL_GRID.openRevealDuration.toFixed(2)}s,`,
     `  blinkCount: ${SHAPE_STREAM_FINAL_GRID.blinkCount}, blinkDuration: ${SHAPE_STREAM_FINAL_GRID.blinkDuration.toFixed(2)}s,`,
-    `  postEyeHold: ${SHAPE_STREAM_FINAL_GRID.postEyeHoldDuration.toFixed(2)}s, handoff: ${SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration.toFixed(2)}s, roomBreak: ${doorwayRoomBreakPhaseDuration().toFixed(2)}s, blackFade: ${SHAPE_STREAM_FINAL_GRID.blackFadeDuration.toFixed(2)}s, homeHold: ${SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration.toFixed(2)}s,`,
+    `  postEyeHold: ${SHAPE_STREAM_FINAL_GRID.postEyeHoldDuration.toFixed(2)}s, handoff: ${SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration.toFixed(2)}s, roomBreak: ${doorwayRoomBreakActiveDuration().toFixed(2)}s, siteFade: ${SHAPE_STREAM_FINAL_GRID.blackFadeDuration.toFixed(2)}s, homeHold: ${SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration.toFixed(2)}s,`,
+    `  pageZoom: ${SHAPE_STREAM_FINAL_GRID.pageZoomScale.toFixed(2)}x @ ${SHAPE_STREAM_FINAL_GRID.pageZoomStart.toFixed(2)}-${SHAPE_STREAM_FINAL_GRID.pageZoomEnd.toFixed(2)}, zoomHold: ${SHAPE_STREAM_FINAL_GRID.pageZoomHoldDuration.toFixed(2)}s, zoomAnchor: 'particleImage', fadeColor: ${colorHex(DOORWAY_EYE_TUNING.transitionFadeColor)},`,
     `  roomImagePieces: ${SHAPE_STREAM_FINAL_GRID.roomShardDesktopCount}/${SHAPE_STREAM_FINAL_GRID.roomShardMobileCount}/${SHAPE_STREAM_FINAL_GRID.roomShardReducedCount},`,
     `  imageBreakFlow: ${SHAPE_STREAM_FINAL_GRID.roomParticlePullDuration.toFixed(2)}s/${SHAPE_STREAM_FINAL_GRID.roomParticleBatchSize}@${SHAPE_STREAM_FINAL_GRID.roomParticleBatchInterval.toFixed(3)}s,`,
     `  preview: '${previewName}'`,
@@ -6576,6 +7412,8 @@ function activeLayoutText() {
     '',
     activeShapeLockText(),
     '',
+    activeDoorwayShapeBarrierText(),
+    '',
     activeDoorwayEyeText()
   ].join('\n');
 }
@@ -6590,6 +7428,7 @@ function allLayoutsText() {
     const homeSource = name === previousLayoutName ? orbs.map((o) => o.home) : layout.orbHomes;
     const shadowSource = name === previousLayoutName ? orbs.map((o) => o.shadow) : (layout.orbShadow || []);
     const streamLayout = SHAPE_STREAM_FLOOR_LAYOUTS[name] || SHAPE_STREAM_FLOOR_LAYOUTS.desktop;
+    const barrierLayout = activeDoorwayShapeBarrierLayout(name);
     return [
       `${name}: {`,
       `  image: { width: ${layout.image.width}, height: ${layout.image.height} },`,
@@ -6603,7 +7442,21 @@ function allLayoutsText() {
       `  streamLandingPhases: ${formatShapeStreamLandingPhases()},`,
       `  streamFloor: ${JSON.stringify(streamLayout)},`,
       `  completionRing: ${JSON.stringify(layout.completionRing)},`,
-      `  shapeLock: ${JSON.stringify(SHAPE_LOCK_LAYOUTS[name])}`,
+      `  shapeLock: ${JSON.stringify(SHAPE_LOCK_LAYOUTS[name])},`,
+      `  doorwayShapeBarrier: ${JSON.stringify({
+        enabled: SHAPE_STREAM.doorwayKeepoutEnabled,
+        hardCollider: SHAPE_STREAM.doorwayPhysicalBarrierEnabled,
+        unit: 'coreWidth',
+        layoutScale: shapeStreamDoorwayBarrierLayoutScale(),
+        offsetX: barrierLayout.offsetX,
+        offsetY: barrierLayout.offsetY,
+        sideRadius: barrierLayout.sideRadius,
+        topPad: barrierLayout.topPad,
+        bottomPad: barrierLayout.bottomPad,
+        targetPenalty: barrierLayout.targetPenalty,
+        pushStrength: barrierLayout.pushStrength,
+        maxPushSpeed: barrierLayout.maxPushSpeed
+      })}`,
       `}`
     ].join('\n');
   });
@@ -6618,6 +7471,7 @@ function updateCalibrationConsole() {
   syncFloorEditorControls();
   syncLandingPhaseControls();
   syncShapeLockControls();
+  syncDoorwayShapeBarrierControls();
   syncDoorwayEyeControls();
   drawFloorEditorOverlay();
   calibrationOutput.textContent = activeLayoutText();
@@ -6696,6 +7550,11 @@ if (calibrate && calibrationConsole) {
     const eyeInput = event.target.closest('[data-eye-control]');
     if (eyeInput) {
       handleDoorwayEyeControl(eyeInput);
+      return;
+    }
+    const shapeBarrierInput = event.target.closest('[data-shape-barrier-control]');
+    if (shapeBarrierInput) {
+      handleDoorwayShapeBarrierControl(shapeBarrierInput);
       return;
     }
     const input = event.target.closest('[data-lock-control]');
@@ -6872,6 +7731,12 @@ const clock = new THREE.Clock();
 function animate() {
   const delta = Math.min(clock.getDelta(), 0.04);
   orbs.forEach((o) => {
+    if (doorwayExit.orbsHidden) {
+      o.mesh.visible = false;
+      o.floatShadow.visible = false;
+      return;
+    }
+    o.mesh.visible = true;
     if (o.target) {
       o.mesh.position.lerp(o.target, 0.18);
       if (o.mesh.position.distanceTo(o.target) < 0.002) {
@@ -6922,7 +7787,7 @@ function animate() {
     // high the orb sits above the floor band, so higher orbs cast further down (and the
     // shadow spreads + fades with height). Key light is upper-left, so it skews right.
     const floating = o.seated == null;
-    o.floatShadow.visible = floating;
+    o.floatShadow.visible = floating && !doorwayExit.orbsHidden;
     if (floating) {
       const floorWorldY = imageToWorld(0.5, CONFIG.floorY).y;
       const height = Math.max(0, o.mesh.position.y - floorWorldY); // orb height above the floor
