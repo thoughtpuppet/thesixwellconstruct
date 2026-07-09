@@ -180,10 +180,22 @@ const previewComplete = urlParams.has('previewComplete');
 const noNavigate = calibrate && urlParams.has('noNavigate');
 if (calibrate) mountCalibrationHud(document.body);
 
+const ENTRY_HANDOFF_KEY = 'swcEntryHandoff';
+function markEntryHandoff(mode, extras = {}) {
+  try {
+    window.sessionStorage.setItem(ENTRY_HANDOFF_KEY, JSON.stringify({
+      mode,
+      ts: Date.now(),
+      ...extras
+    }));
+  } catch (error) {}
+}
+
 const canvas = document.getElementById('entry-canvas');
 const coreFrame = document.getElementById('frame-stage');
 const artStage = document.getElementById('art-stage');
 const roomBgImage = document.querySelector('#room-bg img');
+const homeGhost = document.getElementById('home-ghost');
 const ringRippleVideo = document.getElementById('ring-ripple-video');
 const root = document.getElementById('entry-root');
 const status = document.getElementById('entry-status');
@@ -1748,10 +1760,11 @@ const SHAPE_STREAM_FINAL_GRID = {
   postEyeHoldDuration: 0.45,
   roomBreakDuration: 4.85,
   roomImageHandoffDuration: 2.00,
+  homeGhostCenterDuration: 2.20,
   blackFadeDuration: 0.37,
   homeFadeHoldDuration: 0.18,
-  pageZoomHoldDuration: 5.00,
-  pageZoomScale: 1.80,
+  pageZoomHoldDuration: 0.00,
+  pageZoomScale: 1.00,
   pageZoomStart: 0.00,
   pageZoomEnd: 1.00,
   homeHref: '/home/',
@@ -1776,6 +1789,7 @@ const SHAPE_STREAM_FINAL_GRID = {
   roomShardMobileCount: 4200,
   roomShardReducedCount: 900
 };
+const DOORWAY_PAGE_ZOOM_ENABLED = false;
 const BASE_SHAPE_STREAM_FLOOR_LAYOUTS = {
   desktop: {
     floor: {
@@ -3157,13 +3171,14 @@ function easeInOutCubic(t) {
 }
 
 function shapeStreamDoorwayExitDuration(name) {
+  if (!DOORWAY_PAGE_ZOOM_ENABLED && name === 'pageZoomHoldDuration') return 0;
   if (!reducedMotionQuery.matches || calibrate) return SHAPE_STREAM_FINAL_GRID[name];
   if (name === 'closedRevealDuration') return 0.14;
   if (name === 'openRevealDuration') return 0.12;
   if (name === 'blinkDuration') return 0.14;
   if (name === 'postEyeHoldDuration') return 0.22;
-  if (name === 'pageZoomHoldDuration') return 0.9;
   if (name === 'roomBreakDuration') return 2.55;
+  if (name === 'homeGhostCenterDuration') return 0.12;
   if (name === 'blackFadeDuration') return 0.42;
   return SHAPE_STREAM_FINAL_GRID[name];
 }
@@ -3444,6 +3459,10 @@ function doorwayRoomBackgroundHideProgress(progress = 0) {
   return easeInOutCubic(THREE.MathUtils.clamp((handoff - 0.84) / 0.16, 0, 1));
 }
 
+function doorwayHomeGhostCenterProgress(progress = 0) {
+  return easeInOutCubic(THREE.MathUtils.clamp(progress, 0, 1));
+}
+
 function doorwayRoomVacuumProgress(progress = 0) {
   return THREE.MathUtils.clamp(
     doorwayRoomBreakVacuumElapsed(progress) / Math.max(0.001, doorwayRoomParticleQueueDuration()),
@@ -3465,7 +3484,10 @@ function clearDoorwayAmbientDimming() {
 }
 
 function applyDoorwayAmbientDimming(progress = 0) {
-  const dim = doorwayRoomDimmingProgress(progress);
+  const ghostReveal = homeGhost
+    ? THREE.MathUtils.clamp(Number.parseFloat(homeGhost.style.opacity || '0') || 0, 0, 1)
+    : 0;
+  const dim = doorwayRoomDimmingProgress(progress) * (1 - ghostReveal);
   const radialOpacity = doorwayOverlayOpacity((reducedMotionQuery.matches ? 0.20 : 0.34) * dim);
   const veilOpacity = doorwayOverlayOpacity((reducedMotionQuery.matches ? 0.10 : 0.22) * dim);
   doorwayExit.gravityVeil.visible = radialOpacity > 0.004;
@@ -3972,6 +3994,7 @@ function updateDoorwayRoomShards(progress = 0, opacityScale = 1) {
 }
 
 function resetDoorwayRoomBreak() {
+  setHomeGhostProgress(0);
   if (roomBgImage) {
     roomBgImage.style.opacity = '';
     roomBgImage.style.filter = '';
@@ -3994,10 +4017,44 @@ function resetDoorwayRoomBreak() {
   }
 }
 
-function applyDoorwayRoomBreak(progress = 0, fragmentsActive = progress > 0) {
-  if (!roomBgImage) return;
+function homeGhostDoorOffsetPixels() {
+  if (!homeGhost) return { x: 0, y: 0 };
+  const ghostRect = homeGhost.getBoundingClientRect();
+  const stageRect = artStage.getBoundingClientRect();
+  const door = doorwayPageZoomAnchorNorm('door');
+  const doorX = stageRect.left + door.x * stageRect.width;
+  const doorY = stageRect.top + door.y * stageRect.height;
+  return {
+    x: doorX - (ghostRect.left + ghostRect.width / 2),
+    y: doorY - (ghostRect.top + ghostRect.height / 2)
+  };
+}
+
+function setHomeGhostProgress(progress = 0, centerProgress = 0) {
+  if (!homeGhost) return;
+  const opacity = THREE.MathUtils.clamp(progress, 0, 1);
+  const visible = opacity > 0.004;
+  homeGhost.style.opacity = opacity.toFixed(3);
+  homeGhost.style.visibility = visible ? 'visible' : 'hidden';
+  if (window.__swcHomeGhost?.setHandoffOffset) {
+    const offset = homeGhostDoorOffsetPixels();
+    window.__swcHomeGhost.setHandoffOffset(offset.x, offset.y, centerProgress);
+  }
+  if (window.__swcHomeGhost?.setProgress) {
+    window.__swcHomeGhost.setProgress(opacity);
+  }
+}
+
+function preloadHomeGhostAssets() {
+  window.__swcHomeGhost?.preload?.();
+}
+
+function applyDoorwayRoomBreak(progress = 0, fragmentsActive = progress > 0, centerProgress = 0) {
   const t = THREE.MathUtils.clamp(progress, 0, 1);
   const hide = fragmentsActive ? doorwayRoomBackgroundHideProgress(t) : 0;
+  const ghostCenter = fragmentsActive ? doorwayHomeGhostCenterProgress(centerProgress) : 0;
+  setHomeGhostProgress(hide, ghostCenter);
+  if (!roomBgImage) return;
   const opacity = 1 - hide;
   roomBgImage.style.opacity = opacity.toFixed(3);
   roomBgImage.style.filter = '';
@@ -4060,6 +4117,7 @@ function setDoorwayOrbsHidden(hidden = false) {
 }
 
 function doorwayPageZoomProgress(vacuumProgress = 0) {
+  if (!DOORWAY_PAGE_ZOOM_ENABLED) return 0;
   const start = THREE.MathUtils.clamp(SHAPE_STREAM_FINAL_GRID.pageZoomStart, 0, 0.98);
   const end = THREE.MathUtils.clamp(
     SHAPE_STREAM_FINAL_GRID.pageZoomEnd,
@@ -4085,6 +4143,11 @@ function doorwayPageZoomAnchorNorm(anchor = 'particleImage') {
 }
 
 function applyDoorwayPageZoom(progress = 0, anchor = 'particleImage') {
+  if (!DOORWAY_PAGE_ZOOM_ENABLED) {
+    doorwayExit.pullProgress = 0;
+    resetDoorwayViewerPull();
+    return;
+  }
   const t = THREE.MathUtils.clamp(progress, 0, 1);
   doorwayExit.pullProgress = t;
   const anchorNorm = doorwayPageZoomAnchorNorm(anchor);
@@ -4423,7 +4486,7 @@ function startDoorwayTransitionPreview() {
 function finishShapeStreamDoorwayExitHandoff() {
   applyDoorwayBlackFade(1);
   applyDoorwayPageZoom(1);
-  applyDoorwayRoomBreak(1);
+  applyDoorwayRoomBreak(1, true, 1);
   updateDoorwayRoomShards(1, 0);
   updateDoorwayRoomDust(1, 0);
   setDoorwayOrbsHidden(true);
@@ -4450,11 +4513,17 @@ function finishShapeStreamDoorwayExitHandoff() {
   status.textContent = `entering home - ${activeLayoutName}`;
   const navigateHome = () => {
     doorwayExit.navigationTimer = null;
-    if (typeof window._constructFade === 'function') {
-      window._constructFade(SHAPE_STREAM_FINAL_GRID.homeHref);
-    } else {
-      window.location.href = SHAPE_STREAM_FINAL_GRID.homeHref;
+    const ghostIntroStartedTs = window.__swcHomeGhost?.getIntroStartedTs?.();
+    const ghostIntroDelay = window.__swcHomeGhost?.getIntroZoomDelay?.();
+    const handoffExtras = {};
+    if (Number.isFinite(ghostIntroStartedTs)) {
+      handoffExtras.homeGhostIntroStartedTs = ghostIntroStartedTs;
     }
+    if (Number.isFinite(ghostIntroDelay)) {
+      handoffExtras.homeGhostIntroDelay = ghostIntroDelay;
+    }
+    markEntryHandoff('complete', handoffExtras);
+    window.location.href = SHAPE_STREAM_FINAL_GRID.homeHref;
   };
   const holdMs = Math.max(0, SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration || 0) * 1000;
   if (holdMs > 0) {
@@ -4676,6 +4745,7 @@ function animateShapeStreamDoorwayExit(delta) {
     setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
     updateDoorwayRoomDust(1, 0);
     updateDoorwayRoomShards(breakProgress);
+    preloadHomeGhostAssets();
     applyDoorwayRoomBreak(breakProgress, true);
     setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(breakProgress));
     applyDoorwayBlackFade(0);
@@ -4691,7 +4761,39 @@ function animateShapeStreamDoorwayExit(delta) {
     );
     if (progress >= 1) {
       updateDoorwayRoomShards(1);
-      applyDoorwayRoomBreak(1, true);
+      applyDoorwayRoomBreak(1, true, 0);
+      shapeStream.finalGrid.exitPhase = 'homeGhostCenter';
+      shapeStream.finalGrid.exitElapsed = 0;
+      shapeStream.finalGrid.exitProgress = 0;
+    }
+    return;
+  }
+
+  if (exitPhase === 'homeGhostCenter') {
+    const duration = Math.max(0.001, shapeStreamDoorwayExitDuration('homeGhostCenterDuration'));
+    const progress = THREE.MathUtils.clamp(shapeStream.finalGrid.exitElapsed / duration, 0, 1);
+    shapeStream.finalGrid.exitProgress = progress;
+    shapeStream.finalGrid.flashCount = SHAPE_STREAM_FINAL_GRID.blinkCount;
+    shapeStream.finalGrid.collapseProgress = 1;
+    shapeStream.finalGrid.dissolveProgress = 1;
+    shapeStream.finalGrid.portalProgress = 0;
+    setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
+    updateDoorwayRoomShards(1, 0);
+    updateDoorwayRoomDust(1, 0);
+    applyDoorwayRoomBreak(1, true, progress);
+    setCompletionExitOpacityScale(0);
+    applyDoorwayBlackFade(0);
+    applyDoorwayAmbientDimming(1);
+    applyDoorwayPageZoom(1);
+    setDoorwayOrbsHidden(true);
+    doorwayExit.voidPlane.visible = false;
+    doorwayExit.voidPlane.material.opacity = 0;
+    updateDoorwayGravityRings('idle', 0);
+    layoutShapeStreamDoorwayExit(
+      doorwayEyeScale(),
+      SHAPE_STREAM_FINAL_GRID.voidDoorScale * 0.58
+    );
+    if (progress >= 1) {
       shapeStream.finalGrid.exitPhase = 'blackFade';
       shapeStream.finalGrid.exitElapsed = 0;
       shapeStream.finalGrid.exitProgress = 0;
@@ -4711,7 +4813,7 @@ function animateShapeStreamDoorwayExit(delta) {
     setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
     updateDoorwayRoomShards(1, 1 - cover);
     updateDoorwayRoomDust(1, 0);
-    applyDoorwayRoomBreak(1, true);
+    applyDoorwayRoomBreak(1, true, 1);
     setCompletionExitOpacityScale(0);
     applyDoorwayBlackFade(progress);
     applyDoorwayAmbientDimming(1);
@@ -5124,6 +5226,7 @@ function retargetShapeStreamFinalGrid(restartAnimation = false) {
       const vacuumProgress = doorwayRoomVacuumProgress(breakProgress);
       seedDoorwayRoomShards(true);
       updateDoorwayRoomShards(breakProgress);
+      preloadHomeGhostAssets();
       applyDoorwayRoomBreak(breakProgress, true);
       setCompletionExitOpacityScale(1 - doorwayRoomBackgroundHideProgress(breakProgress));
       setDoorwayEyeOpacity(0, 0, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
@@ -5132,12 +5235,23 @@ function retargetShapeStreamFinalGrid(restartAnimation = false) {
       updateDoorwayRoomDust(1, 0);
       applyDoorwayPageZoom(Math.max(doorwayExit.pullProgress || 0, doorwayPageZoomProgress(vacuumProgress)));
       setDoorwayOrbsHidden(true);
+    } else if (phase === 'homeGhostCenter') {
+      const centerProgress = shapeStream.finalGrid.exitProgress || 0;
+      seedDoorwayRoomShards(true);
+      updateDoorwayRoomShards(1, 0);
+      applyDoorwayRoomBreak(1, true, centerProgress);
+      setCompletionExitOpacityScale(0);
+      applyDoorwayAmbientDimming(1);
+      applyDoorwayBlackFade(0);
+      updateDoorwayRoomDust(1, 0);
+      applyDoorwayPageZoom(1);
+      setDoorwayOrbsHidden(true);
     } else if (phase === 'blackFade' || phase === 'ready' || phase === 'navigating') {
       const blackProgress = phase === 'blackFade' ? shapeStream.finalGrid.portalProgress || 0 : 1;
       const cover = easeInCubic(blackProgress);
       seedDoorwayRoomShards(true);
       updateDoorwayRoomShards(1, phase === 'blackFade' ? 1 - cover : 0);
-      applyDoorwayRoomBreak(1, true);
+      applyDoorwayRoomBreak(1, true, 1);
       setCompletionExitOpacityScale(0);
       applyDoorwayAmbientDimming(1);
       applyDoorwayBlackFade(blackProgress);
@@ -5756,11 +5870,7 @@ function syncDoorwayEyeControls() {
     'blink-count': SHAPE_STREAM_FINAL_GRID.blinkCount,
     'blink-duration': SHAPE_STREAM_FINAL_GRID.blinkDuration,
     'break-handoff-duration': SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration,
-    'site-fade-duration': SHAPE_STREAM_FINAL_GRID.blackFadeDuration,
-    'page-zoom-scale': SHAPE_STREAM_FINAL_GRID.pageZoomScale,
-    'page-zoom-hold': SHAPE_STREAM_FINAL_GRID.pageZoomHoldDuration,
-    'page-zoom-start': SHAPE_STREAM_FINAL_GRID.pageZoomStart,
-    'page-zoom-end': SHAPE_STREAM_FINAL_GRID.pageZoomEnd
+    'site-fade-duration': SHAPE_STREAM_FINAL_GRID.blackFadeDuration
   };
   Object.entries(values).forEach(([name, value]) => {
     const input = calibrationConsole?.querySelector(`[data-eye-control="${name}"]`);
@@ -5794,22 +5904,6 @@ function handleDoorwayEyeControl(input) {
     SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration = THREE.MathUtils.clamp(numericValue, 0, 3);
   } else if (control === 'site-fade-duration' && Number.isFinite(numericValue)) {
     SHAPE_STREAM_FINAL_GRID.blackFadeDuration = THREE.MathUtils.clamp(numericValue, 0.05, 3);
-  } else if (control === 'page-zoom-scale' && Number.isFinite(numericValue)) {
-    SHAPE_STREAM_FINAL_GRID.pageZoomScale = THREE.MathUtils.clamp(numericValue, 1, 2.2);
-  } else if (control === 'page-zoom-hold' && Number.isFinite(numericValue)) {
-    SHAPE_STREAM_FINAL_GRID.pageZoomHoldDuration = THREE.MathUtils.clamp(numericValue, 0, 10);
-  } else if (control === 'page-zoom-start' && Number.isFinite(numericValue)) {
-    SHAPE_STREAM_FINAL_GRID.pageZoomStart = THREE.MathUtils.clamp(numericValue, 0, 0.98);
-    SHAPE_STREAM_FINAL_GRID.pageZoomEnd = Math.max(
-      SHAPE_STREAM_FINAL_GRID.pageZoomStart + 0.01,
-      SHAPE_STREAM_FINAL_GRID.pageZoomEnd
-    );
-  } else if (control === 'page-zoom-end' && Number.isFinite(numericValue)) {
-    SHAPE_STREAM_FINAL_GRID.pageZoomEnd = THREE.MathUtils.clamp(
-      numericValue,
-      SHAPE_STREAM_FINAL_GRID.pageZoomStart + 0.01,
-      1
-    );
   }
   applyDoorwayEyeTuning();
   if (wasTransitionPreview) {
@@ -7518,8 +7612,7 @@ function activeDoorwayEyeText() {
     `  overlayColor: ${colorHex(DOORWAY_EYE_TUNING.overlayColor)}, overlayOpacity: ${DOORWAY_EYE_TUNING.overlayOpacity.toFixed(2)},`,
     `  closedFade: ${SHAPE_STREAM_FINAL_GRID.closedRevealDuration.toFixed(2)}s, openFade: ${SHAPE_STREAM_FINAL_GRID.openRevealDuration.toFixed(2)}s,`,
     `  blinkCount: ${SHAPE_STREAM_FINAL_GRID.blinkCount}, blinkDuration: ${SHAPE_STREAM_FINAL_GRID.blinkDuration.toFixed(2)}s,`,
-    `  postEyeHold: ${SHAPE_STREAM_FINAL_GRID.postEyeHoldDuration.toFixed(2)}s, handoff: ${SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration.toFixed(2)}s, roomBreak: ${doorwayRoomBreakActiveDuration().toFixed(2)}s, siteFade: ${SHAPE_STREAM_FINAL_GRID.blackFadeDuration.toFixed(2)}s, homeHold: ${SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration.toFixed(2)}s,`,
-    `  pageZoom: ${SHAPE_STREAM_FINAL_GRID.pageZoomScale.toFixed(2)}x @ ${SHAPE_STREAM_FINAL_GRID.pageZoomStart.toFixed(2)}-${SHAPE_STREAM_FINAL_GRID.pageZoomEnd.toFixed(2)}, zoomHold: ${SHAPE_STREAM_FINAL_GRID.pageZoomHoldDuration.toFixed(2)}s, zoomAnchor: 'particleImage', fadeColor: ${colorHex(DOORWAY_EYE_TUNING.transitionFadeColor)},`,
+    `  postEyeHold: ${SHAPE_STREAM_FINAL_GRID.postEyeHoldDuration.toFixed(2)}s, handoff: ${SHAPE_STREAM_FINAL_GRID.roomImageHandoffDuration.toFixed(2)}s, roomBreak: ${doorwayRoomBreakActiveDuration().toFixed(2)}s, siteFade: ${SHAPE_STREAM_FINAL_GRID.blackFadeDuration.toFixed(2)}s, homeHold: ${SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration.toFixed(2)}s, fadeColor: ${colorHex(DOORWAY_EYE_TUNING.transitionFadeColor)},`,
     `  roomImagePieces: ${SHAPE_STREAM_FINAL_GRID.roomShardDesktopCount}/${SHAPE_STREAM_FINAL_GRID.roomShardMobileCount}/${SHAPE_STREAM_FINAL_GRID.roomShardReducedCount},`,
     `  imageBreakFlow: ${SHAPE_STREAM_FINAL_GRID.roomParticlePullDuration.toFixed(2)}s/${SHAPE_STREAM_FINAL_GRID.roomParticleBatchSize}@${SHAPE_STREAM_FINAL_GRID.roomParticleBatchInterval.toFixed(3)}s,`,
     `  preview: '${previewName}'`,

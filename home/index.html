@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0e0e0e">
 <meta name="color-scheme" content="dark">
 <meta name="supported-color-schemes" content="dark">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -133,10 +135,64 @@
   // window.__floatStart so the canvas can sync the passing stars to it exactly.
   // Reduced-motion users skip the move.
   (function () {
+    var ENTRY_HANDOFF_KEY = 'swcEntryHandoff';
+    var ENTRY_HANDOFF_MAX_AGE_MS = 7000;
+    var DEFAULT_INTRO_ZOOM_DELAY = 700;
+    var ENTRY_HANDOFF_INTRO_DELAYS = {
+      skip: 420,
+      complete: 120
+    };
+
+    function consumeEntryHandoff() {
+      var raw = null;
+      try {
+        raw = window.sessionStorage.getItem(ENTRY_HANDOFF_KEY);
+        if (raw) window.sessionStorage.removeItem(ENTRY_HANDOFF_KEY);
+      } catch (error) {
+        return null;
+      }
+      if (!raw) return null;
+      try {
+        var parsed = JSON.parse(raw);
+        var mode = parsed && parsed.mode;
+        var age = Date.now() - Number(parsed && parsed.ts);
+        if (!Object.prototype.hasOwnProperty.call(ENTRY_HANDOFF_INTRO_DELAYS, mode)) return null;
+        if (!Number.isFinite(age) || age < 0 || age > ENTRY_HANDOFF_MAX_AGE_MS) return null;
+        var handoff = { mode: mode, age: age };
+        if (mode === 'complete') {
+          var ghostIntroStartedTs = Number(parsed.homeGhostIntroStartedTs);
+          var ghostIntroElapsedMs = Date.now() - ghostIntroStartedTs;
+          var ghostIntroDelay = Number(parsed.homeGhostIntroDelay);
+          if (Number.isFinite(ghostIntroElapsedMs) && ghostIntroElapsedMs >= 0 && ghostIntroElapsedMs <= ENTRY_HANDOFF_MAX_AGE_MS) {
+            handoff.homeGhostIntroElapsedMs = ghostIntroElapsedMs;
+          }
+          if (Number.isFinite(ghostIntroDelay) && ghostIntroDelay >= 0 && ghostIntroDelay <= 2000) {
+            handoff.homeGhostIntroDelay = ghostIntroDelay;
+          }
+        }
+        return handoff;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    var entryHandoff = consumeEntryHandoff();
+    window.__entryHandoff = entryHandoff;
+    window.__homeIntroZoomDelay = entryHandoff
+      ? (Number.isFinite(entryHandoff.homeGhostIntroDelay)
+        ? entryHandoff.homeGhostIntroDelay
+        : ENTRY_HANDOFF_INTRO_DELAYS[entryHandoff.mode])
+      : DEFAULT_INTRO_ZOOM_DELAY;
+
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       // Skip the zoom: stamp far in the past so introContentScale resolves to 1.
       window.__floatStart = performance.now() - 1e7;
       document.body.classList.remove('intro'); return;
+    }
+    if (entryHandoff && entryHandoff.mode === 'complete' && Number.isFinite(entryHandoff.homeGhostIntroElapsedMs)) {
+      window.__floatStart = performance.now() - entryHandoff.homeGhostIntroElapsedMs;
+      document.body.classList.remove('intro');
+      return;
     }
     function start() {
       if (window.__floatStart != null) return;
@@ -178,7 +234,7 @@ const hint = document.getElementById('hint');
 const wordmarkDesc = document.getElementById('wordmark-desc');
 const soundToggle = document.getElementById('sound-toggle');
 
-const INTRO_ZOOM_DELAY = 700;   // brief stillness before the field starts moving in
+const INTRO_ZOOM_DELAY = Number(window.__homeIntroZoomDelay) || 700;   // brief stillness before the field starts moving in
 const STARTUP_SOUND_KEY = 'swcStartupMuted';
 const startupSound = new Audio('/assets/audio/console-startup.wav');
 startupSound.preload = 'auto';

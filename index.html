@@ -3,22 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#120c07">
+<meta name="theme-color" content="#0e0e0e">
 <meta name="description" content="The creative ecosystem of Saiel Dauhn Solehman.">
 <link rel="canonical" href="https://thesixwellconstruct.com/">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" as="image" href="/assets/entry-room/frame_01-entry-room-mobile-extended.jpg" type="image/jpeg" media="(max-aspect-ratio: 3/4)">
 <link rel="preload" as="image" href="/assets/entry-room/frame_01-entry-room-desktop-extended.jpg" type="image/jpeg" media="(min-aspect-ratio: 3/4)">
 <title>the six.well construct</title>
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
+  :root { --font-inter: 'Inter', Arial, sans-serif; }
   * { box-sizing: border-box; }
   html, body {
     margin: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #0b0806;
+    background: #0e0e0e;
+    font-family: var(--font-inter);
+    font-synthesis: none;
+    text-rendering: geometricPrecision;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     touch-action: none;
   }
 
@@ -37,7 +44,8 @@
     --gravity-warp-origin-y: 50%;
     position: fixed;
     inset: 0;
-    background: #0b0806;
+    background: #0e0e0e;
+    isolation: isolate;
   }
 
   #entry-gravity-defs {
@@ -67,6 +75,52 @@
     height: max(100vh, calc(100vw * var(--art-h) / var(--art-w)));
     transform: translate(-50%, -50%);
     overflow: hidden;
+    isolation: isolate;
+    z-index: 1;
+  }
+
+  #home-ghost {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    background: #0e0e0e;
+    color: #FCB867;
+    opacity: 0;
+    visibility: hidden;
+    will-change: opacity;
+  }
+
+  #home-ghost-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+  }
+
+  #home-ghost-wordmark {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    width: min(92vw, 760px);
+    text-align: center;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  #home-ghost-wordmark {
+    top: max(16px, calc((100% - 100vh) / 2 + 16px));
+    font-family: var(--font-inter) !important;
+    font-size: clamp(22px, 5.4vw, 38px);
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: -0.05em;
+    opacity: 0.82;
   }
 
   #entry-root.is-gravity-warping #art-stage {
@@ -86,6 +140,7 @@
     width: 100%;
     height: 100%;
     display: block;
+    z-index: 1;
   }
 
   #room-bg img {
@@ -453,6 +508,10 @@
       <feDisplacementMap id="entry-gravity-warp-displacement" in="SourceGraphic" in2="warpNoise" scale="0" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
     </filter>
   </svg>
+  <div id="home-ghost" aria-hidden="true">
+    <canvas id="home-ghost-canvas"></canvas>
+    <div id="home-ghost-wordmark">the six.well construct</div>
+  </div>
   <div id="art-stage">
     <picture id="room-bg" aria-hidden="true">
       <source media="(max-aspect-ratio: 3/4)" srcset="/assets/entry-room/frame_01-entry-room-mobile-extended.jpg" type="image/jpeg">
@@ -470,9 +529,19 @@
 <script src="/js/transition.js"></script>
 <script>
   (function() {
+    var ENTRY_HANDOFF_KEY = 'swcEntryHandoff';
     var skipButton = document.getElementById('entry-skip');
     var status = document.getElementById('entry-status');
     if (!skipButton) return;
+
+    function markEntryHandoff(mode) {
+      try {
+        window.sessionStorage.setItem(ENTRY_HANDOFF_KEY, JSON.stringify({
+          mode: mode,
+          ts: Date.now()
+        }));
+      } catch (error) {}
+    }
 
     skipButton.addEventListener('click', function() {
       var params = new URLSearchParams(window.location.search);
@@ -485,12 +554,442 @@
       }
 
       if (status) status.textContent = 'entering home';
+      markEntryHandoff('skip');
       if (typeof window._constructFade === 'function') {
         window._constructFade('/home/');
       } else {
         window.location.href = '/home/';
       }
     });
+  })();
+</script>
+<script>
+  (function() {
+    var canvas = document.getElementById('home-ghost-canvas');
+    if (!canvas) return;
+
+    var ctx = canvas.getContext('2d', { colorSpace: 'display-p3' }) || canvas.getContext('2d');
+    var dpr = 1;
+    var eyeOpen = new Image();
+    var eyeClosed = new Image();
+    var eyeOpenTint = null;
+    var eyeClosedTint = null;
+    var eyesLoaded = 0;
+    var raf = 0;
+    var staticRaf = 0;
+    var active = false;
+    var lastT = 0;
+    var time = 0;
+    var dotOrbit = 0;
+    var camX = 0;
+    var camY = 0;
+    var handoffOffsetX = 0;
+    var handoffOffsetY = 0;
+    var handoffCenterProgress = 1;
+    var eyeSourcesRequested = false;
+    var assetsAllowed = false;
+    var ghostVisible = false;
+    var reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    var BG_COLOR = '#0e0e0e';
+    var RING_COLOR = '#6D3D15';
+    var DOT_COLOR = '#FCB867';
+    var BASE_RING_OUTER = 68;
+    var BASE_RING_INNER = 49;
+    var BASE_DOT_RADIUS = 9.5;
+    var BASE_DOT_POSITIONS = [[-18, -28], [18, -28], [-18, 0], [18, 0], [-18, 28], [18, 28]];
+    var INTRO_MIN = 0.42;
+    var HOME_GHOST_STATIC_SCALE = INTRO_MIN;
+    var PAR_CENTER = 1.1;
+    var PAR_NEAR = 1.25;
+    var PAR_FAR = 0.10;
+    var BASE_EYE_RINGS = [
+      { dist: 70, count: 8, w: 120, alpha: 0.055 },
+      { dist: 130, count: 12, w: 108, alpha: 0.045 },
+      { dist: 195, count: 14, w: 94, alpha: 0.038 },
+      { dist: 268, count: 16, w: 80, alpha: 0.030 },
+      { dist: 350, count: 20, w: 66, alpha: 0.022 },
+      { dist: 440, count: 26, w: 54, alpha: 0.016 },
+      { dist: 540, count: 32, w: 44, alpha: 0.011 },
+      { dist: 650, count: 38, w: 36, alpha: 0.007 },
+      { dist: 770, count: 44, w: 28, alpha: 0.004 },
+      { dist: 900, count: 50, w: 22, alpha: 0.002 },
+      { dist: 1050, count: 58, w: 18, alpha: 0.0014 },
+      { dist: 1220, count: 66, w: 15, alpha: 0.0009 }
+    ];
+
+    function clamp01(value) {
+      return Math.max(0, Math.min(1, value));
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function smoothBreath(phase) {
+      var s = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+      return s * s * (3 - 2 * s);
+    }
+
+    function computeScale(w, h) {
+      var shortEdge = Math.min(w, h);
+      return Math.max(0.7, Math.min(1, 0.5 + shortEdge / 2000));
+    }
+
+    function introContentScale() {
+      return HOME_GHOST_STATIC_SCALE;
+    }
+
+    function camFor(par) {
+      return {
+        x: camX * par,
+        y: camY * par
+      };
+    }
+
+    function dollyAt(par) {
+      if (reducedMotion) return 1;
+      return 1 + (0.045 * Math.sin(time / 17000)) * par;
+    }
+
+    function buildEyeRings(w, h, scale) {
+      var rings = BASE_EYE_RINGS.slice();
+      var last = BASE_EYE_RINGS[BASE_EYE_RINGS.length - 1];
+      var needDist = (Math.hypot(w, h) / 2 + 90) / (Math.max(scale, 0.0001) * INTRO_MIN);
+      var dist = last.dist;
+      var eyeW = last.w;
+      var alpha = last.alpha;
+      var step = 150;
+      while (dist < needDist) {
+        dist += step;
+        step *= 1.04;
+        eyeW = Math.max(11, eyeW * 0.94);
+        alpha = Math.max(0.0009, alpha * 0.85);
+        rings.push({
+          dist: dist,
+          count: Math.round(2 * Math.PI * dist / 88),
+          w: eyeW,
+          alpha: alpha
+        });
+      }
+      return rings;
+    }
+
+    function buildTint(img) {
+      var offscreen = document.createElement('canvas');
+      offscreen.width = img.naturalWidth || img.width;
+      offscreen.height = img.naturalHeight || img.height;
+      var offscreenCtx = offscreen.getContext('2d', { colorSpace: 'display-p3' }) || offscreen.getContext('2d');
+      offscreenCtx.drawImage(img, 0, 0);
+      offscreenCtx.globalCompositeOperation = 'multiply';
+      offscreenCtx.fillStyle = DOT_COLOR;
+      offscreenCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+      return offscreen;
+    }
+
+    function resizeCanvas() {
+      var width = Math.max(1, Math.round(canvas.clientWidth));
+      var height = Math.max(1, Math.round(canvas.clientHeight));
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var pixelWidth = Math.round(width * dpr);
+      var pixelHeight = Math.round(height * dpr);
+      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { width: width, height: height };
+    }
+
+    function snap(value) {
+      return Math.round(value * dpr) / dpr;
+    }
+
+    function handoffMix() {
+      return reducedMotion ? 1 : clamp01(handoffCenterProgress);
+    }
+
+    function drawEyes(width, height, scale, contentScale, cx, cy, options) {
+      if (!eyeOpenTint || !eyeClosedTint) return;
+      options = options || {};
+      var alphaScale = Number.isFinite(options.alpha) ? options.alpha : 1;
+      if (alphaScale <= 0.001) return;
+      var rings = buildEyeRings(width, height, scale);
+      var maxRings = Number.isFinite(options.maxRings) ? Math.max(0, options.maxRings) : rings.length;
+      var cameraMul = Number.isFinite(options.cameraMul) ? options.cameraMul : 1;
+      var distanceScale = Number.isFinite(options.distanceScale) ? options.distanceScale : 1;
+      var densityMul = Number.isFinite(options.densityMul) ? options.densityMul : 1.05;
+      var cornerRadius = Math.hypot(width, height) / 2;
+      var idx = 0;
+      var ics = contentScale / Math.max(scale, 0.0001);
+      var pulseSpeed = 1.375;
+      var pulseAmp = 1.05;
+      var breathFloor = 0.58;
+      var globalBreath = smoothBreath((time * pulseSpeed) / 9000);
+      var baseOpacity = breathFloor + (1 - breathFloor) * globalBreath * pulseAmp;
+      var inhalePeak = Math.pow(clamp01((globalBreath - 0.72) / 0.28), 2);
+      var inhaleGlow = 1 + inhalePeak * 0.28;
+      var exhaleFloor = Math.pow(1 - globalBreath, 2);
+      var exhaleFade = 1 - exhaleFloor * 0.18;
+      var introBoost = 1;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      rings.forEach(function(ring, ringIndex) {
+        if (ringIndex >= maxRings) return;
+        var par = lerp(PAR_NEAR, PAR_FAR, rings.length > 1 ? ringIndex / (rings.length - 1) : 0);
+        var cam = camFor(par);
+        var dolly = dollyAt(par);
+        var ringBreath = smoothBreath((time * pulseSpeed) / 9000 - ringIndex * 0.04);
+        var driftFactor = (0.025 + (ringIndex % 3) * 0.006) * 2.6;
+        var breathDist = ring.dist * scale * distanceScale * (1 + driftFactor * (ringBreath - 0.5)) * dolly * ics;
+        var eyeWidth = snap(Math.max(1, ring.w * scale * distanceScale * dolly * ics));
+        if (breathDist - eyeWidth > cornerRadius + 40) return;
+        var count = Math.max(3, Math.round(ring.count * densityMul));
+        var shimmer = 0.95 + 0.05 * Math.sin((time / 4500) + ringIndex * 1.7);
+        for (var i = 0; i < count; i += 1) {
+          var angle = i / count * Math.PI * 2;
+          var tint = idx % 2 === 0 ? eyeOpenTint : eyeClosedTint;
+          var aspect = tint.height / tint.width;
+          var x = cx + cam.x * cameraMul + Math.cos(angle) * breathDist;
+          var y = cy + cam.y * cameraMul + Math.sin(angle) * breathDist;
+          var twinkle = 0.92 + 0.08 * smoothBreath((time * pulseSpeed) / 9000 + idx * 0.04);
+          var alpha = ring.alpha * baseOpacity * introBoost * inhaleGlow * exhaleFade
+            * (shimmer + (1 - shimmer) * breathFloor)
+            * (twinkle + (1 - twinkle) * breathFloor)
+            * alphaScale;
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(
+            tint,
+            snap(x - eyeWidth / 2),
+            snap(y - eyeWidth * aspect / 2),
+            eyeWidth,
+            snap(eyeWidth * aspect)
+          );
+          idx += 1;
+        }
+      });
+      ctx.restore();
+    }
+
+    function drawRingAndDots(contentScale, cx, cy, alphaScale) {
+      alphaScale = Number.isFinite(alphaScale) ? alphaScale : 1;
+      if (alphaScale <= 0.001) return;
+      var viewportScale = contentScale / introContentScale();
+      var cam = camFor(PAR_CENTER);
+      var ics = contentScale / Math.max(viewportScale, 0.0001);
+      var outer = BASE_RING_OUTER * viewportScale;
+      var inner = BASE_RING_INNER * viewportScale;
+      ctx.save();
+      ctx.globalAlpha = alphaScale;
+      ctx.translate(cx + cam.x, cy + cam.y);
+      ctx.scale(ics, ics);
+      ctx.beginPath();
+      ctx.arc(0, 0, outer, 0, Math.PI * 2);
+      ctx.arc(0, 0, inner, 0, Math.PI * 2, true);
+      ctx.fillStyle = RING_COLOR;
+      ctx.fill();
+      BASE_DOT_POSITIONS.forEach(function(dot) {
+        var dX = dot[0] * viewportScale;
+        var dY = dot[1] * viewportScale;
+        var angle = Math.atan2(dY, dX) + dotOrbit;
+        var dist = Math.hypot(dX, dY) + Math.sin(time * 0.025 + dot[0] * 0.13 + dot[1] * 0.09) * 1.5 * viewportScale;
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle) * dist, Math.sin(angle) * dist, BASE_DOT_RADIUS * viewportScale, 0, Math.PI * 2);
+        ctx.fillStyle = DOT_COLOR;
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    function drawHomeGhost(now) {
+      var size = resizeCanvas();
+      var width = size.width;
+      var height = size.height;
+      var dt = 0;
+      if (active && !reducedMotion) {
+        if (!lastT) lastT = now;
+        dt = Math.min(now - lastT, 50);
+        lastT = now;
+      }
+      var cx = width / 2;
+      var cy = height / 2;
+      var viewportWidth = Math.max(1, window.innerWidth || width);
+      var viewportHeight = Math.max(1, window.innerHeight || height);
+      var scale = computeScale(viewportWidth, viewportHeight);
+      if (dt > 0) {
+        time += dt;
+        var targetX = (Math.sin(time / 11000) * 0.65 + Math.sin(time / 23000 + 1.3) * 0.35) * 28 * scale;
+        var targetY = (Math.sin(time / 14000 + 0.7) * 0.6 + Math.sin(time / 31000) * 0.4) * 20 * scale;
+        var follow = 0.05 * (dt / 16);
+        camX += (targetX - camX) * follow;
+        camY += (targetY - camY) * follow;
+        dotOrbit += dt * 0.003;
+      }
+      var contentScale = scale * introContentScale();
+      ctx.fillStyle = BG_COLOR;
+      ctx.fillRect(0, 0, width, height);
+      if (!assetsAllowed) return;
+
+      var mix = handoffMix();
+      var doorX = snap(cx + handoffOffsetX);
+      var doorY = snap(cy + handoffOffsetY);
+      var focusX = snap(lerp(doorX, cx, mix));
+      var focusY = snap(lerp(doorY, cy, mix));
+
+      drawEyes(viewportWidth, viewportHeight, scale, contentScale, focusX, focusY, {
+        alpha: 1,
+        cameraMul: 1,
+        densityMul: 1.05
+      });
+      drawRingAndDots(contentScale, focusX, focusY, 1);
+    }
+
+    function drawLoop(now) {
+      raf = 0;
+      drawHomeGhost(now);
+      if (active && !reducedMotion) {
+        raf = window.requestAnimationFrame(drawLoop);
+      }
+    }
+
+    function requestStaticDraw() {
+      if (raf || staticRaf) return;
+      staticRaf = window.requestAnimationFrame(function(now) {
+        staticRaf = 0;
+        drawHomeGhost(now);
+      });
+    }
+
+    function requestLoop() {
+      if (reducedMotion) {
+        requestStaticDraw();
+        return;
+      }
+      if (raf) return;
+      raf = window.requestAnimationFrame(drawLoop);
+    }
+
+    function resetMotion() {
+      if (raf) window.cancelAnimationFrame(raf);
+      if (staticRaf) window.cancelAnimationFrame(staticRaf);
+      raf = 0;
+      staticRaf = 0;
+      active = false;
+      ghostVisible = false;
+      lastT = 0;
+      time = 0;
+      dotOrbit = 0;
+      camX = 0;
+      camY = 0;
+      handoffOffsetX = 0;
+      handoffOffsetY = 0;
+      handoffCenterProgress = 1;
+      requestStaticDraw();
+    }
+
+    function setHandoffOffset(offsetX, offsetY, centerProgress) {
+      handoffOffsetX = Number.isFinite(offsetX) ? offsetX : 0;
+      handoffOffsetY = Number.isFinite(offsetY) ? offsetY : 0;
+      handoffCenterProgress = clamp01(Number(centerProgress) || 0);
+      active ? requestLoop() : requestStaticDraw();
+    }
+
+    function setProgress(progress) {
+      var visible = clamp01(Number(progress) || 0) > 0.004;
+      ghostVisible = visible;
+      if (!visible) {
+        if (active) resetMotion();
+        return;
+      }
+      if (!assetsAllowed) {
+        requestStaticDraw();
+        return;
+      }
+      prepareHomeGhostAssets();
+      if (!active) {
+        active = true;
+        lastT = 0;
+      }
+      requestLoop();
+    }
+
+    function markEyeLoaded() {
+      eyesLoaded += 1;
+      if (eyesLoaded >= 2) {
+        eyeOpenTint = buildTint(eyeOpen);
+        eyeClosedTint = buildTint(eyeClosed);
+        active ? requestLoop() : requestStaticDraw();
+      }
+    }
+
+    function loadHomeEyeSources() {
+      if (eyeSourcesRequested) return;
+      eyeSourcesRequested = true;
+      eyeOpen.src = '/assets/home-ghost/eye-open.png';
+      eyeClosed.src = '/assets/home-ghost/eye-closed.png';
+    }
+
+    function prepareHomeGhostAssets() {
+      loadHomeEyeSources();
+    }
+
+    function allowHomeGhostAssets() {
+      assetsAllowed = true;
+      prepareHomeGhostAssets();
+      if (ghostVisible && !active) {
+        active = true;
+        lastT = 0;
+      }
+      active ? requestLoop() : requestStaticDraw();
+    }
+
+    window.__swcHomeGhost = {
+      setProgress: setProgress,
+      setHandoffOffset: setHandoffOffset,
+      preload: allowHomeGhostAssets,
+      reset: resetMotion,
+      getEyeSourceInfo: function() {
+        return {
+          open: {
+            dataUri: /^data:image\//.test(eyeOpen.src),
+            width: eyeOpen.naturalWidth || 0,
+            height: eyeOpen.naturalHeight || 0
+          },
+          closed: {
+            dataUri: /^data:image\//.test(eyeClosed.src),
+            width: eyeClosed.naturalWidth || 0,
+            height: eyeClosed.naturalHeight || 0
+          }
+        };
+      },
+      getLoadState: function() {
+        return {
+          assetsAllowed: assetsAllowed,
+          eyeSourcesRequested: eyeSourcesRequested,
+          ghostLinkCount: document.querySelectorAll('#home-ghost a, #home-ghost [href]').length
+        };
+      },
+      getIntroStartedTs: function() {
+        return null;
+      },
+      getIntroZoomDelay: function() {
+        return null;
+      }
+    };
+
+    eyeOpen.addEventListener('load', markEyeLoaded, { once: true });
+    eyeClosed.addEventListener('load', markEyeLoaded, { once: true });
+
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(function() {
+        active ? requestLoop() : requestStaticDraw();
+      }).observe(canvas);
+    }
+    window.addEventListener('resize', function() {
+      active ? requestLoop() : requestStaticDraw();
+    });
+    requestStaticDraw();
   })();
 </script>
 <script type="module" src="/entry-room/3d/entry-room-3d.js"></script>

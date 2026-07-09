@@ -125,10 +125,6 @@ export function mountCalibrationHud(root = document.body) {
         <label>Blink duration s <input type="number" min="0.04" max="1.5" step="0.01" value="0.22" data-eye-control="blink-duration"></label>
         <label>Break fade s <input type="number" min="0" max="3" step="0.01" value="2.00" data-eye-control="break-handoff-duration"></label>
         <label>Site fade s <input type="number" min="0.05" max="3" step="0.01" value="0.37" data-eye-control="site-fade-duration"></label>
-        <label>Page zoom <input type="number" min="1" max="2.2" step="0.01" value="1.80" data-eye-control="page-zoom-scale"></label>
-        <label>Zoom hold s <input type="number" min="0" max="10" step="0.1" value="5.00" data-eye-control="page-zoom-hold"></label>
-        <label>Zoom start <input type="number" min="0" max="0.98" step="0.01" value="0.00" data-eye-control="page-zoom-start"></label>
-        <label>Zoom end <input type="number" min="0.01" max="1" step="0.01" value="1.00" data-eye-control="page-zoom-end"></label>
         <h3>Door position - active layout</h3>
         <label>X <input type="number" min="-0.5" max="1.5" step="0.001" data-lock-control="door-x"></label>
         <label>Y <input type="number" min="-0.5" max="1.5" step="0.001" data-lock-control="door-y"></label>
