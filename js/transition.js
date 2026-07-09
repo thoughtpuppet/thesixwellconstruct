@@ -28,6 +28,7 @@
      If you change one, change both.
   ────────────────────────────────────────────────────────── */
   const FADE_DURATION_MS = 500;
+  const INTER_FONT_CSS_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=swap';
 
 
   /* ── OVERLAY SETUP ────────────────────────────────────────
@@ -43,6 +44,50 @@
 
   var overlay = document.getElementById('construct-fade');
   var pendingNavigationTimer = null;
+
+  function loadInterFontAsync() {
+    if (document.querySelector('link[data-construct-inter-font], link[href*="fonts.googleapis.com/css2?family=Inter"]')) return;
+
+    var preconnectFontsApi = document.createElement('link');
+    preconnectFontsApi.rel = 'preconnect';
+    preconnectFontsApi.href = 'https://fonts.googleapis.com';
+    preconnectFontsApi.setAttribute('data-construct-inter-font', 'true');
+    document.head.appendChild(preconnectFontsApi);
+
+    var preconnectFontsStatic = document.createElement('link');
+    preconnectFontsStatic.rel = 'preconnect';
+    preconnectFontsStatic.href = 'https://fonts.gstatic.com';
+    preconnectFontsStatic.crossOrigin = 'anonymous';
+    preconnectFontsStatic.setAttribute('data-construct-inter-font', 'true');
+    document.head.appendChild(preconnectFontsStatic);
+
+    var fontStylesheet = document.createElement('link');
+    fontStylesheet.rel = 'preload';
+    fontStylesheet.as = 'style';
+    fontStylesheet.href = INTER_FONT_CSS_URL;
+    fontStylesheet.setAttribute('data-construct-inter-font', 'true');
+    fontStylesheet.onload = function() {
+      fontStylesheet.onload = null;
+      fontStylesheet.rel = 'stylesheet';
+    };
+    document.head.appendChild(fontStylesheet);
+  }
+
+  function scheduleInterFontLoad() {
+    var run = function() {
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(loadInterFontAsync, { timeout: 1600 });
+      } else {
+        setTimeout(loadInterFontAsync, 0);
+      }
+    };
+
+    if (document.readyState === 'complete') {
+      run();
+    } else {
+      window.addEventListener('load', run, { once: true });
+    }
+  }
 
   if (!overlay) {
     /* Fallback: create if the inline script didn't run */
@@ -277,6 +322,7 @@
      Exposed here so both scripts share one fade system.
   ────────────────────────────────────────────────────────── */
   window._constructFade = fadeOutThenNavigate;
+  scheduleInterFontLoad();
 
   /* ── LOCAL PROTOTYPE TEXT EDITOR ─────────────────────────
      Loads the optional canvas-like copy editor once per page.
@@ -289,7 +335,13 @@
     window.location.hostname === '::1'
   );
 
-  if (isLocalHost && !document.querySelector('script[data-live-text-editor]')) {
+  var isHomePath = (
+    window.location.pathname === '/home' ||
+    window.location.pathname === '/home/' ||
+    window.location.pathname === '/home/index.html'
+  );
+
+  if (isLocalHost && !isHomePath && !document.querySelector('script[data-live-text-editor]')) {
     var liveTextEditor = document.createElement('script');
     liveTextEditor.src = '/js/live-text-editor.js?v=' + Date.now();
     liveTextEditor.defer = true;

@@ -10,9 +10,6 @@
      font-family: var(--font-display);
      padding: var(--space-md);
    ============================================================ */
-
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block");
-
 :root {
 
   /* ──────────────────────────────────────────────────────────
@@ -236,4 +233,3 @@ img, video {
   display: block;
   max-width: 100%;
 }
-
