@@ -83,8 +83,8 @@ const DESKTOP_COMPLETION_RING = {
   bodyOpacity: 1.0
 };
 const MOBILE_COMPLETION_RING = {
-  x: 0.1659,
-  y: -0.2353,
+  x: 0.2070,
+  y: 0.0895,
   patchX: 0.1659,
   patchY: -0.2353,
   patchSize: 1.20,
@@ -93,11 +93,13 @@ const MOBILE_COMPLETION_RING = {
   aspectX: 0.80,
   aspectY: 1.02,
   radiusPad: 1.56,
+  radiusScale: 1.15,
+  depthScale: 1.45,
   surfaceZ: 0.14,
   recessZ: -0.10,
   bodyOffsetX: -0.20,
   bodyOffsetY: -0.02,
-  bodyOffsetZ: -0.14,
+  bodyOffsetZ: -0.28,
   emergeOffsetX: -0.14,
   emergeOffsetY: 0.10,
   emergeOffsetZ: -1.46,
@@ -122,7 +124,7 @@ const BASE_LAYOUTS = {
   mobile: {
     image: CORE_IMAGE,
     holeRadiusN: 0.0273,
-    orbRadiusFactor: 0.9,
+    orbRadiusFactor: 1.01,
     sockets: MOBILE_SOCKETS,
     orbHomes: MOBILE_ORB_HOMES,
     orbShadow: MOBILE_ORB_SHADOW,
@@ -1755,7 +1757,6 @@ const SHAPE_STREAM = {
   wallFriction: 0.14,
   frontBoundaryClearance: 1.15,
   doorwayKeepoutEnabled: true,
-  doorwayPhysicalBarrierEnabled: true,
   doorwayBarrierFriction: 0.025,
   doorwayBarrierRestitution: 0.10,
   shapeFriction: 1.22,
@@ -1830,6 +1831,7 @@ const SHAPE_STREAM_FINAL_GRID = {
   vacuumEndScaleFactor: 0.76,
   cellSizeFactor: 2.45,
   scaleFactor: 0.42,
+  edgePaddingFactor: 1.08,
   tiltX: -0.42,
   tiltY: 0.28,
   tiltVariation: 0.16,
@@ -2253,7 +2255,7 @@ function rebuildShapeStreamPhysicsBounds() {
     { friction: SHAPE_STREAM.wallFriction }
   );
 
-  if (SHAPE_STREAM.doorwayKeepoutEnabled && SHAPE_STREAM.doorwayPhysicalBarrierEnabled && floorZone) {
+  if (SHAPE_STREAM.doorwayKeepoutEnabled && activeDoorwayShapeBarrierHardCollider() && floorZone) {
     createShapeStreamDoorwayBarrierBody();
   }
 
@@ -4935,12 +4937,33 @@ function shapeStreamFinalGridMetrics(requiredCount = shapeStream.items.length) {
     }
   }
 
+  let cellW = viewport.width / Math.max(1, columns - 1);
+  let cellH = viewport.height / Math.max(1, rows - 1);
+  let scale = Math.max(cellW, cellH) * SHAPE_STREAM_FINAL_GRID.scaleFactor;
+  const maxShapeRadius = shapeStream.items.reduce((largest, item) => {
+    const geometry = item.mesh?.geometry;
+    if (!geometry) return largest;
+    if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+    return Math.max(largest, geometry.boundingSphere?.radius || 1);
+  }, 1);
+  let edgePadding = scale * maxShapeRadius * SHAPE_STREAM_FINAL_GRID.edgePaddingFactor;
+
+  // Resolve the padding against the smaller usable grid once so the outermost
+  // tilted meshes touch the frame without placing their centers on its edges.
+  cellW = Math.max(0.001, viewport.width - edgePadding * 2) / Math.max(1, columns - 1);
+  cellH = Math.max(0.001, viewport.height - edgePadding * 2) / Math.max(1, rows - 1);
+  scale = Math.max(cellW, cellH) * SHAPE_STREAM_FINAL_GRID.scaleFactor;
+  edgePadding = scale * maxShapeRadius * SHAPE_STREAM_FINAL_GRID.edgePaddingFactor;
+  cellW = Math.max(0.001, viewport.width - edgePadding * 2) / Math.max(1, columns - 1);
+  cellH = Math.max(0.001, viewport.height - edgePadding * 2) / Math.max(1, rows - 1);
+
   return {
     columns,
     rows,
     count: columns * rows,
-    cellW: viewport.width / Math.max(1, columns - 1),
-    cellH: viewport.height / Math.max(1, rows - 1)
+    cellW,
+    cellH,
+    edgePadding
   };
 }
 
@@ -5052,8 +5075,8 @@ function updateShapeStreamFinalGridTargets(captureStarts = false) {
     detachShapeStreamItemPhysics(item);
     const row = Math.floor(index / settledMetrics.columns);
     const column = index % settledMetrics.columns;
-    const x = -viewport.width * 0.5 + column * settledMetrics.cellW;
-    const y = viewport.height * 0.5 - row * settledMetrics.cellH;
+    const x = -viewport.width * 0.5 + settledMetrics.edgePadding + column * settledMetrics.cellW;
+    const y = viewport.height * 0.5 - settledMetrics.edgePadding - row * settledMetrics.cellH;
     item.mesh.visible = true;
     item.mesh.renderOrder = 18;
     item.bucketCommitted = true;
@@ -5663,10 +5686,11 @@ function updateShapeStream(delta) {
 const SHAPE_LOCK_ORDER = ['circle', 'triangle', 'square', 'pentagon', 'hexagon'];
 const SHAPE_LOCK_LAYOUTS = {
   desktop: { x: 0.619, y: 0.555, sizeN: 0.024 },
-  mobile: { x: 0.763, y: 0.600, sizeN: 0.030 }
+  mobile: { x: 0.763, y: 0.600, sizeN: 0.0345 }
 };
 const DOORWAY_SHAPE_BARRIER_LAYOUTS = {
   desktop: {
+    hardCollider: true,
     offsetX: 0,
     offsetY: 0.005,
     sideRadius: 0.035,
@@ -5677,6 +5701,7 @@ const DOORWAY_SHAPE_BARRIER_LAYOUTS = {
     maxPushSpeed: 8.00
   },
   mobile: {
+    hardCollider: false,
     offsetX: 0.005,
     offsetY: 0.005,
     sideRadius: 0.045,
@@ -5698,6 +5723,10 @@ const SHAPE_LOCK_TUNING = {
 
 function activeDoorwayShapeBarrierLayout(layoutName = activeLayoutName) {
   return DOORWAY_SHAPE_BARRIER_LAYOUTS[layoutName] || DOORWAY_SHAPE_BARRIER_LAYOUTS.desktop;
+}
+
+function activeDoorwayShapeBarrierHardCollider(layoutName = activeLayoutName) {
+  return activeDoorwayShapeBarrierLayout(layoutName).hardCollider !== false;
 }
 
 const shapeLockRaycaster = new THREE.Raycaster();
@@ -6460,7 +6489,7 @@ function drawDoorwayShapeBarrierOverlay() {
     x: cx,
     y: (Number(cy) - Number(ry) - 12).toFixed(1)
   });
-  label.textContent = SHAPE_STREAM.doorwayPhysicalBarrierEnabled ? 'hard shape barrier' : 'soft shape barrier';
+  label.textContent = activeDoorwayShapeBarrierHardCollider() ? 'hard shape barrier' : 'soft shape barrier';
   floorEditor.barrierGroup.appendChild(label);
 }
 
@@ -6720,7 +6749,7 @@ function floorEditorPointerUp(event) {
     : (drag.type === 'shape-barrier' ? 'door shape barrier' : drag.key);
   floorEditor.drag = null;
   try { floorEditor.svg?.releasePointerCapture(event.pointerId); } catch {}
-  if (drag.type === 'shape-barrier' && SHAPE_STREAM.doorwayPhysicalBarrierEnabled && shapeStream.world) {
+  if (drag.type === 'shape-barrier' && activeDoorwayShapeBarrierHardCollider() && shapeStream.world) {
     rebuildShapeStreamPhysicsBounds();
   }
   drawFloorEditorOverlay();
@@ -6759,7 +6788,7 @@ function syncDoorwayShapeBarrierControls() {
   const barrierLayout = activeDoorwayShapeBarrierLayout();
   const values = {
     enabled: SHAPE_STREAM.doorwayKeepoutEnabled,
-    'hard-collider': SHAPE_STREAM.doorwayPhysicalBarrierEnabled,
+    'hard-collider': activeDoorwayShapeBarrierHardCollider(),
     'screen-offset-x': barrierLayout.offsetX,
     'screen-offset-y': barrierLayout.offsetY,
     'screen-half-width': barrierLayout.sideRadius,
@@ -6789,27 +6818,27 @@ function handleDoorwayShapeBarrierControl(input) {
     SHAPE_STREAM.doorwayKeepoutEnabled = !!input.checked;
     needsPhysicsRebuild = true;
   } else if (control === 'hard-collider') {
-    SHAPE_STREAM.doorwayPhysicalBarrierEnabled = !!input.checked;
+    activeDoorwayShapeBarrierLayout().hardCollider = !!input.checked;
     needsPhysicsRebuild = true;
   } else if (control === 'screen-offset-x' && Number.isFinite(numericValue)) {
     barrierLayout.offsetX = THREE.MathUtils.clamp(numericValue, -0.4, 0.4);
-    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    needsPhysicsRebuild = activeDoorwayShapeBarrierHardCollider();
     drawFloorEditorOverlay();
   } else if (control === 'screen-offset-y' && Number.isFinite(numericValue)) {
     barrierLayout.offsetY = THREE.MathUtils.clamp(numericValue, -0.4, 0.4);
-    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    needsPhysicsRebuild = activeDoorwayShapeBarrierHardCollider();
     drawFloorEditorOverlay();
   } else if (control === 'screen-half-width' && Number.isFinite(numericValue)) {
     barrierLayout.sideRadius = THREE.MathUtils.clamp(numericValue, 0.005, 0.25);
-    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    needsPhysicsRebuild = activeDoorwayShapeBarrierHardCollider();
     drawFloorEditorOverlay();
   } else if (control === 'screen-top-pad' && Number.isFinite(numericValue)) {
     barrierLayout.topPad = THREE.MathUtils.clamp(numericValue, 0, 0.6);
-    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    needsPhysicsRebuild = activeDoorwayShapeBarrierHardCollider();
     drawFloorEditorOverlay();
   } else if (control === 'screen-bottom-pad' && Number.isFinite(numericValue)) {
     barrierLayout.bottomPad = THREE.MathUtils.clamp(numericValue, 0, 0.8);
-    needsPhysicsRebuild = SHAPE_STREAM.doorwayPhysicalBarrierEnabled;
+    needsPhysicsRebuild = activeDoorwayShapeBarrierHardCollider();
     drawFloorEditorOverlay();
   } else if (control === 'screen-target-penalty' && Number.isFinite(numericValue)) {
     barrierLayout.targetPenalty = THREE.MathUtils.clamp(numericValue, 0, 40);
@@ -6959,7 +6988,10 @@ function layoutCompletionEffects(holeR, orbR) {
   const maxX = Math.max(...socketPositions.map((pos) => pos.x));
   const minY = Math.min(...socketPositions.map((pos) => pos.y));
   const maxY = Math.max(...socketPositions.map((pos) => pos.y));
-  const ringR = Math.max(maxX - minX, maxY - minY) * 0.5 + holeR * ringConfig.radiusPad;
+  const ringR = (
+    Math.max(maxX - minX, maxY - minY) * 0.5 + holeR * ringConfig.radiusPad
+  ) * (ringConfig.radiusScale ?? 1);
+  const ringDepthScale = ringConfig.depthScale ?? 1;
   const anchor = imageToWorld(ringConfig.x, ringConfig.y, orbR + ringConfig.surfaceZ);
   const emergeOffset = new THREE.Vector3(
     holeR * ringConfig.emergeOffsetX,
@@ -6999,12 +7031,20 @@ function layoutCompletionEffects(holeR, orbR) {
     ROOM_BACKDROP_Z - completionEffects.ringBody.userData.surfacePosition.z - ringFrontHalfDepth
   );
   completionEffects.ringBody.userData.startOffset.copy(bodyStartOffset);
-  completionEffects.ringBody.userData.baseScale.set(ringR * ringConfig.aspectX, ringR * ringConfig.aspectY, 1);
+  completionEffects.ringBody.userData.baseScale.set(
+    ringR * ringConfig.aspectX,
+    ringR * ringConfig.aspectY,
+    ringDepthScale
+  );
 
   completionEffects.ring.position.copy(anchor);
   completionEffects.ring.userData.surfacePosition.copy(anchor);
   completionEffects.ring.userData.startOffset.copy(emergeOffset);
-  completionEffects.ring.userData.baseScale.set(ringR * ringConfig.aspectX, ringR * ringConfig.aspectY, 1);
+  completionEffects.ring.userData.baseScale.set(
+    ringR * ringConfig.aspectX,
+    ringR * ringConfig.aspectY,
+    ringDepthScale
+  );
 
   const patchAnchor = imageToWorld(
     ringConfig.patchX ?? ringConfig.x,
@@ -7662,7 +7702,8 @@ function activeCompletionRingText() {
     'completionRing: {',
     `  x: ${ring.x.toFixed(4)}, y: ${ring.y.toFixed(4)},`,
     `  aspectX: ${ring.aspectX.toFixed(2)}, aspectY: ${ring.aspectY.toFixed(2)},`,
-    `  radiusPad: ${ring.radiusPad.toFixed(2)}, surfaceZ: ${ring.surfaceZ.toFixed(2)}, recessZ: ${ring.recessZ.toFixed(2)},`,
+    `  radiusPad: ${ring.radiusPad.toFixed(2)}, radiusScale: ${(ring.radiusScale ?? 1).toFixed(2)}, depthScale: ${(ring.depthScale ?? 1).toFixed(2)},`,
+    `  surfaceZ: ${ring.surfaceZ.toFixed(2)}, recessZ: ${ring.recessZ.toFixed(2)},`,
     `  bodyOffsetX: ${ring.bodyOffsetX.toFixed(2)}, bodyOffsetY: ${ring.bodyOffsetY.toFixed(2)}, bodyOffsetZ: ${ring.bodyOffsetZ.toFixed(2)},`,
     `  emergeOffsetX: ${ring.emergeOffsetX.toFixed(2)}, emergeOffsetY: ${ring.emergeOffsetY.toFixed(2)}, emergeOffsetZ: ${ring.emergeOffsetZ.toFixed(2)},`,
     `  startScale: ${ring.startScale.toFixed(2)}, bodyStartScale: ${ring.bodyStartScale.toFixed(2)},`,
@@ -7728,7 +7769,7 @@ function activeDoorwayShapeBarrierText() {
   const barrierLayout = activeDoorwayShapeBarrierLayout();
   return [
     'doorwayShapeBarrier: {',
-    `  enabled: ${SHAPE_STREAM.doorwayKeepoutEnabled}, hardCollider: ${SHAPE_STREAM.doorwayPhysicalBarrierEnabled},`,
+    `  enabled: ${SHAPE_STREAM.doorwayKeepoutEnabled}, hardCollider: ${activeDoorwayShapeBarrierHardCollider()},`,
     `  unit: 'coreWidth', layoutScale: ${shapeStreamDoorwayBarrierLayoutScale().toFixed(3)},`,
     `  offsetX: ${barrierLayout.offsetX.toFixed(4)}, offsetY: ${barrierLayout.offsetY.toFixed(4)},`,
     `  sideRadius: ${barrierLayout.sideRadius.toFixed(3)}, topPad: ${barrierLayout.topPad.toFixed(3)}, bottomPad: ${barrierLayout.bottomPad.toFixed(3)},`,
@@ -7815,7 +7856,7 @@ function allLayoutsText() {
       `  shapeLock: ${JSON.stringify(SHAPE_LOCK_LAYOUTS[name])},`,
       `  doorwayShapeBarrier: ${JSON.stringify({
         enabled: SHAPE_STREAM.doorwayKeepoutEnabled,
-        hardCollider: SHAPE_STREAM.doorwayPhysicalBarrierEnabled,
+        hardCollider: activeDoorwayShapeBarrierHardCollider(),
         unit: 'coreWidth',
         layoutScale: shapeStreamDoorwayBarrierLayoutScale(),
         offsetX: barrierLayout.offsetX,
@@ -8240,15 +8281,23 @@ window.addEventListener('pageshow', (event) => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) finishActiveDrag({ interrupted: true });
 });
-window.addEventListener('resize', () => {
-  resize();
-  syncLayoutFromViewport();
-  syncRoomBackdropTexture();
-  layout();
-  reseatPlaced();
-  retargetShapeStreamFinalGrid(true);
-  updateCalibrationConsole();
-});
+let viewportResizeFrame = 0;
+function handleViewportResize() {
+  if (viewportResizeFrame) cancelAnimationFrame(viewportResizeFrame);
+  viewportResizeFrame = requestAnimationFrame(() => {
+    viewportResizeFrame = 0;
+    resize();
+    syncLayoutFromViewport();
+    syncRoomBackdropTexture();
+    layout();
+    reseatPlaced();
+    retargetShapeStreamFinalGrid(true);
+    updateCalibrationConsole();
+  });
+}
+window.addEventListener('resize', handleViewportResize);
+window.visualViewport?.addEventListener('resize', handleViewportResize);
+window.visualViewport?.addEventListener('scroll', handleViewportResize);
 if (calibrate) {
   status.textContent = 'calibrate - see HUD guide';
   updateCalibrationConsole();

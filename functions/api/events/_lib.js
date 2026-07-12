@@ -14,6 +14,9 @@
 //   POST /api/square-events/webhook  -> confirm paid ticket (separate signing key)
 
 import {
+  notifyAdminEventOpenMicReceived,
+  notifyAdminEventTicketPaid,
+  notifyAdminEventWaitlistReceived,
   notifyEventTicketPaid,
   notifyEventTicketCancelled,
   notifyEventOpenMicSlotAssigned,
@@ -732,6 +735,13 @@ export async function handleEventWaitlist(request, env, slug) {
       .bind(id, event.id, name, email, phone, seats, note, now, now)
       .run();
 
+    await notifyAdminEventWaitlistReceived(
+      env,
+      request,
+      { id, name, email, phone, seats, note },
+      event
+    ).catch((error) => console.warn("Admin waitlist notification failed.", error.message));
+
     return json({ ok: true, waitlistId: id });
   } catch (error) {
     return errorResponse("Unable to join the waitlist.", 500, { detail: error.message });
@@ -813,6 +823,22 @@ export async function handleEventOpenMicSignup(request, env, slug) {
         now
       )
       .run();
+
+    await notifyAdminEventOpenMicReceived(
+      env,
+      request,
+      {
+        id,
+        performerName,
+        performerEmail,
+        performerPhone,
+        actType,
+        pieceTitle,
+        notes,
+        requestedSlot,
+      },
+      event
+    ).catch((error) => console.warn("Admin open mic notification failed.", error.message));
 
     return json({ ok: true, signupId: id });
   } catch (error) {
@@ -936,6 +962,9 @@ async function markTicketPaid(db, env, request, ticketRow, order, paymentId) {
   if (!alreadyPaid) {
     await notifyEventTicketPaid(env, request, ticketRow).catch((error) => {
       console.warn("Event confirmation email failed.", error.message);
+    });
+    await notifyAdminEventTicketPaid(env, request, ticketRow).catch((error) => {
+      console.warn("Admin event ticket notification failed.", error.message);
     });
   }
 }

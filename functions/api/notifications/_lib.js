@@ -43,7 +43,7 @@ function replyToAddress(env) {
 }
 
 function adminNotificationAddress(env) {
-  return replyToAddress(env);
+  return env.ADMIN_NOTIFICATION_EMAIL || DEFAULT_REPLY_TO;
 }
 
 // Events are a separate brand (the six.well construct) from the tattoo house.
@@ -74,6 +74,10 @@ function publicUrl(env, request, path) {
   return `${publicBaseUrl(env, request)}${path}`;
 }
 
+function studioConsoleUrl(env, request) {
+  return publicUrl(env, request, "/studio/submissions/");
+}
+
 const IN_PERSON_CONSULTATION_BOOKING_TYPE_ID = "consult_in_person";
 const VIRTUAL_CONSULTATION_BOOKING_TYPE_ID = "consult_virtual";
 const BUILD_SESSION_BOOKING_TYPE_ID = "build_in_person";
@@ -84,13 +88,6 @@ const CONSULTATION_BOOKING_TYPE_IDS = [
 ];
 // Studio bookings are the construct's own product (not the tattoo house).
 const STUDIO_BOOKING_TYPE_IDS = ["studio_visit", "studio_gathering", "studio_rental"];
-const ADMIN_SUBMISSION_TYPES = new Set([
-  "tattoo_inquiry",
-  "flash_claim",
-  "special_project",
-  "build_brief",
-  "maze_design",
-]);
 const CONFIRMATION_PATHS = {
   [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/consultation/",
   [VIRTUAL_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/virtual-consultation/",
@@ -491,15 +488,27 @@ function submissionDetailLines(submission) {
       "message",
       "instagram",
     ],
+    art_acquisition: ["artwork", "artwork_title", "budget_range", "message", "instagram"],
+    consultation: ["consultation_type", "preferred_dates", "message", "instagram"],
+    studio_booking: ["booking_type", "preferred_dates", "party_size", "message"],
   };
-  const preferredFields = fieldsByType[submission.type] || [];
+  const preferredFields = fieldsByType[submission.type] || Object.keys(payload);
   return preferredFields
     .map((key) => compactLine(labelFromKey(key), payload[key]))
     .filter(Boolean);
 }
 
-function adminAppointmentEligible(appointment) {
-  return !STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
+async function sendAdminNotification(env, request, message) {
+  const recipient = adminNotificationAddress(env);
+  if (!recipient) return { ok: false, skipped: true };
+
+  return sendTransactionalEmail(env, {
+    to: recipient,
+    ...message,
+    text: [...message.lines, "", compactLine("Studio console", studioConsoleUrl(env, request))]
+      .filter((line) => line !== "")
+      .join("\n"),
+  });
 }
 
 export async function notifySubmissionReceived(env, submission, options = {}) {
@@ -531,16 +540,9 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
 
 export async function notifyAdminSubmissionReceived(env, submission, options = {}) {
   const normalized = normalizeSubmission(submission);
-  if (!ADMIN_SUBMISSION_TYPES.has(normalized.type)) {
-    return { ok: false, skipped: true };
-  }
-
-  const recipient = adminNotificationAddress(env);
-  if (!recipient) return { ok: false, skipped: true };
-
   const detailLines = submissionDetailLines(normalized);
-  const text = [
-    "New tattoo submission received.",
+  const lines = [
+    "New form submission received.",
     "",
     compactLine("Type", labelFromKey(normalized.type)),
     compactLine("Submission ID", normalized.id),
@@ -554,12 +556,11 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
     "",
     detailLines.length ? "Project notes" : "",
     ...detailLines,
-  ].filter((line) => line !== "").join("\n");
+  ];
 
-  return sendTransactionalEmail(env, {
-    to: recipient,
-    subject: `New tattoo submission: ${labelFromKey(normalized.type)}`,
-    text,
+  return sendAdminNotification(env, null, {
+    subject: `New submission: ${labelFromKey(normalized.type)}`,
+    lines,
     templateKey: "admin_submission_received",
     relatedType: "submission",
     relatedId: normalized.id,
@@ -809,16 +810,11 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow, o
 
 export async function notifyAdminAppointmentConfirmed(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
-  if (!adminAppointmentEligible(appointment)) return { ok: false, skipped: true };
-
-  const recipient = adminNotificationAddress(env);
-  if (!recipient) return { ok: false, skipped: true };
-
   const when = [formatDate(appointment.startAt), formatDate(appointment.endAt)]
     .filter(Boolean)
     .join(" - ");
-  const text = [
-    "Tattoo booking payment confirmed.",
+  const lines = [
+    "Booking payment confirmed.",
     "",
     compactLine("Booking type", appointment.bookingTypeLabel || appointment.bookingTypeId),
     compactLine("Appointment ID", appointment.id),
@@ -837,16 +833,93 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
     "",
     compactLine("Confirmation page", appointmentConfirmationUrl(env, request, appointment)),
     compactLine("Calendar", appointmentCalendarUrl(env, request, appointment)),
-  ].filter((line) => line !== "").join("\n");
+  ];
 
-  return sendTransactionalEmail(env, {
-    to: recipient,
-    subject: `Tattoo booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`,
-    text,
+  return sendAdminNotification(env, request, {
+    subject: `Booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`,
+    lines,
     templateKey: "admin_appointment_confirmed",
     relatedType: "appointment",
     relatedId: appointment.id,
     idempotencyKey: options.idempotencyKey || `admin_appointment_confirmed:${appointment.id}`,
+  });
+}
+
+export async function notifyAdminEventWaitlistReceived(env, request, entry, event, options = {}) {
+  return sendAdminNotification(env, request, {
+    subject: `New event waitlist request: ${event.title || event.slug}`,
+    lines: [
+      "New event waitlist request received.",
+      "",
+      compactLine("Event", event.title || event.slug),
+      compactLine("Waitlist ID", entry.id),
+      compactLine("Seats requested", entry.seats),
+      "",
+      "Contact",
+      compactLine("Name", entry.name),
+      compactLine("Email", entry.email),
+      compactLine("Phone", entry.phone),
+      compactLine("Note", entry.note),
+    ],
+    templateKey: "admin_event_waitlist_received",
+    relatedType: "event_waitlist",
+    relatedId: entry.id,
+    idempotencyKey: options.idempotencyKey || `admin_event_waitlist_received:${entry.id}`,
+  });
+}
+
+export async function notifyAdminEventOpenMicReceived(env, request, signup, event, options = {}) {
+  return sendAdminNotification(env, request, {
+    subject: `New open mic request: ${event.title || event.slug}`,
+    lines: [
+      "New open mic request received.",
+      "",
+      compactLine("Event", event.title || event.slug),
+      compactLine("Signup ID", signup.id),
+      compactLine("Performer", signup.performerName),
+      compactLine("Email", signup.performerEmail),
+      compactLine("Phone", signup.performerPhone),
+      compactLine("Act type", signup.actType),
+      compactLine("Piece title", signup.pieceTitle),
+      compactLine("Requested slot", signup.requestedSlot),
+      compactLine("Notes", signup.notes),
+    ],
+    templateKey: "admin_event_open_mic_received",
+    relatedType: "event_open_mic_signup",
+    relatedId: signup.id,
+    idempotencyKey: options.idempotencyKey || `admin_event_open_mic_received:${signup.id}`,
+  });
+}
+
+export async function notifyAdminEventTicketPaid(env, request, ticketRow, options = {}) {
+  const db = notificationDb(env);
+  const event = db
+    ? await db.prepare("SELECT title, slug, starts_at, location FROM events WHERE id = ?")
+        .bind(ticketRow.event_id || ticketRow.eventId)
+        .first()
+        .catch(() => null)
+    : null;
+  const title = event?.title || ticketRow.event_title || "Event";
+
+  return sendAdminNotification(env, request, {
+    subject: `Event ticket paid: ${title}`,
+    lines: [
+      "Event ticket payment confirmed.",
+      "",
+      compactLine("Event", title),
+      compactLine("Ticket ID", ticketRow.id),
+      compactLine("Seats", ticketRow.seats || 1),
+      compactLine("When", event?.starts_at ? formatDate(event.starts_at) : ""),
+      "",
+      "Guest",
+      compactLine("Name", ticketRow.contact_name || ticketRow.contactName),
+      compactLine("Email", ticketRow.contact_email || ticketRow.contactEmail),
+      compactLine("Phone", ticketRow.contact_phone || ticketRow.contactPhone),
+    ],
+    templateKey: "admin_event_ticket_paid",
+    relatedType: "event_ticket",
+    relatedId: ticketRow.id,
+    idempotencyKey: options.idempotencyKey || `admin_event_ticket_paid:${ticketRow.id}`,
   });
 }
 
