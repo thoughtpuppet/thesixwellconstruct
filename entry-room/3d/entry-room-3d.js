@@ -67,11 +67,16 @@ const DESKTOP_COMPLETION_RING = {
   aspectX: 0.92,
   aspectY: 1.0,
   radiusPad: 3.05,
-  surfaceZ: 0.14,
+  innerRadius: 0.76,
+  depthScale: 2.25,
+  rotationX: 0.00,
+  rotationY: 0.12,
+  rotationZ: 0.00,
+  surfaceZ: 0.34,
   recessZ: -0.10,
-  bodyOffsetX: -0.42,
-  bodyOffsetY: -0.02,
-  bodyOffsetZ: -0.14,
+  bodyOffsetX: 0.00,
+  bodyOffsetY: 0.00,
+  bodyOffsetZ: -0.45,
   emergeOffsetX: -0.34,
   emergeOffsetY: 0.02,
   emergeOffsetZ: -1.62,
@@ -80,7 +85,7 @@ const DESKTOP_COMPLETION_RING = {
   recessOpacity: 0.72,
   settledRecessOpacity: 0.18,
   ringOpacity: 1.0,
-  bodyOpacity: 1.0
+  bodyOpacity: 0.0
 };
 const MOBILE_COMPLETION_RING = {
   x: 0.2070,
@@ -90,16 +95,20 @@ const MOBILE_COMPLETION_RING = {
   patchSize: 1.20,
   fieldSize: 1.55,
   fieldOpacity: 0.10,
-  aspectX: 0.80,
-  aspectY: 1.02,
+  aspectX: 0.96,
+  aspectY: 1.00,
   radiusPad: 1.56,
   radiusScale: 1.15,
-  depthScale: 1.45,
-  surfaceZ: 0.14,
+  innerRadius: 0.76,
+  depthScale: 0.75,
+  rotationX: 0.00,
+  rotationY: 0.14,
+  rotationZ: 0.00,
+  surfaceZ: 0.60,
   recessZ: -0.10,
   bodyOffsetX: -0.20,
   bodyOffsetY: -0.02,
-  bodyOffsetZ: -0.28,
+  bodyOffsetZ: -0.55,
   emergeOffsetX: -0.14,
   emergeOffsetY: 0.10,
   emergeOffsetZ: -1.46,
@@ -108,7 +117,7 @@ const MOBILE_COMPLETION_RING = {
   recessOpacity: 0.66,
   settledRecessOpacity: 0.16,
   ringOpacity: 0.96,
-  bodyOpacity: 0.96
+  bodyOpacity: 0.0
 };
 const BASE_LAYOUTS = {
   desktop: {
@@ -1584,6 +1593,7 @@ const completionEffects = (() => {
   ringBody.renderOrder = 6;
   ringBody.visible = false;
   ringBody.userData.baseScale = new THREE.Vector3(1, 1, 1);
+  ringBody.userData.ringInnerRadius = 0.76;
   ringBody.userData.surfacePosition = new THREE.Vector3();
   ringBody.userData.startOffset = new THREE.Vector3();
   scene.add(ringBody);
@@ -1605,6 +1615,7 @@ const completionEffects = (() => {
   ring.renderOrder = 8;
   ring.visible = false;
   ring.userData.baseScale = new THREE.Vector3(1, 1, 1);
+  ring.userData.ringInnerRadius = 0.76;
   ring.userData.surfacePosition = new THREE.Vector3();
   ring.userData.startOffset = new THREE.Vector3();
   scene.add(ring);
@@ -6981,8 +6992,19 @@ function layout() {
   layoutShapeLock();
 }
 
+function syncCompletionRingGeometry(innerRadius) {
+  [completionEffects.ringBody, completionEffects.ring].forEach((mesh) => {
+    if (Math.abs((mesh.userData.ringInnerRadius ?? 0.76) - innerRadius) < 0.0001) return;
+    mesh.geometry.dispose();
+    mesh.geometry = makeBlockRingGeometry(innerRadius, 1, COMPLETION_RING_DEPTH);
+    mesh.userData.ringInnerRadius = innerRadius;
+  });
+}
+
 function layoutCompletionEffects(holeR, orbR) {
   const ringConfig = activeLayout.completionRing || DESKTOP_COMPLETION_RING;
+  const ringInnerRadius = THREE.MathUtils.clamp(ringConfig.innerRadius ?? 0.76, 0.35, 0.88);
+  syncCompletionRingGeometry(ringInnerRadius);
   const socketPositions = sockets.map((s) => imageToWorld(s.norm.x, s.norm.y, orbR + 0.18));
   const minX = Math.min(...socketPositions.map((pos) => pos.x));
   const maxX = Math.max(...socketPositions.map((pos) => pos.x));
@@ -6992,13 +7014,18 @@ function layoutCompletionEffects(holeR, orbR) {
     Math.max(maxX - minX, maxY - minY) * 0.5 + holeR * ringConfig.radiusPad
   ) * (ringConfig.radiusScale ?? 1);
   const ringDepthScale = ringConfig.depthScale ?? 1;
+  const ringRotation = new THREE.Euler(
+    ringConfig.rotationX ?? 0,
+    ringConfig.rotationY ?? 0,
+    ringConfig.rotationZ ?? 0
+  );
   const anchor = imageToWorld(ringConfig.x, ringConfig.y, orbR + ringConfig.surfaceZ);
   const emergeOffset = new THREE.Vector3(
     holeR * ringConfig.emergeOffsetX,
     holeR * ringConfig.emergeOffsetY,
     holeR * ringConfig.emergeOffsetZ
   );
-  const ringFrontHalfDepth = COMPLETION_RING_DEPTH * 0.5 + COMPLETION_RING_FRONT_CLEARANCE;
+  const ringFrontHalfDepth = COMPLETION_RING_DEPTH * ringDepthScale * 0.5 + COMPLETION_RING_FRONT_CLEARANCE;
   const minStartZ = ROOM_BACKDROP_Z - anchor.z - ringFrontHalfDepth;
   emergeOffset.z = Math.min(emergeOffset.z, minStartZ);
   completionEffects.config = ringConfig;
@@ -7036,8 +7063,10 @@ function layoutCompletionEffects(holeR, orbR) {
     ringR * ringConfig.aspectY,
     ringDepthScale
   );
+  completionEffects.ringBody.rotation.copy(ringRotation);
 
   completionEffects.ring.position.copy(anchor);
+  completionEffects.ring.rotation.copy(ringRotation);
   completionEffects.ring.userData.surfacePosition.copy(anchor);
   completionEffects.ring.userData.startOffset.copy(emergeOffset);
   completionEffects.ring.userData.baseScale.set(
@@ -7509,7 +7538,7 @@ function primeCompletionFrame() {
 
   completionEffects.ringBody.position.copy(completionEffects.ringBody.userData.faceLockedPosition).add(completionEffects.ringBody.userData.startOffset);
   completionEffects.ringBody.scale.copy(completionEffects.ringBody.userData.baseScale).multiplyScalar(completionEffects.config.startScale || 1);
-  completionEffects.ringBody.material.opacity = 1;
+  completionEffects.ringBody.material.opacity = completionEffects.config.bodyOpacity ?? 0;
 
   completionEffects.ring.position.copy(completionEffects.ring.userData.surfacePosition).add(completionEffects.ring.userData.startOffset);
   completionEffects.ring.scale.copy(completionEffects.ring.userData.baseScale).multiplyScalar(completionEffects.config.startScale || 1);
@@ -7604,7 +7633,7 @@ function updateCompletionEffects(delta) {
   completionEffects.ringBody.position.add(ringBodyTravel);
   completionEffects.ringBody.scale.copy(completionEffects.ringBody.userData.baseScale)
     .multiplyScalar(ringStartScale + (1 - ringStartScale) * ringT);
-  completionEffects.ringBody.material.opacity = exitOpacity;
+  completionEffects.ringBody.material.opacity = (completionEffects.config.bodyOpacity ?? 0) * exitOpacity;
 
   completionEffects.ring.position.copy(completionEffects.ring.userData.surfacePosition)
     .addScaledVector(completionEffects.ring.userData.startOffset, 1 - ringT);
@@ -7702,7 +7731,8 @@ function activeCompletionRingText() {
     'completionRing: {',
     `  x: ${ring.x.toFixed(4)}, y: ${ring.y.toFixed(4)},`,
     `  aspectX: ${ring.aspectX.toFixed(2)}, aspectY: ${ring.aspectY.toFixed(2)},`,
-    `  radiusPad: ${ring.radiusPad.toFixed(2)}, radiusScale: ${(ring.radiusScale ?? 1).toFixed(2)}, depthScale: ${(ring.depthScale ?? 1).toFixed(2)},`,
+    `  radiusPad: ${ring.radiusPad.toFixed(2)}, radiusScale: ${(ring.radiusScale ?? 1).toFixed(2)}, innerRadius: ${(ring.innerRadius ?? 0.76).toFixed(2)}, depthScale: ${(ring.depthScale ?? 1).toFixed(2)},`,
+    `  rotationX: ${(ring.rotationX ?? 0).toFixed(2)}, rotationY: ${(ring.rotationY ?? 0).toFixed(2)}, rotationZ: ${(ring.rotationZ ?? 0).toFixed(2)},`,
     `  surfaceZ: ${ring.surfaceZ.toFixed(2)}, recessZ: ${ring.recessZ.toFixed(2)},`,
     `  bodyOffsetX: ${ring.bodyOffsetX.toFixed(2)}, bodyOffsetY: ${ring.bodyOffsetY.toFixed(2)}, bodyOffsetZ: ${ring.bodyOffsetZ.toFixed(2)},`,
     `  emergeOffsetX: ${ring.emergeOffsetX.toFixed(2)}, emergeOffsetY: ${ring.emergeOffsetY.toFixed(2)}, emergeOffsetZ: ${ring.emergeOffsetZ.toFixed(2)},`,

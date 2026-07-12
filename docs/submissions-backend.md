@@ -92,8 +92,8 @@ npx.cmd wrangler@latest d1 migrations apply swc-submissions
 The Worker uses the `EMAIL` send binding in `wrangler.jsonc`. Confirmation and
 reminder email defaults are:
 
-- `NOTIFICATION_FROM_EMAIL=saisolehamn@artpilltattoohouse.com`
-- `NOTIFICATION_REPLY_TO=saisolehamn@artpilltattoohouse.com`
+- `NOTIFICATION_FROM_EMAIL=saisolehman@artpilltattoohouse.com`
+- `NOTIFICATION_REPLY_TO=saisolehman@artpilltattoohouse.com`
 - `NOTIFICATION_FROM_NAME=art.pill TATTOO HOUSE`
 
 Cloudflare must be allowed to send mail for `artpilltattoohouse.com`; otherwise

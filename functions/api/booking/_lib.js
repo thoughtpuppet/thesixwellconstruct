@@ -43,7 +43,7 @@ function confirmationPathForBookingType(bookingTypeId) {
   return CONFIRMATION_PATHS[bookingTypeId] || "/booking/confirmed/";
 }
 
-const DEFAULT_SUPPORT_EMAIL = "saisolehamn@artpilltattoohouse.com";
+const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_STUDIO_CALENDAR_LOCATION = "364 Nelson Street SW, Atlanta, GA 30313";
 const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
 const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";

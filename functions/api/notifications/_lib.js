@@ -1,6 +1,7 @@
-const DEFAULT_FROM_ADDRESS = "saisolehamn@artpilltattoohouse.com";
+const DEFAULT_FROM_ADDRESS = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_FROM_NAME = "art.pill TATTOO HOUSE";
-const DEFAULT_REPLY_TO = "saisolehamn@artpilltattoohouse.com";
+const DEFAULT_REPLY_TO = "saisolehman@artpilltattoohouse.com";
+const DEFAULT_ADMIN_FROM_ADDRESS = "notifications@artpilltattoohouse.com";
 const DEFAULT_TIMEZONE = "America/New_York";
 const DEFAULT_BOOKING_TYPES = {
   tattoo_quarter: {
@@ -504,6 +505,9 @@ async function sendAdminNotification(env, request, message) {
 
   return sendTransactionalEmail(env, {
     to: recipient,
+    fromEmail: env.ADMIN_NOTIFICATION_FROM_EMAIL || DEFAULT_ADMIN_FROM_ADDRESS,
+    fromName: env.ADMIN_NOTIFICATION_FROM_NAME || "art.pill notifications",
+    replyTo: replyToAddress(env),
     ...message,
     text: [...message.lines, "", compactLine("Studio console", studioConsoleUrl(env, request))]
       .filter((line) => line !== "")

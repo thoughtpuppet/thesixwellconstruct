@@ -7,8 +7,8 @@ then hand the docs back to Codex for implementation.
 ## Sender
 
 - From name: `art.pill TATTOO HOUSE`
-- From email: `saisolehamn@artpilltattoohouse.com`
-- Reply-to: `saisolehamn@artpilltattoohouse.com`
+- From email: `saisolehman@artpilltattoohouse.com`
+- Reply-to: `saisolehman@artpilltattoohouse.com`
 
 ## Live Templates
 
