@@ -85,8 +85,8 @@ const DESKTOP_COMPLETION_RING = {
 const MOBILE_COMPLETION_RING = {
   x: 0.2070,
   y: 0.0895,
-  patchX: 0.1659,
-  patchY: -0.2353,
+  patchX: 0.2070,
+  patchY: 0.0895,
   patchSize: 1.20,
   fieldSize: 1.55,
   fieldOpacity: 0.10,
@@ -5686,7 +5686,7 @@ function updateShapeStream(delta) {
 const SHAPE_LOCK_ORDER = ['circle', 'triangle', 'square', 'pentagon', 'hexagon'];
 const SHAPE_LOCK_LAYOUTS = {
   desktop: { x: 0.619, y: 0.555, sizeN: 0.024 },
-  mobile: { x: 0.763, y: 0.600, sizeN: 0.0345 }
+  mobile: { x: 0.763, y: 0.618, sizeN: 0.0476 }
 };
 const DOORWAY_SHAPE_BARRIER_LAYOUTS = {
   desktop: {
@@ -5701,12 +5701,12 @@ const DOORWAY_SHAPE_BARRIER_LAYOUTS = {
     maxPushSpeed: 8.00
   },
   mobile: {
-    hardCollider: false,
+    hardCollider: true,
     offsetX: 0.005,
     offsetY: 0.005,
-    sideRadius: 0.045,
-    topPad: 0.040,
-    bottomPad: 0.050,
+    sideRadius: 0.035,
+    topPad: 0.030,
+    bottomPad: 0.030,
     targetPenalty: 17.50,
     pushStrength: 17.00,
     maxPushSpeed: 8.00

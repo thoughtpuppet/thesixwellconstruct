@@ -979,6 +979,24 @@ export async function handleAdminResendNotification(request, env) {
     const db = notificationDb(env);
     if (!db) return errorResponse("Missing D1 binding SUBMISSIONS_DB.", 503);
 
+    if (asString(body.templateKey) === "admin_test") {
+      const delivery = await sendAdminNotification(env, request, {
+        subject: "TEST - form submission notifications",
+        lines: [
+          "This is a test of the admin form-submission notification system.",
+          "",
+          compactLine("Sent at", new Date().toISOString()),
+          compactLine("Recipient", adminNotificationAddress(env)),
+          "No customer record was created or changed.",
+        ],
+        templateKey: "admin_test",
+        relatedType: "system",
+        relatedId: "admin_notifications",
+        idempotencyKey: resendKey("admin_test"),
+      });
+      return json({ ok: Boolean(delivery.ok), delivery });
+    }
+
     const sourceDelivery = await deliveryById(db, asString(body.notificationId));
     const templateKey = asString(body.templateKey || sourceDelivery?.template_key);
     const submissionId = asString(

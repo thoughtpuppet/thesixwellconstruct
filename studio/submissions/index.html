@@ -345,6 +345,7 @@
     <h1>Studio Console</h1>
     <div class="header-actions">
       <span class="status" id="status">Locked</span>
+      <button class="button" id="testEmailBtn" type="button">Send Test Email</button>
       <button class="button" id="refreshBtn" type="button">Refresh</button>
       <button class="button" id="lockBtn" type="button">Lock</button>
     </div>
@@ -387,6 +388,7 @@
   const listEl = document.getElementById("submissionList");
   const detailEl = document.getElementById("detailPane");
   const refreshBtn = document.getElementById("refreshBtn");
+  const testEmailBtn = document.getElementById("testEmailBtn");
   const lockBtn = document.getElementById("lockBtn");
   const tabsEl = document.getElementById("tabs");
   const toolbarEl = document.getElementById("toolbar");
@@ -3821,6 +3823,22 @@ ${meetingLines}
   });
 
   refreshBtn.addEventListener("click", () => loadAndRender().catch((error) => setStatus(error.message)));
+  testEmailBtn.addEventListener("click", async () => {
+    testEmailBtn.disabled = true;
+    setStatus("Sending test email…");
+    try {
+      await api("/api/admin/notifications/resend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ templateKey: "admin_test" }),
+      });
+      setStatus("Test email sent");
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      testEmailBtn.disabled = false;
+    }
+  });
   tabsEl.addEventListener("click", (event) => {
     const tabBtn = event.target.closest("[data-tab]");
     if (tabBtn) setActiveTab(tabBtn.dataset.tab);
