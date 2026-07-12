@@ -30,9 +30,9 @@ const MOBILE_SOCKETS = [
   { x: 0.7129, y: 0.3112 }, { x: 0.7891, y: 0.3138 }
 ];
 const MOBILE_ORB_HOMES = [
-  { x: 0.1192, y: -0.0316 }, { x: 0.7499, y: 1.2356 },
+  { x: 0.1800, y: -0.0316 }, { x: 0.7250, y: 1.2356 },
   { x: 0.5752, y: -0.5221 }, { x: 0.1583, y: 1.1367 },
-  { x: 0.4685, y: 0.4401 }, { x: 0.9119, y: 0.7072 }
+  { x: 0.4685, y: 0.4401 }, { x: 0.8400, y: 0.7072 }
 ];
 const MOBILE_ORB_SHADOW = [
   { cast: 0.96, skew: 0.02, depth: 1.00, z: 0.00 },
@@ -235,13 +235,14 @@ const RING_SETTLE_FADE_DURATION = 0.55;
 const RING_PALETTE_COLORS = [
   COMPLETION_RING_COLOR, 0xff9500, 0xffd60a, 0x34c759, 0x2dd4bf, 0x0a84ff, 0xbf5af2
 ];
-const WRONG_SHAPE_FLASH_DURATION = 420;
+const WRONG_SHAPE_FLASH_DURATION = 1100;
 // How long the completion ring's emerge + colour-cycle + settle-fade runs after it
 // reaches its settled point. The doorway shape-lock waits this out before appearing.
 const RING_SETTLE_SEQUENCE_DURATION = RING_COLOR_PAUSE_AFTER_EMERGENCE
   + (RING_PALETTE_COLORS.length - 1) * RING_PALETTE_COLOR_DURATION
   + RING_SETTLE_FADE_DURATION;
 const SHAPE_STREAM_START_TIME = RING_SETTLED_TIME + RING_SETTLE_SEQUENCE_DURATION;
+const SHAPE_STREAM_RESET_TIME = 90;
 const SHAPE_LOCK_START_DELAY = 3; // extra pause after the ring settles before the lock cycles in
 const SHAPE_IMPACT_FEEDBACK_COOLDOWN_MS = 115;
 const SHAPE_IMPACT_HAPTIC_COOLDOWN_MS = 240;
@@ -253,6 +254,8 @@ const interactionFeedback = {
   lastHapticAt: 0,
   lastShapeImpactSoundAt: 0,
   counters: {
+    grab: 0,
+    reject: 0,
     socket: 0,
     shapeImpact: 0,
     haptic: 0
@@ -411,6 +414,58 @@ function triggerSocketTone(ctx, startAt = ctx.currentTime) {
   bodyOsc.stop(startAt + 0.105);
 }
 
+function triggerOrbGrabTone(ctx, startAt = ctx.currentTime, pan = 0) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(104, startAt);
+  osc.frequency.exponentialRampToValueAtTime(78, startAt + 0.055);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(0.013 * feedbackGainScale(), startAt + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.065);
+  osc.connect(gain);
+  connectFeedbackOutput(ctx, gain, pan);
+  osc.start(startAt);
+  osc.stop(startAt + 0.075);
+}
+
+function triggerOrbRejectTone(ctx, startAt = ctx.currentTime, pan = 0) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(74, startAt);
+  osc.frequency.exponentialRampToValueAtTime(40, startAt + 0.09);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(0.018 * feedbackGainScale(), startAt + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.105);
+  osc.connect(gain);
+  connectFeedbackOutput(ctx, gain, pan);
+  osc.start(startAt);
+  osc.stop(startAt + 0.115);
+  triggerNoiseBurst(ctx, startAt + 0.004, {
+    duration: 0.04,
+    gain: 0.008,
+    filterType: 'lowpass',
+    frequency: 360,
+    q: 0.72,
+    pan
+  });
+}
+
+function playOrbGrabFeedback(orb) {
+  interactionFeedback.counters.grab += 1;
+  pulseFeedbackHaptic(7);
+  const pan = feedbackPanForPosition(orb?.mesh?.position);
+  playFeedbackAudio((ctx, startAt) => triggerOrbGrabTone(ctx, startAt, pan));
+}
+
+function playOrbRejectFeedback(orb) {
+  interactionFeedback.counters.reject += 1;
+  pulseFeedbackHaptic([8, 22, 8]);
+  const pan = feedbackPanForPosition(orb?.mesh?.position);
+  playFeedbackAudio((ctx, startAt) => triggerOrbRejectTone(ctx, startAt, pan));
+}
+
 function triggerShapeImpactThud(ctx, startAt, pan = 0, intensity = 0.4) {
   const clamped = THREE.MathUtils.clamp(intensity, 0.2, 1);
   const gainScale = feedbackGainScale();
@@ -528,6 +583,7 @@ window.entryRoom3d = Object.assign(window.entryRoom3d || {}, {
     count: shapeStream.items.length,
     settled: shapeStream.items.filter((i) => i.settled).length,
     full: shapeStream.full,
+    resetElapsed: +shapeStream.resetElapsed.toFixed(2),
     finalGrid: {
       active: shapeStream.finalGrid.active,
       animating: shapeStream.finalGrid.animating,
@@ -1137,6 +1193,27 @@ function viewportWorldSize() {
   };
 }
 
+// Keep the authored composition intact, but protect floating orbs from being
+// cropped when the room is viewed at unusual aspect ratios. The padding also
+// reserves enough space for the ambient drift so an orb never brushes an edge.
+function floatingOrbHomeWorld(orb) {
+  const home = imageToWorld(orb.home.x, orb.home.y, CONFIG.homeZ);
+  const visible = viewportMetrics();
+  const canvasRect = canvas.getBoundingClientRect();
+  const orbR = orb.orbR || (activeHoleRadiusN() * coreUnitW() * activeOrbRadiusFactor());
+  const driftEnvelope = orbR * 1.15;
+  const insetX = orbR + driftEnvelope + (16 / Math.max(1, canvasRect.width)) * viewport.width;
+  const insetY = orbR + driftEnvelope + (16 / Math.max(1, canvasRect.height)) * viewport.height;
+  const left = toWorld(visible.left, 0.5).x + insetX;
+  const right = toWorld(visible.left + visible.width, 0.5).x - insetX;
+  const top = toWorld(0.5, visible.top).y - insetY;
+  const bottom = toWorld(0.5, visible.top + visible.height).y + insetY;
+
+  home.x = THREE.MathUtils.clamp(home.x, left, right);
+  home.y = THREE.MathUtils.clamp(home.y, bottom, top);
+  return home;
+}
+
 function worldToImage(v) {
   const core = coreMetrics();
   const n = worldToNorm(v);
@@ -1289,6 +1366,11 @@ const orbs = activeLayout.orbHomes.map((p, index) => {
     target: null,        // world Vector3 to ease toward (seat / return)
     phase: Math.random() * Math.PI * 2,
     pullX: 0, pullY: 0,  // eased cursor-gravity offset while floating
+    hoverMix: 0,
+    grabMix: 0,
+    grabPulse: 0,
+    seatPulse: 0,
+    rejectPulse: 0,
     shadow: { ...DEFAULT_SHADOW, ...((activeLayout.orbShadow && activeLayout.orbShadow[index]) || {}) } // per-orb shadow cast/skew/depth/z
   };
 });
@@ -1310,7 +1392,7 @@ keyboardFocusRing.visible = false;
 scene.add(keyboardFocusRing);
 
 function placeOrbAtHome(orb) {
-  const home = imageToWorld(orb.home.x, orb.home.y, CONFIG.homeZ);
+  const home = floatingOrbHomeWorld(orb);
   orb.mesh.position.copy(home);
   orb.mesh.rotation.set(0, 0, 0);
   orb.target = null;
@@ -1881,6 +1963,7 @@ const shapeStream = (() => {
     palette,
     items: [],            // active shapes
     spawnTimer: 0,
+    resetElapsed: 0,
     xBucketCount: X_BUCKET_COUNT,
     depthBucketCount: DEPTH_BUCKET_COUNT,
     zones: [],
@@ -1980,6 +2063,7 @@ function resetShapeStream() {
     zone.inFlight?.fill(0);
   });
   shapeStream.spawnTimer = 0;
+  shapeStream.resetElapsed = 0;
   shapeStream.landingPhaseIndex = THREE.MathUtils.clamp(
     SHAPE_STREAM.initialLandingPhaseIndex,
     0,
@@ -5563,6 +5647,16 @@ function updateShapeStream(delta) {
   if (!shapeStream.full) {
     if (shapeStream.items.length >= SHAPE_STREAM.maxShapes) shapeStream.full = true;
   }
+
+  if (ringBlackSettled && !shapeLock.solved && !shapeStream.finalGrid.active) {
+    shapeStream.resetElapsed += delta;
+    if (shapeStream.resetElapsed >= SHAPE_STREAM_RESET_TIME) {
+      resetCompletionState();
+      resetOrbPlacements();
+      status.textContent = 'puzzle reset';
+      return;
+    }
+  }
 }
 
 /* ===== doorway sequence lock ====================================== */
@@ -5616,6 +5710,7 @@ const shapeLock = {
   progress: 0,
   solved: false,
   currentIndex: -1,
+  symbolBag: [],
   cycleElapsed: 0,
   cycleDuration: 1,
   previewing: false,
@@ -5701,11 +5796,35 @@ function layoutShapeLock() {
   if (isDoorwayEyeCalibrationPreviewActive()) applyDoorwayEyeCalibrationPreview();
 }
 
-function cycleShapeLockSymbol() {
-  let nextIndex = Math.floor(Math.random() * shapeLock.symbols.length);
-  if (shapeLock.symbols.length > 1 && nextIndex === shapeLock.currentIndex) {
-    nextIndex = (nextIndex + 1 + Math.floor(Math.random() * (shapeLock.symbols.length - 1))) % shapeLock.symbols.length;
+function refillShapeLockSymbolBag() {
+  const bag = shapeLock.symbols.map((_, index) => index);
+  for (let index = bag.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [bag[index], bag[swapIndex]] = [bag[swapIndex], bag[index]];
   }
+
+  if (bag.length > 1 && bag[0] === shapeLock.currentIndex) {
+    const swapIndex = 1 + Math.floor(Math.random() * (bag.length - 1));
+    [bag[0], bag[swapIndex]] = [bag[swapIndex], bag[0]];
+  }
+
+  // Preserve the shuffled round while ensuring the symbol the player currently
+  // needs appears within the next three displays (six seconds at the default cadence).
+  const expectedName = SHAPE_LOCK_ORDER[shapeLock.progress];
+  const expectedIndex = SHAPE_LOCK_ORDER.indexOf(expectedName);
+  const expectedBagIndex = bag.indexOf(expectedIndex);
+  const fairWindow = Math.min(3, bag.length);
+  if (expectedBagIndex >= fairWindow && fairWindow > 0) {
+    const fairIndex = Math.floor(Math.random() * fairWindow);
+    [bag[fairIndex], bag[expectedBagIndex]] = [bag[expectedBagIndex], bag[fairIndex]];
+  }
+
+  shapeLock.symbolBag = bag;
+}
+
+function cycleShapeLockSymbol() {
+  if (shapeLock.symbolBag.length === 0) refillShapeLockSymbolBag();
+  const nextIndex = shapeLock.symbolBag.shift();
   shapeLock.currentIndex = nextIndex;
   shapeLock.cycleElapsed = 0;
   shapeLock.cycleDuration = SHAPE_LOCK_TUNING.cycleMin
@@ -5722,6 +5841,7 @@ function resetShapeLock() {
   shapeLock.progress = 0;
   shapeLock.solved = false;
   shapeLock.currentIndex = -1;
+  shapeLock.symbolBag.length = 0;
   shapeLock.cycleElapsed = 0;
   shapeLock.previewing = false;
   shapeLock.group.visible = false;
@@ -6784,9 +6904,13 @@ function handleShapeLockClick(event) {
       setShapeLockSolvedState();
       activateShapeStreamFinalGrid();
       status.textContent = 'door sequence complete';
-    } else cycleShapeLockSymbol();
+    } else {
+      shapeLock.symbolBag.length = 0;
+      cycleShapeLockSymbol();
+    }
   } else {
     shapeLock.progress = 0;
+    shapeLock.symbolBag.length = 0;
     shapeLock.overlayGroup.visible = false;
     shapeLock.overlays.forEach((mesh) => { mesh.visible = false; });
     flashWrongShapeOverlay();
@@ -6818,7 +6942,7 @@ function layout() {
     o.orbR = orbR;
     o.mesh.scale.setScalar(orbR);
     if (o.seated == null && !o.dragging && !o.keyboardActive && !o.target) {
-      const h = imageToWorld(o.home.x, o.home.y, CONFIG.homeZ);
+      const h = floatingOrbHomeWorld(o);
       o.mesh.position.copy(h);
     }
   });
@@ -6993,6 +7117,7 @@ function reseatPlaced() {
 let active = null, activePointer = null;
 const dragOffset = new THREE.Vector3();
 let pointerWorld = null; // live cursor position in world space, for the idle gravity pull
+let hoveredOrb = null;
 let keyboardSelectedOrb = null;
 let keyboardCanvasFocused = false;
 
@@ -7047,6 +7172,8 @@ function seatOrbInSocket(orb, socket) {
   orb.target = null;
   orb.dragging = false;
   orb.keyboardActive = false;
+  orb.seatPulse = 1;
+  orb.rejectPulse = 0;
   playSocketFeedback();
   updateStatus();
   return true;
@@ -7077,7 +7204,7 @@ function finishActiveDrag({ pointerId = activePointer, interrupted = false } = {
       orb.home.y = +n.y.toFixed(4);
       dumpOrbHomes();
     } else {
-      orb.target = imageToWorld(orb.home.x, orb.home.y, CONFIG.homeZ);
+      orb.target = floatingOrbHomeWorld(orb);
     }
   } else {
     const near = nearestOpenSocket(orb);
@@ -7090,7 +7217,9 @@ function finishActiveDrag({ pointerId = activePointer, interrupted = false } = {
       orb.target = null;
       dumpOrbHomes();
     } else {
-      orb.target = imageToWorld(orb.home.x, orb.home.y, CONFIG.homeZ);
+      orb.rejectPulse = 1;
+      orb.target = floatingOrbHomeWorld(orb);
+      playOrbRejectFeedback(orb);
     }
   }
 
@@ -7114,11 +7243,14 @@ function pointerDown(event) {
   active = orb;
   activePointer = event.pointerId;
   orb.dragging = true;
+  orb.grabPulse = 1;
+  orb.rejectPulse = 0;
   orb.target = null;
   orb.mesh.position.z = CONFIG.dragZ;
   dragOffset.copy(orb.mesh.position).sub(point);
   canvas.setPointerCapture(event.pointerId);
   root.classList.add('is-dragging');
+  playOrbGrabFeedback(orb);
   event.preventDefault();
 }
 
@@ -7185,6 +7317,8 @@ function attemptKeyboardSeat(orb) {
     return true;
   }
   status.textContent = `orb ${orb.index + 1} is not close to an open socket`;
+  orb.rejectPulse = 1;
+  playOrbRejectFeedback(orb);
   return false;
 }
 
@@ -7229,6 +7363,7 @@ function updateKeyboardFocusRing() {
 function pointerMove(event) {
   pointerWorld = eventToWorld(event, CONFIG.homeZ);
   if (!active || event.pointerId !== activePointer) {
+    hoveredOrb = nearestOrb(pointerWorld);
     if (calibrate) calibrateMove(event);
     return;
   }
@@ -7968,7 +8103,10 @@ canvas.addEventListener('lostpointercapture', (event) => {
     finishActiveDrag({ pointerId: event.pointerId, interrupted: true });
   }
 });
-canvas.addEventListener('pointerleave', () => { pointerWorld = null; });
+canvas.addEventListener('pointerleave', () => {
+  pointerWorld = null;
+  hoveredOrb = null;
+});
 
 /* ===== loop ======================================================= */
 const clock = new THREE.Clock();
@@ -7991,7 +8129,7 @@ function animate() {
       // Readable, unhurried drift for floating orbs. Two overlapping paths keep the
       // movement from looking like a synchronized vertical bob.
       o.phase += delta * 0.9;
-      const home = imageToWorld(o.home.x, o.home.y, CONFIG.homeZ);
+      const home = floatingOrbHomeWorld(o);
       const driftScale = o.orbR;
       home.x += (
         Math.sin(o.phase * 0.72 + o.index * 1.17) * 0.72 +
@@ -8027,10 +8165,47 @@ function animate() {
       o.mesh.position.lerp(home, 0.07);
     }
 
+    const floating = o.seated == null;
+    const feedbackEase = 1 - Math.exp(-delta * 15);
+    const hoverTarget = floating && hoveredOrb === o && !o.dragging && !o.keyboardActive ? 1 : 0;
+    const grabTarget = floating && (o.dragging || o.keyboardActive) ? 1 : 0;
+    o.hoverMix += (hoverTarget - o.hoverMix) * feedbackEase;
+    o.grabMix += (grabTarget - o.grabMix) * feedbackEase;
+    o.grabPulse = Math.max(0, o.grabPulse - delta / 0.18);
+    o.seatPulse = Math.max(0, o.seatPulse - delta / 0.34);
+    o.rejectPulse = Math.max(0, o.rejectPulse - delta / 0.46);
+
+    const motionScale = reducedMotionQuery.matches ? 0.35 : 1;
+    const grabKick = Math.sin((1 - o.grabPulse) * Math.PI) * o.grabPulse * 0.045 * motionScale;
+    const seatKick = Math.sin((1 - o.seatPulse) * Math.PI) * o.seatPulse * 0.16 * motionScale;
+    const rejectKick = Math.sin((1 - o.rejectPulse) * Math.PI * 3) * o.rejectPulse * 0.055 * motionScale;
+    const feedbackScale = 1
+      + o.hoverMix * 0.055
+      + o.grabMix * 0.085
+      + grabKick
+      + seatKick
+      + rejectKick;
+    o.mesh.scale.setScalar(o.orbR * Math.max(0.88, feedbackScale));
+
+    if (!completionEffects.active) {
+      if (o.seatPulse > 0) {
+        o.mesh.material.emissive.setHex(0xb91d0f);
+        o.mesh.material.emissiveIntensity = o.seatPulse * 0.34;
+      } else if (o.rejectPulse > 0) {
+        o.mesh.material.emissive.setHex(0x6e0404);
+        o.mesh.material.emissiveIntensity = o.rejectPulse * 0.20;
+      } else if (floating) {
+        o.mesh.material.emissive.setHex(0x5a2a0e);
+        o.mesh.material.emissiveIntensity = o.hoverMix * 0.11 + o.grabMix * 0.17;
+      } else {
+        o.mesh.material.emissive.setHex(0x000000);
+        o.mesh.material.emissiveIntensity = 0;
+      }
+    }
+
     // Floor shadow: a flattened ellipse on the ground. The drop is proportional to how
     // high the orb sits above the floor band, so higher orbs cast further down (and the
     // shadow spreads + fades with height). Key light is upper-left, so it skews right.
-    const floating = o.seated == null;
     o.floatShadow.visible = floating && !doorwayExit.orbsHidden;
     if (floating) {
       const floorWorldY = imageToWorld(0.5, CONFIG.floorY).y;
