@@ -1078,7 +1078,7 @@ export async function reapStalePendingTickets(env) {
 /* Admin handlers                                                      */
 /* ------------------------------------------------------------------ */
 
-const ADMIN_EVENT_STATUSES = new Set(["draft", "open", "closed"]);
+const ADMIN_EVENT_STATUSES = new Set(["draft", "open", "closed", "completed", "cancelled"]);
 
 async function eventStats(db, eventId) {
   const row = await db
@@ -1166,7 +1166,7 @@ export async function handleAdminEventCreate(request, env) {
   if (!slug) return errorResponse("A valid slug or title is required.", 400);
 
   if (body.status !== undefined && !ADMIN_EVENT_STATUSES.has(asString(body.status))) {
-    return errorResponse("Status must be draft, open, or closed.", 400);
+    return errorResponse("Status must be draft, open, closed, completed, or cancelled.", 400);
   }
 
   try {
@@ -1237,7 +1237,7 @@ export async function handleAdminEventUpdate(request, env, slug) {
   if (!body) return errorResponse("Expected JSON or form data.", 400);
 
   if (body.status !== undefined && !ADMIN_EVENT_STATUSES.has(asString(body.status))) {
-    return errorResponse("Status must be draft, open, or closed.", 400);
+    return errorResponse("Status must be draft, open, closed, completed, or cancelled.", 400);
   }
 
   try {

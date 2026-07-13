@@ -42,6 +42,14 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .selected-title { font-family:var(--sans); font-weight:900; font-size:24px; line-height:0.98; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .selected-meta { display:flex; flex-wrap:wrap; gap:8px; }
   .selected-meta span { font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); border:5px solid var(--ring-faint); padding:4px 8px; }
+  .session-plan { grid-column:1 / -1; border-left:5px solid var(--ring-soft); padding:16px 0 16px 18px; margin-top:4px; }
+  .session-plan.is-hidden { display:none; }
+  .session-plan.is-required { border-left-color:var(--signal); background:rgba(110,4,4,.08); padding-right:16px; }
+  .session-plan-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--signal); margin-bottom:8px; }
+  .session-plan-title { font-family:var(--sans); font-weight:900; font-size:16px; line-height:1.2; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  .session-plan-copy { color:var(--text-mute); font-size:13px; line-height:1.65; }
+  .session-ack { margin:16px 0 0; }
+  .session-ack.is-hidden { display:none; }
   .form-panel { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:42px 0; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
@@ -119,6 +127,15 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <h2 class="selected-title" id="selectedTitle">Choose a design</h2>
             <div class="selected-meta" id="selectedMeta"></div>
           </div>
+          <div class="session-plan is-hidden" id="sessionPlan">
+            <p class="session-plan-kicker">Session structure</p>
+            <h3 class="session-plan-title" id="sessionPlanTitle"></h3>
+            <p class="session-plan-copy" id="sessionPlanCopy"></p>
+            <label class="check session-ack is-hidden" id="sessionAcknowledgement">
+              <input type="checkbox" name="session_plan_acknowledged" value="yes" id="sessionPlanAcknowledged" form="flashClaimForm">
+              <span class="check-label">I understand that this design has a required session structure set by the artist and that I will review the final estimate before booking.</span>
+            </label>
+          </div>
         </aside>
       </section>
       <section class="form-panel" aria-label="Flash claim form">
@@ -134,6 +151,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           <input type="hidden" name="flash_series" id="flash_series">
           <input type="hidden" name="flash_size" id="flash_size">
           <input type="hidden" name="flash_price_note" id="flash_price_note">
+          <input type="hidden" name="flash_session_category" id="flash_session_category">
+          <input type="hidden" name="flash_split_policy" id="flash_split_policy">
+          <input type="hidden" name="flash_estimated_sessions" id="flash_estimated_sessions">
+          <input type="hidden" name="flash_estimated_total_time" id="flash_estimated_total_time">
+          <input type="hidden" name="flash_session_plan_note" id="flash_session_plan_note">
           <input type="hidden" name="subject" id="subject" value="New Art.Pill flash claim">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <div class="field-grid">
@@ -180,13 +202,23 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       subject: document.getElementById("subject"),
       sheetCodeField: document.getElementById("sheetCodeField"),
       sheetCodeInput: document.getElementById("sheet_code"),
+      sessionPlan: document.getElementById("sessionPlan"),
+      sessionPlanTitle: document.getElementById("sessionPlanTitle"),
+      sessionPlanCopy: document.getElementById("sessionPlanCopy"),
+      sessionAcknowledgement: document.getElementById("sessionAcknowledgement"),
+      sessionPlanAcknowledged: document.getElementById("sessionPlanAcknowledged"),
       hidden: {
         id: document.getElementById("flash_id"),
         title: document.getElementById("flash_title"),
         code: document.getElementById("flash_code"),
         series: document.getElementById("flash_series"),
         size: document.getElementById("flash_size"),
-        price: document.getElementById("flash_price_note")
+        price: document.getElementById("flash_price_note"),
+        sessionCategory: document.getElementById("flash_session_category"),
+        splitPolicy: document.getElementById("flash_split_policy"),
+        estimatedSessions: document.getElementById("flash_estimated_sessions"),
+        estimatedTotalTime: document.getElementById("flash_estimated_total_time"),
+        sessionPlanNote: document.getElementById("flash_session_plan_note")
       }
     };
     let availableFlash = [];
@@ -202,6 +234,67 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
     function codeFor(item) {
       return item.sheetCode || item.designCode || item.id;
+    }
+
+    function normalizedSessionCategory(item) {
+      const value = String(item.sessionCategory || "artist_review").toLowerCase().replace(/[ -]+/g, "_");
+      return ["one_session", "multiple_sessions"].includes(value) ? value : "artist_review";
+    }
+
+    function normalizedSplitPolicy(item) {
+      const value = String(item.splitPolicy || "artist_review").toLowerCase().replace(/[ -]+/g, "_");
+      return ["required", "client_choice", "not_available"].includes(value) ? value : "artist_review";
+    }
+
+    function rangeLabel(minimum, maximum, unit) {
+      const min = Number(minimum) || 0;
+      const max = Number(maximum) || 0;
+      if (!min && !max) return "";
+      if (!max || min === max) return `${min || max} ${unit}${(min || max) === 1 ? "" : "s"}`;
+      return `${min}-${max} ${unit}s`;
+    }
+
+    function timeLabel(item) {
+      const min = Number(item.estimatedTotalMinutesMin) || 0;
+      const max = Number(item.estimatedTotalMinutesMax) || 0;
+      if (!min && !max) return "";
+      const hours = (minutes) => Number.isInteger(minutes / 60) ? `${minutes / 60} hr` : `${(minutes / 60).toFixed(1)} hr`;
+      return !max || min === max ? hours(min || max) : `${hours(min)}-${hours(max)}`;
+    }
+
+    function sessionLabel(item) {
+      const category = normalizedSessionCategory(item);
+      const policy = normalizedSplitPolicy(item);
+      if (category === "one_session") return policy === "required" ? "One session required" : "One session";
+      if (category === "multiple_sessions") return policy === "required" ? "Multiple sessions required" : "Multiple sessions";
+      return "Artist review";
+    }
+
+    function renderSessionPlan(item) {
+      if (!item) {
+        els.sessionPlan.classList.add("is-hidden");
+        els.sessionPlan.classList.remove("is-required");
+        els.sessionAcknowledgement.classList.add("is-hidden");
+        els.sessionPlanAcknowledged.required = false;
+        els.sessionPlanAcknowledged.checked = false;
+        return;
+      }
+      const policy = normalizedSplitPolicy(item);
+      const required = policy === "required" || policy === "not_available";
+      const sessions = rangeLabel(item.estimatedSessionsMin, item.estimatedSessionsMax, "session");
+      const totalTime = timeLabel(item);
+      const estimate = [sessions, totalTime].filter(Boolean).join(" · ");
+      let policyCopy = "The studio will confirm the session structure after reviewing placement and scale.";
+      if (required) policyCopy = "This session structure is required by the artist and cannot be changed through client preference.";
+      if (policy === "client_choice") policyCopy = "After the studio confirms the total-time estimate, you may request one longer appointment or multiple shorter appointments.";
+      if (policy === "not_available") policyCopy = "Splitting is not available for this design's required process.";
+      els.sessionPlanTitle.textContent = [sessionLabel(item), estimate].filter(Boolean).join(" · ");
+      els.sessionPlanCopy.textContent = [item.sessionPlanNote, policyCopy].filter(Boolean).join(" ");
+      els.sessionPlan.classList.remove("is-hidden");
+      els.sessionPlan.classList.toggle("is-required", required);
+      els.sessionAcknowledgement.classList.toggle("is-hidden", !required);
+      els.sessionPlanAcknowledged.required = required;
+      els.sessionPlanAcknowledged.checked = false;
     }
 
     function optionLabel(item) {
@@ -231,6 +324,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         revealSheetCode(false);
         Object.values(els.hidden).forEach((input) => input.value = "");
         els.subject.value = "New Art.Pill flash claim";
+        renderSessionPlan(null);
         return;
       }
       const code = codeFor(item);
@@ -238,7 +332,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       els.image.src = item.image;
       els.image.alt = `${item.title} - selected flash`;
       els.title.textContent = item.title;
-      els.meta.innerHTML = [item.series, item.sizeBucket, code, item.price]
+      els.meta.innerHTML = [item.series, item.sizeBucket, code, item.price, sessionLabel(item)]
         .filter(Boolean)
         .map((value) => `<span>${escapeHtml(value)}</span>`)
         .join("");
@@ -248,8 +342,14 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       els.hidden.series.value = item.series || "";
       els.hidden.size.value = item.sizeBucket || "";
       els.hidden.price.value = item.price || "";
+      els.hidden.sessionCategory.value = normalizedSessionCategory(item);
+      els.hidden.splitPolicy.value = normalizedSplitPolicy(item);
+      els.hidden.estimatedSessions.value = rangeLabel(item.estimatedSessionsMin, item.estimatedSessionsMax, "session");
+      els.hidden.estimatedTotalTime.value = timeLabel(item);
+      els.hidden.sessionPlanNote.value = item.sessionPlanNote || "";
       els.subject.value = `New Art.Pill flash claim - ${item.title}`;
       revealSheetCode(item.type === "Sheet");
+      renderSessionPlan(item);
     }
 
     function revealSheetCode(shouldReveal) {

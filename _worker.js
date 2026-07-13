@@ -66,6 +66,7 @@ import {
   sendDueEventTicketReminders,
 } from "./functions/api/notifications/_lib.js";
 import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
+import { handleConstructApi } from "./functions/api/construct/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -631,6 +632,33 @@ export default {
     const url = new URL(request.url);
     if (isLocalOnlyPath(url.pathname) && !isLocalPreview(url)) {
       return notFoundPage(request, env);
+    }
+
+    if (
+      url.pathname === "/api/search" ||
+      url.pathname === "/api/site/navigation" ||
+      url.pathname.startsWith("/api/construct/media/") ||
+      url.pathname === "/api/flash" || url.pathname.startsWith("/api/flash/") ||
+      url.pathname === "/api/visual-language" || url.pathname.startsWith("/api/visual-language/") ||
+      url.pathname === "/api/art" || url.pathname.startsWith("/api/art/") ||
+      url.pathname === "/api/archive" || url.pathname.startsWith("/api/archive/") ||
+      /^\/api\/admin\/events\/[^/]+\/create-archive-record$/.test(url.pathname) ||
+      url.pathname.startsWith("/api/admin/flash") ||
+      url.pathname.startsWith("/api/admin/visual-language") ||
+      url.pathname.startsWith("/api/admin/art") ||
+      url.pathname.startsWith("/api/admin/archive") ||
+      url.pathname.startsWith("/api/admin/people") ||
+      url.pathname.startsWith("/api/admin/places") ||
+      url.pathname.startsWith("/api/admin/nodes") ||
+      url.pathname.startsWith("/api/admin/pathways") ||
+      url.pathname.startsWith("/api/admin/media") ||
+      url.pathname.startsWith("/api/admin/relationships") ||
+      url.pathname.startsWith("/api/admin/taxonomy") ||
+      url.pathname.startsWith("/api/admin/entities/") ||
+      url.pathname.startsWith("/api/admin/revisions") ||
+      url.pathname.startsWith("/api/admin/search/status")
+    ) {
+      return handleConstructApi(request, env);
     }
 
     if (url.pathname.startsWith("/api/shop/")) {

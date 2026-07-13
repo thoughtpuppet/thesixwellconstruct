@@ -364,6 +364,27 @@ export async function handleCreateSubmission(request, env) {
 
   try {
     const db = requireSubmissionDb(env);
+    if (submission.type === "flash_claim") {
+      const flashId = asString(body.payload.flash_id || body.payload.selected_flash);
+      const flash = await db.prepare("SELECT id,title,state,claimable FROM flash_items WHERE id=? OR slug=?").bind(flashId, flashId).first();
+      if (!flash || flash.state !== "available" || Number(flash.claimable) !== 1) {
+        return errorResponse("That flash is no longer available. Refresh the flash catalog and choose another design.", 409, { code: "FLASH_UNAVAILABLE" });
+      }
+      body.payload.flash_snapshot = { id: flash.id, title: flash.title, state: flash.state, claimable: true };
+    }
+
+    if (submission.type === "build_brief") {
+      const rawIds = body.payload.symbol_ids || body.payload.selected_symbol_ids || [];
+      const symbolIds = (Array.isArray(rawIds) ? rawIds : String(rawIds).split(",")).map(asString).filter(Boolean);
+      if (symbolIds.length) {
+        const placeholders = symbolIds.map(() => "?").join(",");
+        const result = await db.prepare(`SELECT v.id,v.name,v.meaning,v.svg_markup,v.themes_json,c.name category FROM visual_symbols v JOIN visual_symbol_categories c ON c.id=v.category_id WHERE v.id IN (${placeholders}) AND v.state='published'`).bind(...symbolIds).all();
+        const symbols = result.results || [];
+        if (symbols.length !== new Set(symbolIds).size) return errorResponse("One or more selected symbols are unavailable. Refresh and try again.", 409, { code: "SYMBOL_UNAVAILABLE" });
+        body.payload.symbol_snapshot = symbols.map((symbol) => ({ id: symbol.id, name: symbol.name, meaning: symbol.meaning, category: symbol.category, themes: parseJsonField(symbol.themes_json, []), imagery: symbol.svg_markup }));
+      }
+    }
+    submission.payload = body.payload;
     const id = createSubmissionId();
     const savedFiles = await saveSubmissionFiles(env, id, body.files);
     const now = new Date().toISOString();

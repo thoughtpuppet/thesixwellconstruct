@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
+<link rel="stylesheet" href="/studio/construct-manager.css">
 <style>
   :root {
     color-scheme: dark;
@@ -379,6 +380,9 @@
     <button class="tab" type="button" data-tab="studio">Studio Booking</button>
     <button class="tab" type="button" data-tab="art">Art Inquiries</button>
     <button class="tab" type="button" data-tab="events">Events</button>
+    <button class="tab" type="button" data-tab="archive">Archive</button>
+    <button class="tab" type="button" data-tab="site">Site</button>
+    <button class="tab" type="button" data-tab="shared">Shared</button>
   </nav>
   <nav class="subnav" id="subnav" aria-label="Section view"></nav>
   <main class="layout" id="layout">
@@ -1144,19 +1148,29 @@
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>
-        <button class="subnav-btn ${subView === "portfolio" ? "is-active" : ""}" type="button" data-subview="portfolio">Portfolio</button>`;
+        <button class="subnav-btn ${subView === "portfolio" ? "is-active" : ""}" type="button" data-subview="portfolio">Portfolio</button>
+        <button class="subnav-btn ${subView === "flash" ? "is-active" : ""}" type="button" data-subview="flash">Flash</button>
+        <button class="subnav-btn ${subView === "visual-language" ? "is-active" : ""}" type="button" data-subview="visual-language">Visual Language</button>`;
     } else if (activeTab === "studio") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
         <button class="subnav-btn ${subView === "bookings" ? "is-active" : ""}" type="button" data-subview="bookings">Bookings</button>
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>`;
+    } else if (activeTab === "art") {
+      html = `<button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button><button class="subnav-btn ${subView === "works" ? "is-active" : ""}" type="button" data-subview="works">Works</button>`;
     } else if (activeTab === "events") {
-      html = `<button class="subnav-btn ${selectedEventSlug ? "" : "is-active"}" type="button" data-events-home>All Events</button>`;
+      html = `<button class="subnav-btn ${subView !== "event-archive" && !selectedEventSlug ? "is-active" : ""}" type="button" data-events-home>Current Events</button><button class="subnav-btn ${subView === "event-archive" ? "is-active" : ""}" type="button" data-subview="event-archive">Event Archive</button>`;
       if (selectedEventSlug) {
         const ev = events.find((e) => e.slug === selectedEventSlug);
         html += `<span class="subnav-crumb">/ ${escapeHtml(ev ? ev.title : selectedEventSlug)}</span>`;
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
+    } else if (activeTab === "archive") {
+      html = ["records","collections","timeline","people","places","media-artifacts","drafts","settings"].map((view) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${view.replace(/-/g," ")}</button>`).join("");
+    } else if (activeTab === "site") {
+      html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+    } else if (activeTab === "shared") {
+      html = [["media","Media Library"],["relationships","Relationships"],["taxonomy","Tags and Themes"],["revisions","Revision History"],["search-index","Search Index Status"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     }
     subnavEl.innerHTML = html;
   }
@@ -1441,6 +1455,15 @@
       return;
     }
 
+    const managedView = window.ConstructManager?.isManagedView(activeTab, subView);
+    if (managedView) {
+      layoutEl.classList.add("single");
+      listPane.classList.add("hidden");
+      toolbarEl.innerHTML = "";
+      window.ConstructManager.render(activeTab, subView).catch((error) => setStatus(error.message));
+      return;
+    }
+
     if (activeTab === "tattoo" && subView === "portfolio") {
       renderPortfolioManager().catch((error) => setStatus(error.message));
       return;
@@ -1464,7 +1487,7 @@
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
-    subView = "requests";
+    subView = tab === "archive" ? "records" : tab === "site" ? "pathways" : tab === "shared" ? "media" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
@@ -2314,7 +2337,7 @@ ${meetingLines}
   }
 
   function eventStatusOptions(current) {
-    return ["draft", "open", "closed"].map((value) =>
+    return ["draft", "open", "closed", "completed", "cancelled"].map((value) =>
       `<option value="${value}" ${value === current ? "selected" : ""}>${value.toUpperCase()}</option>`
     ).join("");
   }
@@ -2517,7 +2540,7 @@ ${meetingLines}
         <div class="detail-head">
           <span class="pill">Public / Events</span>
           <h2>Ticketed Events</h2>
-          <p class="contact">Create a new event, or flip an existing one between draft, open, and closed; adjust date, price, capacity, and copy. Seat counts reflect paid tickets only. Individual RSVPs are listed on the left — select one to manage or refund it.</p>
+          <p class="contact">Create a new event; manage draft, open, closed, completed, and cancelled states; or create a privacy-safe archive draft. Seat counts reflect paid tickets only.</p>
         </div>
         <div class="review-card" id="eventsReadinessCard">
           <div class="review-card-header">Events Readiness</div>
@@ -4214,5 +4237,6 @@ ${meetingLines}
   }
 })();
 </script>
+<script src="/studio/construct-manager.js"></script>
 </body>
 </html>
