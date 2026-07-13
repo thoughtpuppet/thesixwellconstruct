@@ -786,7 +786,7 @@ statement:    —
         -->
 
         <!-- Work 01 — Marbles (real) -->
-        <div class="work-card entrance-fade entrance-delay-1"
+        <div class="work-card entrance-fade entrance-delay-1" data-managed-id="art-marbles"
              data-medium="painting" data-type="standalone" data-id="marbles"
              data-slug="lostmarblespainting"
              data-title="AM I LOSING MY MARBLES OR HIDING THEM?" data-year="2023" data-medium-label="Acrylic on wood panel"
@@ -802,7 +802,7 @@ statement:    —
 
         <!-- Works 02–08 — placeholders. Replace src + data-* as works are ready. -->
 
-        <div class="work-card entrance-fade entrance-delay-2"
+        <div class="work-card entrance-fade entrance-delay-2" data-managed-id="art-lust"
              data-medium="painting" data-type="standalone" data-id="lust"
              data-slug="lustpainting"
              data-title="LUST." data-year="2023" data-medium-label="Acrylic on wood panel"
@@ -816,7 +816,7 @@ statement:    —
           </div>
         </div>
 
-        <div class="work-card entrance-fade entrance-delay-2"
+        <div class="work-card entrance-fade entrance-delay-2" data-managed-id="art-sloth"
              data-medium="painting" data-type="standalone" data-id="sloth"
              data-slug="slothpainting"
              data-title="SLOTH." data-year="—" data-medium-label="Painting"
@@ -830,7 +830,7 @@ statement:    —
           </div>
         </div>
 
-        <div class="work-card entrance-fade entrance-delay-3"
+        <div class="work-card entrance-fade entrance-delay-3" data-managed-id="art-homeland-security"
              data-medium="painting" data-type="series" data-id="homelandsecurity"
              data-slug="homelandsecuritypainting"
              data-title="HOMELAND SECURITY." data-year="—" data-medium-label="Painting"
@@ -844,7 +844,7 @@ statement:    —
           </div>
         </div>
 
-        <div class="work-card entrance-fade entrance-delay-3"
+        <div class="work-card entrance-fade entrance-delay-3" data-managed-id="art-inner-chaos"
              data-medium="painting" data-type="series" data-id="thefrustrationsofinnercharos"
              data-slug="thefrustrationsofinnercharospainting"
              data-title="THE FRUSTRATIONS OF INNER CHAOS." data-year="—" data-medium-label="Painting"
@@ -858,7 +858,7 @@ statement:    —
           </div>
         </div>
 
-        <div class="work-card entrance-fade entrance-delay-4"
+        <div class="work-card entrance-fade entrance-delay-4" data-managed-id="art-paranoia-trauma"
              data-medium="painting" data-type="standalone" data-id="paranoiafosteredtrauma"
              data-slug="paranoiafosteredtraumapainting"
              data-title="PARANOIA & FOSTERED TRAUMA." data-year="—" data-medium-label="Painting"
@@ -1164,6 +1164,11 @@ statement:    —
   renderRow1();
   renderRow2();
   applyFilters();
+  window.refreshManagedArtIndex = function () {
+    renderRow1();
+    renderRow2();
+    applyFilters();
+  };
 
 
   /* ============================================================
@@ -1245,7 +1250,7 @@ statement:    —
   })();
 
   </script>
+  <script src="/js/art-catalog-order.js"></script>
 
 </body>
 </html>
-

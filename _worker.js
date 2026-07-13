@@ -650,12 +650,14 @@ export default {
     if (
       url.pathname === "/api/search" ||
       url.pathname === "/api/site/navigation" ||
+      url.pathname.startsWith("/api/connections/") ||
       url.pathname.startsWith("/api/construct/media/") ||
       url.pathname === "/api/flash" || url.pathname.startsWith("/api/flash/") ||
       url.pathname === "/api/legend" || url.pathname.startsWith("/api/legend/") ||
       url.pathname === "/api/visual-language" || url.pathname.startsWith("/api/visual-language/") ||
       url.pathname === "/api/art" || url.pathname.startsWith("/api/art/") ||
       url.pathname === "/api/archive" || url.pathname.startsWith("/api/archive/") ||
+      url.pathname === "/api/archive-collections" || url.pathname.startsWith("/api/archive-collections/") ||
       /^\/api\/admin\/events\/[^/]+\/create-archive-record$/.test(url.pathname) ||
       url.pathname.startsWith("/api/admin/flash") ||
       url.pathname.startsWith("/api/admin/legend") ||
@@ -668,6 +670,8 @@ export default {
       url.pathname.startsWith("/api/admin/pathways") ||
       url.pathname.startsWith("/api/admin/media") ||
       url.pathname.startsWith("/api/admin/relationships") ||
+      url.pathname.startsWith("/api/admin/relationship-types") ||
+      url.pathname === "/api/admin/entities" ||
       url.pathname.startsWith("/api/admin/taxonomy") ||
       url.pathname.startsWith("/api/admin/entities/") ||
       url.pathname.startsWith("/api/admin/revisions") ||

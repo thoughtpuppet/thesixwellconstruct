@@ -33,9 +33,19 @@
   .field p { margin:0; color:var(--muted); font-size:.9rem; line-height:1.65; }
   .mediums { display:flex; flex-wrap:wrap; gap:9px; padding:40px 0 76px; border-bottom:1px solid var(--line); }
   .mediums span { padding:9px 12px; border:1px solid var(--line); color:#bbb5aa; font-size:.65rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+  .legend-catalog { padding:72px 0; border-top:1px solid var(--line); }
+  .legend-filters { display:flex; flex-wrap:wrap; gap:8px; margin:30px 0; }
+  .legend-filters button { border:1px solid var(--line); background:transparent; color:var(--paper); padding:9px 12px; font:700 .65rem Inter,Arial,sans-serif; letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
+  .legend-filters button[aria-pressed="true"] { border-color:var(--acid); color:var(--acid); }
+  .legend-grid { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line); border-left:1px solid var(--line); }
+  .legend-card { min-height:330px; padding:28px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .legend-mark { width:112px; height:112px; color:var(--acid); }
+  .legend-mark svg { width:100%; height:100%; display:block; }
+  .legend-card h3 { margin:42px 0 12px; font-size:1rem; letter-spacing:.08em; text-transform:uppercase; }
+  .legend-card p,.legend-empty { color:var(--muted); line-height:1.65; }
   .footer { padding-top:28px; align-items:flex-start; }
   .footer nav { display:flex; flex-wrap:wrap; gap:20px; }
-  @media(max-width:760px){ .shell{width:calc(100% - 28px);padding-top:22px}.hero{min-height:auto;grid-template-columns:1fr;padding:94px 0 48px}.framework{padding:54px 0}.framework-head{grid-template-columns:1fr;gap:24px}.fields{grid-template-columns:1fr 1fr}.field:nth-child(2){border-right:0}.field:nth-child(-n+2){border-bottom:1px solid var(--line)}.footer{flex-direction:column} }
+  @media(max-width:760px){ .shell{width:calc(100% - 28px);padding-top:22px}.hero{min-height:auto;grid-template-columns:1fr;padding:94px 0 48px}.framework{padding:54px 0}.framework-head{grid-template-columns:1fr;gap:24px}.fields{grid-template-columns:1fr 1fr}.field:nth-child(2){border-right:0}.field:nth-child(-n+2){border-bottom:1px solid var(--line)}.legend-grid{grid-template-columns:1fr 1fr}.footer{flex-direction:column} }
 </style>
 </head>
 <body data-venture="about">
@@ -43,13 +53,13 @@
   <nav class="topline" aria-label="Page navigation"><a href="/home/">&larr; The Construct</a><a href="/about/">About</a></nav>
   <header class="hero">
     <div><span class="kicker">A living symbolic index</span><h1>The<br>Legend</h1></div>
-    <div><p class="lede">A key to the recurring symbols that move through the Six.Well Construct—and to the meanings, variations, and relationships they gather in different forms.</p><span class="status">Index in development</span></div>
+    <div><p class="lede">A key to the recurring symbols that move through the Six.Well Construct—and to the meanings, variations, and relationships they gather in different forms.</p><span class="status">Live managed index</span></div>
   </header>
 
   <section class="framework" aria-labelledby="framework-title">
     <div class="framework-head">
       <header><span class="kicker">How to read it</span><h2 id="framework-title">One language. Many forms.</h2></header>
-      <p class="framework-copy">The Legend will not assign one permanent definition to every mark. It will document a symbol's core idea, the meanings it has gathered, how its form changes, and where it appears throughout the Construct.</p>
+      <p class="framework-copy">The Legend does not assign one permanent definition to every mark. It documents a symbol's core idea, the meanings it has gathered, how its form changes, and where it appears throughout the Construct.</p>
     </div>
     <div class="fields">
       <article class="field"><span class="index">01</span><h3>Symbol</h3><p>The mark, figure, gesture, shape, character, or recurring visual structure.</p></article>
@@ -57,6 +67,13 @@
       <article class="field"><span class="index">03</span><h3>Variations</h3><p>How the symbol mutates, combines with others, or changes through context.</p></article>
       <article class="field"><span class="index">04</span><h3>Appearances</h3><p>The tattoos, paintings, films, garments, writings, objects, and spaces it inhabits.</p></article>
     </div>
+  </section>
+
+  <section class="legend-catalog" aria-labelledby="legend-catalog-title">
+    <span class="kicker">Published from Studio</span>
+    <h2 id="legend-catalog-title">The living index.</h2>
+    <div class="legend-filters" data-live-legend-filters aria-label="Legend categories"></div>
+    <div class="legend-grid" data-live-legend aria-live="polite"><p class="legend-empty">Loading the Legend…</p></div>
   </section>
 
   <div class="mediums" aria-label="Media represented in the Legend">
@@ -68,5 +85,6 @@
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>
 <script src="/js/construct-nav.js"></script>
+<script src="/js/legend-catalog.js"></script>
 </body>
 </html>

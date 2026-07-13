@@ -551,7 +551,7 @@
       return [item.year, item.placement].filter(Boolean).join(' / ');
     }
 
-    function openOverlay(item, trigger) {
+    function openOverlay(item, trigger, historyMode = 'push') {
       returnFocus = trigger;
       overlayImg.src = item.imageUrl;
       overlayImg.alt = item.altText || DEFAULT_ALT;
@@ -569,16 +569,22 @@
       overlayFrag.style.display = item.caption ? '' : 'none';
       overlay.classList.add('open');
       document.body.style.overflow = 'hidden';
+      if (historyMode === 'push') {
+        const url = new URL(location.href);
+        url.searchParams.set('work', item.id);
+        history.pushState({ portfolioWork: item.id }, '', url);
+      }
       closeBtn.focus();
     }
 
-    function closeOverlay() {
+    function closeOverlay(historyMode = 'back') {
       if (!overlay.classList.contains('open')) return;
       overlay.classList.remove('open');
       document.body.style.overflow = '';
       overlayImg.src = '';
       returnFocus?.focus();
       returnFocus = null;
+      if (historyMode === 'back' && new URL(location.href).searchParams.has('work')) history.back();
     }
 
     function renderCards() {
@@ -634,7 +640,7 @@
       introDesc.textContent = selection ? `${selection} / tattoo work by Saiel Dauhn Solehman` : 'tattoo work by Saiel Dauhn Solehman';
     }
 
-    closeBtn.addEventListener('click', closeOverlay);
+    closeBtn.addEventListener('click', () => closeOverlay());
     overlay.addEventListener('click', (event) => { if (event.target === overlay) closeOverlay(); });
     document.addEventListener('keydown', (event) => {
       if (!overlay.classList.contains('open')) return;
@@ -648,6 +654,12 @@
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       }
     });
+    window.addEventListener('popstate', () => {
+      const requested = new URL(location.href).searchParams.get('work');
+      const item = items.find((candidate) => candidate.id === requested);
+      if (item) openOverlay(item, null, 'none');
+      else closeOverlay('none');
+    });
 
     fetch('/api/portfolio', { headers: { accept: 'application/json' } })
       .then(async (response) => {
@@ -655,6 +667,9 @@
         const payload = await response.json();
         items = Array.isArray(payload.items) ? payload.items : [];
         render();
+        const requested = new URL(location.href).searchParams.get('work');
+        const item = items.find((candidate) => candidate.id === requested);
+        if (item) openOverlay(item, null, 'none');
       })
       .catch(() => {
         typeRow.replaceChildren();

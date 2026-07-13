@@ -159,12 +159,13 @@ async function createUpload(request, env) {
   });
 
   try {
-    await db.prepare(`
+    await db.batch([db.prepare(`
       INSERT INTO portfolio_items (
         id, storage_key, original_filename, content_type, title, alt_text,
         state, sort_order, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, datetime('now'), datetime('now'))
-    `).bind(id, key, originalFilename, file.type, title, altText, order).run();
+    `).bind(id, key, originalFilename, file.type, title, altText, order),
+    db.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'portfolio_item','node-tattoos','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(id)]);
   } catch (error) {
     await env.SUBMISSION_FILES.delete(key);
     throw error;
@@ -217,6 +218,8 @@ async function patchItem(request, env, id) {
   updates.push("updated_at = datetime('now')");
   values.push(id);
   await db.prepare(`UPDATE portfolio_items SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  await db.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,public_at=CASE WHEN ?='public' THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?")
+    .bind(nextState === "published" ? "public" : "internal", nextState === "published" ? 1 : 0, nextState === "published" ? "public" : "internal", id).run();
   const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first();
   return json({ item: itemFromRow(row, true) });
 }
@@ -231,6 +234,7 @@ async function archiveItem(request, env, id) {
   if (order !== null) {
     await db.prepare("UPDATE portfolio_items SET state = 'archived', sort_order = ?, updated_at = datetime('now') WHERE id = ?")
       .bind(order, id).run();
+    await db.prepare("UPDATE content_entities SET visibility='internal',search_visibility=0,archived_at=datetime('now'),updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(id).run();
   }
   return json({ ok: true, archivedId: id });
 }

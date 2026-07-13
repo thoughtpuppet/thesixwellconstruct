@@ -155,6 +155,7 @@
     /* ── Item wrapper ─── */
     var item = document.createElement('div');
     item.className = 'cnav-item';
+    item.setAttribute('data-venture-key', v.key);
     item.style.cssText = [
       'position:relative',
       'display:flex',
@@ -958,6 +959,55 @@
   window.addEventListener('orientationchange', function() {
     setTimeout(applyResponsiveNav, 150);
   });
+
+  (async function hydrateManagedConstructNav() {
+    var snapshotKey = 'swc_managed_navigation_v1';
+    var payload = null;
+    try {
+      var response = await fetch('/api/site/navigation', { cache: 'no-store', headers: { accept: 'application/json' } });
+      if (!response.ok) throw new Error('navigation unavailable');
+      payload = await response.json();
+      localStorage.setItem(snapshotKey, JSON.stringify(payload));
+    } catch (error) {
+      try { payload = JSON.parse(localStorage.getItem(snapshotKey) || 'null'); } catch (ignored) { payload = null; }
+    }
+    if (!payload || !Array.isArray(payload.nodes) || !payload.nodes.length) return;
+    var keyBySlug = { tattoos: 'tattooing', 'art-making': 'art', merch: 'merch', about: 'about', events: 'events', music: 'music', writings: 'writings', archive: 'archive', film: 'film' };
+    var byKey = {};
+    VENTURES.forEach(function(venture) { byKey[venture.key] = venture; });
+    var ordered = payload.nodes.map(function(node) {
+      var key = keyBySlug[node.slug] || node.slug;
+      var venture = byKey[key];
+      if (!venture) return null;
+      venture.label = node.name || venture.label;
+      venture.url = node.route || venture.url;
+      if (node.color) venture.color = node.color;
+      return venture;
+    }).filter(Boolean);
+    if (!ordered.length) return;
+    var managedKeys = new Set(ordered.map(function(venture) { return venture.key; }));
+    nav.querySelectorAll('[data-venture-key]').forEach(function(item) {
+      if (!managedKeys.has(item.getAttribute('data-venture-key'))) item.remove();
+    });
+    VENTURES.splice.apply(VENTURES, [0, VENTURES.length].concat(ordered));
+    desktopColorBindings.forEach(function(binding) {
+      binding.label.textContent = binding.venture.label;
+      binding.label.style.color = binding.venture.color;
+      binding.dot.setAttribute('aria-label', binding.venture.label);
+      binding.dot.setAttribute('data-bg-color', binding.venture.color);
+      binding.dot.style.background = binding.venture.color;
+    });
+    VENTURES.forEach(function(venture) {
+      var item = nav.querySelector('[data-venture-key="' + venture.key + '"]');
+      if (item) nav.appendChild(item);
+    });
+    currentVenture = null;
+    VENTURES.forEach(function(venture) { if (venture.key === currentKey) currentVenture = venture; });
+    if (currentVenture) chipText.textContent = currentVenture.label;
+    buildMobileNodes();
+    applyResponsiveNav();
+    document.documentElement.setAttribute('data-managed-construct-nav', 'live');
+  })();
 
   /* ── EXPOSE API ───────────────────────────────────────────
      Allows external scripts to show/hide the nav.

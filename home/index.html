@@ -1059,6 +1059,34 @@ const SUB_NODE_DATA = {
   'FILM':       [{name:'isolated.take',url:'/film/#projects'},{name:'&friends',url:'/film/#projects'},{name:'animations',url:'/film/#forms'},{name:'sloth99',url:'/film/#status'}],
 };
 
+// Studio Console is the live source of truth. The bundled object above remains
+// the final outage fallback; the last successful managed response is kept in
+// the browser between visits.
+(async function hydrateManagedNavigation(){
+  const snapshotKey='swc_managed_navigation_v1';
+  let payload=null;
+  try{
+    const response=await fetch('/api/site/navigation',{cache:'no-store',headers:{accept:'application/json'}});
+    if(!response.ok)throw new Error('navigation unavailable');
+    payload=await response.json();
+    localStorage.setItem(snapshotKey,JSON.stringify(payload));
+  }catch{
+    try{payload=JSON.parse(localStorage.getItem(snapshotKey)||'null')}catch{payload=null}
+  }
+  if(!payload||!Array.isArray(payload.nodes)||!payload.nodes.length)return;
+  const priorByName=new Map(VENTURES.map(venture=>[venture.name,venture]));
+  const slots=VENTURES.map(venture=>({angle:venture.angle,dist:venture.dist,fromDot:venture.fromDot,color:venture.color}));
+  const managedVentures=payload.nodes.slice(0,9).map((node,index)=>{
+    const prior=priorByName.get(node.name)||{};
+    const slot=slots[index]||slots[slots.length-1];
+    SUB_NODE_DATA[node.name]=(node.pathways||[]).slice(0,9).map(path=>({name:path.name,url:path.route,color:path.color||node.color||prior.color||slot.color}));
+    return {name:node.name,color:node.color||prior.color||slot.color,angle:slot.angle,dist:slot.dist,fromDot:slot.fromDot};
+  });
+  VENTURES.splice(0,VENTURES.length,...managedVentures);
+  document.documentElement.dataset.managedNavigation='live';
+  document.documentElement.dataset.managedNodeCount=String(managedVentures.length);
+})();
+
 // Sacred geometry shape assigned to each construct pathway
 const SUB_SHAPES = {
   'TATTOOS':    'circle',

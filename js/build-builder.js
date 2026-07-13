@@ -1,6 +1,6 @@
 /* ============================================================
    ART.PILL "BUILD A BRIEF" — visual-language symbol builder
-   Data-driven from /assets/build/symbols.json.
+   Data-driven from the managed Legend API, with the bundled JSON as an outage fallback.
    Each symbol renders its mark + meaning + "seen in" examples.
    Selections (max 12) form the brief carried into the submission form.
 ============================================================ */
@@ -9,6 +9,8 @@
 
   const MAX_SELECTIONS = 12;
   const DATA_URL = "/assets/build/symbols.json";
+  const LEGEND_URL = "/api/legend";
+  const CATEGORY_URL = "/api/legend/categories";
   const PUBLIC_THEMES = [
     "protection",
     "memory",
@@ -225,13 +227,46 @@
   }
 
   /* ── INIT ── */
+  async function loadManagedSymbols() {
+    const [symbolsResponse, categoriesResponse] = await Promise.all([
+      fetch(LEGEND_URL, { cache: "no-store", headers: { accept: "application/json" } }),
+      fetch(CATEGORY_URL, { cache: "no-store", headers: { accept: "application/json" } }),
+    ]);
+    if (!symbolsResponse.ok || !categoriesResponse.ok) throw new Error("Managed Legend unavailable");
+    const [symbolsPayload, categoriesPayload] = await Promise.all([
+      symbolsResponse.json(),
+      categoriesResponse.json(),
+    ]);
+    const categories = new Map((categoriesPayload.records || []).map((category, index) => [
+      category.id,
+      { name: category.name, order: index },
+    ]));
+    return (symbolsPayload.records || [])
+      .map((symbol) => ({
+        id: symbol.id,
+        category: categories.get(symbol.category_id)?.name || symbol.category_id || "Unclassified",
+        categoryOrder: categories.get(symbol.category_id)?.order ?? Number.MAX_SAFE_INTEGER,
+        name: symbol.name,
+        meaning: symbol.meaning,
+        svg: symbol.svg_markup || "",
+        examples: Array.isArray(symbol.examples) ? symbol.examples : [],
+        themes: Array.isArray(symbol.themes) ? symbol.themes : [],
+        sortOrder: Number(symbol.sort_order || 0),
+      }))
+      .sort((a, b) => a.categoryOrder - b.categoryOrder || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  }
+
   async function init() {
     try {
-      const res = await fetch(DATA_URL, { cache: "no-cache" });
-      const data = await res.json();
-      SYMBOLS = Array.isArray(data.symbols) ? data.symbols : [];
-    } catch (err) {
-      SYMBOLS = [];
+      SYMBOLS = await loadManagedSymbols();
+    } catch {
+      try {
+        const res = await fetch(DATA_URL, { cache: "no-cache" });
+        const data = await res.json();
+        SYMBOLS = Array.isArray(data.symbols) ? data.symbols : [];
+      } catch {
+        SYMBOLS = [];
+      }
     }
     SYMBOLS.forEach((s) => byId.set(s.id, s));
     buildFilters();

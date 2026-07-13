@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
 <link rel="stylesheet" href="/studio/construct-manager.css?v=art-upload">
+<link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <style>
   :root {
     color-scheme: dark;
@@ -1178,7 +1179,7 @@
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
-      html = [["media","Media Library"],["relationships","Relationships"],["taxonomy","Tags and Themes"],["revisions","Revision History"],["search-index","Search Index Status"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["media","Media Library"],["relationships","Connections"],["taxonomy","Tags and Themes"],["revisions","Revision History"],["search-index","Search Index Status"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     }
     subnavEl.innerHTML = html;
   }
@@ -1249,6 +1250,7 @@
           <div class="portfolio-card-actions">
             ${canSort ? `<button class="button" type="button" data-portfolio-move="up" data-id="${escapeHtml(item.id)}" ${index === 0 ? "disabled" : ""}>Move up</button><button class="button" type="button" data-portfolio-move="down" data-id="${escapeHtml(item.id)}" ${index === total - 1 ? "disabled" : ""}>Move down</button>` : ""}
             ${stateAction}
+            <button class="button" type="button" data-portfolio-connections data-id="${escapeHtml(item.id)}">Connections</button>
             ${item.state !== "archived" ? `<button class="button danger-button" type="button" data-portfolio-archive data-id="${escapeHtml(item.id)}">Archive</button>` : ""}
           </div>
           <details class="portfolio-edit">
@@ -1266,6 +1268,7 @@
               <button class="button" type="submit">Save metadata</button>
             </form>
           </details>
+          <div data-portfolio-connections-panel="${escapeHtml(item.id)}"></div>
         </div>
       </article>`;
   }
@@ -1400,6 +1403,11 @@
         await api(`/api/admin/portfolio/${encodeURIComponent(archive.dataset.id)}`, { method: "DELETE" });
         await loadPortfolioItems();
         setStatus("Portfolio item archived");
+      }
+      const connections = event.target.closest("[data-portfolio-connections]");
+      if (connections) {
+        const panel = manager.querySelector(`[data-portfolio-connections-panel="${CSS.escape(connections.dataset.id)}"]`);
+        if (panel) window.ConnectionsManager?.mount(panel, { entityId: connections.dataset.id });
       }
     });
     manager.addEventListener("submit", async (event) => {
@@ -4321,6 +4329,7 @@ ${meetingLines}
   }
 })();
 </script>
-<script src="/studio/construct-manager.js?v=art-upload"></script>
+<script src="/studio/connections-manager.js?v=1"></script>
+<script src="/studio/construct-manager.js?v=connections-1"></script>
 </body>
 </html>

@@ -36,23 +36,18 @@
   .hero-left { display:flex; flex-direction:column; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; }
   .hero-desc { font-size:14px; letter-spacing:0.03em; line-height:1.75; color:var(--text-mute); text-align:right; max-width:400px; flex-shrink:0; }
-  nav.filters { margin-bottom:var(--s6); }
-  .filter-row { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; padding-bottom:var(--s4); }
-  .filter-row--split { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; }
-  .filter-row--split > div { display:flex; align-items:center; gap:var(--s5); flex-wrap:wrap; }
-  .filter-sep { width:1px; height:12px; background:var(--ring-soft); flex-shrink:0; align-self:center; }
-  .filter-cascade { overflow:hidden; max-height:0; opacity:0; pointer-events:none; transition:max-height 0.24s cubic-bezier(0.2,0,0.2,1), opacity 0.2s ease, padding-bottom 0.24s; padding-bottom:0; }
-  .filter-cascade.is-open { max-height:80px; opacity:1; pointer-events:auto; padding-bottom:var(--s4); }
-  .chip { position:relative; font-family:var(--sans); font-weight:500; font-size:13px; letter-spacing:0.04em; text-transform:lowercase; color:var(--text-mute); padding:var(--s2) 0; background:none; border:none; cursor:pointer; transition:color var(--t-fast); }
-  .chip:hover { color:var(--text); }
-  .chip.active { color:var(--text); }
-  .chip.active .chip-label::after { content:""; position:absolute; left:0; bottom:-1px; width:100%; height:2px; background:var(--venture-color); }
-  .chip.active::before { content:""; position:absolute; left:-10px; top:50%; width:4px; height:4px; border-radius:50%; background:var(--venture-color); transform:translateY(-50%); }
-  .chip-label { position:relative; }
-  .chip-count { font-family:var(--serif); font-size:10px; color:var(--text-dim); margin-left:2px; vertical-align:super; }
-  .session-filter-band { display:grid; grid-template-columns:minmax(120px,.35fr) minmax(0,1fr); gap:18px 34px; align-items:center; margin-top:8px; padding:20px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
-  .session-filter-title { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--signal); }
-  .session-filter-note { grid-column:2; max-width:720px; color:var(--text-dim); font-size:12px; line-height:1.65; }
+  nav.filters { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)) auto; gap:14px; align-items:end; margin-bottom:var(--s6); padding:20px 0 16px; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
+  .filter-control { display:grid; gap:8px; min-width:0; }
+  .filter-control-label { font-family:var(--sans); font-weight:900; font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-dim); }
+  .filter-select { width:100%; min-height:48px; border:5px solid var(--ring-faint); border-radius:0; background-color:rgba(14,14,14,.82); color:var(--text-mute); font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:.08em; text-transform:uppercase; padding:0 38px 0 12px; appearance:none; cursor:pointer; background-image:linear-gradient(45deg,transparent 50%,var(--signal) 50%),linear-gradient(135deg,var(--signal) 50%,transparent 50%); background-position:calc(100% - 19px) 20px,calc(100% - 13px) 20px; background-size:6px 6px,6px 6px; background-repeat:no-repeat; transition:border-color var(--t-fast),color var(--t-fast); }
+  .filter-select:hover,.filter-select:focus { border-color:var(--ring); color:var(--text); outline:none; }
+  .filter-select.is-active { border-color:var(--signal); color:var(--text); }
+  .filter-select option { background:var(--bg); color:var(--text); }
+  .filter-reset { min-height:48px; border:5px solid var(--ring-faint); background:transparent; color:var(--text-dim); padding:0 16px; font-family:var(--sans); font-weight:900; font-size:9px; letter-spacing:.16em; text-transform:uppercase; cursor:pointer; transition:border-color var(--t-fast),color var(--t-fast); }
+  .filter-reset:hover,.filter-reset:focus-visible { border-color:var(--accent); color:var(--accent); outline:none; }
+  .filter-reset:disabled { opacity:.35; cursor:default; border-color:var(--ring-faint); color:var(--text-dim); }
+  .filter-context { grid-column:1 / -1; min-height:20px; color:var(--text-dim); font-size:12px; line-height:1.65; padding-top:2px; }
+  .filter-context.has-session { color:var(--text-mute); }
   .ecosystem-band { border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); margin-bottom:72px; padding:22px 0; display:grid; grid-template-columns:minmax(0,0.74fr) minmax(0,1.26fr); gap:34px; align-items:start; }
   .ecosystem-intro { padding:0; }
   .node-link { padding:0 0 0 16px; }
@@ -80,6 +75,7 @@
   .pill.available { color:var(--text); border-color:rgba(255,231,202,0.28); }
   .pill.past { color:var(--text-ghost); border-color:var(--ring-faint); }
   .pill.placed { color:var(--signal); border-color:rgba(110,4,4,0.45); background:rgba(110,4,4,0.08); }
+  .pill.experimental { color:#fff; border-color:var(--accent); background:rgba(110,4,4,.78); }
   .pill.session { color:var(--accent); border-color:rgba(252,184,103,.34); }
   .pill.required { color:#fff; border-color:var(--signal); background:rgba(110,4,4,.62); }
   .placed-band { border-top:5px solid rgba(110,4,4,0.25); border-bottom:5px solid rgba(110,4,4,0.25); background:rgba(110,4,4,0.04); padding:22px 0; margin-bottom:var(--s6); display:none; }
@@ -191,8 +187,6 @@
   @media (max-width:768px) {
     .hero { flex-direction:column; align-items:flex-start; gap:20px; }
     .section-head,.filter-band { grid-template-columns:1fr; }
-    .session-filter-band { grid-template-columns:1fr; }
-    .session-filter-note { grid-column:1; }
     .ecosystem-band,.node-grid,.selected-piece.is-active { grid-template-columns:1fr; }
     .node-grid { gap:12px; }
     .node-link { border-left:5px solid var(--ring-faint); border-bottom:none; }
@@ -201,6 +195,9 @@
     .filter-label { padding-top:0; }
     .filter-group { border-right:none; padding-right:0; }
     .detail { grid-template-columns:1fr; gap:10px; }
+    nav.filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .filter-control:nth-of-type(5),.filter-reset { grid-column:1 / -1; }
+    .filter-reset { width:100%; }
     .modal-panel { width:calc(100vw - 24px); max-height:calc(100vh - 24px); }
     .modal-image { max-height:38vh; }
     .modal-image img { max-height:34vh; padding:14px; }
@@ -214,6 +211,8 @@
     .catalog-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .sheet-grid { grid-template-columns:1fr; }
     .field-grid { grid-template-columns:1fr; }
+    nav.filters { gap:12px; padding:16px 0 14px; }
+    .filter-select { min-height:46px; font-size:10px; padding-left:10px; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
 @media (max-width: 700px) {
@@ -253,18 +252,13 @@
     </section>
 
     <nav class="filters" aria-label="Flash catalog filters">
-      <div class="filter-row" id="typeRow" data-filter-group="type"></div>
-      <div class="filter-row filter-cascade" id="seriesRow" data-filter-group="series"></div>
-      <div class="filter-row filter-cascade filter-row--split" id="qualifierRow">
-        <div data-filter-group="sizeBucket"></div>
-        <span class="filter-sep" aria-hidden="true"></span>
-        <div data-filter-group="status"></div>
-      </div>
-      <div class="session-filter-band">
-        <p class="session-filter-title">Plan by sessions</p>
-        <div class="filter-row" id="sessionRow" data-filter-group="session"></div>
-        <p class="session-filter-note">Session structure is part of the design. Some pieces may be split by client preference after review; others require multiple sessions because of the process and the artist's working limits.</p>
-      </div>
+      <label class="filter-control"><span class="filter-control-label">Type</span><select class="filter-select" data-filter-group="type" aria-label="Filter by type"></select></label>
+      <label class="filter-control"><span class="filter-control-label">Series</span><select class="filter-select" data-filter-group="series" aria-label="Filter by series"></select></label>
+      <label class="filter-control"><span class="filter-control-label">Size</span><select class="filter-select" data-filter-group="sizeBucket" aria-label="Filter by size"></select></label>
+      <label class="filter-control"><span class="filter-control-label">Availability</span><select class="filter-select" data-filter-group="status" aria-label="Filter by availability"></select></label>
+      <label class="filter-control"><span class="filter-control-label">Sessions</span><select class="filter-select" data-filter-group="session" aria-label="Filter by sessions"></select></label>
+      <button class="filter-reset" id="filterReset" type="button">Reset</button>
+      <p class="filter-context" id="filterContext" aria-live="polite">Use any combination of filters to narrow the catalog.</p>
     </nav>
 
     <div class="placed-band" id="placedBand" aria-live="polite">
@@ -308,16 +302,18 @@
     };
     const state = { type: "All", series: "All", sizeBucket: "All", status: "All", session: "All", items: [], seriesMeta: [] };
     const groups = {
-      type: ["All", "Series", "Standalone", "Placed"],
+      type: ["All", "Series", "Standalone", "Placed", "Experimental"],
       series: ["All", "MAZE", "Sairoglyphs"],
       sizeBucket: ["All", "Small", "Medium", "Large"],
       status: ["All", "Available", "Past"],
-      session: ["All", "One session", "Multiple sessions", "Artist review"]
+      session: ["All", "One session", "Multiple sessions"]
     };
     const els = {
       sheetGrid: document.getElementById("sheetGrid"),
       catalogGrid: document.getElementById("catalogGrid"),
-      resultCount: document.getElementById("resultCount")
+      resultCount: document.getElementById("resultCount"),
+      filterContext: document.getElementById("filterContext"),
+      filterReset: document.getElementById("filterReset")
     };
 
     function escapeHtml(value) {
@@ -349,75 +345,60 @@
       if (state.type === "Placed" && !item.placed) return false;
       if (state.type === "Series" && item.series === "Standalones") return false;
       if (state.type === "Standalone" && item.series !== "Standalones") return false;
-      if (state.type !== "Placed") {
-        if (state.series !== "All" && item.series !== state.series) return false;
-        if (state.status !== "All" && item.status !== state.status) return false;
-        if (state.sizeBucket !== "All" && item.sizeBucket !== state.sizeBucket) return false;
-      }
+      if (state.type === "Experimental" && item.processCategory !== "experimental") return false;
+      if (state.series !== "All" && item.series !== state.series) return false;
+      if (state.status !== "All" && item.status !== state.status) return false;
+      if (state.sizeBucket !== "All" && item.sizeBucket !== state.sizeBucket) return false;
       if (state.session !== "All" && sessionLabel(item) !== state.session) return false;
       return true;
     }
 
-    function updateCascade() {
-      const seriesRow = document.getElementById("seriesRow");
-      const qualifierRow = document.getElementById("qualifierRow");
+    function optionLabel(group, value) {
+      if (value !== "All") return value;
+      return "All";
+    }
+
+    function updateFilterUi() {
       const placedBand = document.getElementById("placedBand");
-      const isPlaced = state.type === "Placed";
-      const showSeries = state.type === "Series";
-      const showQualifier = state.type === "Standalone" || (state.type === "Series" && state.series !== "All");
-      seriesRow.classList.toggle("is-open", showSeries && !isPlaced);
-      qualifierRow.classList.toggle("is-open", showQualifier && !isPlaced);
-      placedBand.classList.toggle("is-visible", isPlaced);
-    }
-
-    function setChipsActive(group) {
-      document.querySelectorAll(`[data-filter-group="${group}"] .chip`).forEach((btn) => {
-        btn.classList.toggle("active", btn.querySelector(".chip-label").textContent.toLowerCase() === state[group].toLowerCase());
+      const hasActiveFilters = Object.keys(groups).some((group) => state[group] !== "All");
+      document.querySelectorAll(".filter-select").forEach((select) => {
+        select.classList.toggle("is-active", select.value !== "All");
       });
-    }
-
-    function createFilterButton(group, value) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "chip" + (state[group] === value ? " active" : "");
-      button.innerHTML = `<span class="chip-label">${escapeHtml(value)}</span>`;
-      button.addEventListener("click", () => {
-        state[group] = value;
-        setChipsActive(group);
-        if (group === "type") {
-          // reset downstream state
-          state.series = "All";
-          state.sizeBucket = "All";
-          state.status = "All";
-          setChipsActive("series");
-          setChipsActive("sizeBucket");
-          setChipsActive("status");
-        }
-        if (group === "type" && value === "Placed") {
-          // collapse qualifier cascades when placed is active
-          document.getElementById("seriesRow").classList.remove("is-open");
-          document.getElementById("qualifierRow").classList.remove("is-open");
-        }
-        if (group === "series" && value === "All") {
-          state.sizeBucket = "All";
-          state.status = "All";
-          setChipsActive("sizeBucket");
-          setChipsActive("status");
-        }
-        updateCascade();
-        renderCatalog();
-      });
-      return button;
+      els.filterReset.disabled = !hasActiveFilters;
+      placedBand.classList.toggle("is-visible", state.type === "Placed");
+      els.filterContext.classList.toggle("has-session", state.session !== "All");
+      if (state.session === "One session") {
+        els.filterContext.textContent = "One-session flash is planned for one appointment. Final timing is confirmed after placement and scale review.";
+      } else if (state.session === "Multiple sessions") {
+        els.filterContext.textContent = "Multiple-session flash is intentionally completed across more than one appointment. The final plan is confirmed after review.";
+      } else if (state.type === "Experimental") {
+        els.filterContext.textContent = "Experimental flash is offered to test new techniques and processes. Each piece includes its own expectations and review.";
+      } else {
+        els.filterContext.textContent = hasActiveFilters ? "Filters work together. Reset returns to the full catalog." : "Use any combination of filters to narrow the catalog.";
+      }
     }
 
     function renderFilters() {
       Object.entries(groups).forEach(([group, values]) => {
-        const container = document.querySelector(`[data-filter-group="${group}"]`);
-        if (!container) return;
-        container.innerHTML = "";
-        values.forEach((value) => container.appendChild(createFilterButton(group, value)));
+        const select = document.querySelector(`[data-filter-group="${group}"]`);
+        if (!select) return;
+        select.innerHTML = values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(optionLabel(group, value))}</option>`).join("");
+        select.value = state[group];
+        select.addEventListener("change", () => {
+          state[group] = select.value;
+          updateFilterUi();
+          renderCatalog();
+        });
       });
-      updateCascade();
+      els.filterReset.addEventListener("click", () => {
+        Object.keys(groups).forEach((group) => {
+          state[group] = "All";
+          document.querySelector(`[data-filter-group="${group}"]`).value = "All";
+        });
+        updateFilterUi();
+        renderCatalog();
+      });
+      updateFilterUi();
     }
 
     function card(item) {
@@ -430,7 +411,7 @@
       const required = policy === "required" || policy === "not_available";
       link.innerHTML = `
         <span class="card-image"><img src="${item.image}" alt="${item.title}" loading="lazy"></span>
-        <span class="card-badge">${item.placed ? '<span class="pill placed">Placed</span>' : ''}<span class="pill ${slug(item.status)}">${item.status}</span><span class="pill session">${sessions}</span>${required ? '<span class="pill required">Required plan</span>' : ''}</span>
+        <span class="card-badge">${item.processCategory === "experimental" ? '<span class="pill experimental">Experimental</span>' : ''}${item.placed ? '<span class="pill placed">Placed</span>' : ''}<span class="pill ${slug(item.status)}">${item.status}</span><span class="pill session">${sessions}</span>${required ? '<span class="pill required">Required plan</span>' : ''}</span>
         <span class="card-overlay">
           <span class="card-title">${item.title}</span>
           <span class="card-sub">${item.series} · ${codeFor(item)}</span>
@@ -500,6 +481,7 @@
         price: record.price_label || fallback.price || "",
         image: media?.url || fallback.image || "",
         type: record.item_type === "sheet" ? "Sheet" : (fallback.type || "Individual"),
+        processCategory: record.process_category || fallback.processCategory || "standard",
         placed: stateValue === "placed",
         description: record.description || fallback.description || "",
         claimable: stateValue === "available" && Number(record.claimable) === 1,
