@@ -143,7 +143,7 @@ async function adminCreate(request, env, resource) {
   const keys = Object.keys(values); if (!keys.length) return failure("No editable fields supplied.");
   const initial = { id: recordId, ...values };
   await database.batch([
-    database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId,config.entityType,values.node_id || null,"internal"),
+    database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId,config.entityType,values.node_id || (config.entityType==="visual_symbol"?"node-legend":null),"internal"),
     database.prepare(`INSERT INTO ${config.table}(id,${keys.join(",")},created_at,updated_at) VALUES(?,${keys.map(()=>"?").join(",")},datetime('now'),datetime('now'))`).bind(recordId,...keys.map(k=>values[k])),
   ]);
   const created = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
@@ -185,6 +185,7 @@ async function mediaApi(request, env, mediaId="") {
 
 const NODE_FALLBACKS={
   tattoos:{id:"node-tattoos",name:"TATTOOS",slug:"tattoos",color:"#6E0404"},
+  legend:{id:"node-legend",name:"LEGEND",slug:"legend",color:"#FCB467"},
   art:{id:"node-art",name:"ART MAKING",slug:"art-making",color:"#0039BD"},
   merch:{id:"node-merch",name:"MERCH",slug:"merch",color:"#F08000"},
   about:{id:"node-about",name:"ABOUT",slug:"about",color:"#FCB467"},
@@ -197,7 +198,8 @@ const NODE_FALLBACKS={
 
 function canonicalNodeAlias(value,entityType=""){
   const raw=String(value||"").toLowerCase();
-  if(["tattooing","tattoo","tattoos","node-tattoos"].includes(raw)||["flash_item","flash_series","portfolio_item","visual_symbol"].includes(entityType))return"node-tattoos";
+  if(["legend","visual-language","visual_language","node-legend"].includes(raw)||entityType==="visual_symbol")return"node-legend";
+  if(["tattooing","tattoo","tattoos","node-tattoos"].includes(raw)||["flash_item","flash_series","portfolio_item"].includes(entityType))return"node-tattoos";
   if(["art","art-making","node-art"].includes(raw)||entityType==="art_work")return"node-art";
   if(["merch","node-merch"].includes(raw)||entityType==="merch_item")return"node-merch";
   if(["event","events","node-events"].includes(raw)||entityType==="event")return"node-events";
@@ -234,11 +236,12 @@ function entityDirectorySql(where="1=1"){
     COALESCE(NULLIF(mi.image_url,''),NULLIF(pi.source_url,''),
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id) FROM entity_media em JOIN media_assets m ON m.id=em.media_id
        WHERE em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order LIMIT 1),
+      CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(json_extract(vs.examples_json,'$[0].src'),'') ELSE '' END,
       CASE WHEN ce.entity_type='portfolio_item' THEN '/api/portfolio/media/'||pi.id ELSE '' END) image_url,
     CASE ce.entity_type
       WHEN 'flash_item' THEN CASE WHEN fi.item_type='sheet' THEN 'Flash sheet' ELSE 'Flash' END
       WHEN 'flash_series' THEN 'Flash series' WHEN 'art_work' THEN 'Painting' WHEN 'portfolio_item' THEN 'Tattoo'
-      WHEN 'merch_item' THEN COALESCE(NULLIF(mi.product_type,''),'Product') WHEN 'visual_symbol' THEN 'Symbol'
+      WHEN 'merch_item' THEN COALESCE(NULLIF(mi.product_type,''),'Product') WHEN 'visual_symbol' THEN 'Legend symbol'
       WHEN 'archive_record' THEN COALESCE(NULLIF(ar.record_type,''),'Archive record') WHEN 'archive_collection' THEN 'Archive collection'
       WHEN 'construct_node' THEN 'Construct node' WHEN 'construct_pathway' THEN 'Pathway'
       WHEN 'person' THEN 'Person' WHEN 'place' THEN 'Place' WHEN 'event' THEN 'Event' ELSE ce.entity_type END kind_label,
@@ -266,7 +269,8 @@ function entityDirectorySql(where="1=1"){
   LEFT JOIN places pl ON ce.entity_type='place' AND pl.id=ce.id
   LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
   LEFT JOIN construct_nodes cn ON cn.id=CASE
-    WHEN ce.entity_type IN ('flash_item','flash_series','portfolio_item','visual_symbol') OR ce.node_id IN ('tattoo','tattoos','tattooing') THEN 'node-tattoos'
+    WHEN ce.entity_type='visual_symbol' OR ce.node_id IN ('legend','visual-language','visual_language') THEN 'node-legend'
+    WHEN ce.entity_type IN ('flash_item','flash_series','portfolio_item') OR ce.node_id IN ('tattoo','tattoos','tattooing') THEN 'node-tattoos'
     WHEN ce.entity_type='art_work' OR ce.node_id IN ('art','art-making') THEN 'node-art'
     WHEN ce.entity_type='merch_item' OR ce.node_id='merch' THEN 'node-merch'
     WHEN ce.entity_type='event' OR ce.node_id='events' THEN 'node-events'

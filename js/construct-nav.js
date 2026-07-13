@@ -269,8 +269,6 @@
   var MOBILE_PARTICLE_COUNT = 26;
   var MOBILE_TRAVEL_END = 0.85;
   var MOBILE_XFADE_START = 0.42;
-  var MOBILE_ORBIT_SPEED = 0.00007;
-  var MOBILE_ORBIT_RADIUS = 8;
   var GLYPH_R = 32;
   var GLYPH_INNER = 22;
   var HOME_DOT_POSITIONS = [[-18, -28], [18, -28], [-18, 0], [18, 0], [-18, 28], [18, 28]];
@@ -429,7 +427,6 @@
   var mobileCx = 0;
   var mobileCy = 0;
   var mobileDpr = 1;
-  var mobileOrbit = 0;
 
   function applyTokenColorsToRenderedNav() {
     refreshVentureColors();
@@ -481,10 +478,6 @@
     var cb = hexToRgb(b);
     return 'rgb(' + Math.round(lerp(ca.r, cb.r, t)) + ',' + Math.round(lerp(ca.g, cb.g, t)) + ',' + Math.round(lerp(ca.b, cb.b, t)) + ')';
   }
-  function mobileDriftOpenFactor(prog) {
-    var t = clamp01(prog);
-    return 0.04 + 0.96 * (t * t * t);
-  }
   function mobileStartForNode(v) {
     var fromDot = HOME_FROM_DOT[v.key];
     if (typeof fromDot === 'number') {
@@ -498,17 +491,10 @@
     }
     return { x: mobileCx, y: mobileCy, r: 3 };
   }
-  function mobileAnchorForNode(nd, prog) {
-    var orbitOpen = mobileDriftOpenFactor(prog);
-    var orbitAngle = mobileOrbit * orbitOpen + nd.orbitPhase;
-    var angle = nd.angle + mobileOrbit * 0.18 * orbitOpen;
-    var drift = {
-      x: nd.dax * orbitOpen * Math.sin((mobileLastT / nd.dpx) * Math.PI * 2 + nd.dox),
-      y: nd.day * orbitOpen * Math.sin((mobileLastT / nd.dpy) * Math.PI * 2 + nd.doy),
-    };
+  function mobileAnchorForNode(nd) {
     return {
-      x: mobileCx + Math.cos(angle) * MOBILE_RING_RADIUS + Math.cos(orbitAngle) * MOBILE_ORBIT_RADIUS * orbitOpen + drift.x,
-      y: mobileCy + Math.sin(angle) * MOBILE_RING_RADIUS + Math.sin(orbitAngle) * MOBILE_ORBIT_RADIUS * orbitOpen + drift.y,
+      x: mobileCx + Math.cos(nd.angle) * MOBILE_RING_RADIUS,
+      y: mobileCy + Math.sin(nd.angle) * MOBILE_RING_RADIUS,
     };
   }
 
@@ -558,13 +544,6 @@
         y: mobileCy,
         r: 0,
         alpha: 0,
-        orbitPhase: i * 0.77,
-        dax: 4.5 + (i * 1.7) % 3.5,
-        day: 3.5 + (i * 2.3) % 3.5,
-        dpx: 18000 + (i * 3700) % 9000,
-        dpy: 22000 + (i * 4100) % 8000,
-        dox: i * 1.4,
-        doy: i * 2.1,
       });
     });
 
@@ -706,7 +685,6 @@
     if (mobileLastT == null) mobileLastT = now;
     var dt = Math.min(now - mobileLastT, 50);
     mobileLastT = now;
-    mobileOrbit += dt * MOBILE_ORBIT_SPEED;
     mCtx.clearRect(0, 0, mobileW, mobileH);
     drawMobileWordmarkGlyph(now);
 
@@ -727,22 +705,12 @@
         var bloomAlpha = 1 - xfade;
         var settledAlpha = easeOutSoft(xfade);
         var start = mobileStartForNode(nd.venture);
-        var anchor = mobileAnchorForNode(nd, staggered);
+        var anchor = mobileAnchorForNode(nd);
         var travelX = lerp(start.x, anchor.x, travel);
         var travelY = lerp(start.y, anchor.y, travel);
 
-        if (settledAlpha > 0 && nd.alpha <= 0.02) {
-          nd.x = travelX;
-          nd.y = travelY;
-        }
-        if (settledAlpha > 0) {
-          var follow = 0.012 * (dt / 16);
-          nd.x += (anchor.x - nd.x) * follow;
-          nd.y += (anchor.y - nd.y) * follow;
-        } else {
-          nd.x = travelX;
-          nd.y = travelY;
-        }
+        nd.x = travelX;
+        nd.y = travelY;
 
         nd.r = lerp(start.r, MOBILE_NODE_SIZE, travel);
         nd.alpha = Math.max(bloomAlpha * 0.9, settledAlpha);

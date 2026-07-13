@@ -72,6 +72,26 @@
 
 .cc-cards { display: grid; grid-template-columns: 1fr; gap: 10px; }
 
+.cc-group--symbols .cc-cards {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.cc-group--symbols .cc-card--with-media {
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  min-height: 80px;
+}
+
+.cc-group--symbols .cc-card-media {
+  width: 46px;
+  height: 46px;
+  margin-left: 10px;
+}
+
+.cc-group--symbols .cc-card-body { padding: 11px 8px 11px 10px; }
+.cc-group--symbols .cc-card-title { font-size: 11px; }
+.cc-group--symbols .cc-card-meta .cc-badge:nth-child(2),
+.cc-group--symbols .cc-card-meta .cc-badge:nth-child(3) { display: none; }
+
 .cc-card {
   --cc-target: #FCB467;
   position: relative;
@@ -211,6 +231,10 @@
   .cc-card { min-height: 70px; }
   .cc-card--with-media { grid-template-columns: 64px minmax(0, 1fr) auto; min-height: 86px; }
   .cc-card-media { width: 54px; height: 54px; margin-left: 12px; }
+  .cc-group--symbols .cc-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cc-group--symbols .cc-card--with-media { grid-template-columns: 48px minmax(0, 1fr); }
+  .cc-group--symbols .cc-card-media { width: 38px; height: 38px; margin-left: 8px; }
+  .cc-group--symbols .cc-card::after { display: none; }
   .cc-card-body { padding: 13px 14px; }
   .cc-map { min-height: 520px; }
   .cc-map-node { width: 78px; height: 78px; font-size: 9px; }
