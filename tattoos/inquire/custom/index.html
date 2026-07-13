@@ -107,8 +107,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <div class="layout">
       <section>
         <h1 class="page-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
-        <p class="intro-body" data-copy-id="inquiry-intro-primary"><span style="color: rgba(252, 184, 103, 0.64)">Submitting an inquiry starts the review process. If your project is a strong fit and meets budget requirements, you will receive a private booking link along with the next steps.</span></p>
-        <p class="intro-body" data-copy-id="inquiry-intro-secondary"><span style="color: rgba(252, 184, 103, 0.64)">Use this form for custom or derivative standard work. Keep in mind that I do not copy other artists work. Derivative work is limited to resonated culture cliches and classic mantras that will be reimagined in my own way and style. To see examples of what I mean, click here.</span><br><span style="color: rgba(252, 184, 103, 0.64)">To<span style="color: rgb(255, 231, 202)"> ensure you are filling out the correct form</span>, use this guide to determine you are in the right place.&nbsp;</span></p>
+        <p class="intro-body" data-copy-id="inquiry-intro-primary">Use this pathway for an original custom tattoo that is not an available flash design, a Build Your Own brief, or an open Special Project. Submitting starts a project review; it does not reserve an appointment.</p>
+        <p class="intro-body" data-copy-id="inquiry-intro-secondary">Share the idea, meaning, placement, approximate size, budget, and visual direction clearly enough to judge fit. References may describe subject matter or atmosphere, but another artist's tattoo will not be copied. If the project is accepted, you will receive the appropriate next step or a private booking link.</p>
         <p class="include-label">What to Include</p>
         <ul class="include-list">
           <li>Concept, subject matter, and the meaning behind it</li>
@@ -124,7 +124,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         </div>
         <div class="path-note">
           <p class="path-note-title" data-copy-id="inquiry-consult-note-title">Want a consultation first?</p>
-          <p class="path-note-body" data-copy-id="inquiry-consult-note-body">Book a $20 consultation - in-person at the studio or virtual over video call - for placement, cover-up review, or project planning before or alongside your inquiry.</p>
+          <p class="path-note-body" data-copy-id="inquiry-consult-note-body">Book an in-person consultation (<span data-consultation-meta="consult_in_person">loading current details…</span>) or a virtual consultation (<span data-consultation-meta="consult_virtual">loading current details…</span>) for placement, cover-up review, or project planning before or alongside your inquiry.</p>
           <a class="path-note-link" href="/tattoos/inquire/consultation/">Book a consultation &rarr;</a>
         </div>
         <div class="lead-note">
@@ -157,8 +157,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               </div>
             </div>
             <div class="field full">
-              <label for="project_type">Project type</label>
-              <select id="project_type" name="project_type">
+              <label for="project_type">Project type <span class="required-mark">*</span></label>
+              <select id="project_type" name="project_type" required>
+                <option value="">Select a project type</option>
                 <option value="new_work">New work</option>
                 <option value="cover_up">Cover-up</option>
                 <option value="large_cover_up">Large cover-up - in-person consult required</option>
@@ -167,10 +168,10 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               </select>
             </div>
             <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
-            <div class="field"><label for="size">Approx. size (optional)</label><input id="size" name="size" placeholder="Example: 4-6 in"></div>
+            <div class="field"><label for="size">Approx. size <span class="required-mark">*</span></label><input id="size" name="size" placeholder="Example: 4-6 in" required></div>
             <div class="field">
-              <label for="budget_range">Budget</label>
-              <select id="budget_range" name="budget_range">
+              <label for="budget_range">Budget range <span class="required-mark">*</span></label>
+              <select id="budget_range" name="budget_range" required>
                 <option value="">Select a range</option>
                 <option value="Under $150">Under $150</option>
                 <option value="$150-$300">$150-$300</option>
@@ -183,8 +184,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               </select>
             </div>
             <div class="field">
-              <label for="color_preference">Color preference</label>
-              <select id="color_preference" name="color_preference">
+              <label for="color_preference">Color preference <span class="required-mark">*</span></label>
+              <select id="color_preference" name="color_preference" required>
                 <option value="">Select an option</option>
                 <option value="Color">Color</option>
                 <option value="Black & grey">Black &amp; grey</option>
@@ -198,6 +199,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
             <div class="field full"><label for="message">Project notes <span class="required-mark">*</span></label><textarea id="message" name="message" required></textarea></div>
           </div>
+          <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older. <span class="required-mark">*</span></span></label>
           <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this submission begins review before an appointment is confirmed. <span class="required-mark">*</span></span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
@@ -211,6 +213,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <a href="/tattoos/">&larr; back to Art.Pill</a>
     <a href="/home/">the six.well construct</a>
   </footer>
+  <script src="/js/consultation-context.js"></script>
+  <script>hydrateConsultationContext(document);</script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
@@ -238,7 +242,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           if (!response.ok) {
             throw new Error(payload.error || "Submission failed.");
           }
-          window.location.href = "/tattoos/submission-received/";
+          window.location.href = "/tattoos/submission-received/?type=custom";
         } catch (error) {
           status.textContent = error.message || "Submission failed. Please try again.";
           submitBtn.disabled = false;

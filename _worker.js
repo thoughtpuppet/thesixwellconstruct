@@ -27,6 +27,7 @@ import {
   handleAdminGetBookingReadiness,
   handleAdminGetAvailabilityPreview,
   handleAdminGetSchedule,
+  handleAdminTattooSessionPlan,
   handleAdminListAppointments,
   handleAdminListAvailability,
   handleAdminListBookingTypes,
@@ -43,6 +44,7 @@ import {
   handleAdminUpdateAvailability,
   handleBookingCalendar,
   handleBookingContext,
+  handleSaveBookingSessionPlan,
   handleCancelAppointment,
   handleConfirmBooking,
   handleCreateBookingCheckout,
@@ -472,6 +474,11 @@ async function handleBookingApi(request, env) {
     return handleBookingContext(request, env);
   }
 
+  if (pathname === "/api/booking/session-plan") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleSaveBookingSessionPlan(request, env);
+  }
+
   if (pathname === "/api/booking/hold") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleCreateBookingHold(request, env);
@@ -520,6 +527,12 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/admin/booking/tokens/revoke-submission") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleAdminRevokeSubmissionBookingTokens(request, env);
+  }
+
+  const sessionPlanMatch = pathname.match(/^\/api\/admin\/booking\/session-plans\/([^/]+)$/);
+  if (sessionPlanMatch) {
+    if (!["GET", "PATCH"].includes(method)) return methodNotAllowed(method, ["GET", "PATCH"]);
+    return handleAdminTattooSessionPlan(request, env, decodeURIComponent(sessionPlanMatch[1]));
   }
 
   const tokenMatch = pathname.match(/^\/api\/admin\/booking\/tokens\/([^/]+)$/);

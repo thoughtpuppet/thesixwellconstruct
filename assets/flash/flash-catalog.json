@@ -67,36 +67,6 @@
       ]
     },
     {
-      "id": "ap-maze-001",
-      "title": "MAZE Series Study",
-      "series": "MAZE",
-      "status": "Past",
-      "sizeBucket": "Large",
-      "price": "Archive / not currently claimable",
-      "image": "/assets/flash/IMG_8898.jpg",
-      "type": "Individual",
-      "placed": false,
-      "description": "A MAZE study used as a visual placeholder for the series language. Future MAZE flash and related merch will live here.",
-      "claimable": false,
-      "sessionCategory": "Artist review",
-      "splitPolicy": "Artist review",
-      "estimatedSessionsMin": null,
-      "estimatedSessionsMax": null,
-      "estimatedTotalMinutesMin": null,
-      "estimatedTotalMinutesMax": null,
-      "sessionPlanNote": "Archive study; no active session plan.",
-      "sheetCode": "",
-      "designCode": "MAZE-ARCHIVE-01",
-      "merchStatus": "coming soon",
-      "merchUrl": "/merch/?filter=art.pill",
-      "archivePath": "/#archive",
-      "writingPath": "/#writings",
-      "relatedNodes": [
-        { "label": "MAZE archive", "venture": "archive", "url": "/#archive", "description": "This piece is currently a study, not a claimable flash design." },
-        { "label": "Memory writing", "venture": "writings", "url": "/#writings", "description": "Writing around blocked routes, private maps, and memory." }
-      ]
-    },
-    {
       "id": "ap-standalone-001",
       "title": "Coparent",
       "series": "Standalones",
@@ -124,65 +94,6 @@
         { "label": "Source imagery", "venture": "art", "url": "/art/", "description": "The broader image world this standalone belongs to." },
         { "label": "Related merch", "venture": "merch", "url": "/merch/?filter=art.pill", "description": "Art.Pill supply and future design objects." },
         { "label": "Open studio", "venture": "events", "url": "/#events", "description": "Encounter connected work through studio and gathering paths." }
-      ]
-    },
-    {
-      "id": "ap-sairo-001",
-      "title": "Sairoglyph Placeholder Study",
-      "series": "Sairoglyphs",
-      "status": "Available",
-      "sizeBucket": "Medium",
-      "price": "Medium pricing by placement",
-      "image": "/assets/flash/IMG_0356.jpg",
-      "type": "Individual",
-      "placed": false,
-      "description": "Placeholder card for Sairoglyph-based flash. Final title, symbol meaning, and claim status can be revised later.",
-      "claimable": true,
-      "sessionCategory": "Artist review",
-      "splitPolicy": "Artist review",
-      "estimatedSessionsMin": null,
-      "estimatedSessionsMax": null,
-      "estimatedTotalMinutesMin": null,
-      "estimatedTotalMinutesMax": null,
-      "sessionPlanNote": "Session structure is confirmed after placement and scale are reviewed.",
-      "sheetCode": "",
-      "designCode": "SAIRO-PLACEHOLDER-01",
-      "merchStatus": "coming soon",
-      "merchUrl": "",
-      "writingPath": "/#writings",
-      "relatedNodes": [
-        { "label": "Symbol writing", "venture": "writings", "url": "/#writings", "description": "Language behind the private alphabet." },
-        { "label": "Process archive", "venture": "archive", "url": "/#archive", "description": "Symbol studies and visual fragments." },
-        { "label": "Art source", "venture": "art", "url": "/art/", "description": "The visual field that teaches the marks how to move." }
-      ]
-    },
-    {
-      "id": "ap-standalone-archive-001",
-      "title": "Standalone Archive Study",
-      "series": "Standalones",
-      "status": "Past",
-      "sizeBucket": "Medium",
-      "price": "Archive / not currently claimable",
-      "image": "/assets/flash/IMG_4583.JPG",
-      "type": "Individual",
-      "placed": false,
-      "description": "Past standalone placeholder. Kept in the archive so clients can understand the range without assuming it is available.",
-      "claimable": false,
-      "sessionCategory": "Artist review",
-      "splitPolicy": "Artist review",
-      "estimatedSessionsMin": null,
-      "estimatedSessionsMax": null,
-      "estimatedTotalMinutesMin": null,
-      "estimatedTotalMinutesMax": null,
-      "sessionPlanNote": "Archive study; no active session plan.",
-      "sheetCode": "",
-      "designCode": "STAND-ARCHIVE-01",
-      "merchStatus": "none",
-      "merchUrl": "",
-      "archivePath": "/#archive",
-      "relatedNodes": [
-        { "label": "Archive room", "venture": "archive", "url": "/#archive", "description": "Past flash remains as reference and direction." },
-        { "label": "Portfolio", "venture": "tattooing", "url": "/tattoos/portfolio/", "description": "See how the language translates onto skin." }
       ]
     }
   ]

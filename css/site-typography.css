@@ -60,6 +60,7 @@ h6,
   line-height: 0.9 !important;
 }
 
+body[data-venture="tattooing"] main h1,
 body[data-venture="tattooing"] .intro h1,
 body[data-venture="tattooing"] .hero-title,
 body[data-venture="tattooing"] .page-title,
@@ -72,6 +73,7 @@ body[data-venture="tattooing"] .series-title,
   overflow-wrap: normal !important;
 }
 
+body[data-venture="tattooing"] main h1 br,
 body[data-venture="tattooing"] .intro h1 br,
 body[data-venture="tattooing"] .hero-title br,
 body[data-venture="tattooing"] .page-title br,

@@ -36,9 +36,9 @@
 </head>
 <body data-venture="tattooing">
   <main>
-    <h1>Inquiry Received.</h1>
-    <p>Your submission was captured for review in the studio submissions system. Booking confirmation follows approval.</p>
-    <p>Flash claims are checked for availability, placement, and scale. Custom inquiries and Special Projects are reviewed for the strongest path forward. If approved, you will receive a private token booking link to choose a session, place the deposit, and confirm the appointment.</p>
+    <h1 id="receivedTitle">Inquiry Received.</h1>
+    <p id="receivedIntro">Your submission was captured for review in the studio submissions system. Booking confirmation follows approval.</p>
+    <p id="receivedContext">Flash claims are checked for availability, placement, and scale. Custom inquiries and Special Projects are reviewed for the strongest path forward. If approved, you will receive a private token booking link to choose a session, place the deposit, and confirm the appointment.</p>
     <div class="next-steps">
       <p class="next-steps-label">What happens next</p>
       <ol>
@@ -57,5 +57,21 @@
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script>
+  (function(){
+    var params = new URLSearchParams(location.search);
+    if (params.get('type') !== 'special-project') return;
+    var names = {
+      'mythic-body-studies': 'Mythic Body Studies',
+      'memory-transfer': 'Memory Transfer Studies',
+      'large-scale': 'Large Scale Symbolic Work',
+      'other': 'your Special Project'
+    };
+    var project = names[params.get('project')] || 'your Special Project';
+    document.getElementById('receivedTitle').textContent = 'Application Received.';
+    document.getElementById('receivedIntro').textContent = 'Your application for ' + project + ' was captured for Special Projects review.';
+    document.getElementById('receivedContext').textContent = 'The studio will review the concept, placement, scale, timeline, and budget together. If the project is accepted, the next email will explain its development path and provide private booking access when the work is ready to schedule.';
+  })();
+  </script>
 </body>
 </html>

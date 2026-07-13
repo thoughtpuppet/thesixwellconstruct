@@ -173,12 +173,13 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field"><label for="pronouns">Pronouns (optional)</label><input id="pronouns" name="pronouns"></div>
             <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="Example: left forearm" required></div>
             <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
-            <div class="field"><label for="claim_bid">Bid / budget</label><input id="claim_bid" name="claim_bid" placeholder="Example: $300-$450" required></div>
+            <div class="field"><label for="claim_bid">Budget range</label><input id="claim_bid" name="claim_bid" placeholder="Example: $300-$450" required></div>
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="Example: no rush, June, weekend preferred"></div>
             <div class="field full is-hidden" id="sheetCodeField" aria-hidden="true"><label for="sheet_code">Specific design code on sheet</label><input id="sheet_code" name="sheet_code" placeholder="Example: A, B3, AP-01-C"><p class="file-note">Use this when the selected flash is a sheet and you want one exact item from it.</p></div>
             <div class="field full"><label for="body_references">Body / placement uploads</label><input id="body_references" name="body_references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Optional. Helpful for placement, scale, or body-area context.</p></div>
             <div class="field full"><label for="message">Claim notes (optional)</label><textarea id="message" name="message" placeholder="Anything the studio should know about placement, meaning, availability, or fit."></textarea></div>
           </div>
+          <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older.</span></label>
           <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit Claim</button>
@@ -358,15 +359,56 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       if (!shouldReveal) els.sheetCodeInput.value = "";
     }
 
+    function titleCase(value) {
+      return String(value || "").replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+    }
+
+    function managedItem(record, fallback = {}) {
+      const stateValue = String(record.state || "").toLowerCase();
+      const media = Array.isArray(record.media) ? record.media[0] : null;
+      return {
+        ...fallback,
+        id: record.id || fallback.id,
+        title: record.title || fallback.title || "Untitled flash",
+        series: titleCase(record.series_id) || fallback.series || "Standalones",
+        status: ["available", "reserved"].includes(stateValue) ? "Available" : "Past",
+        sizeBucket: record.size_bucket || fallback.sizeBucket || "",
+        price: record.price_label || fallback.price || "",
+        image: media?.url || fallback.image || "",
+        type: record.item_type === "sheet" ? "Sheet" : (fallback.type || "Individual"),
+        claimable: stateValue === "available" && Number(record.claimable) === 1,
+        sheetCode: record.sheet_code || fallback.sheetCode || "",
+        designCode: record.design_code || fallback.designCode || "",
+        sessionCategory: record.session_category || fallback.sessionCategory || "Artist review",
+        splitPolicy: record.split_policy || fallback.splitPolicy || "Artist review",
+        estimatedSessionsMin: record.estimated_sessions_min ?? fallback.estimatedSessionsMin ?? null,
+        estimatedSessionsMax: record.estimated_sessions_max ?? fallback.estimatedSessionsMax ?? null,
+        estimatedTotalMinutesMin: record.estimated_total_minutes_min ?? fallback.estimatedTotalMinutesMin ?? null,
+        estimatedTotalMinutesMax: record.estimated_total_minutes_max ?? fallback.estimatedTotalMinutesMax ?? null,
+        sessionPlanNote: record.session_plan_note || fallback.sessionPlanNote || "",
+      };
+    }
+
     async function init() {
+      let catalog = { items: [] };
       try {
         const response = await fetch("/assets/flash/flash-catalog.json", { cache: "no-store" });
         if (!response.ok) throw new Error("Catalog unavailable");
-        const catalog = await response.json();
-        availableFlash = (catalog.items || []).filter((item) => item.claimable === true && item.status === "Available");
+        catalog = await response.json();
       } catch {
-        availableFlash = [];
+        catalog = { items: [] };
       }
+      let items = catalog.items || [];
+      try {
+        const response = await fetch("/api/flash", { cache: "no-store" });
+        if (!response.ok) throw new Error("Managed catalog unavailable");
+        const payload = await response.json();
+        const fallbackById = new Map(items.map((item) => [item.id, item]));
+        items = (payload.records || []).map((record) => managedItem(record, fallbackById.get(record.id)));
+      } catch {
+        // Static catalog remains the safe fallback while D1 or a migration is unavailable.
+      }
+      availableFlash = items.filter((item) => item.claimable === true && item.status === "Available");
       const requested = selectedRequestId();
       renderOptions(requested);
       updateSelected(requested);
@@ -402,7 +444,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           if (!response.ok) {
             throw new Error(payload.error || "Submission failed.");
           }
-          window.location.href = "/tattoos/submission-received/";
+          window.location.href = "/tattoos/submission-received/?type=flash";
         } catch (error) {
           status.textContent = error.message || "Submission failed. Please try again.";
           submitBtn.disabled = false;

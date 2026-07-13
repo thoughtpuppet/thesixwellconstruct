@@ -126,6 +126,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           <div>
             <h3 class="consult-option-title" data-copy-id="inquire-consult-in-person-title">In-Person<br>Consultation</h3>
             <p class="consult-option-body" data-copy-id="inquire-consult-in-person-body">Book focused planning time for placement, large cover-up review, project direction, or questions that you want to share face to face.</p>
+            <p class="consult-option-kicker" data-consultation-meta="consult_in_person" aria-live="polite">Loading current details…</p>
           </div>
           <span class="consult-option-action">Book in person &rarr;</span>
         </a>
@@ -134,6 +135,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           <div>
             <h3 class="consult-option-title" data-copy-id="inquire-consult-virtual-title">Virtual<br>Consultation</h3>
             <p class="consult-option-body" data-copy-id="inquire-consult-virtual-body">Meet over video when you need planning support before an inquiry, but cannot make it to the studio.</p>
+            <p class="consult-option-kicker" data-consultation-meta="consult_virtual" aria-live="polite">Loading current details…</p>
           </div>
           <span class="consult-option-action">Book virtual &rarr;</span>
         </a>
@@ -206,6 +208,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <a href="/tattoos/" data-copy-id="inquire-footer-back">&larr; back to Art.Pill tattoo house</a>
     <a href="/home/" data-copy-id="inquire-footer-home">the six.well construct</a>
   </footer>
+  <script src="/js/consultation-context.js"></script>
+  <script>hydrateConsultationContext(document);</script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>

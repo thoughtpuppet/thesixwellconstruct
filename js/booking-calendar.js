@@ -327,12 +327,16 @@
           payload = previewContext();
           if (payload.error) throw new Error(payload.error);
         } else {
-          const params = apiBookingTypeIds.length
-            ? `?type=${apiBookingTypeIds.map(encodeURIComponent).join("&type=")}`
-            : "";
-          const response = await fetch(`${contextUrl}${params}`, { cache: "no-store" });
-          payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
+          if (contextUrl === "/api/booking/public-consultation/context" && global.getPublicConsultationContext) {
+            payload = await global.getPublicConsultationContext();
+          } else {
+            const params = apiBookingTypeIds.length
+              ? `?type=${apiBookingTypeIds.map(encodeURIComponent).join("&type=")}`
+              : "";
+            const response = await fetch(`${contextUrl}${params}`, { cache: "no-store" });
+            payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
+          }
         }
         const allTypes = payload.bookingTypes || (payload.bookingType ? [payload.bookingType] : []);
         bookingTypes = allTypes.filter(filterBookingTypes);

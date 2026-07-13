@@ -35,6 +35,15 @@
   .booking-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:56px; align-items:start; }
   .section { display:grid; gap:14px; margin-bottom:36px; }
   .session-list,.window-list { display:grid; gap:10px; }
+  .session-plan-panel { border:5px solid rgba(110,4,4,.45); padding:20px; display:grid; gap:16px; }
+  .session-plan-title { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
+  .session-plan-copy { margin:0; color:rgba(255,231,202,.62); font-size:13px; line-height:1.7; }
+  .session-plan-options { display:grid; gap:8px; }
+  .session-plan-ack { display:grid; grid-template-columns:20px 1fr; gap:10px; align-items:start; color:var(--muted); font-size:12px; line-height:1.6; }
+  .session-plan-ack input { width:18px; height:18px; margin-top:2px; accent-color:var(--signal); }
+  .session-plan-confirm { min-height:46px; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+  .session-plan-confirm:disabled { opacity:.4; cursor:not-allowed; }
+  .session-plan-confirm:not(:disabled):hover { border-color:var(--accent); color:var(--accent); }
   .window-tools { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:2px; }
   .month-nav { display:flex; align-items:center; gap:8px; }
   .month-button { width:34px; min-height:34px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:14px; font-weight:900; line-height:1; transition:border-color var(--t-fast), color var(--t-fast); }
@@ -116,6 +125,11 @@
 
   <div id="bookingApp" class="booking-grid hidden">
     <div>
+      <section class="section hidden" id="sessionPlanSection">
+        <p class="section-label">Your Session Estimate</p>
+        <div class="session-plan-panel" id="sessionPlanPanel"></div>
+      </section>
+      <div id="appointmentSelection">
       <section class="section">
         <p class="section-label">Session &amp; Deposit</p>
         <div id="sessionList" class="session-list"></div>
@@ -133,6 +147,7 @@
         <div id="calendar" class="calendar hidden" data-live-edit-ignore="true"></div>
         <div id="windowList" class="window-list"></div>
       </section>
+      </div>
     </div>
     <aside class="panel">
       <div class="panel-row"><span class="panel-key">Client</span><span id="clientValue">-</span></div>
@@ -166,6 +181,9 @@
   const statusEl = document.getElementById("status");
   const appEl = document.getElementById("bookingApp");
   const sessionListEl = document.getElementById("sessionList");
+  const sessionPlanSection = document.getElementById("sessionPlanSection");
+  const sessionPlanPanel = document.getElementById("sessionPlanPanel");
+  const appointmentSelection = document.getElementById("appointmentSelection");
   const windowListEl = document.getElementById("windowList");
   const windowToolsEl = document.getElementById("windowTools");
   const monthSelectEl = document.getElementById("monthSelect");
@@ -188,6 +206,8 @@
   let selectedMonthKey = "";
   let selectedDayKey = "";
   let selectedTipCents = 0;
+  let selectedPlanPreference = "";
+  let planAcknowledged = false;
   if (previewMode && editMode) document.body.classList.add("local-edit-preview");
 
   function previewContext() {
@@ -208,6 +228,18 @@
     return {
       client: { name: "Preview Client", email: "client@example.com", phone: "" },
       submission: { id: "preview", type: "tattoo_inquiry" },
+      sessionPlan: {
+        sessionCategory: "multiple_sessions",
+        splitPolicy: "client_choice",
+        estimatedSessionsMin: 2,
+        estimatedSessionsMax: 3,
+        estimatedTotalMinutesMin: 420,
+        estimatedTotalMinutesMax: 600,
+        artistNote: "The composition is planned across more than one sitting. Choose the pacing that best supports your body and the studio process.",
+        clientPreference: "",
+        clientAcknowledged: false,
+        clientSelectedAt: "",
+      },
       bookingTypes: [
         {
           id: "tattoo_quarter",
@@ -266,6 +298,7 @@
       client: payload.client || { name: "Preview Client", email: "", phone: "" },
       submission: payload.submission || { id: "preview", type: "tattoo_inquiry" },
       settings: payload.settings || null,
+      sessionPlan: payload.sessionPlan || null,
       bookingTypes: payload.bookingTypes,
       availabilityWindows: payload.availabilityWindows,
     };
@@ -405,9 +438,84 @@
     return `${minutes} minutes`;
   }
 
+  function estimateRange(minimum, maximum, formatter) {
+    const min = Number(minimum) || 0;
+    const max = Number(maximum) || 0;
+    if (!min && !max) return "";
+    if (!max || min === max) return formatter(min || max);
+    return `${formatter(min)}–${formatter(max)}`;
+  }
+
+  function sessionCountRange(minimum, maximum) {
+    const min = Number(minimum) || 0;
+    const max = Number(maximum) || 0;
+    if (!min && !max) return "";
+    if (!max || min === max) {
+      const value = min || max;
+      return `${value} session${value === 1 ? "" : "s"}`;
+    }
+    return `${min}–${max} sessions`;
+  }
+
+  function totalTimeRange(minimum, maximum) {
+    const min = Number(minimum) || 0;
+    const max = Number(maximum) || 0;
+    if (!min && !max) return "";
+    if (min && max && min !== max && min % 60 === 0 && max % 60 === 0) {
+      return `${min / 60}–${max / 60} hours`;
+    }
+    return estimateRange(min, max, (value) => minutesLabel(value));
+  }
+
+  function planIsReady(plan) {
+    if (!plan || !["required", "client_choice", "not_available"].includes(plan.splitPolicy)) return true;
+    return Boolean(plan.clientAcknowledged && plan.clientPreference && plan.clientSelectedAt);
+  }
+
+  function renderSessionPlan() {
+    const plan = context?.sessionPlan;
+    if (!plan) {
+      sessionPlanSection.classList.add("hidden");
+      appointmentSelection.classList.remove("hidden");
+      return;
+    }
+    sessionPlanSection.classList.remove("hidden");
+    const category = plan.sessionCategory === "one_session" ? "One session" : plan.sessionCategory === "multiple_sessions" ? "Multiple sessions" : "Artist review";
+    const sessions = sessionCountRange(plan.estimatedSessionsMin, plan.estimatedSessionsMax);
+    const totalTime = totalTimeRange(plan.estimatedTotalMinutesMin, plan.estimatedTotalMinutesMax);
+    const estimate = [sessions, totalTime].filter(Boolean).join(" · ");
+    const fixed = ["required", "not_available"].includes(plan.splitPolicy);
+    const flexible = plan.splitPolicy === "client_choice";
+    const choices = flexible ? [
+      ["studio_plan", "Follow the studio recommendation", "Use the pacing shown in the estimate."],
+      ["one_longer_session", "Request one longer session", "The studio will confirm whether the work and your appointment window allow it."],
+      ["multiple_shorter_sessions", "Request multiple shorter sessions", "Complete the work across shorter appointments."],
+      ["discuss_with_artist", "Discuss it with the artist", "Hold the scheduling decision until you speak with the studio."],
+    ] : [["studio_plan", fixed ? "Accept the required session structure" : "Continue with the studio plan", fixed ? "This structure is part of the approved process and is not optional." : "The studio will confirm the final pacing."]];
+    const policyCopy = plan.splitPolicy === "required"
+      ? "This tattoo must be completed across multiple sessions."
+      : plan.splitPolicy === "not_available"
+        ? "This tattoo must be completed in one session; splitting is not available."
+        : flexible
+          ? "The studio has provided its recommendation, and you may choose how you would prefer to pace the work."
+          : "The artist is still reviewing the final session structure.";
+    sessionPlanPanel.innerHTML = `
+      <h2 class="session-plan-title">${escapeHtml(category)}${estimate ? ` · ${escapeHtml(estimate)}` : ""}</h2>
+      <p class="session-plan-copy">${escapeHtml(plan.artistNote || "Your estimate is based on the approved design, placement, and studio process.")}</p>
+      <p class="session-plan-copy">${escapeHtml(policyCopy)}</p>
+      ${planIsReady(plan) ? `<div class="status">Saved: ${escapeHtml(String(plan.clientPreference).replace(/_/g," "))}. You may update this choice before booking.</div>` : ""}
+      <div class="session-plan-options">${choices.map(([value,title,meta]) => `<button class="choice ${selectedPlanPreference === value ? "active" : ""}" type="button" data-plan-preference="${value}"><span><span class="choice-title">${escapeHtml(title)}</span><span class="choice-meta">${escapeHtml(meta)}</span></span></button>`).join("")}</div>
+      <label class="session-plan-ack"><input id="sessionPlanAck" type="checkbox" ${planAcknowledged ? "checked" : ""}><span>I have reviewed the estimated time and session structure. I understand the final count can change with placement, detail, skin response, breaks, and comfort during the appointment.</span></label>
+      <button class="session-plan-confirm" id="confirmSessionPlanBtn" type="button" ${selectedPlanPreference && planAcknowledged ? "" : "disabled"}>Confirm Session Plan</button>
+      <p class="fine" id="sessionPlanStatus"></p>
+    `;
+    appointmentSelection.classList.toggle("hidden", !planIsReady(plan));
+  }
+
   function render() {
     const types = context.bookingTypes || [];
     const windows = context.availabilityWindows || [];
+    renderSessionPlan();
     sessionListEl.innerHTML = types.map((type) => `
       <button class="choice ${selectedType?.id === type.id ? "active" : ""}" type="button" data-type="${escapeHtml(type.id)}">
         <span>
@@ -456,8 +564,14 @@
     depositValue.textContent = selectedType ? selectedType.depositLabel : "-";
     tipValue.textContent = money(selectedTipCents, selectedType?.currency || "USD");
     totalValue.textContent = selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
-    checkoutBtn.disabled = !selectedType || !selectedWindow;
+    checkoutBtn.disabled = !selectedType || !selectedWindow || !planIsReady(context.sessionPlan);
     window.dispatchEvent(new CustomEvent("sixwell:booking-rendered"));
+  }
+
+  function initializePlanSelection() {
+    selectedPlanPreference = context?.sessionPlan?.clientPreference || "";
+    planAcknowledged = Boolean(context?.sessionPlan?.clientAcknowledged);
+    if (["required", "not_available"].includes(context?.sessionPlan?.splitPolicy) && !selectedPlanPreference) selectedPlanPreference = "studio_plan";
   }
 
   async function loadContext() {
@@ -476,6 +590,7 @@
       context = adminPreviewContext() || previewContext();
       selectedType = context.bookingTypes[0] || null;
       selectedWindow = null;
+      initializePlanSelection();
       statusEl.classList.add("hidden");
       appEl.classList.remove("hidden");
       checkoutBtn.textContent = "Preview Checkout";
@@ -493,10 +608,50 @@
     context = payload;
     selectedType = context.bookingTypes[0] || null;
     selectedWindow = null;
+    initializePlanSelection();
     statusEl.classList.add("hidden");
     appEl.classList.remove("hidden");
     render();
   }
+
+  sessionPlanSection.addEventListener("click", async (event) => {
+    const choice = event.target.closest("[data-plan-preference]");
+    if (choice) {
+      selectedPlanPreference = choice.dataset.planPreference || "";
+      renderSessionPlan();
+      return;
+    }
+    if (event.target.id !== "confirmSessionPlanBtn") return;
+    const status = document.getElementById("sessionPlanStatus");
+    if (!selectedPlanPreference || !planAcknowledged) return;
+    if (previewMode) {
+      context.sessionPlan = { ...context.sessionPlan, clientPreference:selectedPlanPreference, clientAcknowledged:true, clientSelectedAt:new Date().toISOString() };
+      render();
+      return;
+    }
+    event.target.disabled = true;
+    if (status) status.textContent = "Saving your session choice.";
+    const response = await fetch("/api/booking/session-plan", {
+      method: "POST",
+      headers: { "content-type":"application/json" },
+      body: JSON.stringify({ token, preference:selectedPlanPreference, acknowledged:true }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (status) status.textContent = payload.error || "Unable to save your session choice.";
+      event.target.disabled = false;
+      return;
+    }
+    context.sessionPlan = payload.sessionPlan;
+    initializePlanSelection();
+    render();
+  });
+
+  sessionPlanSection.addEventListener("change", (event) => {
+    if (event.target.id !== "sessionPlanAck") return;
+    planAcknowledged = event.target.checked;
+    renderSessionPlan();
+  });
 
   sessionListEl.addEventListener("click", (event) => {
     const button = event.target.closest("[data-type]");

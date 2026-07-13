@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
-<link rel="stylesheet" href="/studio/construct-manager.css">
+<link rel="stylesheet" href="/studio/construct-manager.css?v=art-upload">
 <style>
   :root {
     color-scheme: dark;
@@ -198,6 +198,11 @@
   .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
   .assist-panel { border:5px solid var(--ring-faint); padding:14px; margin-top:16px; display:grid; gap:10px; }
   .assist-panel textarea { min-height:112px; }
+  .session-plan-editor { border:5px solid rgba(110,4,4,.46); padding:16px; margin-top:18px; display:grid; gap:14px; }
+  .session-plan-editor h3 { margin:0; color:var(--accent); font-family:var(--sans); font-size:16px; text-transform:uppercase; }
+  .session-plan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .session-plan-grid .wide { grid-column:1 / -1; }
+  .session-plan-client-state { color:var(--dim); font-family:var(--sans); font-size:11px; line-height:1.6; }
   .availability-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
   .availability-list { display:grid; gap:10px; }
   .availability-item { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:8px; }
@@ -465,6 +470,7 @@
       walkInPlaceholder: "Open studio note",
     },
   };
+  const TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
   const HOME_DAY_COLORS = {
     tattoo: "var(--color-tattooing,#6E0404)",
     art: "var(--color-art,#0039BD)",
@@ -810,7 +816,7 @@
           ${field("Flash Size", p("flash_size"))}
           ${field("Placement", p("placement"))}
           ${field("Scale", p("scale"))}
-          ${field("Bid / Budget", p("claim_bid"))}
+          ${field("Budget Range", p("claim_bid"))}
           ${field("Timeline", p("timeline"))}
         </div>
         ${p("sheet_code") ? `<div class="field"><label>Specific Sheet Code</label><div class="value">${escapeHtml(p("sheet_code"))}</div></div>` : ""}
@@ -2142,7 +2148,7 @@ ${meetingLines}
     return url;
   }
 
-  function clientPreviewContext(submission, payload) {
+  function clientPreviewContext(submission, payload, sessionPlan = null) {
     const clientName = submission.contactName || payloadValue(submission, "name") || "Preview Client";
     return {
       createdAt: Date.now(),
@@ -2158,6 +2164,7 @@ ${meetingLines}
         sourcePath: submission.sourcePath || "",
       },
       settings: payload.settings || null,
+      sessionPlan,
       bookingTypes: payload.bookingTypes || [],
       availabilityWindows: payload.availabilityWindows || [],
     };
@@ -2190,7 +2197,7 @@ ${meetingLines}
       if (requiresInPersonConsult(submission)) {
         return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: ${bookingUrl}`;
       }
-      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project has been approved for booking. You can choose your session and place the deposit here: ${bookingUrl}`;
+      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project has been approved for booking. Review your session estimate, choose your pacing where available, and place the deposit here: ${bookingUrl}`;
     }
     if (bookingUrl && submission.status === "booked") {
       return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
@@ -2211,6 +2218,69 @@ ${meetingLines}
         ${canResendConfirmation ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
       </div>
     `;
+  }
+
+  function sessionPlanOption(value, current, label) {
+    return `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`;
+  }
+
+  function sessionPlanEditorHtml(plan = {}) {
+    const preference = plan.clientPreference ? titleize(plan.clientPreference) : "No client response yet";
+    const responseTime = plan.clientSelectedAt ? ` · ${formatDate(plan.clientSelectedAt)}` : "";
+    return `
+      <h3>Session Estimate &amp; Splitting</h3>
+      <p class="contact">Set the structure the client will review before booking. Required plans cannot be overridden by client preference. Saving a revision clears any earlier client response so they must confirm the updated estimate.</p>
+      <form id="tattooSessionPlanForm" class="session-plan-grid">
+        <div class="field"><label for="planSessionCategory">Session category</label><select id="planSessionCategory" name="sessionCategory">
+          ${sessionPlanOption("artist_review", plan.sessionCategory || "artist_review", "Artist review")}
+          ${sessionPlanOption("one_session", plan.sessionCategory, "One session")}
+          ${sessionPlanOption("multiple_sessions", plan.sessionCategory, "Multiple sessions")}
+        </select></div>
+        <div class="field"><label for="planSplitPolicy">Splitting policy</label><select id="planSplitPolicy" name="splitPolicy">
+          ${sessionPlanOption("artist_review", plan.splitPolicy || "artist_review", "Artist review")}
+          ${sessionPlanOption("required", plan.splitPolicy, "Splitting required")}
+          ${sessionPlanOption("client_choice", plan.splitPolicy, "Client choice after estimate")}
+          ${sessionPlanOption("not_available", plan.splitPolicy, "Splitting unavailable")}
+        </select></div>
+        <div class="field"><label for="planSessionsMin">Sessions minimum</label><input id="planSessionsMin" name="estimatedSessionsMin" type="number" min="1" step="1" value="${escapeHtml(plan.estimatedSessionsMin ?? "")}"></div>
+        <div class="field"><label for="planSessionsMax">Sessions maximum</label><input id="planSessionsMax" name="estimatedSessionsMax" type="number" min="1" step="1" value="${escapeHtml(plan.estimatedSessionsMax ?? "")}"></div>
+        <div class="field"><label for="planMinutesMin">Total minutes minimum</label><input id="planMinutesMin" name="estimatedTotalMinutesMin" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMin ?? "")}"></div>
+        <div class="field"><label for="planMinutesMax">Total minutes maximum</label><input id="planMinutesMax" name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMax ?? "")}"></div>
+        <div class="field wide"><label for="planArtistNote">Client-facing estimate note</label><textarea id="planArtistNote" name="artistNote" placeholder="Explain the process, required breaks, or why this structure is necessary.">${escapeHtml(plan.artistNote || "")}</textarea></div>
+      </form>
+      <p class="session-plan-client-state">Client response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}</p>
+      <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button">Save Session Plan</button></div>
+    `;
+  }
+
+  async function renderTattooSessionPlanEditor(submissionId) {
+    const mount = document.getElementById("tattooSessionPlanEditor");
+    if (!mount) return;
+    mount.innerHTML = `<p class="contact">Loading session plan…</p>`;
+    try {
+      const payload = await api(`/api/admin/booking/session-plans/${encodeURIComponent(submissionId)}`);
+      mount.innerHTML = sessionPlanEditorHtml(payload.sessionPlan || {});
+      enhanceControls(mount);
+    } catch (error) {
+      mount.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
+    }
+  }
+
+  async function saveTattooSessionPlan(submissionId) {
+    const form = document.getElementById("tattooSessionPlanForm");
+    if (!form) return null;
+    const values = Object.fromEntries(new FormData(form));
+    const payload = await api(`/api/admin/booking/session-plans/${encodeURIComponent(submissionId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    const mount = document.getElementById("tattooSessionPlanEditor");
+    if (mount) {
+      mount.innerHTML = sessionPlanEditorHtml(payload.sessionPlan || {});
+      enhanceControls(mount);
+    }
+    return payload.sessionPlan;
   }
 
   function renderDetail(submission) {
@@ -2248,6 +2318,7 @@ ${meetingLines}
       ${typeFields(submission)}
       ${renderFiles(submission)}
       ${renderPaymentSummary(submission)}
+      ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<div class="session-plan-editor" id="tattooSessionPlanEditor"></div>` : ""}
 
       <div class="actions">
         <div class="field">
@@ -2315,6 +2386,7 @@ ${meetingLines}
     `;
     enhanceControls(detailEl);
     renderEventHistory(submission.id);
+    if (TATTOO_PROJECT_TYPES.has(submission.type)) renderTattooSessionPlanEditor(submission.id);
     if (!hasAppointment) renderTokenState(submission.id);
   }
 
@@ -3588,12 +3660,22 @@ ${meetingLines}
       return;
     }
 
+    if (event.target.id === "saveSessionPlanBtn" && activeId) {
+      setStatus("Saving session plan");
+      await saveTattooSessionPlan(activeId);
+      setStatus("Session plan saved");
+      return;
+    }
+
     if (event.target.id === "previewBookingBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
       if (!submission) return;
       setStatus("Building preview");
-      const payload = await api("/api/admin/booking/availability-preview");
-      localStorage.setItem(bookingPreviewKey, JSON.stringify(clientPreviewContext(submission, payload)));
+      const [payload, planPayload] = await Promise.all([
+        api("/api/admin/booking/availability-preview"),
+        TATTOO_PROJECT_TYPES.has(submission.type) ? api(`/api/admin/booking/session-plans/${encodeURIComponent(activeId)}`) : Promise.resolve({ sessionPlan:null }),
+      ]);
+      localStorage.setItem(bookingPreviewKey, JSON.stringify(clientPreviewContext(submission, payload, planPayload.sessionPlan || null)));
       window.open(previewUrl().toString(), "_blank", "noopener,noreferrer");
       setStatus("Real-data preview opened");
       return;
@@ -4239,6 +4321,6 @@ ${meetingLines}
   }
 })();
 </script>
-<script src="/studio/construct-manager.js"></script>
+<script src="/studio/construct-manager.js?v=art-upload"></script>
 </body>
 </html>

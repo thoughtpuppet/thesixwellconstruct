@@ -29,6 +29,10 @@ const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
 
 // Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.
 const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
+const TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
+const SESSION_CATEGORIES = new Set(["artist_review", "one_session", "multiple_sessions"]);
+const SPLIT_POLICIES = new Set(["artist_review", "required", "client_choice", "not_available"]);
+const CLIENT_SESSION_PREFERENCES = new Set(["studio_plan", "one_longer_session", "multiple_shorter_sessions", "discuss_with_artist"]);
 
 const CONFIRMATION_PATHS = {
   consult_in_person: "/booking/confirmed/consultation/",
@@ -571,6 +575,49 @@ async function loadTokenContext(db, rawToken) {
   };
 }
 
+function normalizeTattooSessionPlan(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    submissionId: row.submission_id,
+    sessionCategory: row.session_category || "artist_review",
+    splitPolicy: row.split_policy || "artist_review",
+    estimatedSessionsMin: row.estimated_sessions_min ?? null,
+    estimatedSessionsMax: row.estimated_sessions_max ?? null,
+    estimatedTotalMinutesMin: row.estimated_total_minutes_min ?? null,
+    estimatedTotalMinutesMax: row.estimated_total_minutes_max ?? null,
+    artistNote: row.artist_note || "",
+    clientPreference: row.client_preference || "",
+    clientAcknowledged: Boolean(row.client_acknowledged),
+    clientInformedAt: row.client_informed_at || "",
+    clientSelectedAt: row.client_selected_at || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function loadTattooSessionPlan(db, submissionId) {
+  if (!submissionId) return null;
+  return db.prepare("SELECT * FROM tattoo_session_plans WHERE submission_id = ?").bind(submissionId).first();
+}
+
+function sessionPlanRequiresClientResponse(plan) {
+  return Boolean(plan && ["required", "client_choice", "not_available"].includes(plan.split_policy));
+}
+
+function sessionPlanResponseComplete(plan) {
+  if (!sessionPlanRequiresClientResponse(plan)) return true;
+  return Boolean(Number(plan.client_acknowledged) === 1 && plan.client_preference && plan.client_selected_at);
+}
+
+async function ensureSessionPlanResponse(db, tokenContext) {
+  const plan = await loadTattooSessionPlan(db, tokenContext?.token?.submission_id);
+  if (plan && !sessionPlanResponseComplete(plan)) {
+    return { error: "Review and confirm the studio's session plan before choosing an appointment." };
+  }
+  return { plan };
+}
+
 async function listBookingTypes(db, allowedBookingTypes) {
   const result = await db
     .prepare(
@@ -761,6 +808,7 @@ export async function handleBookingContext(request, env) {
 
     const bookingTypes = await listBookingTypes(db, context.allowedBookingTypes);
     const windows = await listPublicWindows(db, bookingTypes);
+    const sessionPlan = await loadTattooSessionPlan(db, context.token.submission_id);
 
     return json({
       ok: true,
@@ -773,6 +821,7 @@ export async function handleBookingContext(request, env) {
         id: context.token.submission_id,
         type: context.token.submission_type,
       },
+      sessionPlan: normalizeTattooSessionPlan(sessionPlan),
       bookingTypes,
       availabilityWindows: windows,
     });
@@ -780,6 +829,34 @@ export async function handleBookingContext(request, env) {
     return errorResponse("Unable to load booking context.", 500, {
       detail: error.message,
     });
+  }
+}
+
+export async function handleSaveBookingSessionPlan(request, env) {
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  try {
+    const db = requireBookingDb(env);
+    const context = await loadTokenContext(db, asString(body.token));
+    if (!context) return errorResponse("A private booking link is required.", 401);
+    if (context.invalid) return errorResponse(context.invalid, 403);
+    const plan = await loadTattooSessionPlan(db, context.token.submission_id);
+    if (!plan) return errorResponse("No session plan is attached to this project.", 404);
+    if (body.acknowledged !== true) return errorResponse("Acknowledge the session estimate before continuing.", 400);
+    const preference = asString(body.preference);
+    if (!CLIENT_SESSION_PREFERENCES.has(preference)) return errorResponse("Choose a valid session preference.", 400);
+    if (["required", "not_available"].includes(plan.split_policy) && preference !== "studio_plan") {
+      return errorResponse("This project has a required session structure.", 409);
+    }
+    if (plan.split_policy === "artist_review" && !["studio_plan", "discuss_with_artist"].includes(preference)) {
+      return errorResponse("The artist must finish reviewing this session structure.", 409);
+    }
+    const now = new Date().toISOString();
+    await db.prepare(`UPDATE tattoo_session_plans SET client_preference = ?, client_acknowledged = 1, client_informed_at = COALESCE(client_informed_at, ?), client_selected_at = ?, updated_at = ? WHERE submission_id = ?`)
+      .bind(preference, now, now, now, context.token.submission_id).run();
+    return json({ ok: true, sessionPlan: normalizeTattooSessionPlan(await loadTattooSessionPlan(db, context.token.submission_id)) });
+  } catch (error) {
+    return errorResponse("Unable to save the session preference.", 500, { detail: error.message });
   }
 }
 
@@ -1067,6 +1144,7 @@ function publicClientFromBody(body) {
     phone: asOptionalString(body.phone),
     direction: asOptionalString(body.direction),
     understand: asString(body.understand),
+    ageConfirmed: asString(body.age_confirmed),
   };
 }
 
@@ -1079,6 +1157,9 @@ function validatePublicConsultation(body) {
   }
   if (client.understand !== "yes") {
     return { error: "Consultation acknowledgement is required." };
+  }
+  if (client.ageConfirmed !== "yes") {
+    return { error: "You must confirm that you are 18 or older." };
   }
   if (!PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(asString(body.bookingTypeId))) {
     return { error: "Please select a public consultation session type." };
@@ -1113,6 +1194,7 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
     booking_type_label: bookingType.label,
     deposit_label: formatMoney(bookingType.deposit_cents, bookingType.currency || "USD"),
     understand: client.understand,
+    age_confirmed: client.ageConfirmed,
   };
   const contact = {
     name: client.name,
@@ -1650,6 +1732,8 @@ export async function handleCreateBookingHold(request, env) {
     const context = await loadTokenContext(db, asString(body.token));
     if (!context) return errorResponse("A private booking link is required.", 401);
     if (context.invalid) return errorResponse(context.invalid, 403);
+    const sessionPlanCheck = await ensureSessionPlanResponse(db, context);
+    if (sessionPlanCheck.error) return errorResponse(sessionPlanCheck.error, 409);
 
     const result = await createPendingAppointment(
       db,
@@ -2030,6 +2114,8 @@ export async function handleCreateBookingCheckout(request, env) {
     const context = await loadTokenContext(db, asString(body.token));
     if (!context) return errorResponse("A private booking link is required.", 401);
     if (context.invalid) return errorResponse(context.invalid, 403);
+    const sessionPlanCheck = await ensureSessionPlanResponse(db, context);
+    if (sessionPlanCheck.error) return errorResponse(sessionPlanCheck.error, 409);
 
     const tip = parseTipCents(body.tipCents);
     if (tip.error) return errorResponse(tip.error, 400);
@@ -2384,6 +2470,45 @@ export async function handleStudioSquareWebhook(request, env) {
   }
 }
 
+export async function handleAdminTattooSessionPlan(request, env, submissionId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  try {
+    const db = requireBookingDb(env);
+    const submission = await db.prepare("SELECT id,type FROM submissions WHERE id = ?").bind(submissionId).first();
+    if (!submission) return errorResponse("Submission not found.", 404);
+    if (!TATTOO_PROJECT_SUBMISSION_TYPES.has(submission.type)) return errorResponse("Session planning applies only to tattoo project submissions.", 409);
+    if (request.method === "GET") {
+      return json({ ok: true, sessionPlan: normalizeTattooSessionPlan(await loadTattooSessionPlan(db, submissionId)) });
+    }
+    const body = await readJsonBody(request);
+    if (!body) return errorResponse("Expected JSON body.", 400);
+    const sessionCategory = asString(body.sessionCategory) || "artist_review";
+    const splitPolicy = asString(body.splitPolicy) || "artist_review";
+    if (!SESSION_CATEGORIES.has(sessionCategory)) return errorResponse("Choose a valid session category.", 400);
+    if (!SPLIT_POLICIES.has(splitPolicy)) return errorResponse("Choose a valid split policy.", 400);
+    if (splitPolicy === "required" && sessionCategory !== "multiple_sessions") return errorResponse("Required splitting must use the multiple-sessions category.", 400);
+    if (splitPolicy === "not_available" && sessionCategory !== "one_session") return errorResponse("Splitting unavailable must use the one-session category.", 400);
+    const integer = (value) => value === "" || value === null || value === undefined ? null : Math.round(Number(value));
+    let sessionsMin = integer(body.estimatedSessionsMin);
+    let sessionsMax = integer(body.estimatedSessionsMax);
+    const minutesMin = integer(body.estimatedTotalMinutesMin);
+    const minutesMax = integer(body.estimatedTotalMinutesMax);
+    if (sessionCategory === "one_session") sessionsMin = sessionsMax = 1;
+    if (sessionCategory === "multiple_sessions" && (!sessionsMin || sessionsMin < 2)) return errorResponse("Multiple-session plans require a minimum of at least two sessions.", 400);
+    if (sessionCategory !== "artist_review" && (!sessionsMax || sessionsMax < sessionsMin)) return errorResponse("Enter a valid maximum session count.", 400);
+    if ([sessionsMin,sessionsMax,minutesMin,minutesMax].some((value) => value !== null && (!Number.isFinite(value) || value < 0))) return errorResponse("Session estimates must be non-negative whole numbers.", 400);
+    if (minutesMin !== null && minutesMax !== null && minutesMin > minutesMax) return errorResponse("Minimum total time cannot exceed maximum total time.", 400);
+    const existing = await loadTattooSessionPlan(db, submissionId);
+    const now = new Date().toISOString();
+    await db.prepare(`INSERT INTO tattoo_session_plans (id,submission_id,estimated_sessions_min,estimated_sessions_max,estimated_total_minutes_min,estimated_total_minutes_max,split_policy,artist_note,session_category,client_preference,client_acknowledged,client_informed_at,client_selected_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?) ON CONFLICT(submission_id) DO UPDATE SET estimated_sessions_min=excluded.estimated_sessions_min,estimated_sessions_max=excluded.estimated_sessions_max,estimated_total_minutes_min=excluded.estimated_total_minutes_min,estimated_total_minutes_max=excluded.estimated_total_minutes_max,split_policy=excluded.split_policy,artist_note=excluded.artist_note,session_category=excluded.session_category,client_preference=NULL,client_acknowledged=0,client_informed_at=NULL,client_selected_at=NULL,updated_at=excluded.updated_at`)
+      .bind(existing?.id || crypto.randomUUID(),submissionId,sessionsMin,sessionsMax,minutesMin,minutesMax,splitPolicy,asString(body.artistNote).slice(0,5000),sessionCategory,existing?.created_at || now,now).run();
+    return json({ ok: true, sessionPlan: normalizeTattooSessionPlan(await loadTattooSessionPlan(db, submissionId)) });
+  } catch (error) {
+    return errorResponse("Unable to save the tattoo session plan.", 500, { detail: error.message });
+  }
+}
+
 export async function handleAdminCreateBookingToken(request, env) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
@@ -2397,6 +2522,12 @@ export async function handleAdminCreateBookingToken(request, env) {
     if (!submission) return errorResponse("Submission not found.", 404);
     if (submission.status !== "approved") {
       return errorResponse("Only approved submissions can receive booking links.", 400);
+    }
+    if (TATTOO_PROJECT_SUBMISSION_TYPES.has(submission.type)) {
+      const sessionPlan = await loadTattooSessionPlan(db, submissionId);
+      if (!sessionPlan || sessionPlan.session_category === "artist_review" || sessionPlan.split_policy === "artist_review") {
+        return errorResponse("Finish and save the client's session estimate before generating booking access.", 409);
+      }
     }
 
     const rawToken = createRawToken();

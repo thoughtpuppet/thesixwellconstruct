@@ -54,7 +54,7 @@
   .studio-aside a{color:var(--signal);opacity:0.8;border-bottom:1px solid rgba(110,4,4,0.3);padding-bottom:1px;transition:opacity var(--t-fast),border-color var(--t-fast);}
   .studio-aside a:hover{opacity:1;border-bottom-color:var(--signal);}
 
-  /* ── COMING SOON (Build Your Own not yet open) ── */
+  /* Legacy status-panel styling retained for editor compatibility. */
   .coming-soon{border:5px solid var(--ring-faint);padding:var(--s7) var(--s6);margin-bottom:var(--s7);display:grid;gap:var(--s4);max-width:780px;}
   .coming-soon-kicker{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);}
   .coming-soon-title{font-family:var(--sans);font-weight:900;font-size:clamp(28px,4vw,46px);letter-spacing:-0.03em;line-height:0.95;text-transform:uppercase;color:var(--accent);}
@@ -265,7 +265,7 @@
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-2-num">II</p>
         <h3 class="step-title" data-copy-id="build-step-select-title">Build or draw</h3>
-        <p class="step-body" data-copy-id="build-step-select-body">Choose up to six elements that feel right, or compose a maze of your own. Either becomes your brief.</p>
+        <p class="step-body" data-copy-id="build-step-select-body">Choose up to twelve elements that feel right, or compose a maze of your own. Either becomes your brief.</p>
       </div>
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-3-num">III</p>
@@ -276,23 +276,15 @@
 
     <p class="studio-aside" data-copy-id="build-studio-aside">There is an option to do this in-person at the art.pill Tattoo House studio. <a href="/tattoos/build/in-person/">Learn more.</a></p>
 
-    <!-- COMING SOON (shown publicly until the builder opens; ?preview reveals the hub) -->
-    <section class="coming-soon" id="comingSoon" aria-label="Build Your Own status">
-      <p class="coming-soon-kicker">Opening soon</p>
-      <h2 class="coming-soon-title">The builder is<br>being finished.</h2>
-      <p class="coming-soon-body">Build Your Own is almost ready. The symbol language, the maze studio, and the in-person build session are being finalized before this path opens. If you already know you want to work from the visual language, begin an inquiry and say so — your note carries into review.</p>
-      <a class="coming-soon-cta" href="/tattoos/inquire/">Begin an inquiry →</a>
-    </section>
-
-    <!-- BUILD HUB (hidden until Build Your Own opens; ?preview reveals it) -->
-    <div id="buildHub" style="display:none">
+    <!-- BUILD HUB -->
+    <div id="buildHub">
 
       <!-- DOOR TABS -->
       <div class="door-tabs" role="tablist" aria-label="Choose how to build">
         <button type="button" class="door-tab active" id="doorTabBrief" role="tab" aria-selected="true" aria-controls="doorBrief">
           <span class="door-tab-num">Path I</span>
           <span class="door-tab-name">Build a Brief</span>
-          <span class="door-tab-sub">Select meaningful symbols from the visual language.</span>
+          <span class="door-tab-sub">Select meaningful symbols from Legend.</span>
         </button>
         <button type="button" class="door-tab" id="doorTabMaze" role="tab" aria-selected="false" aria-controls="doorMaze">
           <span class="door-tab-num">Path II</span>
@@ -307,7 +299,7 @@
         <div class="builder-wrap">
           <!-- SYMBOL BROWSER -->
           <div class="symbol-col">
-            <div class="filter-block" aria-label="Filter the visual language">
+            <div class="filter-block" aria-label="Filter Legend">
               <div class="filter-group">
                 <p class="filter-label">Form</p>
                 <select class="filter-select" id="filterRow" aria-label="Filter by form"></select>
@@ -371,6 +363,11 @@
             </div>
 
             <label class="check">
+              <input type="checkbox" name="age_confirmed" value="yes" required>
+              <span class="check-label">I confirm that I am 18 years of age or older.</span>
+            </label>
+
+            <label class="check">
               <input type="checkbox" name="review_consent" value="yes" required>
               <span class="check-label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
             </label>
@@ -405,19 +402,11 @@
 
   <button type="button" class="kiosk-startover" id="kioskStartOver">Start over</button>
 
-  <!-- Preview gate + kiosk mode. Public sees "coming soon"; ?preview reveals the
-       hub; ?kiosk reveals it and runs as a studio terminal (no chrome, idle reset). -->
+  <!-- Kiosk mode adds terminal behavior to the public builder. -->
   <script>
   (function(){
     var params = new URLSearchParams(location.search);
     var isKiosk = params.has('kiosk');
-    var isPreview = isKiosk || params.has('preview');
-    var coming = document.getElementById('comingSoon');
-    var hub = document.getElementById('buildHub');
-    if (isPreview) {
-      if (coming) coming.style.display = 'none';
-      if (hub) hub.style.display = 'block';
-    }
     if (isKiosk) {
       document.body.classList.add('kiosk');
       var mazeCta = document.querySelector('.maze-door-cta');
@@ -473,7 +462,7 @@
       if (!form.reportValidity()) return;
       var selected = document.getElementById("selectedElements");
       if (selected && !selected.value.trim()) {
-        status.textContent = "Select at least one visual-language element before submitting.";
+        status.textContent = "Select at least one Legend symbol before submitting.";
         return;
       }
 
@@ -490,7 +479,7 @@
         if (!response.ok) {
           throw new Error(payload.error || "Submission failed.");
         }
-        window.location.href = "/tattoos/submission-received/";
+        window.location.href = "/tattoos/submission-received/?type=build";
       } catch (error) {
         status.textContent = error.message || "Submission failed. Please try again.";
         submitBtn.disabled = false;

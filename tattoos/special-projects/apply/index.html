@@ -92,6 +92,7 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
           <input type="hidden" name="type" value="special_project">
           <input type="hidden" name="source_path" value="/tattoos/special-projects/apply/">
           <input type="hidden" name="project_category" value="special_projects">
+          <input type="hidden" name="project_id" id="projectId" value="">
           <input type="hidden" name="subject" value="New Art.Pill Special Projects application">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <div class="field-grid">
@@ -117,6 +118,7 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
             <div class="field full"><label for="message">Concept direction</label><textarea id="message" name="message" required></textarea></div>
           </div>
+          <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older.</span></label>
           <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand the final image is developed through shared symbolic direction while remaining rooted in the artist's existing body of work.</span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit Application</button>
@@ -138,7 +140,24 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
       var form = document.getElementById("specialProjectForm");
       var submitBtn = document.getElementById("submitBtn");
       var status = document.getElementById("formStatus");
+      var projectSelect = document.getElementById("project_title");
+      var projectId = document.getElementById("projectId");
       if (!form || !submitBtn || !status) return;
+
+      var projects = {
+        "mythic-body-studies": "Mythic Body Studies",
+        "memory-transfer": "Memory Transfer Studies",
+        "large-scale": "Large Scale Symbolic Work"
+      };
+      var selectedProject = new URLSearchParams(location.search).get("project") || "";
+      if (projects[selectedProject]) {
+        projectId.value = selectedProject;
+        projectSelect.value = projects[selectedProject];
+      }
+      projectSelect.addEventListener("change", function(){
+        var match = Object.keys(projects).find(function(key){ return projects[key] === projectSelect.value; });
+        projectId.value = match || "other";
+      });
 
       form.addEventListener("submit", async function(event){
         event.preventDefault();
@@ -157,7 +176,8 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
           if (!response.ok) {
             throw new Error(payload.error || "Submission failed.");
           }
-          window.location.href = "/tattoos/submission-received/";
+          var project = projectId.value || "other";
+          window.location.href = "/tattoos/submission-received/?type=special-project&project=" + encodeURIComponent(project);
         } catch (error) {
           status.textContent = error.message || "Submission failed. Please try again.";
           submitBtn.disabled = false;

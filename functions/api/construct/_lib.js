@@ -5,11 +5,31 @@ function normalizeRecord(config, body, existing = {}) {
   for (const field of config.fields) {
     if (!(field in body)) continue;
     if (["sort_order","claimable","acquisition_eligible","homepage_enabled"].includes(field)) out[field] = Number(body[field]) || 0;
+    else if (["estimated_sessions_min","estimated_sessions_max","estimated_total_minutes_min","estimated_total_minutes_max"].includes(field)) {
+      const value = body[field] === "" || body[field] === null ? null : Number(body[field]);
+      out[field] = Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
+    }
     else if (field.endsWith("_json")) out[field] = typeof body[field] === "string" ? body[field] : JSON.stringify(body[field] ?? []);
     else out[field] = text(body[field], field === "svg_markup" || field === "body" || field === "body_html" ? 50000 : 8000);
   }
   if (config.fields.includes("slug") && !out.slug && !existing.slug) out.slug = slug(body.title || body.name);
   if (out.state && !config.states.includes(out.state)) throw new Error(`Invalid state: ${out.state}`);
+  if (out.session_category && !["artist_review","one_session","multiple_sessions"].includes(out.session_category)) throw new Error("Invalid session category.");
+  if (out.split_policy && !["artist_review","required","client_choice","not_available"].includes(out.split_policy)) throw new Error("Invalid split policy.");
+  const merged = { ...existing, ...out };
+  for (const [minimum,maximum,label] of [["estimated_sessions_min","estimated_sessions_max","session count"],["estimated_total_minutes_min","estimated_total_minutes_max","total time"]]) {
+    if (merged[minimum] !== null && merged[maximum] !== null && Number(merged[minimum]) > Number(merged[maximum])) throw new Error(`Minimum ${label} cannot exceed maximum.`);
+  }
+  if (config.entityType === "flash_item") {
+    if (merged.split_policy === "required" && merged.session_category !== "multiple_sessions") throw new Error("Required splitting must use the multiple-sessions category.");
+    if (merged.split_policy === "not_available" && merged.session_category !== "one_session") throw new Error("Splitting unavailable must use the one-session category.");
+    if (merged.session_category === "one_session") {
+      out.estimated_sessions_min = 1;
+      out.estimated_sessions_max = 1;
+    }
+    if (merged.session_category === "multiple_sessions" && Number(merged.estimated_sessions_min) < 2) throw new Error("Multiple-session flash requires a minimum of at least two sessions.");
+    if (merged.session_category !== "artist_review" && (!Number(merged.estimated_sessions_max) || Number(merged.estimated_sessions_max) < Number(merged.estimated_sessions_min))) throw new Error("Enter a valid maximum session count.");
+  }
   if (config.entityType === "construct_node" && out.homepage_enabled && out.state === "published") out.homepage_enabled = 1;
   return out;
 }

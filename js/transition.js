@@ -173,7 +173,7 @@
     if (!document.body.matches('[data-venture="tattooing"]')) return;
 
     var titles = document.querySelectorAll(
-      '.intro h1, .hero-title, .page-title, .gate-title, .series-title, .tattoos-page .hero-copy h1'
+      'main h1, .intro h1, .hero-title, .page-title, .gate-title, .series-title, .tattoos-page .hero-copy h1'
     );
 
     titles.forEach(function(title) {
@@ -194,8 +194,21 @@
       var computedSize = parseFloat(window.getComputedStyle(title).fontSize);
       if (!computedSize) return;
 
-      var scale = Math.max(0.58, Math.min(1, availableWidth / titleWidth));
+      var scale = Math.max(0.48, Math.min(1, availableWidth / titleWidth));
       title.style.setProperty('font-size', Math.floor(computedSize * scale) + 'px', 'important');
+
+      /* Font rounding and inline live-editor spans can leave a title a few
+         pixels wide after the proportional pass. Tighten once more from the
+         rendered width so every tattoo route stays inside the phone viewport. */
+      var renderedWidth = title.getBoundingClientRect().width;
+      if (renderedWidth > availableWidth) {
+        var correctedSize = parseFloat(window.getComputedStyle(title).fontSize);
+        title.style.setProperty(
+          'font-size',
+          Math.max(22, Math.floor(correctedSize * (availableWidth / renderedWidth))) + 'px',
+          'important'
+        );
+      }
     });
   }
 

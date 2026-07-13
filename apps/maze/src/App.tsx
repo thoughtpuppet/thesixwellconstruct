@@ -116,7 +116,7 @@ function SubmitDialog({
       const res = await fetch("/api/submissions", { method: "POST", body: fd });
       const payload = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(payload.error || "Submission failed.");
-      window.location.href = "/tattoos/submission-received/";
+      window.location.href = "/tattoos/submission-received/?type=maze";
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Submission failed. Please try again.");
       setBusy(false);
@@ -151,6 +151,10 @@ function SubmitDialog({
           <label className="maze-submit-full">
             What does this maze carry?
             <textarea name="maze_explanation" rows={4} required placeholder="Explain the meaning, the path, what it should hold." />
+          </label>
+          <label className="maze-submit-consent">
+            <input type="checkbox" name="age_confirmed" value="yes" required />
+            <span>I confirm that I am 18 years of age or older.</span>
           </label>
           <label className="maze-submit-consent">
             <input type="checkbox" name="review_consent" value="yes" required />

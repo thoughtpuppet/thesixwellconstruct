@@ -398,7 +398,9 @@ main { padding:var(--s6) var(--s5); }
     };
     var buttons = Array.prototype.slice.call(document.querySelectorAll('.index-button'));
     var select = document.getElementById('projectSelect');
+    var applyLink = document.getElementById('projectApply');
     function setProject(key) {
+      if (!projects[key]) key = 'mythic-body-studies';
       var project = projects[key] || projects['mythic-body-studies'];
       fields.kicker.textContent = project.kicker;
       fields.title.textContent = project.title;
@@ -415,6 +417,7 @@ main { padding:var(--s6) var(--s5); }
         button.classList.toggle('is-active', button.getAttribute('data-project') === key);
       });
       if (select.value !== key) select.value = key;
+      if (applyLink) applyLink.href = '/tattoos/special-projects/apply/?project=' + encodeURIComponent(key);
     }
     buttons.forEach(function(button) {
       button.addEventListener('click', function() {
@@ -424,6 +427,7 @@ main { padding:var(--s6) var(--s5); }
     select.addEventListener('change', function() {
       setProject(select.value);
     });
+    setProject(new URLSearchParams(location.search).get('project') || 'mythic-body-studies');
   </script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

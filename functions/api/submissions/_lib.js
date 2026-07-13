@@ -23,16 +23,28 @@ const PUBLIC_TYPES = new Set([
   "studio_booking",
 ]);
 
+const TATTOO_SUBMISSION_TYPES = new Set([
+  "tattoo_inquiry",
+  "flash_claim",
+  "special_project",
+  "build_brief",
+  "maze_design",
+]);
+
 const REQUIRED_FIELDS_BY_TYPE = {
   tattoo_inquiry: [
+    ["project_type", "Project type is required."],
     ["placement", "Placement is required."],
+    ["size", "Approximate size is required."],
+    ["budget_range", "Budget range is required."],
+    ["color_preference", "Color preference is required."],
     ["message", "Project notes are required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   flash_claim: [
     ["selected_flash", "Available flash selection is required."],
     ["placement", "Placement is required."],
-    ["claim_bid", "Bid / budget is required."],
+    ["claim_bid", "Budget range is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   build_brief: [
@@ -240,6 +252,10 @@ function validateSubmission(submission, payload) {
 
   if (!submission.contact.email || !isLikelyEmail(submission.contact.email)) {
     return { error: "A valid email is required.", status: 400 };
+  }
+
+  if (TATTOO_SUBMISSION_TYPES.has(submission.type) && payload.age_confirmed !== "yes") {
+    return { error: "You must confirm that you are 18 or older.", status: 400 };
   }
 
   const requiredFields = REQUIRED_FIELDS_BY_TYPE[submission.type] || [];
