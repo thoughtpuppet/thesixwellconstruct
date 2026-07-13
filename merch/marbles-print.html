@@ -664,7 +664,7 @@
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 </head>
-<body data-venture="merch" data-product-handle="marbles-print">
+<body data-venture="merch" data-product-handle="marbles-print" data-construct-entity="merch-marbles-print">
 
   <div class="grain"></div>
 
@@ -788,10 +788,10 @@
       <!-- ====================================================
            ORIGIN — links to the source painting
       ==================================================== -->
-      <hr class="section-divider">
-      <p class="section-label" data-copy-id="marbles-print-origin-label">origin.</p>
+      <hr class="section-divider" data-legacy-connections>
+      <p class="section-label" data-copy-id="marbles-print-origin-label" data-legacy-connections>origin.</p>
 
-      <a class="origin-block" id="originLink" href="/merch/am-i-losing-my-marbles.html">
+      <a class="origin-block" id="originLink" href="/art/lostmarblespainting.html" data-legacy-connections>
         <div class="origin-thumb">
           <img
             id="originThumb"
@@ -810,10 +810,10 @@
       <!-- ====================================================
            RELATED — other things from this painting
       ==================================================== -->
-      <hr class="section-divider">
-      <p class="section-label" data-copy-id="marbles-print-related-label">also from this work.</p>
+      <hr class="section-divider" data-legacy-connections>
+      <p class="section-label" data-copy-id="marbles-print-related-label" data-legacy-connections>also from this work.</p>
 
-      <div class="related-row">
+      <div class="related-row" data-legacy-connections>
         <!-- Marbles Hoodie -->
         <a class="related-card" href="/merch/lostmarbles-hoodie.html">
           <div class="related-frame">
@@ -863,10 +863,9 @@
   <script src='/js/transition.js'></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script src="/js/entity-page-connections.js?v=1"></script>
 
 </body>
 </html>
-
-
 
 

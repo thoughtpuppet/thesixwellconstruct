@@ -1,13 +1,21 @@
 (function () {
   function mountConnections(entityId) {
+    const legacy = [...document.querySelectorAll("[data-legacy-connections]")];
+    const first = document.querySelector(".related-block[data-legacy-connections],section.related[data-legacy-connections],.related-row[data-legacy-connections]") || legacy[0];
     const footer = document.querySelector("footer");
-    const host = document.createElement("section");
-    if (footer?.parentNode) footer.parentNode.insertBefore(host, footer);
-    else document.body.appendChild(host);
-    const run = () => window.ConstructConnections?.mount({ entityId, host });
+    const host = first?.matches("section,.related-row") ? first : document.createElement("section");
+    if (!host.isConnected) {
+      if (first?.parentNode) first.parentNode.insertBefore(host, first);
+      else if (footer?.parentNode) footer.parentNode.insertBefore(host, footer);
+      else document.body.appendChild(host);
+    }
+    const run = async () => {
+      await window.ConstructConnections?.mount({ entityId, host, embedded: Boolean(first) });
+      if (!host.hidden) legacy.forEach((node) => { if (node !== host) node.hidden = true; });
+    };
     if (window.ConstructConnections) return run();
     const script = document.createElement("script");
-    script.src = "/js/construct-connections.js?v=1";
+    script.src = "/js/construct-connections.js?v=2";
     script.onload = run;
     document.head.appendChild(script);
   }

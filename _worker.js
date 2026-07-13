@@ -663,6 +663,7 @@ export default {
       url.pathname.startsWith("/api/admin/legend") ||
       url.pathname.startsWith("/api/admin/visual-language") ||
       url.pathname.startsWith("/api/admin/art") ||
+      url.pathname.startsWith("/api/admin/merch") ||
       url.pathname.startsWith("/api/admin/archive") ||
       url.pathname.startsWith("/api/admin/people") ||
       url.pathname.startsWith("/api/admin/places") ||

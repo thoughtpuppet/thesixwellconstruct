@@ -855,7 +855,6 @@
   window.addEventListener('resize', function() {
     if (ringOpen) {
       resizeMobileCanvas();
-      buildMobileNodes();
     }
   });
 
@@ -1004,7 +1003,19 @@
     currentVenture = null;
     VENTURES.forEach(function(venture) { if (venture.key === currentKey) currentVenture = venture; });
     if (currentVenture) chipText.textContent = currentVenture.label;
-    buildMobileNodes();
+    // Rebuilding while the bloom is visible resets every node to the center.
+    // That can happen when managed data resolves after a quick tap, making the
+    // pill nav appear to collapse and open again. Existing nodes reference the
+    // updated venture objects, so refresh their labels in place and let the
+    // next normal open rebuild the managed order.
+    if (mobileState === 'closed') {
+      buildMobileNodes();
+    } else {
+      mobileNodes.forEach(function(node) {
+        node.el.textContent = node.venture.label;
+        node.el.style.color = node.venture.color;
+      });
+    }
     applyResponsiveNav();
     document.documentElement.setAttribute('data-managed-construct-nav', 'live');
   })();

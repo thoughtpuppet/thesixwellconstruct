@@ -199,6 +199,7 @@ function canonicalNodeAlias(value,entityType=""){
   const raw=String(value||"").toLowerCase();
   if(["tattooing","tattoo","tattoos","node-tattoos"].includes(raw)||["flash_item","flash_series","portfolio_item","visual_symbol"].includes(entityType))return"node-tattoos";
   if(["art","art-making","node-art"].includes(raw)||entityType==="art_work")return"node-art";
+  if(["merch","node-merch"].includes(raw)||entityType==="merch_item")return"node-merch";
   if(["event","events","node-events"].includes(raw)||entityType==="event")return"node-events";
   if(["archive","node-archive"].includes(raw)||entityType.startsWith("archive_"))return"node-archive";
   if(raw.startsWith("node-"))return raw;
@@ -210,12 +211,12 @@ function nodeFallback(nodeId){return Object.values(NODE_FALLBACKS).find(node=>no
 function entityDirectorySql(where="1=1"){
   return `SELECT ce.id,ce.entity_type,ce.node_id legacy_node_id,ce.visibility,
     CASE ce.entity_type
-      WHEN 'flash_item' THEN fi.title WHEN 'flash_series' THEN fs.name WHEN 'art_work' THEN aw.title WHEN 'portfolio_item' THEN pi.title
+      WHEN 'flash_item' THEN fi.title WHEN 'flash_series' THEN fs.name WHEN 'art_work' THEN aw.title WHEN 'portfolio_item' THEN pi.title WHEN 'merch_item' THEN mi.title
       WHEN 'visual_symbol' THEN vs.name WHEN 'archive_record' THEN ar.title WHEN 'archive_collection' THEN ac.name
       WHEN 'construct_node' THEN own.name WHEN 'construct_pathway' THEN cp.name WHEN 'person' THEN pe.name
       WHEN 'place' THEN pl.name WHEN 'event' THEN ev.title ELSE ce.id END title,
     CASE ce.entity_type
-      WHEN 'flash_item' THEN fi.state WHEN 'flash_series' THEN fs.state WHEN 'art_work' THEN aw.state WHEN 'portfolio_item' THEN pi.state
+      WHEN 'flash_item' THEN fi.state WHEN 'flash_series' THEN fs.state WHEN 'art_work' THEN aw.state WHEN 'portfolio_item' THEN pi.state WHEN 'merch_item' THEN mi.state
       WHEN 'visual_symbol' THEN vs.state WHEN 'archive_record' THEN ar.state WHEN 'archive_collection' THEN ac.state
       WHEN 'construct_node' THEN own.state WHEN 'construct_pathway' THEN cp.state WHEN 'person' THEN pe.state
       WHEN 'place' THEN pl.state WHEN 'event' THEN ev.status ELSE ce.visibility END state,
@@ -224,15 +225,30 @@ function entityDirectorySql(where="1=1"){
       WHEN 'flash_series' THEN '/tattoos/flash/?series='||fs.slug
       WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/?work='||aw.slug)
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
+      WHEN 'merch_item' THEN mi.route
       WHEN 'visual_symbol' THEN '/legend/?symbol='||vs.slug
       WHEN 'archive_record' THEN '/archive/?record='||ar.slug
       WHEN 'archive_collection' THEN '/archive/?collection='||ac.slug
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route
       WHEN 'event' THEN '/events/'||ev.slug||'/' ELSE '' END route,
-    COALESCE(NULLIF(pi.source_url,''),
+    COALESCE(NULLIF(mi.image_url,''),NULLIF(pi.source_url,''),
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id) FROM entity_media em JOIN media_assets m ON m.id=em.media_id
        WHERE em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order LIMIT 1),
       CASE WHEN ce.entity_type='portfolio_item' THEN '/api/portfolio/media/'||pi.id ELSE '' END) image_url,
+    CASE ce.entity_type
+      WHEN 'flash_item' THEN CASE WHEN fi.item_type='sheet' THEN 'Flash sheet' ELSE 'Flash' END
+      WHEN 'flash_series' THEN 'Flash series' WHEN 'art_work' THEN 'Painting' WHEN 'portfolio_item' THEN 'Tattoo'
+      WHEN 'merch_item' THEN COALESCE(NULLIF(mi.product_type,''),'Product') WHEN 'visual_symbol' THEN 'Symbol'
+      WHEN 'archive_record' THEN COALESCE(NULLIF(ar.record_type,''),'Archive record') WHEN 'archive_collection' THEN 'Archive collection'
+      WHEN 'construct_node' THEN 'Construct node' WHEN 'construct_pathway' THEN 'Pathway'
+      WHEN 'person' THEN 'Person' WHEN 'place' THEN 'Place' WHEN 'event' THEN 'Event' ELSE ce.entity_type END kind_label,
+    CASE ce.entity_type
+      WHEN 'art_work' THEN trim(COALESCE(aw.year,'')||CASE WHEN aw.year<>'' AND aw.medium<>'' THEN ' · ' ELSE '' END||COALESCE(aw.medium,''))
+      WHEN 'portfolio_item' THEN trim(COALESCE(pi.year,'')||CASE WHEN pi.year<>'' AND pi.placement<>'' THEN ' · ' ELSE '' END||COALESCE(pi.placement,'')||CASE WHEN (pi.year<>'' OR pi.placement<>'') AND pi.primary_style<>'' THEN ' · ' ELSE '' END||COALESCE(pi.primary_style,''))
+      WHEN 'flash_item' THEN trim(COALESCE(fi.size_bucket,'')||CASE WHEN fi.size_bucket<>'' AND fi.process_category<>'' THEN ' · ' ELSE '' END||COALESCE(fi.process_category,''))
+      WHEN 'archive_record' THEN trim(COALESCE(ar.date_or_period,'')||CASE WHEN ar.date_or_period<>'' AND ar.room<>'' THEN ' · ' ELSE '' END||COALESCE(ar.room,''))
+      WHEN 'event' THEN trim(COALESCE(ev.starts_at,'')||CASE WHEN ev.starts_at IS NOT NULL AND ev.starts_at<>'' AND ev.location<>'' THEN ' · ' ELSE '' END||COALESCE(ev.location,''))
+      WHEN 'place' THEN COALESCE(pl.public_location,'') ELSE '' END detail_label,
     COALESCE(cn.id,'') node_resolved_id,COALESCE(cn.name,'') node_name,COALESCE(cn.slug,'') node_slug,COALESCE(cn.color,'') node_color,
     COALESCE(fi.claimable,0) claimable
   FROM content_entities ce
@@ -240,6 +256,7 @@ function entityDirectorySql(where="1=1"){
   LEFT JOIN flash_series fs ON ce.entity_type='flash_series' AND fs.id=ce.id
   LEFT JOIN art_works aw ON ce.entity_type='art_work' AND aw.id=ce.id
   LEFT JOIN portfolio_items pi ON ce.entity_type='portfolio_item' AND pi.id=ce.id
+  LEFT JOIN merch_items mi ON ce.entity_type='merch_item' AND mi.id=ce.id
   LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
   LEFT JOIN archive_records ar ON ce.entity_type='archive_record' AND ar.id=ce.id
   LEFT JOIN archive_collections ac ON ce.entity_type='archive_collection' AND ac.id=ce.id
@@ -251,6 +268,7 @@ function entityDirectorySql(where="1=1"){
   LEFT JOIN construct_nodes cn ON cn.id=CASE
     WHEN ce.entity_type IN ('flash_item','flash_series','portfolio_item','visual_symbol') OR ce.node_id IN ('tattoo','tattoos','tattooing') THEN 'node-tattoos'
     WHEN ce.entity_type='art_work' OR ce.node_id IN ('art','art-making') THEN 'node-art'
+    WHEN ce.entity_type='merch_item' OR ce.node_id='merch' THEN 'node-merch'
     WHEN ce.entity_type='event' OR ce.node_id='events' THEN 'node-events'
     WHEN ce.entity_type LIKE 'archive_%' OR ce.node_id='archive' THEN 'node-archive'
     WHEN ce.entity_type='construct_node' THEN ce.id ELSE ce.node_id END
@@ -259,7 +277,7 @@ function entityDirectorySql(where="1=1"){
 
 function presentEntity(row){
   if(!row)return null;const nodeId=row.node_resolved_id||canonicalNodeAlias(row.legacy_node_id,row.entity_type);const fallback=nodeFallback(nodeId);
-  return {id:row.id,entityType:row.entity_type,title:row.title||row.id,state:row.state||row.visibility,visibility:row.visibility,route:row.route||"",imageUrl:row.image_url||"",claimable:Number(row.claimable||0),node:{id:nodeId,name:row.node_name||fallback.name,slug:row.node_slug||fallback.slug,color:row.node_color||fallback.color}};
+  return {id:row.id,entityType:row.entity_type,title:row.title||row.id,state:row.state||row.visibility,visibility:row.visibility,route:row.route||"",imageUrl:row.image_url||"",kindLabel:row.kind_label||row.entity_type,detailLabel:row.detail_label||"",claimable:Number(row.claimable||0),node:{id:nodeId,name:row.node_name||fallback.name,slug:row.node_slug||fallback.slug,color:row.node_color||fallback.color}};
 }
 
 async function entityRecords(database,ids){

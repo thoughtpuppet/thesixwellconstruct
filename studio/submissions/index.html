@@ -385,6 +385,7 @@
     <button class="tab" type="button" data-tab="tattoo">Tattoo Booking</button>
     <button class="tab" type="button" data-tab="studio">Studio Booking</button>
     <button class="tab" type="button" data-tab="art">Art Inquiries</button>
+    <button class="tab" type="button" data-tab="merch">Merch</button>
     <button class="tab" type="button" data-tab="legend">Legend</button>
     <button class="tab" type="button" data-tab="events">Events</button>
     <button class="tab" type="button" data-tab="archive">Archive</button>
@@ -1165,6 +1166,8 @@
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>`;
     } else if (activeTab === "art") {
       html = `<button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button><button class="subnav-btn ${subView === "works" ? "is-active" : ""}" type="button" data-subview="works">Works</button>`;
+    } else if (activeTab === "merch") {
+      html = `<button class="subnav-btn ${subView === "products" ? "is-active" : ""}" type="button" data-subview="products">Products</button>`;
     } else if (activeTab === "legend") {
       html = [["symbols","Symbols"],["categories","Categories"],["themes","Themes"],["examples","Examples"],["usage","Usage and Relationships"],["drafts","Drafts"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "events") {
@@ -1503,7 +1506,7 @@
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
-    subView = tab === "legend" ? "symbols" : tab === "archive" ? "records" : tab === "site" ? "pathways" : tab === "shared" ? "media" : "requests";
+    subView = tab === "legend" ? "symbols" : tab === "archive" ? "records" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
