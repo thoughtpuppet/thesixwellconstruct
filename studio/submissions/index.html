@@ -326,6 +326,29 @@
   .file-badge { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; white-space:nowrap; }
   .file-badge.stored { color:#55BA5A; }
   .type-tag { display:inline-block; padding:2px 7px; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; border:3px solid rgba(255,231,202,0.22); color:var(--dim); margin-left:6px; }
+  .portfolio-manager { display:grid; gap:22px; }
+  .portfolio-head { display:flex; justify-content:space-between; align-items:end; gap:18px; flex-wrap:wrap; padding-bottom:22px; border-bottom:5px solid var(--ring-faint); }
+  .portfolio-head h2 { margin-bottom:8px; }
+  .portfolio-filters { display:flex; gap:8px; flex-wrap:wrap; }
+  .portfolio-drop { border:5px dashed var(--ring-soft); padding:24px; display:grid; place-items:center; gap:10px; text-align:center; background:rgba(252,184,103,0.025); }
+  .portfolio-drop.is-over { border-color:var(--accent); background:rgba(252,184,103,0.08); }
+  .portfolio-drop input { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
+  .portfolio-upload-status { min-height:18px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; align-items:start; }
+  .portfolio-card { border:5px solid var(--ring-faint); background:var(--panel); display:grid; min-width:0; }
+  .portfolio-card.is-dragging { opacity:.45; }
+  .portfolio-card-media { aspect-ratio:4/5; background:#090909; overflow:hidden; }
+  .portfolio-card-media img { width:100%; height:100%; object-fit:cover; display:block; }
+  .portfolio-card-body { display:grid; gap:10px; padding:12px; }
+  .portfolio-card-title { display:flex; justify-content:space-between; gap:10px; align-items:start; }
+  .portfolio-card-title strong { font-family:var(--sans); font-size:11px; line-height:1.35; letter-spacing:.08em; text-transform:uppercase; overflow-wrap:anywhere; }
+  .portfolio-card-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  .portfolio-card-actions .button { min-height:34px; padding:0 9px; font-size:9px; }
+  .portfolio-edit { border-top:5px solid var(--ring-faint); padding-top:10px; }
+  .portfolio-edit summary { cursor:pointer; color:var(--accent); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .portfolio-edit-form { display:grid; gap:10px; margin-top:12px; }
+  .portfolio-edit-form textarea { min-height:92px; }
+  .portfolio-empty { grid-column:1/-1; border:5px solid var(--ring-faint); padding:26px; color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
     .list-pane { border-right:0; border-bottom:5px solid var(--ring-faint); max-height:42vh; }
@@ -460,6 +483,9 @@
   let homeMonth = "";
   let selectedHomeDay = "";
   let selectedEventSlug = "";
+  let portfolioItems = [];
+  let portfolioState = "published";
+  let portfolioObjectUrls = [];
 
   function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -1117,7 +1143,8 @@
     if (activeTab === "tattoo") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
-        <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>`;
+        <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>
+        <button class="subnav-btn ${subView === "portfolio" ? "is-active" : ""}" type="button" data-subview="portfolio">Portfolio</button>`;
     } else if (activeTab === "studio") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
@@ -1165,6 +1192,224 @@
     renderActiveTab();
   }
 
+  const PORTFOLIO_STYLES = [
+    ["unclassified", "Unclassified"],
+    ["symbolic", "Symbolic"],
+    ["surreal", "Surreal"],
+    ["mythic", "Mythic"],
+    ["special-project", "Special Project"],
+  ];
+
+  function portfolioItemsForState() {
+    return portfolioItems.filter((item) => item.state === portfolioState)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  function portfolioLabel(item) {
+    return item.title || item.originalFilename || "Untitled portfolio image";
+  }
+
+  function renderPortfolioCard(item, index, total) {
+    const canSort = portfolioState !== "archived";
+    const stateAction = item.state === "published"
+      ? `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Unpublish</button>`
+      : item.state === "draft"
+        ? `<button class="button" type="button" data-portfolio-state="published" data-id="${escapeHtml(item.id)}">Publish</button>`
+        : `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Restore to draft</button>`;
+    return `
+      <article class="portfolio-card" data-portfolio-card="${escapeHtml(item.id)}" ${canSort ? 'draggable="true"' : ""}>
+        <div class="portfolio-card-media">
+          <img ${item.sourceUrl ? `src="${escapeHtml(item.sourceUrl)}"` : `data-secure-src="${escapeHtml(item.imageUrl)}"`} alt="${escapeHtml(item.altText || "Portfolio preview")}">
+        </div>
+        <div class="portfolio-card-body">
+          <div class="portfolio-card-title"><strong>${escapeHtml(portfolioLabel(item))}</strong><span class="pill">${index + 1} / ${total}</span></div>
+          <div class="meta">${escapeHtml(PORTFOLIO_STYLES.find(([key]) => key === item.primaryStyle)?.[1] || "Unclassified")}${item.collection ? ` / ${escapeHtml(item.collection)}` : ""}</div>
+          <div class="portfolio-card-actions">
+            ${canSort ? `<button class="button" type="button" data-portfolio-move="up" data-id="${escapeHtml(item.id)}" ${index === 0 ? "disabled" : ""}>Move up</button><button class="button" type="button" data-portfolio-move="down" data-id="${escapeHtml(item.id)}" ${index === total - 1 ? "disabled" : ""}>Move down</button>` : ""}
+            ${stateAction}
+            ${item.state !== "archived" ? `<button class="button danger-button" type="button" data-portfolio-archive data-id="${escapeHtml(item.id)}">Archive</button>` : ""}
+          </div>
+          <details class="portfolio-edit">
+            <summary>Edit metadata</summary>
+            <form class="portfolio-edit-form" data-portfolio-form="${escapeHtml(item.id)}">
+              <label>Title<input name="title" value="${escapeHtml(item.title)}" maxlength="160"></label>
+              <label>Alt text<textarea name="altText" maxlength="300">${escapeHtml(item.altText)}</textarea></label>
+              <div class="grid" style="margin:0;gap:10px;">
+                <label>Year<input name="year" value="${escapeHtml(item.year)}" maxlength="20"></label>
+                <label>Placement<input name="placement" value="${escapeHtml(item.placement)}" maxlength="160"></label>
+              </div>
+              <label>Primary style<select name="primaryStyle">${PORTFOLIO_STYLES.map(([key,label]) => `<option value="${key}"${key === item.primaryStyle || (key === "unclassified" && !item.primaryStyle) ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+              <label>Collection<input name="collection" value="${escapeHtml(item.collection)}" maxlength="160" placeholder="Optional grouping"></label>
+              <label>Caption<textarea name="caption" maxlength="2000">${escapeHtml(item.caption)}</textarea></label>
+              <button class="button" type="submit">Save metadata</button>
+            </form>
+          </details>
+        </div>
+      </article>`;
+  }
+
+  async function hydratePortfolioImages(root) {
+    for (const image of root.querySelectorAll("img[data-secure-src]")) {
+      try {
+        const response = await fetch(image.dataset.secureSrc, { headers: { authorization: `Bearer ${token}` } });
+        if (!response.ok) throw new Error();
+        const objectUrl = URL.createObjectURL(await response.blob());
+        portfolioObjectUrls.push(objectUrl);
+        image.src = objectUrl;
+      } catch {
+        image.alt = "Preview unavailable";
+      }
+    }
+  }
+
+  function paintPortfolioItems() {
+    const grid = document.getElementById("portfolioGrid");
+    if (!grid) return;
+    ["published", "draft", "archived"].forEach((state) => {
+      const button = document.querySelector(`[data-portfolio-filter="${state}"]`);
+      if (button) button.textContent = `${state} (${portfolioItems.filter((item) => item.state === state).length})`;
+    });
+    portfolioObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+    portfolioObjectUrls = [];
+    const items = portfolioItemsForState();
+    grid.innerHTML = items.length
+      ? items.map((item, index) => renderPortfolioCard(item, index, items.length)).join("")
+      : `<div class="portfolio-empty">No ${escapeHtml(portfolioState)} portfolio items.</div>`;
+    hydratePortfolioImages(grid);
+  }
+
+  async function loadPortfolioItems() {
+    const payload = await api("/api/admin/portfolio");
+    portfolioItems = payload.items || [];
+    paintPortfolioItems();
+  }
+
+  async function savePortfolioOrder(ids) {
+    await api("/api/admin/portfolio/reorder", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ state: portfolioState, ids }),
+    });
+    ids.forEach((id, index) => {
+      const item = portfolioItems.find((candidate) => candidate.id === id);
+      if (item) item.sortOrder = index + 1;
+    });
+    paintPortfolioItems();
+    setStatus("Portfolio order published");
+  }
+
+  async function movePortfolioItem(id, direction) {
+    const ids = portfolioItemsForState().map((item) => item.id);
+    const from = ids.indexOf(id);
+    const to = direction === "up" ? from - 1 : from + 1;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    await savePortfolioOrder(ids);
+  }
+
+  async function uploadPortfolioFiles(files) {
+    const validTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    const status = document.getElementById("portfolioUploadStatus");
+    const accepted = [...files].filter((file) => {
+      if (!validTypes.has(file.type)) { setStatus(`${file.name}: use JPEG, PNG, or WebP`); return false; }
+      if (file.size > 15 * 1024 * 1024) { setStatus(`${file.name}: exceeds 15 MB`); return false; }
+      return true;
+    });
+    for (let index = 0; index < accepted.length; index += 1) {
+      const file = accepted[index];
+      status.textContent = `Uploading ${index + 1} of ${accepted.length}: ${file.name}`;
+      const form = new FormData();
+      form.append("file", file);
+      await api("/api/admin/portfolio", { method: "POST", body: form });
+      status.textContent = `Uploaded ${index + 1} of ${accepted.length}`;
+    }
+    if (accepted.length) {
+      portfolioState = "draft";
+      await renderPortfolioManager();
+      setStatus(`${accepted.length} portfolio upload${accepted.length === 1 ? "" : "s"} ready in Draft`);
+    }
+  }
+
+  function bindPortfolioManager() {
+    const manager = document.getElementById("portfolioManager");
+    const drop = document.getElementById("portfolioDrop");
+    const input = document.getElementById("portfolioFiles");
+    if (!manager || !drop || !input) return;
+    document.getElementById("portfolioChoose").addEventListener("click", () => input.click());
+    input.addEventListener("change", () => uploadPortfolioFiles(input.files).catch((error) => setStatus(error.message)));
+    ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("is-over"); }));
+    ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.remove("is-over"); }));
+    drop.addEventListener("drop", (event) => uploadPortfolioFiles(event.dataTransfer.files).catch((error) => setStatus(error.message)));
+    manager.addEventListener("dragstart", (event) => {
+      const card = event.target.closest("[data-portfolio-card]");
+      if (!card) return;
+      card.classList.add("is-dragging");
+      event.dataTransfer.setData("text/plain", card.dataset.portfolioCard);
+    });
+    manager.addEventListener("dragend", (event) => event.target.closest("[data-portfolio-card]")?.classList.remove("is-dragging"));
+    manager.addEventListener("dragover", (event) => { if (event.target.closest("[data-portfolio-card]")) event.preventDefault(); });
+    manager.addEventListener("drop", (event) => {
+      const target = event.target.closest("[data-portfolio-card]");
+      const sourceId = event.dataTransfer.getData("text/plain");
+      if (!target || !sourceId || sourceId === target.dataset.portfolioCard) return;
+      event.preventDefault();
+      const ids = portfolioItemsForState().map((item) => item.id);
+      const from = ids.indexOf(sourceId);
+      const to = ids.indexOf(target.dataset.portfolioCard);
+      ids.splice(to, 0, ids.splice(from, 1)[0]);
+      savePortfolioOrder(ids).catch((error) => setStatus(error.message));
+    });
+    manager.addEventListener("click", async (event) => {
+      const filter = event.target.closest("[data-portfolio-filter]");
+      if (filter) { portfolioState = filter.dataset.portfolioFilter; renderPortfolioManager(); return; }
+      const move = event.target.closest("[data-portfolio-move]");
+      if (move) { await movePortfolioItem(move.dataset.id, move.dataset.portfolioMove); return; }
+      const state = event.target.closest("[data-portfolio-state]");
+      if (state) {
+        await api(`/api/admin/portfolio/${encodeURIComponent(state.dataset.id)}`, {
+          method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ state: state.dataset.portfolioState }),
+        });
+        await loadPortfolioItems();
+        setStatus(state.dataset.portfolioState === "published" ? "Portfolio item published" : "Portfolio item moved to draft");
+        return;
+      }
+      const archive = event.target.closest("[data-portfolio-archive]");
+      if (archive) {
+        await api(`/api/admin/portfolio/${encodeURIComponent(archive.dataset.id)}`, { method: "DELETE" });
+        await loadPortfolioItems();
+        setStatus("Portfolio item archived");
+      }
+    });
+    manager.addEventListener("submit", async (event) => {
+      const form = event.target.closest("[data-portfolio-form]");
+      if (!form) return;
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(form));
+      await api(`/api/admin/portfolio/${encodeURIComponent(form.dataset.portfolioForm)}`, {
+        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(values),
+      });
+      await loadPortfolioItems();
+      setStatus("Portfolio metadata saved");
+    });
+  }
+
+  async function renderPortfolioManager() {
+    layoutEl.classList.add("single");
+    listPane.classList.add("hidden");
+    toolbarEl.innerHTML = "";
+    const counts = Object.fromEntries(["published", "draft", "archived"].map((state) => [state, portfolioItems.filter((item) => item.state === state).length]));
+    detailEl.innerHTML = `
+      <section class="portfolio-manager" id="portfolioManager">
+        <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, publish, and order tattoo work. Saved changes appear on the public gallery immediately.</p></div>
+          <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
+        </div>
+        <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. New uploads stay in Draft.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
+        <div class="portfolio-grid" id="portfolioGrid"><div class="portfolio-empty">Loading portfolio...</div></div>
+      </section>`;
+    bindPortfolioManager();
+    await loadPortfolioItems();
+  }
+
   function renderActiveTab() {
     tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
     buildSubnav();
@@ -1193,6 +1438,11 @@
       renderStudioBookingList();
       const active = activeAppointmentId ? appointments.find((a) => a.id === activeAppointmentId) : null;
       renderStudioAppointmentDetail(active && isStudioAppointment(active) ? active : null);
+      return;
+    }
+
+    if (activeTab === "tattoo" && subView === "portfolio") {
+      renderPortfolioManager().catch((error) => setStatus(error.message));
       return;
     }
 

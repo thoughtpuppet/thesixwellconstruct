@@ -65,6 +65,7 @@ import {
   sendDueAppointmentReminders,
   sendDueEventTicketReminders,
 } from "./functions/api/notifications/_lib.js";
+import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -667,6 +668,15 @@ export default {
 
     if (url.pathname.startsWith("/api/admin/notifications/")) {
       return handleNotificationsApi(request, env);
+    }
+
+    if (
+      url.pathname === "/api/portfolio" ||
+      url.pathname.startsWith("/api/portfolio/") ||
+      url.pathname === "/api/admin/portfolio" ||
+      url.pathname.startsWith("/api/admin/portfolio/")
+    ) {
+      return handlePortfolioApi(request, env);
     }
 
     if (
