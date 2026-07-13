@@ -5,3 +5,7 @@
   For more details, see [4mhttps://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally[0m
 
 
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mENOENT: no such file or directory, stat 'C:\Users\selli\OneDrive\Documents\GitHub\thesixwellconstruct\studio\managed-previews\index.html'[0m
+
+
+🪵  Logs were written to "C:\Users\selli\OneDrive\Documents\GitHub\thesixwellconstruct\.wrangler-config\.wrangler\logs\wrangler-2026-07-13_16-43-19_206.log"

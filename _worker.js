@@ -639,11 +639,13 @@ export default {
       url.pathname === "/api/site/navigation" ||
       url.pathname.startsWith("/api/construct/media/") ||
       url.pathname === "/api/flash" || url.pathname.startsWith("/api/flash/") ||
+      url.pathname === "/api/legend" || url.pathname.startsWith("/api/legend/") ||
       url.pathname === "/api/visual-language" || url.pathname.startsWith("/api/visual-language/") ||
       url.pathname === "/api/art" || url.pathname.startsWith("/api/art/") ||
       url.pathname === "/api/archive" || url.pathname.startsWith("/api/archive/") ||
       /^\/api\/admin\/events\/[^/]+\/create-archive-record$/.test(url.pathname) ||
       url.pathname.startsWith("/api/admin/flash") ||
+      url.pathname.startsWith("/api/admin/legend") ||
       url.pathname.startsWith("/api/admin/visual-language") ||
       url.pathname.startsWith("/api/admin/art") ||
       url.pathname.startsWith("/api/admin/archive") ||

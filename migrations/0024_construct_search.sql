@@ -21,4 +21,4 @@ SELECT a.id,'art_work','art',a.slug,a.title,a.statement,'',a.state,a.year,a.lega
 INSERT OR REPLACE INTO search_documents(entity_id,entity_type,node_id,slug,title,summary,body,state,date_label,route,updated_at)
 SELECT r.id,'archive_record','archive',r.slug,r.title,r.summary,r.body,r.state,r.date_or_period,'/archive/managed-preview/?record='||r.slug,r.updated_at FROM archive_records r WHERE r.state='published';
 INSERT OR REPLACE INTO search_documents(entity_id,entity_type,node_id,slug,title,summary,body,state,theme_labels,route,updated_at)
-SELECT v.id,'visual_symbol','tattooing',v.slug,v.name,v.meaning,'',v.state,replace(replace(v.themes_json,'[',''),']',''),'/tattoos/build-managed-preview/?symbol='||v.slug,v.updated_at FROM visual_symbols v WHERE v.state='published';
+SELECT v.id,'visual_symbol',NULL,v.slug,v.name,v.meaning,'',v.state,replace(replace(v.themes_json,'[',''),']',''),'/legend/managed-preview/?symbol='||v.slug,v.updated_at FROM visual_symbols v WHERE v.state='published';

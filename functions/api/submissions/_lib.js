@@ -36,7 +36,7 @@ const REQUIRED_FIELDS_BY_TYPE = {
     ["review_consent", "Review consent is required.", "yes"],
   ],
   build_brief: [
-    ["selected_elements", "Select at least one visual-language element."],
+    ["selected_elements", "Select at least one Legend symbol."],
     ["placement", "Placement is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
