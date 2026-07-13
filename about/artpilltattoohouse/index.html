@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About Art.Pill Tattoo House &middot; the six.well construct</title>
+<meta name="description" content="Art.Pill Tattoo House is Saiel Dauhn Solehman's tattoo practice: a space for symbolic, surreal, and collaborative work on the body.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e0e0e;
+    --paper: #f0e8da;
+    --muted: #a89e90;
+    --signal: #6e0404;
+    --accent: #fcb867;
+    --line: rgba(240, 232, 218, 0.18);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 84% 8%, rgba(110, 4, 4, 0.24), transparent 34rem),
+      var(--bg);
+    color: var(--paper);
+    font-family: Inter, Arial, sans-serif;
+  }
+  a { color: inherit; }
+  .page {
+    width: min(1180px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 32px 0 54px;
+  }
+  .topline,
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .topline a,
+  .footer a,
+  .text-link {
+    text-underline-offset: 0.28em;
+    text-decoration-thickness: 1px;
+  }
+  .hero {
+    min-height: 74vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+    align-items: end;
+    gap: clamp(36px, 8vw, 110px);
+    padding: clamp(90px, 14vw, 170px) 0 64px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand-mark {
+    width: min(510px, 100%);
+    max-height: 190px;
+    object-fit: contain;
+    object-position: left center;
+    filter: brightness(0) invert(1);
+  }
+  .eyebrow,
+  .section-kicker,
+  .timeline-index {
+    display: block;
+    color: var(--accent);
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  h1 {
+    max-width: 12ch;
+    margin: 20px 0 0;
+    font-size: clamp(3.2rem, 8vw, 7.7rem);
+    line-height: 0.85;
+    letter-spacing: -0.075em;
+    text-transform: uppercase;
+  }
+  .hero-copy {
+    max-width: 34rem;
+    margin: 0;
+    color: #d2c8ba;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.2rem, 2vw, 1.7rem);
+    line-height: 1.48;
+  }
+  .about-grid {
+    display: grid;
+    grid-template-columns: 0.72fr 1fr 1fr;
+    gap: 42px;
+    padding: 76px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .about-grid h2,
+  .archive-head h2 {
+    margin: 12px 0 0;
+    font-size: clamp(2.1rem, 5vw, 4.8rem);
+    line-height: 0.94;
+    letter-spacing: -0.055em;
+    text-transform: uppercase;
+  }
+  .about-grid p {
+    margin: 0;
+    color: #c2b8aa;
+    font-size: 0.98rem;
+    line-height: 1.75;
+  }
+  .process {
+    padding: 76px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .process-head,
+  .meaning-bridge {
+    display: grid;
+    grid-template-columns: 0.72fr 2fr;
+    gap: 42px;
+  }
+  .process-head { margin-bottom: 44px; }
+  .process-head h2,
+  .meaning-bridge h2 {
+    margin: 12px 0 0;
+    font-size: clamp(2.1rem, 5vw, 4.8rem);
+    line-height: 0.94;
+    letter-spacing: -0.055em;
+    text-transform: uppercase;
+  }
+  .process-statement {
+    max-width: 48rem;
+    margin: 0;
+    color: #d2c8ba;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.25rem, 2.25vw, 1.8rem);
+    line-height: 1.5;
+  }
+  .process-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .process-card {
+    min-height: 220px;
+    padding: 26px;
+    border-right: 1px solid var(--line);
+  }
+  .process-card:last-child { border-right: 0; }
+  .process-card h3 {
+    margin: 44px 0 12px;
+    font-size: 0.92rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .process-card p,
+  .meaning-copy p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.65;
+  }
+  .meaning-bridge {
+    align-items: start;
+    padding-top: 76px;
+  }
+  .meaning-copy { max-width: 48rem; }
+  .meaning-copy p + p { margin-top: 18px; }
+  .legend-link {
+    display: inline-block;
+    margin-top: 26px;
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-underline-offset: 0.35em;
+  }
+  .archive {
+    padding: 76px 0 84px;
+  }
+  .archive-head {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 42px;
+    align-items: end;
+    margin-bottom: 42px;
+  }
+  .archive-intro {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+  .timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line);
+  }
+  .timeline li {
+    display: grid;
+    grid-template-columns: 0.24fr 0.7fr 1.4fr;
+    gap: 32px;
+    padding: 30px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .timeline h3 {
+    margin: 0;
+    font-size: 1rem;
+    text-transform: uppercase;
+  }
+  .timeline p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .archive-link {
+    display: inline-block;
+    margin-top: 38px;
+    color: var(--accent);
+    font-size: 0.82rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-underline-offset: 0.35em;
+  }
+  .footer {
+    padding-top: 26px;
+    border-top: 1px solid var(--line);
+  }
+  .footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
+  @media (max-width: 760px) {
+    .page { width: min(100% - 28px, 1180px); padding-top: 22px; }
+    .hero { min-height: auto; grid-template-columns: 1fr; padding: 88px 0 48px; }
+    .brand-mark { max-height: 120px; }
+    .about-grid { grid-template-columns: 1fr; gap: 26px; padding: 54px 0; }
+    .process { padding: 54px 0; }
+    .process-head,
+    .meaning-bridge { grid-template-columns: 1fr; gap: 24px; }
+    .process-grid { grid-template-columns: 1fr 1fr; }
+    .process-card:nth-child(2) { border-right: 0; }
+    .process-card:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    .meaning-bridge { padding-top: 54px; }
+    .archive { padding: 54px 0 64px; }
+    .archive-head { grid-template-columns: 1fr; gap: 24px; }
+    .timeline li { grid-template-columns: 54px 1fr; gap: 14px; }
+    .timeline p { grid-column: 2; }
+    .footer { align-items: flex-start; flex-direction: column; }
+  }
+</style>
+</head>
+<body data-venture="tattooing">
+<main class="page entrance-fade">
+  <nav class="topline" aria-label="Page navigation">
+    <a href="/tattoos/">&larr; Tattoo House</a>
+    <a href="/tattoos/inquire/">Start an inquiry</a>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <img class="brand-mark" src="/assets/brand/art-pill-tattoo-house.svg.svg" alt="Art.Pill Tattoo House">
+      <span class="eyebrow">About the house</span>
+      <h1>Marks with meaning.</h1>
+    </div>
+    <p class="hero-copy">Art.Pill Tattoo House is the tattoo practice of Saiel Dauhn Solehman: a space where the body becomes a site for symbolism, memory, collaboration, and transformation.</p>
+  </header>
+
+  <section class="about-grid" aria-labelledby="practice-title">
+    <header>
+      <span class="section-kicker">The practice</span>
+      <h2 id="practice-title">Built around intention.</h2>
+    </header>
+    <p>The work moves between original flash, custom review, symbolic systems, and special projects. Each path begins with the idea and the person carrying it, then finds the form that belongs on the body.</p>
+    <p>Art.Pill sits inside the larger Six.Well Construct while keeping its own room, rhythm, and record. The tattoo is treated as both a personal object and a living part of an evolving visual language.</p>
+  </section>
+
+  <section class="process" aria-labelledby="process-title">
+    <div class="process-head">
+      <header>
+        <span class="section-kicker">Process &amp; philosophy</span>
+        <h2 id="process-title">The body changes the image.</h2>
+      </header>
+      <p class="process-statement">For me, tattooing is not just placing an image on skin. It is a collaboration between a person, a symbol, a body, and time. Meaning begins before the appointment and keeps changing after the piece leaves the studio.</p>
+    </div>
+
+    <div class="process-grid" aria-label="Tattoo process">
+      <article class="process-card">
+        <span class="timeline-index">01</span>
+        <h3>Listen</h3>
+        <p>The process begins with what the person is carrying: an idea, memory, tension, transformation, or image they cannot leave alone.</p>
+      </article>
+      <article class="process-card">
+        <span class="timeline-index">02</span>
+        <h3>Translate</h3>
+        <p>I look for the visual structure beneath the request and translate it through composition, symbolism, placement, and the language of the body.</p>
+      </article>
+      <article class="process-card">
+        <span class="timeline-index">03</span>
+        <h3>Make together</h3>
+        <p>The design becomes specific through conversation. Custom work is not a one-way commission; the final form is shaped through exchange.</p>
+      </article>
+      <article class="process-card">
+        <span class="timeline-index">04</span>
+        <h3>Let it live</h3>
+        <p>A tattoo changes with movement, healing, memory, and the life around it. The finished piece is a beginning rather than a fixed endpoint.</p>
+      </article>
+    </div>
+
+    <div class="meaning-bridge">
+      <header>
+        <span class="section-kicker">Meaning in the work</span>
+        <h2>Symbols travel.</h2>
+      </header>
+      <div class="meaning-copy">
+        <p>Some forms return throughout my work, but they do not belong only to tattooing. They move between skin, paintings, garments, film, writing, objects, and rooms across the Construct.</p>
+        <p>The Legend holds the broader language behind those recurring symbols. Individual artwork records can then explain how that language changes inside one particular piece.</p>
+        <a class="legend-link" href="/legend/">Enter the Legend &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="archive" aria-labelledby="archive-title">
+    <div class="archive-head">
+      <div>
+        <span class="section-kicker">Archive highlights</span>
+        <h2 id="archive-title">A living record.</h2>
+      </div>
+      <p class="archive-intro">A brief path through the house. The full archive holds the deeper record of healed work, design traces, process, and studio history.</p>
+    </div>
+    <ol class="timeline">
+      <li>
+        <span class="timeline-index">01</span>
+        <h3>Origin</h3>
+        <p>Art.Pill takes shape as the tattoo and body-marking room within Saiel's wider interdisciplinary practice.</p>
+      </li>
+      <li>
+        <span class="timeline-index">02</span>
+        <h3>Language</h3>
+        <p>Flash, custom work, recurring symbols, and special projects establish the house's visual vocabulary.</p>
+      </li>
+      <li>
+        <span class="timeline-index">03</span>
+        <h3>Continuing record</h3>
+        <p>New work joins healed photographs, sketches, and process evidence as the archive continues to grow.</p>
+      </li>
+    </ol>
+    <a class="archive-link" href="/archive/tattoos/">See the full archive &rarr;</a>
+  </section>
+
+  <footer class="footer">
+    <span>&copy; Art.Pill Tattoo House</span>
+    <nav aria-label="Related pages">
+      <a href="/tattoos/portfolio/">Portfolio</a>
+      <a href="/legend/">The Legend</a>
+      <a href="/tattoos/inquire/">Inquiry</a>
+      <a href="/home/">Return to construct</a>
+    </nav>
+  </footer>
+</main>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

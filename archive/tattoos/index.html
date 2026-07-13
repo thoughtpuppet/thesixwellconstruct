@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tattoo Archive - the six.well construct</title>
+<title>Art.Pill Tattoo House Archive &middot; the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -11,17 +11,43 @@
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/venture-pages.css">
 <link rel="stylesheet" href="/css/site-typography.css">
-<style>:root{--venture-color:var(--color-tattooing);--venture-accent:var(--color-tattooing);--venture-dim:var(--color-tattooing-dim);--venture-wash:rgba(110,4,4,0.12);}</style>
+<style>
+:root{--venture-color:var(--color-tattooing);--venture-accent:var(--color-tattooing);--venture-dim:var(--color-tattooing-dim);--venture-wash:rgba(110,4,4,0.12);}
+.archive-status{display:inline-block;margin-top:16px;padding:7px 9px;border:1px solid var(--ring-faint);font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--venture-accent)}
+.archive-rooms{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--ring-faint);border-bottom:1px solid var(--ring-faint)}
+.archive-room{min-height:260px;padding:28px;border-right:1px solid var(--ring-faint)}
+.archive-room:last-child{border-right:0}
+.archive-room h2{margin:54px 0 14px;font-size:clamp(26px,4vw,52px);line-height:.92;letter-spacing:-.045em;text-transform:uppercase}
+.archive-room p{margin:0;color:var(--text-muted);font-size:14px;line-height:1.7}
+.archive-index{color:var(--venture-accent);font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}
+.bridge{display:grid;grid-template-columns:.8fr 1.2fr;gap:40px;align-items:start;padding:72px 0}
+.bridge h2{margin:10px 0 0;font-size:clamp(34px,6vw,72px);line-height:.9;letter-spacing:-.05em;text-transform:uppercase}
+.bridge-copy p{margin:0 0 22px;color:var(--text-muted);line-height:1.7}
+@media(max-width:760px){.archive-rooms{grid-template-columns:1fr}.archive-room{min-height:auto;border-right:0;border-bottom:1px solid var(--ring-faint)}.archive-room:last-child{border-bottom:0}.bridge{grid-template-columns:1fr;padding:54px 0}}
+</style>
 </head>
-<body class="venture-page" data-venture="archive">
+<body class="venture-page" data-venture="tattooing">
 <div class="venture-grain" aria-hidden="true"></div>
 <main class="venture-shell entrance-fade">
   <section class="venture-hero" aria-labelledby="page-title">
-    <div><span class="venture-kicker">archive node</span><h1 class="venture-title" id="page-title">Tattoo Archive.</h1></div>
-    <div class="hero-copy"><p class="hero-lede">Records, healed work, design traces, booking residue, and process notes from the tattoo house.</p><p class="hero-note">This page is a holding room for tattoo evidence as the public archive grows.</p><div class="hero-actions"><a class="venture-link" href="/tattoos/">tattoos</a><a class="venture-link" href="/archive/">archive root</a></div></div>
+    <div><span class="venture-kicker">Art.Pill Tattoo House</span><h1 class="venture-title" id="page-title">Tattoo Archive.</h1></div>
+    <div class="hero-copy"><p class="hero-lede">The historical record of the house: healed work, design traces, process evidence, and the life surrounding the tattoos.</p><p class="hero-note">The archive will open in phases as records are identified, contextualized, and prepared for public view.</p><span class="archive-status">Archive in development</span><div class="hero-actions"><a class="venture-link" href="/about/artpilltattoohouse/">about the house</a><a class="venture-link" href="/archive/">archive root</a></div></div>
   </section>
-  <section class="section"><header class="section-head"><div><span class="section-kicker">record</span><h2 class="section-title">Body Proof</h2></div><p class="section-copy">Healed photographs, flash studies, consented process images, and aftercare traces belong here once they are ready for public memory.</p></header></section>
-  <footer class="footer"><p>&copy; the six.well construct</p><div class="page-links"><a href="/home/">return to construct</a><a href="/archive/">archive</a></div></footer>
+  <section class="section" aria-label="Planned archive rooms">
+    <div class="archive-rooms">
+      <article class="archive-room"><span class="archive-index">01 / body proof</span><h2>Finished &amp; healed</h2><p>Consented photographs of completed and healed work, including how each piece settles into movement, skin, and time.</p></article>
+      <article class="archive-room"><span class="archive-index">02 / source material</span><h2>Before the skin</h2><p>Flash studies, sketches, composition tests, placement drawings, and the visual research behind selected works.</p></article>
+      <article class="archive-room"><span class="archive-index">03 / studio memory</span><h2>The life around it</h2><p>Process images, rooms, objects, milestones, and fragments that document the changing shape of Art.Pill Tattoo House.</p></article>
+    </div>
+  </section>
+  <section class="bridge">
+    <header><span class="section-kicker">Archive / Legend</span><h2>Evidence is not definition.</h2></header>
+    <div class="bridge-copy"><p>The Archive records what happened and what remains. The Legend follows the symbols themselves—what they carry and how their meanings travel between tattoos and other mediums.</p><div class="hero-actions"><a class="venture-link" href="/legend/">enter the Legend</a><a class="venture-link" href="/tattoos/portfolio/">current portfolio</a></div></div>
+  </section>
+  <footer class="footer"><p>&copy; Art.Pill Tattoo House</p><div class="page-links"><a href="/about/artpilltattoohouse/">about</a><a href="/tattoos/">tattoo house</a><a href="/home/">return to construct</a></div></footer>
 </main>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
 </body>
 </html>

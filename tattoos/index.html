@@ -230,6 +230,23 @@
     font-family:var(--sans);
     font-weight:900;
   }
+  .brand-links {
+    display:flex;
+    align-items:center;
+    gap:18px;
+    flex-wrap:wrap;
+    margin-top:22px;
+  }
+  .brand-link {
+    display:inline-block;
+    font-family:var(--serif);
+    font-size:11px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--text);
+    transition:color var(--t-fast);
+  }
+  .brand-link:hover { color:var(--signal); }
   .section {
     padding:48px 0;
     border-top:5px solid var(--ring-faint);
@@ -251,21 +268,6 @@
     line-height:1.8; color:var(--text); max-width:620px;
   }
   .section-body + .section-body { margin-top:16px; }
-  .section-portfolio-link {
-    display:inline-block;
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text);
-    transition:color var(--t-fast);
-  }
-  .section-portfolio-link:hover { color:var(--signal); }
-  #the-work {
-    display:flex;
-    justify-content:flex-end;
-    padding:0 0 25px;
-    border-top:none;
-  }
-  #the-work .section-body { max-width:none; }
   .editorial-field {
     display:grid;
     grid-template-columns:minmax(0,0.9fr) minmax(280px,0.48fr);
@@ -641,6 +643,9 @@
           <img class="venture-stamp" src="/assets/brand/art-pill-tattoo-house.svg.svg" alt="art.pill Tattoo House logo" loading="eager">
           <h2 class="brand-title" id="tattoo-house-title" data-copy-id="tattoos-brand-title">art.pill Tattoo <span style="font-family: Georgia, &quot;Times New Roman&quot;, Times, serif"><span><span><span><span style="font-family: Inter, Arial, sans-serif">House</span></span></span></span></span></h2>
         </div>
+        <div class="brand-links">
+          <a class="brand-link" href="/about/artpilltattoohouse/">Learn more &rarr;</a>
+        </div>
       </div>
       <p class="brand-copy" data-copy-id="tattoos-brand-copy"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 14px"><span style="font-size: 14px">a private tattoo studio in Atlanta, Georgia, owned and operated by Sai Solehman. The studio specializes in NARRATIVE COMPOSITIONS, FLORAL PIECES, script, and repeatable symbolic patterns, with color work designed thoughtfully for brown skin tones.</span></span></span></p>
       <div class="brand-band-walkin" id="walk-in-windows">
@@ -656,10 +661,11 @@
         <p class="brand-kicker"><span style="font-size: 16px;"><span style="font-size: 14px;">Owner / <strong><span style="color: rgb(0, 113, 235)">Artist</span></strong></span></span></p>
         <h2 class="brand-title" id="artist-name-title">Saiel Dauhn Solehman</h2>
         <p class="brand-copy"><span style="font-size: 14px">an Atlanta-based interdisciplinary artist whose visions move through tattooing, painting, film, apparel, and woodworking. Her practice explores mysticism, introspection, communication, psychological tension, and cultural systems through layered symbolism and visual conversations set within vivid, surreal environments.</span></p>
+        <div class="brand-links">
+          <a class="brand-link" href="/about/founder/">Learn more &rarr;</a>
+          <a class="brand-link" href="/tattoos/portfolio/">See the portfolio &rarr;</a>
+        </div>
       </div>
-    </section>
-    <section class="section" id="the-work">
-      <a class="section-portfolio-link" href="/tattoos/portfolio/">See the portfolio →</a>
     </section>
 
     <section class="section" id="ways-to-work">

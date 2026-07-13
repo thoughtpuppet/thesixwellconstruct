@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Legend &middot; the six.well construct</title>
+<meta name="description" content="The Legend is the living key to the symbols, meanings, variations, and appearances that move across the Six.Well Construct.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block">
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<style>
+  :root { color-scheme: dark; --bg:#090a09; --paper:#eee8dc; --muted:#9f9b91; --acid:#d9e85a; --line:rgba(238,232,220,.17); }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(circle at 72% 18%,rgba(217,232,90,.08),transparent 30rem),var(--bg); color:var(--paper); font-family:Inter,Arial,sans-serif; }
+  a { color:inherit; }
+  .shell { width:min(1180px,calc(100% - 40px)); margin:auto; padding:32px 0 48px; }
+  .topline,.footer { display:flex; justify-content:space-between; gap:24px; font-size:.7rem; font-weight:700; letter-spacing:.13em; text-transform:uppercase; }
+  .hero { min-height:72vh; display:grid; grid-template-columns:1.2fr .8fr; align-items:end; gap:clamp(36px,8vw,110px); padding:clamp(100px,15vw,180px) 0 64px; border-bottom:1px solid var(--line); }
+  .kicker,.index { color:var(--acid); font-size:.68rem; font-weight:900; letter-spacing:.17em; text-transform:uppercase; }
+  h1 { margin:16px 0 0; font-size:clamp(5rem,17vw,14rem); line-height:.74; letter-spacing:-.09em; text-transform:uppercase; }
+  .lede { margin:0; color:#cec8bc; font-family:Georgia,"Times New Roman",serif; font-size:clamp(1.25rem,2.2vw,1.9rem); line-height:1.48; }
+  .status { display:inline-block; margin-top:26px; padding:8px 10px; border:1px solid var(--line); color:var(--acid); font-size:.64rem; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+  .framework { padding:72px 0; }
+  .framework-head { display:grid; grid-template-columns:.6fr 1.4fr; gap:42px; margin-bottom:40px; }
+  h2 { margin:12px 0 0; font-size:clamp(2.2rem,6vw,5.2rem); line-height:.9; letter-spacing:-.06em; text-transform:uppercase; }
+  .framework-copy { margin:0; max-width:45rem; color:var(--muted); line-height:1.7; }
+  .fields { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .field { min-height:230px; padding:28px; border-right:1px solid var(--line); }
+  .field:last-child { border-right:0; }
+  .field h3 { margin:48px 0 12px; font-size:.9rem; letter-spacing:.1em; text-transform:uppercase; }
+  .field p { margin:0; color:var(--muted); font-size:.9rem; line-height:1.65; }
+  .mediums { display:flex; flex-wrap:wrap; gap:9px; padding:40px 0 76px; border-bottom:1px solid var(--line); }
+  .mediums span { padding:9px 12px; border:1px solid var(--line); color:#bbb5aa; font-size:.65rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+  .footer { padding-top:28px; align-items:flex-start; }
+  .footer nav { display:flex; flex-wrap:wrap; gap:20px; }
+  @media(max-width:760px){ .shell{width:calc(100% - 28px);padding-top:22px}.hero{min-height:auto;grid-template-columns:1fr;padding:94px 0 48px}.framework{padding:54px 0}.framework-head{grid-template-columns:1fr;gap:24px}.fields{grid-template-columns:1fr 1fr}.field:nth-child(2){border-right:0}.field:nth-child(-n+2){border-bottom:1px solid var(--line)}.footer{flex-direction:column} }
+</style>
+</head>
+<body data-venture="about">
+<main class="shell entrance-fade">
+  <nav class="topline" aria-label="Page navigation"><a href="/home/">&larr; The Construct</a><a href="/about/">About</a></nav>
+  <header class="hero">
+    <div><span class="kicker">A living symbolic index</span><h1>The<br>Legend</h1></div>
+    <div><p class="lede">A key to the recurring symbols that move through the Six.Well Construct—and to the meanings, variations, and relationships they gather in different forms.</p><span class="status">Index in development</span></div>
+  </header>
+
+  <section class="framework" aria-labelledby="framework-title">
+    <div class="framework-head">
+      <header><span class="kicker">How to read it</span><h2 id="framework-title">One language. Many forms.</h2></header>
+      <p class="framework-copy">The Legend will not assign one permanent definition to every mark. It will document a symbol's core idea, the meanings it has gathered, how its form changes, and where it appears throughout the Construct.</p>
+    </div>
+    <div class="fields">
+      <article class="field"><span class="index">01</span><h3>Symbol</h3><p>The mark, figure, gesture, shape, character, or recurring visual structure.</p></article>
+      <article class="field"><span class="index">02</span><h3>Meaning</h3><p>Its central idea, emotional charge, personal history, and possible readings.</p></article>
+      <article class="field"><span class="index">03</span><h3>Variations</h3><p>How the symbol mutates, combines with others, or changes through context.</p></article>
+      <article class="field"><span class="index">04</span><h3>Appearances</h3><p>The tattoos, paintings, films, garments, writings, objects, and spaces it inhabits.</p></article>
+    </div>
+  </section>
+
+  <div class="mediums" aria-label="Media represented in the Legend">
+    <span>Tattooing</span><span>Painting</span><span>Film</span><span>Apparel</span><span>Writing</span><span>Objects</span><span>Rooms</span>
+  </div>
+
+  <footer class="footer"><span>&copy; the six.well construct</span><nav aria-label="Related pages"><a href="/about/artpilltattoohouse/">Art.Pill Tattoo House</a><a href="/archive/">Archive</a><a href="/home/">Return to construct</a></nav></footer>
+</main>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

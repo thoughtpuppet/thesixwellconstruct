@@ -133,7 +133,7 @@ const BASE_LAYOUTS = {
   mobile: {
     image: CORE_IMAGE,
     holeRadiusN: 0.0273,
-    orbRadiusFactor: 1.01,
+    orbRadiusFactor: 1.16,
     sockets: MOBILE_SOCKETS,
     orbHomes: MOBILE_ORB_HOMES,
     orbShadow: MOBILE_ORB_SHADOW,
@@ -1065,6 +1065,7 @@ const doorwayExit = (() => {
     scale: 0.18,
     voidScale: 0.2,
     orbsHidden: false,
+    orbOpacity: 1,
     pullProgress: 0,
     pullOriginX: 50,
     pullOriginY: 50,
@@ -1354,7 +1355,9 @@ const orbMat = new THREE.MeshPhysicalMaterial({
   roughness: 0.48,
   metalness: 0.02,
   clearcoat: 0.16,
-  clearcoatRoughness: 0.58
+  clearcoatRoughness: 0.58,
+  transparent: true,
+  opacity: 1
 });
 const orbs = activeLayout.orbHomes.map((p, index) => {
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 36), orbMat.clone());
@@ -4200,6 +4203,9 @@ function resetDoorwayViewerPull() {
 
 function setDoorwayOrbsHidden(hidden = false) {
   doorwayExit.orbsHidden = !!hidden;
+  sockets.forEach((socket) => {
+    socket.group.visible = !doorwayExit.orbsHidden;
+  });
   if (!doorwayExit.orbsHidden) {
     orbs.forEach((orb) => {
       orb.mesh.visible = true;
@@ -4210,6 +4216,17 @@ function setDoorwayOrbsHidden(hidden = false) {
   orbs.forEach((orb) => {
     orb.mesh.visible = false;
     if (orb.floatShadow) orb.floatShadow.visible = false;
+  });
+}
+
+function setDoorwayOrbOpacity(opacity = 1) {
+  const nextOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
+  doorwayExit.orbOpacity = nextOpacity;
+  orbs.forEach((orb) => {
+    orb.mesh.material.opacity = nextOpacity;
+  });
+  sockets.forEach((socket) => {
+    socket.shadow.material.opacity = nextOpacity;
   });
 }
 
@@ -4363,11 +4380,27 @@ function applyDoorwayEyeCalibrationFrame(closedOpacity = 0, openOpacity = 0, opt
 function applyDoorwayEyeCalibrationPreview() {
   if (!isDoorwayEyeCalibrationPreviewActive()) return;
   if (doorwayExit.calibrationPreview === 'closed') {
+    setDoorwayOrbOpacity(1);
     applyDoorwayEyeCalibrationFrame(1, 0);
   } else if (doorwayExit.calibrationPreview === 'blink') {
     const frame = doorwayEyeCalibrationBlinkFrame();
+    const totalBlinks = Math.max(1, SHAPE_STREAM_FINAL_GRID.blinkCount);
+    const blinkDuration = Math.max(0.001, SHAPE_STREAM_FINAL_GRID.blinkDuration * totalBlinks);
+    const revealDuration = Math.max(0.001, SHAPE_STREAM_FINAL_GRID.openRevealDuration);
+    if (doorwayExit.calibrationBlinkElapsed < blinkDuration) {
+      const blinkProgress = THREE.MathUtils.clamp(doorwayExit.calibrationBlinkElapsed / blinkDuration, 0, 1);
+      setDoorwayOrbOpacity(THREE.MathUtils.lerp(0.82, 0.1, easeInOutCubic(blinkProgress)));
+    } else {
+      const revealProgress = THREE.MathUtils.clamp(
+        (doorwayExit.calibrationBlinkElapsed - blinkDuration) / revealDuration,
+        0,
+        1
+      );
+      setDoorwayOrbOpacity(THREE.MathUtils.lerp(0.1, 0, easeOutCubic(revealProgress)));
+    }
     applyDoorwayEyeCalibrationFrame(frame.closedOpacity, frame.openOpacity, { openMaxOpacity: 1 });
   } else {
+    setDoorwayOrbOpacity(0);
     applyDoorwayEyeCalibrationFrame(0, 1, { openMaxOpacity: 1 });
   }
 }
@@ -4406,6 +4439,7 @@ function hideDoorwayEyeCalibrationPreview() {
   doorwayExit.veil.material.opacity = 0;
   updateDoorwayGravityRings('calibrationPreview', 0);
   resetDoorwayViewerPull();
+  setDoorwayOrbOpacity(1);
   setDoorwayOrbsHidden(false);
   resetDoorwayRoomDust();
   resetDoorwayRoomBreak();
@@ -4447,6 +4481,7 @@ function resetShapeStreamDoorwayExit() {
   resetDoorwayRoomBreak();
   resetDoorwayBlackFade();
   resetDoorwayRoomDust();
+  setDoorwayOrbOpacity(1);
   setDoorwayOrbsHidden(false);
   setCompletionExitOpacityScale(1);
   doorwayExit.navigationTriggered = false;
@@ -4517,6 +4552,7 @@ function startShapeStreamDoorwayExit() {
   resetDoorwayRoomBreak();
   resetDoorwayBlackFade();
   resetDoorwayRoomDust();
+  setDoorwayOrbOpacity(1);
   setDoorwayOrbsHidden(false);
   seedDoorwayRoomDust(true);
   setCompletionExitOpacityScale(1);
@@ -4648,6 +4684,7 @@ function animateShapeStreamDoorwayExit(delta) {
     setDoorwayEyeOpacity(t, 0);
     clearDoorwayAmbientDimming();
     applyDoorwayPageZoom(0);
+    setDoorwayOrbOpacity(THREE.MathUtils.lerp(1, 0.82, t));
     setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(0, doorwayOverlayOpacity(0.46), t);
     updateDoorwayGravityRings('idle', 0);
@@ -4671,6 +4708,7 @@ function animateShapeStreamDoorwayExit(delta) {
     setDoorwayEyeOpacity(1 - t, t, DOORWAY_EYE_COLOR, { openMaxOpacity: 1 });
     clearDoorwayAmbientDimming();
     applyDoorwayPageZoom(0);
+    setDoorwayOrbOpacity(THREE.MathUtils.lerp(0.1, 0, t));
     setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = THREE.MathUtils.lerp(doorwayOverlayOpacity(0.46), doorwayOverlayOpacity(0.71), t);
     updateDoorwayGravityRings('idle', 0);
@@ -4703,6 +4741,7 @@ function animateShapeStreamDoorwayExit(delta) {
     setDoorwayEyeOpacity(eyeVisible ? 1 : 0, 0);
     clearDoorwayAmbientDimming();
     applyDoorwayPageZoom(0);
+    setDoorwayOrbOpacity(THREE.MathUtils.lerp(0.82, 0.1, easeInOutCubic(progress)));
     setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.46);
     updateDoorwayGravityRings('blinkSequence', progress);
@@ -4738,6 +4777,7 @@ function animateShapeStreamDoorwayExit(delta) {
     applyDoorwayBlackFade(0);
     clearDoorwayAmbientDimming();
     applyDoorwayPageZoom(0);
+    setDoorwayOrbOpacity(0);
     setDoorwayOrbsHidden(false);
     doorwayExit.voidPlane.material.opacity = doorwayOverlayOpacity(0.71);
     updateDoorwayGravityRings('idle', 0);
@@ -5313,6 +5353,7 @@ function retargetShapeStreamFinalGrid(restartAnimation = false) {
       doorwayExit.roomShards.doorMaterial.uniforms.uOpacity.value = 0;
       applyDoorwayBlackFade(0);
       applyDoorwayPageZoom(0);
+      setDoorwayOrbOpacity(0);
       setDoorwayOrbsHidden(false);
     } else if (phase === 'pageZoomHold') {
       const progress = shapeStream.finalGrid.exitProgress || 0;
@@ -8289,7 +8330,8 @@ function animate() {
         o.mesh.position.y - height * o.shadow.cast,
         0.08 + depth * 0.10 + o.shadow.z
       );
-      o.floatShadow.material.opacity = THREE.MathUtils.clamp(1 - height * 0.05 * depth, 0.26, 1);
+      o.floatShadow.material.opacity = THREE.MathUtils.clamp(1 - height * 0.05 * depth, 0.26, 1)
+        * doorwayExit.orbOpacity;
     }
   });
   updateCompletionEffects(delta);
