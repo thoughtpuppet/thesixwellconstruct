@@ -120,19 +120,24 @@ npx.cmd wrangler@latest r2 bucket create swc-submission-files
 
 ## Migrated forms
 
-The website submission paths now submit to `/api/submissions` with a `type` field:
+The review-form paths submit to `/api/submissions` with a `type` field:
 
-- `/tattoos/inquire/` uses `tattoo_inquiry`
+- `/tattoos/inquire/custom/` uses `tattoo_inquiry`
 - `/tattoos/flash/claim/` uses `flash_claim`
 - `/tattoos/build/` uses `build_brief`
 - `/tattoos/special-projects/apply/` uses `special_project`
 - `/art/acquisitioninquiry.html` uses `art_acquisition`
 
-`/tattoos/build/in-person/` and `/tattoos/inquire/consultation/` are different:
-they use the public consultation booking routes, create a linked
-`consultation` submission for review context, create a Zoom meeting for virtual
-consultations, and then send the client to Square for the consultation/build
-deposit.
+Paid public booking paths are different:
+
+- `/tattoos/inquire/consultation/` and `/tattoos/build/in-person/` use the
+  public consultation booking routes, create a linked `consultation`
+  submission for review context, create a Zoom meeting for virtual
+  consultations, and then send the client to Square for the consultation/build
+  deposit.
+- `/booking/studio/` and `/booking/studio-visit/` use the public studio booking
+  routes, create a linked `studio_booking` submission, and then send the client
+  to the studio Square checkout location.
 
 The review console utility form at `/studio/submissions/` is not a submission path. It only collects the admin token in the browser so the console can read protected admin endpoints.
 
@@ -159,6 +164,14 @@ Public consultation/build sessions use:
 - `POST /api/booking/public-consultation/checkout` to create a linked
   `consultation` submission, create the appointment, create a Zoom meeting when
   the selected type is `consult_virtual`, and start Square checkout.
+
+Public studio bookings use:
+
+- `GET /api/booking/public-studio/context` for studio booking types and
+  bookable windows.
+- `POST /api/booking/public-studio/checkout` to create a linked
+  `studio_booking` submission, create the appointment, and start Square
+  checkout at the studio location.
 
 Apply migrations through `0011_virtual_zoom_meetings.sql` before using this in
 production so tips, public consultation booking types, walk-in windows, and

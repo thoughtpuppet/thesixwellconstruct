@@ -135,14 +135,13 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script src="/js/submission-form.js"></script>
   <script>
     (function(){
       var form = document.getElementById("specialProjectForm");
-      var submitBtn = document.getElementById("submitBtn");
-      var status = document.getElementById("formStatus");
       var projectSelect = document.getElementById("project_title");
       var projectId = document.getElementById("projectId");
-      if (!form || !submitBtn || !status) return;
+      if (!form || !projectSelect || !projectId) return;
 
       var projects = {
         "mythic-body-studies": "Mythic Body Studies",
@@ -159,29 +158,15 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
         projectId.value = match || "other";
       });
 
-      form.addEventListener("submit", async function(event){
-        event.preventDefault();
-        if (!form.reportValidity()) return;
-
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Submitting...";
-        status.textContent = "Capturing your application for review.";
-
-        try {
-          var response = await fetch(form.action, {
-            method: "POST",
-            body: new FormData(form),
-          });
-          var payload = await response.json().catch(function(){ return {}; });
-          if (!response.ok) {
-            throw new Error(payload.error || "Submission failed.");
-          }
+      window.SixWellSubmissionForms.init({
+        form: "#specialProjectForm",
+        submitButton: "#submitBtn",
+        status: "#formStatus",
+        pendingText: "Capturing your application for review.",
+        errorText: "Submission failed. Please try again.",
+        onSuccess: function() {
           var project = projectId.value || "other";
           window.location.href = "/tattoos/submission-received/?type=special-project&project=" + encodeURIComponent(project);
-        } catch (error) {
-          status.textContent = error.message || "Submission failed. Please try again.";
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Submit Application";
         }
       });
     })();

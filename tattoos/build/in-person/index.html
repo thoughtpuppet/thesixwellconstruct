@@ -33,14 +33,6 @@
   .nav-inquire{font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(110,4,4,0.4);padding:8px 16px;transition:background var(--t-fast),border-color var(--t-fast);}
   .nav-inquire:hover{background:rgba(110,4,4,0.06);border-color:var(--signal);}
 
-  /* ── COMING SOON (in-person build not yet open) ── */
-  .coming-soon{border:5px solid var(--ring-faint);padding:var(--s6);display:grid;gap:var(--s4);align-content:start;}
-  .coming-soon-kicker{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);}
-  .coming-soon-title{font-family:var(--sans);font-weight:900;font-size:clamp(26px,3.4vw,40px);letter-spacing:-0.03em;line-height:0.95;text-transform:uppercase;color:var(--accent);}
-  .coming-soon-body{font-size:14px;line-height:1.75;color:var(--text-mute);}
-  .coming-soon-cta{justify-self:start;display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(110,4,4,0.4);padding:12px 24px;margin-top:var(--s2);transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
-  .coming-soon-cta:hover{background:rgba(110,4,4,0.06);border-color:var(--signal);color:var(--accent);}
-
   /* ── MAIN ── */
   main{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:var(--s8) var(--s6) var(--s7);}
 
@@ -149,16 +141,7 @@
         </div>
       </section>
 
-      <!-- RIGHT — COMING SOON (in-person build not yet open) -->
-      <section class="coming-soon" aria-label="In-person build status">
-        <p class="coming-soon-kicker">Opening soon</p>
-        <h2 class="coming-soon-title">Build sessions<br>open soon.</h2>
-        <p class="coming-soon-body">In-person build sessions are being finalized before booking opens. If you'd like to develop a brief in the studio, begin an inquiry and note your interest — your message carries into review.</p>
-        <a class="coming-soon-cta" href="/tattoos/inquire/">Begin an inquiry →</a>
-      </section>
-
-      <!-- RIGHT — FORM (hidden until in-person build opens) -->
-      <section class="form-panel" aria-label="Book an in-person build session" style="display:none">
+      <section class="form-panel" aria-label="Book an in-person build session">
         <h2 class="form-title">Book a Build Session.</h2>
         <p class="form-note">A longer in-person session for developing your tattoo brief in the studio. After selecting a time, you'll be taken to Square to hold the slot.</p>
 

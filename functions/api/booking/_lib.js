@@ -247,6 +247,32 @@ function normalizeAppointment(row) {
   };
 }
 
+function availabilityScopeFromRequest(request) {
+  const scope = new URL(request.url).searchParams.get("scope") || "";
+  if (scope === "studio") {
+    return {
+      scope,
+      bookingTypeIds: STUDIO_BOOKING_TYPE_IDS,
+      includeUnscoped: false,
+    };
+  }
+  if (scope === "tattoo") {
+    return {
+      scope,
+      bookingTypeIds: [
+        ...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing,
+        ...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.consultation,
+      ],
+      includeUnscoped: true,
+    };
+  }
+  return {
+    scope: "all",
+    bookingTypeIds: [],
+    includeUnscoped: true,
+  };
+}
+
 function formatMoney(cents, currency) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -748,13 +774,16 @@ async function listGeneratedWindows(db, bookingTypes, blackouts, activeAppointme
   return generated;
 }
 
-async function loadBookingsByLocalDay(db, timezone, afterIso) {
+async function loadBookingsByLocalDay(db, timezone, afterIso, bookingTypeIds = []) {
+  const ids = (bookingTypeIds || []).filter(Boolean);
+  const typeClause = ids.length ? ` AND booking_type_id IN (${ids.map(() => "?").join(", ")})` : "";
   const result = await db
     .prepare(
       `SELECT start_at FROM appointments
        WHERE start_at > ? AND status IN ('pending_deposit', 'deposit_pending', 'confirmed')`
+        + typeClause
     )
-    .bind(afterIso)
+    .bind(afterIso, ...ids)
     .all();
   const map = new Map();
   for (const row of result.results || []) {
@@ -1178,10 +1207,12 @@ function submissionRequiresConsultation(submission) {
 async function createPublicConsultationSubmission(db, body, client, bookingType) {
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
+  const sourcePath = asOptionalString(body.source_path || body.sourcePath) || "/tattoos/inquire/consultation/";
+  const subject = asOptionalString(body.subject) || "New Art.Pill Consultation Booking Request";
   const payload = {
     type: "consultation",
-    source_path: "/tattoos/inquire/consultation/",
-    subject: "New Art.Pill Consultation Booking Request",
+    source_path: sourcePath,
+    subject,
     firstName: asString(body.firstName || body.first_name),
     lastName: asString(body.lastName || body.last_name),
     name: client.name,
@@ -1214,8 +1245,8 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
       id,
       "consultation",
       "approved",
-      "/tattoos/inquire/consultation/",
-      payload.subject,
+      sourcePath,
+      subject,
       client.name,
       client.email,
       client.phone || null,
@@ -1491,10 +1522,12 @@ export async function handlePublicStudioContext(request, env) {
 async function createPublicStudioSubmission(db, body, client, bookingType) {
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
+  const sourcePath = asOptionalString(body.source_path || body.sourcePath) || "/booking/studio/";
+  const subject = asOptionalString(body.subject) || "New Studio Booking Request";
   const payload = {
     type: "studio_booking",
-    source_path: "/booking/studio/",
-    subject: "New Studio Booking Request",
+    source_path: sourcePath,
+    subject,
     firstName: asString(body.firstName || body.first_name),
     lastName: asString(body.lastName || body.last_name),
     name: client.name,
@@ -1526,8 +1559,8 @@ async function createPublicStudioSubmission(db, body, client, bookingType) {
       id,
       "studio_booking",
       "approved",
-      "/booking/studio/",
-      payload.subject,
+      sourcePath,
+      subject,
       client.name,
       client.email,
       client.phone || null,
@@ -2674,6 +2707,7 @@ export async function handleAdminGetBookingReadiness(request, env) {
 
   try {
     const db = requireBookingDb(env);
+    const scope = new URL(request.url).searchParams.get("scope") === "studio" ? "studio" : "tattoo";
     const settingsRow = await db
       .prepare("SELECT * FROM booking_settings WHERE venture = ?")
       .bind("tattooing")
@@ -2697,52 +2731,85 @@ export async function handleAdminGetBookingReadiness(request, env) {
 
     const activeRules = rules.results || [];
     const activeBookingTypes = bookingTypes.results || [];
+    const activeStudioBookingTypes = activeBookingTypes.filter(
+      (type) => STUDIO_BOOKING_TYPE_IDS.includes(type.id) && type.active
+    );
     const activePublicBookingTypes = activeBookingTypes.filter(
       (type) => PUBLIC_CONSULTATION_BOOKING_TYPE_IDS.includes(type.id) && type.active
     );
     const hasConsultationRule = activeRules.some(
       (rule) => (rule.category || "tattooing") === "consultation" && rule.active
     );
+    const hasStudioRule = activeRules.some(
+      (rule) => (rule.category || "tattooing") === "studio" && rule.active
+    );
     const appointmentMeetingsReady = await tableReady(db, "appointment_meetings");
-    const squareWebhookUrl = squareWebhookNotificationUrl(request, env);
-    const requiredSettingsReady = Boolean(
+    const squareWebhookUrl = scope === "studio"
+      ? studioSquareWebhookNotificationUrl(request, env)
+      : squareWebhookNotificationUrl(request, env);
+    const sharedSettingsReady = Boolean(
       settings &&
       asString(settings.timezone) &&
       requiredPositiveSetting(settings, "bookingHorizonDays") &&
       requiredPositiveSetting(settings, "slotIntervalMinutes") &&
       requiredPositiveSetting(settings, "maxBookingsPerDay") &&
-      requiredPositiveSetting(settings, "defaultCapacity") &&
+      requiredPositiveSetting(settings, "defaultCapacity")
+    );
+    const tattooSettingsReady = Boolean(
+      sharedSettingsReady &&
       activePublicBookingTypes.length > 0 &&
       hasConsultationRule
     );
+    const studioSettingsReady = Boolean(
+      sharedSettingsReady &&
+      activeStudioBookingTypes.length > 0 &&
+      hasStudioRule
+    );
+    const squareCheckoutReady = scope === "studio"
+      ? squareConfiguredForBookingType(env, "studio_visit")
+      : squareConfigured(env);
+    const squareSignatureReady = scope === "studio"
+      ? Boolean(asString(env.SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY))
+      : Boolean(asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY));
+    const squareLocationId = scope === "studio"
+      ? asString(env.SQUARE_STUDIO_LOCATION_ID)
+      : asString(env.SQUARE_LOCATION_ID);
+    const squareMissingMessage = scope === "studio"
+      ? "Missing SQUARE_ACCESS_TOKEN or SQUARE_STUDIO_LOCATION_ID."
+      : "Missing SQUARE_ACCESS_TOKEN or SQUARE_LOCATION_ID.";
+    const webhookMissingMessage = scope === "studio"
+      ? "Missing SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY, so paid studio bookings cannot be trusted from Square webhooks."
+      : "Missing SQUARE_WEBHOOK_SIGNATURE_KEY, so paid appointments cannot be trusted from Square webhooks.";
 
     const checks = [
       readinessItem(
-        "square_checkout",
-        "Square checkout",
-        squareConfigured(env),
-        squareConfigured(env)
+        scope === "studio" ? "studio_square_checkout" : "square_checkout",
+        scope === "studio" ? "Studio Square checkout" : "Square checkout",
+        squareCheckoutReady,
+        squareCheckoutReady
           ? `Checkout can create ${env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox"} Square payment links.`
-          : "Missing SQUARE_ACCESS_TOKEN or SQUARE_LOCATION_ID.",
+          : squareMissingMessage,
         {
           environment: env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
           hasAccessToken: Boolean(asString(env.SQUARE_ACCESS_TOKEN)),
-          hasLocationId: Boolean(asString(env.SQUARE_LOCATION_ID)),
+          hasLocationId: Boolean(squareLocationId),
+          scope,
         }
       ),
       readinessItem(
-        "square_webhook_signing",
-        "Square webhook signing",
-        Boolean(asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY)),
-        asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY)
+        scope === "studio" ? "studio_square_webhook_signing" : "square_webhook_signing",
+        scope === "studio" ? "Studio Square webhook signing" : "Square webhook signing",
+        squareSignatureReady,
+        squareSignatureReady
           ? "Webhook signature verification is configured."
-          : "Missing SQUARE_WEBHOOK_SIGNATURE_KEY, so paid appointments cannot be trusted from Square webhooks.",
+          : webhookMissingMessage,
         {
-          hasSignatureKey: Boolean(asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY)),
+          hasSignatureKey: squareSignatureReady,
           notificationUrl: squareWebhookUrl,
+          scope,
         }
       ),
-      readinessItem(
+      ...(scope === "studio" ? [] : [readinessItem(
         "zoom_credentials",
         "Zoom credentials",
         zoomConfigured(env) && appointmentMeetingsReady,
@@ -2758,27 +2825,38 @@ export async function handleAdminGetBookingReadiness(request, env) {
           hasHostUserId: Boolean(asString(env.ZOOM_HOST_USER_ID)),
           appointmentMeetingsTable: appointmentMeetingsReady,
         }
-      ),
+      )]),
       readinessItem(
         "booking_settings",
-        "Booking settings",
-        requiredSettingsReady,
-        requiredSettingsReady
-          ? "Booking settings, public consultation types, and consultation schedule are ready."
-          : "Booking settings need a horizon, interval, daily limit, capacity, public consultation type, and active consultation hours.",
+        scope === "studio" ? "Studio booking settings" : "Booking settings",
+        scope === "studio" ? studioSettingsReady : tattooSettingsReady,
+        scope === "studio"
+          ? studioSettingsReady
+            ? "Booking settings, studio booking types, and studio hours are ready."
+            : "Booking settings need a horizon, interval, daily limit, capacity, active studio booking type, and active studio hours."
+          : tattooSettingsReady
+            ? "Booking settings, public consultation types, and consultation schedule are ready."
+            : "Booking settings need a horizon, interval, daily limit, capacity, public consultation type, and active consultation hours.",
         {
           settings,
+          scope,
           publicConsultationTypes: activePublicBookingTypes.map((type) => ({
             id: type.id,
             depositCents: type.deposit_cents,
           })),
+          publicStudioTypes: activeStudioBookingTypes.map((type) => ({
+            id: type.id,
+            depositCents: type.deposit_cents,
+          })),
           activeConsultationRuleCount: activeRules.filter((rule) => (rule.category || "tattooing") === "consultation" && rule.active).length,
+          activeStudioRuleCount: activeRules.filter((rule) => (rule.category || "tattooing") === "studio" && rule.active).length,
         }
       ),
     ];
 
     return json({
       ok: true,
+      scope,
       ready: checks.every((check) => check.ready),
       checkedAt: new Date().toISOString(),
       checks,
@@ -2927,19 +3005,25 @@ export async function handleAdminListAvailability(request, env) {
   try {
     const db = requireBookingDb(env);
     const now = new Date().toISOString();
+    const scope = availabilityScopeFromRequest(request);
+    const typeIds = scope.bookingTypeIds || [];
+    const scopedTypeClause = typeIds.length
+      ? ` AND (${scope.includeUnscoped ? "booking_type_id IS NULL OR " : ""}booking_type_id IN (${typeIds.map(() => "?").join(", ")}))`
+      : "";
     const result = await db
       .prepare(
         `SELECT * FROM availability_windows
          WHERE venture = ? AND id NOT LIKE 'gen:%'
+         ${scopedTypeClause}
          ORDER BY
            CASE WHEN end_at >= ? THEN 0 ELSE 1 END ASC,
            CASE WHEN end_at >= ? THEN start_at END ASC,
            CASE WHEN end_at < ? THEN start_at END DESC
          LIMIT 100`
       )
-      .bind("tattooing", now, now, now)
+      .bind("tattooing", ...typeIds, now, now, now)
       .all();
-    return json({ availabilityWindows: (result.results || []).map(normalizeWindow) });
+    return json({ scope: scope.scope, availabilityWindows: (result.results || []).map(normalizeWindow) });
   } catch (error) {
     return errorResponse("Unable to load availability.", 500, {
       detail: error.message,
@@ -2952,6 +3036,10 @@ export async function handleAdminListWalkIns(request, env) {
   if (authError) return authError;
 
   try {
+    const scope = availabilityScopeFromRequest(request);
+    if (scope.scope === "studio") {
+      return json({ scope: scope.scope, walkInWindows: [] });
+    }
     const db = requireBookingDb(env);
     const now = new Date().toISOString();
     const result = await db
@@ -2966,7 +3054,7 @@ export async function handleAdminListWalkIns(request, env) {
       )
       .bind("tattooing", now, now, now)
       .all();
-    return json({ walkInWindows: (result.results || []).map(normalizeWalkInWindow) });
+    return json({ scope: scope.scope, walkInWindows: (result.results || []).map(normalizeWalkInWindow) });
   } catch (error) {
     return errorResponse("Unable to load walk-in windows.", 500, {
       detail: error.message,
@@ -3149,18 +3237,20 @@ export async function handleAdminGetAvailabilityPreview(request, env) {
 
   try {
     const db = requireBookingDb(env);
+    const scope = availabilityScopeFromRequest(request);
     const settingsRow = await db
       .prepare("SELECT * FROM booking_settings WHERE venture = ?")
       .bind("tattooing")
       .first();
     const settings = settingsRow ? normalizeSettings(settingsRow) : null;
-    const bookingTypes = await listBookingTypes(db, []);
+    const bookingTypes = await listBookingTypes(db, scope.bookingTypeIds);
     const availabilityWindows = await listPublicWindows(db, bookingTypes);
     const bookedDays = settings
-      ? bookedDaysFromMap(await loadBookingsByLocalDay(db, settings.timezone, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()))
+      ? bookedDaysFromMap(await loadBookingsByLocalDay(db, settings.timezone, new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), scope.bookingTypeIds))
       : [];
 
     return json({
+      scope: scope.scope,
       settings,
       bookingTypes,
       availabilityWindows,

@@ -138,7 +138,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         <div class="lead-note">
           <p class="lead-note-title" data-copy-id="inquiry-lead-note-title">Timing</p>
           <p class="lead-note-body" data-copy-id="inquiry-lead-note-body-1">Custom artwork requires at least 2 weeks of lead time before your desired appointment date. Simple or pre-existing designs don't require this lead time, but follow first-come, first-served availability.</p>
-          <!-- TODO: confirm these hours are current before publishing -->
           <p class="lead-note-body" data-copy-id="inquiry-lead-note-body-2">Studio hours: Tues-Wed 1pm-6pm, Fri-Sat 1pm-8pm. Closed Sun, Mon, Thurs.</p>
         </div>
       </section>
@@ -230,12 +229,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
+  <script src="/js/submission-form.js"></script>
   <script>
     (function(){
       var form = document.getElementById("inquiryForm");
-      var submitBtn = document.getElementById("submitBtn");
-      var status = document.getElementById("formStatus");
-      if (!form || !submitBtn || !status) return;
+      if (!form) return;
 
       var referenceId = new URLSearchParams(window.location.search).get("reference");
       var referenceCard = document.getElementById("portfolioReference");
@@ -260,29 +258,13 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           .catch(function(){ referenceCard.hidden = true; });
       }
 
-      form.addEventListener("submit", async function(event){
-        event.preventDefault();
-        if (!form.reportValidity()) return;
-
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Submitting...";
-        status.textContent = "Capturing your inquiry for review.";
-
-        try {
-          var response = await fetch(form.action, {
-            method: "POST",
-            body: new FormData(form),
-          });
-          var payload = await response.json().catch(function(){ return {}; });
-          if (!response.ok) {
-            throw new Error(payload.error || "Submission failed.");
-          }
-          window.location.href = "/tattoos/submission-received/?type=custom";
-        } catch (error) {
-          status.textContent = error.message || "Submission failed. Please try again.";
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Submit for Review";
-        }
+      window.SixWellSubmissionForms.init({
+        form: "#inquiryForm",
+        submitButton: "#submitBtn",
+        status: "#formStatus",
+        pendingText: "Capturing your inquiry for review.",
+        errorText: "Submission failed. Please try again.",
+        redirectTo: "/tattoos/submission-received/?type=custom"
       });
     })();
   </script>

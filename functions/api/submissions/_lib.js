@@ -34,6 +34,8 @@ const TATTOO_SUBMISSION_TYPES = new Set([
 const REQUIRED_FIELDS_BY_TYPE = {
   tattoo_inquiry: [
     ["project_type", "Project type is required."],
+    ["dob", "Date of birth is required."],
+    ["previous_client", "Previous client status is required."],
     ["placement", "Placement is required."],
     ["size", "Approximate size is required."],
     ["budget_range", "Budget range is required."],

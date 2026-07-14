@@ -485,6 +485,8 @@
       ],
       bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_full", "consult_in_person", "consult_virtual", "build_in_person"],
       walkInPlaceholder: "Small flash, build consults, or studio note",
+      allowUnscopedExceptions: true,
+      showWalkIns: true,
     },
     studio: {
       groups: [
@@ -498,6 +500,8 @@
       ],
       bookingTypeIds: ["studio_visit", "studio_gathering", "studio_rental"],
       walkInPlaceholder: "Open studio note",
+      allowUnscopedExceptions: false,
+      showWalkIns: false,
     },
   };
   const TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
@@ -507,6 +511,14 @@
     event: "var(--color-events,#005D25)",
   };
   const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
+  const PRIVATE_BOOKING_TYPE_OPTIONS = [
+    ["consult_in_person", "In-Person Consultation"],
+    ["consult_virtual", "Virtual Consultation"],
+    ["build_in_person", "In-Person Build Session"],
+    ["tattoo_quarter", "Quarter Session"],
+    ["tattoo_half", "Half Session"],
+    ["tattoo_full", "Full Session"],
+  ];
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
@@ -990,44 +1002,6 @@
         </div>
       </div>
     `;
-  }
-
-  async function renderEventHistory(submissionId) {
-    const evContainer = document.getElementById("eventHistoryBody");
-    const notifContainer = document.getElementById("notificationsBody");
-    if (!evContainer && !notifContainer) return;
-    try {
-      const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}`);
-
-      const events = payload.events || [];
-      if (evContainer) {
-        evContainer.innerHTML = events.length ? `<div class="event-list">${events.map((ev) => `
-          <div class="event-item">
-            <span class="event-time">${escapeHtml(formatDate(ev.created_at || ev.createdAt))}</span>
-            <span class="event-text">${escapeHtml(titleize(ev.event_type || ev.eventType || ""))}${ev.note ? ` — ${ev.note}` : ""}${ev.actor && ev.actor !== "system" ? ` (${ev.actor})` : ""}</span>
-          </div>
-        `).join("")}</div>`
-        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No events recorded.</p>';
-      }
-
-      const notifications = payload.notifications || [];
-      if (notifContainer) {
-        notifContainer.innerHTML = notifications.length ? `<div class="event-list">${notifications.map((n) => `
-          <div class="event-item">
-            <span class="event-time">${escapeHtml(formatDate(n.sent_at || n.created_at))}</span>
-            <span class="event-text" style="${n.status === "failed" ? "color:var(--signal);" : ""}">
-              ${escapeHtml(n.channel || "")} · ${escapeHtml(n.template_key || "")} → ${escapeHtml(n.recipient || "")}
-              · <strong>${escapeHtml(n.status || "")}</strong>
-              ${n.error ? ` — ${escapeHtml(n.error)}` : ""}
-            </span>
-          </div>
-        `).join("")}</div>`
-        : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No notifications recorded.</p>';
-      }
-    } catch {
-      if (evContainer) evContainer.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load events.</p>';
-      if (notifContainer) notifContainer.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;color:var(--signal);">Could not load notifications.</p>';
-    }
   }
 
   function notificationRetryAttrs(notification, fallbackSubmissionId) {
@@ -2528,6 +2502,13 @@ ${meetingLines}
     }
     const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
     const appointment = latestAppointmentFor(submission.id);
+    const isStudio = submission.type === "studio_booking" || isStudioAppointment(appointment);
+    if (isStudio) {
+      if (appointment && appointment.status === "confirmed") {
+        return `Hi ${name}, this is the six.well construct. Your studio booking is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes.`;
+      }
+      return `Hi ${name}, this is the six.well construct. We received your studio booking request and will follow up with next steps. Thank you.`;
+    }
     if (appointment && appointment.status === "confirmed") {
       return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
     }
@@ -2621,6 +2602,63 @@ ${meetingLines}
     return payload.sessionPlan;
   }
 
+  function defaultAllowedBookingTypes(submission) {
+    return requiresInPersonConsult(submission)
+      ? ["consult_in_person"]
+      : ["tattoo_quarter", "tattoo_half", "tattoo_full"];
+  }
+
+  function sortedTypeList(values) {
+    return [...values].filter(Boolean).sort().join("|");
+  }
+
+  function renderBookingTokenControls(submission) {
+    const defaults = defaultAllowedBookingTypes(submission);
+    return `
+      <div class="field" style="margin-top:10px;" id="tokenOptions" data-default-token-types="${escapeHtml(sortedTypeList(defaults))}">
+        <label>Booking Link Controls</label>
+        <div class="contact" style="margin-bottom:8px;">Leave defaults selected for the normal booking link. Adjust when this approval needs consultation, build, or a specific session length.</div>
+        <div class="booking-actions" style="align-items:flex-start;">
+          ${PRIVATE_BOOKING_TYPE_OPTIONS.map(([value, label]) => `
+            <label class="check" style="margin:0;min-width:190px;">
+              <input type="checkbox" data-token-type value="${escapeHtml(value)}"${defaults.includes(value) ? " checked" : ""}>
+              <span class="check-label">${escapeHtml(label)}</span>
+            </label>
+          `).join("")}
+        </div>
+        <div class="schedule-grid" style="margin-top:10px;">
+          <div class="field">
+            <label for="tokenExpiresAt">Expires At</label>
+            <input id="tokenExpiresAt" type="datetime-local">
+            <div class="contact">Blank uses the server default: 30 days.</div>
+          </div>
+          <label class="check" style="margin:0;align-self:end;">
+            <input id="tokenRevokeExisting" type="checkbox" checked>
+            <span class="check-label">Revoke existing active links when generating</span>
+          </label>
+        </div>
+      </div>
+    `;
+  }
+
+  function bookingTokenRequestBody(submissionId) {
+    const selected = [...document.querySelectorAll("[data-token-type]:checked")].map((input) => input.value);
+    if (!selected.length) {
+      throw new Error("Choose at least one session type for this booking link.");
+    }
+    const defaultKey = document.getElementById("tokenOptions")?.dataset.defaultTokenTypes || "";
+    const body = {
+      submissionId,
+      revokeExisting: document.getElementById("tokenRevokeExisting")?.checked !== false,
+    };
+    if (sortedTypeList(selected) !== defaultKey) {
+      body.allowedBookingTypes = selected;
+    }
+    const expiresAt = localDateTimeToIso(document.getElementById("tokenExpiresAt")?.value || "");
+    if (expiresAt) body.expiresAt = expiresAt;
+    return body;
+  }
+
   function renderDetail(submission) {
     const isProtected = submission.status === "booked" || submission.status === "paid";
     const hasAppointment = !!latestAppointmentFor(submission.id);
@@ -2668,7 +2706,7 @@ ${meetingLines}
         <div class="field">
           ${isEvent ? eventBlock : hasAppointment ? `
             <p style="font-family:var(--sans);font-size:11px;color:var(--dim);">
-              This consultation was booked directly through the public calendar.
+              This ${submission.type === "studio_booking" ? "studio booking" : "consultation"} was booked directly through the public calendar.
               No booking access link is needed — see Appointment Payment above.
             </p>
             <input id="bookingUrl" type="hidden" value="${escapeHtml(submission.bookingUrl || "")}">
@@ -2681,6 +2719,7 @@ ${meetingLines}
               <button class="button" id="copyBookingBtn" type="button">Copy</button>
               <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
             </div>
+            ${renderBookingTokenControls(submission)}
             <div id="tokenStateInfo" style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:6px;">Loading token state…</div>
           `}
           <button class="button" id="saveBtn" type="button" style="margin-top:10px;width:100%;border-color:#4caf50;">Save</button>
@@ -3160,6 +3199,39 @@ ${meetingLines}
       .sort((a, b) => (Number(a.sortOrder || 0) - Number(b.sortOrder || 0)) || String(a.label || "").localeCompare(String(b.label || "")));
   }
 
+  function availabilityScope() {
+    return activeTab === "studio" ? "studio" : "tattoo";
+  }
+
+  function availabilityApi(path) {
+    const url = new URL(path, window.location.origin);
+    url.searchParams.set("scope", availabilityScope());
+    return `${url.pathname}${url.search}`;
+  }
+
+  function availabilityConfig() {
+    return AVAILABILITY_CONFIGS[activeTab] || AVAILABILITY_CONFIGS.tattoo;
+  }
+
+  function scopedSessionTypeOptions(options = {}) {
+    const config = availabilityConfig();
+    const includeBlank = options.includeBlank !== false && config.allowUnscopedExceptions !== false;
+    return (config.sessionTypeOptions || []).filter(([value]) => value || includeBlank);
+  }
+
+  function renderSessionTypeOptions(selectedValue = "", options = {}) {
+    const normalized = selectedValue || "";
+    return scopedSessionTypeOptions(options).map(([value, label]) =>
+      `<option value="${escapeHtml(value)}"${value === normalized ? " selected" : ""}>${escapeHtml(label)}</option>`
+    ).join("");
+  }
+
+  function sessionTypeLabel(value) {
+    const found = (availabilityConfig().sessionTypeOptions || []).find(([id]) => id === value);
+    if (found) return found[1];
+    return value ? titleize(value) : "Any tattoo session";
+  }
+
   function renderBookingTypePrices() {
     const panel = document.getElementById("bookingTypesPanel");
     if (!panel) return;
@@ -3200,14 +3272,14 @@ ${meetingLines}
 
   function readinessDetailLines(check) {
     const details = check.details || {};
-    if (check.id === "square_checkout") {
+    if (check.id === "square_checkout" || check.id === "studio_square_checkout") {
       return [
         `Environment: ${details.environment || "sandbox"}`,
         `Access token: ${details.hasAccessToken ? "present" : "missing"}`,
         `Location ID: ${details.hasLocationId ? "present" : "missing"}`,
       ];
     }
-    if (check.id === "square_webhook_signing") {
+    if (check.id === "square_webhook_signing" || check.id === "studio_square_webhook_signing") {
       return [
         `Signature key: ${details.hasSignatureKey ? "present" : "missing"}`,
         `Webhook URL: ${details.notificationUrl || "not resolved"}`,
@@ -3224,7 +3296,10 @@ ${meetingLines}
     }
     if (check.id === "booking_settings") {
       const settings = details.settings || {};
-      const types = (details.publicConsultationTypes || []).map((type) => type.id).join(", ") || "none active";
+      const typeRows = details.scope === "studio"
+        ? (details.publicStudioTypes || [])
+        : (details.publicConsultationTypes || []);
+      const types = typeRows.map((type) => type.id).join(", ") || "none active";
       return [
         `Timezone: ${settings.timezone || "missing"}`,
         `Horizon: ${settings.bookingHorizonDays || 0} days`,
@@ -3232,8 +3307,8 @@ ${meetingLines}
         `Interval: ${settings.slotIntervalMinutes || 0} minutes`,
         `Daily limit: ${settings.maxBookingsPerDay || 0}`,
         `Default capacity: ${settings.defaultCapacity || 0}`,
-        `Public types: ${types}`,
-        `Consultation rules: ${details.activeConsultationRuleCount || 0} active`,
+        `${details.scope === "studio" ? "Studio types" : "Public types"}: ${types}`,
+        `${details.scope === "studio" ? "Studio rules" : "Consultation rules"}: ${details.scope === "studio" ? details.activeStudioRuleCount || 0 : details.activeConsultationRuleCount || 0} active`,
       ];
     }
     return [];
@@ -3265,19 +3340,20 @@ ${meetingLines}
   async function loadBookingReadiness() {
     const panel = document.getElementById("bookingReadinessPanel");
     if (!panel) return;
-    const payload = await api("/api/admin/booking/readiness");
+    const payload = await api(availabilityApi("/api/admin/booking/readiness"));
     renderBookingReadiness(payload);
   }
 
   async function loadAvailabilityPreview() {
     const calendar = document.getElementById("bookedCalendar");
     if (!calendar) return;
-    const payload = await api("/api/admin/booking/availability-preview");
+    const payload = await api(availabilityApi("/api/admin/booking/availability-preview"));
     const bookedDays = payload.bookedDays || [];
     const dayStats = dayStatsFromAppointments();
+    const visibleAppointments = scopedAppointments();
     const monthKeys = [...new Set([
       ...bookedDays.map((item) => String(item.date || "").slice(0, 7)).filter(Boolean),
-      ...appointments.map((a) => monthKey(a.startAt)).filter(Boolean),
+      ...visibleAppointments.map((a) => monthKey(a.startAt)).filter(Boolean),
     ])].sort();
     if (!monthKeys.length) monthKeys.push(monthKey(new Date().toISOString()));
     if (!monthKeys.includes(availabilityPreviewMonth)) availabilityPreviewMonth = monthKeys[0];
@@ -3297,7 +3373,7 @@ ${meetingLines}
   }
 
   async function renderAvailabilityManager() {
-    const config = AVAILABILITY_CONFIGS[activeTab] || AVAILABILITY_CONFIGS.tattoo;
+    const config = availabilityConfig();
     const scopeLabel = activeTab === "studio" ? "Studio" : "Tattoo & Consultation";
     const weeklyGroupsHtml = config.groups.map((group) => `
           <div class="schedule-group is-open" data-collapse-group>
@@ -3307,7 +3383,7 @@ ${meetingLines}
               <div id="${group.containerId}"></div>
             </div>
           </div>`).join("");
-    const sessionTypeOptionsHtml = config.sessionTypeOptions.map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join("");
+    const sessionTypeOptionsHtml = renderSessionTypeOptions("", { includeBlank: config.allowUnscopedExceptions !== false });
     detailEl.innerHTML = `
       <div class="availability-manager">
         <div class="detail-head">
@@ -3379,7 +3455,7 @@ ${meetingLines}
           </div>
         </section>
       </form>
-      <section class="schedule-section" data-collapse-section>
+      ${config.showWalkIns === false ? "" : `<section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Walk-In Windows</button>
         <div class="section-body">
           <form id="walkInForm" class="availability-form">
@@ -3403,7 +3479,7 @@ ${meetingLines}
           </form>
           <div id="walkInList" class="availability-list"><p class="empty">Loading walk-in windows.</p></div>
         </div>
-      </section>
+      </section>`}
       <section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Appointments</button>
         <div class="section-body">
@@ -3550,13 +3626,13 @@ ${meetingLines}
   async function loadAvailability() {
     const list = document.getElementById("availabilityList");
     if (!list) return;
-    const payload = await api("/api/admin/booking/availability");
+    const payload = await api(availabilityApi("/api/admin/booking/availability"));
     const windows = payload.availabilityWindows || [];
     list.innerHTML = windows.length ? windows.map((windowItem) => `
       <div class="availability-item" data-availability-item="${escapeHtml(windowItem.id)}">
         <span class="pill">${windowItem.isBlackout ? "exception blackout" : "extra bookable block"} / ${windowItem.active ? "active" : "inactive"}</span>
         <div class="contact">${escapeHtml(formatDateTimeLocal(windowItem.startAt))} - ${escapeHtml(formatDateTimeLocal(windowItem.endAt))}</div>
-        <div class="meta">${escapeHtml(windowItem.bookingTypeId || "any tattoo session")} / capacity ${escapeHtml(windowItem.capacity)} / buffer ${escapeHtml(windowItem.bufferBeforeMinutes)} before, ${escapeHtml(windowItem.bufferAfterMinutes)} after</div>
+        <div class="meta">${escapeHtml(sessionTypeLabel(windowItem.bookingTypeId))} / capacity ${escapeHtml(windowItem.capacity)} / buffer ${escapeHtml(windowItem.bufferBeforeMinutes)} before, ${escapeHtml(windowItem.bufferAfterMinutes)} after</div>
         <div class="meta">${escapeHtml(windowItem.note || "")}</div>
         <div class="booking-actions">
           <button class="button" type="button" data-edit-window="${escapeHtml(windowItem.id)}">Edit</button>
@@ -3575,13 +3651,7 @@ ${meetingLines}
           <div class="field">
             <label>Session Type</label>
             <select data-edit-field="bookingTypeId">
-              <option value="" ${windowItem.bookingTypeId ? "" : "selected"}>Any tattoo session</option>
-              <option value="consult_in_person" ${windowItem.bookingTypeId === "consult_in_person" ? "selected" : ""}>In-Person Consultation</option>
-              <option value="consult_virtual" ${windowItem.bookingTypeId === "consult_virtual" ? "selected" : ""}>Virtual Consultation</option>
-              <option value="build_in_person" ${windowItem.bookingTypeId === "build_in_person" ? "selected" : ""}>In-Person Build Session</option>
-              <option value="tattoo_quarter" ${windowItem.bookingTypeId === "tattoo_quarter" ? "selected" : ""}>Quarter Session</option>
-              <option value="tattoo_half" ${windowItem.bookingTypeId === "tattoo_half" ? "selected" : ""}>Half Session</option>
-              <option value="tattoo_full" ${windowItem.bookingTypeId === "tattoo_full" ? "selected" : ""}>Full Session</option>
+              ${renderSessionTypeOptions(windowItem.bookingTypeId, { includeBlank: availabilityConfig().allowUnscopedExceptions !== false })}
             </select>
           </div>
           <div class="field">
@@ -3627,7 +3697,7 @@ ${meetingLines}
   async function loadWalkIns() {
     const list = document.getElementById("walkInList");
     if (!list) return;
-    const payload = await api("/api/admin/booking/walk-ins");
+    const payload = await api(availabilityApi("/api/admin/booking/walk-ins"));
     const windows = payload.walkInWindows || [];
     list.innerHTML = windows.length ? windows.map((windowItem) => `
       <div class="availability-item" data-walk-in-item="${escapeHtml(windowItem.id)}">
@@ -4041,10 +4111,17 @@ ${meetingLines}
         if (index >= 0) submissions[index] = saved.submission;
       }
       setStatus("Generating link");
+      let tokenBody;
+      try {
+        tokenBody = bookingTokenRequestBody(activeId);
+      } catch (error) {
+        setStatus(error.message);
+        return;
+      }
       const payload = await api("/api/admin/booking/tokens", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ submissionId: activeId, revokeExisting: true }),
+        body: JSON.stringify(tokenBody),
       });
       document.getElementById("bookingUrl").value = payload.token.path;
       const textAssist = document.getElementById("textAssist");
@@ -4492,6 +4569,12 @@ ${meetingLines}
 
     if (event.target.id !== "availabilityForm") return;
     event.preventDefault();
+    const config = availabilityConfig();
+    const bookingTypeId = document.getElementById("availabilityType").value;
+    if (config.allowUnscopedExceptions === false && !bookingTypeId) {
+      setStatus("Choose a studio booking type for studio exceptions");
+      return;
+    }
     setStatus("Adding exception");
     await api("/api/admin/booking/availability", {
       method: "POST",
@@ -4500,7 +4583,7 @@ ${meetingLines}
         venture: "tattooing",
         startAt: localDateTimeToIso(document.getElementById("availabilityStart").value),
         endAt: localDateTimeToIso(document.getElementById("availabilityEnd").value),
-        bookingTypeId: document.getElementById("availabilityType").value,
+        bookingTypeId,
         capacity: document.getElementById("availabilityCapacity").value,
         bufferBeforeMinutes: document.getElementById("bufferBefore").value,
         bufferAfterMinutes: document.getElementById("bufferAfter").value,

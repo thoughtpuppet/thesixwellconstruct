@@ -18,27 +18,6 @@
   SUBMISSION FLOW:
     Form posts to /api/submissions and is reviewed in the studio console.
 
-    TO ACTIVATE:
-      1. Create account at emailjs.com
-      2. Add email service (Gmail etc.) → copy Service ID
-      3. Create email template → copy Template ID
-      4. Account → API Keys → copy Public Key
-      5. Replace the three REPLACE_WITH_... values below
-      6. Uncomment the EmailJS script tag in <head>
-      7. Uncomment the emailjs.send() call in the submit handler
-
-    TEMPLATE VARIABLES (use these in your EmailJS template):
-      {{from_name}}       — inquirer's name
-      {{from_email}}      — inquirer's email
-      {{phone}}           — phone (optional)
-      {{painting}}        — which painting
-      {{inquiry_type}}    — purchase / delivery+hanging / both
-      {{location}}        — local or shipping
-      {{city}}            — city (if local)
-      {{shipping_address}}— address (if shipping)
-      {{message}}         — open message
-      {{reply_to}}        — same as from_email
-
   CONTACT INFO:
     REPLACE placeholder email + instagram with real details.
 
@@ -50,9 +29,6 @@
     ART medium color: #0071EB
   ============================================================
 -->
-
-<!-- EmailJS SDK — uncomment when you have your credentials -->
-<!-- <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script> -->
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -686,109 +662,50 @@
   /* ============================================================
      FORM VALIDATION + SUBMISSION
   ============================================================ */
-  document.getElementById("artAcquisitionForm").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const firstName = document.getElementById("first-name").value.trim();
-    const lastName  = document.getElementById("last-name").value.trim();
-    const email     = document.getElementById("email");
-    const emailVal  = email ? email.value.trim() : "";
-    const painting  = document.getElementById("painting").value;
-    const status    = document.getElementById("formStatus");
-    const submitBtn = document.getElementById("submitBtn");
+  function buildInquiryType() {
+    return [
+      chkPurchase.checked ? "purchase" : null,
+      chkDelivery.checked ? "delivery + hanging" : null
+    ].filter(Boolean).join(" + ");
+  }
 
-    /* basic validation */
+  function validateArtAcquisition(context) {
+    const status = context.status;
+    const email = document.getElementById("email");
+    const firstName = document.getElementById("first-name").value.trim();
+    const lastName = document.getElementById("last-name").value.trim();
+    const emailVal = email ? email.value.trim() : "";
+    const painting = document.getElementById("painting").value;
+
     if (!firstName || !lastName || !emailVal || !painting) {
-      status.className = "form-status error";
-      status.textContent = "please fill in your name, email, and which painting.";
-      return;
+      context.setStatus(status, "please fill in your name, email, and which painting.", "error");
+      return false;
     }
     if (!chkPurchase.checked && !chkDelivery.checked) {
-      status.className = "form-status error";
-      status.textContent = "please select at least one inquiry type.";
-      return;
+      context.setStatus(status, "please select at least one inquiry type.", "error");
+      return false;
     }
     if (chkDelivery.checked) {
       const locationSelected = document.querySelector("input[name='location']:checked");
       if (!locationSelected) {
-        status.className = "form-status error";
-        status.textContent = "please select local or shipping for delivery.";
-        return;
+        context.setStatus(status, "please select local or shipping for delivery.", "error");
+        return false;
       }
     }
 
-    /* build template params for EmailJS */
-    const locationVal = document.querySelector("input[name='location']:checked");
-    const templateParams = {
-      type:             "art_acquisition",
-      source_path:      "/art/acquisitioninquiry.html",
-      subject:          "New art acquisition inquiry",
-      first_name:       firstName,
-      last_name:        lastName,
-      from_name:        `${firstName} ${lastName}`,
-      from_email:       emailVal,
-      reply_to:         emailVal,
-      phone:            document.getElementById("phone").value.trim() || "not provided",
-      painting:         painting,
-      inquiry_type:     [
-        chkPurchase.checked ? "purchase" : null,
-        chkDelivery.checked ? "delivery + hanging" : null
-      ].filter(Boolean).join(" + "),
-      location:         locationVal ? locationVal.value : "n/a",
-      city:             document.getElementById("city").value.trim() || "n/a",
-      shipping_address: document.getElementById("address").value.trim() || "n/a",
-      message:          document.getElementById("message").value.trim() || "none"
-    };
-
-    /* ============================================================
-       EMAILJS SEND — uncomment when credentials are ready
-
-       replace the three REPLACE_WITH_... strings:
-         REPLACE_WITH_SERVICE_ID   → your EmailJS service ID
-         REPLACE_WITH_TEMPLATE_ID  → your EmailJS template ID
-         REPLACE_WITH_PUBLIC_KEY   → your EmailJS public key (init below too)
-
-       also uncomment the SDK script tag in <head>
-    ============================================================ */
-
-    // emailjs.init("REPLACE_WITH_PUBLIC_KEY");
-    // emailjs.send(
-    //   "REPLACE_WITH_SERVICE_ID",
-    //   "REPLACE_WITH_TEMPLATE_ID",
-    //   templateParams
-    // ).then(() => {
-    //   status.className = "form-status success";
-    //   status.textContent = "inquiry received. Saiel will be in touch within 48 hours.";
-    //   document.getElementById("submitBtn").disabled = true;
-    //   document.getElementById("submitBtn").style.opacity = "0.4";
-    // }).catch((err) => {
-    //   console.error("EmailJS error:", err);
-    //   status.className = "form-status error";
-    //   status.textContent = "something went wrong. please email directly.";
-    // });
-
-    /* ============================================================
-       PROTOTYPE RESPONSE — remove this block when EmailJS is live
-    ============================================================ */
-    document.getElementById("inquiryType").value = templateParams.inquiry_type;
-    submitBtn.disabled = true;
-    submitBtn.style.opacity = "0.4";
-    status.className = "form-status success";
-    status.textContent = "capturing inquiry...";
-
-    fetch(form.action, {
-      method: "POST",
-      body: new FormData(form)
-    }).then(async (response) => {
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "submission failed.");
-      window.location.href = "/tattoos/submission-received/";
-    }).catch((error) => {
-      status.className = "form-status error";
-      status.textContent = error.message || "something went wrong. please email directly.";
-      submitBtn.disabled = false;
-      submitBtn.style.opacity = "1";
-    });
+    document.getElementById("inquiryType").value = buildInquiryType();
+  }
+  </script>
+  <script src="/js/submission-form.js"></script>
+  <script>
+  window.SixWellSubmissionForms.init({
+    form: "#artAcquisitionForm",
+    submitButton: "#submitBtn",
+    status: "#formStatus",
+    pendingText: "capturing inquiry...",
+    errorText: "something went wrong. please email directly.",
+    disabledOpacity: "0.4",
+    beforeSubmit: validateArtAcquisition
   });
   </script>
 

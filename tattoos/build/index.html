@@ -448,42 +448,24 @@
 
   <!-- Brief builder -->
   <script src="/js/build-builder.js"></script>
+  <script src="/js/submission-form.js"></script>
 
   <!-- Brief submission handler -->
   <script>
   (function(){
-    var form = document.getElementById("buildBriefForm");
-    var submitBtn = document.getElementById("submitBtn");
-    var status = document.getElementById("formStatus");
-    if (!form || !submitBtn || !status) return;
-
-    form.addEventListener("submit", async function(event){
-      event.preventDefault();
-      if (!form.reportValidity()) return;
-      var selected = document.getElementById("selectedElements");
-      if (selected && !selected.value.trim()) {
-        status.textContent = "Select at least one Legend symbol before submitting.";
-        return;
-      }
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Submitting...";
-      status.textContent = "Capturing your brief for review.";
-
-      try {
-        var response = await fetch(form.action, {
-          method: "POST",
-          body: new FormData(form),
-        });
-        var payload = await response.json().catch(function(){ return {}; });
-        if (!response.ok) {
-          throw new Error(payload.error || "Submission failed.");
+    window.SixWellSubmissionForms.init({
+      form: "#buildBriefForm",
+      submitButton: "#submitBtn",
+      status: "#formStatus",
+      pendingText: "Capturing your brief for review.",
+      errorText: "Submission failed. Please try again.",
+      redirectTo: "/tattoos/submission-received/?type=build",
+      beforeSubmit: function(context) {
+        var selected = document.getElementById("selectedElements");
+        if (selected && !selected.value.trim()) {
+          context.setStatus(context.status, "Select at least one visual-language element before submitting.", "error");
+          return false;
         }
-        window.location.href = "/tattoos/submission-received/?type=build";
-      } catch (error) {
-        status.textContent = error.message || "Submission failed. Please try again.";
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Submit Brief";
       }
     });
   })();

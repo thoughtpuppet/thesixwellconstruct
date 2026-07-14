@@ -420,36 +420,16 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
     init();
   </script>
+  <script src="/js/submission-form.js"></script>
   <script>
     (function(){
-      var form = document.getElementById("flashClaimForm");
-      var submitBtn = document.getElementById("submitBtn");
-      var status = document.getElementById("formStatus");
-      if (!form || !submitBtn || !status) return;
-
-      form.addEventListener("submit", async function(event){
-        event.preventDefault();
-        if (!form.reportValidity()) return;
-
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Submitting...";
-        status.textContent = "Capturing your flash claim for review.";
-
-        try {
-          var response = await fetch(form.action, {
-            method: "POST",
-            body: new FormData(form),
-          });
-          var payload = await response.json().catch(function(){ return {}; });
-          if (!response.ok) {
-            throw new Error(payload.error || "Submission failed.");
-          }
-          window.location.href = "/tattoos/submission-received/?type=flash";
-        } catch (error) {
-          status.textContent = error.message || "Submission failed. Please try again.";
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Submit Claim";
-        }
+      window.SixWellSubmissionForms.init({
+        form: "#flashClaimForm",
+        submitButton: "#submitBtn",
+        status: "#formStatus",
+        pendingText: "Capturing your flash claim for review.",
+        errorText: "Submission failed. Please try again.",
+        redirectTo: "/tattoos/submission-received/?type=flash"
       });
     })();
   </script>
