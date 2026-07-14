@@ -45,6 +45,14 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .form-panel { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:42px 0; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
+  .portfolio-reference { display:grid; grid-template-columns:92px minmax(0,1fr); gap:18px; align-items:start; border:5px solid rgba(110,4,4,.45); padding:14px; margin-bottom:28px; }
+  .portfolio-reference[hidden] { display:none; }
+  .portfolio-reference img { width:92px; aspect-ratio:4/5; object-fit:cover; background:#090909; }
+  .portfolio-reference-copy { display:grid; gap:7px; }
+  .portfolio-reference-label { color:var(--signal); font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+  .portfolio-reference-title { color:var(--text); font-family:var(--sans); font-size:14px; font-weight:900; }
+  .portfolio-reference-meta,.portfolio-reference-note { color:var(--text-mute); font-size:12px; line-height:1.6; }
+  .portfolio-reference-note { color:var(--text-dim); }
   .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
@@ -135,12 +143,16 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         </div>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
+        <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>
         <h2 class="form-title" data-copy-id="inquiry-form-title">Submit for Review</h2>
         <p class="form-note" data-copy-id="inquiry-form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow. Please fill out all questions in detail - vague answers may delay approval.</p>
         <form id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="tattoo_inquiry">
           <input type="hidden" name="source_path" value="/tattoos/inquire/custom/">
           <input type="hidden" name="subject" value="New Art.Pill tattoo inquiry">
+          <input type="hidden" name="reference_entity_id" value="">
+          <input type="hidden" name="reference_title" value="">
+          <input type="hidden" name="reference_route" value="">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <div class="field-grid">
             <div class="field"><label for="firstName">First name <span class="required-mark">*</span></label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
@@ -224,6 +236,29 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       var submitBtn = document.getElementById("submitBtn");
       var status = document.getElementById("formStatus");
       if (!form || !submitBtn || !status) return;
+
+      var referenceId = new URLSearchParams(window.location.search).get("reference");
+      var referenceCard = document.getElementById("portfolioReference");
+      if (referenceId && referenceCard) {
+        fetch("/api/portfolio/" + encodeURIComponent(referenceId), { headers:{ accept:"application/json" }, cache:"no-store" })
+          .then(function(response){ if(!response.ok) throw new Error(); return response.json(); })
+          .then(function(payload){
+            var item = payload.item;
+            if (!item || !item.similarInquiriesEnabled) throw new Error();
+            var image = document.createElement("img"); image.src = item.imageUrl; image.alt = item.altText || "Selected tattoo reference";
+            var copy = document.createElement("div"); copy.className = "portfolio-reference-copy";
+            var label = document.createElement("span"); label.className = "portfolio-reference-label"; label.textContent = "Your selected direction";
+            var title = document.createElement("strong"); title.className = "portfolio-reference-title"; title.textContent = item.title || "Tattoo work";
+            var meta = document.createElement("span"); meta.className = "portfolio-reference-meta"; meta.textContent = [item.year,item.placement,item.primaryStyle].filter(Boolean).join(" · ");
+            var note = document.createElement("span"); note.className = "portfolio-reference-note"; note.textContent = "This completed tattoo will not be copied. It is attached only as context for visual direction, process, technique, or atmosphere in a new original project.";
+            copy.append(label,title); if(meta.textContent) copy.append(meta); copy.append(note); referenceCard.replaceChildren(image,copy); referenceCard.hidden = false;
+            form.elements.reference_entity_id.value = item.id;
+            form.elements.reference_title.value = item.title || "Tattoo work";
+            form.elements.reference_route.value = "/tattoos/portfolio/?work=" + encodeURIComponent(item.id);
+            form.elements.source_path.value = window.location.pathname + window.location.search;
+          })
+          .catch(function(){ referenceCard.hidden = true; });
+      }
 
       form.addEventListener("submit", async function(event){
         event.preventDefault();

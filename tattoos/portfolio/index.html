@@ -385,6 +385,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/portfolio-detail.css?v=3">
 </head>
 
 <body data-venture="tattooing">
@@ -465,8 +466,14 @@
   <script src="/js/construct-nav.js"></script>
 
 
+  <script src="/js/construct-connections.js?v=3"></script>
+  <script src="/js/portfolio-detail.js"></script>
   <script>
   (() => {
+    if (window.PortfolioDetailExperience) {
+      window.PortfolioDetailExperience.start();
+      return;
+    }
     const STYLE_LABELS = {
       symbolic: 'symbolic',
       surreal: 'surreal',

@@ -13,5 +13,6 @@ Sequence 01_1.gif
 output/
 mobile-preview-*.err.log
 mobile-preview-*.out.log
+portfolio-*-dev.*.log
 .claude/settings.local.json
 tools/entry-room-3d-viewport-checks.ps1

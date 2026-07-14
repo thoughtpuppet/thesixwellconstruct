@@ -355,6 +355,15 @@
   .portfolio-edit summary { cursor:pointer; color:var(--accent); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
   .portfolio-edit-form { display:grid; gap:10px; margin-top:12px; }
   .portfolio-edit-form textarea { min-height:92px; }
+  .portfolio-field-note { color:var(--dim); font-size:10px; line-height:1.55; }
+  .portfolio-similar-note[hidden] { display:none; }
+  .portfolio-angle-manager { display:grid; gap:10px; border-top:5px solid var(--ring-faint); padding-top:12px; }
+  .portfolio-angle-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .portfolio-angle-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:8px; }
+  .portfolio-angle { display:grid; gap:6px; border:3px solid var(--ring-faint); padding:6px; }
+  .portfolio-angle img { width:100%; aspect-ratio:4/5; object-fit:cover; background:#090909; }
+  .portfolio-angle-actions { display:flex; gap:4px; flex-wrap:wrap; }
+  .portfolio-angle-actions .button { min-height:28px; padding:0 6px; font-size:8px; }
   .portfolio-empty { grid-column:1/-1; border:5px solid var(--ring-faint); padding:26px; color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
@@ -1256,6 +1265,7 @@
             <button class="button" type="button" data-portfolio-connections data-id="${escapeHtml(item.id)}" aria-expanded="false" aria-controls="portfolio-connections-${escapeHtml(item.id)}">Connections</button>
             ${item.state !== "archived" ? `<button class="button danger-button" type="button" data-portfolio-archive data-id="${escapeHtml(item.id)}">Archive</button>` : ""}
             <button class="button danger-button" type="button" data-portfolio-delete data-id="${escapeHtml(item.id)}">Delete permanently</button>
+            ${item.state === "published" ? `<a class="button" href="/tattoos/portfolio/?work=${encodeURIComponent(item.id)}" target="_blank" rel="noopener">View public detail</a>` : ""}
           </div>
           <details class="portfolio-edit">
             <summary>Edit metadata</summary>
@@ -1269,9 +1279,22 @@
               <label>Primary style<select name="primaryStyle">${PORTFOLIO_STYLES.map(([key,label]) => `<option value="${key}"${key === item.primaryStyle || (key === "unclassified" && !item.primaryStyle) ? " selected" : ""}>${label}</option>`).join("")}</select></label>
               <label>Collection<input name="collection" value="${escapeHtml(item.collection)}" maxlength="160" placeholder="Optional grouping"></label>
               <label>Caption<textarea name="caption" maxlength="2000">${escapeHtml(item.caption)}</textarea></label>
+              <label>Public statement / story<textarea name="statement" maxlength="10000">${escapeHtml(item.statement || "")}</textarea></label>
+              <label>Process notes<textarea name="processNotes" maxlength="10000">${escapeHtml(item.processNotes || "")}</textarea></label>
+              <label>Techniques<textarea name="techniques" maxlength="2000" placeholder="Example: freehand marker, opaque color packing, stippled transitions">${escapeHtml(item.techniques || "")}</textarea></label>
+              <div class="grid" style="margin:0;gap:10px;">
+                <label>Session count<input name="sessionCount" type="number" min="1" max="99" value="${item.sessionCount ?? ""}" placeholder="Optional"></label>
+                <label>Session information<textarea name="sessionNote" maxlength="2000">${escapeHtml(item.sessionNote || "")}</textarea></label>
+              </div>
+              <label class="check"><input name="similarInquiriesEnabled" type="checkbox" ${item.similarInquiriesEnabled ? "checked" : ""} data-similar-toggle><span>Allow “book something in this direction” inquiries</span></label>
+              <label class="portfolio-similar-note" ${item.similarInquiriesEnabled ? "" : "hidden"} data-similar-note>Similar-work note<textarea name="similarInquiryNote" maxlength="1000" placeholder="Describe the qualities, process, or atmosphere that may carry into a new original project.">${escapeHtml(item.similarInquiryNote || "")}</textarea><span class="portfolio-field-note">The public page always states that the original tattoo will not be copied.</span></label>
               <button class="button" type="submit">Save metadata</button>
             </form>
           </details>
+          <section class="portfolio-angle-manager" data-angle-manager="${escapeHtml(item.id)}">
+            <div class="portfolio-angle-head"><strong>Additional angles</strong><label class="button">Add images<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-angle-upload="${escapeHtml(item.id)}"></label></div>
+            <div class="portfolio-angle-grid">${(item.angles || []).map((angle, angleIndex, angles) => `<article class="portfolio-angle"><img data-secure-src="${escapeHtml(angle.imageUrl)}" alt="${escapeHtml(angle.altText || `${portfolioLabel(item)} additional angle`)}"><div class="portfolio-angle-actions"><button class="button" type="button" data-angle-move="up" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(angle.id)}" ${angleIndex === 0 ? "disabled" : ""}>Up</button><button class="button" type="button" data-angle-move="down" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(angle.id)}" ${angleIndex === angles.length - 1 ? "disabled" : ""}>Down</button><button class="button danger-button" type="button" data-angle-delete data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(angle.id)}">Remove</button></div></article>`).join("") || `<span class="portfolio-field-note">No additional angles uploaded.</span>`}</div>
+          </section>
           <div id="portfolio-connections-${escapeHtml(item.id)}" data-portfolio-connections-panel="${escapeHtml(item.id)}" hidden></div>
         </div>
       </article>`;
@@ -1359,6 +1382,50 @@
     }
   }
 
+  async function uploadPortfolioAngles(itemId, files) {
+    const item = portfolioItems.find((record) => record.id === itemId);
+    const accepted = [...files].filter((file) => ["image/jpeg", "image/png", "image/webp"].includes(file.type) && file.size <= 15 * 1024 * 1024);
+    for (let index = 0; index < accepted.length; index += 1) {
+      const file = accepted[index];
+      setStatus(`Uploading angle ${index + 1} of ${accepted.length}: ${file.name}`);
+      const upload = new FormData();
+      upload.append("file", file);
+      upload.append("alt_text", item?.altText || portfolioLabel(item || {}));
+      upload.append("privacy", "public");
+      upload.append("consent_status", "granted");
+      const uploaded = await api("/api/admin/media", { method: "POST", body: upload });
+      await api(`/api/admin/entities/${encodeURIComponent(itemId)}/media`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          media_id: uploaded.record.id,
+          role: "gallery",
+          sort_order: (item?.angles?.length || 0) + index + 1,
+          public_visible: true,
+          alt_text_override: item?.altText || portfolioLabel(item || {}),
+        }),
+      });
+    }
+    await loadPortfolioItems();
+    setStatus(accepted.length ? `${accepted.length} additional angle${accepted.length === 1 ? "" : "s"} attached` : "Use JPEG, PNG, or WebP images up to 15 MB");
+  }
+
+  async function movePortfolioAngle(itemId, mediaId, direction) {
+    const item = portfolioItems.find((record) => record.id === itemId);
+    const ids = (item?.angles || []).map((angle) => angle.id);
+    const from = ids.indexOf(mediaId);
+    const to = direction === "up" ? from - 1 : from + 1;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/angles/reorder`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    await loadPortfolioItems();
+    setStatus("Additional angle order saved");
+  }
+
   function bindPortfolioManager() {
     const manager = document.getElementById("portfolioManager");
     const drop = document.getElementById("portfolioDrop");
@@ -1366,6 +1433,12 @@
     if (!manager || !drop || !input) return;
     document.getElementById("portfolioChoose").addEventListener("click", () => input.click());
     input.addEventListener("change", () => uploadPortfolioFiles(input.files).catch((error) => setStatus(error.message)));
+    manager.addEventListener("change", (event) => {
+      const toggle = event.target.closest("[data-similar-toggle]");
+      if (toggle) toggle.closest("form")?.querySelector("[data-similar-note]")?.toggleAttribute("hidden", !toggle.checked);
+      const angleInput = event.target.closest("[data-angle-upload]");
+      if (angleInput?.files?.length) uploadPortfolioAngles(angleInput.dataset.angleUpload, angleInput.files).catch((error) => setStatus(error.message));
+    });
     ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("is-over"); }));
     ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.remove("is-over"); }));
     drop.addEventListener("drop", (event) => uploadPortfolioFiles(event.dataTransfer.files).catch((error) => setStatus(error.message)));
@@ -1393,6 +1466,16 @@
       if (filter) { portfolioState = filter.dataset.portfolioFilter; renderPortfolioManager(); return; }
       const move = event.target.closest("[data-portfolio-move]");
       if (move) { await movePortfolioItem(move.dataset.id, move.dataset.portfolioMove); return; }
+      const angleMove = event.target.closest("[data-angle-move]");
+      if (angleMove) { await movePortfolioAngle(angleMove.dataset.itemId, angleMove.dataset.mediaId, angleMove.dataset.angleMove); return; }
+      const angleDelete = event.target.closest("[data-angle-delete]");
+      if (angleDelete) {
+        if (!window.confirm("Remove this additional angle and its stored image?")) return;
+        await api(`/api/admin/portfolio/${encodeURIComponent(angleDelete.dataset.itemId)}/angles/${encodeURIComponent(angleDelete.dataset.mediaId)}`, { method: "DELETE" });
+        await loadPortfolioItems();
+        setStatus("Additional angle removed");
+        return;
+      }
       const state = event.target.closest("[data-portfolio-state]");
       if (state) {
         await api(`/api/admin/portfolio/${encodeURIComponent(state.dataset.id)}`, {
@@ -1447,6 +1530,7 @@
       if (!form) return;
       event.preventDefault();
       const values = Object.fromEntries(new FormData(form));
+      values.similarInquiriesEnabled = form.elements.similarInquiriesEnabled.checked;
       await api(`/api/admin/portfolio/${encodeURIComponent(form.dataset.portfolioForm)}`, {
         method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(values),
       });

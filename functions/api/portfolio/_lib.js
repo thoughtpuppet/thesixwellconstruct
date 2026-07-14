@@ -1,4 +1,5 @@
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+const MAX_DELETE_ROLLBACK_BYTES = 60 * 1024 * 1024;
 const ALLOWED_UPLOADS = new Map([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
@@ -20,6 +21,11 @@ const EDITABLE_FIELDS = new Map([
   ["primaryStyle", "primary_style"],
   ["collection", "collection"],
   ["caption", "caption"],
+  ["statement", "statement"],
+  ["processNotes", "process_notes"],
+  ["techniques", "techniques"],
+  ["sessionNote", "session_note"],
+  ["similarInquiryNote", "similar_inquiry_note"],
 ]);
 
 function json(data, init = {}) {
@@ -57,7 +63,7 @@ function cleanText(value, max = 500) {
   return String(value ?? "").trim().slice(0, max);
 }
 
-function itemFromRow(row, admin = false) {
+function itemFromRow(row, admin = false, detail = false) {
   const item = {
     id: row.id,
     imageUrl: row.source_url || `/api/portfolio/media/${encodeURIComponent(row.id)}`,
@@ -74,6 +80,16 @@ function itemFromRow(row, admin = false) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+  if (admin || detail) {
+    item.statement = row.statement || "";
+    item.processNotes = row.process_notes || "";
+    item.techniques = row.techniques || "";
+    item.sessionCount = row.session_count == null ? null : Number(row.session_count);
+    item.sessionNote = row.session_note || "";
+    item.similarInquiriesEnabled = Number(row.similar_inquiries_enabled || 0) === 1;
+    item.similarInquiryNote = row.similar_inquiry_note || "";
+    item.detailUrl = `/tattoos/portfolio/?work=${encodeURIComponent(row.id)}`;
+  }
   if (admin) {
     item.sourceUrl = row.source_url || "";
     item.storageKey = row.storage_key || "";
@@ -81,6 +97,39 @@ function itemFromRow(row, admin = false) {
     if (row.storage_key) item.imageUrl = `/api/admin/portfolio/media/${encodeURIComponent(row.id)}`;
   }
   return item;
+}
+
+function mediaItem(row, admin = false) {
+  return {
+    id: row.media_id,
+    role: row.role,
+    sortOrder: Number(row.sort_order || 0),
+    imageUrl: admin
+      ? `/api/admin/media/${encodeURIComponent(row.media_id)}`
+      : row.source_url || `/api/construct/media/${encodeURIComponent(row.media_id)}`,
+    altText: row.alt_text_override || row.alt_text || "",
+    caption: row.caption_override || row.caption || "",
+    originalFilename: row.original_filename || "",
+  };
+}
+
+async function galleryMedia(db, entityIds, admin = false) {
+  if (!entityIds.length) return new Map();
+  const placeholders = entityIds.map(() => "?").join(",");
+  const visibility = admin
+    ? ""
+    : "AND em.public_visible = 1 AND m.state = 'active' AND m.privacy IN ('public','unlisted')";
+  const result = await db.prepare(`
+    SELECT em.entity_id, em.media_id, em.role, em.sort_order, em.alt_text_override,
+      em.caption_override, m.source_url, m.original_filename, m.alt_text, m.caption
+    FROM entity_media em
+    JOIN media_assets m ON m.id = em.media_id
+    WHERE em.entity_id IN (${placeholders}) AND em.role = 'gallery' ${visibility}
+    ORDER BY em.entity_id, em.sort_order, em.created_at
+  `).bind(...entityIds).all();
+  const grouped = new Map(entityIds.map((id) => [id, []]));
+  for (const row of result.results || []) grouped.get(row.entity_id)?.push(mediaItem(row, admin));
+  return grouped;
 }
 
 async function nextSortOrder(db, state) {
@@ -102,10 +151,21 @@ async function listPublic(env) {
 async function listAdmin(request, env) {
   const authError = adminError(request, env);
   if (authError) return authError;
-  const result = await requireDb(env).prepare(
+  const db = requireDb(env);
+  const result = await db.prepare(
     "SELECT * FROM portfolio_items ORDER BY CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, sort_order ASC, created_at ASC"
   ).all();
-  return json({ items: (result.results || []).map((row) => itemFromRow(row, true)) });
+  const rows = result.results || [];
+  const media = await galleryMedia(db, rows.map((row) => row.id), true);
+  return json({ items: rows.map((row) => ({ ...itemFromRow(row, true), angles: media.get(row.id) || [] })) });
+}
+
+async function getPublicItem(env, id) {
+  const db = requireDb(env);
+  const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ? AND state = 'published'").bind(id).first();
+  if (!row) return errorResponse("Portfolio item not found.", 404);
+  const media = await galleryMedia(db, [id]);
+  return json({ item: { ...itemFromRow(row, false, true), angles: media.get(id) || [] } });
 }
 
 async function mediaResponse(request, env, id, admin = false) {
@@ -188,13 +248,36 @@ async function patchItem(request, env, id) {
   const values = [];
   for (const [apiField, sqlField] of EDITABLE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(body, apiField)) continue;
-    const max = apiField === "caption" ? 2000 : apiField === "altText" ? 300 : 160;
+    const max = apiField === "statement" || apiField === "processNotes"
+      ? 10000
+      : apiField === "caption" || apiField === "techniques" || apiField === "sessionNote"
+        ? 2000
+        : apiField === "similarInquiryNote"
+          ? 1000
+          : apiField === "altText"
+            ? 300
+            : 160;
     const value = cleanText(body[apiField], max);
     if (apiField === "primaryStyle" && !ALLOWED_STYLES.has(value)) {
       return errorResponse("Choose a valid primary style.");
     }
     updates.push(`${sqlField} = ?`);
     values.push(value);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "sessionCount")) {
+    const raw = body.sessionCount;
+    const value = raw === "" || raw == null ? null : Number(raw);
+    if (value !== null && (!Number.isInteger(value) || value < 1 || value > 99)) {
+      return errorResponse("Session count must be a whole number between 1 and 99.", 422);
+    }
+    updates.push("session_count = ?");
+    values.push(value);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "similarInquiriesEnabled")) {
+    updates.push("similar_inquiries_enabled = ?");
+    values.push(body.similarInquiriesEnabled === true || body.similarInquiriesEnabled === "true" || body.similarInquiriesEnabled === "on" ? 1 : 0);
   }
 
   let nextState = current.state;
@@ -251,33 +334,107 @@ async function permanentlyDeleteItem(request, env, id) {
     return errorResponse("This image is not in managed storage yet. Migrate it before permanent deletion.", 409);
   }
 
-  const stored = await env.SUBMISSION_FILES.get(current.storage_key);
-  if (!stored) {
+  const attached = await db.prepare(`
+    SELECT m.id, m.storage_key, m.mime_type
+    FROM entity_media em JOIN media_assets m ON m.id = em.media_id
+    WHERE em.entity_id = ? AND m.storage_key <> ''
+  `).bind(id).all();
+  const storedMedia = new Map([
+    [current.storage_key, { id: `media-${id}`, storage_key: current.storage_key, mime_type: current.content_type }],
+  ]);
+  for (const media of attached.results || []) storedMedia.set(media.storage_key, media);
+  const backups = [];
+  let rollbackBytes = 0;
+  for (const media of storedMedia.values()) {
+    const object = await env.SUBMISSION_FILES.get(media.storage_key);
+    if (object) {
+      const objectBytes = Number(object.size || 0);
+      if (rollbackBytes + objectBytes > MAX_DELETE_ROLLBACK_BYTES) {
+        return errorResponse(
+          "This entry has too much attached media to delete safely in one request. Remove some additional angles first.",
+          409
+        );
+      }
+      rollbackBytes += objectBytes;
+      backups.push({
+        media,
+        body: await object.arrayBuffer(),
+        options: { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata },
+      });
+    }
+  }
+  if (!backups.some((backup) => backup.media.storage_key === current.storage_key)) {
     return errorResponse("The stored image is missing. The portfolio entry was not deleted.", 409);
   }
 
-  // Portfolio uploads are capped at 15 MB. Keeping a bounded rollback copy lets
-  // us restore the object if the D1 transaction fails after the R2 deletion.
-  const rollbackBody = await stored.arrayBuffer();
-  const rollbackOptions = {
-    httpMetadata: stored.httpMetadata,
-    customMetadata: stored.customMetadata,
-  };
-
-  await env.SUBMISSION_FILES.delete(current.storage_key);
+  // Bounded rollback copies let us restore every angle if the D1 transaction
+  // fails after the R2 deletions without exhausting the Worker's memory.
+  await Promise.all(backups.map((backup) => env.SUBMISSION_FILES.delete(backup.media.storage_key)));
   try {
     await db.batch([
       db.prepare("DELETE FROM content_entities WHERE id = ?").bind(id),
       db.prepare("DELETE FROM portfolio_items WHERE id = ?").bind(id),
-      db.prepare("DELETE FROM media_assets WHERE (id = ? OR storage_key = ?) AND NOT EXISTS (SELECT 1 FROM entity_media WHERE entity_media.media_id = media_assets.id)")
-        .bind(`media-${id}`, current.storage_key),
+      ...[...storedMedia.values()].map((media) => db.prepare(
+        "DELETE FROM media_assets WHERE id = ? AND NOT EXISTS (SELECT 1 FROM entity_media WHERE entity_media.media_id = media_assets.id)"
+      ).bind(media.id)),
     ]);
   } catch (error) {
-    await env.SUBMISSION_FILES.put(current.storage_key, rollbackBody, rollbackOptions);
+    await Promise.all(backups.map((backup) => env.SUBMISSION_FILES.put(
+      backup.media.storage_key,
+      backup.body,
+      backup.options
+    )));
     throw error;
   }
 
   return json({ ok: true, deletedId: id, deletedStorageKey: current.storage_key });
+}
+
+async function deleteAngle(request, env, itemId, mediaId) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const db = requireDb(env);
+  const media = await db.prepare(`
+    SELECT m.* FROM entity_media em JOIN media_assets m ON m.id = em.media_id
+    WHERE em.entity_id = ? AND em.media_id = ? AND em.role = 'gallery'
+  `).bind(itemId, mediaId).first();
+  if (!media) return errorResponse("Portfolio angle not found.", 404);
+  const object = media.storage_key && env.SUBMISSION_FILES
+    ? await env.SUBMISSION_FILES.get(media.storage_key)
+    : null;
+  const rollback = object ? {
+    body: await object.arrayBuffer(),
+    options: { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata },
+  } : null;
+  if (object) await env.SUBMISSION_FILES.delete(media.storage_key);
+  try {
+    await db.batch([
+      db.prepare("DELETE FROM entity_media WHERE entity_id = ? AND media_id = ? AND role = 'gallery'").bind(itemId, mediaId),
+      db.prepare("DELETE FROM media_assets WHERE id = ? AND NOT EXISTS (SELECT 1 FROM entity_media WHERE entity_media.media_id = media_assets.id)").bind(mediaId),
+    ]);
+  } catch (error) {
+    if (rollback && media.storage_key) await env.SUBMISSION_FILES.put(media.storage_key, rollback.body, rollback.options);
+    throw error;
+  }
+  return json({ ok: true, deletedMediaId: mediaId });
+}
+
+async function reorderAngles(request, env, itemId) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const body = await request.json().catch(() => null);
+  const ids = Array.isArray(body?.ids) ? body.ids.map((id) => cleanText(id, 160)) : [];
+  if (new Set(ids).size !== ids.length) return errorResponse("Send each angle exactly once.");
+  const db = requireDb(env);
+  const current = await db.prepare("SELECT media_id FROM entity_media WHERE entity_id = ? AND role = 'gallery'").bind(itemId).all();
+  const expected = (current.results || []).map((row) => row.media_id);
+  if (ids.length !== expected.length || expected.some((id) => !ids.includes(id))) {
+    return errorResponse("The image list changed. Refresh before reordering.", 409);
+  }
+  await db.batch(ids.map((mediaId, index) => db.prepare(
+    "UPDATE entity_media SET sort_order = ? WHERE entity_id = ? AND media_id = ? AND role = 'gallery'"
+  ).bind(index + 1, itemId, mediaId)));
+  return json({ ok: true, ids });
 }
 
 async function reorderItems(request, env) {
@@ -321,6 +478,11 @@ export async function handlePortfolioApi(request, env) {
       if (method !== "GET") return methodNotAllowed(["GET"]);
       return mediaResponse(request, env, decodeURIComponent(path.slice("/api/portfolio/media/".length)));
     }
+    const publicItemMatch = path.match(/^\/api\/portfolio\/([^/]+)$/);
+    if (publicItemMatch) {
+      if (method !== "GET") return methodNotAllowed(["GET"]);
+      return getPublicItem(env, decodeURIComponent(publicItemMatch[1]));
+    }
     if (path === "/api/admin/portfolio") {
       if (method === "GET") return listAdmin(request, env);
       if (method === "POST") return createUpload(request, env);
@@ -333,6 +495,16 @@ export async function handlePortfolioApi(request, env) {
     if (path.startsWith("/api/admin/portfolio/media/")) {
       if (method !== "GET") return methodNotAllowed(["GET"]);
       return mediaResponse(request, env, decodeURIComponent(path.slice("/api/admin/portfolio/media/".length)), true);
+    }
+    const angleOrderMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/angles\/reorder$/);
+    if (angleOrderMatch) {
+      if (method !== "POST") return methodNotAllowed(["POST"]);
+      return reorderAngles(request, env, decodeURIComponent(angleOrderMatch[1]));
+    }
+    const angleMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/angles\/([^/]+)$/);
+    if (angleMatch) {
+      if (method !== "DELETE") return methodNotAllowed(["DELETE"]);
+      return deleteAngle(request, env, decodeURIComponent(angleMatch[1]), decodeURIComponent(angleMatch[2]));
     }
     const permanentMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/permanent$/);
     if (permanentMatch) {

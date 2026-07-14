@@ -3,6 +3,8 @@ functions/
 wrangler.jsonc
 README.md
 .dev.vars.example
+.gitignore
+.assetsignore
 tools/
 .hidden-pages/
 .git
@@ -16,3 +18,4 @@ node_modules/
 .DS_Store
 **/.DS_Store
 Sequence 01_1.gif
+portfolio-*-dev.*.log
