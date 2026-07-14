@@ -239,6 +239,47 @@ async function archiveItem(request, env, id) {
   return json({ ok: true, archivedId: id });
 }
 
+async function permanentlyDeleteItem(request, env, id) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  if (!env.SUBMISSION_FILES) return errorResponse("Portfolio storage is not configured.", 503);
+
+  const db = requireDb(env);
+  const current = await db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first();
+  if (!current) return errorResponse("Portfolio item not found.", 404);
+  if (!current.storage_key) {
+    return errorResponse("This image is not in managed storage yet. Migrate it before permanent deletion.", 409);
+  }
+
+  const stored = await env.SUBMISSION_FILES.get(current.storage_key);
+  if (!stored) {
+    return errorResponse("The stored image is missing. The portfolio entry was not deleted.", 409);
+  }
+
+  // Portfolio uploads are capped at 15 MB. Keeping a bounded rollback copy lets
+  // us restore the object if the D1 transaction fails after the R2 deletion.
+  const rollbackBody = await stored.arrayBuffer();
+  const rollbackOptions = {
+    httpMetadata: stored.httpMetadata,
+    customMetadata: stored.customMetadata,
+  };
+
+  await env.SUBMISSION_FILES.delete(current.storage_key);
+  try {
+    await db.batch([
+      db.prepare("DELETE FROM content_entities WHERE id = ?").bind(id),
+      db.prepare("DELETE FROM portfolio_items WHERE id = ?").bind(id),
+      db.prepare("DELETE FROM media_assets WHERE (id = ? OR storage_key = ?) AND NOT EXISTS (SELECT 1 FROM entity_media WHERE entity_media.media_id = media_assets.id)")
+        .bind(`media-${id}`, current.storage_key),
+    ]);
+  } catch (error) {
+    await env.SUBMISSION_FILES.put(current.storage_key, rollbackBody, rollbackOptions);
+    throw error;
+  }
+
+  return json({ ok: true, deletedId: id, deletedStorageKey: current.storage_key });
+}
+
 async function reorderItems(request, env) {
   const authError = adminError(request, env);
   if (authError) return authError;
@@ -292,6 +333,11 @@ export async function handlePortfolioApi(request, env) {
     if (path.startsWith("/api/admin/portfolio/media/")) {
       if (method !== "GET") return methodNotAllowed(["GET"]);
       return mediaResponse(request, env, decodeURIComponent(path.slice("/api/admin/portfolio/media/".length)), true);
+    }
+    const permanentMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/permanent$/);
+    if (permanentMatch) {
+      if (method !== "DELETE") return methodNotAllowed(["DELETE"]);
+      return await permanentlyDeleteItem(request, env, decodeURIComponent(permanentMatch[1]));
     }
     if (path.startsWith("/api/admin/portfolio/")) {
       const id = decodeURIComponent(path.slice("/api/admin/portfolio/".length));

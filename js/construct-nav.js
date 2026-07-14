@@ -269,6 +269,8 @@
   var MOBILE_PARTICLE_COUNT = 26;
   var MOBILE_TRAVEL_END = 0.85;
   var MOBILE_XFADE_START = 0.42;
+  var MOBILE_ORBIT_SPEED = 0.00007;
+  var MOBILE_ORBIT_RADIUS = 8;
   var GLYPH_R = 32;
   var GLYPH_INNER = 22;
   var HOME_DOT_POSITIONS = [[-18, -28], [18, -28], [-18, 0], [18, 0], [-18, 28], [18, 28]];
@@ -427,6 +429,7 @@
   var mobileCx = 0;
   var mobileCy = 0;
   var mobileDpr = 1;
+  var mobileMotionMs = 0;
 
   function applyTokenColorsToRenderedNav() {
     refreshVentureColors();
@@ -492,9 +495,19 @@
     return { x: mobileCx, y: mobileCy, r: 3 };
   }
   function mobileAnchorForNode(nd) {
+    var orbit = mobileMotionMs * MOBILE_ORBIT_SPEED;
+    var angle = nd.angle + orbit * 0.18;
+    var orbitX = (Math.cos(orbit + nd.orbitPhase) - Math.cos(nd.orbitPhase)) * MOBILE_ORBIT_RADIUS;
+    var orbitY = (Math.sin(orbit + nd.orbitPhase) - Math.sin(nd.orbitPhase)) * MOBILE_ORBIT_RADIUS;
+    var driftX = nd.dax * (
+      Math.sin((mobileMotionMs / nd.dpx) * Math.PI * 2 + nd.dox) - Math.sin(nd.dox)
+    );
+    var driftY = nd.day * (
+      Math.sin((mobileMotionMs / nd.dpy) * Math.PI * 2 + nd.doy) - Math.sin(nd.doy)
+    );
     return {
-      x: mobileCx + Math.cos(nd.angle) * MOBILE_RING_RADIUS,
-      y: mobileCy + Math.sin(nd.angle) * MOBILE_RING_RADIUS,
+      x: mobileCx + Math.cos(angle) * MOBILE_RING_RADIUS + orbitX + driftX,
+      y: mobileCy + Math.sin(angle) * MOBILE_RING_RADIUS + orbitY + driftY,
     };
   }
 
@@ -544,6 +557,13 @@
         y: mobileCy,
         r: 0,
         alpha: 0,
+        orbitPhase: i * 0.77,
+        dax: 4.5 + (i * 1.7) % 3.5,
+        day: 3.5 + (i * 2.3) % 3.5,
+        dpx: 18000 + (i * 3700) % 9000,
+        dpy: 22000 + (i * 4100) % 8000,
+        dox: i * 1.4,
+        doy: i * 2.1,
       });
     });
 
@@ -688,7 +708,9 @@
     mCtx.clearRect(0, 0, mobileW, mobileH);
     drawMobileWordmarkGlyph(now);
 
+    var wasOpen = mobileState === 'open';
     var prog = mobileProgress(now);
+    if (wasOpen) mobileMotionMs += dt;
     var visible = mobileState !== 'closed';
     mobileAlpha = easeOutSoft(prog);
 
@@ -738,6 +760,7 @@
   function openRing() {
     if (mobileState === 'open' || mobileState === 'opening') return;
     ringOpen = true;
+    mobileMotionMs = 0;
     resizeMobileCanvas();
     buildMobileNodes();
     mScrim.style.display = 'block';

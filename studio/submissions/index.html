@@ -1253,8 +1253,9 @@
           <div class="portfolio-card-actions">
             ${canSort ? `<button class="button" type="button" data-portfolio-move="up" data-id="${escapeHtml(item.id)}" ${index === 0 ? "disabled" : ""}>Move up</button><button class="button" type="button" data-portfolio-move="down" data-id="${escapeHtml(item.id)}" ${index === total - 1 ? "disabled" : ""}>Move down</button>` : ""}
             ${stateAction}
-            <button class="button" type="button" data-portfolio-connections data-id="${escapeHtml(item.id)}">Connections</button>
+            <button class="button" type="button" data-portfolio-connections data-id="${escapeHtml(item.id)}" aria-expanded="false" aria-controls="portfolio-connections-${escapeHtml(item.id)}">Connections</button>
             ${item.state !== "archived" ? `<button class="button danger-button" type="button" data-portfolio-archive data-id="${escapeHtml(item.id)}">Archive</button>` : ""}
+            <button class="button danger-button" type="button" data-portfolio-delete data-id="${escapeHtml(item.id)}">Delete permanently</button>
           </div>
           <details class="portfolio-edit">
             <summary>Edit metadata</summary>
@@ -1271,7 +1272,7 @@
               <button class="button" type="submit">Save metadata</button>
             </form>
           </details>
-          <div data-portfolio-connections-panel="${escapeHtml(item.id)}"></div>
+          <div id="portfolio-connections-${escapeHtml(item.id)}" data-portfolio-connections-panel="${escapeHtml(item.id)}" hidden></div>
         </div>
       </article>`;
   }
@@ -1407,10 +1408,38 @@
         await loadPortfolioItems();
         setStatus("Portfolio item archived");
       }
+      const permanentDelete = event.target.closest("[data-portfolio-delete]");
+      if (permanentDelete) {
+        const item = portfolioItems.find((record) => record.id === permanentDelete.dataset.id);
+        const label = item ? portfolioLabel(item) : "this portfolio image";
+        const confirmation = window.prompt(`Permanently delete ${label}, its connections, and its stored image? This cannot be undone.\n\nType DELETE to continue.`);
+        if (confirmation !== "DELETE") {
+          if (confirmation !== null) setStatus("Permanent deletion cancelled: DELETE was not entered.");
+          return;
+        }
+        permanentDelete.disabled = true;
+        try {
+          await api(`/api/admin/portfolio/${encodeURIComponent(permanentDelete.dataset.id)}/permanent`, { method: "DELETE" });
+          await loadPortfolioItems();
+          setStatus("Portfolio entry and stored image permanently deleted");
+        } catch (error) {
+          permanentDelete.disabled = false;
+          setStatus(error.message);
+        }
+        return;
+      }
       const connections = event.target.closest("[data-portfolio-connections]");
       if (connections) {
         const panel = manager.querySelector(`[data-portfolio-connections-panel="${CSS.escape(connections.dataset.id)}"]`);
-        if (panel) window.ConnectionsManager?.mount(panel, { entityId: connections.dataset.id });
+        if (panel) {
+          const isOpen = connections.getAttribute("aria-expanded") === "true";
+          connections.setAttribute("aria-expanded", String(!isOpen));
+          panel.hidden = isOpen;
+          if (!isOpen && !panel.dataset.connectionsMounted) {
+            panel.dataset.connectionsMounted = "true";
+            await window.ConnectionsManager?.mount(panel, { entityId: connections.dataset.id });
+          }
+        }
       }
     });
     manager.addEventListener("submit", async (event) => {
