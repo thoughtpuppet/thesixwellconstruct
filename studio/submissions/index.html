@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
 <link rel="stylesheet" href="/studio/construct-manager.css?v=art-upload">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
+<link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
 <style>
   :root {
     color-scheme: dark;
@@ -357,11 +358,17 @@
   .portfolio-edit-form textarea { min-height:92px; }
   .portfolio-field-note { color:var(--dim); font-size:10px; line-height:1.55; }
   .portfolio-similar-note[hidden] { display:none; }
-  .portfolio-angle-manager { display:grid; gap:10px; border-top:5px solid var(--ring-faint); padding-top:12px; }
+  .portfolio-angle-manager { border-top:5px solid var(--ring-faint); padding-top:10px; }
+  .portfolio-angle-manager summary { display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; color:var(--accent); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+  .portfolio-angle-manager summary::marker { color:var(--accent); }
+  .portfolio-angle-content { display:grid; gap:10px; margin-top:12px; }
   .portfolio-angle-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
-  .portfolio-angle-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:8px; }
+  .portfolio-angle-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
   .portfolio-angle { display:grid; gap:6px; border:3px solid var(--ring-faint); padding:6px; }
   .portfolio-angle img { width:100%; aspect-ratio:4/5; object-fit:cover; background:#090909; }
+  .portfolio-image-documentation { display:grid; gap:8px; }
+  .portfolio-image-documentation textarea { min-height:64px; }
+  .portfolio-image-state { color:var(--accent); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
   .portfolio-angle-actions { display:flex; gap:4px; flex-wrap:wrap; }
   .portfolio-angle-actions .button { min-height:28px; padding:0 6px; font-size:8px; }
   .portfolio-empty { grid-column:1/-1; border:5px solid var(--ring-faint); padding:26px; color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
@@ -433,6 +440,7 @@
   </form>
 </div>
 
+<script src="/studio/admin-collapse.js?v=2"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -1247,6 +1255,12 @@
     ["mythic", "Mythic"],
     ["special-project", "Special Project"],
   ];
+  const PORTFOLIO_HEALING_STATES = [
+    ["unspecified", "Unspecified"],
+    ["fresh", "Fresh"],
+    ["healed", "Healed"],
+    ["in-progress", "In progress"],
+  ];
 
   function portfolioOptionList(kind, currentValue = "") {
     const key = kind === "style" ? "styles" : "collections";
@@ -1273,8 +1287,27 @@
     return item.title || item.originalFilename || "Untitled portfolio image";
   }
 
+  function renderPortfolioImageEditor(item, image, index, images) {
+    const primary = image.imageRef === "primary";
+    return `<article class="portfolio-angle">
+      <img data-secure-src="${escapeHtml(image.imageUrl)}" alt="${escapeHtml(image.altText || `${portfolioLabel(item)} tattoo image`)}">
+      <form class="portfolio-image-documentation" data-image-documentation="${escapeHtml(item.id)}" data-image-ref="${escapeHtml(image.imageRef)}">
+        <span class="portfolio-image-state">${primary ? "Primary image" : `Image ${index + 1}`} ${image.isCover ? " / Cover" : ""}</span>
+        <label>Condition<select name="healingState">${PORTFOLIO_HEALING_STATES.map(([value,label]) => `<option value="${value}"${value === image.healingState ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+        <label>Timing note<input name="timingNote" value="${escapeHtml(image.timingNote || "")}" maxlength="160" placeholder="Example: day of, 8 weeks healed"></label>
+        <label>Image caption<textarea name="caption" maxlength="1000">${escapeHtml(image.documentationCaption || "")}</textarea></label>
+        <div class="portfolio-angle-actions">
+          <button class="button" type="submit">Save image</button>
+          <button class="button" type="button" data-image-cover ${image.isCover ? "disabled" : ""}>${image.isCover ? "Current cover" : "Use as cover"}</button>
+          ${primary ? "" : `<button class="button" type="button" data-angle-move="up" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}" ${index === 1 ? "disabled" : ""}>Up</button><button class="button" type="button" data-angle-move="down" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}" ${index === images.length - 1 ? "disabled" : ""}>Down</button><button class="button danger-button" type="button" data-angle-delete data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}">Remove</button>`}
+        </div>
+      </form>
+    </article>`;
+  }
+
   function renderPortfolioCard(item, index, total) {
     const canSort = portfolioState !== "archived";
+    const portfolioImages = [item.primaryImage || { imageRef:"primary", imageUrl:item.imageUrl, altText:item.altText, healingState:"unspecified", isCover:true }, ...(item.angles || [])];
     const stateAction = item.state === "published"
       ? `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Unpublish</button>`
       : item.state === "draft"
@@ -1320,10 +1353,13 @@
               <button class="button" type="submit">Save metadata</button>
             </form>
           </details>
-          <section class="portfolio-angle-manager" data-angle-manager="${escapeHtml(item.id)}">
-            <div class="portfolio-angle-head"><strong>Additional angles</strong><label class="button">Add images<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-angle-upload="${escapeHtml(item.id)}"></label></div>
-            <div class="portfolio-angle-grid">${(item.angles || []).map((angle, angleIndex, angles) => `<article class="portfolio-angle"><img data-secure-src="${escapeHtml(angle.imageUrl)}" alt="${escapeHtml(angle.altText || `${portfolioLabel(item)} additional angle`)}"><div class="portfolio-angle-actions"><button class="button" type="button" data-angle-move="up" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(angle.id)}" ${angleIndex === 0 ? "disabled" : ""}>Up</button><button class="button" type="button" data-angle-move="down" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(angle.id)}" ${angleIndex === angles.length - 1 ? "disabled" : ""}>Down</button><button class="button danger-button" type="button" data-angle-delete data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(angle.id)}">Remove</button></div></article>`).join("") || `<span class="portfolio-field-note">No additional angles uploaded.</span>`}</div>
-          </section>
+          <details class="portfolio-angle-manager" data-angle-manager="${escapeHtml(item.id)}">
+            <summary><span>Tattoo images</span><span class="pill">${portfolioImages.length} image${portfolioImages.length === 1 ? "" : "s"}</span></summary>
+            <div class="portfolio-angle-content">
+              <div class="portfolio-angle-head"><div class="portfolio-field-note">Label each photograph as Fresh, Healed, In progress, or Unspecified.</div><label class="button">Add images<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-angle-upload="${escapeHtml(item.id)}"></label></div>
+              <div class="portfolio-angle-grid">${portfolioImages.map((image, imageIndex, images) => renderPortfolioImageEditor(item, image, imageIndex, images)).join("")}</div>
+            </div>
+          </details>
           <div id="portfolio-connections-${escapeHtml(item.id)}" data-portfolio-connections-panel="${escapeHtml(item.id)}" hidden></div>
         </div>
       </article>`;
@@ -1417,7 +1453,7 @@
     const accepted = [...files].filter((file) => ["image/jpeg", "image/png", "image/webp"].includes(file.type) && file.size <= 15 * 1024 * 1024);
     for (let index = 0; index < accepted.length; index += 1) {
       const file = accepted[index];
-      setStatus(`Uploading angle ${index + 1} of ${accepted.length}: ${file.name}`);
+      setStatus(`Uploading tattoo image ${index + 1} of ${accepted.length}: ${file.name}`);
       const upload = new FormData();
       upload.append("file", file);
       upload.append("alt_text", item?.altText || portfolioLabel(item || {}));
@@ -1437,7 +1473,7 @@
       });
     }
     await loadPortfolioItems();
-    setStatus(accepted.length ? `${accepted.length} additional angle${accepted.length === 1 ? "" : "s"} attached` : "Use JPEG, PNG, or WebP images up to 15 MB");
+    setStatus(accepted.length ? `${accepted.length} tattoo image${accepted.length === 1 ? "" : "s"} attached` : "Use JPEG, PNG, or WebP images up to 15 MB");
   }
 
   async function movePortfolioAngle(itemId, mediaId, direction) {
@@ -1453,7 +1489,19 @@
       body: JSON.stringify({ ids }),
     });
     await loadPortfolioItems();
-    setStatus("Additional angle order saved");
+    setStatus("Tattoo image order saved");
+  }
+
+  async function savePortfolioImageDocumentation(form, isCover = false) {
+    const values = Object.fromEntries(new FormData(form));
+    values.isCover = isCover;
+    await api(`/api/admin/portfolio/${encodeURIComponent(form.dataset.imageDocumentation)}/images/${encodeURIComponent(form.dataset.imageRef)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    await loadPortfolioItems();
+    setStatus(isCover ? "Portfolio cover image saved" : "Tattoo image documentation saved");
   }
 
   function bindPortfolioManager() {
@@ -1496,6 +1544,12 @@
       if (filter) { portfolioState = filter.dataset.portfolioFilter; renderPortfolioManager(); return; }
       const move = event.target.closest("[data-portfolio-move]");
       if (move) { await movePortfolioItem(move.dataset.id, move.dataset.portfolioMove); return; }
+      const cover = event.target.closest("[data-image-cover]");
+      if (cover) {
+        const form = cover.closest("[data-image-documentation]");
+        if (form) await savePortfolioImageDocumentation(form, true);
+        return;
+      }
       const angleMove = event.target.closest("[data-angle-move]");
       if (angleMove) { await movePortfolioAngle(angleMove.dataset.itemId, angleMove.dataset.mediaId, angleMove.dataset.angleMove); return; }
       const angleDelete = event.target.closest("[data-angle-delete]");
@@ -1503,7 +1557,7 @@
         if (!window.confirm("Remove this additional angle and its stored image?")) return;
         await api(`/api/admin/portfolio/${encodeURIComponent(angleDelete.dataset.itemId)}/angles/${encodeURIComponent(angleDelete.dataset.mediaId)}`, { method: "DELETE" });
         await loadPortfolioItems();
-        setStatus("Additional angle removed");
+        setStatus("Tattoo image removed");
         return;
       }
       const state = event.target.closest("[data-portfolio-state]");
@@ -1556,6 +1610,12 @@
       }
     });
     manager.addEventListener("submit", async (event) => {
+      const imageForm = event.target.closest("[data-image-documentation]");
+      if (imageForm) {
+        event.preventDefault();
+        await savePortfolioImageDocumentation(imageForm);
+        return;
+      }
       const form = event.target.closest("[data-portfolio-form]");
       if (!form) return;
       event.preventDefault();

@@ -69,6 +69,7 @@
         image.addEventListener("error", () => { failedIds.add(item.id); render(); });
         const badge=node("span","work-badge","art.pill"),meta=node("span","work-meta"),title=node("span","work-title",item.title||"Tattoo work");
         meta.append(title); const info=itemInfo(item); if(info)meta.append(node("span","work-info",info));
+        if(item.hasFreshAndHealed)meta.append(node("span","work-info portfolio-documentation-badge","fresh + healed documentation"));
         card.append(image,badge,meta); card.addEventListener("click",()=>openDetail(item,card,"push")); grid.append(card);
       });
     }
@@ -87,13 +88,42 @@
       if (global.ConstructConnections) return Promise.resolve();
       return new Promise((resolve) => { const script=document.createElement("script"); script.src="/js/construct-connections.js?v=3"; script.onload=resolve; script.onerror=resolve; document.head.append(script); });
     }
+    function healingLabel(state) {
+      return {fresh:"Fresh",healed:"Healed","in-progress":"In progress",unspecified:"Documentation"}[state]||"Documentation";
+    }
+    function imageNote(image) {
+      return [healingLabel(image.healingState),image.timingNote,image.documentationCaption].filter(Boolean).join(" \u00b7 ");
+    }
+    function documentedFigure(image) {
+      const figure=node("figure","portfolio-documented-image"),photo=node("img");photo.src=image.imageUrl;photo.alt=image.altText||DEFAULT_ALT;photo.loading="lazy";figure.append(photo);
+      const note=imageNote(image);if(note)figure.append(node("figcaption","portfolio-image-note",note));return figure;
+    }
+    function standardMedia(item,images,media) {
+      const imageWrap=node("div","overlay-image-wrap"),mainImage=node("img"),note=node("div","portfolio-image-note");
+      const cover=images.find((image)=>image.isCover)||images[0];let selectedRef=cover.imageRef;
+      function selectImage(image){selectedRef=image.imageRef;mainImage.style.opacity="0";mainImage.src=image.imageUrl;mainImage.alt=image.altText||item.altText||DEFAULT_ALT;note.textContent=imageNote(image);note.hidden=!note.textContent;requestAnimationFrame(()=>{mainImage.style.opacity="1"});media.querySelectorAll(".portfolio-angle-button").forEach((entry)=>entry.setAttribute("aria-pressed",String(entry.dataset.imageRef===image.imageRef)))}
+      mainImage.src=cover.imageUrl;mainImage.alt=cover.altText||item.altText||DEFAULT_ALT;imageWrap.append(mainImage);media.append(imageWrap,note);note.textContent=imageNote(cover);note.hidden=!note.textContent;
+      if(images.length>1){let active="all";const states=[...new Set(images.map((image)=>image.healingState).filter((state)=>state!=="unspecified"))];const strip=node("div","portfolio-angle-strip");strip.setAttribute("aria-label","Tattoo photographs");function paintStrip(){strip.replaceChildren();const visible=active==="all"?images:images.filter((image)=>image.healingState===active);if(visible.length&&!visible.some((image)=>image.imageRef===selectedRef))selectedRef=visible[0].imageRef;visible.forEach((image)=>{const button=node("button","portfolio-angle-button");button.type="button";button.dataset.imageRef=image.imageRef;button.setAttribute("aria-pressed",String(image.imageRef===selectedRef));button.setAttribute("aria-label",`${healingLabel(image.healingState)} tattoo photograph${image.timingNote?`, ${image.timingNote}`:""}`);const thumb=node("img");thumb.src=image.imageUrl;thumb.alt="";button.append(thumb,node("span","portfolio-thumb-state",healingLabel(image.healingState)));button.addEventListener("click",()=>selectImage(image));strip.append(button)});const selected=visible.find((image)=>image.imageRef===selectedRef);if(selected)selectImage(selected)}if(states.includes("fresh")&&states.includes("healed")){const filters=node("div","portfolio-documentation-filters");[["all","All"],["fresh","Fresh"],["healed","Healed"]].forEach(([value,label])=>{const button=node("button",value==="all"?"active":"",label);button.type="button";button.setAttribute("aria-pressed",String(value==="all"));button.addEventListener("click",()=>{active=value;filters.querySelectorAll("button").forEach((entry)=>{const pressed=entry===button;entry.classList.toggle("active",pressed);entry.setAttribute("aria-pressed",String(pressed))});paintStrip()});filters.append(button)});media.append(filters)}paintStrip();media.append(strip)}
+    }
+    function compareMedia(images,media) {
+      const fresh=images.find((image)=>image.healingState==="fresh"),healed=images.find((image)=>image.healingState==="healed");
+      const heading=node("div","portfolio-documentation-heading");heading.append(node("span","portfolio-detail-label","Fresh + healed comparison"),node("p","","The same tattoo documented at different stages."));const comparison=node("div","portfolio-image-comparison");comparison.append(documentedFigure(fresh),documentedFigure(healed));media.append(heading,comparison);
+    }
+    function viewerControlledMedia(item,images,media) {
+      const gallery=node("div","portfolio-media-view"),fresh=images.find((image)=>image.healingState==="fresh"),healed=images.find((image)=>image.healingState==="healed");
+      standardMedia(item,images,gallery);
+      if(!fresh||!healed){media.append(gallery);return}
+      const comparison=node("div","portfolio-media-view");comparison.hidden=true;comparison.setAttribute("aria-label","Fresh and healed comparison");compareMedia(images,comparison);
+      const controls=node("div","portfolio-view-switch"),galleryButton=node("button","","Gallery"),compareButton=node("button","","Compare");controls.setAttribute("role","group");controls.setAttribute("aria-label","Tattoo image view");galleryButton.type=compareButton.type="button";galleryButton.setAttribute("aria-pressed","true");compareButton.setAttribute("aria-pressed","false");
+      function setView(view){const comparing=view==="compare";gallery.hidden=comparing;comparison.hidden=!comparing;galleryButton.setAttribute("aria-pressed",String(!comparing));compareButton.setAttribute("aria-pressed",String(comparing))}
+      galleryButton.addEventListener("click",()=>setView("gallery"));compareButton.addEventListener("click",()=>setView("compare"));controls.append(node("span","portfolio-detail-label","View"),galleryButton,compareButton);media.append(controls,gallery,comparison);
+    }
     function paintDetail(item) {
       detail.replaceChildren();
       const back=node("button","overlay-close","Back to portfolio"); back.type="button"; back.addEventListener("click",()=>closeDetail());
-      const inner=node("div","overlay-inner"),media=node("div","portfolio-detail-media"),imageWrap=node("div","overlay-image-wrap"),mainImage=node("img");
-      mainImage.src=item.imageUrl; mainImage.alt=item.altText||DEFAULT_ALT; imageWrap.append(mainImage); media.append(imageWrap);
-      const images=[{id:"primary",imageUrl:item.imageUrl,altText:item.altText||DEFAULT_ALT},...(item.angles||[])];
-      if(images.length>1){const strip=node("div","portfolio-angle-strip");strip.setAttribute("aria-label","Tattoo image angles");images.forEach((angle,index)=>{const button=node("button","portfolio-angle-button");button.type="button";button.setAttribute("aria-pressed",String(index===0));button.setAttribute("aria-label",index===0?"Main tattoo image":`Tattoo angle ${index+1}`);const thumb=node("img");thumb.src=angle.imageUrl;thumb.alt="";button.append(thumb);button.addEventListener("click",()=>{mainImage.style.opacity="0";mainImage.src=angle.imageUrl;mainImage.alt=angle.altText||item.altText||DEFAULT_ALT;requestAnimationFrame(()=>{mainImage.style.opacity="1"});strip.querySelectorAll("button").forEach((entry)=>entry.setAttribute("aria-pressed",String(entry===button)));});strip.append(button)});media.append(strip)}
+      const inner=node("div","overlay-inner"),media=node("div","portfolio-detail-media");
+      const images=[item.primaryImage||{id:"primary",imageRef:"primary",imageUrl:item.imageUrl,altText:item.altText||DEFAULT_ALT,healingState:"unspecified",isCover:true},...(item.angles||[])];
+      viewerControlledMedia(item,images,media);
       const copy=node("div","overlay-details"),head=node("header"),detailTitle=node("h1","overlay-title",item.title||"Tattoo work");detailTitle.tabIndex=-1;head.append(node("p","portfolio-detail-kicker","Tattoo work"),detailTitle);
       const info=itemInfo(item);if(info)head.append(node("p","overlay-subtitle",info));
       const tags=node("div","overlay-tags");[optionLabel("style",item.primaryStyle),optionLabel("collection",item.collection)].filter(Boolean).forEach((value)=>tags.append(node("span","overlay-tag",value)));if(tags.childElementCount)head.append(tags);copy.append(head);
@@ -102,7 +132,7 @@
       [block("Process",item.processNotes),block("Techniques",item.techniques)].filter(Boolean).forEach((section)=>copy.append(section));
       if(item.similarInquiriesEnabled){const similar=node("section","portfolio-similar");similar.append(node("p","portfolio-detail-label","Book something in this direction"));if(item.similarInquiryNote)similar.append(node("p","",item.similarInquiryNote));similar.append(node("p","disclaimer","This completed tattoo will not be copied. It may serve as a reference for visual direction, process, technique, or atmosphere in a new original project."));const link=node("a","","Start a custom inquiry");link.href=`/tattoos/inquire/custom/?reference=${encodeURIComponent(item.id)}`;similar.append(link);copy.append(similar)}
       inner.append(media,copy);const connections=node("section","portfolio-detail-connections");connections.hidden=true;inner.append(connections);detail.append(back,inner);document.body.classList.add("is-portfolio-detail");detail.classList.add("open");document.title=`${item.title||"Tattoo work"} · Art.Pill Tattoo House`;window.scrollTo({top:0,behavior:"auto"});
-      ensureConnections().then(()=>global.ConstructConnections?.mount({entityId:item.id,host:connections}));
+      ensureConnections().then(()=>global.ConstructConnections?.mount({entityId:item.id,host:connections,embedded:true}));
       requestAnimationFrame(()=>document.querySelector("#work-overlay .overlay-title")?.focus?.());
     }
     async function openDetail(summary,trigger,historyMode="push") {

@@ -5,6 +5,8 @@ const ALLOWED_UPLOADS = new Map([
   ["image/png", "png"],
   ["image/webp", "webp"],
 ]);
+const HEALING_STATES = new Set(["fresh", "healed", "in-progress", "unspecified"]);
+const IMAGE_PRESENTATIONS = new Set(["standard", "compare", "grouped"]);
 const EDITABLE_FIELDS = new Map([
   ["title", "title"],
   ["altText", "alt_text"],
@@ -122,6 +124,8 @@ function itemFromRow(row, admin = false, detail = false) {
     primaryStyle: row.primary_style || "unclassified",
     collection: row.collection || "",
     caption: row.caption || "",
+    imagePresentation: row.image_presentation || "standard",
+    coverImageRef: row.cover_image_ref || "primary",
     state: row.state,
     sortOrder: Number(row.sort_order || 0),
     createdAt: row.created_at,
@@ -179,6 +183,57 @@ async function galleryMedia(db, entityIds, admin = false) {
   return grouped;
 }
 
+async function imageDetails(db, entityIds) {
+  if (!entityIds.length) return new Map();
+  const placeholders = entityIds.map(() => "?").join(",");
+  const result = await db.prepare(`
+    SELECT portfolio_item_id, image_ref, healing_state, timing_note, caption
+    FROM portfolio_image_details
+    WHERE portfolio_item_id IN (${placeholders})
+  `).bind(...entityIds).all();
+  const grouped = new Map(entityIds.map((id) => [id, new Map()]));
+  for (const row of result.results || []) grouped.get(row.portfolio_item_id)?.set(row.image_ref, row);
+  return grouped;
+}
+
+function documentedImage(image, imageRef, details, coverImageRef) {
+  const documentation = details?.get(imageRef);
+  return {
+    ...image,
+    imageRef,
+    healingState: documentation?.healing_state || "unspecified",
+    timingNote: documentation?.timing_note || "",
+    documentationCaption: documentation?.caption || "",
+    isCover: imageRef === coverImageRef,
+  };
+}
+
+function applyImageDocumentation(item, angles, details, includeImages = false) {
+  const primary = documentedImage({
+    id: "primary",
+    imageUrl: item.imageUrl,
+    altText: item.altText,
+    caption: "",
+    originalFilename: item.originalFilename,
+  }, "primary", details, item.coverImageRef);
+  const documentedAngles = angles.map((angle) => documentedImage(angle, angle.id, details, item.coverImageRef));
+  const images = [primary, ...documentedAngles];
+  const cover = images.find((image) => image.isCover) || primary;
+  if (!images.some((image) => image.isCover)) {
+    primary.isCover = true;
+    item.coverImageRef = "primary";
+  }
+  const states = [...new Set(images.map((image) => image.healingState).filter((state) => state !== "unspecified"))];
+  item.imageUrl = cover.imageUrl;
+  item.documentationStates = states;
+  item.hasFreshAndHealed = states.includes("fresh") && states.includes("healed");
+  if (includeImages) {
+    item.primaryImage = primary;
+    item.angles = documentedAngles;
+  }
+  return item;
+}
+
 async function nextSortOrder(db, state) {
   const row = await db
     .prepare("SELECT COALESCE(MAX(sort_order), 0) AS max_order FROM portfolio_items WHERE state = ?")
@@ -193,7 +248,13 @@ async function listPublic(env) {
     db.prepare("SELECT * FROM portfolio_items WHERE state = 'published' ORDER BY sort_order ASC, created_at ASC").all(),
     portfolioOptions(db),
   ]);
-  return json({ items: (result.results || []).map((row) => decorateItem(itemFromRow(row), options)), options });
+  const rows = result.results || [];
+  const ids = rows.map((row) => row.id);
+  const [media, documentation] = await Promise.all([galleryMedia(db, ids), imageDetails(db, ids)]);
+  return json({
+    items: rows.map((row) => applyImageDocumentation(decorateItem(itemFromRow(row), options), media.get(row.id) || [], documentation.get(row.id))),
+    options,
+  });
 }
 
 async function listAdmin(request, env) {
@@ -205,16 +266,21 @@ async function listAdmin(request, env) {
     portfolioOptions(db, true),
   ]);
   const rows = result.results || [];
-  const media = await galleryMedia(db, rows.map((row) => row.id), true);
-  return json({ items: rows.map((row) => decorateItem({ ...itemFromRow(row, true), angles: media.get(row.id) || [] }, options)), options });
+  const ids = rows.map((row) => row.id);
+  const [media, documentation] = await Promise.all([galleryMedia(db, ids, true), imageDetails(db, ids)]);
+  return json({
+    items: rows.map((row) => applyImageDocumentation(decorateItem(itemFromRow(row, true), options), media.get(row.id) || [], documentation.get(row.id), true)),
+    options,
+  });
 }
 
 async function getPublicItem(env, id) {
   const db = requireDb(env);
   const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ? AND state = 'published'").bind(id).first();
   if (!row) return errorResponse("Portfolio item not found.", 404);
-  const [media, options] = await Promise.all([galleryMedia(db, [id]), portfolioOptions(db)]);
-  return json({ item: decorateItem({ ...itemFromRow(row, false, true), angles: media.get(id) || [] }, options), options });
+  const [media, options, documentation] = await Promise.all([galleryMedia(db, [id]), portfolioOptions(db), imageDetails(db, [id])]);
+  const item = applyImageDocumentation(decorateItem(itemFromRow(row, false, true), options), media.get(id) || [], documentation.get(id), true);
+  return json({ item, options });
 }
 
 async function mediaResponse(request, env, id, admin = false) {
@@ -274,7 +340,8 @@ async function createUpload(request, env) {
         state, sort_order, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, datetime('now'), datetime('now'))
     `).bind(id, key, originalFilename, file.type, title, altText, order),
-    db.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'portfolio_item','node-tattoos','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(id)]);
+    db.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'portfolio_item','node-tattoos','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(id),
+    db.prepare("INSERT INTO portfolio_image_details(portfolio_item_id,image_ref,healing_state,timing_note,caption,created_at,updated_at) VALUES(?,'primary','unspecified','','',datetime('now'),datetime('now'))").bind(id)]);
   } catch (error) {
     await env.SUBMISSION_FILES.delete(key);
     throw error;
@@ -335,6 +402,13 @@ async function patchItem(request, env, id) {
     values.push(body.similarInquiriesEnabled === true || body.similarInquiriesEnabled === "true" || body.similarInquiriesEnabled === "on" ? 1 : 0);
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "imagePresentation")) {
+    const presentation = cleanText(body.imagePresentation, 20);
+    if (!IMAGE_PRESENTATIONS.has(presentation)) return errorResponse("Choose a valid image presentation.", 422);
+    updates.push("image_presentation = ?");
+    values.push(presentation);
+  }
+
   let nextState = current.state;
   if (Object.prototype.hasOwnProperty.call(body, "state")) {
     nextState = cleanText(body.state, 20);
@@ -360,6 +434,39 @@ async function patchItem(request, env, id) {
     .bind(nextState === "published" ? "public" : "internal", nextState === "published" ? 1 : 0, nextState === "published" ? "public" : "internal", id).run();
   const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first();
   return json({ item: itemFromRow(row, true) });
+}
+
+async function patchImageDocumentation(request, env, itemId, imageRef) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse("Send a JSON object.");
+  const db = requireDb(env);
+  const item = await db.prepare("SELECT id FROM portfolio_items WHERE id = ?").bind(itemId).first();
+  if (!item) return errorResponse("Portfolio item not found.", 404);
+  if (imageRef !== "primary") {
+    const attached = await db.prepare("SELECT 1 AS found FROM entity_media WHERE entity_id = ? AND media_id = ? AND role = 'gallery'")
+      .bind(itemId, imageRef).first();
+    if (!attached) return errorResponse("Portfolio image not found.", 404);
+  }
+  const healingState = cleanText(body.healingState, 20) || "unspecified";
+  if (!HEALING_STATES.has(healingState)) return errorResponse("Choose Fresh, Healed, In progress, or Unspecified.", 422);
+  const timingNote = cleanText(body.timingNote, 160);
+  const caption = cleanText(body.caption, 1000);
+  const statements = [db.prepare(`
+    INSERT INTO portfolio_image_details(portfolio_item_id, image_ref, healing_state, timing_note, caption, created_at, updated_at)
+    VALUES(?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(portfolio_item_id, image_ref) DO UPDATE SET
+      healing_state = excluded.healing_state,
+      timing_note = excluded.timing_note,
+      caption = excluded.caption,
+      updated_at = datetime('now')
+  `).bind(itemId, imageRef, healingState, timingNote, caption)];
+  if (body.isCover === true || body.isCover === "true" || body.isCover === "on") {
+    statements.push(db.prepare("UPDATE portfolio_items SET cover_image_ref = ?, updated_at = datetime('now') WHERE id = ?").bind(imageRef, itemId));
+  }
+  await db.batch(statements);
+  return json({ ok: true, itemId, imageRef });
 }
 
 async function createOption(request, env) {
@@ -522,6 +629,7 @@ async function permanentlyDeleteItem(request, env, id) {
   await Promise.all(backups.map((backup) => env.SUBMISSION_FILES.delete(backup.media.storage_key)));
   try {
     await db.batch([
+      db.prepare("DELETE FROM portfolio_image_details WHERE portfolio_item_id = ?").bind(id),
       db.prepare("DELETE FROM content_entities WHERE id = ?").bind(id),
       db.prepare("DELETE FROM portfolio_items WHERE id = ?").bind(id),
       ...[...storedMedia.values()].map((media) => db.prepare(
@@ -559,6 +667,8 @@ async function deleteAngle(request, env, itemId, mediaId) {
   if (object) await env.SUBMISSION_FILES.delete(media.storage_key);
   try {
     await db.batch([
+      db.prepare("DELETE FROM portfolio_image_details WHERE portfolio_item_id = ? AND image_ref = ?").bind(itemId, mediaId),
+      db.prepare("UPDATE portfolio_items SET cover_image_ref = 'primary', updated_at = datetime('now') WHERE id = ? AND cover_image_ref = ?").bind(itemId, mediaId),
       db.prepare("DELETE FROM entity_media WHERE entity_id = ? AND media_id = ? AND role = 'gallery'").bind(itemId, mediaId),
       db.prepare("DELETE FROM media_assets WHERE id = ? AND NOT EXISTS (SELECT 1 FROM entity_media WHERE entity_media.media_id = media_assets.id)").bind(mediaId),
     ]);
@@ -665,6 +775,11 @@ export async function handlePortfolioApi(request, env) {
     if (path.startsWith("/api/admin/portfolio/media/")) {
       if (method !== "GET") return methodNotAllowed(["GET"]);
       return mediaResponse(request, env, decodeURIComponent(path.slice("/api/admin/portfolio/media/".length)), true);
+    }
+    const imageDocumentationMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images\/([^/]+)$/);
+    if (imageDocumentationMatch) {
+      if (method !== "PATCH") return methodNotAllowed(["PATCH"]);
+      return patchImageDocumentation(request, env, decodeURIComponent(imageDocumentationMatch[1]), decodeURIComponent(imageDocumentationMatch[2]));
     }
     const angleOrderMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/angles\/reorder$/);
     if (angleOrderMatch) {
