@@ -365,6 +365,17 @@
   .portfolio-angle-actions { display:flex; gap:4px; flex-wrap:wrap; }
   .portfolio-angle-actions .button { min-height:28px; padding:0 6px; font-size:8px; }
   .portfolio-empty { grid-column:1/-1; border:5px solid var(--ring-faint); padding:26px; color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+  .portfolio-settings { display:grid; gap:24px; }
+  .portfolio-settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:start; }
+  .portfolio-option-group { display:grid; gap:12px; border:5px solid var(--ring-faint); padding:16px; background:var(--panel); }
+  .portfolio-option-list { display:grid; gap:8px; }
+  .portfolio-option { display:grid; gap:10px; border:3px solid var(--ring-faint); padding:12px; }
+  .portfolio-option-head { display:flex; justify-content:space-between; gap:10px; align-items:start; }
+  .portfolio-option-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  .portfolio-option-actions .button { min-height:32px; padding:0 8px; font-size:8px; }
+  .portfolio-option-key { color:var(--dim); font-family:var(--mono); font-size:9px; overflow-wrap:anywhere; }
+  .portfolio-option-create { display:grid; gap:10px; border-top:5px solid var(--ring-faint); padding-top:14px; }
+  @media (max-width:760px) { .portfolio-settings-grid { grid-template-columns:1fr; } }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
     .list-pane { border-right:0; border-bottom:5px solid var(--ring-faint); max-height:42vh; }
@@ -508,6 +519,7 @@
   let portfolioItems = [];
   let portfolioState = "published";
   let portfolioObjectUrls = [];
+  let portfolioOptions = { styles: [], collections: [] };
 
   function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -1167,6 +1179,7 @@
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>
         <button class="subnav-btn ${subView === "portfolio" ? "is-active" : ""}" type="button" data-subview="portfolio">Portfolio</button>
+        <button class="subnav-btn ${subView === "portfolio-settings" ? "is-active" : ""}" type="button" data-subview="portfolio-settings">Portfolio Settings</button>
         <button class="subnav-btn ${subView === "flash" ? "is-active" : ""}" type="button" data-subview="flash">Flash</button>`;
     } else if (activeTab === "studio") {
       html = `
@@ -1227,13 +1240,29 @@
     renderActiveTab();
   }
 
-  const PORTFOLIO_STYLES = [
+  const PORTFOLIO_STYLE_FALLBACKS = [
     ["unclassified", "Unclassified"],
     ["symbolic", "Symbolic"],
     ["surreal", "Surreal"],
     ["mythic", "Mythic"],
     ["special-project", "Special Project"],
   ];
+
+  function portfolioOptionList(kind, currentValue = "") {
+    const key = kind === "style" ? "styles" : "collections";
+    const options = (portfolioOptions[key] || []).filter((option) => option.enabled || option.value === currentValue);
+    if (currentValue && !options.some((option) => option.value === currentValue)) {
+      options.push({ value: currentValue, label: currentValue, enabled: false });
+    }
+    return options;
+  }
+
+  function portfolioOptionLabel(kind, value) {
+    const key = kind === "style" ? "styles" : "collections";
+    return portfolioOptions[key]?.find((option) => option.value === value)?.label
+      || (kind === "style" ? PORTFOLIO_STYLE_FALLBACKS.find(([entry]) => entry === value)?.[1] : value)
+      || "Unclassified";
+  }
 
   function portfolioItemsForState() {
     return portfolioItems.filter((item) => item.state === portfolioState)
@@ -1258,7 +1287,7 @@
         </div>
         <div class="portfolio-card-body">
           <div class="portfolio-card-title"><strong>${escapeHtml(portfolioLabel(item))}</strong><span class="pill">${index + 1} / ${total}</span></div>
-          <div class="meta">${escapeHtml(PORTFOLIO_STYLES.find(([key]) => key === item.primaryStyle)?.[1] || "Unclassified")}${item.collection ? ` / ${escapeHtml(item.collection)}` : ""}</div>
+          <div class="meta">${escapeHtml(portfolioOptionLabel("style", item.primaryStyle))}${item.collection ? ` / ${escapeHtml(portfolioOptionLabel("collection", item.collection))}` : ""}</div>
           <div class="portfolio-card-actions">
             ${canSort ? `<button class="button" type="button" data-portfolio-move="up" data-id="${escapeHtml(item.id)}" ${index === 0 ? "disabled" : ""}>Move up</button><button class="button" type="button" data-portfolio-move="down" data-id="${escapeHtml(item.id)}" ${index === total - 1 ? "disabled" : ""}>Move down</button>` : ""}
             ${stateAction}
@@ -1276,8 +1305,8 @@
                 <label>Year<input name="year" value="${escapeHtml(item.year)}" maxlength="20"></label>
                 <label>Placement<input name="placement" value="${escapeHtml(item.placement)}" maxlength="160"></label>
               </div>
-              <label>Primary style<select name="primaryStyle">${PORTFOLIO_STYLES.map(([key,label]) => `<option value="${key}"${key === item.primaryStyle || (key === "unclassified" && !item.primaryStyle) ? " selected" : ""}>${label}</option>`).join("")}</select></label>
-              <label>Collection<input name="collection" value="${escapeHtml(item.collection)}" maxlength="160" placeholder="Optional grouping"></label>
+              <label>Primary style<select name="primaryStyle">${portfolioOptionList("style", item.primaryStyle || "unclassified").map((option) => `<option value="${escapeHtml(option.value)}"${option.value === item.primaryStyle || (option.value === "unclassified" && !item.primaryStyle) ? " selected" : ""}>${escapeHtml(option.label)}${option.enabled ? "" : " (disabled)"}</option>`).join("")}</select></label>
+              <label>Collection<select name="collection"><option value="">No collection</option>${portfolioOptionList("collection", item.collection).map((option) => `<option value="${escapeHtml(option.value)}"${option.value === item.collection ? " selected" : ""}>${escapeHtml(option.label)}${option.enabled ? "" : " (disabled)"}</option>`).join("")}</select></label>
               <label>Caption<textarea name="caption" maxlength="2000">${escapeHtml(item.caption)}</textarea></label>
               <label>Public statement / story<textarea name="statement" maxlength="10000">${escapeHtml(item.statement || "")}</textarea></label>
               <label>Process notes<textarea name="processNotes" maxlength="10000">${escapeHtml(item.processNotes || "")}</textarea></label>
@@ -1333,6 +1362,7 @@
   async function loadPortfolioItems() {
     const payload = await api("/api/admin/portfolio");
     portfolioItems = payload.items || [];
+    portfolioOptions = payload.options || { styles: [], collections: [] };
     paintPortfolioItems();
   }
 
@@ -1556,6 +1586,125 @@
     await loadPortfolioItems();
   }
 
+  function renderPortfolioOption(option, index, options) {
+    const protectedFallback = option.kind === "style" && option.value === "unclassified";
+    return `
+      <form class="portfolio-option" data-portfolio-option="${escapeHtml(option.id)}" data-kind="${escapeHtml(option.kind)}">
+        <div class="portfolio-option-head"><div><strong>${escapeHtml(option.label)}</strong><div class="portfolio-option-key">${escapeHtml(option.value)}</div></div><span class="pill">${option.usageCount} use${option.usageCount === 1 ? "" : "s"}</span></div>
+        <label>Name<input name="label" value="${escapeHtml(option.label)}" maxlength="80" required></label>
+        <label>Description<textarea name="description" maxlength="500" placeholder="Optional internal context for this option">${escapeHtml(option.description || "")}</textarea></label>
+        <label class="check"><input name="enabled" type="checkbox" ${option.enabled ? "checked" : ""} ${protectedFallback ? "disabled" : ""}><span>Enabled for new portfolio assignments${protectedFallback ? " (required fallback)" : ""}</span></label>
+        <div class="portfolio-option-actions">
+          <button class="button" type="submit">Save</button>
+          <button class="button" type="button" data-option-move="up" ${index === 0 ? "disabled" : ""}>Move up</button>
+          <button class="button" type="button" data-option-move="down" ${index === options.length - 1 ? "disabled" : ""}>Move down</button>
+          ${!protectedFallback && option.usageCount === 0 ? `<button class="button danger-button" type="button" data-option-delete>Delete</button>` : ""}
+        </div>
+      </form>`;
+  }
+
+  function portfolioSettingsGroup(kind, title, note) {
+    const key = kind === "style" ? "styles" : "collections";
+    const options = portfolioOptions[key] || [];
+    return `
+      <section class="portfolio-option-group" data-option-group="${kind}">
+        <div><h3>${title}</h3><p class="contact">${note}</p></div>
+        <div class="portfolio-option-list">${options.map((option, index) => renderPortfolioOption(option, index, options)).join("") || `<p class="portfolio-field-note">No options yet.</p>`}</div>
+        <form class="portfolio-option-create" data-option-create="${kind}">
+          <strong>Add ${kind === "style" ? "style" : "collection"}</strong>
+          <label>Name<input name="label" maxlength="80" required></label>
+          <label>Key<input name="value" maxlength="80" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="Generated from the name if blank"><span class="portfolio-field-note">Stable internal key. Lowercase letters, numbers, and hyphens.</span></label>
+          <label>Description<textarea name="description" maxlength="500"></textarea></label>
+          <button class="button" type="submit">Add option</button>
+        </form>
+      </section>`;
+  }
+
+  async function loadPortfolioSettings() {
+    const payload = await api("/api/admin/portfolio/settings");
+    portfolioOptions = payload.options || { styles: [], collections: [] };
+  }
+
+  async function savePortfolioOptionOrder(kind, ids) {
+    await api("/api/admin/portfolio/settings/reorder", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind, ids }),
+    });
+  }
+
+  function bindPortfolioSettings() {
+    const manager = document.getElementById("portfolioSettings");
+    if (!manager) return;
+    manager.addEventListener("submit", async (event) => {
+      const create = event.target.closest("[data-option-create]");
+      const edit = event.target.closest("[data-portfolio-option]");
+      if (!create && !edit) return;
+      event.preventDefault();
+      try {
+        const values = Object.fromEntries(new FormData(event.target));
+        if (create) {
+          values.kind = create.dataset.optionCreate;
+          await api("/api/admin/portfolio/settings", {
+            method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(values),
+          });
+          setStatus("Portfolio option added");
+        } else {
+          values.enabled = edit.elements.enabled.disabled || edit.elements.enabled.checked;
+          await api(`/api/admin/portfolio/settings/${encodeURIComponent(edit.dataset.portfolioOption)}`, {
+            method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(values),
+          });
+          setStatus("Portfolio option saved");
+        }
+        await renderPortfolioSettings();
+      } catch (error) { setStatus(error.message); }
+    });
+    manager.addEventListener("click", async (event) => {
+      const form = event.target.closest("[data-portfolio-option]");
+      if (!form) return;
+      const remove = event.target.closest("[data-option-delete]");
+      if (remove) {
+        if (!window.confirm("Delete this unused portfolio option?")) return;
+        try {
+          await api(`/api/admin/portfolio/settings/${encodeURIComponent(form.dataset.portfolioOption)}`, { method: "DELETE" });
+          setStatus("Portfolio option deleted");
+          await renderPortfolioSettings();
+        } catch (error) { setStatus(error.message); }
+        return;
+      }
+      const move = event.target.closest("[data-option-move]");
+      if (!move) return;
+      const kind = form.dataset.kind;
+      const key = kind === "style" ? "styles" : "collections";
+      const ids = (portfolioOptions[key] || []).map((option) => option.id);
+      const from = ids.indexOf(form.dataset.portfolioOption);
+      const to = move.dataset.optionMove === "up" ? from - 1 : from + 1;
+      if (from < 0 || to < 0 || to >= ids.length) return;
+      [ids[from], ids[to]] = [ids[to], ids[from]];
+      try {
+        await savePortfolioOptionOrder(kind, ids);
+        setStatus("Portfolio option order saved");
+        await renderPortfolioSettings();
+      } catch (error) { setStatus(error.message); }
+    });
+  }
+
+  async function renderPortfolioSettings() {
+    layoutEl.classList.add("single");
+    listPane.classList.add("hidden");
+    toolbarEl.innerHTML = "";
+    await loadPortfolioSettings();
+    detailEl.innerHTML = `
+      <section class="portfolio-settings" id="portfolioSettings">
+        <div class="portfolio-head"><div><h2>Portfolio Settings</h2><p class="contact">Manage the styles and collections available when editing tattoo portfolio work.</p></div></div>
+        <div class="portfolio-settings-grid">
+          ${portfolioSettingsGroup("style", "Primary styles", "Color-coded or formal approaches used to filter and describe tattoo work.")}
+          ${portfolioSettingsGroup("collection", "Collections", "Curated groupings that can span multiple tattoo styles.")}
+        </div>
+      </section>`;
+    bindPortfolioSettings();
+  }
+
   function renderActiveTab() {
     tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
     buildSubnav();
@@ -1598,6 +1747,11 @@
 
     if (activeTab === "tattoo" && subView === "portfolio") {
       renderPortfolioManager().catch((error) => setStatus(error.message));
+      return;
+    }
+
+    if (activeTab === "tattoo" && subView === "portfolio-settings") {
+      renderPortfolioSettings().catch((error) => setStatus(error.message));
       return;
     }
 

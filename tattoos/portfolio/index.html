@@ -480,6 +480,8 @@
       mythic: 'mythic',
       'special-project': 'special projects',
     };
+    const COLLECTION_LABELS = {};
+    const optionLabel = (kind, value) => kind === 'style' ? (STYLE_LABELS[value] || value) : (COLLECTION_LABELS[value] || value);
     const DEFAULT_ALT = 'Tattoo portfolio work by Saiel Dauhn Solehman';
     const grid = document.getElementById('gridTattoo');
     const typeRow = document.getElementById('typeRow');
@@ -538,7 +540,7 @@
       }));
       styles.forEach((style) => {
         const count = available.filter((item) => item.primaryStyle === style).length;
-        typeRow.appendChild(chip(STYLE_LABELS[style], count, activeStyle === style, () => {
+        typeRow.appendChild(chip(optionLabel('style', style), count, activeStyle === style, () => {
           activeStyle = activeStyle === style ? '' : style;
           render();
         }));
@@ -547,7 +549,7 @@
       collections.forEach((collection) => {
         const count = available.filter((item) => item.collection === collection && (!activeStyle || item.primaryStyle === activeStyle)).length;
         if (!count) return;
-        collectionRow.appendChild(chip(collection, count, activeCollection === collection, () => {
+        collectionRow.appendChild(chip(optionLabel('collection', collection), count, activeCollection === collection, () => {
           activeCollection = activeCollection === collection ? '' : collection;
           render();
         }));
@@ -566,7 +568,7 @@
       overlaySub.textContent = itemInfo(item);
       overlaySub.style.display = itemInfo(item) ? '' : 'none';
       overlayTags.replaceChildren();
-      [STYLE_LABELS[item.primaryStyle], item.collection].filter(Boolean).forEach((label) => {
+      [optionLabel('style', item.primaryStyle), optionLabel('collection', item.collection)].filter(Boolean).forEach((label) => {
         const tag = document.createElement('span');
         tag.className = 'overlay-tag';
         tag.textContent = label;
@@ -643,7 +645,7 @@
     function render() {
       renderFilters();
       renderCards();
-      const selection = activeCollection || (activeStyle ? STYLE_LABELS[activeStyle] : '');
+      const selection = activeCollection ? optionLabel('collection', activeCollection) : (activeStyle ? optionLabel('style', activeStyle) : '');
       introDesc.textContent = selection ? `${selection} / tattoo work by Saiel Dauhn Solehman` : 'tattoo work by Saiel Dauhn Solehman';
     }
 
@@ -672,6 +674,8 @@
       .then(async (response) => {
         if (!response.ok) throw new Error();
         const payload = await response.json();
+        (payload.options?.styles || []).forEach((option) => { STYLE_LABELS[option.value] = option.label; });
+        (payload.options?.collections || []).forEach((option) => { COLLECTION_LABELS[option.value] = option.label; });
         items = Array.isArray(payload.items) ? payload.items : [];
         render();
         const requested = new URL(location.href).searchParams.get('work');

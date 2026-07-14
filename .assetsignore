@@ -1,5 +1,6 @@
 _worker.js
 functions/
+migrations/
 wrangler.jsonc
 README.md
 .dev.vars.example

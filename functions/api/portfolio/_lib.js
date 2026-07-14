@@ -5,14 +5,6 @@ const ALLOWED_UPLOADS = new Map([
   ["image/png", "png"],
   ["image/webp", "webp"],
 ]);
-const ALLOWED_STYLES = new Set([
-  "",
-  "unclassified",
-  "symbolic",
-  "surreal",
-  "mythic",
-  "special-project",
-]);
 const EDITABLE_FIELDS = new Map([
   ["title", "title"],
   ["altText", "alt_text"],
@@ -61,6 +53,61 @@ function adminError(request, env) {
 
 function cleanText(value, max = 500) {
   return String(value ?? "").trim().slice(0, max);
+}
+
+function optionSlug(value) {
+  return cleanText(value, 80).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function optionFromRow(row, admin = false) {
+  return {
+    value: row.value,
+    label: row.label,
+    sortOrder: Number(row.sort_order || 0),
+    ...(admin ? {
+      id: row.id,
+      kind: row.kind,
+      description: row.description || "",
+      enabled: Number(row.enabled || 0) === 1,
+      usageCount: Number(row.usage_count || 0),
+    } : {}),
+  };
+}
+
+async function portfolioOptions(db, admin = false) {
+  const usage = admin ? `,
+    CASE kind
+      WHEN 'style' THEN (SELECT COUNT(*) FROM portfolio_items p WHERE COALESCE(NULLIF(p.primary_style, ''), 'unclassified') = portfolio_options.value)
+      ELSE (SELECT COUNT(*) FROM portfolio_items p WHERE p.collection = portfolio_options.value)
+    END AS usage_count` : "";
+  const result = await db.prepare(`
+    SELECT portfolio_options.*${usage}
+    FROM portfolio_options
+    ORDER BY kind, sort_order, label COLLATE NOCASE
+  `).all();
+  const options = { styles: [], collections: [] };
+  for (const row of result.results || []) {
+    options[row.kind === "style" ? "styles" : "collections"].push(optionFromRow(row, admin));
+  }
+  return options;
+}
+
+function decorateItem(item, options) {
+  const style = options.styles.find((entry) => entry.value === item.primaryStyle);
+  const collection = options.collections.find((entry) => entry.value === item.collection);
+  return {
+    ...item,
+    primaryStyleLabel: style?.label || item.primaryStyle,
+    collectionLabel: collection?.label || item.collection,
+  };
+}
+
+async function resolveOptionValue(db, kind, value, currentValue = "") {
+  if (kind === "collection" && !value) return "";
+  const normalized = kind === "style" && !value ? "unclassified" : value;
+  const row = await db.prepare("SELECT value, enabled FROM portfolio_options WHERE kind = ? AND value = ? COLLATE NOCASE")
+    .bind(kind, normalized).first();
+  return row && (Number(row.enabled) === 1 || row.value === currentValue) ? row.value : null;
 }
 
 function itemFromRow(row, admin = false, detail = false) {
@@ -142,30 +189,32 @@ async function nextSortOrder(db, state) {
 
 async function listPublic(env) {
   const db = requireDb(env);
-  const result = await db.prepare(
-    "SELECT * FROM portfolio_items WHERE state = 'published' ORDER BY sort_order ASC, created_at ASC"
-  ).all();
-  return json({ items: (result.results || []).map((row) => itemFromRow(row)) });
+  const [result, options] = await Promise.all([
+    db.prepare("SELECT * FROM portfolio_items WHERE state = 'published' ORDER BY sort_order ASC, created_at ASC").all(),
+    portfolioOptions(db),
+  ]);
+  return json({ items: (result.results || []).map((row) => decorateItem(itemFromRow(row), options)), options });
 }
 
 async function listAdmin(request, env) {
   const authError = adminError(request, env);
   if (authError) return authError;
   const db = requireDb(env);
-  const result = await db.prepare(
-    "SELECT * FROM portfolio_items ORDER BY CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, sort_order ASC, created_at ASC"
-  ).all();
+  const [result, options] = await Promise.all([
+    db.prepare("SELECT * FROM portfolio_items ORDER BY CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, sort_order ASC, created_at ASC").all(),
+    portfolioOptions(db, true),
+  ]);
   const rows = result.results || [];
   const media = await galleryMedia(db, rows.map((row) => row.id), true);
-  return json({ items: rows.map((row) => ({ ...itemFromRow(row, true), angles: media.get(row.id) || [] })) });
+  return json({ items: rows.map((row) => decorateItem({ ...itemFromRow(row, true), angles: media.get(row.id) || [] }, options)), options });
 }
 
 async function getPublicItem(env, id) {
   const db = requireDb(env);
   const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ? AND state = 'published'").bind(id).first();
   if (!row) return errorResponse("Portfolio item not found.", 404);
-  const media = await galleryMedia(db, [id]);
-  return json({ item: { ...itemFromRow(row, false, true), angles: media.get(id) || [] } });
+  const [media, options] = await Promise.all([galleryMedia(db, [id]), portfolioOptions(db)]);
+  return json({ item: decorateItem({ ...itemFromRow(row, false, true), angles: media.get(id) || [] }, options), options });
 }
 
 async function mediaResponse(request, env, id, admin = false) {
@@ -258,11 +307,17 @@ async function patchItem(request, env, id) {
             ? 300
             : 160;
     const value = cleanText(body[apiField], max);
-    if (apiField === "primaryStyle" && !ALLOWED_STYLES.has(value)) {
-      return errorResponse("Choose a valid primary style.");
+    let storedValue = value;
+    if (apiField === "primaryStyle") {
+      storedValue = await resolveOptionValue(db, "style", value, current.primary_style || "unclassified");
+      if (storedValue === null) return errorResponse("Choose an enabled primary style.");
+    }
+    if (apiField === "collection") {
+      storedValue = await resolveOptionValue(db, "collection", value, current.collection || "");
+      if (storedValue === null) return errorResponse("Choose an enabled collection.");
     }
     updates.push(`${sqlField} = ?`);
-    values.push(value);
+    values.push(storedValue);
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "sessionCount")) {
@@ -305,6 +360,101 @@ async function patchItem(request, env, id) {
     .bind(nextState === "published" ? "public" : "internal", nextState === "published" ? 1 : 0, nextState === "published" ? "public" : "internal", id).run();
   const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first();
   return json({ item: itemFromRow(row, true) });
+}
+
+async function createOption(request, env) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const body = await request.json().catch(() => null);
+  const kind = cleanText(body?.kind, 20);
+  const label = cleanText(body?.label, 80);
+  const value = optionSlug(body?.value || label);
+  const description = cleanText(body?.description, 500);
+  if (!['style', 'collection'].includes(kind)) return errorResponse("Choose styles or collections.", 422);
+  if (!label) return errorResponse("Name is required.", 422);
+  if (!value) return errorResponse("Add a valid key using letters or numbers.", 422);
+  const db = requireDb(env);
+  const existing = await db.prepare("SELECT id, value, label FROM portfolio_options WHERE kind = ? AND (value = ? COLLATE NOCASE OR label = ? COLLATE NOCASE)")
+    .bind(kind, value, label).first();
+  if (existing) return errorResponse(existing.value.toLowerCase() === value.toLowerCase() ? "That option key already exists." : "That option name already exists.", 409);
+  const order = await db.prepare("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM portfolio_options WHERE kind = ?")
+    .bind(kind).first();
+  const id = `portfolio-${kind}-${crypto.randomUUID()}`;
+  await db.prepare(`
+    INSERT INTO portfolio_options(id, kind, value, label, description, enabled, sort_order, created_at, updated_at)
+    VALUES(?, ?, ?, ?, ?, 1, ?, datetime('now'), datetime('now'))
+  `).bind(id, kind, value, label, description, Number(order?.next_order || 1)).run();
+  const row = await db.prepare("SELECT *, 0 AS usage_count FROM portfolio_options WHERE id = ?").bind(id).first();
+  return json({ option: optionFromRow(row, true) }, { status: 201 });
+}
+
+async function patchOption(request, env, id) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse("Send a JSON object.");
+  const db = requireDb(env);
+  const current = await db.prepare("SELECT * FROM portfolio_options WHERE id = ?").bind(id).first();
+  if (!current) return errorResponse("Portfolio option not found.", 404);
+  const updates = [];
+  const values = [];
+  if (Object.prototype.hasOwnProperty.call(body, "label")) {
+    const label = cleanText(body.label, 80);
+    if (!label) return errorResponse("Name is required.", 422);
+    const duplicate = await db.prepare("SELECT id FROM portfolio_options WHERE kind = ? AND label = ? COLLATE NOCASE AND id <> ?")
+      .bind(current.kind, label, id).first();
+    if (duplicate) return errorResponse("That option name already exists.", 409);
+    updates.push("label = ?"); values.push(label);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "description")) {
+    updates.push("description = ?"); values.push(cleanText(body.description, 500));
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "enabled")) {
+    const enabled = body.enabled === true || body.enabled === "true" || body.enabled === "on";
+    if (current.kind === "style" && current.value === "unclassified" && !enabled) {
+      return errorResponse("Unclassified must remain enabled because it is the portfolio fallback.", 409);
+    }
+    updates.push("enabled = ?"); values.push(enabled ? 1 : 0);
+  }
+  if (!updates.length) return errorResponse("No option changes were supplied.");
+  updates.push("updated_at = datetime('now')"); values.push(id);
+  await db.prepare(`UPDATE portfolio_options SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  return json({ ok: true, id });
+}
+
+async function deleteOption(request, env, id) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const db = requireDb(env);
+  const option = await db.prepare("SELECT * FROM portfolio_options WHERE id = ?").bind(id).first();
+  if (!option) return errorResponse("Portfolio option not found.", 404);
+  if (option.kind === "style" && option.value === "unclassified") return errorResponse("Unclassified cannot be deleted.", 409);
+  const usage = option.kind === "style"
+    ? await db.prepare("SELECT COUNT(*) AS count FROM portfolio_items WHERE COALESCE(NULLIF(primary_style, ''), 'unclassified') = ?").bind(option.value).first()
+    : await db.prepare("SELECT COUNT(*) AS count FROM portfolio_items WHERE collection = ?").bind(option.value).first();
+  if (Number(usage?.count || 0) > 0) return errorResponse("This option is assigned to portfolio work. Disable it instead.", 409);
+  await db.prepare("DELETE FROM portfolio_options WHERE id = ?").bind(id).run();
+  return json({ ok: true, deletedId: id });
+}
+
+async function reorderOptions(request, env) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  const body = await request.json().catch(() => null);
+  const kind = cleanText(body?.kind, 20);
+  const ids = Array.isArray(body?.ids) ? body.ids.map((id) => cleanText(id, 160)) : [];
+  if (!['style', 'collection'].includes(kind)) return errorResponse("Choose styles or collections.", 422);
+  if (!ids.length || new Set(ids).size !== ids.length) return errorResponse("Send every option exactly once.");
+  const db = requireDb(env);
+  const current = await db.prepare("SELECT id FROM portfolio_options WHERE kind = ? ORDER BY sort_order, label COLLATE NOCASE").bind(kind).all();
+  const expected = (current.results || []).map((row) => row.id);
+  if (expected.length !== ids.length || expected.some((entry) => !ids.includes(entry))) {
+    return errorResponse("The option list changed. Refresh before reordering.", 409);
+  }
+  await db.batch(ids.map((optionId, index) => db.prepare(
+    "UPDATE portfolio_options SET sort_order = ?, updated_at = datetime('now') WHERE id = ? AND kind = ?"
+  ).bind(index + 1, optionId, kind)));
+  return json({ ok: true, ids });
 }
 
 async function archiveItem(request, env, id) {
@@ -491,6 +641,26 @@ export async function handlePortfolioApi(request, env) {
     if (path === "/api/admin/portfolio/reorder") {
       if (method !== "POST") return methodNotAllowed(["POST"]);
       return reorderItems(request, env);
+    }
+    if (path === "/api/admin/portfolio/settings") {
+      if (method === "GET") {
+        const authError = adminError(request, env);
+        if (authError) return authError;
+        return json({ options: await portfolioOptions(requireDb(env), true) });
+      }
+      if (method === "POST") return createOption(request, env);
+      return methodNotAllowed(["GET", "POST"]);
+    }
+    if (path === "/api/admin/portfolio/settings/reorder") {
+      if (method !== "POST") return methodNotAllowed(["POST"]);
+      return reorderOptions(request, env);
+    }
+    const settingsMatch = path.match(/^\/api\/admin\/portfolio\/settings\/([^/]+)$/);
+    if (settingsMatch) {
+      const id = decodeURIComponent(settingsMatch[1]);
+      if (method === "PATCH") return patchOption(request, env, id);
+      if (method === "DELETE") return deleteOption(request, env, id);
+      return methodNotAllowed(["PATCH", "DELETE"]);
     }
     if (path.startsWith("/api/admin/portfolio/media/")) {
       if (method !== "GET") return methodNotAllowed(["GET"]);

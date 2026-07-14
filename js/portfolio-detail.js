@@ -1,6 +1,12 @@
 (function (global) {
   const STYLE_LABELS = { symbolic:"symbolic", surreal:"surreal", mythic:"mythic", "special-project":"special projects" };
   const DEFAULT_ALT = "Tattoo portfolio work by Saiel Dauhn Solehman";
+  let portfolioOptions = { styles: [], collections: [] };
+
+  function optionLabel(kind, value) {
+    const options = kind === "style" ? portfolioOptions.styles : portfolioOptions.collections;
+    return options.find((option) => option.value === value)?.label || (kind === "style" ? STYLE_LABELS[value] : value) || "";
+  }
 
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -40,14 +46,14 @@
     }
     function renderFilters() {
       const available = renderedItems();
-      const styles = [...new Set(available.map((item) => item.primaryStyle).filter((style) => STYLE_LABELS[style]))];
+      const styles = [...new Set(available.map((item) => item.primaryStyle).filter((style) => optionLabel("style", style)))];
       const collections = [...new Set(available.map((item) => item.collection).filter(Boolean))].sort((a,b) => a.localeCompare(b));
       typeRow.replaceChildren(chip("all", available.length, !activeStyle && !activeCollection, () => { activeStyle=""; activeCollection=""; render(); }));
-      styles.forEach((style) => typeRow.append(chip(STYLE_LABELS[style], available.filter((item) => item.primaryStyle === style).length, activeStyle === style, () => { activeStyle = activeStyle === style ? "" : style; render(); })));
+      styles.forEach((style) => typeRow.append(chip(optionLabel("style", style), available.filter((item) => item.primaryStyle === style).length, activeStyle === style, () => { activeStyle = activeStyle === style ? "" : style; render(); })));
       collectionRow.replaceChildren();
       collections.forEach((collection) => {
         const count = available.filter((item) => item.collection === collection && (!activeStyle || item.primaryStyle === activeStyle)).length;
-        if (count) collectionRow.append(chip(collection, count, activeCollection === collection, () => { activeCollection = activeCollection === collection ? "" : collection; render(); }));
+        if (count) collectionRow.append(chip(optionLabel("collection", collection), count, activeCollection === collection, () => { activeCollection = activeCollection === collection ? "" : collection; render(); }));
       });
     }
     function renderCards() {
@@ -68,7 +74,7 @@
     }
     function render() {
       renderFilters(); renderCards();
-      const selection=activeCollection||(activeStyle?STYLE_LABELS[activeStyle]:"");
+      const selection=activeCollection?optionLabel("collection",activeCollection):(activeStyle?optionLabel("style",activeStyle):"");
       introDesc.textContent=selection?`${selection} / tattoo work by Saiel Dauhn Solehman`:"tattoo work by Saiel Dauhn Solehman";
     }
     function block(label, copy, className="") {
@@ -90,7 +96,7 @@
       if(images.length>1){const strip=node("div","portfolio-angle-strip");strip.setAttribute("aria-label","Tattoo image angles");images.forEach((angle,index)=>{const button=node("button","portfolio-angle-button");button.type="button";button.setAttribute("aria-pressed",String(index===0));button.setAttribute("aria-label",index===0?"Main tattoo image":`Tattoo angle ${index+1}`);const thumb=node("img");thumb.src=angle.imageUrl;thumb.alt="";button.append(thumb);button.addEventListener("click",()=>{mainImage.style.opacity="0";mainImage.src=angle.imageUrl;mainImage.alt=angle.altText||item.altText||DEFAULT_ALT;requestAnimationFrame(()=>{mainImage.style.opacity="1"});strip.querySelectorAll("button").forEach((entry)=>entry.setAttribute("aria-pressed",String(entry===button)));});strip.append(button)});media.append(strip)}
       const copy=node("div","overlay-details"),head=node("header"),detailTitle=node("h1","overlay-title",item.title||"Tattoo work");detailTitle.tabIndex=-1;head.append(node("p","portfolio-detail-kicker","Tattoo work"),detailTitle);
       const info=itemInfo(item);if(info)head.append(node("p","overlay-subtitle",info));
-      const tags=node("div","overlay-tags");[STYLE_LABELS[item.primaryStyle],item.collection].filter(Boolean).forEach((value)=>tags.append(node("span","overlay-tag",value)));if(tags.childElementCount)head.append(tags);copy.append(head);
+      const tags=node("div","overlay-tags");[optionLabel("style",item.primaryStyle),optionLabel("collection",item.collection)].filter(Boolean).forEach((value)=>tags.append(node("span","overlay-tag",value)));if(tags.childElementCount)head.append(tags);copy.append(head);
       [block("About this tattoo",item.caption),block("Statement / story",item.statement,"statement")].filter(Boolean).forEach((section)=>copy.append(section));
       if(item.sessionCount||item.sessionNote){const session=node("section","portfolio-detail-block"),grid=node("div","portfolio-session-grid");session.append(node("p","portfolio-detail-label","Sessions"));if(item.sessionCount){const cell=node("div");cell.append(node("span","portfolio-detail-label","Completed in"),node("span","portfolio-session-value",`${item.sessionCount} session${item.sessionCount===1?"":"s"}`));grid.append(cell)}if(item.sessionNote){const cell=node("div");cell.append(node("span","portfolio-detail-label","Session notes"),node("span","portfolio-session-value",item.sessionNote));grid.append(cell)}session.append(grid);copy.append(session)}
       [block("Process",item.processNotes),block("Techniques",item.techniques)].filter(Boolean).forEach((section)=>copy.append(section));
@@ -109,7 +115,7 @@
     function closeDetail(){const url=new URL(location.href);if(openedFromGallery&&url.searchParams.has("work")){history.back();return}url.searchParams.delete("work");history.replaceState({},"",url);showGallery();returnFocus?.focus();returnFocus=null}
     window.addEventListener("popstate",(event)=>{const requested=new URL(location.href).searchParams.get("work");const item=items.find((candidate)=>candidate.id===requested);if(item)openDetail(item,null,"none");else showGallery(event.state)});
     document.addEventListener("keydown",(event)=>{if(event.key==="Escape"&&detail.classList.contains("open"))closeDetail()});
-    fetch("/api/portfolio",{headers:{accept:"application/json"},cache:"no-store"}).then(async(response)=>{if(!response.ok)throw new Error();const payload=await response.json();items=Array.isArray(payload.items)?payload.items:[];render();const requested=new URL(location.href).searchParams.get("work");const item=items.find((candidate)=>candidate.id===requested);if(item)openDetail(item,null,"none");else if(requested)openDetail({id:requested},null,"none")}).catch(()=>{typeRow.replaceChildren();collectionRow.replaceChildren();grid.innerHTML='<div class="catalog-state" role="alert">The portfolio is temporarily unavailable. <a href="/tattoos/inquire/">Send an inquiry</a>.</div>'});
+    fetch("/api/portfolio",{headers:{accept:"application/json"},cache:"no-store"}).then(async(response)=>{if(!response.ok)throw new Error();const payload=await response.json();items=Array.isArray(payload.items)?payload.items:[];portfolioOptions=payload.options||portfolioOptions;render();const requested=new URL(location.href).searchParams.get("work");const item=items.find((candidate)=>candidate.id===requested);if(item)openDetail(item,null,"none");else if(requested)openDetail({id:requested},null,"none")}).catch(()=>{typeRow.replaceChildren();collectionRow.replaceChildren();grid.innerHTML='<div class="catalog-state" role="alert">The portfolio is temporarily unavailable. <a href="/tattoos/inquire/">Send an inquiry</a>.</div>'});
   }
 
   global.PortfolioDetailExperience={start};
