@@ -3,36 +3,36 @@
 
 /* ── SLOT PICKER ── */
 .slot-picker{margin-bottom:18px;}
-.slot-picker-label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#D35A5A;margin-bottom:10px;display:block;}
+.slot-picker-label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;display:block;}
 .tz-note{font-family:var(--serif);font-size:12px;font-style:italic;color:var(--text-dim);margin:-4px 0 12px;}
 .slot-selected{display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
 .slot-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:5px solid rgba(110,4,4,0.4);background:rgba(110,4,4,0.06);}
 .slot-item-text{font-family:var(--serif);font-size:13px;color:var(--text);line-height:1.4;}
-.slot-item-num{font-family:var(--sans);font-weight:900;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:#D35A5A;margin-right:6px;}
+.slot-item-num{font-family:var(--sans);font-weight:900;font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);opacity:0.65;margin-right:6px;}
 .slot-item-remove{font-size:18px;line-height:1;color:var(--text-dim);cursor:pointer;background:none;border:none;padding:2px 4px;transition:color var(--t-fast);flex-shrink:0;}
 .slot-item-remove:hover{color:var(--signal);}
 /* calendar - matches the regular tattoo-appointment booking calendar (booking/index.html) */
 .cal-wrap{border:none;background:none;}
 .cal-next-available:empty{display:none;}
 .cal-next-btn{width:100%;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;text-align:left;background:transparent;color:var(--text);border:5px solid var(--ring-faint);padding:14px 16px;margin-bottom:14px;cursor:pointer;font-family:var(--serif);transition:border-color var(--t-fast),background var(--t-fast);}
-.cal-next-btn:hover,.cal-next-btn:focus-visible{border-color:#D35A5A;background:rgba(110,4,4,0.12);outline:2px solid #D35A5A;outline-offset:2px;}
+.cal-next-btn:hover,.cal-next-btn:focus-visible{border-color:var(--accent);background:rgba(252,184,103,0.045);outline:2px solid var(--accent);outline-offset:2px;}
 .cal-next-title{display:block;font-family:var(--sans);font-size:14px;font-weight:900;color:var(--text);}
 .cal-next-meta{display:block;margin-top:4px;color:var(--text-dim);font-size:12px;line-height:1.4;}
-.cal-next-tag{align-self:start;color:#D35A5A;font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;}
+.cal-next-tag{align-self:start;color:var(--signal);font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;}
 .cal-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 0 8px;border-bottom:none;}
-.cal-month-label{font-family:var(--sans);font-weight:800;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:#D35A5A;}
+.cal-month-label{font-family:var(--sans);font-weight:800;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-mute);}
 .cal-nav{width:34px;min-height:34px;border:5px solid var(--ring-faint);background:transparent;color:var(--text);font-family:var(--sans);font-size:14px;font-weight:900;line-height:1;padding:0;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast);}
-.cal-nav:hover:not(:disabled),.cal-nav:focus-visible{border-color:#D35A5A;color:#D35A5A;outline:2px solid #D35A5A;outline-offset:2px;}
+.cal-nav:hover:not(:disabled),.cal-nav:focus-visible{border-color:var(--accent);color:var(--accent);outline:2px solid var(--accent);outline-offset:2px;}
 .cal-nav:disabled{opacity:0.32;color:var(--text-ghost);cursor:not-allowed;}
 .cal-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;padding:0 0 6px;}
-.cal-weekdays span{font-family:var(--sans);font-weight:800;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:#D35A5A;text-align:center;}
+.cal-weekdays span{font-family:var(--sans);font-weight:800;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-dim);text-align:center;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;padding:0;}
 .cal-day{aspect-ratio:1;min-width:0;display:flex;align-items:center;justify-content:center;border:5px solid var(--ring-faint);background:transparent;color:rgba(255,231,202,0.32);font-family:var(--sans);font-size:12px;font-weight:900;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast),background var(--t-fast);}
 .cal-day.empty{visibility:hidden;border-color:transparent;pointer-events:none;}
 .cal-day.past{color:rgba(255,231,202,0.32);border-color:var(--ring-faint);cursor:not-allowed;pointer-events:none;}
 .cal-day.open{color:#FFE7CA;border-color:var(--ring-soft);}
 .cal-day.today{color:var(--accent);border-color:var(--ring-soft);font-size:9px;letter-spacing:0.04em;text-transform:uppercase;}
-.cal-day:hover:not(.past):not(.empty),.cal-day:focus-visible{border-color:#D35A5A;color:#D35A5A;background:rgba(110,4,4,0.12);outline:2px solid #D35A5A;outline-offset:2px;}
+.cal-day:hover:not(.past):not(.empty),.cal-day:focus-visible{border-color:var(--accent);color:var(--accent);background:rgba(252,184,103,0.045);outline:2px solid var(--accent);outline-offset:2px;}
 .cal-day.active{border-color:var(--signal);color:var(--text);background:rgba(110,4,4,0.12);}
 .cal-day.booked{border-color:var(--signal);color:var(--text);background:rgba(110,4,4,0.12);cursor:default;}
 /* time picker */
@@ -54,11 +54,11 @@
 .time-panel::-webkit-scrollbar-thumb:hover{background:var(--accent);}
 .time-option{display:block;width:100%;text-align:left;padding:12px 14px;font-family:var(--serif);font-size:13px;color:var(--text-mute);background:transparent;border:5px solid var(--ring-faint);cursor:pointer;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
 .time-option:last-child{border-bottom:5px solid var(--ring-faint);}
-.time-option:hover,.time-option:focus-visible{background:rgba(110,4,4,0.1);border-color:#D35A5A;color:var(--text);outline:2px solid #D35A5A;outline-offset:2px;}
-.time-option.selected{color:#D35A5A;background:rgba(110,4,4,0.08);}
+.time-option:hover,.time-option:focus-visible{background:rgba(110,4,4,0.1);border-color:var(--signal);color:var(--text);outline:2px solid var(--signal);outline-offset:2px;}
+.time-option.selected{color:var(--accent);background:rgba(110,4,4,0.08);}
 .time-option.is-am{color:var(--text-dim);}
 .time-option.is-am:hover,.time-option.is-am.selected{color:var(--text);}
-.time-divider{display:block;width:100%;padding:4px 14px;font-family:var(--sans);font-weight:900;font-size:8px;letter-spacing:0.22em;text-transform:uppercase;color:#D35A5A;background:rgba(0,0,0,0.3);border-bottom:1px solid var(--ring-faint);pointer-events:none;}
+.time-divider{display:block;width:100%;padding:4px 14px;font-family:var(--sans);font-weight:900;font-size:8px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-ghost);background:rgba(0,0,0,0.3);border-bottom:1px solid var(--ring-faint);pointer-events:none;}
 /* add button */
 .time-add-btn{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.13em;text-transform:uppercase;color:var(--signal);border:5px solid rgba(110,4,4,0.4);background:transparent;padding:9px 14px;cursor:pointer;white-space:nowrap;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);}
 .time-add-btn:hover:not(:disabled){background:rgba(110,4,4,0.1);border-color:var(--signal);}

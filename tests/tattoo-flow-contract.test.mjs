@@ -94,12 +94,13 @@ class LocalD1 {
   }
 }
 
-function migratedDatabase() {
+function migratedDatabase({ before = "" } = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   const directory = join(ROOT, "migrations");
   const migrations = readdirSync(directory).filter((name) => name.endsWith(".sql")).sort();
   for (const migration of migrations) {
+    if (before && migration.localeCompare(before) >= 0) break;
     database.exec(readFileSync(join(directory, migration), "utf8"));
   }
   return database;
@@ -390,6 +391,62 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   });
   assert.equal(database.prepare("SELECT count(*) AS count FROM special_project_calls WHERE status = 'open'").get().count, 3);
   assert.equal(database.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days, 14);
+});
+
+test("the applied tattoo baseline keeps its production filename and 0039 stays replay-safe", () => {
+  const baseline = readFileSync(
+    join(ROOT, "migrations", "0036_tattoo_lifecycle_checkout_holds.sql"),
+    "utf8",
+  );
+  const delta = readFileSync(
+    join(ROOT, "migrations", "0039_tattoo_lifecycle_checkout_holds.sql"),
+    "utf8",
+  );
+
+  assert.match(baseline, /ALTER TABLE submissions ADD COLUMN tattoo_stage/);
+  assert.doesNotMatch(delta, /ALTER TABLE\s+/);
+  assert.doesNotMatch(delta, /UPDATE submissions SET tattoo_stage/);
+  assert.match(delta, /idx_appointments_one_active_token_hold/);
+  assert.match(delta, /'build', 'Build Your Own', 'Quoted after review'/);
+  assert.match(delta, /'mythic-body-studies'/);
+});
+
+test("0039 upgrades only the untouched early Tattoo Settings seed", () => {
+  const migrationName = "0039_tattoo_lifecycle_checkout_holds.sql";
+  const delta = readFileSync(join(ROOT, "migrations", migrationName), "utf8");
+  const earlySeed = [
+    "Most project submissions are reviewed within 5–7 business days.",
+    2,
+    "Walk-in availability is announced through scheduled walk-in windows. Check the tattoo page before traveling to the studio.",
+    "saisolehman@artpilltattoohouse.com",
+    "2026-07-15 01:32:00",
+  ];
+
+  const untouched = migratedDatabase({ before: migrationName });
+  untouched.prepare(`
+    UPDATE tattoo_settings
+    SET review_time_message = ?, lead_time_days = ?, walk_in_guidance = ?,
+        support_email = ?, updated_at = ?
+    WHERE id = 'default'
+  `).run(...earlySeed);
+  untouched.exec(delta);
+  assert.equal(
+    untouched.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days,
+    14,
+  );
+
+  const edited = migratedDatabase({ before: migrationName });
+  edited.prepare(`
+    UPDATE tattoo_settings
+    SET review_time_message = ?, lead_time_days = ?, walk_in_guidance = ?,
+        support_email = ?, updated_at = ?
+    WHERE id = 'default'
+  `).run(earlySeed[0], earlySeed[1], "Studio-edited walk-in guidance.", earlySeed[3], earlySeed[4]);
+  edited.exec(delta);
+  assert.equal(
+    edited.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days,
+    2,
+  );
 });
 
 test("Build submissions require intent, snapshot stable published symbol IDs, and are idempotent", async () => {

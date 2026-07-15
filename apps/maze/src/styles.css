@@ -26,11 +26,11 @@
   --tabs-bg: rgba(148, 112, 56, 0.74);
 
   /* Accents: alchemical marker colors for headings & reading lines. */
-  --accent-oxblood: #B93636; /* display accent */
-  --accent-red: #D35A5A; /* small labels / focus */
+  --accent-oxblood: #6f1d1b; /* heading spans, composition */
+  --accent-red: #5a0202; /* eyebrow */
   --accent-teal: #1c6b6e; /* placement */
   --accent-amber: #cf8e1e; /* relationship */
-  --tool-active: #6E0404; /* selected tool / ornament fill */
+  --tool-active: #8a2522; /* selected tool / preset / shape */
 
   color: var(--ink);
   background: var(--gold-base);
@@ -625,7 +625,7 @@ dd {
 .shape-grid button:focus-visible,
 .swatch-row button:focus-visible,
 .action-grid button:focus-visible {
-  outline: 3px solid #D35A5A;
+  outline: 3px solid var(--accent-amber);
   outline-offset: 2px;
 }
 
