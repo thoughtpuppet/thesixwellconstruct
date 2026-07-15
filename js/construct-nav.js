@@ -84,6 +84,8 @@
   var CONFIG = {
     dotSize:         17,     /* px — larger navigation dots for readability */
     dotGap:          30,     /* px — space between dot centers */
+    dotGapMin:       16,     /* px — narrow-desktop minimum before chip fallback */
+    desktopClearance: 24,    /* px — protects hover scale + edge labels */
     topInset:        38,     /* px — aligns the dot row closer to header center */
 
     /* Dot opacity states */
@@ -869,10 +871,62 @@
              instead. The chip is centered in the header band,
              in the space between the corner ring (left) and the
              cart button (right).
-     >=700px: restore the desktop dot row; hide chip + ring.
+     >=700px: fit the desktop dot row into the measured space
+              between the corner lockup and right-side controls.
+              If even the minimum gap cannot fit, use the chip.
   ────────────────────────────────────────────────────────── */
   var MOBILE_BP = 700;
   var TINY_BP   = 380;
+
+  function visibleRect(element) {
+    if (!element) return null;
+    var style = getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden') return null;
+    var rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return rect;
+  }
+
+  function desktopHeaderBounds(w) {
+    var clearance = CONFIG.desktopClearance;
+    var cornerRect = visibleRect(document.getElementById('construct-corner'));
+    var leftBoundary = cornerRect ? cornerRect.right + clearance : clearance;
+
+    var rightControls = Array.prototype.slice.call(document.querySelectorAll(
+      'header.top .cart-toggle, header.top .nav-inquire'
+    ));
+    var header = document.querySelector('header.top');
+    if (!rightControls.length && header) {
+      rightControls = Array.prototype.slice.call(header.querySelectorAll('a, button, [role="button"]'));
+    }
+
+    var rightControlLeft = w;
+    rightControls.forEach(function(control) {
+      var rect = visibleRect(control);
+      if (rect && rect.left >= w / 2) {
+        rightControlLeft = Math.min(rightControlLeft, rect.left);
+      }
+    });
+
+    return {
+      left: leftBoundary,
+      right: rightControlLeft < w ? rightControlLeft - clearance : w - clearance,
+    };
+  }
+
+  function positionCompactChip(leftBoundary, rightBoundary, top) {
+    mChip.style.display = 'inline-flex';
+    mChip.style.top = top + 'px';
+
+    var chipWidth = mChip.getBoundingClientRect().width;
+    var minCenter = leftBoundary + chipWidth / 2;
+    var maxCenter = rightBoundary - chipWidth / 2;
+    var centerX = leftBoundary + Math.max(0, rightBoundary - leftBoundary) / 2;
+    if (minCenter <= maxCenter) {
+      centerX = Math.max(minCenter, Math.min(maxCenter, centerX));
+    }
+    mChip.style.left = centerX + 'px';
+  }
 
   function applyResponsiveNav() {
     var w = window.innerWidth;
@@ -910,20 +964,6 @@
       mChip.style.left    = centerX + 'px';
 
     } else {
-      if (ringOpen) closeRing();
-      mChip.style.display  = 'none';
-      mScrim.style.display = 'none';
-      mRing.style.display  = 'none';
-
-      nav.style.display        = 'flex';
-      nav.style.top            = CONFIG.topInset + 'px';
-      nav.style.left           = '50%';
-      nav.style.transform      = 'translateX(-50%)';
-      nav.style.justifyContent = 'center';
-      nav.style.maxWidth       = 'none';
-      nav.style.flexWrap       = 'nowrap';
-      nav.style.gap            = CONFIG.dotGap + 'px';
-
       var desktopDots = nav.querySelectorAll('.cnav-dot');
       desktopDots.forEach(function(d) {
         d.style.width  = CONFIG.dotSize + 'px';
@@ -937,6 +977,43 @@
           if (bgColor) d.style.background = bgColor;
         }
       });
+
+      var bounds = desktopHeaderBounds(w);
+      var dotCount = desktopDots.length;
+      var minRowWidth = dotCount > 0
+        ? (dotCount * CONFIG.dotSize) + ((dotCount - 1) * CONFIG.dotGapMin)
+        : 0;
+      var availableWidth = Math.max(0, bounds.right - bounds.left);
+
+      if (!dotCount || availableWidth < minRowWidth) {
+        nav.style.display = 'none';
+        positionCompactChip(bounds.left, bounds.right, CONFIG.topInset + CONFIG.dotSize / 2);
+        return;
+      }
+
+      if (ringOpen) closeRing();
+      mChip.style.display  = 'none';
+      mScrim.style.display = 'none';
+      mRing.style.display  = 'none';
+
+      var fittedGap = dotCount > 1
+        ? (availableWidth - (dotCount * CONFIG.dotSize)) / (dotCount - 1)
+        : CONFIG.dotGap;
+      fittedGap = Math.max(CONFIG.dotGapMin, Math.min(CONFIG.dotGap, fittedGap));
+
+      var rowWidth = (dotCount * CONFIG.dotSize) + ((dotCount - 1) * fittedGap);
+      var minCenter = bounds.left + rowWidth / 2;
+      var maxCenter = bounds.right - rowWidth / 2;
+      var centerX = Math.max(minCenter, Math.min(maxCenter, w / 2));
+
+      nav.style.display        = 'flex';
+      nav.style.top            = CONFIG.topInset + 'px';
+      nav.style.left           = centerX + 'px';
+      nav.style.transform      = 'translateX(-50%)';
+      nav.style.justifyContent = 'center';
+      nav.style.maxWidth       = 'none';
+      nav.style.flexWrap       = 'nowrap';
+      nav.style.gap            = fittedGap + 'px';
     }
   }
 
@@ -945,6 +1022,9 @@
     applyTokenColorsToRenderedNav();
     applyResponsiveNav();
   });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(applyResponsiveNav);
+  }
   window.addEventListener('resize', applyResponsiveNav);
   window.addEventListener('orientationchange', function() {
     setTimeout(applyResponsiveNav, 150);

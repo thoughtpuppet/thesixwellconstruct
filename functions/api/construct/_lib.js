@@ -1,5 +1,129 @@
 import { db, entityMedia, failure, id, json, nextRevision, parseJson, readJson, requireStudioAdmin, RESOURCE_CONFIG, slug, text } from "../_shared/construct.js";
 
+function safeLegendUrl(value) {
+  const url = text(value, 2000);
+  if (!url) return "";
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
+  try {
+    const parsed = new URL(url);
+    return ["http:", "https:"].includes(parsed.protocol) ? url : "";
+  } catch {
+    return "";
+  }
+}
+
+function sanitizeLegendSvg(value) {
+  const markup = text(value, 80000);
+  if (!markup) return "";
+  if (!/^<svg\b[\s\S]*<\/svg>$/i.test(markup)) throw new Error("SVG artwork must contain one complete <svg> element.");
+  if (/<\/?(?:script|foreignObject|iframe|object|embed|link|style|a|image|animate|set)\b/i.test(markup)) throw new Error("SVG artwork contains an unsupported embedded element.");
+  const unsafePaintReference = [...markup.matchAll(/url\s*\(\s*([^)]*)\)/gi)].some((match) => !/^['"]?#[a-zA-Z][\w:.-]*['"]?$/.test(match[1].trim()));
+  const unsafeHref = [...markup.matchAll(/\s(?:href|xlink:href)\s*=\s*(["'])(.*?)\1/gi)].some((match) => !/^#[a-zA-Z][\w:.-]*$/.test(match[2].trim()));
+  if (/\s(?:on[a-z]+|src)\s*=/i.test(markup) || /(?:javascript:|data:text\/html|expression\s*\(|@import|<!DOCTYPE|<!ENTITY)/i.test(markup) || unsafePaintReference || unsafeHref) throw new Error("SVG artwork contains an external or executable reference.");
+  return markup;
+}
+
+function legendArray(value, label) {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed || "[]"); } catch { throw new Error(`${label} must be valid JSON.`); }
+  }
+  if (!Array.isArray(parsed)) throw new Error(`${label} must be a list.`);
+  return parsed;
+}
+
+function legendObject(value, label) {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed || "{}"); } catch { throw new Error(`${label} must be valid JSON.`); }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${label} must be an object.`);
+  return parsed;
+}
+
+const LEGEND_CONTEXT_MODES = new Set(["cultural", "personal", "reoriented"]);
+const LEGEND_REORIENTATION_MODES = new Set(["expanded", "inverted", "contested", "detached", "combined"]);
+
+function normalizeLegendLayers(out) {
+  if ("svg_markup" in out) out.svg_markup = sanitizeLegendSvg(out.svg_markup);
+  if ("themes_json" in out) {
+    const themes = legendArray(out.themes_json, "Themes").slice(0, 40).map((theme) => text(theme, 80)).filter(Boolean);
+    out.themes_json = JSON.stringify([...new Set(themes)]);
+  }
+  if ("context_json" in out) {
+    const value = legendObject(out.context_json, "Influence and relationship");
+    if ("modes" in value && !Array.isArray(value.modes)) throw new Error("Influence modes must be a list.");
+    if ("sources" in value && !Array.isArray(value.sources)) throw new Error("Legend sources must be a list.");
+    if ("reorientation" in value && (!value.reorientation || typeof value.reorientation !== "object" || Array.isArray(value.reorientation))) throw new Error("Reorientation must be an object.");
+    const culturalContext = text(value.cultural_context, 5000);
+    const personalRelationship = text(value.personal_relationship, 5000);
+    const overlapOrTension = text(value.overlap_or_tension, 5000);
+    const viewerOpening = text(value.viewer_opening, 5000);
+    const reorientationMode = text(value.reorientation?.mode, 40).toLowerCase();
+    const reorientationStatement = text(value.reorientation?.statement, 5000);
+    if (reorientationMode && !LEGEND_REORIENTATION_MODES.has(reorientationMode)) throw new Error("Choose a supported reorientation mode.");
+    if (reorientationMode && !reorientationStatement) throw new Error("A reorientation mode needs a first-person explanation.");
+    if (reorientationStatement && !reorientationMode) throw new Error("Choose a reorientation mode for the explanation.");
+    const rawModes = Array.isArray(value.modes) ? value.modes.map((mode) => text(mode, 40).toLowerCase()).filter(Boolean) : [];
+    if (rawModes.some((mode) => !LEGEND_CONTEXT_MODES.has(mode))) throw new Error("Choose supported influence modes.");
+    const modes = [...rawModes];
+    if (culturalContext) modes.push("cultural");
+    if (personalRelationship) modes.push("personal");
+    if (reorientationMode) modes.push("reoriented");
+    const rawSources = Array.isArray(value.sources) ? value.sources.slice(0, 20) : [];
+    const sources = rawSources.map((entry) => {
+      const rawUrl = text(entry?.url, 2000);
+      const hasAuthoredValue = [entry?.title, entry?.creator, entry?.url, entry?.note].some((field) => text(field, 3000));
+      const source = {
+        title: text(entry?.title, 300),
+        creator: text(entry?.creator, 300),
+        url: safeLegendUrl(rawUrl),
+        note: text(entry?.note, 3000),
+      };
+      if (hasAuthoredValue && (!source.title || !rawUrl || !source.url)) throw new Error("Every Legend source needs a title and a valid public or site URL.");
+      return source;
+    }).filter((entry) => entry.title && entry.url);
+    out.context_json = JSON.stringify({
+      modes: [...new Set(modes)],
+      cultural_context: culturalContext,
+      personal_relationship: personalRelationship,
+      reorientation: { mode: reorientationMode, statement: reorientationStatement },
+      overlap_or_tension: overlapOrTension,
+      viewer_opening: viewerOpening,
+      sources,
+    });
+  }
+  if ("applications_json" in out) {
+    const applications = legendArray(out.applications_json, "Applications").slice(0, 40).map((entry) => ({
+      title: text(entry?.title, 160),
+      meaning: text(entry?.meaning, 3000),
+      note: text(entry?.note, 3000),
+      svg_markup: entry?.svg_markup ? sanitizeLegendSvg(entry.svg_markup) : "",
+    })).filter((entry) => entry.title && entry.meaning);
+    out.applications_json = JSON.stringify(applications);
+  }
+  if ("variants_json" in out) {
+    const variants = legendArray(out.variants_json, "Variants").slice(0, 60).map((entry) => ({
+      name: text(entry?.name, 160),
+      style: text(entry?.style, 120),
+      note: text(entry?.note, 3000),
+      svg_markup: entry?.svg_markup ? sanitizeLegendSvg(entry.svg_markup) : "",
+      image_url: safeLegendUrl(entry?.image_url),
+    })).filter((entry) => entry.name && (entry.svg_markup || entry.image_url));
+    out.variants_json = JSON.stringify(variants);
+  }
+  if ("examples_json" in out) {
+    const examples = legendArray(out.examples_json, "Appearances").slice(0, 60).map((entry) => ({
+      title: text(entry?.title, 160),
+      medium: text(entry?.medium, 120),
+      caption: text(entry?.caption, 3000),
+      src: safeLegendUrl(entry?.src),
+      href: safeLegendUrl(entry?.href),
+    })).filter((entry) => entry.title && (entry.src || entry.href));
+    out.examples_json = JSON.stringify(examples);
+  }
+}
+
 function normalizeRecord(config, body, existing = {}) {
   const out = {};
   for (const field of config.fields) {
@@ -32,6 +156,13 @@ function normalizeRecord(config, body, existing = {}) {
     if (merged.session_category !== "artist_review" && (!Number(merged.estimated_sessions_max) || Number(merged.estimated_sessions_max) < Number(merged.estimated_sessions_min))) throw new Error("Enter a valid maximum session count.");
   }
   if (config.entityType === "construct_node" && out.homepage_enabled && out.state === "published") out.homepage_enabled = 1;
+  if (config.entityType === "visual_symbol") {
+    if (!("state" in out) && !existing.id) out.state = "draft";
+    normalizeLegendLayers(out);
+    const symbol = { ...existing, ...out };
+    if (!symbol.name || !symbol.category_id || !symbol.meaning) throw new Error("A Legend symbol needs a name, category, and core meaning.");
+    if (symbol.state === "published" && !symbol.svg_markup) throw new Error("Upload the final canonical SVG before publishing a Legend symbol.");
+  }
   return out;
 }
 
@@ -51,7 +182,15 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
   const result = recordSlug ? await statement.bind(recordSlug).all() : await statement.all();
   const rows = result.results || [];
   const media = await entityMedia(database, rows.map((row) => row.id));
-  const records = rows.map((row) => ({ ...row, themes: parseJson(row.themes_json), examples: parseJson(row.examples_json), media: media.get(row.id) || [] }));
+  const records = rows.map((row) => ({
+    ...row,
+    themes: parseJson(row.themes_json),
+    context: parseJson(row.context_json, {}),
+    applications: parseJson(row.applications_json),
+    variants: parseJson(row.variants_json),
+    examples: parseJson(row.examples_json),
+    media: media.get(row.id) || [],
+  }));
   if (recordSlug && !records[0]) return failure("Not found.", 404);
   return json(recordSlug ? { record: records[0] } : { records, count: records.length });
 }
@@ -103,7 +242,22 @@ function searchDocument(resource, row) {
   if (resource === "flash") return { ...common, node_id: "tattooing", summary: row.description || "", route: row.legacy_path || "/tattoos/flash/" };
   if (resource === "art") return { ...common, node_id: "art", summary: row.statement || "", date_label: row.year || "", route: row.legacy_path || `/art/?work=${encodeURIComponent(row.slug || row.id)}` };
   if (resource === "archive") return { ...common, node_id: "archive", summary: row.summary || "", body: row.body || "", date_label: row.date_or_period || "", route: `/archive/?record=${encodeURIComponent(row.slug || row.id)}` };
-  if (resource === "visual-language") return { ...common, summary: row.meaning || "", theme_labels: parseJson(row.themes_json).join(", "), route: `/legend/?symbol=${encodeURIComponent(row.slug || row.id)}` };
+  if (resource === "visual-language") {
+    const context = parseJson(row.context_json, {});
+    const applications = parseJson(row.applications_json).flatMap((entry) => [entry.title, entry.meaning, entry.note]);
+    const variants = parseJson(row.variants_json).flatMap((entry) => [entry.name, entry.style, entry.note]);
+    const appearances = parseJson(row.examples_json).flatMap((entry) => [entry.title, entry.medium, entry.caption]);
+    const influence = [
+      context.cultural_context,
+      context.personal_relationship,
+      context.reorientation?.mode,
+      context.reorientation?.statement,
+      context.overlap_or_tension,
+      context.viewer_opening,
+      ...(Array.isArray(context.sources) ? context.sources.flatMap((entry) => [entry.title, entry.creator, entry.note]) : []),
+    ];
+    return { ...common, summary: row.meaning || "", body: [...influence, ...applications, ...variants, ...appearances].filter(Boolean).join(" "), theme_labels: parseJson(row.themes_json).join(", "), route: `/legend/?symbol=${encodeURIComponent(row.slug || row.id)}` };
+  }
   return null;
 }
 
