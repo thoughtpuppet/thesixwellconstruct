@@ -26,11 +26,11 @@
   --tabs-bg: rgba(148, 112, 56, 0.74);
 
   /* Accents: alchemical marker colors for headings & reading lines. */
-  --accent-oxblood: #6f1d1b; /* heading spans, composition */
-  --accent-red: #5a0202; /* eyebrow */
+  --accent-oxblood: #B93636; /* display accent */
+  --accent-red: #D35A5A; /* small labels / focus */
   --accent-teal: #1c6b6e; /* placement */
   --accent-amber: #cf8e1e; /* relationship */
-  --tool-active: #8a2522; /* selected tool / preset / shape */
+  --tool-active: #6E0404; /* selected tool / ornament fill */
 
   color: var(--ink);
   background: var(--gold-base);
@@ -68,7 +68,7 @@
 
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100vh;
   overflow: hidden;
 }
@@ -141,6 +141,7 @@ h1 {
 }
 
 .mode-controls button,
+.mode-controls .back-to-build,
 .workspace-tabs button,
 .touch-note,
 .action-grid button,
@@ -160,6 +161,7 @@ h1 {
 }
 
 .mode-controls button:hover,
+.mode-controls .back-to-build:hover,
 .workspace-tabs button:hover,
 .action-grid button:hover,
 .button-row button:hover,
@@ -613,6 +615,20 @@ dd {
   min-height: 52px;
 }
 
+.mode-controls .back-to-build {
+  text-decoration: none;
+}
+
+.mode-controls :where(button, a):focus-visible,
+.tool-row button:focus-visible,
+.wall-preset-grid button:focus-visible,
+.shape-grid button:focus-visible,
+.swatch-row button:focus-visible,
+.action-grid button:focus-visible {
+  outline: 3px solid #D35A5A;
+  outline-offset: 2px;
+}
+
 .kiosk-start-over {
   position: fixed;
   right: 20px;
@@ -638,6 +654,17 @@ dd {
   .workspace {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .palette,
+  .inspector,
+  .canvas-shell {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .palette,
@@ -670,10 +697,26 @@ dd {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 12px;
+    padding: 14px 12px 12px;
   }
 
   .mode-controls {
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .mode-controls button,
+  .mode-controls .back-to-build {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
   }
 
   .symbol-list {
@@ -695,5 +738,16 @@ dd {
 
   .workspace-tabs button {
     flex: 0 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }

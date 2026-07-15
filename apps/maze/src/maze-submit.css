@@ -1,12 +1,12 @@
 /* Submit-maze button + dialog. Scoped to the maze studio. */
 .submit-maze {
-  background: #b51f29;
+  background: #6E0404;
   color: #f7ece0;
-  border-color: #b51f29;
+  border-color: #6E0404;
 }
 .submit-maze:hover {
-  background: #9a1822;
-  border-color: #9a1822;
+  background: #B93636;
+  border-color: #B93636;
 }
 
 .maze-submit-overlay {
@@ -38,6 +38,7 @@
 .maze-submit-head h2 {
   font-size: 20px;
   letter-spacing: -0.01em;
+  color: #B93636;
 }
 .maze-submit-close {
   font-size: 24px;
@@ -89,8 +90,9 @@
 }
 .maze-submit-panel input:focus,
 .maze-submit-panel textarea:focus {
-  outline: none;
-  border-color: #d9a21b;
+  outline: 2px solid #D35A5A;
+  outline-offset: 2px;
+  border-color: #D35A5A;
 }
 .maze-submit-panel textarea { resize: vertical; }
 .maze-submit-consent {
@@ -104,7 +106,7 @@
   line-height: 1.5;
   color: rgba(241, 230, 214, 0.7);
 }
-.maze-submit-consent input { width: 16px; height: 16px; accent-color: #b51f29; margin-top: 2px; }
+.maze-submit-consent input { width: 18px; height: 18px; accent-color: #6E0404; margin-top: 2px; }
 .maze-submit-actions {
   display: flex;
   justify-content: flex-end;
@@ -121,9 +123,14 @@
   color: rgba(241, 230, 214, 0.8);
 }
 .maze-submit-actions button.primary {
-  background: #b51f29;
-  border-color: #b51f29;
+  background: #6E0404;
+  border-color: #6E0404;
   color: #f7ece0;
+}
+.maze-submit-actions button:focus-visible,
+.maze-submit-close:focus-visible {
+  outline: 2px solid #D35A5A;
+  outline-offset: 3px;
 }
 .maze-submit-actions button.primary:disabled {
   opacity: 0.5;
@@ -137,4 +144,12 @@
 
 @media (max-width: 520px) {
   .maze-submit-grid { grid-template-columns: 1fr; }
+  .maze-submit-panel input,
+  .maze-submit-panel textarea,
+  .maze-submit-actions button { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .maze-submit-panel *,
+  .submit-maze { transition: none !important; animation: none !important; }
 }

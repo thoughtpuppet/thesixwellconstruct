@@ -382,7 +382,21 @@
   .portfolio-option-actions .button { min-height:32px; padding:0 8px; font-size:8px; }
   .portfolio-option-key { color:var(--dim); font-family:var(--mono); font-size:9px; overflow-wrap:anywhere; }
   .portfolio-option-create { display:grid; gap:10px; border-top:5px solid var(--ring-faint); padding-top:14px; }
+  .tattoo-settings { display:grid; gap:22px; }
+  .tattoo-settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; align-items:start; }
+  .tattoo-settings-card { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; }
+  .tattoo-settings-card h3 { font-family:var(--sans); font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+  .tattoo-settings-list { display:grid; gap:10px; }
+  .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:3px solid var(--ring-faint); padding-top:10px; }
+  .tattoo-settings-row.special { grid-template-columns:minmax(0,1fr) minmax(110px,.45fr) minmax(110px,.45fr); }
+  .lifecycle-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0 18px; }
+  .lifecycle-strip .field { min-width:0; }
   @media (max-width:760px) { .portfolio-settings-grid { grid-template-columns:1fr; } }
+  @media (max-width:760px) {
+    .tattoo-settings-grid { grid-template-columns:1fr; }
+    .tattoo-settings-row,
+    .tattoo-settings-row.special { grid-template-columns:1fr; }
+  }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
     .list-pane { border-right:0; border-bottom:5px solid var(--ring-faint); max-height:42vh; }
@@ -461,7 +475,7 @@
   const bookingPreviewKey = "swc_booking_admin_preview";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const TAB_TYPES = {
-    tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "consultation", "in_person_consultation"],
+    tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "consultation", "in_person_consultation", "build_session"],
     studio: ["studio_booking"],
     art: ["art_acquisition", "art_inquiry"],
     events: ["event_rsvp"],
@@ -513,8 +527,6 @@
   const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
   const PRIVATE_BOOKING_TYPE_OPTIONS = [
     ["consult_in_person", "In-Person Consultation"],
-    ["consult_virtual", "Virtual Consultation"],
-    ["build_in_person", "In-Person Build Session"],
     ["tattoo_quarter", "Quarter Session"],
     ["tattoo_half", "Half Session"],
     ["tattoo_full", "Full Session"],
@@ -540,6 +552,7 @@
   let portfolioState = "published";
   let portfolioObjectUrls = [];
   let portfolioOptions = { styles: [], collections: [] };
+  let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
 
   function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -825,7 +838,14 @@
 
   function nextActionBadge(submission) {
     const s = submission.status;
+    const stage = submission.tattooStage || submission.tattoo_stage || "";
     const hasUrl = !!(submission.bookingUrl);
+    if (s === "cancelled") return `<span class="next-action na-declined">Cancelled</span>`;
+    if (stage === "consultation_required") return `<span class="next-action na-no-link">Consultation Required</span>`;
+    if (stage === "consultation_scheduled") return `<span class="next-action na-link-sent">Consultation Scheduled</span>`;
+    if (stage === "consultation_complete") return `<span class="next-action na-needs-review">Plan Needed</span>`;
+    if (stage === "ready_to_book") return `<span class="next-action na-no-link">Ready for Tattoo Link</span>`;
+    if (stage === "tattoo_scheduled") return `<span class="next-action na-booked">Tattoo Scheduled</span>`;
     if (s === "declined") return `<span class="next-action na-declined">Declined</span>`;
     if (s === "archived") return `<span class="next-action na-archived">Archived</span>`;
     if (s === "booked") return `<span class="next-action na-booked">Booked</span>`;
@@ -838,6 +858,16 @@
   function requiresInPersonConsult(submission) {
     const p = submission.payload || {};
     return p.project_type === "large_cover_up" || p.consult_required === "yes";
+  }
+
+  function statusOptionsFor(submission) {
+    const managedLifecycle = TATTOO_PROJECT_TYPES.has(submission.type)
+      || ["consultation", "build_session"].includes(submission.type);
+    const options = managedLifecycle
+      ? ["new", "reviewing", "approved", "declined", "cancelled", "archived"]
+      : ["new", "reviewing", "approved", "declined", "booked", "cancelled", "archived"];
+    if (submission.status && !options.includes(submission.status)) options.push(submission.status);
+    return options;
   }
 
   function typeFields(submission) {
@@ -853,6 +883,7 @@
     if (t === "flash_claim") {
       return card("Flash Claim", `
         <div class="grid">
+          ${field("Flash ID", p("flash_id"))}
           ${field("Flash Title", p("flash_title"))}
           ${field("Flash Code", p("flash_code"))}
           ${field("Series", p("flash_series"))}
@@ -861,7 +892,15 @@
           ${field("Scale", p("scale"))}
           ${field("Budget Range", p("claim_bid"))}
           ${field("Timeline", p("timeline"))}
+          ${field("Managed Price", p("flash_price_note"))}
+          ${field("Session Category", p("flash_session_category"))}
+          ${field("Estimated Sessions", p("flash_estimated_sessions"))}
+          ${field("Estimated Time", p("flash_estimated_total_time"))}
+          ${field("Plan Acknowledged", p("session_plan_acknowledged"))}
         </div>
+        ${p("flash_snapshot") ? `<div class="field" style="margin-top:16px;"><label>Managed Flash Snapshot</label><div class="value full">${escapeHtml(p("flash_snapshot"))}</div></div>` : ""}
+        ${p("flash_session_plan_note") ? `<div class="field" style="margin-top:16px;"><label>Managed Session Note</label><div class="value full">${escapeHtml(p("flash_session_plan_note"))}</div></div>` : ""}
+        ${(submission.flashConflict || submission.flash_conflict) ? `<div class="field" style="margin-top:16px;"><label>Flash Conflict</label><div class="value full">${escapeHtml(submission.flashConflict || submission.flash_conflict)}</div></div>` : ""}
         ${p("sheet_code") ? `<div class="field"><label>Specific Sheet Code</label><div class="value">${escapeHtml(p("sheet_code"))}</div></div>` : ""}
         <div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
       `);
@@ -875,9 +914,11 @@
           ${field("Budget", p("budget_range"))}
           ${field("Timeline", p("timeline"))}
           ${field("Instagram", p("instagram"))}
-          ${field("Direction", p("direction") || p("intent"))}
+          ${field("Design Intent", p("design_intent") || p("direction") || p("intent"))}
+          ${field("Review Consent", p("review_consent"))}
         </div>
-        ${p("selected_elements") ? `<div class="field" style="margin-top:16px;"><label>Selected Elements</label><div class="value full">${escapeHtml(p("selected_elements"))}</div></div>` : ""}
+        ${p("selected_symbol_ids") || p("symbol_ids") || p("selected_elements") ? `<div class="field" style="margin-top:16px;"><label>Stable Symbol IDs</label><div class="value full">${escapeHtml(p("selected_symbol_ids") || p("symbol_ids") || p("selected_elements"))}</div></div>` : ""}
+        ${p("symbol_snapshot") ? `<div class="field" style="margin-top:16px;"><label>Immutable Symbol Snapshot</label><div class="value full">${escapeHtml(p("symbol_snapshot"))}</div></div>` : ""}
         <div class="field" style="margin-top:16px;"><label>Brief / Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
       `);
@@ -970,10 +1011,16 @@
     return card("Tattoo Inquiry", `
       <div class="grid">
         ${field("Project Type", p("project_type"))}
+        ${field("Date of Birth", p("dob"))}
+        ${field("Previous Client", p("previous_client"))}
         ${field("Placement", p("placement"))}
         ${field("Size", p("size"))}
         ${field("Budget", p("budget_range"))}
+        ${field("Color Preference", p("color_preference"))}
         ${field("Timeline", p("timeline"))}
+        ${field("Requested Date", p("requested_date"))}
+        ${field("Age Confirmed", p("age_confirmed"))}
+        ${field("Review Consent", p("review_consent"))}
         ${field("Instagram", p("instagram"))}
         ${field("Source", submission.sourcePath || "")}
       </div>
@@ -1024,7 +1071,13 @@
     if (!evContainer && !notifContainer) return;
     try {
       const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}`);
-      const events = payload.events || [];
+      const appointmentEvents = (payload.appointmentEvents || payload.appointment_events || []).map((item) => ({
+        ...item,
+        event_type: `appointment_${item.event_type || item.eventType || "event"}`,
+        note: [item.note, item.appointmentId || item.appointment_id ? `Appointment ${item.appointmentId || item.appointment_id}` : ""].filter(Boolean).join(" · "),
+      }));
+      const events = [...(payload.events || []), ...appointmentEvents]
+        .sort((a, b) => new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0));
       if (evContainer) {
         evContainer.innerHTML = events.length ? `<div class="event-list">${events.map((ev) => `
           <div class="event-item">
@@ -1045,7 +1098,7 @@
               / <strong>${escapeHtml(n.status || "")}</strong>
               ${n.error ? ` - ${escapeHtml(n.error)}` : ""}
             </span>
-            ${n.status === "failed" ? `<button class="button" type="button" style="min-height:30px;padding:0 10px;font-size:10px;" ${notificationRetryAttrs(n, submissionId)}>Retry</button>` : ""}
+            ${["failed", "skipped"].includes(n.status) ? `<button class="button" type="button" style="min-height:30px;padding:0 10px;font-size:10px;" ${notificationRetryAttrs(n, submissionId)}>Retry</button>` : ""}
           </div>
         `).join("")}</div>`
         : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No notifications recorded.</p>';
@@ -1069,7 +1122,7 @@
       const active = tokens.find((t) => t.state === "active");
       const counts = tokens.reduce((acc, t) => { acc[t.state] = (acc[t.state] || 0) + 1; return acc; }, {});
       const parts = [];
-      if (active) parts.push(`Active token${active.expiresAt ? ` · expires ${formatDate(active.expiresAt)}` : ""}`);
+      if (active) parts.push(`Active ${active.purpose ? `${titleize(active.purpose)} ` : ""}token${active.expiresAt ? ` · expires ${formatDate(active.expiresAt)}` : ""}`);
       if (counts.used) parts.push(`${counts.used} used`);
       if (counts.revoked) parts.push(`${counts.revoked} revoked`);
       if (counts.expired) parts.push(`${counts.expired} expired`);
@@ -1144,10 +1197,10 @@
       enhanceControls(toolbarEl);
       return;
     }
-    const statusOptions = [["", "ALL STATUSES"], ["new", "NEW"], ["reviewing", "REVIEWING"], ["approved", "APPROVED"], ["declined", "DECLINED"], ["booked", "BOOKED"], ["archived", "ARCHIVED"]];
+    const statusOptions = [["", "ALL STATUSES"], ["new", "NEW"], ["reviewing", "REVIEWING"], ["approved", "APPROVED"], ["declined", "DECLINED"], ["booked", "BOOKED"], ["cancelled", "CANCELLED"], ["archived", "ARCHIVED"]];
     let html = `<select id="statusFilter" aria-label="Filter by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     if (activeTab === "tattoo") {
-      const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["maze_design", "BUILD A MAZE"], ["special_project", "SPECIAL PROJECT"], ["consultation", "CONSULTATION"]];
+      const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["maze_design", "BUILD A MAZE"], ["special_project", "SPECIAL PROJECT"], ["consultation", "CONSULTATION"], ["build_session", "IN-PERSON BUILD SESSION"]];
       html += `<select id="typeFilter" aria-label="Filter by type">${typeOptions.map(([v, l]) => `<option value="${v}"${v === typeValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     }
     toolbarEl.innerHTML = html;
@@ -1162,7 +1215,8 @@
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>
         <button class="subnav-btn ${subView === "portfolio" ? "is-active" : ""}" type="button" data-subview="portfolio">Portfolio</button>
         <button class="subnav-btn ${subView === "portfolio-settings" ? "is-active" : ""}" type="button" data-subview="portfolio-settings">Portfolio Settings</button>
-        <button class="subnav-btn ${subView === "flash" ? "is-active" : ""}" type="button" data-subview="flash">Flash</button>`;
+        <button class="subnav-btn ${subView === "flash" ? "is-active" : ""}" type="button" data-subview="flash">Flash</button>
+        <button class="subnav-btn ${subView === "tattoo-settings" ? "is-active" : ""}" type="button" data-subview="tattoo-settings">Tattoo Settings</button>`;
     } else if (activeTab === "studio") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
@@ -1739,6 +1793,89 @@
     bindPortfolioSettings();
   }
 
+  function settingValue(object, camel, snake, fallback = "") {
+    return object?.[camel] ?? object?.[snake] ?? fallback;
+  }
+
+  function formatDisplayedTattooHours(value) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (!Array.isArray(value)) return "By appointment—see live availability.";
+    const lines = value.map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      const day = item.dayLabel || item.day || item.label || "";
+      const hours = item.hoursText || item.hours || (item.closed ? "Closed" : "");
+      return [day, hours].filter(Boolean).join(" ");
+    }).filter(Boolean);
+    return lines.join("; ") || "By appointment—see live availability.";
+  }
+
+  async function loadTattooSettings() {
+    const payload = await api("/api/admin/tattoo/settings");
+    tattooSettings = {
+      settings: payload.settings || {},
+      rateCards: payload.rateCards || payload.rate_cards || [],
+      specialProjects: payload.specialProjects || payload.special_projects || [],
+      displayedHours: formatDisplayedTattooHours(payload.displayedHours ?? payload.displayed_hours),
+    };
+  }
+
+  function tattooRateRow(rate, index) {
+    const key = settingValue(rate, "serviceKey", "service_key", rate.id || "");
+    return `<div class="tattoo-settings-row" data-rate-card data-service-key="${escapeHtml(key)}" data-id="${escapeHtml(rate.id || key)}">
+      <label>Service label<input data-rate-label value="${escapeHtml(rate.label || "")}" maxlength="120"></label>
+      <label>Displayed rate<input data-rate-text value="${escapeHtml(settingValue(rate, "rateText", "rate_text"))}" maxlength="80"></label>
+      <label class="check"><input data-rate-active type="checkbox" ${Number(rate.active ?? 1) ? "checked" : ""}><span>Public</span></label>
+    </div>`;
+  }
+
+  function specialProjectRow(project) {
+    const status = project.status || "closed";
+    return `<div class="tattoo-settings-row special" data-special-project data-id="${escapeHtml(project.id || "")}" data-slug="${escapeHtml(project.slug || "")}">
+      <label>Call title<input data-special-title value="${escapeHtml(project.title || "")}" maxlength="160"></label>
+      <label>Status<select data-special-status><option value="open" ${status === "open" ? "selected" : ""}>Open</option><option value="closed" ${status === "closed" ? "selected" : ""}>Closed</option></select></label>
+      <label>Displayed rate<input data-special-rate value="${escapeHtml(settingValue(project, "rateText", "rate_text"))}" maxlength="80"></label>
+      <label style="grid-column:1/-1;">Public summary<textarea data-special-summary maxlength="1200">${escapeHtml(project.summary || "")}</textarea></label>
+    </div>`;
+  }
+
+  async function renderTattooSettings() {
+    layoutEl.classList.add("single");
+    listPane.classList.add("hidden");
+    toolbarEl.innerHTML = "";
+    detailEl.innerHTML = '<p class="empty">Loading tattoo settings…</p>';
+    await loadTattooSettings();
+    const settings = tattooSettings.settings || {};
+    detailEl.innerHTML = `<section class="tattoo-settings" id="tattooSettings">
+      <div class="portfolio-head"><div><h2>Tattoo Settings</h2><p class="contact">Public rates, walk-in guidance, review timing, lead time, and Special Project availability. Public hours are derived from the active tattoo schedule.</p></div><button class="button" type="button" data-refresh-tattoo-settings>Refresh</button></div>
+      <form class="tattoo-settings" data-tattoo-settings-form>
+        <div class="tattoo-settings-grid">
+          <section class="tattoo-settings-card">
+            <h3>Client guidance</h3>
+            <label>Review-time message<textarea name="reviewTimeMessage" maxlength="500">${escapeHtml(settingValue(settings, "reviewTimeMessage", "review_time_message", "Most project submissions are reviewed within 5–7 business days."))}</textarea></label>
+            <label>Minimum project lead time (days)<input name="leadTimeDays" type="number" min="0" max="365" value="${escapeHtml(settingValue(settings, "leadTimeDays", "lead_time_days", 14))}"></label>
+            <label>Support email<input name="supportEmail" type="email" value="${escapeHtml(settingValue(settings, "supportEmail", "support_email"))}"></label>
+            <label>Walk-in guidance<textarea name="walkInGuidance" maxlength="1200">${escapeHtml(settingValue(settings, "walkInGuidance", "walk_in_guidance"))}</textarea></label>
+            <div class="field"><label>Published tattoo hours</label><div class="value">${escapeHtml(tattooSettings.displayedHours || "By appointment—see live availability.")}</div></div>
+          </section>
+          <section class="tattoo-settings-card">
+            <h3>Rate cards</h3>
+            <p class="contact">These values drive the public Tattoo House rate display. Booking fees still come from live booking types.</p>
+            <div class="tattoo-settings-list">${tattooSettings.rateCards.map(tattooRateRow).join("") || '<p class="empty">No rate cards configured.</p>'}</div>
+          </section>
+        </div>
+        <section class="tattoo-settings-card">
+          <h3>Special Project calls</h3>
+          <p class="contact">Closed calls stay visible for context but cannot accept applications.</p>
+          <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
+        </section>
+        <div class="booking-actions"><button class="button" type="submit">Save Tattoo Settings</button></div>
+        <div class="contact" id="tattooSettingsStatus" role="status" aria-live="polite"></div>
+      </form>
+    </section>`;
+    enhanceControls(detailEl);
+  }
+
   function renderActiveTab() {
     tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
     buildSubnav();
@@ -1786,6 +1923,11 @@
 
     if (activeTab === "tattoo" && subView === "portfolio-settings") {
       renderPortfolioSettings().catch((error) => setStatus(error.message));
+      return;
+    }
+
+    if (activeTab === "tattoo" && subView === "tattoo-settings") {
+      renderTattooSettings().catch((error) => setStatus(error.message));
       return;
     }
 
@@ -2361,7 +2503,7 @@
           <span class="name">${escapeHtml(submission.contactName || "Unnamed")}</span>
           <span class="pill">${escapeHtml(submission.status)}</span>
         </span>
-        <span class="meta">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.contactEmail || "")}</span>
+        <span class="meta">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.contactEmail || "")}${submission.tattooStage ? ` / ${escapeHtml(titleize(submission.tattooStage))}` : ""}</span>
         <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
           ${nextActionBadge(submission)}
@@ -2383,6 +2525,7 @@
   function payloadValue(submission, key) {
     const value = submission.payload?.[key];
     if (Array.isArray(value)) return value.join(", ");
+    if (value && typeof value === "object") return JSON.stringify(value);
     return value || "";
   }
 
@@ -2392,8 +2535,16 @@
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
   }
 
+  function historicPrerequisiteAppointmentFor(submissionId) {
+    return appointments
+      .filter((appointment) => appointment.submissionId === submissionId)
+      .filter((appointment) => appointment.purpose === "prerequisite_consultation")
+      .filter((appointment) => ["confirmed", "completed"].includes(appointment.status))
+      .sort((a, b) => new Date(b.startAt || b.createdAt).getTime() - new Date(a.startAt || a.createdAt).getTime())[0] || null;
+  }
+
   function appointmentIsPending(appointment) {
-    return ["pending_deposit", "deposit_pending"].includes(appointment?.status || "");
+    return ["pending_deposit", "deposit_pending", "replacement_pending", "expiry_attention"].includes(appointment?.status || "");
   }
 
   function appointmentIsConfirmed(appointment) {
@@ -2415,6 +2566,14 @@
     const meeting = appointment.meeting || null;
     const isVirtual = appointment.bookingTypeId === "consult_virtual";
     const isPublicBooking = submission.type === "consultation" || ["consult_in_person", "consult_virtual", "build_in_person"].includes(appointment.bookingTypeId);
+    const holdExpiresAt = appointment.holdExpiresAt || appointment.hold_expires_at || "";
+    const completedAt = appointment.completedAt || appointment.completed_at || "";
+    const replacementFor = appointment.replacementForAppointmentId || appointment.replacement_for_appointment_id || "";
+    const replacedBy = appointment.replacedByAppointmentId || appointment.replaced_by_appointment_id || "";
+    const canCompleteConsultation = appointment.status === "confirmed"
+      && ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose || "")
+      && !completedAt
+      && new Date(appointment.startAt).getTime() <= Date.now();
     const calendarHref = appointmentIsConfirmed(appointment) ? appointmentCalendarUrl(appointment) : "";
     const meetingLines = meeting?.joinUrl
       ? `Zoom: ready
@@ -2431,8 +2590,11 @@ ${["archived", "cancelled"].includes(appointment.status) ? "" : `<button class="
         <div class="value">
 ${isPublicBooking ? "Source: Public calendar booking\n" : ""}Status: ${escapeHtml(titleize(appointment.status))}
 Session: ${escapeHtml(titleize(appointment.bookingTypeId || "session"))}
+Purpose: ${escapeHtml(titleize(appointment.purpose || "unspecified"))}
 When: ${escapeHtml(formatDate(appointment.startAt))}
 Ends: ${escapeHtml(formatDate(appointment.endAt))}
+${holdExpiresAt ? `Checkout hold expires: ${escapeHtml(formatDate(holdExpiresAt))}\n` : ""}${appointment.status === "expiry_attention" ? "Hold reconciliation: needs Studio attention; capacity remains blocked\n" : ""}${completedAt ? `Completed: ${escapeHtml(formatDate(completedAt))}\n` : ""}Reschedules used: ${escapeHtml(String(appointment.rescheduleCount ?? appointment.reschedule_count ?? 0))} / 1
+${replacementFor ? `Replacement for: ${escapeHtml(replacementFor)}\n` : ""}${replacedBy ? `Replaced by: ${escapeHtml(replacedBy)}\n` : ""}
 ${appointmentIsConfirmed(appointment) && !isVirtual ? `Location: ${escapeHtml(STUDIO_ADDRESS)}\n` : ""}
 Reservation/deposit: ${escapeHtml(money(depositCents, currency))}
 Optional tip: ${escapeHtml(money(tipCents, currency))}
@@ -2444,6 +2606,7 @@ ${meetingLines}
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
           ${appointmentIsPending(appointment) ? `<button class="button danger-button" type="button" data-release-pending="${escapeHtml(appointment.id)}">Release Pending Checkout</button>` : ""}
+          ${canCompleteConsultation ? `<button class="button" type="button" data-complete-appointment="${escapeHtml(appointment.id)}">Mark Consultation Complete</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
         </div>
       </div>
@@ -2602,8 +2765,16 @@ ${meetingLines}
     return payload.sessionPlan;
   }
 
-  function defaultAllowedBookingTypes(submission) {
-    return requiresInPersonConsult(submission)
+  function defaultTokenPurpose(submission) {
+    const stage = submission.tattooStage || submission.tattoo_stage || "";
+    return (["consultation_required", "consultation_scheduled"].includes(stage)
+      || (requiresInPersonConsult(submission) && !["consultation_complete", "ready_to_book", "tattoo_scheduled", "closed"].includes(stage)))
+      ? "consultation"
+      : "tattoo";
+  }
+
+  function defaultAllowedBookingTypes(submission, purpose = defaultTokenPurpose(submission)) {
+    return purpose === "consultation"
       ? ["consult_in_person"]
       : ["tattoo_quarter", "tattoo_half", "tattoo_full"];
   }
@@ -2613,11 +2784,16 @@ ${meetingLines}
   }
 
   function renderBookingTokenControls(submission) {
-    const defaults = defaultAllowedBookingTypes(submission);
+    const purpose = defaultTokenPurpose(submission);
+    const defaults = defaultAllowedBookingTypes(submission, purpose);
     return `
-      <div class="field" style="margin-top:10px;" id="tokenOptions" data-default-token-types="${escapeHtml(sortedTypeList(defaults))}">
+      <div class="field" style="margin-top:10px;" id="tokenOptions" data-default-token-types="${escapeHtml(sortedTypeList(defaults))}" data-default-token-purpose="${escapeHtml(purpose)}">
         <label>Booking Link Controls</label>
-        <div class="contact" style="margin-bottom:8px;">Leave defaults selected for the normal booking link. Adjust when this approval needs consultation, build, or a specific session length.</div>
+        <div class="contact" style="margin-bottom:8px;">Purpose is lifecycle-bound: prerequisite consultation links expose only the in-person consultation; tattoo links require the completed consultation and final session plan when applicable.</div>
+        <div class="field" style="margin-bottom:10px;">
+          <label for="tokenPurpose">Link purpose</label>
+          <select id="tokenPurpose"><option value="consultation" ${purpose === "consultation" ? "selected" : ""}>Prerequisite consultation</option><option value="tattoo" ${purpose === "tattoo" ? "selected" : ""}>Tattoo appointment</option></select>
+        </div>
         <div class="booking-actions" style="align-items:flex-start;">
           ${PRIVATE_BOOKING_TYPE_OPTIONS.map(([value, label]) => `
             <label class="check" style="margin:0;min-width:190px;">
@@ -2647,8 +2823,16 @@ ${meetingLines}
       throw new Error("Choose at least one session type for this booking link.");
     }
     const defaultKey = document.getElementById("tokenOptions")?.dataset.defaultTokenTypes || "";
+    const purpose = document.getElementById("tokenPurpose")?.value || "tattoo";
+    const compatibleTypes = purpose === "consultation"
+      ? new Set(["consult_in_person"])
+      : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full"]);
+    if (selected.some((type) => !compatibleTypes.has(type))) {
+      throw new Error(`The selected session types are not compatible with the ${purpose} link purpose.`);
+    }
     const body = {
       submissionId,
+      purpose,
       revokeExisting: document.getElementById("tokenRevokeExisting")?.checked !== false,
     };
     if (sortedTypeList(selected) !== defaultKey) {
@@ -2660,8 +2844,14 @@ ${meetingLines}
   }
 
   function renderDetail(submission) {
-    const isProtected = submission.status === "booked" || submission.status === "paid";
+    const isProtected = ["booked", "paid", "cancelled"].includes(submission.status);
     const hasAppointment = !!latestAppointmentFor(submission.id);
+    const latestAppointment = latestAppointmentFor(submission.id);
+    const historicPrerequisiteAppointment = historicPrerequisiteAppointmentFor(submission.id);
+    const hasDirectAppointment = hasAppointment && !TATTOO_PROJECT_TYPES.has(submission.type);
+    const tattooStage = submission.tattooStage || submission.tattoo_stage || "";
+    const lifecycleReviewRequired = Boolean(submission.lifecycleReviewRequired ?? submission.lifecycle_review_required);
+    const lifecycleReviewNote = submission.lifecycleReviewNote || submission.lifecycle_review_note || "";
     const isEvent = submission.type === "event_rsvp";
     const eventTicketId = isEvent ? payloadValue(submission, "ticket_id") : "";
     const eventPaid = isEvent && submission.status === "booked";
@@ -2680,6 +2870,9 @@ ${meetingLines}
       <div class="detail-head">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <span class="pill">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.status)}</span>
+          ${tattooStage ? `<span class="pill">Stage: ${escapeHtml(titleize(tattooStage))}</span>` : ""}
+          ${latestAppointment?.purpose ? `<span class="pill">Purpose: ${escapeHtml(titleize(latestAppointment.purpose))}</span>` : ""}
+          ${lifecycleReviewRequired ? `<span class="pill" style="color:#EC5E26;border-color:rgba(236,94,38,.72);">Historic Review Required</span>` : ""}
           ${nextActionBadge(submission)}
           ${requiresInPersonConsult(submission) ? `<span class="pill" style="color:#FCB867;border-color:rgba(252,184,103,0.5);">IN-PERSON CONSULT REQUIRED</span>` : ""}
         </div>
@@ -2691,6 +2884,24 @@ ${meetingLines}
         </p>
       </div>
 
+      ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<div class="lifecycle-strip">
+        ${detailField("Submission reference", submission.id)}
+        ${detailField("Lifecycle stage", titleize(tattooStage || "review"))}
+        ${detailField("Appointment purpose", latestAppointment?.purpose ? titleize(latestAppointment.purpose) : "Not scheduled")}
+        ${detailField("Hold state", latestAppointment?.status === "expiry_attention" ? "Expiry attention — still blocking" : latestAppointment?.holdExpiresAt ? `Held until ${formatDate(latestAppointment.holdExpiresAt)}` : "No active hold")}
+        ${lifecycleReviewRequired ? detailField("Migration review", lifecycleReviewNote || "Confirm historic lifecycle before taking the next action.") : ""}
+      </div>` : ""}
+
+      ${lifecycleReviewRequired ? `<div class="assist-panel" style="border-color:rgba(236,94,38,.55);">
+        <label>Historic Lifecycle Review</label>
+        <p class="contact">${historicPrerequisiteAppointment
+          ? `Reconcile the ${escapeHtml(titleize(historicPrerequisiteAppointment.status))} prerequisite consultation and unlock the reviewed project lifecycle.`
+          : "Confirm the saved final session plan, clear the migration review flag, and move this project to ready to book."}</p>
+        <div class="booking-actions">
+          <button class="button" type="button" data-resolve-historic-lifecycle="${escapeHtml(submission.id)}" data-appointment-id="${escapeHtml(historicPrerequisiteAppointment?.id || "")}">Resolve Historic Lifecycle</button>
+        </div>
+      </div>` : ""}
+
       ${typeFields(submission)}
       ${renderFiles(submission)}
       ${renderPaymentSummary(submission)}
@@ -2700,11 +2911,12 @@ ${meetingLines}
         <div class="field">
           <label for="detailStatus">Status</label>
           <select id="detailStatus">
-            ${["new","reviewing","approved","declined","booked","archived"].map((status) => `<option value="${status}" ${status === submission.status ? "selected" : ""}>${status.toUpperCase()}</option>`).join("")}
+            ${statusOptionsFor(submission).map((status) => `<option value="${status}" ${status === submission.status ? "selected" : ""}>${status.toUpperCase()}</option>`).join("")}
           </select>
+          ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<label style="margin-top:10px;">Tattoo lifecycle stage</label><div class="value">${escapeHtml(titleize(tattooStage || "review"))}</div><p class="contact">Lifecycle stages advance only through review, paid booking, consultation completion, and finalized session-plan actions.</p>` : ""}
         </div>
         <div class="field">
-          ${isEvent ? eventBlock : hasAppointment ? `
+          ${isEvent ? eventBlock : hasDirectAppointment ? `
             <p style="font-family:var(--sans);font-size:11px;color:var(--dim);">
               This ${submission.type === "studio_booking" ? "studio booking" : "consultation"} was booked directly through the public calendar.
               No booking access link is needed — see Appointment Payment above.
@@ -2764,7 +2976,21 @@ ${meetingLines}
     enhanceControls(detailEl);
     renderEventHistory(submission.id);
     if (TATTOO_PROJECT_TYPES.has(submission.type)) renderTattooSessionPlanEditor(submission.id);
-    if (!hasAppointment) renderTokenState(submission.id);
+    if (!hasDirectAppointment) {
+      renderTokenState(submission.id);
+      const purposeSelect = document.getElementById("tokenPurpose");
+      const syncTokenTypes = () => {
+        const purpose = purposeSelect?.value || "tattoo";
+        const compatible = purpose === "consultation" ? new Set(["consult_in_person"]) : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full"]);
+        document.querySelectorAll("[data-token-type]").forEach((input) => {
+          const allowed = compatible.has(input.value);
+          input.disabled = !allowed;
+          input.checked = allowed;
+        });
+      };
+      purposeSelect?.addEventListener("change", syncTokenTypes);
+      syncTokenTypes();
+    }
   }
 
   function localDateTimeToIso(value) {
@@ -3856,6 +4082,89 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const refreshTattooSettings = event.target.closest("[data-refresh-tattoo-settings]");
+    if (refreshTattooSettings) {
+      setStatus("Refreshing tattoo settings");
+      await renderTattooSettings();
+      setStatus("Tattoo settings refreshed");
+      return;
+    }
+
+    const resolveHistoricLifecycle = event.target.closest("[data-resolve-historic-lifecycle]");
+    if (resolveHistoricLifecycle) {
+      const submissionId = resolveHistoricLifecycle.dataset.resolveHistoricLifecycle;
+      const appointmentId = resolveHistoricLifecycle.dataset.appointmentId || "";
+      const confirmation = appointmentId
+        ? "Resolve this historic lifecycle record using its linked prerequisite consultation? This will mark a confirmed consultation complete when needed and clear the migration review flag."
+        : "Resolve this historic lifecycle record using the saved final session plan? This will clear the migration review flag and move the project to ready to book.";
+      if (!window.confirm(confirmation)) return;
+      const originalLabel = resolveHistoricLifecycle.textContent;
+      resolveHistoricLifecycle.disabled = true;
+      resolveHistoricLifecycle.textContent = "Resolving…";
+      setStatus("Resolving historic lifecycle");
+      try {
+        const payload = await api(`/api/admin/booking/lifecycle-review/${encodeURIComponent(submissionId)}/resolve`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            ...(appointmentId ? { appointmentId } : {}),
+            note: "Historic lifecycle reviewed and resolved in Studio.",
+          }),
+        });
+        await loadAndRender();
+        setStatus(payload.resolution === "prerequisite_consultation"
+          ? "Historic prerequisite consultation reconciled"
+          : "Historic lifecycle resolved from the final session plan");
+      } catch (error) {
+        setStatus(error.message || "Historic lifecycle could not be resolved");
+        if (resolveHistoricLifecycle.isConnected) {
+          resolveHistoricLifecycle.disabled = false;
+          resolveHistoricLifecycle.textContent = originalLabel;
+        }
+      }
+      return;
+    }
+
+    const completeAppointment = event.target.closest("[data-complete-appointment]");
+    if (completeAppointment) {
+      const appointmentId = completeAppointment.dataset.completeAppointment;
+      const submission = activeId ? submissions.find((item) => item.id === activeId) : null;
+      const resolveHistorical = Boolean(submission?.lifecycleReviewRequired ?? submission?.lifecycle_review_required);
+      const confirmation = resolveHistorical
+        ? "Mark this flagged prerequisite consultation complete and resolve its historic lifecycle review?"
+        : "Mark this consultation complete? This unlocks final session planning for linked cover-up projects.";
+      if (!window.confirm(confirmation)) return;
+      const originalLabel = completeAppointment.textContent;
+      completeAppointment.disabled = true;
+      completeAppointment.textContent = resolveHistorical ? "Resolving…" : "Completing…";
+      setStatus("Completing consultation");
+      try {
+        const payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/complete`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            resolveHistorical,
+            note: resolveHistorical
+              ? "Historic prerequisite consultation reviewed and completed in Studio."
+              : "Consultation marked complete in Studio.",
+          }),
+        });
+        const index = appointments.findIndex((appointment) => appointment.id === appointmentId);
+        if (index >= 0 && payload.appointment) appointments[index] = payload.appointment;
+        await loadAndRender();
+        setStatus(payload.historicalResolved
+          ? "Consultation completed and historic lifecycle resolved"
+          : "Consultation marked complete");
+      } catch (error) {
+        setStatus(error.message || "Consultation could not be completed");
+        if (completeAppointment.isConnected) {
+          completeAppointment.disabled = false;
+          completeAppointment.textContent = originalLabel;
+        }
+      }
+      return;
+    }
+
     const sectionToggle = event.target.closest(".section-toggle");
     if (sectionToggle) {
       sectionToggle.closest("[data-collapse-section]")?.classList.toggle("is-open");
@@ -4071,6 +4380,7 @@ ${meetingLines}
     if (event.target.id === "saveSessionPlanBtn" && activeId) {
       setStatus("Saving session plan");
       await saveTattooSessionPlan(activeId);
+      await loadAndRender();
       setStatus("Session plan saved");
       return;
     }
@@ -4123,18 +4433,26 @@ ${meetingLines}
         headers: { "content-type": "application/json" },
         body: JSON.stringify(tokenBody),
       });
-      document.getElementById("bookingUrl").value = payload.token.path;
+      const tokenPath = payload.token.path || payload.token.bookingUrl || "";
+      document.getElementById("bookingUrl").value = tokenPath;
       const textAssist = document.getElementById("textAssist");
       if (textAssist) {
         textAssist.value = textReminderCopy({
           ...(submissions.find((s) => s.id === activeId) || submission),
-          bookingUrl: payload.token.path,
+          bookingUrl: tokenPath,
           status: "approved",
         });
       }
-      await navigator.clipboard?.writeText(payload.token.bookingUrl).catch(() => {});
+      await navigator.clipboard?.writeText(payload.token.bookingUrl || tokenPath).catch(() => {});
       await loadAndRender();
-      setStatus("Booking link emailed and copied");
+      const delivery = payload.delivery || payload.notificationDelivery || payload.notification || null;
+      setStatus(delivery && !delivery.ok
+        ? `Booking link generated and copied; email failed${delivery.error ? ` (${delivery.error})` : ""}`
+        : delivery?.skipped
+          ? "Booking link generated and copied; email was already delivered"
+          : delivery?.ok
+            ? "Booking link emailed and copied"
+            : "Booking link generated and copied; verify delivery in Notifications");
       return;
     }
 
@@ -4198,6 +4516,7 @@ ${meetingLines}
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           status: "archived",
+          tattooStage: TATTOO_PROJECT_TYPES.has(submission?.type) ? "closed" : undefined,
           bookingUrl: submission?.bookingUrl || "",
           internalNotes: document.getElementById("internalNotes")?.value || submission?.internalNotes || "",
         }),
@@ -4342,6 +4661,47 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const tattooSettingsForm = event.target.closest("[data-tattoo-settings-form]");
+    if (tattooSettingsForm) {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(tattooSettingsForm));
+      const rateCards = [...tattooSettingsForm.querySelectorAll("[data-rate-card]")].map((row, index) => ({
+        id: row.dataset.id || row.dataset.serviceKey,
+        serviceKey: row.dataset.serviceKey,
+        label: row.querySelector("[data-rate-label]")?.value.trim() || "",
+        rateText: row.querySelector("[data-rate-text]")?.value.trim() || "",
+        active: row.querySelector("[data-rate-active]")?.checked !== false,
+        sortOrder: index,
+      }));
+      const specialProjects = [...tattooSettingsForm.querySelectorAll("[data-special-project]")].map((row, index) => ({
+        id: row.dataset.id,
+        slug: row.dataset.slug,
+        title: row.querySelector("[data-special-title]")?.value.trim() || "",
+        status: row.querySelector("[data-special-status]")?.value || "closed",
+        rateText: row.querySelector("[data-special-rate]")?.value.trim() || "",
+        summary: row.querySelector("[data-special-summary]")?.value.trim() || "",
+        sortOrder: index,
+      }));
+      setStatus("Saving tattoo settings");
+      await api("/api/admin/tattoo/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            reviewTimeMessage: String(values.reviewTimeMessage || "").trim(),
+            leadTimeDays: Number(values.leadTimeDays || 0),
+            supportEmail: String(values.supportEmail || "").trim(),
+            walkInGuidance: String(values.walkInGuidance || "").trim(),
+          },
+          rateCards,
+          specialProjects,
+        }),
+      });
+      await renderTattooSettings();
+      setStatus("Tattoo settings saved");
+      return;
+    }
+
     const bookingTypeForm = event.target.closest("[data-booking-type-form]");
     if (bookingTypeForm) {
       event.preventDefault();

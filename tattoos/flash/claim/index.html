@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --accent:#FCB867; --signal:#6E0404; --ring:#6D3D15;
+    --bg:#0e0e0e; --accent:#B93636; --focus:#D35A5A; --signal:#6E0404; --ring:#6D3D15;
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --text:#FFE7CA; --text-mute:rgba(255,231,202,0.62);
     --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
@@ -26,26 +26,26 @@
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
 main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .layout { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(380px,560px); gap:72px; align-items:start; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(50px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:38px; }
+  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(50px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--accent); text-transform:uppercase; margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
   .path-list { list-style:none; display:flex; flex-direction:column; max-width:620px; border-top:5px solid var(--ring-faint); margin-top:44px; }
   .path-list li { display:grid; grid-template-columns:42px minmax(0,1fr); gap:18px; font-size:14px; line-height:1.6; color:var(--text-mute); padding:16px 0; border-bottom:5px solid var(--ring-faint); }
-  .path-list li::before { color:var(--signal); opacity:0.72; font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.14em; }
+  .path-list li::before { color:var(--focus); font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.14em; }
   .path-list li:nth-child(1)::before { content:"I"; }
   .path-list li:nth-child(2)::before { content:"II"; }
   .path-list li:nth-child(3)::before { content:"III"; }
   .selected-card { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:26px 0; margin-top:42px; display:grid; grid-template-columns:132px minmax(0,1fr); gap:22px; align-items:center; }
   .selected-card.is-empty { display:none; }
   .selected-card img { width:132px; height:132px; object-fit:contain; border:5px solid var(--ring-faint); background:rgba(0,0,0,0.18); }
-  .selected-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--signal); margin-bottom:10px; }
+  .selected-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--focus); margin-bottom:10px; }
   .selected-title { font-family:var(--sans); font-weight:900; font-size:24px; line-height:0.98; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .selected-meta { display:flex; flex-wrap:wrap; gap:8px; }
-  .selected-meta span { font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); border:5px solid var(--ring-faint); padding:4px 8px; }
+  .selected-meta span { font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--focus); border:5px solid var(--ring-faint); padding:4px 8px; }
   .session-plan { grid-column:1 / -1; border-left:5px solid var(--ring-soft); padding:16px 0 16px 18px; margin-top:4px; }
   .session-plan.is-hidden { display:none; }
   .session-plan.is-required { border-left-color:var(--signal); background:rgba(110,4,4,.08); padding-right:16px; }
-  .session-plan-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--signal); margin-bottom:8px; }
+  .session-plan-kicker { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--focus); margin-bottom:8px; }
   .session-plan-title { font-family:var(--sans); font-weight:900; font-size:16px; line-height:1.2; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
   .session-plan-copy { color:var(--text-mute); font-size:13px; line-height:1.65; }
   .session-ack { margin:16px 0 0; }
@@ -57,19 +57,22 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
   .field.is-hidden { display:none; }
-  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
+  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--focus); }
   input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
   input[type="file"] { padding:11px 12px; color:var(--text-mute); }
   textarea { min-height:124px; resize:vertical; }
-  input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
+  input:focus,textarea:focus,select:focus { outline:2px solid var(--focus); outline-offset:2px; border-color:var(--focus); }
   .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
   .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
   .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; padding:0; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
+  .form-fieldset { border:0; margin:0; padding:0; min-width:0; }
+  .form-legend { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
-  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
-  .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
+  .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text); background:var(--signal); border:5px solid var(--signal); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
+  .cta-primary:hover,.cta-primary:focus-visible { background:var(--accent); border-color:var(--accent); color:var(--text); outline:none; }
+  :where(a,button,input,textarea,select):focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
   footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
@@ -82,14 +85,17 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     .form-panel { padding:30px 0; }
     .field-grid,.selected-card { grid-template-columns:1fr; }
     .selected-card img { width:100%; height:220px; }
+    input:not([type="checkbox"]),textarea,select,.cta-primary { font-size:16px; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
   @media (max-width:700px) { header.top { position:sticky; padding:var(--s3) var(--s4); min-height:60px; align-items:center; } }
+  @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:1ms!important; animation-iteration-count:1!important; transition-duration:1ms!important; scroll-behavior:auto!important; } }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -158,7 +164,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           <input type="hidden" name="flash_session_plan_note" id="flash_session_plan_note">
           <input type="hidden" name="subject" id="subject" value="New Art.Pill flash claim">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
-          <div class="field-grid">
+          <fieldset class="form-fieldset">
+            <legend class="form-legend">Flash claim details</legend>
+            <div class="field-grid">
             <div class="field full">
               <label for="flashSelect">Available flash</label>
               <select id="flashSelect" name="selected_flash" required>
@@ -178,12 +186,17 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field full is-hidden" id="sheetCodeField" aria-hidden="true"><label for="sheet_code">Specific design code on sheet</label><input id="sheet_code" name="sheet_code" placeholder="Example: A, B3, AP-01-C"><p class="file-note">Use this when the selected flash is a sheet and you want one exact item from it.</p></div>
             <div class="field full"><label for="body_references">Body / placement uploads</label><input id="body_references" name="body_references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Optional. Helpful for placement, scale, or body-area context.</p></div>
             <div class="field full"><label for="message">Claim notes (optional)</label><textarea id="message" name="message" placeholder="Anything the studio should know about placement, meaning, availability, or fit."></textarea></div>
-          </div>
-          <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older.</span></label>
-          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="form-fieldset">
+            <legend class="form-legend">Flash claim acknowledgements</legend>
+            <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older.</span></label>
+            <label class="check"><input type="checkbox" name="flash_claim_acknowledged" value="yes" required><span class="check-label">I understand that submitting begins studio review and does not reserve or book the design until availability is confirmed.</span></label>
+            <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
+          </fieldset>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit Claim</button>
-            <p class="form-status" id="formStatus">Flash claims are reviewed before private token booking access is sent.</p>
+            <p class="form-status" id="formStatus" role="status" aria-live="polite">Flash claims are reviewed before private token booking access is sent.</p>
           </div>
         </form>
       </section>
@@ -280,21 +293,23 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         els.sessionPlanAcknowledged.checked = false;
         return;
       }
+      const category = normalizedSessionCategory(item);
       const policy = normalizedSplitPolicy(item);
-      const required = policy === "required" || policy === "not_available";
+      const fixedStructure = policy === "required" || policy === "not_available";
+      const acknowledgementRequired = category !== "artist_review" || policy !== "artist_review";
       const sessions = rangeLabel(item.estimatedSessionsMin, item.estimatedSessionsMax, "session");
       const totalTime = timeLabel(item);
       const estimate = [sessions, totalTime].filter(Boolean).join(" · ");
       let policyCopy = "The studio will confirm the session structure after reviewing placement and scale.";
-      if (required) policyCopy = "This session structure is required by the artist and cannot be changed through client preference.";
+      if (fixedStructure) policyCopy = "This session structure is required by the artist and cannot be changed through client preference.";
       if (policy === "client_choice") policyCopy = "After the studio confirms the total-time estimate, you may request one longer appointment or multiple shorter appointments.";
       if (policy === "not_available") policyCopy = "Splitting is not available for this design's required process.";
       els.sessionPlanTitle.textContent = [sessionLabel(item), estimate].filter(Boolean).join(" · ");
       els.sessionPlanCopy.textContent = [item.sessionPlanNote, policyCopy].filter(Boolean).join(" ");
       els.sessionPlan.classList.remove("is-hidden");
-      els.sessionPlan.classList.toggle("is-required", required);
-      els.sessionAcknowledgement.classList.toggle("is-hidden", !required);
-      els.sessionPlanAcknowledged.required = required;
+      els.sessionPlan.classList.toggle("is-required", fixedStructure);
+      els.sessionAcknowledgement.classList.toggle("is-hidden", !acknowledgementRequired);
+      els.sessionPlanAcknowledged.required = acknowledgementRequired;
       els.sessionPlanAcknowledged.checked = false;
     }
 
@@ -305,6 +320,18 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     function selectedRequestId() {
       const params = new URLSearchParams(window.location.search);
       return params.get("design") || params.get("flash") || params.get("id") || "";
+    }
+
+    function normalizedPath(value) {
+      try { return new URL(String(value || ""), window.location.origin).pathname.replace(/\/+$/, ""); }
+      catch { return String(value || "").replace(/\/+$/, ""); }
+    }
+
+    function matchesRequest(item, request) {
+      const normalized = String(request || "").trim().toLowerCase();
+      const requestPath = normalizedPath(request).toLowerCase();
+      return [item.id, item.slug].some((value) => String(value || "").toLowerCase() === normalized) ||
+        (item.legacyPath && normalizedPath(item.legacyPath).toLowerCase() === requestPath);
     }
 
     function renderOptions(selectedId) {
@@ -369,9 +396,12 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       return {
         ...fallback,
         id: record.id || fallback.id,
+        slug: record.slug || fallback.slug || record.id || fallback.id,
+        legacyPath: record.legacy_path || fallback.legacyPath || "",
         title: record.title || fallback.title || "Untitled flash",
         series: titleCase(record.series_id) || fallback.series || "Standalones",
-        status: ["available", "reserved"].includes(stateValue) ? "Available" : "Past",
+        state: stateValue,
+        status: stateValue === "available" ? "Available" : (stateValue === "reserved" ? "Reserved" : "Past"),
         sizeBucket: record.size_bucket || fallback.sizeBucket || "",
         price: record.price_label || fallback.price || "",
         image: media?.url || fallback.image || "",
@@ -391,6 +421,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
     async function init() {
       let catalog = { items: [] };
+      let managedLoadError = false;
       try {
         const response = await fetch("/assets/flash/flash-catalog.json", { cache: "no-store" });
         if (!response.ok) throw new Error("Catalog unavailable");
@@ -406,14 +437,32 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         const fallbackById = new Map(items.map((item) => [item.id, item]));
         items = (payload.records || []).map((record) => managedItem(record, fallbackById.get(record.id)));
       } catch {
-        // Static catalog remains the safe fallback while D1 or a migration is unavailable.
+        // Static metadata may decorate a live managed record, but it must never
+        // make a claim look available when the source of truth cannot be read.
+        managedLoadError = true;
+        items = [];
       }
-      availableFlash = items.filter((item) => item.claimable === true && item.status === "Available");
+      availableFlash = items.filter((item) => item.claimable === true && String(item.state || item.status || "").toLowerCase() === "available" && item.status === "Available");
       const requested = selectedRequestId();
-      renderOptions(requested);
-      updateSelected(requested);
+      const selectedItem = availableFlash.find((item) => matchesRequest(item, requested));
+      renderOptions(selectedItem?.id || "");
+      updateSelected(selectedItem?.id || "");
       if (!availableFlash.length) {
-        els.select.innerHTML = '<option value="">No available flash loaded</option>';
+        els.select.innerHTML = managedLoadError
+          ? '<option value="">Live availability unavailable</option>'
+          : '<option value="">No available flash loaded</option>';
+      }
+      if (managedLoadError) {
+        const status = document.getElementById("formStatus");
+        status.textContent = "Live flash availability could not be verified. No claim can be submitted right now; return to the catalog and try again shortly.";
+        status.setAttribute("role", "alert");
+      } else if (requested && !selectedItem) {
+        const requestedRecord = items.find((item) => matchesRequest(item, requested));
+        const status = document.getElementById("formStatus");
+        status.textContent = requestedRecord
+          ? "That design is reserved or past and cannot accept a claim. Choose another available design."
+          : "That flash reference is not available. Choose a current design from the list.";
+        status.setAttribute("role", "alert");
       }
       els.select.addEventListener("change", () => updateSelected(els.select.value));
     }

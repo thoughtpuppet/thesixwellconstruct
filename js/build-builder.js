@@ -34,8 +34,16 @@
   const briefLimit = el("briefLimit");
   const briefBegin = el("briefBegin");
   const selInput = el("selectedElements");
+  const selIdsInput = el("selectedSymbolIds");
   const selSummary = el("selectedSummary");
   const summaryTags = el("summaryTags");
+  const selectionStatus = el("selectionStatus");
+  const mobileTray = el("mobileSelectionTray");
+  const mobileTrayToggle = el("mobileTrayToggle");
+  const mobileTrayPanel = el("mobileTrayPanel");
+  const mobileTrayCount = el("mobileTrayCount");
+  const mobileTrayItems = el("mobileTrayItems");
+  const mobileTrayContinue = el("mobileTrayContinue");
 
   if (!symbolGrid) return; // builder not present on this page
 
@@ -44,6 +52,23 @@
   const selected = new Set();
   let activeCategory = "All";
   let activeTheme = "All";
+
+  function announce(message) {
+    if (!selectionStatus) return;
+    selectionStatus.textContent = "";
+    window.requestAnimationFrame(() => { selectionStatus.textContent = message; });
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  }
+
+  function continueToForm() {
+    const intent = document.getElementById("designIntent");
+    const form = document.getElementById("build-form");
+    if (form) form.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+    window.setTimeout(() => intent?.focus({ preventScroll: true }), prefersReducedMotion() ? 0 : 450);
+  }
 
   function escapeHtml(value) {
     return String(value)
@@ -155,13 +180,19 @@
       selected.delete(sym.id);
       card.classList.remove("selected");
       card.setAttribute("aria-pressed", "false");
+      updateBrief(`${sym.name} removed. ${selected.size} of ${MAX_SELECTIONS} selected.`);
+      return;
     } else {
-      if (selected.size >= MAX_SELECTIONS) return;
+      if (selected.size >= MAX_SELECTIONS) {
+        announce(`Selection limit reached. Remove one of the ${MAX_SELECTIONS} selected symbols before adding ${sym.name}.`);
+        briefLimit?.classList.add("visible");
+        return;
+      }
       selected.add(sym.id);
       card.classList.add("selected");
       card.setAttribute("aria-pressed", "true");
     }
-    updateBrief();
+    updateBrief(`${sym.name} added. ${selected.size} of ${MAX_SELECTIONS} selected.`);
   }
 
   function removeSymbol(id) {
@@ -171,14 +202,18 @@
       card.classList.remove("selected");
       card.setAttribute("aria-pressed", "false");
     }
-    updateBrief();
+    updateBrief(`${byId.get(id)?.name || "Symbol"} removed. ${selected.size} of ${MAX_SELECTIONS} selected.`);
   }
 
-  function updateBrief() {
+  function updateBrief(statusMessage = "") {
     const count = selected.size;
     briefCount.textContent = `${count} of ${MAX_SELECTIONS}`;
     briefEmpty.style.display = count === 0 ? "block" : "none";
     briefLimit.classList.toggle("visible", count >= MAX_SELECTIONS);
+    symbolGrid.querySelectorAll(".symbol-card").forEach((card) => {
+      const unavailableAtLimit = count >= MAX_SELECTIONS && !selected.has(card.dataset.id);
+      card.setAttribute("aria-disabled", String(unavailableAtLimit));
+    });
 
     briefItems.innerHTML = "";
     selected.forEach((id) => {
@@ -206,25 +241,44 @@
     const names = [...selected]
       .map((id) => byId.get(id)?.name)
       .filter(Boolean);
+    const ids = [...selected].filter((id) => byId.has(id));
     if (selInput) selInput.value = names.join(", ");
+    if (selIdsInput) selIdsInput.value = ids.join(",");
     if (selSummary) selSummary.classList.toggle("visible", count > 0);
     if (summaryTags) {
       summaryTags.innerHTML = names
         .map((n) => `<span class="summary-tag">${escapeHtml(n)}</span>`)
         .join("");
     }
+
+    if (mobileTray) {
+      mobileTray.classList.toggle("visible", count > 0);
+      document.body.classList.toggle("has-mobile-selection-tray", count > 0);
+    }
+    if (mobileTrayCount) mobileTrayCount.textContent = `${count} of ${MAX_SELECTIONS}`;
+    if (mobileTrayItems) {
+      mobileTrayItems.innerHTML = "";
+      ids.forEach((id) => {
+        const sym = byId.get(id);
+        const item = document.createElement("li");
+        item.innerHTML = `<span>${escapeHtml(sym.name)}</span><button type="button" aria-label="Remove ${escapeHtml(sym.name)}">&times;</button>`;
+        item.querySelector("button").addEventListener("click", () => removeSymbol(id));
+        mobileTrayItems.appendChild(item);
+      });
+    }
+    if (statusMessage) announce(statusMessage);
   }
 
   if (briefBegin) {
-    briefBegin.addEventListener("click", () => {
-      const form = document.getElementById("build-form");
-      if (form) form.scrollIntoView({ behavior: "smooth", block: "start" });
-      setTimeout(() => {
-        const first = document.getElementById("firstName");
-        if (first) first.focus({ preventScroll: true });
-      }, 600);
-    });
+    briefBegin.addEventListener("click", continueToForm);
   }
+
+  mobileTrayToggle?.addEventListener("click", () => {
+    const expanded = mobileTrayToggle.getAttribute("aria-expanded") === "true";
+    mobileTrayToggle.setAttribute("aria-expanded", String(!expanded));
+    if (mobileTrayPanel) mobileTrayPanel.hidden = expanded;
+  });
+  mobileTrayContinue?.addEventListener("click", continueToForm);
 
   /* ── INIT ── */
   async function loadManagedSymbols() {
@@ -268,6 +322,12 @@
         SYMBOLS = [];
       }
     }
+    const uniqueSymbols = new Map();
+    SYMBOLS.forEach((symbol) => {
+      const id = String(symbol?.id || "").trim();
+      if (id && !uniqueSymbols.has(id)) uniqueSymbols.set(id, { ...symbol, id });
+    });
+    SYMBOLS = [...uniqueSymbols.values()];
     SYMBOLS.forEach((s) => byId.set(s.id, s));
     buildFilters();
     buildSymbols();

@@ -142,6 +142,9 @@
     font-size:clamp(20px,2.4vw,32px);
     margin-bottom:14px;
   }
+  .brand-band-hours { margin-top:18px; padding-top:16px; border-top:5px solid var(--ring-faint); }
+  .brand-band-hours-label { font-family:var(--sans); font-weight:900; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  .brand-band-hours-value { font-size:12px; line-height:1.65; color:var(--text-mute); }
   .artist-band {
     display:grid;
     grid-template-columns:minmax(160px,0.26fr) minmax(0,0.74fr);
@@ -601,8 +604,9 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -633,7 +637,7 @@
       </div>
       <div class="hero-right">
         <p class="hero-desc" data-copy-id="tattoos-hero-desc" style="color: rgb(252, 184, 103);">The ink &amp; skin <span style="color: rgb(109, 61, 21)">medium</span> of <span style="color: rgb(252, 184, 103)">saiel dauhn solehman</span><span style="color: rgb(252, 184, 103)">. <span style="color: rgba(252, 184, 103, 0.64)">Original, collaborative and experimental works that push the boundaries of what it means to be a <span style="color: rgb(252, 184, 103)"><strong>tattoo</strong></span></span></span> <span style="color: rgb(0, 113, 235)"><strong>artist</strong></span>.</p>
-        <a class="cta-primary" href="/tattoos/inquire/" style="margin-top:22px;">Begin an inquiry →</a>
+        <a class="cta-primary" href="/tattoos/inquire/" style="margin-top:22px;">Choose a path →</a>
       </div>
     </section>
     <section class="brand-band" aria-labelledby="tattoo-house-title">
@@ -651,6 +655,10 @@
       <div class="brand-band-walkin" id="walk-in-windows">
         <h2 class="section-title">Walk-In Windows</h2>
         <div id="walkInCards"></div>
+        <div class="brand-band-hours">
+          <p class="brand-band-hours-label">Displayed Studio Hours</p>
+          <p class="brand-band-hours-value" id="displayedStudioHours" aria-live="polite">By appointment&mdash;see live availability.</p>
+        </div>
       </div>
     </section>
     <section class="artist-band" aria-labelledby="artist-name-title">
@@ -719,8 +727,8 @@
             <p class="ledger-body" data-copy-id="tattoos-special-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 16px">Long-form symbolic, collaborative, multi-session, or experimental work that needs deeper concept, trust, time, or scale.</span></span></p>
           </div>
           <div>
-            <p class="ledger-status" data-copy-id="tattoos-special-ledger-status">open calls</p>
-            <a class="ledger-action" href="/tattoos/special-projects/"><span style="color: rgb(252, 184, 103);"><span style="color: rgb(255, 231, 202);">View projects →</span></span></a>
+            <p class="ledger-status" id="specialProjectsStatus" data-copy-id="tattoos-special-ledger-status" aria-live="polite">checking current calls</p>
+            <a class="ledger-action" href="/tattoos/special-projects/"><span style="color: rgb(252, 184, 103);"><span style="color: rgb(255, 231, 202);">View calls →</span></span></a>
           </div>
         </article>
       </div>
@@ -759,10 +767,11 @@
         <div>
           <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-rates-label"><span style="color: rgb(255, 231, 202)"><span style="font-size: 14px">Rates</span></span></p>
           <h2 class="section-title" data-copy-id="tattoos-rates-title">Transparent Rates</h2>
-          <ul class="rate-list">
-            <li><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Original flash, smaller custom pieces, and single-session work.</span></p></div></li>
-            <li><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom &amp; Story-Driven Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-custom-body"><span style="color: rgba(252, 184, 103, 0.64)">Extended custom work, complex symbolic compositions, and larger narrative pieces.</span></p></div></li>
-            <li><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="fit-body" data-copy-id="tattoos-rate-special-body"><span style="color: rgba(252, 184, 103, 0.64)">Long-form collaborative work. Starting rate reflects the extended commitment and depth of these sessions.</span></p></div></li>
+          <ul class="rate-list" id="tattooRateList" aria-live="polite">
+            <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Original flash, smaller custom pieces, and single-session work.</span></p></div></li>
+            <li data-rate-service="custom"><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom &amp; Story-Driven Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-custom-body"><span style="color: rgba(252, 184, 103, 0.64)">Extended custom work, complex symbolic compositions, and larger narrative pieces.</span></p></div></li>
+            <li data-rate-service="special"><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="fit-body" data-copy-id="tattoos-rate-special-body"><span style="color: rgba(252, 184, 103, 0.64)">Long-form collaborative work. Starting rate reflects the extended commitment and depth of these sessions.</span></p></div></li>
+            <li data-rate-service="build"><span class="rate-figure">Quoted after review</span><div><p class="rate-label">Build Your Own</p><p class="fit-body"><span style="color: rgba(252, 184, 103, 0.64)">The brief is reviewed for placement, scale, and session format before a rate is confirmed.</span></p></div></li>
           </ul>
           <p class="fine-print" data-copy-id="tattoos-rates-fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
         </div>
@@ -771,11 +780,11 @@
     <div class="booking-cta">
       <div class="booking-cta-left">
         <p class="booking-cta-label" data-copy-id="tattoos-cta-label">Ready to Begin</p>
-        <h2 class="booking-cta-title" data-copy-id="tattoos-cta-title">Start With an Inquiry.</h2>
-        <p class="booking-cta-body" data-copy-id="tattoos-cta-body">Describe your project and we'll find the right path for it. This first stage is a conversation about what you want to put on your body and why.</p>
+        <h2 class="booking-cta-title" data-copy-id="tattoos-cta-title">Choose a Path.</h2>
+        <p class="booking-cta-body" data-copy-id="tattoos-cta-body">Submit a project, book paid planning time, or check a current walk-in window. The chooser explains which path fits before you start.</p>
       </div>
       <div class="booking-cta-actions">
-        <a class="cta-primary" href="/tattoos/inquire/">Begin inquiry →</a>
+        <a class="cta-primary" href="/tattoos/inquire/">Choose a path →</a>
         <p class="booking-cta-note" data-copy-id="tattoos-cta-note">Review comes before scheduling. Approved projects receive private token booking access.</p>
       </div>
     </div>
@@ -787,6 +796,71 @@
   <script src="/js/walk-in-windows.js"></script>
   <script>
     loadWalkInCards("walkInCards", { emptyMessage: "No walk-in windows are currently scheduled. Check back soon or book a consultation." });
+    fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
+      .then(function(response) { if (!response.ok) throw new Error(); return response.json(); })
+      .then(function(payload) {
+        var calls = Array.isArray(payload.specialProjects) ? payload.specialProjects : [];
+        var now = Date.now();
+        var openCount = calls.filter(function(project) {
+          var opens = project.opensAt ? Date.parse(project.opensAt) : null;
+          var closes = project.closesAt ? Date.parse(project.closesAt) : null;
+          return project.status === "open" && (!opens || opens <= now) && (!closes || closes > now);
+        }).length;
+        var status = document.getElementById("specialProjectsStatus");
+        if (status) status.textContent = openCount ? openCount + (openCount === 1 ? " open call" : " open calls") : "no open calls";
+
+        var hoursValue = payload.displayedHours !== undefined ? payload.displayedHours : (payload.settings || {}).displayedHours;
+        var hoursText = "";
+        if (typeof hoursValue === "string") {
+          hoursText = hoursValue.trim();
+        } else if (Array.isArray(hoursValue)) {
+          hoursText = hoursValue.map(function(item) {
+            if (typeof item === "string") return item.trim();
+            if (!item || typeof item !== "object") return "";
+            var label = item.dayLabel || item.day || item.label || "";
+            var value = item.hoursText || item.hours || (item.closed ? "Closed" : "");
+            return [label, value].filter(Boolean).join(" ");
+          }).filter(Boolean).join("; ");
+        }
+        var hoursTarget = document.getElementById("displayedStudioHours");
+        if (hoursTarget) hoursTarget.textContent = hoursText || "By appointment—see live availability.";
+
+        var rateCards = (Array.isArray(payload.rateCards) ? payload.rateCards : []).filter(function(card) {
+          return card && card.active !== false && card.active !== 0;
+        }).sort(function(a, b) {
+          return Number(a.sortOrder || 0) - Number(b.sortOrder || 0);
+        });
+        var rateList = document.getElementById("tattooRateList");
+        if (rateList && rateCards.length) {
+          var descriptions = {};
+          Array.prototype.forEach.call(rateList.querySelectorAll("[data-rate-service]"), function(item) {
+            var body = item.querySelector(".fit-body");
+            descriptions[item.getAttribute("data-rate-service")] = body ? body.textContent.trim() : "";
+          });
+          rateList.replaceChildren();
+          rateCards.forEach(function(card) {
+            var item = document.createElement("li");
+            item.setAttribute("data-rate-service", card.serviceKey || "");
+            var rate = document.createElement("span");
+            rate.className = "rate-figure";
+            rate.textContent = card.rateText || "Quoted after review";
+            var copy = document.createElement("div");
+            var label = document.createElement("p");
+            label.className = "rate-label";
+            label.textContent = card.label || card.serviceKey || "Tattoo service";
+            var body = document.createElement("p");
+            body.className = "fit-body";
+            body.textContent = descriptions[card.serviceKey] || "Current rate confirmed through the managed booking path.";
+            copy.append(label, body);
+            item.append(rate, copy);
+            rateList.append(item);
+          });
+        }
+      })
+      .catch(function() {
+        var status = document.getElementById("specialProjectsStatus");
+        if (status) status.textContent = "view current calls";
+      });
   </script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

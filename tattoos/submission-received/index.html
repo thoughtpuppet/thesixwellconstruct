@@ -22,6 +22,10 @@
   main { width:min(100%,720px); border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:44px 0; }
   h1 { font-family:var(--sans); font-weight:900; font-size:clamp(34px,7vw,74px); line-height:0.9; letter-spacing:-0.05em; color:var(--accent); text-transform:uppercase; margin-bottom:28px; }
   p { font-size:15px; line-height:1.75; color:var(--text-mute); margin-bottom:18px; }
+  .receipt-meta { display:grid; gap:7px; margin:28px 0; padding:18px; border:5px solid var(--ring-faint); }
+  .receipt-label { margin:0; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--accent); }
+  .receipt-reference { display:block; overflow-wrap:anywhere; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:14px; line-height:1.55; color:var(--text); }
+  .receipt-note { margin:0; font-size:12px; color:var(--text-dim); }
   .next-steps { margin:30px 0 4px; padding-top:24px; border-top:5px solid var(--ring-faint); }
   .next-steps-label { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--accent); margin-bottom:18px; }
   .next-steps ol { list-style:none; counter-reset:step; display:grid; gap:14px; }
@@ -30,29 +34,38 @@
   .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
   a { display:inline-flex; min-height:50px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--text-mute); padding:0 24px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; text-decoration:none; }
   a:hover { border-color:var(--accent); color:var(--accent); }
+  .support { margin-top:26px; padding-top:20px; border-top:5px solid var(--ring-faint); }
+  .support a { display:inline; min-height:0; padding:0; border:0; font-family:inherit; font-size:inherit; letter-spacing:normal; text-transform:none; color:var(--accent); }
+  [hidden] { display:none !important; }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <main>
     <h1 id="receivedTitle">Inquiry Received.</h1>
     <p id="receivedIntro">Your submission was captured for review in the studio submissions system. Booking confirmation follows approval.</p>
     <p id="receivedContext">Flash claims are checked for availability, placement, and scale. Custom inquiries and Special Projects are reviewed for the strongest path forward. If approved, you will receive a private token booking link to choose a session, place the deposit, and confirm the appointment.</p>
+    <div class="receipt-meta" aria-label="Submission receipt">
+      <p class="receipt-label">Submission reference</p>
+      <code class="receipt-reference" id="submissionReference">Checking receipt&hellip;</code>
+      <p class="receipt-note" id="referenceNote">Keep this reference if you contact the studio about this submission.</p>
+    </div>
     <div class="next-steps">
       <p class="next-steps-label">What happens next</p>
-      <ol>
-        <li>Your submission enters review — this typically takes a few days.</li>
-        <li>If it's a fit, you'll receive a private booking link by email.</li>
-        <li>The link lets you choose a session time and place your deposit.</li>
+      <ol id="nextSteps">
+        <li id="reviewTimeStep">Most project submissions are reviewed within 5-7 business days.</li>
+        <li id="pathStep">Watch the email address you submitted for the review decision or next question.</li>
+        <li id="bookingStep">If approved, follow the private link in that email; this receipt is not an appointment.</li>
       </ol>
     </div>
     <div class="actions">
-      <a href="/tattoos/flash/">Back to flash</a>
+      <a id="primaryReturn" href="/tattoos/inquire/">Choose another path</a>
       <a href="/tattoos/">Return to Art.Pill</a>
       <a href="/tattoos/policies/">Client resources</a>
-      <a href="/home/">Return to construct</a>
     </div>
+    <p class="support" id="supportLine">Need help with this receipt? Email <a id="supportLink" href="mailto:saisolehman@artpilltattoohouse.com">saisolehman@artpilltattoohouse.com</a> and include the submission reference.</p>
   </main>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
@@ -60,17 +73,97 @@
   <script>
   (function(){
     var params = new URLSearchParams(location.search);
-    if (params.get('type') !== 'special-project') return;
-    var names = {
-      'mythic-body-studies': 'Mythic Body Studies',
-      'memory-transfer': 'Memory Transfer Studies',
-      'large-scale': 'Large Scale Symbolic Work',
-      'other': 'your Special Project'
+    var rawType = (params.get("type") || "custom").toLowerCase();
+    var aliases = { "tattoo_inquiry":"custom", "flash_claim":"flash", "build_brief":"build", "maze_design":"maze", "special-project":"special", "special_project":"special" };
+    var type = aliases[rawType] || rawType;
+    var ref = params.get("ref") || params.get("submissionId") || params.get("submission") || "";
+    var reference = document.getElementById("submissionReference");
+    var referenceNote = document.getElementById("referenceNote");
+    reference.textContent = ref || "Not included in this legacy receipt";
+    if (!ref) referenceNote.textContent = "This older return link did not include a reference. Keep the confirmation email instead.";
+
+    var receipts = {
+      flash: {
+        title: "Flash Claim Received.",
+        intro: "Your flash claim was captured for availability and fit review.",
+        context: "The selected design, placement, scale, and budget are checked together. A claim does not reserve the flash until the studio confirms it.",
+        path: "Watch your email for availability confirmation, a question, or a different recommendation.",
+        booking: "If the claim is approved, use the private booking link to choose a session and place the required deposit.",
+        label: "Back to flash",
+        href: "/tattoos/flash/"
+      },
+      custom: {
+        title: "Project Received.",
+        intro: "Your custom tattoo inquiry was captured for project review.",
+        context: "The studio will review concept, placement, scale, timing, budget, and visual direction. If a large cover-up moves forward, its required paid in-person consultation is linked after this review.",
+        path: "Watch your email for the review decision, a clarification, or a linked consultation when required.",
+        booking: "Approved projects receive the appropriate next step or a private booking link; this receipt is not an appointment.",
+        label: "Back to custom inquiry",
+        href: "/tattoos/inquire/custom/"
+      },
+      build: {
+        title: "Build Brief Received.",
+        intro: "Your Build Your Own brief and selected Legend symbols were captured for review.",
+        context: "The studio will review the symbol set, composition direction, placement, and scale before recommending how the tattoo should move forward.",
+        path: "Watch your email for interpretation questions, a review decision, or the recommended session path.",
+        booking: "If approved, use the private booking link sent by the studio; your saved brief is not a booked session.",
+        label: "Return to Build Your Own",
+        href: "/tattoos/build/"
+      },
+      maze: {
+        title: "Maze Received.",
+        intro: "Your maze image, design data, and explanation were captured for review.",
+        context: "The studio will consider how the path, marks, meaning, placement, and scale can translate into a tattoo.",
+        path: "Watch your email for design questions, a review decision, or the recommended next step.",
+        booking: "If approved, private booking access follows by email; submitting the maze does not guarantee a session.",
+        label: "Return to Maze Studio",
+        href: "/tattoos/build/maze/"
+      },
+      special: {
+        title: "Application Received.",
+        intro: "Your application was captured for Special Projects review.",
+        context: "The selected call, concept, placement, scale, timeline, and budget will be reviewed together. Closed calls do not accept new applications.",
+        path: "Watch your email for the call-specific review decision or a request for more context.",
+        booking: "If accepted, the next email explains the development path and provides private booking access when the work is ready.",
+        label: "Return to Special Projects",
+        href: "/tattoos/special-projects/"
+      }
     };
-    var project = names[params.get('project')] || 'your Special Project';
-    document.getElementById('receivedTitle').textContent = 'Application Received.';
-    document.getElementById('receivedIntro').textContent = 'Your application for ' + project + ' was captured for Special Projects review.';
-    document.getElementById('receivedContext').textContent = 'The studio will review the concept, placement, scale, timeline, and budget together. If the project is accepted, the next email will explain its development path and provide private booking access when the work is ready to schedule.';
+
+    var receipt = receipts[type] || receipts.custom;
+    function applyReceipt(current) {
+      document.getElementById("receivedTitle").textContent = current.title;
+      document.getElementById("receivedIntro").textContent = current.intro;
+      document.getElementById("receivedContext").textContent = current.context;
+      document.getElementById("pathStep").textContent = current.path;
+      document.getElementById("bookingStep").textContent = current.booking;
+      var link = document.getElementById("primaryReturn");
+      link.textContent = current.label;
+      link.href = current.href;
+    }
+    applyReceipt(receipt);
+
+    fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
+      .then(function(response){ if (!response.ok) throw new Error(); return response.json(); })
+      .then(function(payload){
+        var settings = payload.settings || {};
+        if (settings.reviewTimeMessage) document.getElementById("reviewTimeStep").textContent = settings.reviewTimeMessage;
+        if (settings.supportEmail) {
+          var supportLink = document.getElementById("supportLink");
+          supportLink.textContent = settings.supportEmail;
+          supportLink.href = "mailto:" + settings.supportEmail;
+        }
+        if (type === "special") {
+          var calls = Array.isArray(payload.specialProjects) ? payload.specialProjects : [];
+          var key = params.get("project") || "";
+          var project = calls.find(function(item){ return item.slug === key || item.id === key; });
+          if (project) {
+            receipt.intro = "Your application for " + project.title + " was captured for Special Projects review.";
+            applyReceipt(receipt);
+          }
+        }
+      })
+      .catch(function(){});
   })();
   </script>
 </body>

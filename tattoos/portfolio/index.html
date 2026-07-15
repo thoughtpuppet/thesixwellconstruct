@@ -690,5 +690,38 @@
   })();
   </script>
 
+  <script>
+  (() => {
+    const styleRow = document.getElementById('typeRow');
+    const collectionRow = document.getElementById('modeRow');
+    if (!styleRow || !collectionRow) return;
+
+    function numericCount(button) {
+      const value = Number(button?.querySelector('.chip-count')?.textContent || '');
+      return Number.isFinite(value) ? value : -1;
+    }
+
+    function hideRedundantUnclassified() {
+      const allButton = [...styleRow.querySelectorAll('.chip')].find((button) =>
+        button.querySelector('.chip-label')?.textContent.trim().toLowerCase() === 'all'
+      );
+      const unclassified = [styleRow, collectionRow]
+        .flatMap((row) => [...row.querySelectorAll('.chip')])
+        .find((button) => button.querySelector('.chip-label')?.textContent.trim().toLowerCase() === 'unclassified');
+      if (!unclassified) return;
+      const redundant = numericCount(allButton) >= 0 && numericCount(unclassified) === numericCount(allButton);
+      unclassified.hidden = redundant;
+      unclassified.setAttribute('aria-hidden', String(redundant));
+      const hostRow = unclassified.closest('.filter-row');
+      if (hostRow) hostRow.hidden = redundant && [...hostRow.querySelectorAll('.chip')].every((button) => button.hidden);
+    }
+
+    const observer = new MutationObserver(hideRedundantUnclassified);
+    observer.observe(styleRow, { childList:true, subtree:true });
+    observer.observe(collectionRow, { childList:true, subtree:true });
+    hideRedundantUnclassified();
+  })();
+  </script>
+
 </body>
 </html>

@@ -177,20 +177,56 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
   const database = db(env);
   const acquisitionOnly = resource === "art" && new URL(request.url).searchParams.get("acquisition") === "1";
   const baseWhere = `${publicState(resource)}${acquisitionOnly ? " AND acquisition_eligible=1 AND availability='available'" : ""}`;
-  const where = recordSlug ? `${baseWhere} AND slug=?` : baseWhere;
+  const isFlashRecord = resource === "flash" && Boolean(recordSlug);
+  const where = isFlashRecord
+    ? `${baseWhere} AND (id=? OR slug=? OR legacy_path=? OR legacy_path=?)`
+    : recordSlug
+      ? `${baseWhere} AND slug=?`
+      : baseWhere;
   const statement = database.prepare(`SELECT * FROM ${config.table} WHERE ${where} ORDER BY sort_order,id`);
-  const result = recordSlug ? await statement.bind(recordSlug).all() : await statement.all();
+  const legacyPath = `/tattoos/flash/${String(recordSlug).replace(/^\/+|\/+$/g, "")}/`;
+  const result = isFlashRecord
+    ? await statement.bind(recordSlug, recordSlug, recordSlug, legacyPath).all()
+    : recordSlug
+      ? await statement.bind(recordSlug).all()
+      : await statement.all();
   const rows = result.results || [];
   const media = await entityMedia(database, rows.map((row) => row.id));
-  const records = rows.map((row) => ({
-    ...row,
-    themes: parseJson(row.themes_json),
-    context: parseJson(row.context_json, {}),
-    applications: parseJson(row.applications_json),
-    variants: parseJson(row.variants_json),
-    examples: parseJson(row.examples_json),
-    media: media.get(row.id) || [],
-  }));
+  const records = rows.map((row) => {
+    const { reserved_submission_id: _reservationOwner, ...publicRow } = row;
+    const record = {
+      ...publicRow,
+      themes: parseJson(row.themes_json),
+      context: parseJson(row.context_json, {}),
+      applications: parseJson(row.applications_json),
+      variants: parseJson(row.variants_json),
+      examples: parseJson(row.examples_json),
+      media: media.get(row.id) || [],
+    };
+    if (resource !== "flash") return record;
+    const canonicalRoute = `/tattoos/flash/${encodeURIComponent(row.slug || row.id)}/`;
+    const claimableNow = row.state === "available" && Number(row.claimable) === 1 && !row.reserved_submission_id;
+    return {
+      ...record,
+      claimable: claimableNow ? 1 : 0,
+      canonicalRoute,
+      canonical_route: canonicalRoute,
+      claimableNow,
+      claimable_now: claimableNow,
+      pricingNote: row.price_label || "Quoted from the managed flash record after review.",
+      pricing_note: row.price_label || "Quoted from the managed flash record after review.",
+      artistSessionPlan: {
+        category: row.session_category || "artist_review",
+        splitPolicy: row.split_policy || "artist_review",
+        estimatedSessionsMin: row.estimated_sessions_min ?? null,
+        estimatedSessionsMax: row.estimated_sessions_max ?? null,
+        estimatedTotalMinutesMin: row.estimated_total_minutes_min ?? null,
+        estimatedTotalMinutesMax: row.estimated_total_minutes_max ?? null,
+        note: row.session_plan_note || "",
+        acknowledgementRequired: Boolean(row.session_plan_note || (row.session_category && row.session_category !== "artist_review")),
+      },
+    };
+  });
   if (recordSlug && !records[0]) return failure("Not found.", 404);
   return json(recordSlug ? { record: records[0] } : { records, count: records.length });
 }

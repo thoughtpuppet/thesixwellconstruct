@@ -22,6 +22,7 @@ import {
 import {
   handleAdminCreateAvailability,
   handleAdminCreateAppointmentMeeting,
+  handleAdminCompleteAppointment,
   handleAdminCreateBookingToken,
   handleAdminDeleteAvailability,
   handleAdminGetBookingReadiness,
@@ -34,6 +35,8 @@ import {
   handleAdminListSubmissionTokens,
   handleAdminListWalkIns,
   handleAdminReleasePendingAppointment,
+  handleAdminRescheduleAppointment,
+  handleAdminResolveTattooLifecycleReview,
   handleAdminRevokeBookingToken,
   handleAdminRevokeSubmissionBookingTokens,
   handleAdminCreateWalkIn,
@@ -44,15 +47,25 @@ import {
   handleAdminUpdateAvailability,
   handleBookingCalendar,
   handleBookingContext,
+  handleAdminTattooSettings,
   handleSaveBookingSessionPlan,
   handleCancelAppointment,
   handleConfirmBooking,
   handleCreateBookingCheckout,
   handleCreateBookingHold,
+  handleCreateReplacementCheckout,
+  handleGetPendingBookingHold,
+  handleReleasePendingBookingHold,
+  handlePublicTattooSettings,
   handlePublicConsultationCheckout,
   handlePublicConsultationContext,
+  handlePublicSessionCheckout,
+  handlePublicSessionContext,
   handlePublicStudioCheckout,
   handlePublicStudioContext,
+  handleRescheduleAppointment,
+  handleRescheduleContext,
+  reapExpiredBookingHolds,
   handleSquareWebhook,
   handleStudioSquareWebhook,
 } from "./functions/api/booking/_lib.js";
@@ -241,6 +254,13 @@ function eventDetailAssetPath(pathname) {
   const parts = normalizedPath.split("/").filter(Boolean);
   if (parts.length !== 2 || parts[0] !== "events") return "/events/index.html";
   return `/events/${parts[1]}/index.html`;
+}
+
+function isFlashDetailPagePath(pathname) {
+  const normalizedPath = normalizePath(pathname);
+  const parts = normalizedPath.split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "tattoos" || parts[1] !== "flash") return false;
+  return !new Set(["claim", "detail", "maze"]).has(parts[2]) && !hasFileExtension(pathname);
 }
 
 function isHiddenByHomeOnlyMode(pathname) {
@@ -494,9 +514,19 @@ async function handleBookingApi(request, env) {
     return handlePublicConsultationContext(request, env);
   }
 
+  if (pathname === "/api/booking/public-session/context") {
+    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    return handlePublicSessionContext(request, env);
+  }
+
   if (pathname === "/api/booking/public-consultation/checkout") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handlePublicConsultationCheckout(request, env);
+  }
+
+  if (pathname === "/api/booking/public-session/checkout") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handlePublicSessionCheckout(request, env);
   }
 
   if (pathname === "/api/booking/public-studio/context") {
@@ -517,6 +547,34 @@ async function handleBookingApi(request, env) {
   if (pathname === "/api/booking/cancel") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleCancelAppointment(request, env);
+  }
+
+  if (pathname === "/api/booking/pending-hold") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleGetPendingBookingHold(request, env);
+  }
+
+  if (pathname === "/api/booking/pending-hold/release") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleReleasePendingBookingHold(request, env);
+  }
+
+  if (pathname === "/api/booking/reschedule/context") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleRescheduleContext(request, env);
+  }
+
+  if (pathname === "/api/booking/reschedule") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleRescheduleAppointment(request, env);
+  }
+
+  if (
+    pathname === "/api/booking/replacement-checkout" ||
+    pathname === "/api/booking/replacement"
+  ) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleCreateReplacementCheckout(request, env);
   }
 
   if (pathname === "/api/admin/booking/tokens") {
@@ -603,6 +661,28 @@ async function handleBookingApi(request, env) {
   if (appointmentMeetingMatch) {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleAdminCreateAppointmentMeeting(request, env, decodeURIComponent(appointmentMeetingMatch[1]));
+  }
+
+  const lifecycleReviewResolveMatch = pathname.match(/^\/api\/admin\/booking\/lifecycle-review\/([^/]+)\/resolve$/);
+  if (lifecycleReviewResolveMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminResolveTattooLifecycleReview(
+      request,
+      env,
+      decodeURIComponent(lifecycleReviewResolveMatch[1]),
+    );
+  }
+
+  const appointmentCompleteMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/complete$/);
+  if (appointmentCompleteMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminCompleteAppointment(request, env, decodeURIComponent(appointmentCompleteMatch[1]));
+  }
+
+  const appointmentRescheduleMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/reschedule$/);
+  if (appointmentRescheduleMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminRescheduleAppointment(request, env, decodeURIComponent(appointmentRescheduleMatch[1]));
   }
 
   const appointmentReleaseMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/release-pending$/);
@@ -714,6 +794,18 @@ export default {
       return handleBookingApi(request, env);
     }
 
+    if (url.pathname === "/api/tattoo/settings") {
+      if (request.method !== "GET") return methodNotAllowed(request.method, ["GET"]);
+      return handlePublicTattooSettings(request, env);
+    }
+
+    if (url.pathname === "/api/admin/tattoo/settings") {
+      if (!["GET", "PATCH"].includes(request.method)) {
+        return methodNotAllowed(request.method, ["GET", "PATCH"]);
+      }
+      return handleAdminTattooSettings(request, env);
+    }
+
     if (url.pathname.startsWith("/api/admin/notifications/")) {
       return handleNotificationsApi(request, env);
     }
@@ -753,11 +845,16 @@ export default {
       return env.ASSETS.fetch(assetRequest(request, eventDetailAssetPath(url.pathname)));
     }
 
+    if (isFlashDetailPagePath(url.pathname)) {
+      return env.ASSETS.fetch(assetRequest(request, "/tattoos/flash/detail/index.html"));
+    }
+
     return env.ASSETS.fetch(assetRequest(request, assetPathForRequest(url.pathname)));
   },
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(sendDueAppointmentReminders(env));
     ctx.waitUntil(sendDueEventTicketReminders(env));
     ctx.waitUntil(reapStalePendingTickets(env));
+    ctx.waitUntil(reapExpiredBookingHolds(env));
   },
 };

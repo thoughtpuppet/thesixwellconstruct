@@ -3,6 +3,7 @@ const DEFAULT_FROM_NAME = "art.pill TATTOO HOUSE";
 const DEFAULT_REPLY_TO = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_ADMIN_FROM_ADDRESS = "notifications@artpilltattoohouse.com";
 const DEFAULT_TIMEZONE = "America/New_York";
+const DEFAULT_REVIEW_TIME_MESSAGE = "Most project submissions are reviewed within 5–7 business days.";
 const DEFAULT_BOOKING_TYPES = {
   tattoo_quarter: {
     label: "Quarter Session",
@@ -45,6 +46,18 @@ function replyToAddress(env) {
 
 function adminNotificationAddress(env) {
   return env.ADMIN_NOTIFICATION_EMAIL || DEFAULT_REPLY_TO;
+}
+
+function lifecycleLog(event, details = {}) {
+  const allowed = {
+    event,
+    templateKey: details.templateKey || undefined,
+    relatedType: details.relatedType || undefined,
+    relatedId: details.relatedId || undefined,
+    status: details.status || undefined,
+    purpose: details.purpose || undefined,
+  };
+  console.info(JSON.stringify(Object.fromEntries(Object.entries(allowed).filter(([, value]) => value !== undefined))));
 }
 
 // Events are a separate brand (the six.well construct) from the tattoo house.
@@ -259,10 +272,15 @@ async function recordDelivery(db, delivery) {
   try {
     await db
       .prepare(
-        `INSERT OR IGNORE INTO notification_deliveries (
+        `INSERT INTO notification_deliveries (
           id, channel, template_key, recipient, subject, related_type,
           related_id, idempotency_key, status, error, sent_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(idempotency_key) DO UPDATE SET
+          status = excluded.status,
+          error = excluded.error,
+          sent_at = excluded.sent_at,
+          subject = excluded.subject`
       )
       .bind(
         crypto.randomUUID(),
@@ -288,7 +306,7 @@ async function deliveryExists(db, idempotencyKey) {
   if (!db || !idempotencyKey) return false;
   try {
     const row = await db
-      .prepare("SELECT id FROM notification_deliveries WHERE idempotency_key = ? LIMIT 1")
+      .prepare("SELECT id FROM notification_deliveries WHERE idempotency_key = ? AND status = 'sent' LIMIT 1")
       .bind(idempotencyKey)
       .first();
     return Boolean(row);
@@ -300,6 +318,12 @@ async function deliveryExists(db, idempotencyKey) {
 async function sendTransactionalEmail(env, message) {
   const db = notificationDb(env);
   if (await deliveryExists(db, message.idempotencyKey)) {
+    lifecycleLog("notification.idempotent_skip", {
+      templateKey: message.templateKey,
+      relatedType: message.relatedType,
+      relatedId: message.relatedId,
+      status: "skipped",
+    });
     return { ok: true, skipped: true };
   }
 
@@ -309,6 +333,12 @@ async function sendTransactionalEmail(env, message) {
       channel: "email",
       status: "skipped",
       error: "Missing EMAIL send_email binding.",
+    });
+    lifecycleLog("notification.not_configured", {
+      templateKey: message.templateKey,
+      relatedType: message.relatedType,
+      relatedId: message.relatedId,
+      status: "skipped",
     });
     return { ok: false, skipped: true, error: "Missing EMAIL send_email binding." };
   }
@@ -331,15 +361,28 @@ async function sendTransactionalEmail(env, message) {
       status: "sent",
       sentAt: new Date().toISOString(),
     });
+    lifecycleLog("notification.sent", {
+      templateKey: message.templateKey,
+      relatedType: message.relatedType,
+      relatedId: message.relatedId,
+      status: "sent",
+    });
     return { ok: true, response };
   } catch (error) {
+    const errorDetail = [error?.code, error?.message].filter(Boolean).join(": ") || "Unknown email delivery error.";
     await recordDelivery(db, {
       ...message,
       channel: "email",
       status: "failed",
-      error: error.message,
+      error: errorDetail,
     });
-    return { ok: false, error: error.message };
+    lifecycleLog("notification.failed", {
+      templateKey: message.templateKey,
+      relatedType: message.relatedType,
+      relatedId: message.relatedId,
+      status: "failed",
+    });
+    return { ok: false, error: errorDetail, code: error?.code || "" };
   }
 }
 
@@ -356,6 +399,12 @@ function json(data, init = {}) {
 
 function errorResponse(message, status = 400, extras = {}) {
   return json({ error: message, ...extras }, { status });
+}
+
+function deliveryResponse(delivery) {
+  const ok = Boolean(delivery?.ok);
+  const status = ok ? 200 : delivery?.skipped ? 503 : 502;
+  return json({ ok, delivery }, { status });
 }
 
 async function readJsonBody(request) {
@@ -397,6 +446,8 @@ function normalizeSubmission(rowOrSubmission) {
     contactName: rowOrSubmission.contactName || rowOrSubmission.contact_name || contact.name || "",
     contactEmail: rowOrSubmission.contactEmail || rowOrSubmission.contact_email || contact.email || "",
     contactPhone: rowOrSubmission.contactPhone || rowOrSubmission.contact_phone || contact.phone || "",
+    status: rowOrSubmission.status || "new",
+    tattooStage: rowOrSubmission.tattooStage || rowOrSubmission.tattoo_stage || "",
     payload,
   };
 }
@@ -417,8 +468,90 @@ function normalizeAppointment(row) {
     tipCents: row.tip_cents ?? row.tipCents ?? 0,
     totalDueCents: (row.deposit_cents ?? row.depositCents ?? 0) + (row.tip_cents ?? row.tipCents ?? 0),
     currency: row.currency || "USD",
+    purpose: row.purpose || "",
+    status: row.status || "",
+    rescheduleCount: Number(row.reschedule_count ?? row.rescheduleCount ?? 0),
+    originalStartAt: row.original_start_at || row.originalStartAt || "",
+    originalEndAt: row.original_end_at || row.originalEndAt || "",
     meeting: meetingJoinUrl ? { joinUrl: meetingJoinUrl } : null,
   };
+}
+
+function normalizedSubmissionType(type) {
+  const value = asString(type).toLowerCase();
+  if (["custom", "tattoo_inquiry_form"].includes(value)) return "tattoo_inquiry";
+  if (["flash", "flash-claim"].includes(value)) return "flash_claim";
+  if (["build", "build_your_own", "byo"].includes(value)) return "build_brief";
+  if (["maze", "maze_studio"].includes(value)) return "maze_design";
+  if (["special", "special-project"].includes(value)) return "special_project";
+  if (["in_person_consultation", "public_consultation"].includes(value)) return "consultation";
+  if (["build_in_person", "public_build_session"].includes(value)) return "build_session";
+  return value;
+}
+
+const SUBMISSION_RECEIPTS = {
+  tattoo_inquiry: {
+    label: "custom tattoo project",
+    subject: "Custom tattoo project received",
+    expectation: "The studio will review the concept, placement, scale, references, budget, and timing before deciding the next step.",
+    next: "If the project is a fit, you will receive either a private tattoo-booking link or, for a large cover-up, a private prerequisite-consultation link first.",
+  },
+  flash_claim: {
+    label: "flash claim",
+    subject: "Flash claim received",
+    expectation: "The studio will review placement, scale, budget, and the selected flash record. Multiple claims may be reviewed; the design is reserved only when the first compatible claim is approved.",
+    next: "If your claim is approved while the design is still available, you will receive a private tattoo-booking link.",
+  },
+  build_brief: {
+    label: "Build Your Own brief",
+    subject: "Build Your Own brief received",
+    expectation: "The studio will review your selected symbol snapshot, design intent, placement, and scale as one original composition.",
+    next: "If the brief is approved, you will receive a private tattoo-booking link with the recommended session plan.",
+  },
+  maze_design: {
+    label: "Maze Studio design",
+    subject: "Maze Studio design received",
+    expectation: "The studio will review the saved maze image, construction data, design explanation, placement, and scale.",
+    next: "If the design is approved, you will receive a private tattoo-booking link with the recommended session plan.",
+  },
+  special_project: {
+    label: "Special Project application",
+    subject: "Special Project application received",
+    expectation: "The studio will review the selected open call, concept direction, placement, scale, budget, and timing.",
+    next: "If the application is selected, you will receive a private tattoo-booking link or a request for any missing planning details.",
+  },
+  consultation: {
+    label: "consultation reservation",
+    subject: "Consultation reservation started",
+    expectation: "Your requested consultation time is held only while checkout is active.",
+    next: "The consultation becomes confirmed after Square reports a successful reservation-fee payment.",
+  },
+  build_session: {
+    label: "in-person Build session",
+    subject: "In-person Build reservation started",
+    expectation: "Your requested 90-minute Build session is held only while checkout is active.",
+    next: "The session becomes confirmed after Square reports a successful reservation-fee payment.",
+  },
+};
+
+async function tattooReceiptSettings(env) {
+  const fallback = {
+    reviewTimeMessage: env.TATTOO_REVIEW_TIME_MESSAGE || DEFAULT_REVIEW_TIME_MESSAGE,
+    supportEmail: env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO,
+  };
+  const db = notificationDb(env);
+  if (!db) return fallback;
+  try {
+    const row = await db
+      .prepare("SELECT review_time_message, support_email FROM tattoo_settings WHERE id = 'default' LIMIT 1")
+      .first();
+    return {
+      reviewTimeMessage: asString(row?.review_time_message) || fallback.reviewTimeMessage,
+      supportEmail: asString(row?.support_email) || fallback.supportEmail,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function labelFromKey(key) {
@@ -519,13 +652,29 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   const normalized = normalizeSubmission(submission);
   if (!normalized.contactEmail) return { ok: false, skipped: true };
 
+  const type = normalizedSubmissionType(normalized.type);
+  const profile = SUBMISSION_RECEIPTS[type] || {
+    label: "project submission",
+    subject: "Project submission received",
+    expectation: "The studio will review the information you shared before deciding the next step.",
+    next: "If more information or booking access is needed, the studio will contact you by email.",
+  };
+  const settings = await tattooReceiptSettings(env);
+  const reviewLine = ["consultation", "build_session"].includes(type)
+    ? "Complete checkout from the Square link you opened to keep the selected time."
+    : settings.reviewTimeMessage;
+
   const text = [
     `Hi ${normalized.contactName || "there"},`,
     "",
-    "Your art.pill TATTOO HOUSE inquiry has been received.",
-    "The studio will review the project notes, placement, scale, references, and timing before sending any booking access.",
+    `Your art.pill TATTOO HOUSE ${profile.label} has been received.`,
+    `Submission reference: ${normalized.id}`,
     "",
-    "If the project is approved, you will receive a private booking link for scheduling and deposit.",
+    profile.expectation,
+    profile.next,
+    "",
+    reviewLine,
+    `Questions or corrections? Email ${settings.supportEmail} and include your submission reference.`,
     "",
     "Thank you,",
     "art.pill TATTOO HOUSE",
@@ -533,7 +682,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
 
   return sendTransactionalEmail(env, {
     to: normalized.contactEmail,
-    subject: "art.pill TATTOO HOUSE inquiry received",
+    subject: `art.pill TATTOO HOUSE — ${profile.subject}`,
     text,
     templateKey: "submission_received",
     relatedType: "submission",
@@ -581,35 +730,50 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
   const bookingUrl = token.bookingUrl.startsWith("http")
     ? token.bookingUrl
     : `${publicBaseUrl(env, request)}${token.bookingUrl}`;
+  const purpose = asString(token.purpose || token.bookingPurpose || token.booking_purpose) || "tattoo";
+  const isConsultationPurpose = purpose === "consultation";
+  const expiresAt = token.expiresAt || token.expires_at || "";
   const text = [
     `Hi ${normalized.contactName || "there"},`,
     "",
-    "Your tattoo project has been approved for booking.",
+    isConsultationPurpose
+      ? "Your project review is ready for the required in-person planning consultation. This consultation happens before tattoo scheduling."
+      : "Your tattoo project and final session plan are ready for tattoo booking.",
     "",
-    "Approved session options:",
+    isConsultationPurpose ? "Available consultation option:" : "Approved tattoo session options:",
     "",
     sessionOptionsText(bookingTypes),
     "",
-    `Deposit due to book: ${depositAmountText(bookingTypes)}`,
+    `${isConsultationPurpose ? "Consultation reservation fee" : "Tattoo deposit due to book"}: ${depositAmountText(bookingTypes)}`,
     "",
     "Before booking, please review:",
     "",
     `- Terms & Conditions: ${resources.bookingTermsUrl}`,
-    `- Day-of / session prep: ${resources.dayOfInstructionsUrl}`,
+    isConsultationPurpose
+      ? `- Location & parking: ${resources.locationParkingUrl}`
+      : `- Tattoo preparation & location details: ${resources.dayOfInstructionsUrl}`,
     "",
-    "Use the private link below to review your session estimate, choose your pacing where available, select an appointment, and pay the deposit:",
+    isConsultationPurpose
+      ? "Use the private link below to choose the consultation time and pay its reservation fee:"
+      : "Use the private link below to review the final session estimate, select an appointment, and pay the tattoo deposit:",
     "",
     bookingUrl,
     "",
-    "This link is private to your project. Deposits are non-refundable and go toward the final cost of your tattoo. If the available times do not work, reply to this email and the studio can help.",
+    expiresAt ? `Private link expires: ${formatDate(expiresAt)}` : "",
+    isConsultationPurpose
+      ? "The consultation fee is non-refundable and is not a tattoo deposit. Paying schedules only the prerequisite consultation; the tattoo remains unbooked until consultation completion, a final session plan, and a separate tattoo booking link."
+      : "This link is private to your project. Tattoo deposits are non-refundable and go toward the final cost of the scheduled tattoo. Personalized aftercare instructions are provided at the appointment.",
+    "If the available times do not work, reply to this email and the studio can help.",
     "",
     "Thank you,",
     "art.pill TATTOO HOUSE",
-  ].join("\n");
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
 
   return sendTransactionalEmail(env, {
     to: normalized.contactEmail,
-    subject: "Your private art.pill TATTOO HOUSE booking link",
+    subject: isConsultationPurpose
+      ? "Your private prerequisite consultation link"
+      : "Your private art.pill TATTOO HOUSE tattoo booking link",
     text,
     templateKey: "booking_link_created",
     relatedType: "submission",
@@ -635,6 +799,7 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
     `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
     `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
     `Location & parking: ${resources.locationParkingUrl}`,
+    "Personalized aftercare instructions will be provided at your appointment.",
     "",
     "I may follow up directly with prep notes or adjustments before your appointment, if needed.",
     "",
@@ -849,6 +1014,92 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
   });
 }
 
+function rescheduledAppointmentProfile(appointment) {
+  const virtual = appointment.bookingTypeId === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID;
+  const build = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session";
+  const consultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
+    || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
+  const studio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
+  return {
+    studio,
+    virtual,
+    label: studio ? "studio booking" : build ? "Build session" : consultation ? "consultation" : "tattoo appointment",
+  };
+}
+
+export async function notifyAppointmentRescheduled(env, request, appointmentRow, options = {}) {
+  const appointment = normalizeAppointment(appointmentRow);
+  if (!appointment.clientEmail) return { ok: false, skipped: true };
+  const profile = rescheduledAppointmentProfile(appointment);
+  const resources = clientResourceUrls(env, request);
+  const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
+  const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
+  const resourceLines = profile.virtual
+    ? [appointment.meeting?.joinUrl ? `Updated Zoom link: ${appointment.meeting.joinUrl}` : "Zoom details will be sent separately if the link is not ready yet."]
+    : profile.studio
+      ? []
+      : [`Location & parking: ${resources.locationParkingUrl}`];
+  const text = [
+    `Hi ${appointment.clientName || "there"},`,
+    "",
+    `Your ${profile.label} has been rescheduled.`,
+    "",
+    previousStartAt ? `Previous time: ${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}` : "",
+    `New time: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    `Session: ${appointment.bookingTypeLabel}`,
+    "Your existing payment remains attached to this booking. No new payment was charged for this move.",
+    "",
+    `Updated confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
+    `Updated calendar event: ${appointmentCalendarUrl(env, request, appointment)}`,
+    ...resourceLines,
+    "",
+    "This booking has now used its one online reschedule. Contact the Studio if anything else changes.",
+    "",
+    profile.studio ? "the six.well construct" : "art.pill TATTOO HOUSE",
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const identity = profile.studio ? eventsEmailIdentity(env) : {};
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    ...identity,
+    subject: `Your ${profile.label} has been rescheduled`,
+    text,
+    templateKey: "appointment_rescheduled",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: options.idempotencyKey || `appointment_rescheduled:${appointment.id}:${appointment.startAt}`,
+  });
+}
+
+export async function notifyAdminAppointmentRescheduled(env, request, appointmentRow, options = {}) {
+  const appointment = normalizeAppointment(appointmentRow);
+  const profile = rescheduledAppointmentProfile(appointment);
+  const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
+  const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
+  return sendAdminNotification(env, request, {
+    subject: `Booking rescheduled: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`,
+    lines: [
+      "A paid booking was moved without a new charge.",
+      "",
+      compactLine("Booking type", appointment.bookingTypeLabel || appointment.bookingTypeId),
+      compactLine("Purpose", appointment.purpose || profile.label),
+      compactLine("Appointment ID", appointment.id),
+      compactLine("Submission ID", appointment.submissionId),
+      previousStartAt ? compactLine("Previous time", `${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}`) : "",
+      compactLine("New time", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
+      compactLine("Reschedules used", appointment.rescheduleCount),
+      "",
+      compactLine("Client", appointment.clientName),
+      compactLine("Email", appointment.clientEmail),
+      compactLine("Updated confirmation", appointmentConfirmationUrl(env, request, appointment)),
+      compactLine("Updated calendar", appointmentCalendarUrl(env, request, appointment)),
+    ],
+    templateKey: "admin_appointment_rescheduled",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: options.idempotencyKey || `admin_appointment_rescheduled:${appointment.id}:${appointment.startAt}`,
+  });
+}
+
 export async function notifyAdminEventWaitlistReceived(env, request, entry, event, options = {}) {
   return sendAdminNotification(env, request, {
     subject: `New event waitlist request: ${event.title || event.slug}`,
@@ -950,14 +1201,30 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
     .first();
 }
 
-async function latestActiveToken(db, submissionId) {
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function activeTokenForBookingUrl(db, submissionId, bookingUrl) {
+  let rawToken = "";
+  try {
+    rawToken = new URL(bookingUrl, "https://booking.invalid").searchParams.get("token") || "";
+  } catch {
+    return null;
+  }
+  if (!rawToken) return null;
+  const tokenHash = await sha256Hex(rawToken);
   return db
     .prepare(
       `SELECT * FROM booking_tokens
-       WHERE submission_id = ? AND revoked_at IS NULL AND used_at IS NULL
-       ORDER BY created_at DESC LIMIT 1`
+       WHERE submission_id = ? AND token_hash = ?
+         AND revoked_at IS NULL
+         AND used_at IS NULL
+         AND (expires_at IS NULL OR expires_at > ?)
+       LIMIT 1`
     )
-    .bind(submissionId)
+    .bind(submissionId, tokenHash, new Date().toISOString())
     .first();
 }
 
@@ -998,7 +1265,7 @@ export async function handleAdminResendNotification(request, env) {
         relatedId: "admin_notifications",
         idempotencyKey: resendKey("admin_test"),
       });
-      return json({ ok: Boolean(delivery.ok), delivery });
+      return deliveryResponse(delivery);
     }
 
     const sourceDelivery = await deliveryById(db, asString(body.notificationId));
@@ -1026,7 +1293,7 @@ export async function handleAdminResendNotification(request, env) {
       const delivery = await notifyEventTicketPaid(env, request, ticketRow, {
         idempotencyKey: resendKey(`event_ticket_paid:${ticketRow.id}`),
       });
-      return json({ ok: Boolean(delivery.ok), delivery });
+      return deliveryResponse(delivery);
     }
 
     if (templateKey === "submission_received") {
@@ -1035,7 +1302,7 @@ export async function handleAdminResendNotification(request, env) {
       const delivery = await notifySubmissionReceived(env, submission, {
         idempotencyKey: resendKey(`submission_received:${submission.id}`),
       });
-      return json({ ok: Boolean(delivery.ok), delivery });
+      return deliveryResponse(delivery);
     }
 
     if (templateKey === "admin_submission_received") {
@@ -1044,7 +1311,7 @@ export async function handleAdminResendNotification(request, env) {
       const delivery = await notifyAdminSubmissionReceived(env, submission, {
         idempotencyKey: resendKey(`admin_submission_received:${submission.id}`),
       });
-      return json({ ok: Boolean(delivery.ok), delivery });
+      return deliveryResponse(delivery);
     }
 
     if (templateKey === "booking_link_created") {
@@ -1052,18 +1319,23 @@ export async function handleAdminResendNotification(request, env) {
       if (!submission) return errorResponse("Submission not found.", 404);
       if (!submission.booking_url) return errorResponse("This submission does not have a booking URL.", 400);
 
-      const token = await latestActiveToken(db, submission.id);
-      const tokenId = token?.id || submission.id;
+      const token = await activeTokenForBookingUrl(db, submission.id, submission.booking_url);
+      if (!token) {
+        return errorResponse("This booking link is expired, used, or revoked. Generate a new compatible link instead of resending it.", 409);
+      }
+      const tokenId = token.id;
       const delivery = await notifyBookingLinkCreated(env, request, submission, {
         id: tokenId,
         bookingUrl: submission.booking_url.startsWith("http")
           ? submission.booking_url
           : `${publicBaseUrl(env, request)}${submission.booking_url}`,
         allowedBookingTypes: parseJsonField(token?.allowed_booking_types_json, []),
+        purpose: token.purpose || "tattoo",
+        expiresAt: token.expires_at || "",
       }, {
         idempotencyKey: resendKey(`booking_link_created:${tokenId}`),
       });
-      return json({ ok: Boolean(delivery.ok), delivery });
+      return deliveryResponse(delivery);
     }
 
     if (templateKey === "admin_appointment_confirmed") {
@@ -1075,7 +1347,7 @@ export async function handleAdminResendNotification(request, env) {
       const delivery = await notifyAdminAppointmentConfirmed(env, request, appointment, {
         idempotencyKey: resendKey(`admin_appointment_confirmed:${appointment.id}`),
       });
-      return json({ ok: Boolean(delivery.ok), delivery });
+      return deliveryResponse(delivery);
     }
 
     if ([
@@ -1092,7 +1364,48 @@ export async function handleAdminResendNotification(request, env) {
       const delivery = await notifyAppointmentConfirmed(env, request, appointment, {
         idempotencyKey: resendKey(`appointment_confirmed:${appointment.id}`),
       });
-      return json({ ok: Boolean(delivery.ok), delivery });
+      return deliveryResponse(delivery);
+    }
+
+    if (templateKey === "appointment_rescheduled" || templateKey === "admin_appointment_rescheduled") {
+      const appointment = await selectAppointmentWithMeeting(db, appointmentId);
+      if (!appointment) return errorResponse("Appointment not found.", 404);
+      if (appointment.status !== "confirmed" || Number(appointment.reschedule_count || 0) < 1) {
+        return errorResponse("Only confirmed, rescheduled appointments can receive this notification.", 400);
+      }
+      const resendOptions = {
+        previousStartAt: appointment.original_start_at || "",
+        previousEndAt: appointment.original_end_at || "",
+        idempotencyKey: resendKey(`${templateKey}:${appointment.id}`),
+      };
+      const delivery = templateKey === "admin_appointment_rescheduled"
+        ? await notifyAdminAppointmentRescheduled(env, request, appointment, resendOptions)
+        : await notifyAppointmentRescheduled(env, request, appointment, resendOptions);
+      return deliveryResponse(delivery);
+    }
+
+    if (templateKey === "appointment_cancelled") {
+      const appointment = await selectAppointmentWithMeeting(db, appointmentId);
+      if (!appointment) return errorResponse("Appointment not found.", 404);
+      if (appointment.status !== "cancelled") {
+        return errorResponse("Only cancelled appointments can receive cancellation resends.", 400);
+      }
+      const delivery = await notifyAppointmentCancelled(env, request, appointment, {
+        idempotencyKey: resendKey(`appointment_cancelled:${appointment.id}`),
+      });
+      return deliveryResponse(delivery);
+    }
+
+    if (templateKey === "appointment_reminder_24h") {
+      const appointment = await selectAppointmentWithMeeting(db, appointmentId);
+      if (!appointment) return errorResponse("Appointment not found.", 404);
+      if (appointment.status !== "confirmed") {
+        return errorResponse("Only confirmed appointments can receive reminder resends.", 400);
+      }
+      const delivery = await sendAppointmentReminder(env, appointment, {
+        idempotencyKey: resendKey(`appointment_reminder_24h:${appointment.id}`),
+      });
+      return deliveryResponse(delivery);
     }
 
     return errorResponse(`Unsupported notification template: ${templateKey || "(blank)"}.`, 400);
@@ -1101,44 +1414,53 @@ export async function handleAdminResendNotification(request, env) {
   }
 }
 
-export async function notifyAppointmentCancelled(env, request, appointmentRow) {
+export async function notifyAppointmentCancelled(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   if (!appointment.clientEmail) return { ok: false, skipped: true };
 
-  const isConsultation = CONSULTATION_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
-  const rebookPath = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID
-    ? "/tattoos/build/in-person/"
-    : "/tattoos/inquire/consultation/";
-  const rebookUrl = `${publicBaseUrl(env, request)}${rebookPath}?rebook=1`;
-  const policyText = isConsultation
+  const isBuild = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session";
+  const isPrerequisiteConsultation = appointment.purpose === "prerequisite_consultation";
+  const isConsultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
+    || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
+  const occasion = isBuild ? "Build session" : isPrerequisiteConsultation ? "project consultation" : isConsultation ? "consultation" : "appointment";
+  const rebookUrl = isBuild
+    ? `${publicBaseUrl(env, request)}/tattoos/build/in-person/?rebook=1`
+    : isConsultation && !isPrerequisiteConsultation
+      ? `${publicBaseUrl(env, request)}/tattoos/inquire/consultation/?rebook=1&type=${encodeURIComponent(appointment.bookingTypeId || IN_PERSON_CONSULTATION_BOOKING_TYPE_ID)}`
+      : "";
+  const policyText = isConsultation || isBuild
     ? "Per studio policy, reservation fees are non-refundable. One reschedule is allowed with at least 48 hours notice; a new reservation fee is required for reschedules made within 48 hours."
-    : "Per studio policy, deposits and payments are non-refundable. One reschedule is allowed with at least 48 hours notice; a new deposit is required for reschedules made within 48 hours.";
+    : "Per studio policy, deposits and payments are non-refundable. Cancellation is separate from the one-time reschedule option.";
   const text = [
     `Hi ${appointment.clientName || "there"},`,
     "",
-    `Your art.pill TATTOO HOUSE ${isConsultation ? "consultation" : "appointment"} has been cancelled.`,
+    `Your art.pill TATTOO HOUSE ${occasion} has been cancelled.`,
     "",
     `Was scheduled: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     `Session: ${appointment.bookingTypeLabel}`,
     "",
     policyText,
     "",
-    `Pick a new time: ${rebookUrl}`,
+    rebookUrl
+      ? `Start a new reservation: ${rebookUrl}`
+      : isPrerequisiteConsultation
+        ? "This consultation belongs to your reviewed tattoo project. Contact the studio to continue that project; do not start a separate public consultation."
+        : "A cancelled tattoo appointment does not convert into a consultation. Contact the studio if you want to discuss a future project or appointment.",
     "",
     `Questions? Email ${env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO}.`,
     "",
     "Thank you,",
     "art.pill TATTOO HOUSE",
-  ].join("\n");
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: "Your appointment has been cancelled",
+    subject: `Your ${occasion.toLowerCase()} has been cancelled`,
     text,
     templateKey: "appointment_cancelled",
     relatedType: "appointment",
     relatedId: appointment.id,
-    idempotencyKey: `appointment_cancelled:${appointment.id}`,
+    idempotencyKey: options.idempotencyKey || `appointment_cancelled:${appointment.id}`,
   });
 }
 
@@ -1374,6 +1696,56 @@ export async function sendDueEventTicketReminders(env) {
   }
 }
 
+async function sendAppointmentReminder(env, appointmentRow, options = {}) {
+  const appointment = normalizeAppointment(appointmentRow);
+  if (!appointment.clientEmail) return { ok: false, skipped: true };
+  const resources = clientResourceUrls(env);
+  const isVirtual = appointment.bookingTypeId === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID;
+  const isBuild = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session";
+  const isConsultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
+    || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
+  const isStudio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
+  const occasion = isStudio ? "studio booking" : isBuild ? "Build session" : isConsultation ? "consultation" : "tattoo appointment";
+  const brand = isStudio ? "the six.well construct" : "art.pill TATTOO HOUSE";
+  const resourceLines = isVirtual
+    ? [appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "Zoom details: contact the studio if your link has not arrived."]
+    : isConsultation || isBuild
+      ? [`Location & parking: ${resources.locationParkingUrl}`]
+      : isStudio
+        ? []
+        : [
+            `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
+            `Location & parking: ${resources.locationParkingUrl}`,
+            "Personalized aftercare instructions will be provided at your appointment.",
+          ];
+  const text = [
+    `Hi ${appointment.clientName || "there"},`,
+    "",
+    `Reminder: Your ${occasion} with ${brand} is tomorrow.`,
+    "",
+    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    `Session: ${appointment.bookingTypeLabel}`,
+    `Add to calendar: ${appointmentCalendarUrl(env, null, appointment)}`,
+    ...resourceLines,
+    "",
+    "Reply to this thread if you have any questions or concerns before your session.",
+    "",
+    isStudio ? "the six.well construct" : "-Saiel Solehman",
+    isStudio ? "" : "[art.pill TATTOO HOUSE]",
+  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const identity = isStudio ? eventsEmailIdentity(env) : {};
+  return sendTransactionalEmail(env, {
+    to: appointment.clientEmail,
+    ...identity,
+    subject: `Reminder: Your ${occasion} with ${brand} is tomorrow`,
+    text,
+    templateKey: "appointment_reminder_24h",
+    relatedType: "appointment",
+    relatedId: appointment.id,
+    idempotencyKey: options.idempotencyKey || `appointment_reminder_24h:${appointment.id}`,
+  });
+}
+
 export async function sendDueAppointmentReminders(env) {
   const db = notificationDb(env);
   if (!db) return { sent: 0, skipped: 0, failed: 0 };
@@ -1404,40 +1776,7 @@ export async function sendDueAppointmentReminders(env) {
     let skipped = 0;
     let failed = 0;
     for (const row of result.results || []) {
-      const appointment = normalizeAppointment(row);
-      const resources = clientResourceUrls(env);
-      const isConsultation = CONSULTATION_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
-      const isVirtual = appointment.bookingTypeId === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID;
-      const occasion = isConsultation ? "consultation" : "tattoo appointment";
-      const text = [
-        `Hi ${appointment.clientName || "there"},`,
-        "",
-        `Reminder: Your ${occasion} with art.pill TATTOO HOUSE is tomorrow.`,
-        "",
-        `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-        `Session: ${appointment.bookingTypeLabel}`,
-        appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
-        `Add to calendar: ${appointmentCalendarUrl(env, null, appointment)}`,
-        "",
-        isVirtual ? "" : "Please review before arriving:",
-        isVirtual ? "" : "",
-        isConsultation ? "" : `- Day-of instructions: ${resources.dayOfInstructionsUrl}`,
-        isVirtual ? "" : `- Location & parking: ${resources.locationParkingUrl}`,
-        "",
-        "Reply to this thread if you have any questions or concerns before your session.",
-        "",
-        "-Saiel Solehman",
-        "[art.pill TATTOO HOUSE]",
-      ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
-      const delivery = await sendTransactionalEmail(env, {
-        to: appointment.clientEmail,
-        subject: `Reminder: Your ${occasion} with art.pill TATTOO HOUSE is tomorrow`,
-        text,
-        templateKey: "appointment_reminder_24h",
-        relatedType: "appointment",
-        relatedId: appointment.id,
-        idempotencyKey: `appointment_reminder_24h:${appointment.id}`,
-      });
+      const delivery = await sendAppointmentReminder(env, row);
       if (delivery.skipped) skipped += 1;
       else if (delivery.ok) sent += 1;
       else failed += 1;

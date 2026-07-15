@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Custom Inquiry - Art.Pill Tattoo House</title>
+<script>if(new URLSearchParams(location.search).get("preview")==="1"){var previewRobots=document.createElement("meta");previewRobots.name="robots";previewRobots.content="noindex, nofollow";document.head.appendChild(previewRobots);}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -28,20 +29,18 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
-  .include-label { margin-top:48px; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; }
-  .include-list { list-style:none; display:flex; flex-direction:column; max-width:620px; border-top:5px solid var(--ring-faint); }
-  .include-list li { display:grid; grid-template-columns:42px minmax(0,1fr); gap:18px; font-size:14px; line-height:1.6; color:var(--text-mute); padding:16px 0; border-bottom:5px solid var(--ring-faint); }
-  .include-list li::before { color:var(--signal); opacity:0.72; font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.14em; }
-  .include-list li:nth-child(1)::before { content:"I"; }
-  .include-list li:nth-child(2)::before { content:"II"; }
-  .include-list li:nth-child(3)::before { content:"III"; }
-  .include-list li:nth-child(4)::before { content:"IV"; }
-  .include-list li:nth-child(5)::before { content:"V"; }
-  .path-note { margin-top:34px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:22px 0; max-width:620px; }
-  .path-note-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
-  .path-note-body { font-size:13px; line-height:1.7; color:var(--text-mute); margin-bottom:14px; }
-  .path-note-link { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); transition:color var(--t-fast); }
-  .path-note-link:hover { color:var(--accent); }
+  .qualifier-note { margin-top:22px; padding:18px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); font-size:13px; line-height:1.7; color:var(--text-mute); max-width:620px; }
+  .guide-stack { grid-column:1 / -1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:0; max-width:none; }
+  .guide-stack details { border:5px solid var(--ring-faint); background:rgba(14,14,14,0.35); }
+  .guide-stack summary { cursor:pointer; list-style:none; position:relative; padding:17px 54px 17px 18px; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; line-height:1.4; text-transform:uppercase; color:var(--accent); }
+  .guide-stack summary::-webkit-details-marker { display:none; }
+  .guide-stack summary::after { content:"+"; position:absolute; right:18px; top:50%; transform:translateY(-50%); color:var(--signal); font-size:20px; }
+  .guide-stack details[open] summary::after { content:"−"; }
+  .guide-content { padding:0 18px 20px; font-size:13px; line-height:1.75; color:var(--text-mute); }
+  .guide-content p + p,.guide-content ul + p { margin-top:12px; }
+  .guide-content ul { padding-left:20px; display:grid; gap:8px; }
+  .guide-links { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+  .guide-links a { display:inline-flex; min-height:38px; align-items:center; padding:0 12px; border:3px solid var(--ring-soft); font-family:var(--sans); font-weight:700; font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); }
   .form-panel { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:42px 0; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
   .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
@@ -63,6 +62,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
   .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
   .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
+  .field-note { font-size:12px; line-height:1.65; color:var(--text-mute); }
   .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
@@ -71,10 +71,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .radio-option { display:flex; align-items:center; gap:8px; }
   .radio-option input { width:16px; height:16px; accent-color:var(--signal); }
   .radio-option span { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-mute); }
-  .lead-note { margin-top:34px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:22px 0; max-width:620px; }
-  .lead-note-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
-  .lead-note-body { font-size:13px; line-height:1.7; color:var(--text-mute); }
-  .lead-note-body + .lead-note-body { margin-top:8px; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
   .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
   .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
@@ -82,7 +78,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
-  @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } }
+  @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } .guide-stack { grid-template-columns:1fr; } }
   @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 0; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
 @media (max-width: 700px) {
   header.top {
@@ -96,8 +92,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -115,31 +112,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <div class="layout">
       <section>
         <h1 class="page-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
-        <p class="intro-body" data-copy-id="inquiry-intro-primary">Use this pathway for an original custom tattoo that is not an available flash design, a Build Your Own brief, or an open Special Project. Submitting starts a project review; it does not reserve an appointment.</p>
-        <p class="intro-body" data-copy-id="inquiry-intro-secondary">Share the idea, meaning, placement, approximate size, budget, and visual direction clearly enough to judge fit. References may describe subject matter or atmosphere, but another artist's tattoo will not be copied. If the project is accepted, you will receive the appropriate next step or a private booking link.</p>
-        <p class="include-label">What to Include</p>
-        <ul class="include-list">
-          <li>Concept, subject matter, and the meaning behind it</li>
-          <li>Body placement and approximate size</li>
-          <li>Whether this is custom work, a Special Project direction, or a flash-adjacent idea</li>
-          <li>Helpful reference images or links for mood and aesthetic</li>
-          <li>Your timing, budget range, and any context that shapes the project</li>
-        </ul>
-        <div class="path-note">
-          <p class="path-note-title" data-copy-id="inquiry-flash-note-title">Claiming flash?</p>
-          <p class="path-note-body" data-copy-id="inquiry-flash-note-body">Start on the flash wall first. Available designs can prefill the claim form so the review arrives with the right catalog information attached.</p>
-          <a class="path-note-link" href="/tattoos/flash/claim/">Open flash claim form &rarr;</a>
-        </div>
-        <div class="path-note">
-          <p class="path-note-title" data-copy-id="inquiry-consult-note-title">Want a consultation first?</p>
-          <p class="path-note-body" data-copy-id="inquiry-consult-note-body">Book an in-person consultation (<span data-consultation-meta="consult_in_person">loading current details…</span>) or a virtual consultation (<span data-consultation-meta="consult_virtual">loading current details…</span>) for placement, cover-up review, or project planning before or alongside your inquiry.</p>
-          <a class="path-note-link" href="/tattoos/inquire/consultation/">Book a consultation &rarr;</a>
-        </div>
-        <div class="lead-note">
-          <p class="lead-note-title" data-copy-id="inquiry-lead-note-title">Timing</p>
-          <p class="lead-note-body" data-copy-id="inquiry-lead-note-body-1">Custom artwork requires at least 2 weeks of lead time before your desired appointment date. Simple or pre-existing designs don't require this lead time, but follow first-come, first-served availability.</p>
-          <p class="lead-note-body" data-copy-id="inquiry-lead-note-body-2">Studio hours: Tues-Wed 1pm-6pm, Fri-Sat 1pm-8pm. Closed Sun, Mon, Thurs.</p>
-        </div>
+        <p class="intro-body" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash. Build Your Own and open Special Project calls use their dedicated forms. Submitting starts review; it does not reserve an appointment.</p>
+        <p class="qualifier-note">A clear concept, placement, approximate size, budget, and visual direction are enough to begin. References can describe subject matter or atmosphere, but another artist's tattoo will not be copied.</p>
+
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>
@@ -169,14 +144,15 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             </div>
             <div class="field full">
               <label for="project_type">Project type <span class="required-mark">*</span></label>
-              <select id="project_type" name="project_type" required>
+              <select id="project_type" name="project_type" aria-describedby="largeCoverUpNote" required>
                 <option value="">Select a project type</option>
                 <option value="new_work">New work</option>
                 <option value="cover_up">Cover-up</option>
-                <option value="large_cover_up">Large cover-up - in-person consult required</option>
+                <option value="large_cover_up">Large cover-up - consultation follows review</option>
                 <option value="rework">Rework / recolor</option>
                 <option value="space_filler">Space filler</option>
               </select>
+              <p class="field-note" id="largeCoverUpNote">For a large cover-up, submit this form first. If it moves forward, the studio will link this project to the required paid in-person consultation after review; do not book it separately unless directed.</p>
             </div>
             <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
             <div class="field"><label for="size">Approx. size <span class="required-mark">*</span></label><input id="size" name="size" placeholder="Example: 4-6 in" required></div>
@@ -218,6 +194,40 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           </div>
         </form>
       </section>
+      <div class="guide-stack" aria-label="Custom inquiry guidance">
+        <details>
+          <summary>What to include</summary>
+          <div class="guide-content">
+            <ul>
+              <li>Concept, subject matter, and the meaning behind it</li>
+              <li>Body placement and approximate size</li>
+              <li>Helpful references for mood, source, or atmosphere</li>
+              <li>Your timing, budget range, and relevant context</li>
+            </ul>
+          </div>
+        </details>
+        <details>
+          <summary>Timing and review</summary>
+          <div class="guide-content">
+            <p id="managedReviewTime">Most project submissions are reviewed within 5-7 business days.</p>
+            <p id="managedLeadTime">Custom artwork needs at least two weeks of lead time before a desired appointment. A requested date is context for review, not a reservation.</p>
+            <p id="managedStudioHours">By appointment&mdash;see live availability.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Flash, Build, Special, or paid planning</summary>
+          <div class="guide-content">
+            <p>Use the dedicated path when you already chose flash, want to construct a brief from Legend, or want to answer a currently open Special Project call.</p>
+            <p>Paid consultations are for focused placement, cover-up, and project-planning time: in person (<span data-consultation-meta="consult_in_person">loading current details&hellip;</span>) or virtual (<span data-consultation-meta="consult_virtual">loading current details&hellip;</span>).</p>
+            <div class="guide-links">
+              <a href="/tattoos/flash/">Browse flash</a>
+              <a href="/tattoos/build/">Build Your Own</a>
+              <a href="/tattoos/special-projects/">View Special calls</a>
+              <a href="/tattoos/inquire/consultation/">Book planning time</a>
+            </div>
+          </div>
+        </details>
+      </div>
     </div>
   </main>
   <footer class="bottom">
@@ -234,6 +244,29 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     (function(){
       var form = document.getElementById("inquiryForm");
       if (!form) return;
+
+      fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
+        .then(function(response){ if (!response.ok) throw new Error(); return response.json(); })
+        .then(function(payload){
+          var settings = payload.settings || {};
+          var reviewTime = document.getElementById("managedReviewTime");
+          if (reviewTime && settings.reviewTimeMessage) reviewTime.textContent = settings.reviewTimeMessage;
+          var leadTime = document.getElementById("managedLeadTime");
+          if (leadTime && Number(settings.leadTimeDays) > 0) leadTime.textContent = "Custom artwork needs at least " + Number(settings.leadTimeDays) + " days of lead time before a desired appointment. A requested date is context for review, not a reservation.";
+          var hours = payload.displayedHours !== undefined ? payload.displayedHours : settings.displayedHours;
+          var hoursText = typeof hours === "string" ? hours.trim() : "";
+          if (Array.isArray(hours)) {
+            hoursText = hours.map(function(item){
+              if (typeof item === "string") return item;
+              var label = item.dayLabel || item.day || item.label || item.days || "";
+              var value = item.hoursText || item.hours || (item.closed ? "Closed" : "");
+              return [label, value].filter(Boolean).join(" ");
+            }).filter(Boolean).join("; ");
+          }
+          var hoursTarget = document.getElementById("managedStudioHours");
+          if (hoursTarget) hoursTarget.textContent = hoursText ? "Displayed studio hours: " + hoursText + "." : "By appointment—see live availability.";
+        })
+        .catch(function(){});
 
       var referenceId = new URLSearchParams(window.location.search).get("reference");
       var referenceCard = document.getElementById("portfolioReference");
@@ -256,6 +289,12 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             form.elements.source_path.value = window.location.pathname + window.location.search;
           })
           .catch(function(){ referenceCard.hidden = true; });
+      }
+
+      if (new URLSearchParams(window.location.search).get("preview") === "1") {
+        Array.prototype.forEach.call(form.elements, function(control){ control.disabled = true; });
+        document.getElementById("formStatus").textContent = "Preview is read-only. No inquiry will be submitted.";
+        return;
       }
 
       window.SixWellSubmissionForms.init({

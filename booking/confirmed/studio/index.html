@@ -39,21 +39,30 @@
   .manage-block { max-width:620px; margin:36px 0 0; padding-top:36px; border-top:5px solid var(--ring-soft); }
   .manage-block p { color:var(--muted); font-size:14px; line-height:1.7; margin:0 0 14px; }
   .manage-actions { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
-  .manage-input { background:transparent; border:5px solid var(--ring-soft); color:var(--text); font-family:var(--sans); font-size:13px; padding:10px 14px; min-width:220px; }
+  .manage-email-field { display:grid; gap:7px; min-width:min(100%,280px); }
+  .manage-email-label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; }
+  .manage-input { width:100%; background:transparent; border:5px solid var(--ring-soft); color:var(--text); font-family:var(--sans); font-size:16px; padding:10px 14px; min-width:220px; }
   .manage-input::placeholder { color:var(--dim); }
-  .manage-error { color:var(--signal); font-size:12px; margin:0; }
+  .manage-error { color:#D35A5A; font-size:12px; margin:0; }
   .btn-link { background:none; border:5px solid var(--ring-soft); color:#FFE7CA; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; padding:0 24px; min-height:48px; cursor:pointer; }
   .btn-link:hover { border-color:var(--accent); color:var(--accent); }
+  :where(.cta-primary,.cta-ghost,.btn-link,.manage-input):focus-visible { outline:2px solid #D35A5A; outline-offset:3px; }
   @media (max-width:680px) {
     header { padding:18px 24px; min-height:60px; }
     main { padding:48px 24px 64px; }
     .detail-row { grid-template-columns:1fr; gap:4px; }
+    .manage-email-field { width:100%; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    *,*::before,*::after { animation-duration:0.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; transition-duration:0.01ms !important; }
+    .grain { display:none; }
   }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="about">
+<body class="tattoo-flow" data-venture="about">
 <script>
 (function(){
   var o = document.createElement("div");
@@ -69,14 +78,14 @@
 <main>
   <div id="badge" class="badge"><span class="badge-dot"></span><span id="badgeText">Checking Reservation</span></div>
   <h1 id="title">Reading the booking record.</h1>
-  <p id="lead" class="lead">Give this a moment. The system is checking the booking and Square deposit state.</p>
-  <div id="details" class="detail-block"></div>
+  <p id="lead" class="lead" role="status" aria-live="polite">Give this a moment. The system is checking the booking and Square deposit state.</p>
+  <div id="details" class="detail-block" aria-live="polite"></div>
   <p class="note">The amount above is your deposit — it holds your date. Any remaining balance is settled with the studio directly.</p>
   <div class="cta-row">
     <a class="cta-primary" href="/booking/studio/">Book Another Time</a>
     <a class="cta-ghost" href="/home/">Return to construct</a>
   </div>
-  <div id="manageBlock" class="manage-block" style="display:none;"></div>
+  <div id="manageBlock" class="manage-block" style="display:none;" aria-live="polite"></div>
 </main>
 <script>
 (function(){
@@ -114,7 +123,7 @@
   }
 
   const manage = document.getElementById("manageBlock");
-  const DEFAULT_SUPPORT_EMAIL = "mecsaielsolehman@gmail.com";
+  const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const previewMode = new URLSearchParams(window.location.search).get("preview") === "1";
 
@@ -148,27 +157,31 @@
     }
 
     const hours = payload.hoursUntilStart;
+    const alreadyRescheduled = Number(appointment.rescheduleCount || 0) >= 1;
     const policyText = (typeof hours === "number" && hours < 48)
-      ? "This booking is less than 48 hours away. Cancelling now is fine, but a new deposit will be required to book a new time."
-      : "You can cancel or reschedule with at least 48 hours notice without needing a new deposit.";
+      ? "This booking is less than 48 hours away. A reschedule keeps the original booking in place until a new same-type deposit is paid."
+      : "This booking is at least 48 hours away. One same-type reschedule can move the existing payment to the new time.";
 
     manage.innerHTML = `
       <p class="label" style="margin-bottom:12px;">Need to make changes?</p>
       <p>${supportLine}</p>
       <p>${policyText}</p>
       <div class="manage-actions">
-        <input type="email" id="manageEmail" class="manage-input" placeholder="Confirm your booking email">
+        <div class="manage-email-field">
+          <label class="manage-email-label" for="manageEmail">Confirm booking email</label>
+          <input type="email" id="manageEmail" class="manage-input" autocomplete="email" inputmode="email" placeholder="you@example.com">
+        </div>
         <button type="button" id="cancelBtn" class="btn-link">Cancel Booking</button>
-        <button type="button" id="rebookBtn" class="btn-link">Reschedule</button>
+        ${alreadyRescheduled ? "" : `<a id="rescheduleLink" class="btn-link" href="/booking/reschedule/?appointment=${encodeURIComponent(appointment.id)}">Reschedule</a>`}
       </div>
-      <p id="manageError" class="manage-error" style="display:none;"></p>
+      ${alreadyRescheduled ? `<p class="manage-error">This booking has already used its one online reschedule. Contact the Studio for help with any further change.</p>` : ""}
+      <p id="manageError" class="manage-error" role="alert" aria-live="assertive" style="display:none;"></p>
     `;
 
-    document.getElementById("cancelBtn").addEventListener("click", () => doCancel(appointment, payload, false));
-    document.getElementById("rebookBtn").addEventListener("click", () => doCancel(appointment, payload, true));
+    document.getElementById("cancelBtn").addEventListener("click", () => doCancel(appointment, payload));
   }
 
-  async function doCancel(appointment, payload, redirect) {
+  async function doCancel(appointment, payload) {
     const emailInput = document.getElementById("manageEmail");
     const errorEl = document.getElementById("manageError");
     const email = (emailInput.value || "").trim();
@@ -176,18 +189,12 @@
     if (!email) {
       errorEl.textContent = "Enter the email used for this booking to confirm.";
       errorEl.style.display = "";
+      emailInput.focus();
       return;
     }
-    const confirmMessage = redirect
-      ? "This will cancel your current booking so you can pick a new time. Continue?"
-      : "Cancel this studio booking? This cannot be undone.";
-    if (!window.confirm(confirmMessage)) return;
+    if (!window.confirm("Cancel this studio booking? This is separate from rescheduling and cannot be undone.")) return;
 
     if (previewMode) {
-      if (redirect) {
-        window.location.href = rebookUrl();
-        return;
-      }
       badge.classList.add("pending");
       badgeText.textContent = "Booking Cancelled";
       title.textContent = "This studio booking has been cancelled.";
@@ -204,10 +211,6 @@
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Unable to cancel this booking.");
-      if (redirect) {
-        window.location.href = rebookUrl();
-        return;
-      }
       badge.classList.add("pending");
       badgeText.textContent = "Booking Cancelled";
       title.textContent = "This studio booking has been cancelled.";

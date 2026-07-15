@@ -1,4 +1,7 @@
 .tattoos-page {
+  --tattoo-ornament: #6E0404;
+  --tattoo-display: #B93636;
+  --tattoo-focus: #D35A5A;
   min-height: 100vh;
   background:
     radial-gradient(circle at top, rgba(110, 4, 4, 0.14), transparent 34%),
@@ -39,7 +42,7 @@
 .tattoos-page .hero-copy h1,
 .tattoos-page .page-title {
   margin-bottom: 8px;
-  color: var(--venture-accent);
+  color: var(--tattoo-display);
   font-family: var(--font-display);
   font-size: clamp(80px, 14vw, 220px);
   font-weight: 900;
@@ -98,14 +101,14 @@
 }
 
 .tattoos-page .tattoos-button {
-  background: var(--venture-accent);
-  border-color: var(--venture-accent);
+  background: var(--tattoo-ornament);
+  border-color: var(--tattoo-ornament);
   color: var(--color-bg);
 }
 
 .tattoos-page .tattoos-button:hover,
 .tattoos-page .tattoos-button:focus-visible {
-  border-color: var(--venture-accent);
+  border-color: var(--tattoo-focus);
   opacity: 0.9;
   outline: none;
 }
@@ -117,9 +120,9 @@
 
 .tattoos-page .tattoos-button-secondary:hover,
 .tattoos-page .tattoos-button-secondary:focus-visible {
-  border-color: var(--venture-accent);
+  border-color: var(--tattoo-focus);
   background: rgba(110, 4, 4, 0.08);
-  color: var(--venture-accent);
+  color: var(--tattoo-focus);
   outline: none;
 }
 
@@ -161,7 +164,7 @@
 .tattoos-page .mini-label {
   display: block;
   margin-bottom: 8px;
-  color: var(--venture-accent);
+  color: var(--tattoo-focus);
   font-family: var(--font-serif);
   font-size: 10px;
   letter-spacing: 0.22em;
@@ -252,7 +255,7 @@
 
 .tattoos-page .price-figure {
   margin-bottom: 8px;
-  color: var(--venture-accent);
+  color: var(--tattoo-display);
   font-family: var(--font-display);
   font-size: clamp(30px, 4vw, 52px);
   font-weight: 900;
@@ -287,7 +290,7 @@
 .tattoos-page .step-number {
   display: block;
   margin-bottom: 12px;
-  color: var(--venture-accent);
+  color: var(--tattoo-focus);
   font-family: var(--font-display);
   font-size: 28px;
   font-weight: 900;
@@ -337,7 +340,18 @@
 }
 
 .tattoos-page .footer-bottom a:hover {
-  color: var(--venture-accent);
+  color: var(--tattoo-focus);
+}
+
+.tattoos-page :where(input, textarea, select) {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.tattoos-page :where(input, textarea, select):focus-visible,
+.tattoos-page :where(button, a):focus-visible {
+  outline: 2px solid var(--tattoo-focus);
+  outline-offset: 3px;
 }
 
 @media (max-width: 1080px) {
@@ -407,5 +421,80 @@
   .tattoos-page .footer-bottom {
     flex-direction: column;
     padding-top: 48px;
+  }
+
+  .tattoos-page :where(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+    font-size: 16px;
+  }
+}
+
+/* Shared controls for the legacy tattoo journey pages. These pages keep their
+   own editorial layouts, while this layer owns the flow palette, form value
+   casing, keyboard focus, mobile input sizing, and reduced-motion behavior. */
+.tattoo-flow {
+  --tattoo-ornament: #6E0404;
+  --tattoo-display: #B93636;
+  --tattoo-focus: #D35A5A;
+}
+
+.tattoo-flow :where(
+  .hero-title,
+  .page-title,
+  .lane-title,
+  .ledger-title,
+  .section-title,
+  .form-title,
+  .detail-title,
+  .booking-cta-title,
+  .payment-holding-title,
+  main > h1
+) {
+  color: var(--tattoo-display);
+}
+
+.tattoo-flow :where(
+  .lane-index,
+  .section-label,
+  .block-kicker,
+  .receipt-label,
+  .next-steps-label,
+  .detail-kicker,
+  .meta-label,
+  .brief-count,
+  .session-summary-terms,
+  .path-action,
+  .required-mark
+) {
+  color: var(--tattoo-focus);
+}
+
+.tattoo-flow :where(input, textarea, select) {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.tattoo-flow :where(input, textarea, select, button, a, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--tattoo-focus);
+  outline-offset: 3px;
+}
+
+.tattoo-flow :where([role="alert"], .form-status.error, .manage-error) {
+  color: var(--tattoo-focus);
+}
+
+@media (max-width: 768px) {
+  .tattoo-flow :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select) {
+    font-size: 16px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tattoo-flow *,
+  .tattoo-flow *::before,
+  .tattoo-flow *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

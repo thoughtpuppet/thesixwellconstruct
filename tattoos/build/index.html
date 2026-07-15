@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --signal:#6E0404; --ring:#6D3D15;
+    --bg:#0e0e0e; --signal:#6E0404; --display:#B93636; --focus:#D35A5A; --ring:#6D3D15;
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --accent:#FCB867; --text:#FFE7CA;
     --text-mute:rgba(255,231,202,0.6); --text-dim:rgba(255,231,202,0.35); --text-ghost:rgba(255,231,202,0.12);
@@ -38,15 +38,15 @@
 
   /* ── HERO ── */
   .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,420px);gap:48px;align-items:end;margin-bottom:var(--s7);}
-  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(64px,12vw,160px);letter-spacing:-0.05em;line-height:0.88;color:var(--signal);text-transform:uppercase;}
+  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(64px,12vw,160px);letter-spacing:-0.05em;line-height:0.88;color:var(--display);text-transform:uppercase;}
   .hero-desc{font-size:14px;letter-spacing:0.03em;line-height:1.75;color:var(--text-mute);text-align:left;}
 
   /* ── PROCESS STEPS ── */
   .process{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;border:5px solid var(--ring-faint);margin-bottom:var(--s7);}
   .process-step{padding:var(--s5) var(--s5);border-right:5px solid var(--ring-faint);}
   .process-step:last-child{border-right:none;}
-  .step-num{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.6;margin-bottom:var(--s3);}
-  .step-title{font-family:var(--sans);font-weight:900;font-size:14px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s2);}
+  .step-num{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--focus);margin-bottom:var(--s3);}
+  .step-title{font-family:var(--sans);font-weight:900;font-size:14px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--display);margin-bottom:var(--s2);}
   .step-body{font-size:13px;line-height:1.7;color:var(--text-mute);}
 
   /* ── STUDIO ASIDE ── */
@@ -70,7 +70,8 @@
   .door-tab.active{background:rgba(110,4,4,0.08);}
   .door-tab-num{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.7;}
   .door-tab-name{font-family:var(--sans);font-weight:900;font-size:clamp(18px,2.4vw,26px);letter-spacing:-0.02em;text-transform:uppercase;color:var(--text);}
-  .door-tab.active .door-tab-name{color:var(--accent);}
+  .door-tab.active .door-tab-name{color:var(--display);}
+  .door-tab:focus-visible{outline:2px solid var(--focus);outline-offset:-7px;}
   .door-tab-sub{font-family:var(--serif);font-size:12px;line-height:1.6;color:var(--text-mute);}
 
   .door{display:none;}
@@ -84,10 +85,10 @@
 
   .filter-block{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s4);margin-bottom:var(--s5);}
   .filter-group{display:grid;gap:var(--s2);}
-  .filter-label{font-family:var(--sans);font-weight:900;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text-dim);}
+  .filter-label{font-family:var(--sans);font-weight:900;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:var(--focus);}
   .filter-select{width:100%;min-height:54px;border:5px solid var(--ring-faint);background:linear-gradient(90deg,rgba(110,4,4,0.16) 0 5px,rgba(14,14,14,0.82) 5px);color:var(--text-mute);font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;padding:0 48px 0 18px;border-radius:0;appearance:none;cursor:pointer;transition:border-color var(--t-fast),color var(--t-fast),background var(--t-fast);background-image:linear-gradient(90deg,rgba(110,4,4,0.16) 0 5px,rgba(14,14,14,0.82) 5px),linear-gradient(45deg,transparent 50%,var(--signal) 50%),linear-gradient(135deg,var(--signal) 50%,transparent 50%);background-position:0 0,calc(100% - 24px) 23px,calc(100% - 16px) 23px;background-size:100% 100%,8px 8px,8px 8px;background-repeat:no-repeat;}
   .filter-select:hover{border-color:var(--ring-soft);color:var(--text);}
-  .filter-select:focus{outline:1px solid var(--signal);border-color:var(--signal);color:var(--text);background-image:linear-gradient(90deg,rgba(110,4,4,0.28) 0 5px,rgba(14,14,14,0.9) 5px),linear-gradient(45deg,transparent 50%,var(--accent) 50%),linear-gradient(135deg,var(--accent) 50%,transparent 50%);}
+  .filter-select:focus{outline:2px solid var(--focus);outline-offset:2px;border-color:var(--focus);color:var(--text);background-image:linear-gradient(90deg,rgba(110,4,4,0.28) 0 5px,rgba(14,14,14,0.9) 5px),linear-gradient(45deg,transparent 50%,var(--focus) 50%),linear-gradient(135deg,var(--focus) 50%,transparent 50%);}
   .filter-select option{background:var(--bg);color:var(--text);}
 
   .symbol-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3);}
@@ -99,7 +100,9 @@
 
   /* symbol mark (plain SVG or drawn glyph) */
   .symbol-mark{display:flex;align-items:center;justify-content:flex-start;height:72px;color:var(--text-mute);transition:color var(--t-fast);}
-  .symbol-card:hover .symbol-mark,.symbol-card.selected .symbol-mark{color:var(--accent);}
+  .symbol-card:hover .symbol-mark,.symbol-card.selected .symbol-mark{color:var(--display);}
+  .symbol-card:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-color:var(--focus);}
+  .symbol-card[aria-disabled="true"]:not(.selected){opacity:0.48;}
   .symbol-mark svg{width:64px;height:64px;display:block;}
   .symbol-mark img{max-width:72px;max-height:72px;display:block;}
 
@@ -109,7 +112,7 @@
 
   /* "seen in" example strip */
   .symbol-examples{display:flex;flex-direction:column;gap:6px;margin-top:var(--s2);}
-  .symbol-examples-label{font-family:var(--sans);font-weight:700;font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text-dim);}
+  .symbol-examples-label{font-family:var(--sans);font-weight:700;font-size:8px;letter-spacing:0.2em;text-transform:uppercase;color:var(--focus);}
   .symbol-examples-row{display:flex;gap:6px;flex-wrap:wrap;}
   .symbol-example{width:38px;height:38px;border:1px solid var(--ring-faint);overflow:hidden;flex-shrink:0;}
   .symbol-example img{width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(0.2);}
@@ -142,7 +145,7 @@
 
   /* ── MAZE DOOR ── */
   .maze-door{border-top:5px solid var(--ring-faint);padding:var(--s7) 0;display:grid;gap:var(--s5);max-width:780px;}
-  .maze-door-title{font-family:var(--sans);font-weight:900;font-size:clamp(24px,3.4vw,40px);letter-spacing:-0.03em;line-height:0.96;text-transform:uppercase;color:var(--accent);}
+  .maze-door-title{font-family:var(--sans);font-weight:900;font-size:clamp(24px,3.4vw,40px);letter-spacing:-0.03em;line-height:0.96;text-transform:uppercase;color:var(--display);}
   .maze-door-body{font-size:14px;line-height:1.75;color:var(--text-mute);max-width:600px;}
   .maze-door-cta{justify-self:start;display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);border:5px solid var(--signal);padding:14px 28px;transition:background var(--t-fast),color var(--t-fast);}
   .maze-door-cta:hover{background:var(--signal);color:var(--bg);}
@@ -151,21 +154,23 @@
   /* ── FORM SECTION ── */
   .build-form-section{border-top:5px solid var(--ring-faint);padding:var(--s7) 0 var(--s8);}
   .form-header{margin-bottom:var(--s6);}
-  .form-kicker{font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.7;margin-bottom:var(--s3);}
-  .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(28px,4vw,52px);letter-spacing:-0.03em;line-height:0.94;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s4);}
+  .form-kicker{font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--focus);margin-bottom:var(--s3);}
+  .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(28px,4vw,52px);letter-spacing:-0.03em;line-height:0.94;color:var(--display);text-transform:uppercase;margin-bottom:var(--s4);}
   .form-note{font-size:14px;line-height:1.75;color:var(--text-mute);max-width:640px;}
   .selected-summary{background:rgba(110,4,4,0.06);border:5px solid rgba(110,4,4,0.3);padding:var(--s5);margin-bottom:var(--s6);display:none;}
   .selected-summary.visible{display:block;}
-  .summary-label{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);margin-bottom:var(--s4);}
+  .summary-label{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--focus);margin-bottom:var(--s4);}
   .summary-tags{display:flex;flex-wrap:wrap;gap:var(--s2);}
   .summary-tag{font-family:var(--sans);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text);border:5px solid var(--ring-soft);padding:4px 10px;}
   .field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+  .form-fieldset{border:0;margin:0 0 var(--s5);padding:0;min-width:0;}
+  .form-legend{width:100%;padding:0 0 var(--s4);margin-bottom:var(--s5);border-bottom:5px solid var(--ring-faint);font-family:var(--sans);font-size:12px;font-weight:900;letter-spacing:0.16em;text-transform:uppercase;color:var(--focus);}
   .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
   .field.full{grid-column:1 / -1;}
-  label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
-  input,textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;}
+  label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--focus);}
+  input,textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;text-transform:none;letter-spacing:normal;}
   textarea{min-height:120px;resize:vertical;}
-  input:focus,textarea:focus,select:focus{outline:1px solid var(--signal);border-color:var(--signal);}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--focus);outline-offset:2px;border-color:var(--focus);}
   .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
   .check{display:grid;grid-template-columns:18px 1fr;gap:12px;align-items:start;margin:6px 0 28px;}
   .check input{width:18px;height:18px;accent-color:var(--signal);margin-top:2px;padding:0;}
@@ -174,6 +179,9 @@
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
   .submit-btn:hover{background:rgba(252,184,103,0.04);border-color:var(--accent);color:var(--accent);}
   .form-status{font-size:12px;line-height:1.6;color:var(--text-dim);}
+  .field-help{font-size:12px;line-height:1.6;color:var(--text-dim);}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
+  .mobile-selection-tray{display:none;}
 
   /* ── FOOTER ── */
   footer.bottom{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:56px var(--s6);border-top:5px solid var(--ring-faint);display:flex;justify-content:space-between;align-items:center;}
@@ -198,6 +206,16 @@
     .symbol-col{padding:var(--s5) 0;border-right:none;border-bottom:5px solid var(--ring-faint);}
     .brief-col{position:static;height:auto;border-top:5px solid var(--ring-faint);}
     .hero-desc{text-align:left;}
+    body.has-mobile-selection-tray{padding-bottom:92px;}
+    .mobile-selection-tray.visible{position:fixed;z-index:180;left:12px;right:12px;bottom:12px;display:block;border:5px solid var(--signal);background:rgba(14,14,14,0.98);box-shadow:0 16px 54px rgba(0,0,0,0.65);}
+    .mobile-tray-toggle{width:100%;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;color:var(--text);font-family:var(--sans);font-weight:900;text-align:left;}
+    .mobile-tray-count{color:var(--focus);font-size:12px;white-space:nowrap;}
+    .mobile-tray-panel{max-height:44vh;overflow:auto;padding:0 14px 14px;border-top:1px solid var(--ring-faint);}
+    .mobile-tray-panel[hidden]{display:none;}
+    .mobile-tray-items{list-style:none;display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;}
+    .mobile-tray-items li{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ring-soft);padding:6px 8px;color:var(--text-mute);font-size:12px;}
+    .mobile-tray-items button{min-width:28px;min-height:28px;color:var(--focus);font-size:20px;line-height:1;}
+    .mobile-tray-continue{width:100%;min-height:48px;border:2px solid var(--focus);color:var(--focus);font-family:var(--sans);font-weight:900;text-transform:uppercase;}
   }
   @media(max-width:640px){
     header.top{padding:var(--s4) var(--s5);}
@@ -205,6 +223,7 @@
     .page-title{font-size:clamp(56px,18vw,90px);}
     .symbol-grid{grid-template-columns:1fr;}
     .field-grid{grid-template-columns:1fr;}
+    input:not([type="checkbox"]),textarea,select,.filter-select{font-size:16px;}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
   }
   @media(max-width:700px){
@@ -225,10 +244,12 @@
   body.kiosk .symbol-card,body.kiosk .door-tab,body.kiosk .filter-select{min-height:56px;}
   .kiosk-startover{display:none;position:fixed;right:20px;bottom:20px;z-index:200;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--bg);background:var(--signal);border:5px solid var(--signal);padding:14px 24px;cursor:pointer;}
   body.kiosk .kiosk-startover{display:inline-flex;align-items:center;gap:8px;}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto !important;animation-duration:1ms !important;animation-iteration-count:1 !important;transition-duration:1ms !important;}}
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <script>
   (function(){
     var o=document.createElement('div');o.id='construct-fade';
@@ -280,13 +301,13 @@
     <div id="buildHub">
 
       <!-- DOOR TABS -->
-      <div class="door-tabs" role="tablist" aria-label="Choose how to build">
-        <button type="button" class="door-tab active" id="doorTabBrief" role="tab" aria-selected="true" aria-controls="doorBrief">
+      <div class="door-tabs" role="tablist" aria-label="Choose how to build" aria-orientation="horizontal">
+        <button type="button" class="door-tab active" id="doorTabBrief" role="tab" aria-selected="true" aria-controls="doorBrief" tabindex="0">
           <span class="door-tab-num">Path I</span>
           <span class="door-tab-name">Build a Brief</span>
           <span class="door-tab-sub">Select meaningful symbols from Legend of saiel solehman's visual language.</span>
         </button>
-        <button type="button" class="door-tab" id="doorTabMaze" role="tab" aria-selected="false" aria-controls="doorMaze">
+        <button type="button" class="door-tab" id="doorTabMaze" role="tab" aria-selected="false" aria-controls="doorMaze" tabindex="-1">
           <span class="door-tab-num">Path II</span>
           <span class="door-tab-name">Draw a Maze</span>
           <span class="door-tab-sub">Compose your own maze in the drawing studio.</span>
@@ -301,26 +322,27 @@
           <div class="symbol-col">
             <div class="filter-block" aria-label="Filter Legend">
               <div class="filter-group">
-                <p class="filter-label">Form</p>
+                <label class="filter-label" for="filterRow">Form</label>
                 <select class="filter-select" id="filterRow" aria-label="Filter by form"></select>
               </div>
               <div class="filter-group">
-                <p class="filter-label">Theme</p>
+                <label class="filter-label" for="themeFilterRow">Theme</label>
                 <select class="filter-select" id="themeFilterRow" aria-label="Filter by theme"></select>
               </div>
             </div>
-            <div class="symbol-grid" id="symbolGrid" aria-label="Symbol library"></div>
+            <div class="symbol-grid" id="symbolGrid" aria-label="Symbol library" aria-describedby="selectionStatus"></div>
+            <p class="sr-only" id="selectionStatus" role="status" aria-live="polite" aria-atomic="true"></p>
           </div>
 
           <!-- BRIEF PANEL -->
           <div class="brief-col" role="complementary" aria-label="Your build brief">
             <div class="brief-header">
               <span class="brief-heading">your build</span>
-              <span class="brief-count" id="briefCount">0 of 12</span>
+              <span class="brief-count" id="briefCount" role="status" aria-live="polite">0 of 12</span>
             </div>
             <p class="brief-empty" id="briefEmpty" data-copy-id="build-brief-empty">Select symbols from the library to begin building your brief. Each piece you choose carries its meaning into the design.</p>
             <ul class="brief-items" id="briefItems" aria-live="polite"></ul>
-            <p class="brief-limit" id="briefLimit" data-copy-id="build-brief-limit">Twelve elements selected. Remove one to add another, or proceed with this build.</p>
+            <p class="brief-limit" id="briefLimit" role="status" aria-live="polite" data-copy-id="build-brief-limit">Twelve elements selected. Remove one to add another, or proceed with this build.</p>
             <div class="brief-spacer"></div>
             <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form">
               Build this brief →
@@ -346,35 +368,49 @@
             <input type="hidden" name="source_path" value="/tattoos/build/">
             <input type="hidden" name="project_category" value="build-your-own">
             <input type="hidden" name="selected_elements" id="selectedElements">
+            <input type="hidden" name="symbol_ids" id="selectedSymbolIds">
+            <input type="hidden" name="direction" id="legacyDirection">
             <input type="hidden" name="subject" value="New Art.Pill Build Your Own brief">
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
 
-            <div class="field-grid">
-              <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
-              <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
-              <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
-              <div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" autocomplete="tel"></div>
-              <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
-              <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
-              <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
-              <div class="field"><label for="intent">Design intent</label><input id="intent" name="direction" placeholder="What should the piece carry or mean?"></div>
-              <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="form-status" style="margin-top:6px;">Optional. Body reference or placement images only — not mood boards.</p></div>
-              <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
-            </div>
+            <fieldset class="form-fieldset">
+              <legend class="form-legend">Contact details</legend>
+              <div class="field-grid">
+                <div class="field"><label for="firstName">First name</label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
+                <div class="field"><label for="lastName">Last name</label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
+                <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+                <div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" autocomplete="tel"></div>
+              </div>
+            </fieldset>
 
-            <label class="check">
-              <input type="checkbox" name="age_confirmed" value="yes" required>
-              <span class="check-label">I confirm that I am 18 years of age or older.</span>
-            </label>
+            <fieldset class="form-fieldset">
+              <legend class="form-legend">Design details</legend>
+              <div class="field-grid">
+                <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
+                <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
+                <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
+                <div class="field"><label for="designIntent">Design intent</label><input id="designIntent" name="design_intent" placeholder="What should the piece carry or mean?" aria-describedby="intentHelp" required><p class="field-help" id="intentHelp">Required. Describe the meaning, direction, or feeling the selected symbols should carry.</p></div>
+                <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple aria-describedby="referencesHelp"><p class="field-help" id="referencesHelp">Optional. Body reference or placement images only — not mood boards.</p></div>
+                <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
+              </div>
+            </fieldset>
 
-            <label class="check">
-              <input type="checkbox" name="review_consent" value="yes" required>
-              <span class="check-label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
-            </label>
+            <fieldset class="form-fieldset">
+              <legend class="form-legend">Confirm before sending</legend>
+              <label class="check">
+                <input type="checkbox" name="age_confirmed" value="yes" required>
+                <span class="check-label">I confirm that I am 18 years of age or older.</span>
+              </label>
+
+              <label class="check">
+                <input type="checkbox" name="review_consent" value="yes" required>
+                <span class="check-label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
+              </label>
+            </fieldset>
 
             <div class="submit-row">
               <button class="submit-btn" type="submit" id="submitBtn">Submit Brief</button>
-              <p class="form-status" id="formStatus">Reviewed within a few days. Booking access follows if it's a fit.</p>
+              <p class="form-status" id="formStatus" role="status" aria-live="polite">Reviewed within a few days. Booking access follows if it's a fit.</p>
             </div>
           </form>
         </section>
@@ -382,7 +418,7 @@
       </div><!-- /doorBrief -->
 
       <!-- DOOR: DRAW A MAZE -->
-      <div class="door" id="doorMaze" role="tabpanel" aria-labelledby="doorTabMaze">
+      <div class="door" id="doorMaze" role="tabpanel" aria-labelledby="doorTabMaze" hidden>
         <div class="maze-door">
           <h2 class="maze-door-title">The Maze Studio.</h2>
           <p class="maze-door-body">Compose your own maze — paths, rooms, thresholds, and the shapes of the visual language — on an open drawing surface. When it carries what you mean, write a short note and submit it the same way as a brief.</p>
@@ -394,6 +430,16 @@
     </div><!-- /buildHub -->
 
   </main>
+
+  <aside class="mobile-selection-tray" id="mobileSelectionTray" aria-label="Selected build symbols">
+    <button class="mobile-tray-toggle" id="mobileTrayToggle" type="button" aria-expanded="false" aria-controls="mobileTrayPanel">
+      <span>Your build</span><span class="mobile-tray-count" id="mobileTrayCount">0 of 12</span>
+    </button>
+    <div class="mobile-tray-panel" id="mobileTrayPanel" hidden>
+      <ul class="mobile-tray-items" id="mobileTrayItems"></ul>
+      <button class="mobile-tray-continue" id="mobileTrayContinue" type="button">Continue to design intent</button>
+    </div>
+  </aside>
 
   <footer class="bottom">
     <p>&copy; the six.well construct</p>
@@ -437,11 +483,21 @@
         if (!t.tab || !t.panel) return;
         t.tab.classList.toggle('active', on);
         t.tab.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.tab.tabIndex = on ? 0 : -1;
         t.panel.classList.toggle('active', on);
+        t.panel.hidden = !on;
       });
     }
-    tabs.forEach(function(t){
-      if (t.tab) t.tab.addEventListener('click', function(){ activate(t); });
+    tabs.forEach(function(t, index){
+      if (!t.tab) return;
+      t.tab.addEventListener('click', function(){ activate(t); });
+      t.tab.addEventListener('keydown', function(event){
+        if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        var nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1) + tabs.length) % tabs.length;
+        activate(tabs[nextIndex]);
+        tabs[nextIndex].tab.focus();
+      });
     });
   })();
   </script>
@@ -462,10 +518,24 @@
       redirectTo: "/tattoos/submission-received/?type=build",
       beforeSubmit: function(context) {
         var selected = document.getElementById("selectedElements");
-        if (selected && !selected.value.trim()) {
+        var symbolIds = document.getElementById("selectedSymbolIds");
+        var ids = symbolIds ? Array.from(new Set(symbolIds.value.split(',').map(function(value){ return value.trim(); }).filter(Boolean))) : [];
+        if (!selected || !selected.value.trim() || ids.length < 1) {
           context.setStatus(context.status, "Select at least one visual-language element before submitting.", "error");
           return false;
         }
+        if (ids.length > 12) {
+          context.setStatus(context.status, "A build can include no more than twelve visual-language elements.", "error");
+          return false;
+        }
+        symbolIds.value = ids.join(',');
+        var intent = document.getElementById("designIntent");
+        if (!intent || !intent.value.trim()) {
+          context.setStatus(context.status, "Add the design intent before submitting your brief.", "error");
+          if (intent) intent.focus();
+          return false;
+        }
+        document.getElementById("legacyDirection").value = intent.value.trim();
       }
     });
   })();

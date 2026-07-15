@@ -7,6 +7,28 @@
   font-variant-caps: normal;
 }
 
+/* Labels keep the shared display treatment, but text people enter must read
+   back exactly as entered. This intentionally comes after the broad rule. */
+:where(
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]),
+  textarea,
+  select,
+  option,
+  [contenteditable="true"],
+  .form-value,
+  .typed-value
+) {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  line-height: 1.5 !important;
+  font-variant-caps: normal !important;
+}
+
+:where(input, textarea)::placeholder {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
 h1,
 h2,
 h3,
@@ -251,6 +273,16 @@ main > .construct-breadcrumb {
   .hero-title,
   .page-title {
     font-size: clamp(56px, 19vw, 92px) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    textarea,
+    select
+  ) {
+    font-size: 16px !important;
   }
 }
 

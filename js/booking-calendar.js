@@ -69,32 +69,57 @@
     const previewState = previewParams.get("state") || "";
     const requestedBookingTypeId = previewParams.get("type") || "";
 
-    function previewContext() {
-      if (previewState === "error") {
-        return { error: "Unable to load consultation times. (Preview of the load-error state.)" };
+    async function fetchManagedContext() {
+      if (contextUrl === "/api/booking/public-consultation/context" && global.getPublicConsultationContext) {
+        return global.getPublicConsultationContext();
       }
-      const previewTypes = previewBookingTypes || [
-        { id: "consult_in_person", label: "In-Person Consultation", depositCents: 5000, depositLabel: "$50.00", durationMinutes: 30, currency: "USD" },
-        { id: "consult_virtual", label: "Virtual Consultation", depositCents: 5000, depositLabel: "$50.00", durationMinutes: 30, currency: "USD" },
-        { id: "build_in_person", label: "In-Person Build Session", depositCents: 7500, depositLabel: "$75.00", durationMinutes: 60, currency: "USD" },
-      ];
+      const params = apiBookingTypeIds.length
+        ? `?type=${apiBookingTypeIds.map(encodeURIComponent).join("&type=")}`
+        : "";
+      const response = await fetch(`${contextUrl}${params}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Unable to load session times.");
+      return payload;
+    }
+
+    async function previewContext() {
+      if (previewState === "error") {
+        return { error: "Unable to load session times. (Preview of the load-error state.)" };
+      }
+      let managedPayload = {};
+      try {
+        managedPayload = await fetchManagedContext();
+      } catch (error) {
+        if (!Array.isArray(previewBookingTypes) || !previewBookingTypes.length) throw error;
+      }
+      const managedTypes = managedPayload.bookingTypes || (managedPayload.bookingType ? [managedPayload.bookingType] : []);
+      const previewTypes = managedTypes.length ? managedTypes : (previewBookingTypes || []);
+      if (!previewTypes.length) throw new Error("No active session types are available for this preview.");
       const previewWindows = [];
       if (previewState !== "no-availability") {
         const dayOffsets = [2, 4, 7, 9, 11, 16];
         const startHours = [11, 14, 12, 15, 10, 13];
-        dayOffsets.forEach((offset, index) => {
-          const start = new Date();
-          start.setDate(start.getDate() + offset);
-          start.setHours(startHours[index], 0, 0, 0);
-          previewWindows.push({
-            id: `preview-${index + 1}`,
-            bookingTypeId: null,
-            startAt: start.toISOString(),
-            endAt: new Date(start.getTime() + 60 * 60 * 1000).toISOString(),
+        previewTypes.forEach((type) => {
+          dayOffsets.forEach((offset, index) => {
+            const start = new Date();
+            start.setDate(start.getDate() + offset);
+            start.setHours(startHours[index], 0, 0, 0);
+            const durationMinutes = Number(type.durationMinutes) || 60;
+            previewWindows.push({
+              id: `preview-${type.id}-${index + 1}`,
+              bookingTypeId: type.id,
+              startAt: start.toISOString(),
+              endAt: new Date(start.getTime() + durationMinutes * 60 * 1000).toISOString(),
+            });
           });
         });
       }
-      return { bookingTypes: previewTypes, availabilityWindows: previewWindows, walkInWindows: [] };
+      return {
+        ...managedPayload,
+        bookingTypes: previewTypes,
+        availabilityWindows: previewWindows,
+        walkInWindows: managedPayload.walkInWindows || [],
+      };
     }
 
     const form = document.getElementById("consultForm");
@@ -115,6 +140,33 @@
     const bookingTypeSelect = document.getElementById("bookingTypeId");
     const fullNote = document.getElementById("calFullNote");
     const slotPicker = document.querySelector(".slot-picker");
+    const calWrap = document.getElementById("calWrap");
+    const announcement = document.createElement("p");
+    const idempotencyStorageKey = `sixwell:booking-idempotency:${window.location.pathname}:${checkoutUrl}`;
+    let idempotencyKey = "";
+    try {
+      idempotencyKey = window.sessionStorage.getItem(idempotencyStorageKey) || "";
+      if (!idempotencyKey) {
+        idempotencyKey = global.crypto?.randomUUID?.() || `booking-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        window.sessionStorage.setItem(idempotencyStorageKey, idempotencyKey);
+      }
+    } catch (_error) {
+      idempotencyKey = global.crypto?.randomUUID?.() || `booking-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+    announcement.className = "cal-announcement";
+    announcement.setAttribute("role", "status");
+    announcement.setAttribute("aria-live", "polite");
+    announcement.setAttribute("aria-atomic", "true");
+    (calWrap || slotPicker || form).appendChild(announcement);
+    calGrid.setAttribute("role", "grid");
+    calGrid.setAttribute("aria-label", "Available appointment dates");
+    calMonthLabel.setAttribute("aria-live", "polite");
+    selectedEl.setAttribute("role", "status");
+    selectedEl.setAttribute("aria-live", "polite");
+    timePanel.setAttribute("role", "listbox");
+    timePanel.setAttribute("aria-label", "Available appointment times");
+    formError.setAttribute("role", "alert");
+    formError.setAttribute("aria-live", "assertive");
 
     let calendarDate = new Date();
     let windows = [];
@@ -125,6 +177,18 @@
     let selectedWindow = null;
     let windowIndex = new Map();
     let nextWindowByType = new Map();
+    let calendarFocusIndex = 0;
+
+    function announce(message) {
+      announcement.textContent = "";
+      window.requestAnimationFrame(() => {
+        announcement.textContent = message;
+      });
+    }
+
+    function reducedMotion() {
+      return global.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+    }
 
     const freshPrevBtn = prevBtn.cloneNode(true);
     const freshNextBtn = nextBtn.cloneNode(true);
@@ -177,6 +241,7 @@
       timeRow.style.display = "none";
       timePanel.style.display = "none";
       renderCalendar();
+      announce("Selected time cleared.");
     }
 
     function selectedBookingType() {
@@ -205,6 +270,7 @@
       preferredSlots.value = `${formatDate(date)} at ${formatTime(windowItem)}`;
       availabilityWindowId.value = windowItem.id;
       renderCalendar();
+      announce(`Selected ${formatDate(date)} at ${formatTime(windowItem)}.`);
     }
 
     function renderTimeOptions(date) {
@@ -220,11 +286,26 @@
         button.type = "button";
         button.className = "time-option";
         button.textContent = formatTime(windowItem);
+        button.setAttribute("role", "option");
+        button.setAttribute("aria-selected", String(selectedWindow?.id === windowItem.id));
         button.addEventListener("click", (event) => {
           event.stopPropagation();
           setSelectedWindow(windowItem);
         });
         timePanel.appendChild(button);
+      });
+      const timeButtons = [...timePanel.querySelectorAll(".time-option")];
+      timeButtons.forEach((button, index) => {
+        button.addEventListener("keydown", (event) => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const nextIndex = event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? timeButtons.length - 1
+              : (index + (event.key === "ArrowDown" ? 1 : -1) + timeButtons.length) % timeButtons.length;
+          timeButtons[nextIndex]?.focus();
+        });
       });
       timeRow.style.display = "";
       timePanel.style.display = dayWindows.length ? "grid" : "none";
@@ -278,9 +359,9 @@
       const firstDay = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay();
       const daysInMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0).getDate();
       for (let index = 0; index < firstDay; index += 1) {
-        const blank = document.createElement("button");
-        blank.type = "button";
+        const blank = document.createElement("span");
         blank.className = "cal-day empty";
+        blank.setAttribute("aria-hidden", "true");
         calGrid.appendChild(blank);
       }
 
@@ -291,22 +372,69 @@
         const key = dateKey(date);
         button.textContent = key === todayKey ? "Today" : day;
         const hasTimes = windowsFor(date).length > 0;
+        const available = key >= todayKey && hasTimes;
         const isSelected = selectedWindow && dateKey(new Date(selectedWindow.startAt)) === key;
         const isPicked = pickedDate && dateKey(pickedDate) === key;
         button.className = "cal-day" +
           (key < todayKey || !hasTimes ? " past" : "") +
-          (key >= todayKey && hasTimes ? " open" : "") +
+          (available ? " open" : "") +
           (key === todayKey ? " today" : "") +
           (isSelected ? " booked" : "") +
           (isPicked ? " active" : "");
-        if (key >= todayKey && hasTimes) {
+        button.dataset.date = key;
+        button.setAttribute("role", "gridcell");
+        button.setAttribute("aria-label", `${new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(date)}${available ? `, ${windowsFor(date).length} available ${windowsFor(date).length === 1 ? "time" : "times"}` : ", unavailable"}`);
+        button.setAttribute("aria-pressed", String(Boolean(isSelected || isPicked)));
+        if (available) {
           button.addEventListener("click", () => {
             pickedDate = date;
             renderTimeOptions(date);
             renderCalendar();
+            calGrid.querySelector(`[data-date="${key}"]`)?.focus({ preventScroll: true });
+            announce(`${formatDate(date)} selected. Choose an available time.`);
           });
+        } else {
+          button.disabled = true;
         }
         calGrid.appendChild(button);
+      }
+
+      const availableButtons = [...calGrid.querySelectorAll(".cal-day.open:not(:disabled)")];
+      if (availableButtons.length) {
+        calendarFocusIndex = Math.min(calendarFocusIndex, availableButtons.length - 1);
+        const preferredIndex = availableButtons.findIndex((button) => button.dataset.date === dateKey(pickedDate || new Date()));
+        if (preferredIndex >= 0) calendarFocusIndex = preferredIndex;
+        availableButtons.forEach((button, index) => {
+          button.tabIndex = index === calendarFocusIndex ? 0 : -1;
+          button.addEventListener("focus", () => { calendarFocusIndex = index; });
+          button.addEventListener("keydown", (event) => {
+            if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
+            event.preventDefault();
+            if (event.key === "PageUp" || event.key === "PageDown") {
+              const direction = event.key === "PageDown" ? 1 : -1;
+              const requestedMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + direction, 1);
+              if (requestedMonth < firstOfToday) {
+                announce(`${calMonthLabel.textContent} is the earliest booking month.`);
+                return;
+              }
+              calendarDate = requestedMonth;
+              pickedDate = null;
+              calendarFocusIndex = 0;
+              renderCalendar();
+              calGrid.querySelector(".cal-day.open:not(:disabled)")?.focus();
+              announce(`${calMonthLabel.textContent}.`);
+              return;
+            }
+            const requestedIndex = event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? availableButtons.length - 1
+                : index + ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key] || 0);
+            calendarFocusIndex = Math.max(0, Math.min(availableButtons.length - 1, requestedIndex));
+            availableButtons.forEach((entry, entryIndex) => { entry.tabIndex = entryIndex === calendarFocusIndex ? 0 : -1; });
+            availableButtons[calendarFocusIndex]?.focus();
+          });
+        });
       }
     }
 
@@ -324,19 +452,10 @@
       try {
         let payload;
         if (previewMode) {
-          payload = previewContext();
+          payload = await previewContext();
           if (payload.error) throw new Error(payload.error);
         } else {
-          if (contextUrl === "/api/booking/public-consultation/context" && global.getPublicConsultationContext) {
-            payload = await global.getPublicConsultationContext();
-          } else {
-            const params = apiBookingTypeIds.length
-              ? `?type=${apiBookingTypeIds.map(encodeURIComponent).join("&type=")}`
-              : "";
-            const response = await fetch(`${contextUrl}${params}`, { cache: "no-store" });
-            payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(payload.error || "Unable to load consultation times.");
-          }
+          payload = await fetchManagedContext();
         }
         const allTypes = payload.bookingTypes || (payload.bookingType ? [payload.bookingType] : []);
         bookingTypes = allTypes.filter(filterBookingTypes);
@@ -358,9 +477,10 @@
         if (previewMode) submitBtn.textContent = "Preview Checkout";
         else if (bookingType) submitBtn.textContent = `Continue to Square - ${bookingType.depositLabel}`;
         renderCalendar();
+        announce(`${calMonthLabel.textContent}. Use arrow keys to move through available dates.`);
       } catch (error) {
         renderWalkInWindows([]);
-        formError.textContent = error.message || "Unable to load consultation times.";
+        formError.textContent = error.message || "Unable to load session times.";
         formError.style.display = "block";
         renderCalendar();
       }
@@ -372,6 +492,7 @@
       timeRow.style.display = "none";
       timePanel.style.display = "none";
       renderCalendar();
+      announce(`${calMonthLabel.textContent}.`);
     });
     nextBtn.addEventListener("click", () => {
       calendarDate.setMonth(calendarDate.getMonth() + 1);
@@ -379,6 +500,7 @@
       timeRow.style.display = "none";
       timePanel.style.display = "none";
       renderCalendar();
+      announce(`${calMonthLabel.textContent}.`);
     });
     timeTrigger.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -414,9 +536,10 @@
         return;
       }
       if (!selectedWindow) {
-        formError.textContent = "Please select an available consultation time before continuing.";
+        formError.textContent = "Please select an available session time before continuing.";
         formError.style.display = "block";
-        document.getElementById("calWrap").scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("calWrap").scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" });
+        calGrid.querySelector(".cal-day.open:not(:disabled)")?.focus();
         return;
       }
       submitBtn.disabled = true;
@@ -426,13 +549,14 @@
         const data = Object.fromEntries(new FormData(form).entries());
         const response = await fetch(checkoutUrl, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
           body: JSON.stringify(data)
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || "Unable to start checkout.");
         document.getElementById("formStep").style.display = "none";
         document.getElementById("paymentStep").style.display = "block";
+        try { window.sessionStorage.removeItem(idempotencyStorageKey); } catch (_error) {}
         window.location.href = payload.checkoutUrl || `/booking/confirmed/?appointment=${encodeURIComponent(payload.appointmentId || "")}`;
       } catch (error) {
         submitBtn.disabled = false;

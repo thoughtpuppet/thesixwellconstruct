@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Special Projects - Art.Pill Tattoo House</title>
+<script>if(new URLSearchParams(location.search).get("preview")==="1"){var previewRobots=document.createElement("meta");previewRobots.name="robots";previewRobots.content="noindex, nofollow";document.head.appendChild(previewRobots);}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
@@ -71,6 +72,7 @@
     font-family:var(--serif); font-size:16px; line-height:1.8;
     color:var(--text); max-width:700px; margin-bottom:28px;
   }
+  .intro-actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
   .cta-primary {
     display:inline-flex; align-items:center; justify-content:center;
     font-family:var(--sans); font-weight:700; font-size:11px;
@@ -87,6 +89,8 @@
     color:var(--accent);
     outline:none;
   }
+  .cta-primary.is-disabled { opacity:0.42; pointer-events:none; }
+  .cta-secondary { display:inline-flex; align-items:center; min-height:48px; padding:0 18px; border:5px solid var(--ring-faint); font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
   .archive-shell {
     display:grid; grid-template-columns:minmax(220px,320px) minmax(0,1fr);
     width:100%;
@@ -113,6 +117,7 @@
     border-left-color:var(--signal);
     padding-left:35px;
   }
+  .index-button.is-closed { opacity:0.52; }
   .index-number {
     font-family:var(--serif); font-size:10px; letter-spacing:0.18em;
     color:var(--text-dim); padding-top:2px;
@@ -220,6 +225,7 @@
     max-width:460px; font-family:var(--serif); font-size:12px;
     letter-spacing:0.04em; line-height:1.7; color:var(--text-dim);
   }
+  .project-load-status { padding:18px 0; font-size:13px; line-height:1.7; color:var(--text-dim); }
   footer.bottom {
     position:relative; z-index:2; max-width:1440px; margin:0 auto;
     padding:56px var(--s6); border-top:5px solid var(--ring-faint);
@@ -273,8 +279,9 @@ main { padding:var(--s6) var(--s5); }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -302,43 +309,45 @@ main { padding:var(--s6) var(--s5); }
     <section class="intro">
       <h1 class="page-title" data-copy-id="special-projects-page-title">Special Projects</h1>
       <p class="page-subtitle" data-copy-id="special-projects-page-subtitle">Special Projects by SAIEL DAUHN SOLEHMAN</p>
-      <p class="intro-body" data-copy-id="special-projects-intro-body">Special Projects are concept-driven tattoo works built through uniqueness and collaboration. These pieces may involve original imagery, multi-session development, or visual language connected to larger bodies of work.</p>
-      <a class="cta-primary" href="/tattoos/special-projects/apply/">Apply for a Special Project</a>
+      <p class="intro-body" data-copy-id="special-projects-intro-body">Special Projects are concept-driven tattoo calls opened for a defined body of collaborative work. Apply only to a current open call. For another symbolic commission, use the Custom inquiry path.</p>
+      <div class="intro-actions">
+        <a class="cta-primary" href="#project-calls">View current calls</a>
+        <a class="cta-secondary" href="/tattoos/inquire/custom/">Other symbolic commission &rarr;</a>
+      </div>
     </section>
-    <select class="mobile-picker" id="projectSelect" aria-label="Select a tattoo study">
-      <option value="mythic-body-studies">01 MYTHIC BODY STUDIES / OPEN</option>
-      <option value="memory-transfer">02 MEMORY TRANSFER STUDIES / OPEN</option>
-      <option value="large-scale">03 LARGE SCALE SYMBOLIC WORK / OPEN</option>
+    <select class="mobile-picker" id="projectSelect" aria-label="Select a Special Project call">
+      <option value="">Loading current calls&hellip;</option>
     </select>
-    <section class="archive-shell" aria-label="Tattoo studies archive">
+    <section class="archive-shell" id="project-calls" aria-label="Special Project calls">
       <aside class="project-index" aria-label="Project index">
         <p class="index-heading">Project Index</p>
-        <button class="index-button is-active" type="button" data-project="mythic-body-studies"><span class="index-number">01</span><span><span class="index-title">Mythic Body Studies</span><span class="index-year">Open</span></span></button>
-        <button class="index-button" type="button" data-project="memory-transfer"><span class="index-number">02</span><span><span class="index-title">Memory Transfer Studies</span><span class="index-year">Open</span></span></button>
-        <button class="index-button" type="button" data-project="large-scale"><span class="index-number">03</span><span><span class="index-title">Large Scale Symbolic Work</span><span class="index-year">Open</span></span></button>
+        <div id="projectIndex"><p class="project-load-status">Loading Studio-managed calls&hellip;</p></div>
       </aside>
       <article class="project-detail" aria-live="polite">
-        <p class="detail-kicker" id="projectKicker">01 / Open</p>
-        <h2 class="detail-title" id="projectTitle">Mythic Body Studies</h2>
-        <p class="detail-summary" id="projectSummary">An open call for tattoos built around figures, archetypes, ritual objects, and personal mythologies that need to live on the body with gravity.</p>
+        <p class="detail-kicker" id="projectKicker">Loading / Current status</p>
+        <h2 class="detail-title" id="projectTitle">Current Calls</h2>
+        <p class="detail-summary" id="projectSummary">Loading Special Project records from Studio.</p>
         <div class="image-grid" aria-label="Abstract archive frames for selected project">
-          <div class="archive-frame"><span class="frame-label" id="frameOne">figure study</span></div>
-          <div class="archive-frame"><span class="frame-label" id="frameTwo">ritual object</span></div>
-          <div class="archive-frame"><span class="frame-label" id="frameThree">placement system</span></div>
+          <div class="archive-frame"><span class="frame-label" id="frameOne">concept</span></div>
+          <div class="archive-frame"><span class="frame-label" id="frameTwo">placement</span></div>
+          <div class="archive-frame"><span class="frame-label" id="frameThree">review</span></div>
         </div>
         <div class="meta-grid">
-          <div class="meta-item"><p class="meta-label">Medium</p><p class="meta-value" id="projectMedium">Tattoo</p></div>
-          <div class="meta-item"><p class="meta-label">Style</p><p class="meta-value" id="projectStyle">Blackwork / Mythic / Figurative</p></div>
-          <div class="meta-item"><p class="meta-label">Format</p><p class="meta-value" id="projectFormat">Single or multi-session</p></div>
-          <div class="meta-item"><p class="meta-label">Availability</p><p class="meta-value" id="projectAvailability">Open call</p></div>
+          <div class="meta-item"><p class="meta-label">Path</p><p class="meta-value" id="projectMedium">Special Project</p></div>
+          <div class="meta-item"><p class="meta-label">Rate</p><p class="meta-value" id="projectStyle">Confirmed after review</p></div>
+          <div class="meta-item"><p class="meta-label">Call Window</p><p class="meta-value" id="projectFormat">Managed in Studio</p></div>
+          <div class="meta-item"><p class="meta-label">Availability</p><p class="meta-value" id="projectAvailability">Checking</p></div>
         </div>
         <section class="intention">
-          <h3 class="intention-title">Intention</h3>
-          <p class="intention-body" id="projectIntention">This study is for clients who are drawn to mythic imagery and want something personal. The work can begin with an archetype, a dream, a figure, or a symbolic object, then develop into a tattoo that belongs to the body carrying it.</p>
+          <h3 class="intention-title">Application Path</h3>
+          <p class="intention-body" id="projectIntention">Open calls accept applications for review. Closed calls remain visible as context but cannot be submitted.</p>
         </section>
         <div class="application-row">
-          <p class="application-copy">Special Projects are reviewed before booking. If approved, you will receive a private token booking link and next steps.</p>
-          <a class="cta-primary" href="/tattoos/special-projects/apply/" id="projectApply">Apply for this project</a>
+          <p class="application-copy" id="applicationCopy">Special Projects are reviewed before booking. Open-call applications receive call-specific next steps if accepted.</p>
+          <div class="intro-actions">
+            <a class="cta-primary is-disabled" id="projectApply" aria-disabled="true">Loading call status</a>
+            <a class="cta-secondary" href="/tattoos/inquire/custom/">Use Custom instead</a>
+          </div>
         </div>
       </article>
     </section>
@@ -348,86 +357,152 @@ main { padding:var(--s6) var(--s5); }
     <a href="/home/">the six.well construct</a>
   </footer>
   <script>
-    var projects = {
-      'mythic-body-studies': {
-        kicker: '01 / Open',
-        title: 'Mythic Body Studies',
-        summary: 'An open call for tattoos built around figures, archetypes, ritual objects, and personal mythologies that need to live on the body with gravity.',
-        medium: 'Tattoo',
-        style: 'Blackwork / Mythic / Figurative',
-        format: 'Single or multi-session',
-        availability: 'Open call',
-        frames: ['figure study', 'ritual object', 'placement system'],
-        intention: 'This study is for clients who are drawn to mythic imagery and want something personal. The work can begin with an archetype, a dream, a figure, or a symbolic object, then develop into a tattoo that belongs to the body carrying it.'
-      },
-      'memory-transfer': {
-        kicker: '02 / Open',
-        title: 'Memory Transfer Studies',
-        summary: 'An open project for translating remembered places, inherited objects, and private emotional records into symbolic tattoo compositions.',
-        medium: 'Tattoo',
-        style: 'Blackwork / Symbolic / Narrative',
-        format: 'Collaborative development',
-        availability: 'Open call',
-        frames: ['memory object', 'location mark', 'transfer field'],
-        intention: 'This study is for people carrying memories, places, or inherited objects that are ready to become images. The goal is to extract the symbolic charge of a memory and build a tattoo from that charge.'
-      },
-      'large-scale': {
-        kicker: '03 / Open',
-        title: 'Large Scale Symbolic Work',
-        summary: 'An open call for larger symbolic compositions that need meaningful placement, stronger visual architecture, and more than one sitting to resolve.',
-        medium: 'Tattoo',
-        style: 'Blackwork / Symbolic / Surreal',
-        format: 'Large scale / multi-session',
-        availability: 'Open call',
-        frames: ['body map', 'symbol architecture', 'session plan'],
-        intention: 'This project is for clients who want a larger tattoo built with patience and trust. The composition is developed around the body first, with symbolic content, scale, and negative space treated as part of the same system.'
-      }
-    };
+  (function() {
+    var projects = [];
     var fields = {
-      kicker: document.getElementById('projectKicker'),
-      title: document.getElementById('projectTitle'),
-      summary: document.getElementById('projectSummary'),
-      medium: document.getElementById('projectMedium'),
-      style: document.getElementById('projectStyle'),
-      format: document.getElementById('projectFormat'),
-      availability: document.getElementById('projectAvailability'),
-      intention: document.getElementById('projectIntention'),
-      frameOne: document.getElementById('frameOne'),
-      frameTwo: document.getElementById('frameTwo'),
-      frameThree: document.getElementById('frameThree')
+      kicker: document.getElementById("projectKicker"),
+      title: document.getElementById("projectTitle"),
+      summary: document.getElementById("projectSummary"),
+      medium: document.getElementById("projectMedium"),
+      style: document.getElementById("projectStyle"),
+      format: document.getElementById("projectFormat"),
+      availability: document.getElementById("projectAvailability"),
+      intention: document.getElementById("projectIntention")
     };
-    var buttons = Array.prototype.slice.call(document.querySelectorAll('.index-button'));
-    var select = document.getElementById('projectSelect');
-    var applyLink = document.getElementById('projectApply');
-    function setProject(key) {
-      if (!projects[key]) key = 'mythic-body-studies';
-      var project = projects[key] || projects['mythic-body-studies'];
-      fields.kicker.textContent = project.kicker;
-      fields.title.textContent = project.title;
-      fields.summary.textContent = project.summary;
-      fields.medium.textContent = project.medium;
-      fields.style.textContent = project.style;
-      fields.format.textContent = project.format;
-      fields.availability.textContent = project.availability;
-      fields.intention.textContent = project.intention;
-      fields.frameOne.textContent = project.frames[0];
-      fields.frameTwo.textContent = project.frames[1];
-      fields.frameThree.textContent = project.frames[2];
-      buttons.forEach(function(button) {
-        button.classList.toggle('is-active', button.getAttribute('data-project') === key);
-      });
-      if (select.value !== key) select.value = key;
-      if (applyLink) applyLink.href = '/tattoos/special-projects/apply/?project=' + encodeURIComponent(key);
+    var select = document.getElementById("projectSelect");
+    var index = document.getElementById("projectIndex");
+    var applyLink = document.getElementById("projectApply");
+    var applicationCopy = document.getElementById("applicationCopy");
+
+    function effectiveStatus(project) {
+      var now = Date.now();
+      var opens = project.opensAt ? Date.parse(project.opensAt) : null;
+      var closes = project.closesAt ? Date.parse(project.closesAt) : null;
+      if (project.status !== "open") return "closed";
+      if (opens && opens > now) return "opening soon";
+      if (closes && closes <= now) return "closed";
+      return "open";
     }
-    buttons.forEach(function(button) {
-      button.addEventListener('click', function() {
-        setProject(button.getAttribute('data-project'));
+
+    function formatDate(value) {
+      if (!value || !Number.isFinite(Date.parse(value))) return "";
+      return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" }).format(new Date(value));
+    }
+
+    function callWindow(project) {
+      var opens = formatDate(project.opensAt);
+      var closes = formatDate(project.closesAt);
+      if (opens && closes) return opens + " - " + closes;
+      if (closes) return "Through " + closes;
+      if (opens) return "Opens " + opens;
+      return "Dates set in Studio";
+    }
+
+    function keyFor(project) {
+      return project.slug || project.id;
+    }
+
+    function setProject(key) {
+      var project = projects.find(function(item) { return keyFor(item) === key || item.id === key; }) || projects[0];
+      if (!project) return;
+      var selectedKey = keyFor(project);
+      var status = effectiveStatus(project);
+      var number = projects.indexOf(project) + 1;
+      fields.kicker.textContent = String(number).padStart(2, "0") + " / " + status;
+      fields.title.textContent = project.title;
+      fields.summary.textContent = project.summary || "This Studio-managed call does not have a public summary yet.";
+      fields.medium.textContent = "Special Project";
+      fields.style.textContent = project.rateText || "Confirmed after review";
+      fields.format.textContent = callWindow(project);
+      fields.availability.textContent = status === "open" ? "Open call" : (status === "opening soon" ? "Opening soon" : "Closed call");
+      fields.intention.textContent = status === "open"
+        ? "This call is accepting applications for review. Applying does not reserve an appointment; accepted projects receive call-specific next steps."
+        : (status === "opening soon"
+          ? "This call is visible for planning but is not accepting applications yet. Return when the managed opening date arrives."
+          : "This call remains visible as context but is not accepting applications. Use Custom for another symbolic commission.");
+      Array.prototype.forEach.call(index.querySelectorAll(".index-button"), function(button) {
+        button.classList.toggle("is-active", button.getAttribute("data-project") === selectedKey);
       });
-    });
-    select.addEventListener('change', function() {
+      if (select.value !== selectedKey) select.value = selectedKey;
+      if (status === "open") {
+        applyLink.classList.remove("is-disabled");
+        applyLink.removeAttribute("aria-disabled");
+        applyLink.href = "/tattoos/special-projects/apply/?project=" + encodeURIComponent(selectedKey);
+        applyLink.textContent = "Apply for this call";
+        applicationCopy.textContent = "This call is open for review. If accepted, the studio will send its development path and private booking access when appropriate.";
+      } else {
+        applyLink.classList.add("is-disabled");
+        applyLink.setAttribute("aria-disabled", "true");
+        applyLink.removeAttribute("href");
+        applyLink.textContent = status === "opening soon" ? "Applications not open yet" : "Applications closed";
+        applicationCopy.textContent = "This call is not accepting applications. Closed calls stay visible as context; another symbolic commission belongs in Custom.";
+      }
+      var url = new URL(location.href);
+      url.searchParams.set("project", selectedKey);
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+
+    function renderIndex() {
+      index.replaceChildren();
+      select.replaceChildren();
+      projects.forEach(function(project, projectIndex) {
+        var key = keyFor(project);
+        var status = effectiveStatus(project);
+        var button = document.createElement("button");
+        button.className = "index-button" + (status === "closed" ? " is-closed" : "");
+        button.type = "button";
+        button.setAttribute("data-project", key);
+        var number = document.createElement("span");
+        number.className = "index-number";
+        number.textContent = String(projectIndex + 1).padStart(2, "0");
+        var copy = document.createElement("span");
+        var title = document.createElement("span");
+        title.className = "index-title";
+        title.textContent = project.title;
+        var state = document.createElement("span");
+        state.className = "index-year";
+        state.textContent = status;
+        copy.append(title, state);
+        button.append(number, copy);
+        button.addEventListener("click", function() { setProject(key); });
+        index.append(button);
+
+        var option = document.createElement("option");
+        option.value = key;
+        option.textContent = number.textContent + " " + project.title + " / " + status;
+        select.append(option);
+      });
+    }
+
+    select.addEventListener("change", function() {
       setProject(select.value);
     });
-    setProject(new URLSearchParams(location.search).get('project') || 'mythic-body-studies');
+
+    fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
+      .then(function(response) { if (!response.ok) throw new Error("Unable to load current calls."); return response.json(); })
+      .then(function(payload) {
+        projects = (Array.isArray(payload.specialProjects) ? payload.specialProjects : []).slice().sort(function(a, b) {
+          return Number(a.sortOrder || 0) - Number(b.sortOrder || 0);
+        });
+        if (!projects.length) throw new Error("No Special Project calls are currently published.");
+        renderIndex();
+        setProject(new URLSearchParams(location.search).get("project") || keyFor(projects[0]));
+      })
+      .catch(function(error) {
+        index.innerHTML = '<p class="project-load-status">Current calls could not be loaded. No application path has been opened.</p>';
+        select.innerHTML = '<option value="">Calls unavailable</option>';
+        select.disabled = true;
+        fields.kicker.textContent = "Unavailable / Safe fallback";
+        fields.title.textContent = "Current Calls Unavailable";
+        fields.summary.textContent = error.message || "The Studio-managed call list could not be loaded.";
+        fields.availability.textContent = "Unavailable";
+        fields.intention.textContent = "Please return later or use Custom for another symbolic commission.";
+        applyLink.classList.add("is-disabled");
+        applyLink.setAttribute("aria-disabled", "true");
+        applyLink.removeAttribute("href");
+        applyLink.textContent = "Applications unavailable";
+      });
+  })();
   </script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>

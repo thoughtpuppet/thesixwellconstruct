@@ -147,6 +147,27 @@ body.entrance-active .entrance-delay-3 { transition-delay: 240ms; }
 body.entrance-active .entrance-delay-4 { transition-delay: 320ms; }
 body.entrance-active .entrance-delay-5 { transition-delay: 400ms; }
 
+@media (prefers-reduced-motion: reduce) {
+  #construct-fade,
+  .entrance-fade,
+  #construct-header-shell,
+  body[data-venture] header.top {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .entrance-fade,
+  body.entrance-active .entrance-fade {
+    transform: none;
+  }
+
+  :where(html) {
+    scroll-behavior: auto !important;
+  }
+}
+
 
 /* ──────────────────────────────────────────────────────────
    MEDIUM DOT NAV

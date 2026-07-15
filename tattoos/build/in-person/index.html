@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>In-Person Build · art.pill tattoo house</title>
+<script>if(new URLSearchParams(location.search).get("preview")==="1"){var previewRobots=document.createElement("meta");previewRobots.name="robots";previewRobots.content="noindex, nofollow";document.head.appendChild(previewRobots);}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=block" rel="stylesheet">
@@ -57,6 +58,10 @@
   .form-panel{border-top:5px solid var(--ring-soft);padding-top:var(--s6);}
   .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(22px,3vw,34px);letter-spacing:-0.02em;line-height:0.94;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s3);}
   .form-note{font-size:13px;line-height:1.75;color:var(--text-mute);margin-bottom:var(--s6);}
+  .session-summary{display:grid;gap:7px;margin:-18px 0 var(--s6);padding:16px;border:5px solid var(--ring-faint);}
+  .session-summary-label{font-family:var(--sans);font-weight:900;font-size:12px;line-height:1.4;color:var(--text);text-transform:uppercase;}
+  .session-summary-terms{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.14em;line-height:1.5;color:var(--accent);text-transform:uppercase;}
+  .session-summary-description{font-size:12px;line-height:1.65;color:var(--text-mute);}
   .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
   .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
   .field.full{grid-column:1 / -1;}
@@ -101,8 +106,9 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <script>
   (function(){
     var o=document.createElement('div');o.id='construct-fade';
@@ -144,13 +150,18 @@
       <section class="form-panel" aria-label="Book an in-person build session">
         <h2 class="form-title">Book a Build Session.</h2>
         <p class="form-note">A longer in-person session for developing your tattoo brief in the studio. After selecting a time, you'll be taken to Square to hold the slot.</p>
+        <div class="session-summary" aria-live="polite">
+          <p class="session-summary-label" id="buildSessionLabel">Loading current session details&hellip;</p>
+          <p class="session-summary-terms" id="buildSessionTerms">Label, duration, and fee load from the public booking session.</p>
+          <p class="session-summary-description" id="buildSessionDescription"></p>
+        </div>
 
         <!-- STEP 1: FORM -->
         <div id="formStep">
           <form id="consultForm" novalidate>
-            <input type="hidden" name="type" value="consultation">
+            <input type="hidden" name="type" value="build_session">
             <input type="hidden" name="source_path" value="/tattoos/build/in-person/">
-            <input type="hidden" name="subject" value="New In-Person Build Consultation Request">
+            <input type="hidden" name="subject" value="New In-Person Build Session">
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
 
             <div class="field-grid">
@@ -200,7 +211,7 @@
                   </div>
                   <button type="button" class="time-add-btn" id="timeAddBtn" disabled>Select Time</button>
                 </div>
-                <p class="cal-full-note" id="calFullNote" style="display:none;">No public consultation times are available for this date.</p>
+                <p class="cal-full-note" id="calFullNote" style="display:none;">No in-person Build times are available for this date.</p>
               </div>
 
               <input type="hidden" name="preferred_slots" id="preferredSlots">
@@ -228,7 +239,7 @@
         <div id="paymentStep" style="display:none;">
           <div class="payment-holding">
             <p class="payment-holding-title">Details saved.</p>
-            <p class="payment-holding-body">Taking you to complete the deposit now...</p>
+            <p class="payment-holding-body">Taking you to complete the session fee now...</p>
           </div>
         </div>
 
@@ -249,7 +260,24 @@
     initBookingCalendar({
       apiBookingTypeIds: ["build_in_person"],
       filterBookingTypes: (type) => type.id === "build_in_person",
+      contextUrl: "/api/booking/public-session/context",
+      checkoutUrl: "/api/booking/public-session/checkout",
       walkInEmptyMessage: "No walk-in windows are currently set. Book a private consultation or check back soon.",
+      onBookingTypeChange: function(type, walkInWindows, renderWalkInWindows) {
+        var label = document.getElementById("buildSessionLabel");
+        var terms = document.getElementById("buildSessionTerms");
+        var description = document.getElementById("buildSessionDescription");
+        if (type) {
+          label.textContent = type.label;
+          terms.textContent = type.durationMinutes + " minutes · " + type.depositLabel + " session fee";
+          description.textContent = type.description || "This session develops the tattoo brief in person before a tattoo appointment is scheduled.";
+        } else {
+          label.textContent = "In-person Build is currently unavailable";
+          terms.textContent = "No active public session details were returned.";
+          description.textContent = "Return to Build Your Own or choose a consultation path.";
+        }
+        if (walkInWindows) renderWalkInWindows(walkInWindows);
+      },
     });
   })();
   </script>

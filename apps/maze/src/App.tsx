@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type Konva from "konva";
-import { Redo2, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, Redo2, Send, Undo2 } from "lucide-react";
 import { ConstructCanvas } from "./components/ConstructCanvas";
 import { Inspector } from "./components/Inspector";
 import { MazeTools } from "./components/MazeTools";
@@ -10,9 +10,11 @@ import type { MazeShape, MazeTool, MazeWall, Selection } from "./types";
 import "./maze-submit.css";
 
 const STORAGE_KEY = "art-pill-maze-design";
+const SUBMISSION_IDEMPOTENCY_KEY = "sixwell:submission-idempotency:/tattoos/build/maze/:maze-form";
 const MAX_UNDO_STEPS = 60;
 const AUTOSAVE_DELAY_MS = 600;
 const KIOSK = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("kiosk");
+const PREVIEW = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "1";
 const KIOSK_IDLE_MS = 150000;
 
 type MazeState = {
@@ -73,6 +75,22 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+function mazeSubmissionIdempotencyKey() {
+  try {
+    const saved = sessionStorage.getItem(SUBMISSION_IDEMPOTENCY_KEY);
+    if (saved) return saved;
+    const key = crypto.randomUUID();
+    sessionStorage.setItem(SUBMISSION_IDEMPOTENCY_KEY, key);
+    return key;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+function clearMazeSubmissionIdempotencyKey() {
+  try { sessionStorage.removeItem(SUBMISSION_IDEMPOTENCY_KEY); } catch { /* storage can be unavailable */ }
+}
+
 // Submit a finished maze into the same review -> booking pipeline as a brief.
 // Captures the maze as PNG + JSON, collects contact details and an explanation,
 // and posts as a `maze_design` submission.
@@ -91,6 +109,48 @@ function SubmitDialog({
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const busyRef = useRef(busy);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => { busyRef.current = busy; }, [busy]);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busyRef.current) {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+      ) ?? [])].filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -98,6 +158,16 @@ function SubmitDialog({
     event.preventDefault();
     const form = event.currentTarget;
     if (!form.reportValidity()) return;
+
+    if (isEmpty) {
+      setStatus("Draw at least one wall or shape before submitting.");
+      return;
+    }
+
+    if (PREVIEW) {
+      setStatus("Preview mode is read-only. Your maze was not submitted.");
+      return;
+    }
 
     setBusy(true);
     setStatus("Capturing your maze for review.");
@@ -110,13 +180,24 @@ function SubmitDialog({
       fd.set("review_consent", "yes");
 
       const png = capturePng();
-      if (png) fd.set("maze_image", dataUrlToBlob(png), "maze.png");
-      fd.set("maze_json_file", new Blob([getJson()], { type: "application/json" }), "maze.json");
+      const mazeJson = getJson();
+      if (!png) throw new Error("The maze image could not be captured. Wait a moment and try again.");
+      if (!mazeJson) throw new Error("The maze project file could not be created. Try again.");
+      fd.set("maze_image", dataUrlToBlob(png), "maze.png");
+      fd.set("maze_json_file", new Blob([mazeJson], { type: "application/json" }), "maze.json");
 
-      const res = await fetch("/api/submissions", { method: "POST", body: fd });
-      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      const res = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "idempotency-key": mazeSubmissionIdempotencyKey() },
+        body: fd
+      });
+      const payload = (await res.json().catch(() => ({}))) as { error?: string; submissionId?: string };
       if (!res.ok) throw new Error(payload.error || "Submission failed.");
-      window.location.href = "/tattoos/submission-received/?type=maze";
+      const destination = new URL("/tattoos/submission-received/", window.location.origin);
+      destination.searchParams.set("type", "maze");
+      if (payload.submissionId) destination.searchParams.set("ref", payload.submissionId);
+      clearMazeSubmissionIdempotencyKey();
+      window.location.href = `${destination.pathname}${destination.search}`;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Submission failed. Please try again.");
       setBusy(false);
@@ -124,20 +205,20 @@ function SubmitDialog({
   };
 
   return (
-    <div className="maze-submit-overlay" role="dialog" aria-modal="true" aria-label="Submit your maze">
+    <div ref={dialogRef} className="maze-submit-overlay" role="dialog" aria-modal="true" aria-labelledby="maze-submit-title" aria-describedby="maze-submit-note">
       <div className="maze-submit-panel">
         <div className="maze-submit-head">
-          <h2>Submit your maze</h2>
-          <button type="button" className="maze-submit-close" onClick={onClose} aria-label="Close">
+          <h2 id="maze-submit-title">Submit your maze</h2>
+          <button ref={closeButtonRef} type="button" className="maze-submit-close" onClick={onClose} disabled={busy} aria-label="Close submit dialog">
             &times;
           </button>
         </div>
-        <p className="maze-submit-note">
+        <p className="maze-submit-note" id="maze-submit-note">
           Your maze is captured as an image and sent for review. If it fits, a private booking link
           follows. You create the final tattoo from this design.
         </p>
         {isEmpty ? (
-          <p className="maze-submit-warn">Draw at least one wall or shape before submitting.</p>
+          <p className="maze-submit-warn" role="alert">Draw at least one wall or shape before submitting.</p>
         ) : null}
         <form onSubmit={handleSubmit}>
           <div className="maze-submit-grid">
@@ -166,7 +247,7 @@ function SubmitDialog({
               {busy ? "Submitting…" : "Submit maze"}
             </button>
           </div>
-          {status ? <p className="maze-submit-status">{status}</p> : null}
+          {status ? <p className="maze-submit-status" role="status" aria-live="polite">{status}</p> : null}
         </form>
       </div>
     </div>
@@ -415,6 +496,12 @@ export default function App() {
           <h1>Maze Studio</h1>
         </div>
         <div className="mode-controls" aria-label="Maze controls">
+          {!KIOSK ? (
+            <a className="back-to-build" href="/tattoos/build/">
+              <ArrowLeft size={18} />
+              Back to Build
+            </a>
+          ) : null}
           <button type="button" onClick={undo} disabled={undoStack.length === 0} title="Undo">
             <Undo2 size={18} />
             Undo

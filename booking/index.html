@@ -32,6 +32,10 @@
   h1 { max-width:720px; margin:16px 0 24px; font-family:var(--sans); font-size:clamp(42px,7vw,88px); line-height:0.88; letter-spacing:0; color:var(--signal); }
   .lead { max-width:600px; margin:0 0 48px; color:rgba(255,231,202,0.62); font-size:16px; line-height:1.8; }
   .status { max-width:720px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:22px 0; color:var(--muted); line-height:1.7; }
+  .pending-checkout-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+  .pending-checkout-link,.pending-checkout-button { display:inline-flex; min-height:44px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; padding:0 16px; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+  .pending-checkout-link:hover,.pending-checkout-button:hover { border-color:var(--accent); color:var(--accent); }
+  .pending-checkout-button:disabled { opacity:.45; cursor:not-allowed; }
   .booking-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:56px; align-items:start; }
   .section { display:grid; gap:14px; margin-bottom:36px; }
   .session-list,.window-list { display:grid; gap:10px; }
@@ -96,8 +100,9 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
 <script>
 (function(){
   var o = document.createElement("div");
@@ -112,8 +117,8 @@
 <header></header>
 <main>
   <div class="badge"><span class="badge-dot"></span>Private Booking</div>
-  <h1 data-copy-id="booking-title">BOOKING.</h1>
-  <p class="lead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
+  <h1 id="bookingTitle" data-copy-id="booking-title">BOOKING.</h1>
+  <p class="lead" id="bookingLead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
   <p class="local-edit-note" data-live-edit-ignore="true">Preview editing is local only. Use the toolbar at bottom right, then export the changes for source-file updates.</p>
 
   <section class="section">
@@ -122,6 +127,13 @@
   </section>
 
   <div id="status" class="status">Loading private booking access.</div>
+  <div id="pendingCheckoutPanel" class="status hidden" role="status" aria-live="polite">
+    <span id="pendingCheckoutText"></span>
+    <div class="pending-checkout-actions">
+      <a id="resumeCheckoutLink" class="pending-checkout-link hidden" href="#">Resume Square checkout</a>
+      <button id="releaseCheckoutBtn" class="pending-checkout-button hidden" type="button">Release hold and choose again</button>
+    </div>
+  </div>
 
   <div id="bookingApp" class="booking-grid hidden">
     <div>
@@ -131,7 +143,7 @@
       </section>
       <div id="appointmentSelection">
       <section class="section">
-        <p class="section-label">Session &amp; Deposit</p>
+        <p class="section-label" id="sessionSectionLabel">Session &amp; Deposit</p>
         <div id="sessionList" class="session-list"></div>
       </section>
       <section class="section">
@@ -153,7 +165,7 @@
       <div class="panel-row"><span class="panel-key">Client</span><span id="clientValue">-</span></div>
       <div class="panel-row"><span class="panel-key">Session</span><span id="sessionValue">Select a session</span></div>
       <div class="panel-row"><span class="panel-key">Window</span><span id="windowValue">Select a time</span></div>
-      <div class="panel-row"><span class="panel-key">Deposit</span><span id="depositValue">-</span></div>
+      <div class="panel-row"><span class="panel-key" id="depositKey">Deposit</span><span id="depositValue">-</span></div>
       <div class="tip-control">
         <span class="panel-key">Optional Tip</span>
         <div class="tip-options" role="group" aria-label="Optional tip amount">
@@ -179,6 +191,10 @@
   const editMode = params.get("edit") === "1";
   const bookingPreviewKey = "swc_booking_admin_preview";
   const statusEl = document.getElementById("status");
+  const pendingCheckoutPanel = document.getElementById("pendingCheckoutPanel");
+  const pendingCheckoutText = document.getElementById("pendingCheckoutText");
+  const resumeCheckoutLink = document.getElementById("resumeCheckoutLink");
+  const releaseCheckoutBtn = document.getElementById("releaseCheckoutBtn");
   const appEl = document.getElementById("bookingApp");
   const sessionListEl = document.getElementById("sessionList");
   const sessionPlanSection = document.getElementById("sessionPlanSection");
@@ -200,6 +216,10 @@
   const customTipInput = document.getElementById("customTipInput");
   const checkoutBtn = document.getElementById("checkoutBtn");
   const checkoutNote = document.getElementById("checkoutNote");
+  const bookingTitle = document.getElementById("bookingTitle");
+  const bookingLead = document.getElementById("bookingLead");
+  const sessionSectionLabel = document.getElementById("sessionSectionLabel");
+  const depositKey = document.getElementById("depositKey");
   let context = null;
   let selectedType = null;
   let selectedWindow = null;
@@ -472,6 +492,74 @@
     return Boolean(plan.clientAcknowledged && plan.clientPreference && plan.clientSelectedAt);
   }
 
+  function applyPurposeCopy() {
+    const consultation = context?.purpose === "consultation";
+    bookingTitle.textContent = consultation ? "CONSULTATION." : "BOOKING.";
+    bookingLead.textContent = consultation
+      ? "Project review has linked you to a required in-person planning consultation. Choose a time and pay the consultation reservation fee. This does not book the tattoo; tattoo access follows only after the consultation is completed and the studio saves the final session plan."
+      : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
+    sessionSectionLabel.textContent = consultation ? "Consultation & Reservation Fee" : "Session & Deposit";
+    depositKey.textContent = consultation ? "Reservation Fee" : "Deposit";
+    checkoutNote.textContent = consultation
+      ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
+      : "The tattoo deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.";
+  }
+
+  function renderPendingCheckout() {
+    const pending = context?.pendingCheckout;
+    pendingCheckoutPanel.classList.add("hidden");
+    resumeCheckoutLink.classList.add("hidden");
+    releaseCheckoutBtn.classList.add("hidden");
+    if (!pending) return false;
+    const expiresAt = pending.holdExpiresAt || pending.expiresAt || "";
+    const expiresMs = Date.parse(expiresAt);
+    const activeState = pending.holdState === "active";
+    const active = activeState && Number.isFinite(expiresMs) && expiresMs > Date.now();
+    const service = context?.purpose === "consultation" ? "consultation" : "tattoo appointment";
+    if (activeState) {
+      pendingCheckoutText.textContent = active
+        ? `Your ${service} time is held until ${formatDate(expiresAt)}. Resume the existing Square checkout; a second checkout will not be created.`
+        : `This ${service} checkout has reached its hold time and is awaiting Square reconciliation. It continues to block the selected time until that check succeeds.`;
+      if (active && pending.checkoutUrl) {
+        resumeCheckoutLink.href = pending.checkoutUrl;
+        resumeCheckoutLink.classList.remove("hidden");
+      }
+      releaseCheckoutBtn.classList.remove("hidden");
+    } else {
+      pendingCheckoutText.textContent = pending.holdState === "expiry_attention"
+        ? "This checkout could not be reconciled automatically. The time remains blocked while Studio verifies Square; contact the studio before attempting another booking."
+        : "This checkout hold is being reconciled. The time remains blocked until Square confirms its payment state.";
+    }
+    pendingCheckoutPanel.classList.remove("hidden");
+    appEl.classList.add("hidden");
+    return true;
+  }
+
+  releaseCheckoutBtn.addEventListener("click", async () => {
+    const pending = context?.pendingCheckout;
+    if (!pending?.appointmentId || !context?.client?.email) return;
+    if (!window.confirm("Release this checkout hold and choose another time? Square will be checked first, and a paid checkout cannot be released.")) return;
+    releaseCheckoutBtn.disabled = true;
+    pendingCheckoutText.textContent = "Checking Square and releasing the hold.";
+    try {
+      const response = await fetch("/api/booking/pending-hold/release", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          appointmentId: pending.appointmentId,
+          email: context.client.email,
+          reason: "Client chose another time from private booking access",
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Unable to release this checkout hold.");
+      await loadContext();
+    } catch (error) {
+      pendingCheckoutText.textContent = error.message;
+      releaseCheckoutBtn.disabled = false;
+    }
+  });
+
   function renderSessionPlan() {
     const plan = context?.sessionPlan;
     if (!plan) {
@@ -522,7 +610,7 @@
           <span class="choice-title">${escapeHtml(type.label)}</span>
           <span class="choice-meta">${escapeHtml(minutesLabel(type.durationMinutes))} / ${escapeHtml(type.description)}</span>
         </span>
-        <span class="price-wrap"><span class="price">${escapeHtml(type.depositLabel)}</span><span class="price-label">Deposit</span></span>
+        <span class="price-wrap"><span class="price">${escapeHtml(type.depositLabel)}</span><span class="price-label">${context?.purpose === "consultation" ? "Reservation fee" : "Deposit"}</span></span>
       </button>
     `).join("");
 
@@ -609,8 +697,9 @@
     selectedType = context.bookingTypes[0] || null;
     selectedWindow = null;
     initializePlanSelection();
+    applyPurposeCopy();
     statusEl.classList.add("hidden");
-    appEl.classList.remove("hidden");
+    if (!renderPendingCheckout()) appEl.classList.remove("hidden");
     render();
   }
 

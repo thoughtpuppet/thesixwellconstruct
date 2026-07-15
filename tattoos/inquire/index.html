@@ -4,10 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Choose Inquiry Path - Art.Pill Tattoo House</title>
+<script>if(new URLSearchParams(location.search).get("preview")==="1"){var previewRobots=document.createElement("meta");previewRobots.name="robots";previewRobots.content="noindex, nofollow";document.head.appendChild(previewRobots);}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
     --bg:#0e0e0e; --accent:#FCB867; --signal:#6E0404; --ring:#6D3D15;
@@ -27,9 +29,22 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .intro { max-width:780px; margin-bottom:64px; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(38px,7vw,96px); letter-spacing:-0.06em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:34px; white-space:nowrap; }
   .intro-body { font-size:17px; line-height:1.8; color:var(--text); max-width:660px; }
-  .consult-band { display:grid; grid-template-columns:minmax(190px,0.3fr) minmax(0,1fr); gap:44px; align-items:start; padding:34px; margin:-22px 0 56px; background:#171717; }
-  .consult-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
-  .consult-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; }
+  .decision-surface { border:5px solid var(--ring-faint); }
+  .lane { display:grid; grid-template-columns:minmax(200px,0.3fr) minmax(0,1fr); gap:40px; padding:34px; border-bottom:5px solid var(--ring-faint); }
+  .lane:last-child { border-bottom:none; }
+  .lane-index { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
+  .lane-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; margin-bottom:14px; }
+  .lane-intro { font-size:13px; line-height:1.7; color:var(--text-mute); max-width:260px; }
+  .path-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
+  .path-card { display:grid; grid-template-rows:auto 1fr auto; gap:18px; min-height:230px; padding:24px; border-right:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast); }
+  .path-card:nth-child(2n) { border-right:none; }
+  .path-card:nth-last-child(-n+2) { border-bottom:none; }
+  .path-card:hover,.path-card:focus-visible { background:rgba(109,61,21,0.18); outline:none; }
+  .path-card.is-closed { opacity:0.58; }
+  .path-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
+  .path-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.5vw,48px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); text-transform:uppercase; margin-bottom:12px; }
+  .path-body { font-size:14px; line-height:1.7; color:var(--text-mute); max-width:520px; }
+  .path-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text); }
   .consult-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
   .consult-option { display:grid; grid-template-rows:auto 1fr auto; gap:18px; min-height:210px; padding:22px; border-right:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
   .consult-option:last-child { border-right:none; }
@@ -38,27 +53,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .consult-option-title { font-family:var(--sans); font-weight:900; font-size:clamp(22px,3vw,36px); letter-spacing:-0.04em; line-height:0.94; color:var(--text); text-transform:uppercase; margin-bottom:12px; }
   .consult-option-body { font-size:14px; line-height:1.7; color:var(--text-mute); }
   .consult-option-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); }
-  .fit-guide { display:grid; grid-template-columns:minmax(190px,0.32fr) minmax(0,1fr); gap:40px; align-items:start; margin-bottom:56px; padding:34px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
-  .fit-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; margin-bottom:12px; }
-  .fit-title { font-family:var(--sans); font-weight:900; font-size:clamp(26px,3.6vw,48px); letter-spacing:-0.04em; line-height:0.92; color:var(--signal); text-transform:uppercase; }
-  .fit-list { display:grid; border:5px solid var(--ring-faint); }
-  .fit-row { display:grid; grid-template-columns:minmax(150px,0.28fr) minmax(0,1fr) minmax(120px,0.18fr); border-bottom:5px solid var(--ring-faint); }
-  .fit-row:last-child { border-bottom:none; }
-  .fit-row > * { padding:18px; }
-  .fit-row > * + * { border-left:5px solid var(--ring-faint); }
-  .fit-question { font-family:var(--sans); font-weight:900; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text); }
-  .fit-answer { font-size:14px; line-height:1.65; color:var(--text-mute); }
-  .fit-link { align-self:stretch; display:flex; align-items:center; font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); transition:color var(--t-fast), background var(--t-fast); }
-  .fit-link:hover,.fit-link:focus-visible { color:var(--text); background:rgba(109,61,21,0.16); outline:none; }
-  .path-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:5px solid var(--ring-faint); }
-  .path-card { display:grid; grid-template-rows:auto 1fr auto; gap:22px; min-height:280px; padding:30px; border-right:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); transition:background var(--t-fast), color var(--t-fast); }
-  .path-card:nth-child(2n) { border-right:none; }
-  .path-card:nth-last-child(-n+2) { border-bottom:none; }
-  .path-card:hover,.path-card:focus-visible { background:rgba(109,61,21,0.18); outline:none; }
-  .path-kicker { font-family:var(--serif); font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--accent); opacity:0.72; }
-  .path-title { font-family:var(--sans); font-weight:900; font-size:clamp(30px,4vw,58px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); text-transform:uppercase; }
-  .path-body { font-size:14px; line-height:1.75; color:var(--text-mute); max-width:520px; }
-  .path-action { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text); }
+  .walkin-panel { display:grid; gap:20px; }
+  .walkin-guidance { font-size:14px; line-height:1.75; color:var(--text-mute); max-width:760px; }
+  .walkin-actions { display:flex; flex-wrap:wrap; gap:12px; }
+  .walkin-actions a { display:inline-flex; align-items:center; min-height:44px; padding:0 16px; border:5px solid var(--ring-faint); font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); transition:background var(--t-fast),border-color var(--t-fast); }
+  .walkin-actions a:hover,.walkin-actions a:focus-visible { background:rgba(109,61,21,0.16); border-color:var(--ring-soft); outline:none; }
   footer.bottom { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:56px var(--s6); border-top:5px solid var(--ring-faint); display:flex; justify-content:space-between; align-items:center; }
   footer.bottom p,footer.bottom a { font-size:10px; letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase; }
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
@@ -68,14 +67,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     main { padding:var(--s6) var(--s5); }
     .intro { margin-bottom:42px; }
     .page-title { font-size:clamp(30px,10vw,58px); }
-    .consult-band { grid-template-columns:1fr; gap:24px; margin:-16px 0 42px; padding:24px; }
+    .lane { grid-template-columns:1fr; gap:24px; padding:24px; }
+    .lane-intro { max-width:680px; }
     .consult-options { grid-template-columns:1fr; }
     .consult-option,.consult-option:last-child { border-right:none; border-bottom:5px solid var(--ring-faint); }
     .consult-option:last-child { border-bottom:none; }
-    .fit-guide { grid-template-columns:1fr; gap:24px; margin-bottom:42px; padding:26px 0; }
-    .fit-row { grid-template-columns:1fr; }
-    .fit-row > * + * { border-left:none; border-top:1px solid var(--ring-faint); }
-    .fit-link { min-height:52px; }
     .path-grid { grid-template-columns:1fr; }
     .path-card,.path-card:nth-child(2n),.path-card:nth-last-child(-n+2) { border-right:none; border-bottom:5px solid var(--ring-faint); }
     .path-card:last-child { border-bottom:none; }
@@ -83,14 +79,15 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   }
   @media (max-width:640px) {
     .path-card { min-height:auto; }
-    .consult-band,.fit-guide,.path-grid { grid-template-columns:1fr; }
+    .lane,.path-grid { grid-template-columns:1fr; }
     main { overflow-x:hidden; }
   }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -112,104 +109,136 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       <span class="breadcrumb-current" data-copy-id="inquire-breadcrumb-current">Inquire</span>
     </nav>
     <section class="intro">
-      <h1 class="page-title" data-copy-id="inquire-chooser-title">Choose Your Pathway.</h1>
-      <p class="intro-body" data-copy-id="inquire-chooser-intro">Each form carries a different kind of request to review. Choose the path closest to what you want, then submit the details there.</p>
+      <h1 class="page-title" data-copy-id="inquire-chooser-title">Choose a Path.</h1>
+      <p class="intro-body" data-copy-id="inquire-chooser-intro">Start with a project submission, choose paid planning if you need a focused conversation, or use a posted walk-in window for same-day availability.</p>
     </section>
-    <section class="consult-band" aria-labelledby="consult-options-title">
-      <div>
-        <p class="consult-kicker" data-copy-id="inquire-consult-kicker">Want to discuss options with the artist ?&nbsp;</p>
-        <h2 class="consult-title" id="consult-options-title" data-copy-id="inquire-consult-title">Consultation Options</h2>
-      </div>
-      <div class="consult-options">
-        <a class="consult-option" href="/tattoos/inquire/consultation/?type=consult_in_person">
-          <p class="consult-option-kicker" data-copy-id="inquire-consult-in-person-kicker">at the studio</p>
-          <div>
-            <h3 class="consult-option-title" data-copy-id="inquire-consult-in-person-title">In-Person<br>Consultation</h3>
-            <p class="consult-option-body" data-copy-id="inquire-consult-in-person-body">Book focused planning time for placement, large cover-up review, project direction, or questions that you want to share face to face.</p>
-            <p class="consult-option-kicker" data-consultation-meta="consult_in_person" aria-live="polite">Loading current details…</p>
+    <div class="decision-surface" aria-label="Choose a tattoo path">
+      <section class="lane" aria-labelledby="project-lane-title">
+        <div>
+          <p class="lane-index">01 / Start here</p>
+          <h2 class="lane-title" id="project-lane-title">Submit a Project</h2>
+          <p class="lane-intro">Choose the request that already matches your idea. Submissions enter review before any tattoo appointment is offered.</p>
+        </div>
+        <div class="path-grid" aria-label="Project submission paths">
+          <a class="path-card" href="/tattoos/flash/">
+            <p class="path-kicker">available design</p>
+            <div><h3 class="path-title">Flash</h3><p class="path-body">Browse available work, open the design you want, and send its attached claim form.</p></div>
+            <span class="path-action">Browse available flash &rarr;</span>
+          </a>
+          <a class="path-card" href="/tattoos/inquire/custom/">
+            <p class="path-kicker">your own idea</p>
+            <div><h3 class="path-title">Custom</h3><p class="path-body">Submit an original concept, story, placement, references, and timing for fit review.</p></div>
+            <span class="path-action">Open custom form &rarr;</span>
+          </a>
+          <a class="path-card" href="/tattoos/build/">
+            <p class="path-kicker">guided visual language</p>
+            <div><h3 class="path-title">Build</h3><p class="path-body">Choose symbols and marks from Legend to create a guided brief for the artist.</p></div>
+            <span class="path-action">Start Build Your Own &rarr;</span>
+          </a>
+          <a class="path-card" id="specialProjectPath" href="/tattoos/special-projects/">
+            <p class="path-kicker" id="specialProjectKicker" aria-live="polite">checking current calls</p>
+            <div><h3 class="path-title">Special</h3><p class="path-body" id="specialProjectBody">Apply only to a currently open concept-led, long-form, collaborative, or experimental call.</p></div>
+            <span class="path-action" id="specialProjectAction">View current calls &rarr;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="lane" aria-labelledby="consult-options-title">
+        <div>
+          <p class="lane-index">02 / Paid planning</p>
+          <h2 class="lane-title" id="consult-options-title">Book a Consultation</h2>
+          <p class="lane-intro">Use paid planning time when placement or project direction needs a focused conversation. For a large cover-up, submit Custom first; the studio links the required in-person consultation after review.</p>
+        </div>
+        <div class="consult-options">
+          <a class="consult-option" href="/tattoos/inquire/consultation/?type=consult_in_person">
+            <p class="consult-option-kicker">at the studio</p>
+            <div>
+              <h3 class="consult-option-title">In-Person<br>Consultation</h3>
+              <p class="consult-option-body">Focused planning for placement, project direction, or questions best shared face to face. Large cover-ups begin with a Custom submission.</p>
+              <p class="consult-option-kicker" data-consultation-meta="consult_in_person" aria-live="polite">Loading current details&hellip;</p>
+            </div>
+            <span class="consult-option-action">Book in person &rarr;</span>
+          </a>
+          <a class="consult-option" href="/tattoos/inquire/consultation/?type=consult_virtual">
+            <p class="consult-option-kicker">by video call</p>
+            <div>
+              <h3 class="consult-option-title">Virtual<br>Consultation</h3>
+              <p class="consult-option-body">Meet by video when you want planning support but cannot make it to the studio.</p>
+              <p class="consult-option-kicker" data-consultation-meta="consult_virtual" aria-live="polite">Loading current details&hellip;</p>
+            </div>
+            <span class="consult-option-action">Book virtual &rarr;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="lane" aria-labelledby="walkin-lane-title">
+        <div>
+          <p class="lane-index">03 / Same-day availability</p>
+          <h2 class="lane-title" id="walkin-lane-title">Walk-In Windows</h2>
+          <p class="lane-intro">Walk-ins are separate from project review and are offered only during the live windows shown here.</p>
+        </div>
+        <div class="walkin-panel">
+          <p class="walkin-guidance" id="walkInGuidance">Check the live window before traveling, arrive with a valid photo ID, and bring a concise idea that can be completed within the available time. Availability is first-come, first-served.</p>
+          <div id="walkInCards" aria-live="polite"></div>
+          <div class="walkin-actions" aria-label="Walk-in alternatives">
+            <a href="/tattoos/inquire/custom/">No window? Submit a project</a>
+            <a href="/tattoos/inquire/consultation/">Need planning? Book a consultation</a>
+            <a href="/tattoos/day-of/">Read day-of guidance</a>
           </div>
-          <span class="consult-option-action">Book in person &rarr;</span>
-        </a>
-        <a class="consult-option" href="/tattoos/inquire/consultation/?type=consult_virtual">
-          <p class="consult-option-kicker" data-copy-id="inquire-consult-virtual-kicker">by video call</p>
-          <div>
-            <h3 class="consult-option-title" data-copy-id="inquire-consult-virtual-title">Virtual<br>Consultation</h3>
-            <p class="consult-option-body" data-copy-id="inquire-consult-virtual-body">Meet over video when you need planning support before an inquiry, but cannot make it to the studio.</p>
-            <p class="consult-option-kicker" data-consultation-meta="consult_virtual" aria-live="polite">Loading current details…</p>
-          </div>
-          <span class="consult-option-action">Book virtual &rarr;</span>
-        </a>
-      </div>
-    </section>
-    <section class="fit-guide" aria-labelledby="fit-guide-title">
-      <div>
-        <p class="fit-kicker" data-copy-id="inquire-fit-kicker">find the best fit</p>
-        <h2 class="fit-title" id="fit-guide-title" data-copy-id="inquire-fit-title">Which pathway should you use?</h2>
-      </div>
-      <div class="fit-list">
-        <article class="fit-row">
-          <h3 class="fit-question" data-copy-id="inquire-fit-q-1">I already picked a flash design.</h3>
-          <p class="fit-answer" data-copy-id="inquire-fit-a-1">Use the flash claim form. It is built for available pre-drawn work and can carry design details to review.</p>
-          <a class="fit-link" href="/tattoos/flash/claim/">Claim flash</a>
-        </article>
-        <article class="fit-row">
-          <h3 class="fit-question" data-copy-id="inquire-fit-q-2">I have my own idea or concept.</h3>
-          <p class="fit-answer" data-copy-id="inquire-fit-a-2">Use the custom inquiry form for original work based on your idea, story, references, placement, and timeline. you can also request work similar to or reimagined flash.</p>
-          <a class="fit-link" href="/tattoos/inquire/custom/">Custom inquiry</a>
-        </article>
-        <article class="fit-row">
-          <h3 class="fit-question" data-copy-id="inquire-fit-q-3">I want to choose from the visual language to create my own unique design.</h3>
-          <p class="fit-answer" data-copy-id="inquire-fit-a-3">Use the Build Your Own console when you want to select symbols and marks from saiel's visual language to form a guided brief for the artist to create from.</p>
-          <a class="fit-link" href="/tattoos/build/">Build yours</a>
-        </article>
-        <article class="fit-row">
-          <h3 class="fit-question" data-copy-id="inquire-fit-q-4">I want to participate in a deeper project with purpose.</h3>
-          <p class="fit-answer" data-copy-id="inquire-fit-a-4">Apply for a Special Project to participate in an installation, volunteer as a canvas for experimental work, or be part of a deeper, intentional, collaborative or community-based project.</p>
-          <a class="fit-link" href="/tattoos/special-projects/apply/">Apply</a>
-        </article>
-      </div>
-    </section>
-    <section class="path-grid" aria-label="Tattoo inquiry forms">
-      <a class="path-card" href="/tattoos/flash/claim/">
-        <p class="path-kicker" data-copy-id="inquire-path-flash-kicker">available design</p>
-        <div>
-          <h2 class="path-title" data-copy-id="inquire-path-flash-title">Claim<br>Flash</h2>
-          <p class="path-body" data-copy-id="inquire-path-flash-body">Use this when you already know the flash design you want, or you arrived from an individual flash page.</p>
         </div>
-        <span class="path-action">Open flash claim &rarr;</span>
-      </a>
-      <a class="path-card" href="/tattoos/inquire/custom/">
-        <p class="path-kicker" data-copy-id="inquire-path-custom-kicker">custom request</p>
-        <div>
-          <h2 class="path-title" data-copy-id="inquire-path-custom-title">Custom<br>Inquiry</h2>
-          <p class="path-body" data-copy-id="inquire-path-custom-body">Use this for original work built around your concept, story, placement, references, and timing.</p>
-        </div>
-        <span class="path-action">Open custom form &rarr;</span>
-      </a>
-      <a class="path-card" href="/tattoos/build/">
-        <p class="path-kicker" data-copy-id="inquire-path-build-kicker">guided brief</p>
-        <div>
-          <h2 class="path-title" data-copy-id="inquire-path-build-title">Build<br>Your Own</h2>
-          <p class="path-body" data-copy-id="inquire-path-build-body">Choose symbols and marks from the practice's visual language, then send that brief into review.</p>
-        </div>
-        <span class="path-action">Start builder &rarr;</span>
-      </a>
-      <a class="path-card" href="/tattoos/special-projects/apply/">
-        <p class="path-kicker" data-copy-id="inquire-path-special-kicker">larger work</p>
-        <div>
-          <h2 class="path-title" data-copy-id="inquire-path-special-title">Special<br>Projects</h2>
-          <p class="path-body" data-copy-id="inquire-path-special-body">Use this for long-form, symbolic, multi-session, collaborative, or experimental tattoo work.</p>
-        </div>
-        <span class="path-action">Open application &rarr;</span>
-      </a>
-    </section>
+      </section>
+    </div>
   </main>
   <footer class="bottom">
     <a href="/tattoos/" data-copy-id="inquire-footer-back">&larr; back to Art.Pill tattoo house</a>
     <a href="/home/" data-copy-id="inquire-footer-home">the six.well construct</a>
   </footer>
   <script src="/js/consultation-context.js"></script>
-  <script>hydrateConsultationContext(document);</script>
+  <script src="/js/walk-in-windows.js"></script>
+  <script>
+  (function() {
+    hydrateConsultationContext(document);
+    loadWalkInCards("walkInCards", {
+      emptyMessage: "No walk-in windows are posted right now. Submit a project or book a consultation below.",
+      errorMessage: "Walk-in availability could not be loaded. Use a project submission or paid consultation instead."
+    });
+
+    fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
+      .then(function(response) { if (!response.ok) throw new Error(); return response.json(); })
+      .then(function(payload) {
+        var settings = payload.settings || {};
+        var guidance = document.getElementById("walkInGuidance");
+        if (guidance && settings.walkInGuidance) guidance.textContent = settings.walkInGuidance;
+
+        var calls = Array.isArray(payload.specialProjects) ? payload.specialProjects : [];
+        var now = Date.now();
+        var openCalls = calls.filter(function(project) {
+          var opens = project.opensAt ? Date.parse(project.opensAt) : null;
+          var closes = project.closesAt ? Date.parse(project.closesAt) : null;
+          return project.status === "open" && (!opens || opens <= now) && (!closes || closes > now);
+        });
+        var card = document.getElementById("specialProjectPath");
+        var kicker = document.getElementById("specialProjectKicker");
+        var body = document.getElementById("specialProjectBody");
+        var action = document.getElementById("specialProjectAction");
+        if (!card || !kicker || !body || !action) return;
+        if (openCalls.length) {
+          kicker.textContent = openCalls.length + (openCalls.length === 1 ? " open call" : " open calls");
+          body.textContent = "Choose a currently open concept-led, long-form, collaborative, or experimental call.";
+          action.textContent = "View open calls →";
+        } else {
+          card.classList.add("is-closed");
+          kicker.textContent = "no open calls";
+          body.textContent = "There are no open Special Project calls right now. Use Custom for another symbolic commission.";
+          action.textContent = "View calls and alternatives →";
+        }
+      })
+      .catch(function() {
+        var kicker = document.getElementById("specialProjectKicker");
+        if (kicker) kicker.textContent = "view current call status";
+      });
+  })();
+  </script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>
