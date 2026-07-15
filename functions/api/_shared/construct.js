@@ -52,11 +52,22 @@ export async function nextRevision(database, entityId, action, before, after, ac
 export async function entityMedia(database, entityIds) {
   if (!entityIds.length) return new Map();
   const placeholders = entityIds.map(() => "?").join(",");
-  const result = await database.prepare(`SELECT em.entity_id,em.role,em.sort_order,COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) alt_text,COALESCE(NULLIF(em.caption_override,''),m.caption) caption,m.id,m.source_url,m.storage_key,m.mime_type FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.public_visible=1 AND m.state='active' AND m.privacy IN ('public','unlisted') AND em.entity_id IN (${placeholders}) ORDER BY em.entity_id,em.sort_order`).bind(...entityIds).all();
+  const result = await database.prepare(`SELECT DISTINCT em.entity_id,em.role,em.sort_order,
+      COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) alt_text,
+      COALESCE(NULLIF(em.caption_override,''),m.caption) caption,
+      m.id,m.source_url,m.storage_key,m.mime_type
+    FROM entity_media em
+    JOIN media_assets m ON m.id=em.media_id
+    JOIN content_entities ce ON ce.id=em.entity_id AND ce.visibility='public'
+    WHERE em.public_visible=1 AND m.state='active' AND m.privacy='public'
+      AND m.consent_status IN ('not-required','granted')
+      AND m.public_presentation='inline'
+      AND em.entity_id IN (${placeholders})
+    ORDER BY em.entity_id,em.sort_order`).bind(...entityIds).all();
   const map = new Map();
   for (const row of result.results || []) {
     if (!map.has(row.entity_id)) map.set(row.entity_id, []);
-    map.get(row.entity_id).push({ id: row.id, role: row.role, url: row.source_url || `/api/construct/media/${row.id}`, alt: row.alt_text, caption: row.caption, mimeType: row.mime_type });
+    map.get(row.entity_id).push({ id: row.id, role: row.role, url: row.source_url || `/api/construct/entity-media/${row.id}`, alt: row.alt_text, caption: row.caption, mimeType: row.mime_type });
   }
   return map;
 }

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
-<link rel="stylesheet" href="/studio/construct-manager.css?v=legend-context">
+<link rel="stylesheet" href="/studio/construct-manager.css?v=archive-dossiers">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
 <style>
@@ -1236,7 +1236,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = ["records","collections","timeline","people","places","media-artifacts","drafts","settings"].map((view) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${view.replace(/-/g," ")}</button>`).join("");
+      html = [["dossiers","Dossiers"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
@@ -1949,7 +1949,7 @@
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
-    subView = tab === "legend" ? "symbols" : tab === "archive" ? "records" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
+    subView = tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
@@ -5103,6 +5103,6 @@ ${meetingLines}
 })();
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
-<script src="/studio/construct-manager.js?v=legend-context"></script>
+<script src="/studio/construct-manager.js?v=archive-dossiers"></script>
 </body>
 </html>

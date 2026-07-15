@@ -103,10 +103,12 @@ Hidden page source files are saved under `.hidden-pages/`, while the deployed
 Worker returns a 404 for those paths on the public site. Commit and push the
 updated visibility files for the change to go live.
 
-## Obsidian archive import
+## Legacy Obsidian archive import
 
-The public `/archive/` page is generated from selected records in the Obsidian
-vault. The importer only publishes notes with:
+The live public `/archive/` reads the managed D1 archive APIs. The Obsidian
+importer is retained only as an optional source-import tool for older notes; its
+generated JSON is not a second public source of truth. The importer only selects
+notes with:
 
 - `archive_publish: true`
 - `visibility: public`
@@ -117,8 +119,16 @@ Run the importer from the repository root:
 node tools/build-archive.mjs
 ```
 
-The generated public data lives at `assets/archive/records.json`. Private vault
-notes, draft records, and local-only paths are rejected or ignored by default.
+The generated import snapshot lives at `assets/archive/records.json`. Review and
+import selected records into Studio/D1 before publication. Private vault notes,
+draft records, and local-only paths are rejected or ignored by default.
+
+To rebuild every migration in an isolated in-memory database and verify the
+Archive search, timeline, privacy, media, and soft-archive contracts, run:
+
+```bash
+node tools/test-archive-api.mjs
+```
 
 ## Shopify setup
 

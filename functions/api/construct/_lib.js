@@ -244,18 +244,325 @@ async function publicNavigation(env) {
   return json({ revision: nodes.reduce((v,n) => n.updated_at > v ? n.updated_at : v, ""), nodes });
 }
 
+const ARCHIVE_MATERIAL_TYPES = new Set(["final-image","sketch","process-photo","note","voice-memo","video","document","artifact"]);
+const ARCHIVE_DATE_PRECISIONS = new Set(["exact","approximate","year","range","undated"]);
+const ARCHIVE_VISIBILITIES = new Set(["public","unlisted","internal","private"]);
+const ARCHIVE_STATES = new Set(["draft","published","archived"]);
+const ARCHIVE_TIMELINE_STATES = new Set(["draft","published","archived"]);
+const MEDIA_PRIVACIES = new Set(["public","unlisted","internal","private"]);
+const MEDIA_CONSENT_STATUSES = new Set(["not-required","required","granted","denied","unknown"]);
+const MEDIA_TRANSCRIPT_STATUSES = new Set(["not-requested","pending","ready","failed"]);
+const MEDIA_PRESENTATIONS = new Set(["inline","hidden"]);
+
+function archiveFragmentPublicSql(alias="af") {
+  return `(
+    (${alias}.fragment_type='dossier') OR
+    (${alias}.fragment_type='material' AND EXISTS(SELECT 1 FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE am.id=${alias}.source_id AND am.dossier_entity_id=${alias}.dossier_entity_id AND am.state='published' AND am.visibility='public' AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline')))) OR
+    (${alias}.fragment_type='activity' AND EXISTS(SELECT 1 FROM entity_activity ea WHERE ea.id=${alias}.source_id AND ea.entity_id=${alias}.dossier_entity_id AND ea.public_visible=1)) OR
+    (${alias}.fragment_type='subject' AND EXISTS(SELECT 1 FROM archive_dossier_subjects ads JOIN content_entities subject ON subject.id=ads.subject_entity_id AND subject.visibility='public' LEFT JOIN people p ON p.id=subject.id LEFT JOIN places pl ON pl.id=subject.id LEFT JOIN organizations o ON o.id=subject.id WHERE ads.dossier_entity_id=${alias}.dossier_entity_id AND ${alias}.source_id=ads.subject_entity_id||':'||ads.role AND ads.public_visible=1 AND (p.id IS NULL OR (p.state='published' AND p.privacy='public')) AND (pl.id IS NULL OR (pl.state='published' AND pl.privacy='public')) AND (o.id IS NULL OR o.state='published'))) OR
+    (${alias}.fragment_type='relationship' AND EXISTS(SELECT 1 FROM entity_relationships er JOIN relationship_types rt ON rt.id=er.relationship_type_id AND rt.public_visible=1 JOIN content_entities source ON source.id=er.source_entity_id AND source.visibility='public' JOIN content_entities target ON target.id=er.target_entity_id AND target.visibility='public' WHERE er.id=${alias}.source_id AND er.public_visible=1 AND (er.source_entity_id=${alias}.dossier_entity_id OR er.target_entity_id=${alias}.dossier_entity_id))) OR
+    (${alias}.fragment_type='collection' AND EXISTS(SELECT 1 FROM archive_dossier_collections adc JOIN archive_collections ac ON ac.id=adc.collection_id AND ac.state='published' WHERE adc.dossier_entity_id=${alias}.dossier_entity_id AND adc.collection_id=${alias}.source_id)) OR
+    (${alias}.fragment_type='activity-subject' AND EXISTS(SELECT 1 FROM entity_activity_subjects eas JOIN entity_activity ea ON ea.id=eas.activity_id AND ea.public_visible=1 JOIN content_entities subject ON subject.id=eas.subject_entity_id AND subject.visibility='public' LEFT JOIN people p ON p.id=subject.id LEFT JOIN places pl ON pl.id=subject.id LEFT JOIN organizations o ON o.id=subject.id WHERE eas.activity_id||':'||eas.subject_entity_id=${alias}.source_id AND ea.entity_id=${alias}.dossier_entity_id AND eas.public_visible=1 AND (p.id IS NULL OR (p.state='published' AND p.privacy='public')) AND (pl.id IS NULL OR (pl.state='published' AND pl.privacy='public')) AND (o.id IS NULL OR o.state='published')))
+  )`;
+}
+
+function truthy(value) {
+  return value === true || value === 1 || value === "1" || String(value || "").toLowerCase() === "true";
+}
+
+function plainTextFtsQuery(value) {
+  const tokens = String(value || "").normalize("NFKC").match(/[\p{L}\p{N}]+/gu) || [];
+  return [...new Set(tokens.slice(0, 12).map((token) => token.toLowerCase()))]
+    .map((token) => `"${token.replace(/"/g, '""')}"`)
+    .join(" AND ");
+}
+
+function archiveEntitySql(where = "1=1") {
+  return `SELECT ad.*,ce.entity_type,ce.node_id,
+    CASE ce.entity_type
+      WHEN 'art_work' THEN aw.title WHEN 'merch_item' THEN mi.title
+      WHEN 'portfolio_item' THEN COALESCE(NULLIF(pi.title,''),'Untitled tattoo')
+      WHEN 'flash_item' THEN fi.title WHEN 'event' THEN ev.title
+      WHEN 'visual_symbol' THEN vs.name ELSE COALESCE(sd.title,ad.archive_slug) END title,
+    CASE ce.entity_type
+      WHEN 'art_work' THEN aw.statement WHEN 'merch_item' THEN mi.product_type
+      WHEN 'portfolio_item' THEN pi.caption WHEN 'flash_item' THEN fi.description
+      WHEN 'event' THEN ev.description WHEN 'visual_symbol' THEN vs.meaning
+      ELSE COALESCE(sd.summary,'') END canonical_summary,
+    CASE ce.entity_type
+      WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/?work='||aw.slug)
+      WHEN 'merch_item' THEN mi.route
+      WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
+      WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
+      WHEN 'event' THEN '/events/'||ev.slug||'/'
+      WHEN 'visual_symbol' THEN '/about/legend/?symbol='||vs.slug
+      ELSE COALESCE(sd.route,'') END canonical_route,
+    CASE ce.entity_type
+      WHEN 'art_work' THEN aw.year WHEN 'portfolio_item' THEN pi.year
+      WHEN 'event' THEN COALESCE(ev.starts_at,'') ELSE COALESCE(sd.date_label,'') END canonical_date,
+    CASE ce.entity_type
+      WHEN 'art_work' THEN aw.medium WHEN 'portfolio_item' THEN pi.primary_style
+      WHEN 'flash_item' THEN fi.item_type WHEN 'merch_item' THEN mi.product_type
+      WHEN 'event' THEN 'event' WHEN 'visual_symbol' THEN 'symbol' ELSE '' END medium,
+    (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
+      FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
+      WHERE am.dossier_entity_id=ad.entity_id AND am.state='published' AND am.visibility='public'
+        AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+      ORDER BY CASE am.material_type WHEN 'final-image' THEN 0 ELSE 1 END,am.sort_order,am.created_at LIMIT 1) primary_image,
+    (SELECT group_concat(material_type) FROM (
+      SELECT DISTINCT am.material_type material_type FROM archive_materials am
+      LEFT JOIN media_assets m ON m.id=am.media_id
+      WHERE am.dossier_entity_id=ad.entity_id AND am.state='published' AND am.visibility='public'
+        AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
+      ORDER BY am.material_type)) material_types
+  FROM archive_dossiers ad
+  JOIN content_entities ce ON ce.id=ad.entity_id
+  LEFT JOIN art_works aw ON ce.entity_type='art_work' AND aw.id=ce.id
+  LEFT JOIN merch_items mi ON ce.entity_type='merch_item' AND mi.id=ce.id
+  LEFT JOIN portfolio_items pi ON ce.entity_type='portfolio_item' AND pi.id=ce.id
+  LEFT JOIN flash_items fi ON ce.entity_type='flash_item' AND fi.id=ce.id
+  LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
+  LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
+  LEFT JOIN search_documents sd ON sd.entity_id=ce.id
+  WHERE ${where}`;
+}
+
+function presentArchiveItem(row) {
+  if (!row) return null;
+  const materialTypes = String(row.material_types || "").split(",").filter(Boolean);
+  const summary = row.orientation || row.canonical_summary || "";
+  const archiveRoute = `/archive/records/${encodeURIComponent(row.archive_slug)}/`;
+  return {
+    entity_id: row.entity_id,
+    entityId: row.entity_id,
+    archive_slug: row.archive_slug,
+    archiveSlug: row.archive_slug,
+    slug: row.archive_slug,
+    entity_type: row.entity_type,
+    entityType: row.entity_type,
+    record_type: row.record_type || row.entity_type,
+    recordType: row.record_type || row.entity_type,
+    title: row.title || row.archive_slug,
+    summary,
+    orientation: row.orientation || "",
+    story: row.story || "",
+    story_html: row.story_html || "",
+    empty_materials_note: row.empty_materials_note || "No process materials are public yet.",
+    date_label: row.canonical_date || "",
+    dateLabel: row.canonical_date || "",
+    medium: row.medium || "",
+    canonical_route: row.canonical_route || "",
+    canonicalRoute: row.canonical_route || "",
+    active_url: row.canonical_route || "",
+    activeUrl: row.canonical_route || "",
+    canonical_url: row.canonical_route || "",
+    route: row.canonical_route || "",
+    archive_route: archiveRoute,
+    archiveRoute,
+    primary_image: row.primary_image || "",
+    primaryImage: row.primary_image || "",
+    image_url: row.primary_image || "",
+    imageUrl: row.primary_image || "",
+    primary_media: row.primary_image ? { url: row.primary_image } : null,
+    material_types: materialTypes,
+    materialTypes,
+    featured: Number(row.featured || 0),
+    updated_at: row.updated_at,
+  };
+}
+
+function archivePublicConditions(url, alias = "ad") {
+  const conditions = ["ce.visibility='public'", `${alias}.state='published'`, `${alias}.public_visible=1`];
+  const values = [];
+  const q = text(url.searchParams.get("q"), 200);
+  if (q) {
+    const fts = plainTextFtsQuery(q);
+    if (fts) {
+      conditions.push(`EXISTS (SELECT 1 FROM archive_search_fragments_fts JOIN archive_search_fragments af ON af.rowid=archive_search_fragments_fts.rowid WHERE archive_search_fragments_fts MATCH ? AND af.dossier_entity_id=${alias}.entity_id AND af.public_visible=1 AND ${archiveFragmentPublicSql("af")})`);
+      values.push(fts);
+    } else {
+      conditions.push(`EXISTS (SELECT 1 FROM archive_search_fragments af WHERE af.dossier_entity_id=${alias}.entity_id AND af.public_visible=1 AND ${archiveFragmentPublicSql("af")} AND lower(af.label||' '||af.body) LIKE ?)`);
+      values.push(`%${q.toLowerCase()}%`);
+    }
+  }
+  const facetParams = [
+    ["medium","medium"], ["brand","brand"], ["person","person"], ["era","era"],
+    ["record_type","record_type"], ["recordType","record_type"],
+  ];
+  const seenKinds = new Set();
+  for (const [param,kind] of facetParams) {
+    const value = text(url.searchParams.get(param), 120).toLowerCase();
+    if (!value || seenKinds.has(kind)) continue;
+    seenKinds.add(kind);
+    conditions.push(`EXISTS (SELECT 1 FROM archive_dossier_facets adf JOIN archive_facets f ON f.id=adf.facet_id WHERE adf.dossier_entity_id=${alias}.entity_id AND f.kind=? AND (f.slug=? OR lower(f.name)=?))`);
+    values.push(kind,value,value);
+  }
+  const collection=text(url.searchParams.get("collection"),120).toLowerCase();
+  if(collection){conditions.push(`EXISTS (SELECT 1 FROM archive_dossier_collections adc JOIN archive_collections ac ON ac.id=adc.collection_id WHERE adc.dossier_entity_id=${alias}.entity_id AND ac.state='published' AND (ac.slug=? OR lower(ac.name)=?))`);values.push(collection,collection);}
+  const materialType = text(url.searchParams.get("material_type") || url.searchParams.get("materialType"), 80).replace(/_/g,"-").toLowerCase();
+  if (materialType) {
+    conditions.push(`EXISTS (SELECT 1 FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE am.dossier_entity_id=${alias}.entity_id AND am.material_type=? AND am.state='published' AND am.visibility='public' AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline')))`);
+    values.push(materialType);
+  }
+  return { conditions, values, q };
+}
+
+async function publicArchiveItems(request, env) {
+  if (request.method !== "GET") return failure("Method not allowed.",405);
+  const database = db(env); const url = new URL(request.url);
+  const page = Math.max(1,Math.floor(Number(url.searchParams.get("page"))||1));
+  const limit = Math.min(100,Math.max(1,Math.floor(Number(url.searchParams.get("limit"))||24)));
+  const offset = (page-1)*limit;
+  const {conditions,values,q} = archivePublicConditions(url);
+  const where = conditions.join(" AND ");
+  const itemSql = `${archiveEntitySql(where)} ORDER BY ad.featured DESC,ad.sort_order,ad.published_at DESC,ad.entity_id LIMIT ? OFFSET ?`;
+  const countSql = `SELECT COUNT(*) total FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ${where}`;
+  const [itemsResult,countResult,facetResult,materialFacetResult,collectionFacetResult] = await database.batch([
+    database.prepare(itemSql).bind(...values,limit,offset),
+    database.prepare(countSql).bind(...values),
+    database.prepare(`SELECT f.kind,f.name,f.slug,COUNT(DISTINCT adf.dossier_entity_id) count
+      FROM archive_facets f JOIN archive_dossier_facets adf ON adf.facet_id=f.id
+      JOIN archive_dossiers ad ON ad.entity_id=adf.dossier_entity_id
+      JOIN content_entities ce ON ce.id=ad.entity_id
+      WHERE ce.visibility='public' AND ad.state='published' AND ad.public_visible=1
+      GROUP BY f.id ORDER BY f.kind,f.sort_order,f.name`),
+    database.prepare(`SELECT am.material_type slug,am.material_type name,COUNT(DISTINCT am.dossier_entity_id) count
+      FROM archive_materials am JOIN archive_dossiers ad ON ad.entity_id=am.dossier_entity_id
+      JOIN content_entities ce ON ce.id=ad.entity_id LEFT JOIN media_assets m ON m.id=am.media_id
+      WHERE ce.visibility='public' AND ad.state='published' AND ad.public_visible=1
+        AND am.state='published' AND am.visibility='public'
+        AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
+      GROUP BY am.material_type ORDER BY am.material_type`),
+    database.prepare(`SELECT ac.slug,ac.name,COUNT(DISTINCT adc.dossier_entity_id) count
+      FROM archive_dossier_collections adc JOIN archive_collections ac ON ac.id=adc.collection_id AND ac.state='published'
+      JOIN archive_dossiers ad ON ad.entity_id=adc.dossier_entity_id AND ad.state='published' AND ad.public_visible=1
+      JOIN content_entities ce ON ce.id=ad.entity_id AND ce.visibility='public'
+      GROUP BY ac.id ORDER BY ac.sort_order,ac.name`),
+  ]);
+  const items=(itemsResult.results||[]).map(presentArchiveItem);const total=Number(countResult.results?.[0]?.total||0);
+  const facets={medium:[],brand:[],person:[],era:[],collection:collectionFacetResult.results||[],record_type:[],material_type:materialFacetResult.results||[]};
+  for(const facet of facetResult.results||[]){if(facets[facet.kind])facets[facet.kind].push({name:facet.name,slug:facet.slug,count:Number(facet.count||0)});}
+  const pagination={page,limit,total,total_pages:Math.max(1,Math.ceil(total/limit)),totalPages:Math.max(1,Math.ceil(total/limit))};
+  return json({items,records:items,facets,pagination,count:items.length,query:q},{cache:"public, max-age=30"});
+}
+
+async function publicArchiveDetail(request,env,archiveSlug){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const database=db(env);
+  const row=await database.prepare(archiveEntitySql("ce.visibility='public' AND ad.state='published' AND ad.public_visible=1 AND (ad.archive_slug=? OR ad.entity_id=?)")).bind(archiveSlug,archiveSlug).first();
+  if(!row)return failure("Archive item not found.",404);
+  const item=presentArchiveItem(row),entityId=row.entity_id;
+  const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult]=await database.batch([
+    database.prepare(`SELECT am.*,m.mime_type,m.duration_seconds,m.alt_text,m.public_title,m.public_description,
+        CASE WHEN m.transcript_status='ready' THEN m.transcript ELSE '' END transcript,m.transcript_status,m.transcript_language,m.public_presentation,
+        CASE WHEN m.public_presentation='inline' THEN COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END) ELSE '' END media_url
+      FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id
+      WHERE am.dossier_entity_id=? AND am.state='published' AND am.visibility='public'
+        AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
+      ORDER BY CASE WHEN am.occurred_at IS NULL THEN 1 ELSE 0 END,am.occurred_at,am.sort_order,am.created_at`).bind(entityId),
+    database.prepare(`SELECT ea.*,('history-'||ea.id) anchor FROM entity_activity ea
+      WHERE ea.entity_id=? AND ea.public_visible=1
+      ORDER BY CASE WHEN ea.occurred_at IS NULL THEN 1 ELSE 0 END,ea.occurred_at,ea.sort_order,ea.created_at`).bind(entityId),
+    database.prepare(`SELECT ads.subject_entity_id entity_id,ads.role,ads.sort_order,ce.entity_type,
+        COALESCE(o.name,p.name,n.name,ce.id) name,
+        COALESCE(o.slug,p.slug,n.slug,'') slug
+      FROM archive_dossier_subjects ads JOIN content_entities ce ON ce.id=ads.subject_entity_id AND ce.visibility='public'
+      LEFT JOIN organizations o ON o.id=ce.id AND o.state='published'
+      LEFT JOIN people p ON p.id=ce.id AND p.state='published' AND p.privacy='public'
+      LEFT JOIN construct_nodes n ON n.id=ce.id AND n.state='published'
+      WHERE ads.dossier_entity_id=? AND ads.public_visible=1
+        AND (ce.entity_type<>'person' OR p.id IS NOT NULL) AND (ce.entity_type<>'place' OR EXISTS(SELECT 1 FROM places visible_place WHERE visible_place.id=ce.id AND visible_place.state='published' AND visible_place.privacy='public'))
+        AND (ce.entity_type<>'organization' OR o.id IS NOT NULL)
+      ORDER BY ads.sort_order,name`).bind(entityId),
+    database.prepare(`SELECT ac.id,ac.name,ac.slug,ac.description,adc.sort_order
+      FROM archive_dossier_collections adc JOIN archive_collections ac ON ac.id=adc.collection_id
+      WHERE adc.dossier_entity_id=? AND ac.state='published' ORDER BY adc.sort_order,ac.name`).bind(entityId),
+    database.prepare(`SELECT er.*,rt.slug relationship_slug,rt.forward_label,rt.reverse_label
+      FROM entity_relationships er JOIN relationship_types rt ON rt.id=er.relationship_type_id
+      WHERE er.public_visible=1 AND rt.public_visible=1 AND (er.source_entity_id=? OR er.target_entity_id=?)
+      ORDER BY er.sort_order,er.created_at`).bind(entityId,entityId),
+  ]);
+  const relationshipRows=relationshipsResult.results||[];
+  const relatedIds=relationshipRows.map(r=>r.source_entity_id===entityId?r.target_entity_id:r.source_entity_id);
+  const relatedMap=await entityRecords(database,relatedIds);
+  const relatedDossiers=relatedIds.length?(await database.prepare(`SELECT entity_id,archive_slug FROM archive_dossiers WHERE state='published' AND public_visible=1 AND entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
+  const relatedSlugs=new Map(relatedDossiers.map(d=>[d.entity_id,d.archive_slug]));
+  const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const archive_slug=relatedSlugs.get(relatedId)||"";relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,imageUrl:"",archive_slug,archiveRoute:archive_slug?`/archive/records/${encodeURIComponent(archive_slug)}/`:""}});}
+  const materials=(materialsResult.results||[]).map(material=>({...material,anchor:`material-${material.id}`,url:material.media_url||"",inline_text:material.body||""}));
+  const activities=activitiesResult.results||[];
+  return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships},{cache:"public, max-age=30"});
+}
+
+function timelineSubjectName(row){return row.organization_name||row.person_name||row.node_name||row.title||row.slug;}
+
+async function publicArchiveTimeline(request,env,timelineSlug){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const database=db(env);
+  const timeline=await database.prepare(`SELECT at.*,ce.entity_type,o.name organization_name,p.name person_name,n.name node_name
+    FROM archive_timelines at JOIN content_entities ce ON ce.id=at.subject_entity_id AND ce.visibility='public'
+    LEFT JOIN organizations o ON o.id=ce.id AND o.state='published'
+    LEFT JOIN people p ON p.id=ce.id AND p.state='published' AND p.privacy='public'
+    LEFT JOIN construct_nodes n ON n.id=ce.id AND n.state='published'
+    WHERE (at.slug=? OR at.id=?) AND at.state='published' AND at.public_visible=1
+      AND (ce.entity_type<>'person' OR p.id IS NOT NULL)
+      AND (ce.entity_type<>'organization' OR o.id IS NOT NULL)`).bind(timelineSlug,timelineSlug).first();
+  if(!timeline)return failure("Timeline not found.",404);
+  timeline.subject_name=timelineSubjectName(timeline);timeline.route=`/archive/timelines/${encodeURIComponent(timeline.slug)}/`;
+  const [chaptersResult,activitiesResult]=await database.batch([
+    database.prepare(`SELECT * FROM archive_timeline_chapters WHERE timeline_id=? AND state='published' AND public_visible=1
+      ORDER BY CASE WHEN occurred_at IS NULL THEN 1 ELSE 0 END,occurred_at,sort_order,created_at`).bind(timeline.id),
+    database.prepare(`SELECT ea.*,ad.archive_slug,
+        CASE ce.entity_type WHEN 'art_work' THEN aw.title WHEN 'merch_item' THEN mi.title WHEN 'portfolio_item' THEN pi.title
+          WHEN 'flash_item' THEN fi.title WHEN 'event' THEN ev.title WHEN 'visual_symbol' THEN vs.name ELSE ce.id END item_title
+      FROM entity_activity_subjects eas JOIN entity_activity ea ON ea.id=eas.activity_id AND ea.public_visible=1
+      JOIN content_entities ce ON ce.id=ea.entity_id AND ce.visibility='public'
+      JOIN archive_dossiers ad ON ad.entity_id=ea.entity_id AND ad.state='published' AND ad.public_visible=1
+      LEFT JOIN art_works aw ON ce.entity_type='art_work' AND aw.id=ce.id
+      LEFT JOIN merch_items mi ON ce.entity_type='merch_item' AND mi.id=ce.id
+      LEFT JOIN portfolio_items pi ON ce.entity_type='portfolio_item' AND pi.id=ce.id
+      LEFT JOIN flash_items fi ON ce.entity_type='flash_item' AND fi.id=ce.id
+      LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
+      LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
+      WHERE eas.subject_entity_id=? AND eas.public_visible=1
+      ORDER BY CASE WHEN ea.occurred_at IS NULL THEN 1 ELSE 0 END,ea.occurred_at,ea.sort_order,ea.created_at`).bind(timeline.subject_entity_id),
+  ]);
+  const chapters=(chaptersResult.results||[]).map(row=>({...row,entry_type:"chapter",anchor:row.anchor_slug||`chapter-${row.id}`}));
+  const activities=(activitiesResult.results||[]).map(row=>({...row,entry_type:"activity",anchor:`activity-${row.id}`,archive_route:row.archive_slug?`/archive/records/${encodeURIComponent(row.archive_slug)}/`:""}));
+  const entries=[...chapters,...activities].sort((a,b)=>{const ad=a.occurred_at||"9999-12-31",bd=b.occurred_at||"9999-12-31";return ad.localeCompare(bd)||Number(a.sort_order||0)-Number(b.sort_order||0);});
+  const deduped=[],keys=new Set();for(const entry of entries){const key=entry.dedupe_key||`${String(entry.title||"").toLowerCase()}|${entry.occurred_at||entry.date_label||"undated"}`;if(keys.has(key))continue;keys.add(key);deduped.push(entry);}
+  return json({timeline,chapters,activities,entries:deduped},{cache:"public, max-age=60"});
+}
+
 async function publicSearch(request, env) {
-  const url = new URL(request.url); const q = text(url.searchParams.get("q"), 200); const type = text(url.searchParams.get("type"), 80); const node = text(url.searchParams.get("node"), 80);
-  const filters = []; const values = [];
-  if (type) { filters.push("d.entity_type=?"); values.push(type); }
-  if (node) { filters.push("d.node_id=?"); values.push(node); }
-  for (const [param,column] of [["state","state"],["date","date_label"]]) { const value=text(url.searchParams.get(param),120); if(value){filters.push(`d.${column}=?`);values.push(value);} }
-  for (const [param,column] of [["collection","collection_labels"],["theme","theme_labels"],["person","person_labels"],["place","place_labels"]]) { const value=text(url.searchParams.get(param),120); if(value){filters.push(`d.${column} LIKE ?`);values.push(`%${value}%`);} }
-  const where = filters.length ? `AND ${filters.join(" AND ")}` : "";
-  const sql = q ? `SELECT d.*,bm25(search_documents_fts) rank FROM search_documents_fts f JOIN search_documents d ON d.rowid=f.rowid WHERE search_documents_fts MATCH ? ${where} ORDER BY rank LIMIT 100` : `SELECT d.*,0 rank FROM search_documents d WHERE 1=1 ${where} ORDER BY updated_at DESC LIMIT 100`;
-  const args = q ? [q, ...values] : values;
-  const rows = (await db(env).prepare(sql).bind(...args).all()).results || [];
-  return json({ records: rows, count: rows.length, query: q });
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const database=db(env),url=new URL(request.url),q=text(url.searchParams.get("q"),200),type=text(url.searchParams.get("type"),80),node=text(url.searchParams.get("node"),80);
+  const archiveFilter=archivePublicConditions(url),archiveConditions=[...archiveFilter.conditions],archiveValues=[...archiveFilter.values];
+  if(type){archiveConditions.push("ce.entity_type=?");archiveValues.push(type)}
+  if(node){archiveConditions.push("ce.node_id=?");archiveValues.push(node)}
+  const archiveRows=(await database.prepare(`${archiveEntitySql(archiveConditions.join(" AND "))} ORDER BY ad.featured DESC,ad.updated_at DESC LIMIT 100`).bind(...archiveValues).all()).results||[];
+  const archiveIds=archiveRows.map(row=>row.entity_id);let fragmentRows=[];
+  if(archiveIds.length){
+    const idClause=archiveIds.map(()=>"?").join(","),fts=plainTextFtsQuery(q);let fragmentSql,fragmentValues;
+    if(q&&fts){fragmentSql=`SELECT af.*,bm25(archive_search_fragments_fts) rank FROM archive_search_fragments_fts JOIN archive_search_fragments af ON af.rowid=archive_search_fragments_fts.rowid WHERE archive_search_fragments_fts MATCH ? AND af.public_visible=1 AND ${archiveFragmentPublicSql("af")} AND af.dossier_entity_id IN (${idClause}) ORDER BY rank LIMIT 300`;fragmentValues=[fts,...archiveIds]}
+    else if(q){fragmentSql=`SELECT af.*,0 rank FROM archive_search_fragments af WHERE af.public_visible=1 AND ${archiveFragmentPublicSql("af")} AND lower(af.label||' '||af.body) LIKE ? AND af.dossier_entity_id IN (${idClause}) ORDER BY af.updated_at DESC LIMIT 300`;fragmentValues=[`%${q.toLowerCase()}%`,...archiveIds]}
+    else{fragmentSql=`SELECT af.*,0 rank FROM archive_search_fragments af WHERE af.public_visible=1 AND af.fragment_type='dossier' AND ${archiveFragmentPublicSql("af")} AND af.dossier_entity_id IN (${idClause}) ORDER BY af.updated_at DESC LIMIT 300`;fragmentValues=archiveIds}
+    fragmentRows=(await database.prepare(fragmentSql).bind(...fragmentValues).all()).results||[];
+  }
+  const fragmentsByEntity=new Map();for(const fragment of fragmentRows){if(!fragmentsByEntity.has(fragment.dossier_entity_id))fragmentsByEntity.set(fragment.dossier_entity_id,[]);const anchor=fragment.anchor||"overview";fragmentsByEntity.get(fragment.dossier_entity_id).push({fragment_type:fragment.fragment_type,source_id:fragment.source_id,label:fragment.label,body:fragment.body,snippet:String(fragment.body||fragment.label||"").slice(0,320),anchor,dossier_anchor:`/archive/records/${encodeURIComponent(archiveRows.find(row=>row.entity_id===fragment.dossier_entity_id)?.archive_slug||fragment.dossier_entity_id)}/#${encodeURIComponent(anchor)}`,rank:Number(fragment.rank||0)});}
+  const archiveRecords=archiveRows.map(row=>{const item=presentArchiveItem(row);return {...item,route:item.archive_route,matches:fragmentsByEntity.get(row.entity_id)||[],match_count:(fragmentsByEntity.get(row.entity_id)||[]).length};});
+
+  const legacyFilters=["ce.visibility='public'","ce.search_visibility=1","ad.entity_id IS NULL"],legacyValues=[];
+  if(type){legacyFilters.push("d.entity_type=?");legacyValues.push(type)}if(node){legacyFilters.push("d.node_id=?");legacyValues.push(node)}
+  for(const [param,column] of [["state","state"],["date","date_label"]]){const value=text(url.searchParams.get(param),120);if(value){legacyFilters.push(`d.${column}=?`);legacyValues.push(value)}}
+  for(const [param,column] of [["theme","theme_labels"],["place","place_labels"]]){const value=text(url.searchParams.get(param),120);if(value){legacyFilters.push(`d.${column} LIKE ?`);legacyValues.push(`%${value}%`)}}
+  const fts=plainTextFtsQuery(q);let legacySql,legacyArgs;
+  if(q&&fts){legacySql=`SELECT d.*,bm25(search_documents_fts) rank FROM search_documents_fts JOIN search_documents d ON d.rowid=search_documents_fts.rowid JOIN content_entities ce ON ce.id=d.entity_id LEFT JOIN archive_dossiers ad ON ad.entity_id=d.entity_id WHERE search_documents_fts MATCH ? AND ${legacyFilters.join(" AND ")} ORDER BY rank LIMIT 100`;legacyArgs=[fts,...legacyValues]}
+  else if(q){legacySql=`SELECT d.*,0 rank FROM search_documents d JOIN content_entities ce ON ce.id=d.entity_id LEFT JOIN archive_dossiers ad ON ad.entity_id=d.entity_id WHERE lower(d.title||' '||d.summary||' '||d.body) LIKE ? AND ${legacyFilters.join(" AND ")} ORDER BY d.updated_at DESC LIMIT 100`;legacyArgs=[`%${q.toLowerCase()}%`,...legacyValues]}
+  else{legacySql=`SELECT d.*,0 rank FROM search_documents d JOIN content_entities ce ON ce.id=d.entity_id LEFT JOIN archive_dossiers ad ON ad.entity_id=d.entity_id WHERE ${legacyFilters.join(" AND ")} ORDER BY d.updated_at DESC LIMIT 100`;legacyArgs=legacyValues}
+  const legacyRows=(await database.prepare(legacySql).bind(...legacyArgs).all()).results||[];
+  const legacyRecords=legacyRows.map(row=>({...row,matches:[{fragment_type:"entity",source_id:row.entity_id,label:row.title,body:row.summary||row.body||"",snippet:String(row.summary||row.body||"").slice(0,320),anchor:"",dossier_anchor:row.route}],match_count:1}));
+  const records=[...archiveRecords,...legacyRecords];
+  return json({records,groups:records,items:records,count:records.length,query:q},{cache:"public, max-age=30"});
 }
 
 function searchDocument(resource, row) {
@@ -310,7 +617,8 @@ function searchSyncStatement(database, resource, row) {
 }
 
 function entityVisibilityStatement(database, resource, row) {
-  const visible = resource === "flash" ? ["available","reserved","placed","retired"].includes(row.state) : row.state === "published";
+  const stateVisible = resource === "flash" ? ["available","reserved","placed","retired"].includes(row.state) : row.state === "published";
+  const visible = stateVisible && (!['people','places'].includes(resource) || row.privacy === 'public');
   return database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,archived_at=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(visible ? "public" : "internal", visible ? 1 : 0, row.state === "archived" ? new Date().toISOString() : null, visible ? 1 : 0, row.id);
 }
 
@@ -337,7 +645,9 @@ async function adminCreate(request, env, resource) {
     database.prepare(`INSERT INTO ${config.table}(id,${keys.join(",")},created_at,updated_at) VALUES(?,${keys.map(()=>"?").join(",")},datetime('now'),datetime('now'))`).bind(recordId,...keys.map(k=>values[k])),
   ]);
   const created = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
-  await database.batch([entityVisibilityStatement(database, resource, created), searchSyncStatement(database, resource, created)]);
+  const publishStatements=[entityVisibilityStatement(database, resource, created),searchSyncStatement(database, resource, created)];
+  if(archiveEligibleEntityType(config.entityType))publishStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,created),archiveRecordType(config.entityType)));
+  await database.batch(publishStatements);
   await nextRevision(database,recordId,"create",null,created); return json({ record: created },{status:201});
 }
 
@@ -346,11 +656,13 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   const database = db(env); const before = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first(); if (!before) return failure("Not found.",404);
   const values = normalizeRecord(config,body,before); const keys = Object.keys(values); if (!keys.length) return failure("No editable fields supplied.");
   const projected = { ...before, ...values, id: recordId };
-  await database.batch([
+  const updateStatements=[
     database.prepare(`UPDATE ${config.table} SET ${keys.map(k=>`${k}=?`).join(",")},updated_at=datetime('now') WHERE id=?`).bind(...keys.map(k=>values[k]),recordId),
     entityVisibilityStatement(database, resource, projected),
     searchSyncStatement(database, resource, projected),
-  ]);
+  ];
+  if(archiveEligibleEntityType(config.entityType))updateStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,projected),archiveRecordType(config.entityType)));
+  await database.batch(updateStatements);
   const after = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
   await nextRevision(database,recordId,archive?"archive":"update",before,after); return json({record:after});
 }
@@ -363,14 +675,83 @@ async function reorder(request, env, resource) {
   return json({ok:true});
 }
 
+function normalizedConsent(value, fallback="unknown") {
+  const consent=text(value,30).toLowerCase();
+  return consent==="approved"?"granted":(consent||fallback);
+}
+
+async function publicMediaApi(request,env,mediaId){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const database=db(env);
+  const row=await database.prepare(`SELECT m.* FROM media_assets m
+    WHERE m.id=? AND m.state='active' AND m.privacy='public'
+      AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+      AND EXISTS(SELECT 1 FROM archive_materials am JOIN archive_dossiers ad ON ad.entity_id=am.dossier_entity_id
+        JOIN content_entities ce ON ce.id=ad.entity_id WHERE am.media_id=m.id AND am.state='published' AND am.visibility='public'
+          AND ad.state='published' AND ad.public_visible=1 AND ce.visibility='public')`).bind(mediaId).first();
+  if(!row)return failure("Not found.",404);
+  return servePublicMedia(row,request,env);
+}
+
+async function publicEntityMediaApi(request,env,mediaId){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const row=await db(env).prepare(`SELECT m.* FROM media_assets m
+    WHERE m.id=? AND m.state='active' AND m.privacy='public'
+      AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+      AND EXISTS(SELECT 1 FROM entity_media em JOIN content_entities ce ON ce.id=em.entity_id
+        WHERE em.media_id=m.id AND em.public_visible=1 AND ce.visibility='public')`).bind(mediaId).first();
+  if(!row)return failure("Not found.",404);
+  return servePublicMedia(row,request,env);
+}
+
+async function servePublicMedia(row,request,env){
+  if(row.source_url)return new Response(null,{status:302,headers:{location:new URL(row.source_url,request.url).href,"cache-control":"private, no-store"}});
+  const object=await env.SUBMISSION_FILES?.get(row.storage_key);if(!object)return failure("Media unavailable.",404);
+  const filename=String(row.original_filename||"media").replace(/[\r\n"]/g,"-");
+  return new Response(object.body,{headers:{"content-type":row.mime_type||"application/octet-stream","content-disposition":`inline; filename="${filename}"`,"cache-control":"private, no-store","x-content-type-options":"nosniff"}});
+}
+
+async function adminMediaFileApi(request,env,mediaId){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const row=await db(env).prepare("SELECT * FROM media_assets WHERE id=? AND state='active'").bind(mediaId).first();
+  if(!row)return failure("Media not found.",404);
+  return servePublicMedia(row,request,env);
+}
+
 async function mediaApi(request, env, mediaId="") {
   const database=db(env);
-  if(request.method==="GET"){ if(mediaId){const row=await database.prepare("SELECT * FROM media_assets WHERE id=? AND state='active'").bind(mediaId).first();if(!row)return failure("Not found.",404);if(row.source_url)return Response.redirect(new URL(row.source_url,request.url),302);const object=await env.SUBMISSION_FILES?.get(row.storage_key);if(!object)return failure("Media unavailable.",404);return new Response(object.body,{headers:{"content-type":row.mime_type||"application/octet-stream","cache-control":"public, max-age=86400","x-content-type-options":"nosniff"}});} const rows=(await database.prepare("SELECT * FROM media_assets ORDER BY created_at DESC").all()).results||[];return json({records:rows,count:rows.length}); }
-  if(request.method==="PATCH"&&mediaId){const body=await readJson(request);const state=body?.state==="active"?"active":"archived";await database.prepare("UPDATE media_assets SET state=?,updated_at=datetime('now') WHERE id=?").bind(state,mediaId).run();return json({record:await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first()});}
+  if(request.method==="GET"){
+    if(mediaId){const record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first();return record?json({record}):failure("Not found.",404);}
+    const rows=(await database.prepare("SELECT * FROM media_assets ORDER BY created_at DESC").all()).results||[];return json({records:rows,count:rows.length});
+  }
+  if(request.method==="PATCH"&&mediaId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const before=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first();if(!before)return failure("Not found.",404);
+    const next={
+      state:text(body.state??before.state,30),alt_text:text(body.alt_text??before.alt_text,1000),caption:text(body.caption??before.caption,3000),
+      privacy:text(body.privacy??before.privacy,30),consent_status:normalizedConsent(body.consent_status??before.consent_status,before.consent_status),
+      transcript:text(body.transcript??before.transcript,100000),transcript_status:text(body.transcript_status??before.transcript_status,30),
+      transcript_language:text(body.transcript_language??before.transcript_language,40),public_title:text(body.public_title??before.public_title,300),
+      public_description:text(body.public_description??before.public_description,3000),public_presentation:text(body.public_presentation??before.public_presentation,30),
+    };
+    if(!["active","archived"].includes(next.state))return failure("Invalid media state.");
+    if(!MEDIA_PRIVACIES.has(next.privacy))return failure("Invalid media privacy.");
+    if(!MEDIA_CONSENT_STATUSES.has(next.consent_status))return failure("Invalid consent status.");
+    if(!MEDIA_TRANSCRIPT_STATUSES.has(next.transcript_status))return failure("Invalid transcript status.");
+    if(!MEDIA_PRESENTATIONS.has(next.public_presentation))return failure("Invalid public presentation.");
+    await database.prepare("UPDATE media_assets SET state=?,alt_text=?,caption=?,privacy=?,consent_status=?,transcript=?,transcript_status=?,transcript_language=?,public_title=?,public_description=?,public_presentation=?,updated_at=datetime('now') WHERE id=?")
+      .bind(next.state,next.alt_text,next.caption,next.privacy,next.consent_status,next.transcript,next.transcript_status,next.transcript_language,next.public_title,next.public_description,next.public_presentation,mediaId).run();
+    return json({record:await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first()});
+  }
+  if(request.method!=="POST"||mediaId)return failure("Method not allowed.",405);
   const form=await request.formData();const file=form.get("file");if(!(file instanceof File)||!file.size)return failure("A file is required.");
-  const mime=(file.type||"application/octet-stream").toLowerCase();const image=["image/jpeg","image/png","image/webp"].includes(mime);const doc=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(mime);const av=mime.startsWith("audio/")||mime.startsWith("video/");const max=av?50*1024*1024:15*1024*1024;if(!(image||doc||av))return failure("Unsupported media type.",415);if(file.size>max)return failure("File exceeds the allowed size.",413);if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
+  const mime=(file.type||"application/octet-stream").toLowerCase();const image=["image/jpeg","image/png","image/webp","image/gif"].includes(mime);const doc=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"].includes(mime);const av=mime.startsWith("audio/")||mime.startsWith("video/");const max=av?50*1024*1024:15*1024*1024;if(!(image||doc||av))return failure("Unsupported media type.",415);if(file.size>max)return failure("File exceeds the allowed size.",413);if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
+  const privacy=text(form.get("privacy"),30)||"internal",consent=normalizedConsent(form.get("consent_status")),transcriptStatus=text(form.get("transcript_status"),30)||"not-requested",presentation=text(form.get("public_presentation"),30)||"inline";
+  if(!MEDIA_PRIVACIES.has(privacy))return failure("Invalid media privacy.");if(!MEDIA_CONSENT_STATUSES.has(consent))return failure("Invalid consent status.");if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
   const newId=id("media");const key=`construct/${newId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`;await env.SUBMISSION_FILES.put(key,file.stream(),{httpMetadata:{contentType:mime}});
-  try{await database.prepare("INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,privacy,consent_status,state,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'))").bind(newId,key,file.name,mime,file.size,text(form.get("alt_text"),1000),text(form.get("caption"),3000),text(form.get("privacy"),30)||"internal",text(form.get("consent_status"),30)||"unknown").run();}catch(error){await env.SUBMISSION_FILES.delete(key);throw error;}return json({record:await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(newId).first()},{status:201});
+  try{await database.prepare(`INSERT INTO media_assets(id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,privacy,consent_status,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
+    VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),?,?,?,?,?,?)`).bind(newId,key,file.name,mime,file.size,text(form.get("alt_text"),1000),text(form.get("caption"),3000),privacy,consent,text(form.get("transcript"),100000),transcriptStatus,text(form.get("transcript_language"),40),text(form.get("public_title"),300),text(form.get("public_description"),3000),presentation).run();}catch(error){await env.SUBMISSION_FILES.delete(key);throw error;}
+  return json({record:await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(newId).first()},{status:201});
 }
 
 const NODE_FALLBACKS={
@@ -424,8 +805,10 @@ function entityDirectorySql(where="1=1"){
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route
       WHEN 'event' THEN '/events/'||ev.slug||'/' ELSE '' END route,
     COALESCE(NULLIF(mi.image_url,''),NULLIF(pi.source_url,''),
-      (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id) FROM entity_media em JOIN media_assets m ON m.id=em.media_id
-       WHERE em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order LIMIT 1),
+      (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/entity-media/'||m.id) FROM entity_media em JOIN media_assets m ON m.id=em.media_id
+       WHERE em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' AND m.privacy='public'
+         AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+       ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order LIMIT 1),
       CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(json_extract(vs.examples_json,'$[0].src'),'') ELSE '' END,
       CASE WHEN ce.entity_type='portfolio_item' THEN '/api/portfolio/media/'||pi.id ELSE '' END) image_url,
     CASE ce.entity_type
@@ -543,20 +926,134 @@ function canonicalResource(resource){return resource==="legend"?"visual-language
 
 async function entityMediaApi(request,env,entityId){const database=db(env);if(request.method==="GET"){const rows=(await database.prepare("SELECT em.*,m.original_filename,m.source_url,m.storage_key,m.mime_type FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? ORDER BY em.sort_order").bind(entityId).all()).results||[];return json({records:rows,count:rows.length});}const b=await readJson(request);if(!b?.media_id)return failure("media_id is required.");await database.prepare("INSERT OR REPLACE INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at) VALUES(?,?,?,?,?,?,?,datetime('now'))").bind(entityId,b.media_id,text(b.role,60)||"gallery",Number(b.sort_order)||0,b.public_visible?1:0,text(b.alt_text_override,1000),text(b.caption_override,3000)).run();return json({ok:true},{status:201});}
 
+function archiveRecordType(entityType){return {art_work:"artwork",merch_item:"merchandise",portfolio_item:"tattoo",flash_item:"flash",event:"event",visual_symbol:"symbol"}[entityType]||String(entityType||"").replace(/_/g,"-");}
+function archivePreferredSlug(entityType,row){return slug(row?.archive_slug||row?.slug||row?.shopify_handle||row?.id)||String(row?.id||"");}
+function archiveEligibleEntityType(entityType){return ["art_work","merch_item","portfolio_item","flash_item","event","visual_symbol","writing_work","film_work","music_work"].includes(entityType);}
+
+function archiveShellStatement(database,entityId,entityType,preferredSlug,recordType){
+  const base=slug(preferredSlug)||entityId,prefixed=`${String(entityType||"item").replace(/_/g,"-")}-${base}`;
+  return database.prepare(`INSERT INTO archive_dossiers(entity_id,archive_slug,record_type,state,public_visible,published_at,created_by,updated_by,created_at,updated_at)
+    SELECT ce.id,CASE WHEN EXISTS(SELECT 1 FROM archive_dossiers other WHERE other.archive_slug=? AND other.entity_id<>ce.id) THEN ? ELSE ? END,
+      ?,'published',1,COALESCE(ce.public_at,datetime('now')),'studio','studio',datetime('now'),datetime('now')
+    FROM content_entities ce WHERE ce.id=? AND ce.visibility='public'
+    ON CONFLICT(entity_id) DO UPDATE SET
+      archive_slug=CASE WHEN archive_dossiers.archive_slug=archive_dossiers.entity_id THEN excluded.archive_slug ELSE archive_dossiers.archive_slug END,
+      record_type=CASE WHEN archive_dossiers.record_type='' THEN excluded.record_type ELSE archive_dossiers.record_type END,
+      updated_by='studio',updated_at=datetime('now')`).bind(base,prefixed,base,recordType,entityId);
+}
+
+async function archiveDossiersAdminApi(request,env,entityId=""){
+  const database=db(env);
+  if(request.method==="GET"){
+    const where=entityId?"ad.entity_id=?":"1=1";const statement=database.prepare(`${archiveEntitySql(where)} ORDER BY ad.updated_at DESC,ad.entity_id`);const result=entityId?await statement.bind(entityId).all():await statement.all();const records=(result.results||[]).map(row=>({...row,...presentArchiveItem(row)}));
+    if(entityId&&!records[0])return failure("Dossier not found.",404);return json(entityId?{record:records[0],dossier:records[0]}:{records,count:records.length});
+  }
+  if(request.method==="POST"&&!entityId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const ownerId=text(body.entity_id||body.entityId,200);if(!ownerId)return failure("entity_id is required.");
+    const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(ownerId).first();if(!owner)return failure("Canonical entity not found.",404);if(!archiveEligibleEntityType(owner.entity_type))return failure("That entity type is not eligible for an Archive dossier.",409);
+    const archiveSlug=slug(body.archive_slug||body.archiveSlug||body.slug||ownerId);if(!archiveSlug)return failure("archive_slug is required.");const state=text(body.state,30)||"draft",publicVisible=truthy(body.public_visible??body.publicVisible)?1:0;if(!ARCHIVE_STATES.has(state))return failure("Invalid dossier state.");if(state==="published"&&publicVisible&&owner.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
+    await database.prepare(`INSERT INTO archive_dossiers(entity_id,archive_slug,orientation,story,story_html,empty_materials_note,record_type,state,public_visible,featured,sort_order,published_at,created_by,updated_by,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`).bind(ownerId,archiveSlug,text(body.orientation,8000),text(body.story,50000),text(body.story_html,50000),text(body.empty_materials_note,3000)||"No process materials are public yet.",text(body.record_type,100)||archiveRecordType(owner.entity_type),state,publicVisible,truthy(body.featured)?1:0,Number(body.sort_order)||0,state,publicVisible).run();
+    return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,ownerId);
+  }
+  if(request.method==="PATCH"&&entityId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!before)return failure("Dossier not found.",404);const owner=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(entityId).first();
+    const next={archive_slug:slug(body.archive_slug??body.archiveSlug??body.slug??before.archive_slug),orientation:text(body.orientation??before.orientation,8000),story:text(body.story??before.story,50000),story_html:text(body.story_html??before.story_html,50000),empty_materials_note:text(body.empty_materials_note??before.empty_materials_note,3000),record_type:text(body.record_type??body.recordType??before.record_type,100),state:text(body.state??before.state,30),public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible)?1:0,featured:body.featured===undefined?Number(before.featured):truthy(body.featured)?1:0,sort_order:Number(body.sort_order??before.sort_order)||0};
+    if(!next.archive_slug)return failure("archive_slug is required.");if(!ARCHIVE_STATES.has(next.state))return failure("Invalid dossier state.");if(next.state==="published"&&next.public_visible&&owner?.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
+    await database.prepare(`UPDATE archive_dossiers SET archive_slug=?,orientation=?,story=?,story_html=?,empty_materials_note=?,record_type=?,state=?,public_visible=?,featured=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(next.archive_slug,next.orientation,next.story,next.story_html,next.empty_materials_note,next.record_type,next.state,next.public_visible,next.featured,next.sort_order,next.state,next.public_visible,entityId).run();
+    const after=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();await nextRevision(database,entityId,"archive-dossier-update",before,after);return json({record:after,dossier:after});
+  }
+  if(request.method==="DELETE"&&entityId){await database.prepare("UPDATE archive_dossiers SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(entityId).run();return json({ok:true});}
+  return failure("Method not allowed.",405);
+}
+
+function normalizeArchiveMaterial(body,existing={}){
+  const materialType=text(body.material_type??body.materialType??existing.material_type,80).replace(/_/g,"-").toLowerCase()||"note";
+  const visibility=text(body.visibility??body.privacy??existing.visibility,30).toLowerCase()||"internal";
+  const state=text(body.state??existing.state,30).toLowerCase()||"draft";
+  const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null;
+  const endedAt=text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null;
+  const datePrecision=text(body.date_precision??body.datePrecision??existing.date_precision,30).toLowerCase()||(occurredAt?"exact":"undated");
+  return {dossier_entity_id:text(body.dossier_entity_id??body.entity_id??body.entityId??existing.dossier_entity_id,200),media_id:text(body.media_id??body.mediaId??existing.media_id,200)||null,role:text(body.role??existing.role,80)||"notebook",material_type:materialType,title:text(body.title??existing.title,300),caption:text(body.caption??existing.caption,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,100000),process_phase:text(body.process_phase??body.processPhase??existing.process_phase,120),occurred_at:occurredAt,ended_at:endedAt,date_precision:datePrecision,date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),visibility,state,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};
+}
+
+async function validateArchiveMaterial(database,material){
+  if(!material.dossier_entity_id)return failure("entity_id is required.");if(!ARCHIVE_MATERIAL_TYPES.has(material.material_type))return failure("Invalid material type.");if(!ARCHIVE_VISIBILITIES.has(material.visibility))return failure("Invalid material visibility.");if(!ARCHIVE_STATES.has(material.state))return failure("Invalid material state.");if(!ARCHIVE_DATE_PRECISIONS.has(material.date_precision))return failure("Invalid date precision.");if(!material.media_id&&!material.body)return failure("A material needs media_id or inline_text.");
+  const dossier=await database.prepare("SELECT ad.*,ce.visibility canonical_visibility FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ad.entity_id=?").bind(material.dossier_entity_id).first();if(!dossier)return failure("Dossier not found.",404);
+  let media=null;if(material.media_id){media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(material.media_id).first();if(!media)return failure("Media not found.",404)}
+  if(material.state==="published"&&material.visibility==="public"){
+    if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the canonical entity and dossier before publishing this material.",409);
+    if(media&&(media.state!=="active"||media.privacy!=="public"||!["not-required","granted"].includes(media.consent_status)||media.public_presentation!=="inline"))return failure("Public media must be active, public, inline, and have granted or not-required consent.",409);
+  }
+  return {dossier,media};
+}
+
+async function archiveMaterialsAdminApi(request,env,materialId=""){
+  const database=db(env);
+  if(request.method==="GET"&&!materialId){const url=new URL(request.url),entityId=text(url.searchParams.get("entity_id")||url.searchParams.get("entityId"),200);const where=entityId?"WHERE am.dossier_entity_id=?":"";const statement=database.prepare(`SELECT am.*,m.original_filename,m.mime_type,m.byte_size,m.duration_seconds,m.source_url,m.storage_key,
+      m.alt_text,m.caption media_caption,m.privacy media_privacy,m.consent_status,m.state media_state,
+      m.transcript,m.transcript_status,m.transcript_language,m.public_title,m.public_description,m.public_presentation
+      FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id ${where}
+      ORDER BY am.dossier_entity_id,am.sort_order,am.created_at`);const result=entityId?await statement.bind(entityId).all():await statement.all();return json({records:result.results||[],materials:result.results||[],count:(result.results||[]).length});}
+  if(request.method==="POST"&&materialId==="reorder"){const body=await readJson(request);const entityId=text(body?.entity_id||body?.entityId,200),ids=body?.ids;if(!entityId||!Array.isArray(ids))return failure("entity_id and ids are required.");const current=(await database.prepare("SELECT id FROM archive_materials WHERE dossier_entity_id=? ORDER BY sort_order,id").bind(entityId).all()).results||[];const set=new Set(ids);if(ids.length!==current.length||set.size!==current.length||current.some(row=>!set.has(row.id)))return failure("The material list changed. Refresh before reordering.",409);await database.batch(ids.map((recordId,index)=>database.prepare("UPDATE archive_materials SET sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND dossier_entity_id=?").bind(index+1,recordId,entityId)));return json({ok:true});}
+  if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const materialIdNew=text(body.id,200)||id("archive-material");await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,"studio").run();return json({record:await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialIdNew).first()},{status:201});}
+  if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,materialId).run();return json({record:await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first()});}
+  if(request.method==="DELETE"&&materialId){const before=await database.prepare("SELECT id FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);await database.prepare("UPDATE archive_materials SET state='archived',visibility='internal',updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(materialId).run();return json({ok:true,archived:true});}
+  return failure("Method not allowed.",405);
+}
+
+function normalizeArchiveActivity(body,existing={}){const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null,endedAt=text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null;return {entity_id:text(body.entity_id??body.entityId??existing.entity_id,200),activity_type:text(body.activity_type??body.activityType??existing.activity_type,100)||"milestone",title:text(body.title??existing.title,300),notes:text(body.notes??existing.notes,8000),summary:text(body.summary??existing.summary,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,50000),occurred_at:occurredAt,ended_at:endedAt,place_entity_id:text(body.place_entity_id??body.placeEntityId??existing.place_entity_id,200)||null,public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||(occurredAt?"exact":"undated"),date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),source_note:text(body.source_note??body.sourceNote??existing.source_note,3000)};}
+function archiveActivitySubjects(body){const raw=body.subject_entity_ids??body.subjectEntityIds??body.subject_ids??body.subjects;if(raw===undefined)return null;if(!Array.isArray(raw))return [];return [...new Set(raw.map(value=>text(typeof value==="object"?value.entity_id||value.id:value,200)).filter(Boolean))];}
+
+async function archiveActivitiesAdminApi(request,env,activityId=""){
+  const database=db(env);
+  if(request.method==="GET"&&!activityId){const url=new URL(request.url),entityId=text(url.searchParams.get("entity_id")||url.searchParams.get("entityId"),200);const where=entityId?"WHERE ea.entity_id=?":"";const statement=database.prepare(`SELECT ea.* FROM entity_activity ea ${where} ORDER BY CASE WHEN ea.occurred_at IS NULL THEN 1 ELSE 0 END,ea.occurred_at,ea.sort_order,ea.created_at`);const result=entityId?await statement.bind(entityId).all():await statement.all();const records=result.results||[];if(records.length){const ids=records.map(row=>row.id),subjects=(await database.prepare(`SELECT activity_id,subject_entity_id FROM entity_activity_subjects WHERE activity_id IN (${ids.map(()=>"?").join(",")}) ORDER BY sort_order`).bind(...ids).all()).results||[];for(const record of records)record.subject_entity_ids=subjects.filter(subject=>subject.activity_id===record.id).map(subject=>subject.subject_entity_id)}return json({records,activities:records,count:records.length});}
+  if(request.method==="POST"&&!activityId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const activity=normalizeArchiveActivity(body),subjects=archiveActivitySubjects(body)||[];if(!activity.entity_id||!activity.title)return failure("entity_id and title are required.");if(!ARCHIVE_DATE_PRECISIONS.has(activity.date_precision))return failure("Invalid date precision.");const owner=await database.prepare("SELECT ce.visibility,ad.state dossier_state,ad.public_visible dossier_public FROM content_entities ce LEFT JOIN archive_dossiers ad ON ad.entity_id=ce.id WHERE ce.id=?").bind(activity.entity_id).first();if(!owner)return failure("Canonical entity not found.",404);if(activity.public_visible&&(owner.visibility!=="public"||owner.dossier_state!=="published"||!Number(owner.dossier_public)))return failure("Publish the canonical entity and dossier before publishing this activity.",409);const newId=text(body.id,200)||id("archive-activity");const statements=[database.prepare(`INSERT INTO entity_activity(id,entity_id,activity_type,title,notes,occurred_at,ended_at,place_entity_id,public_visible,sort_order,created_by,created_at,updated_at,summary,body,date_precision,date_label,source_note) VALUES(?,?,?,?,?,?,?,?,?,?,'studio',datetime('now'),datetime('now'),?,?,?,?,?)`).bind(newId,activity.entity_id,activity.activity_type,activity.title,activity.notes,activity.occurred_at,activity.ended_at,activity.place_entity_id,activity.public_visible,activity.sort_order,activity.summary,activity.body,activity.date_precision,activity.date_label,activity.source_note),...subjects.map((subject,index)=>database.prepare("INSERT INTO entity_activity_subjects(activity_id,subject_entity_id,public_visible,sort_order,created_at) VALUES(?,?,?,?,datetime('now'))").bind(newId,subject,activity.public_visible?1:0,index+1))];await database.batch(statements);return json({record:await database.prepare("SELECT * FROM entity_activity WHERE id=?").bind(newId).first()},{status:201});}
+  if(request.method==="PATCH"&&activityId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM entity_activity WHERE id=?").bind(activityId).first();if(!before)return failure("Activity not found.",404);const activity=normalizeArchiveActivity(body,before),subjects=archiveActivitySubjects(body);if(!activity.title||!ARCHIVE_DATE_PRECISIONS.has(activity.date_precision))return failure("A title and valid date precision are required.");const owner=await database.prepare("SELECT ce.visibility,ad.state dossier_state,ad.public_visible dossier_public FROM content_entities ce LEFT JOIN archive_dossiers ad ON ad.entity_id=ce.id WHERE ce.id=?").bind(activity.entity_id).first();if(activity.public_visible&&(owner?.visibility!=="public"||owner?.dossier_state!=="published"||!Number(owner?.dossier_public)))return failure("Publish the canonical entity and dossier before publishing this activity.",409);const statements=[database.prepare(`UPDATE entity_activity SET entity_id=?,activity_type=?,title=?,notes=?,occurred_at=?,ended_at=?,place_entity_id=?,public_visible=?,sort_order=?,updated_at=datetime('now'),summary=?,body=?,date_precision=?,date_label=?,source_note=? WHERE id=?`).bind(activity.entity_id,activity.activity_type,activity.title,activity.notes,activity.occurred_at,activity.ended_at,activity.place_entity_id,activity.public_visible,activity.sort_order,activity.summary,activity.body,activity.date_precision,activity.date_label,activity.source_note,activityId)];if(subjects!==null){statements.push(database.prepare("DELETE FROM entity_activity_subjects WHERE activity_id=?").bind(activityId),...subjects.map((subject,index)=>database.prepare("INSERT INTO entity_activity_subjects(activity_id,subject_entity_id,public_visible,sort_order,created_at) VALUES(?,?,?,?,datetime('now'))").bind(activityId,subject,activity.public_visible?1:0,index+1)))}else{statements.push(database.prepare("UPDATE entity_activity_subjects SET public_visible=? WHERE activity_id=?").bind(activity.public_visible?1:0,activityId))}await database.batch(statements);return json({record:await database.prepare("SELECT * FROM entity_activity WHERE id=?").bind(activityId).first()});}
+  if(request.method==="DELETE"&&activityId){const found=await database.prepare("SELECT id FROM entity_activity WHERE id=?").bind(activityId).first();if(!found)return failure("Activity not found.",404);await database.batch([database.prepare("UPDATE entity_activity SET public_visible=0,updated_at=datetime('now') WHERE id=?").bind(activityId),database.prepare("UPDATE entity_activity_subjects SET public_visible=0 WHERE activity_id=?").bind(activityId)]);return json({ok:true,archived:true});}
+  return failure("Method not allowed.",405);
+}
+
+function normalizeArchiveTimeline(body,existing={}){return {subject_entity_id:text(body.subject_entity_id??body.subjectEntityId??existing.subject_entity_id,200),slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),description:text(body.description??existing.description,8000),state:text(body.state??existing.state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+function normalizeArchiveChapter(body,existing={}){const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null;return {title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,50000),occurred_at:occurredAt,ended_at:text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||(occurredAt?"exact":"undated"),date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),anchor_slug:slug(body.anchor_slug??body.anchor??existing.anchor_slug),dedupe_key:text(body.dedupe_key??body.dedupeKey??existing.dedupe_key,200),state:text(body.state??existing.state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+
+async function archiveTimelinesAdminApi(request,env,timelineId="",chapterId=""){
+  const database=db(env);
+  if(chapterId){const before=await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=? AND timeline_id=?").bind(chapterId,timelineId).first();if(!before)return failure("Timeline chapter not found.",404);if(request.method==="PATCH"){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const chapter=normalizeArchiveChapter(body,before);if(!chapter.title||!ARCHIVE_DATE_PRECISIONS.has(chapter.date_precision)||!ARCHIVE_TIMELINE_STATES.has(chapter.state))return failure("Invalid timeline chapter.");await database.prepare(`UPDATE archive_timeline_chapters SET title=?,summary=?,body=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,anchor_slug=?,dedupe_key=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND timeline_id=?`).bind(chapter.title,chapter.summary,chapter.body,chapter.occurred_at,chapter.ended_at,chapter.date_precision,chapter.date_label,chapter.anchor_slug,chapter.dedupe_key,chapter.state,chapter.public_visible,chapter.sort_order,chapterId,timelineId).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=?").bind(chapterId).first()});}if(request.method==="DELETE"){await database.prepare("UPDATE archive_timeline_chapters SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=? AND timeline_id=?").bind(chapterId,timelineId).run();return json({ok:true,archived:true});}return failure("Method not allowed.",405);}
+  const chapterRoute=/\/chapters$/.test(new URL(request.url).pathname);
+  if(chapterRoute&&timelineId&&request.method==="POST"){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const timeline=await database.prepare("SELECT id FROM archive_timelines WHERE id=?").bind(timelineId).first();if(!timeline)return failure("Timeline not found.",404);const chapter=normalizeArchiveChapter(body);if(!chapter.title||!ARCHIVE_DATE_PRECISIONS.has(chapter.date_precision)||!ARCHIVE_TIMELINE_STATES.has(chapter.state))return failure("Invalid timeline chapter.");const newId=text(body.id,200)||id("archive-chapter");await database.prepare(`INSERT INTO archive_timeline_chapters(id,timeline_id,title,summary,body,occurred_at,ended_at,date_precision,date_label,anchor_slug,dedupe_key,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,timelineId,chapter.title,chapter.summary,chapter.body,chapter.occurred_at,chapter.ended_at,chapter.date_precision,chapter.date_label,chapter.anchor_slug,chapter.dedupe_key,chapter.state,chapter.public_visible,chapter.sort_order).run();return json({record:await database.prepare("SELECT * FROM archive_timeline_chapters WHERE id=?").bind(newId).first()},{status:201});}
+  if(request.method==="GET"){const timelineIdFilter=timelineId?"WHERE at.id=?":"";const statement=database.prepare(`SELECT at.*,ce.entity_type,COALESCE(o.name,p.name,n.name,ce.id) subject_name FROM archive_timelines at JOIN content_entities ce ON ce.id=at.subject_entity_id LEFT JOIN organizations o ON o.id=ce.id LEFT JOIN people p ON p.id=ce.id LEFT JOIN construct_nodes n ON n.id=ce.id ${timelineIdFilter} ORDER BY at.sort_order,at.title`);const result=timelineId?await statement.bind(timelineId).all():await statement.all();const records=result.results||[];if(timelineId&&!records[0])return failure("Timeline not found.",404);if(timelineId){const chapters=(await database.prepare("SELECT * FROM archive_timeline_chapters WHERE timeline_id=? ORDER BY occurred_at,sort_order,created_at").bind(timelineId).all()).results||[];return json({record:records[0],timeline:records[0],chapters});}return json({records,count:records.length});}
+  if(request.method==="POST"&&!timelineId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const timeline=normalizeArchiveTimeline(body);if(!timeline.subject_entity_id||!timeline.slug||!timeline.title||!ARCHIVE_TIMELINE_STATES.has(timeline.state))return failure("subject_entity_id, slug, title, and a valid state are required.");const subject=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(timeline.subject_entity_id).first();if(!subject)return failure("Timeline subject not found.",404);if(timeline.state==="published"&&timeline.public_visible&&subject.visibility!=="public")return failure("The timeline subject must be public before publishing.",409);const newId=text(body.id,200)||id("archive-timeline");await database.prepare(`INSERT INTO archive_timelines(id,subject_entity_id,slug,title,description,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?, 'studio','studio',datetime('now'),datetime('now'))`).bind(newId,timeline.subject_entity_id,timeline.slug,timeline.title,timeline.description,timeline.state,timeline.public_visible,timeline.sort_order).run();return json({record:await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(newId).first()},{status:201});}
+  if(request.method==="PATCH"&&timelineId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(timelineId).first();if(!before)return failure("Timeline not found.",404);const timeline=normalizeArchiveTimeline(body,before);if(!timeline.subject_entity_id||!timeline.slug||!timeline.title||!ARCHIVE_TIMELINE_STATES.has(timeline.state))return failure("Invalid timeline.");const subject=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(timeline.subject_entity_id).first();if(!subject)return failure("Timeline subject not found.",404);if(timeline.state==="published"&&timeline.public_visible&&subject.visibility!=="public")return failure("The timeline subject must be public before publishing.",409);await database.prepare(`UPDATE archive_timelines SET subject_entity_id=?,slug=?,title=?,description=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(timeline.subject_entity_id,timeline.slug,timeline.title,timeline.description,timeline.state,timeline.public_visible,timeline.sort_order,timelineId).run();return json({record:await database.prepare("SELECT * FROM archive_timelines WHERE id=?").bind(timelineId).first()});}
+  if(request.method==="DELETE"&&timelineId){await database.prepare("UPDATE archive_timelines SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(timelineId).run();return json({ok:true});}
+  return failure("Method not allowed.",405);
+}
+
 async function eventArchive(request,env,eventId){const database=db(env);const existing=await database.prepare("SELECT * FROM archive_records WHERE source_event_id=?").bind(eventId).first();if(existing)return json({record:existing,created:false});const event=await database.prepare("SELECT id,slug,title,description,starts_at,ends_at,location,status FROM events WHERE id=?").bind(eventId).first();if(!event)return failure("Event not found.",404);const attendance=await database.prepare("SELECT COALESCE(SUM(seats),0) total FROM event_tickets WHERE event_id=? AND status='paid'").bind(eventId).first();const recordId=`archive-event-${event.id}`;await database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_record','archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId).run();await database.prepare("INSERT INTO archive_records(id,slug,source_event_id,title,node_label,record_type,room,date_or_period,timeline_period,summary,body,record_status,state,aggregate_attendance,created_at,updated_at) VALUES(?,?,?,?,?,'event','Events',?,?,?,?,'event handoff','draft',?,datetime('now'),datetime('now'))").bind(recordId,`event-${event.slug}`,event.id,event.title,'The Six.Well Construct',event.starts_at||'',event.starts_at||'',event.description||'',event.description||'',Number(attendance?.total||0)).run();const record=await database.prepare("SELECT * FROM archive_records WHERE id=?").bind(recordId).first();await nextRevision(database,recordId,"event-archive-handoff",null,record);return json({record,created:true},{status:201});}
 
 export async function handleConstructApi(request,env){
   const url=new URL(request.url);const path=url.pathname;
   if(path==="/api/site/navigation")return publicNavigation(env);
   if(path==="/api/search")return publicSearch(request,env);
+  if(path==="/api/archive/items")return publicArchiveItems(request,env);
+  const archiveItemMatch=path.match(/^\/api\/archive\/items\/([^/]+)$/);if(archiveItemMatch)return publicArchiveDetail(request,env,decodeURIComponent(archiveItemMatch[1]));
+  const archiveTimelinePublicMatch=path.match(/^\/api\/archive\/timelines\/([^/]+)$/);if(archiveTimelinePublicMatch)return publicArchiveTimeline(request,env,decodeURIComponent(archiveTimelinePublicMatch[1]));
   const connectionsMatch=path.match(/^\/api\/connections\/([^/]+)$/);if(connectionsMatch&&request.method==="GET")return publicConnections(env,decodeURIComponent(connectionsMatch[1]));
-  const mediaPublic=path.match(/^\/api\/construct\/media\/([^/]+)$/);if(mediaPublic)return mediaApi(request,env,decodeURIComponent(mediaPublic[1]));
+  const mediaPublic=path.match(/^\/api\/construct\/media\/([^/]+)$/);if(mediaPublic)return publicMediaApi(request,env,decodeURIComponent(mediaPublic[1]));
+  const entityMediaPublic=path.match(/^\/api\/construct\/entity-media\/([^/]+)$/);if(entityMediaPublic)return publicEntityMediaApi(request,env,decodeURIComponent(entityMediaPublic[1]));
   if(path==="/api/legend/categories")return publicLegendCategories(env);
   const publicMatch=path.match(/^\/api\/(flash|legend|visual-language|art|archive|archive-collections)(?:\/([^/]+))?$/);if(publicMatch)return publicCatalog(request,env,canonicalResource(publicMatch[1]),publicMatch[2]?decodeURIComponent(publicMatch[2]):"");
   const auth=requireStudioAdmin(request,env);if(auth)return auth;
   const legendCategoryMatch=path.match(/^\/api\/admin\/legend\/categories(?:\/([^/]+))?$/);if(legendCategoryMatch)return legendCategoryApi(request,env,legendCategoryMatch[1]?decodeURIComponent(legendCategoryMatch[1]):"");
   const eventMatch=path.match(/^\/api\/admin\/events\/([^/]+)\/create-archive-record$/);if(eventMatch&&request.method==="POST")return eventArchive(request,env,decodeURIComponent(eventMatch[1]));
+  const mediaFileMatch=path.match(/^\/api\/admin\/media\/([^/]+)\/file$/);if(mediaFileMatch)return adminMediaFileApi(request,env,decodeURIComponent(mediaFileMatch[1]));
   const mediaMatch=path.match(/^\/api\/admin\/media(?:\/([^/]+))?$/);if(mediaMatch)return mediaApi(request,env,mediaMatch[1]?decodeURIComponent(mediaMatch[1]):"");
+  const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
+  const materialMatch=path.match(/^\/api\/admin\/archive-materials(?:\/([^/]+))?$/);if(materialMatch)return archiveMaterialsAdminApi(request,env,materialMatch[1]?decodeURIComponent(materialMatch[1]):"");
+  const activityMatch=path.match(/^\/api\/admin\/archive-activities(?:\/([^/]+))?$/);if(activityMatch)return archiveActivitiesAdminApi(request,env,activityMatch[1]?decodeURIComponent(activityMatch[1]):"");
+  const timelineChapterMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters\/([^/]+)$/);if(timelineChapterMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChapterMatch[1]),decodeURIComponent(timelineChapterMatch[2]));
+  const timelineChaptersMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters$/);if(timelineChaptersMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChaptersMatch[1]),"");
+  const timelineMatch=path.match(/^\/api\/admin\/archive-timelines(?:\/([^/]+))?$/);if(timelineMatch)return archiveTimelinesAdminApi(request,env,timelineMatch[1]?decodeURIComponent(timelineMatch[1]):"");
   if(path==="/api/admin/entities"&&request.method==="GET")return entityDirectory(request,env);
   const relationshipTypeMatch=path.match(/^\/api\/admin\/relationship-types(?:\/([^/]+))?$/);if(relationshipTypeMatch)return relationshipTypesApi(request,env,relationshipTypeMatch[1]?decodeURIComponent(relationshipTypeMatch[1]):"");
   const relationshipMatch=path.match(/^\/api\/admin\/relationships(?:\/([^/]+))?$/);if(relationshipMatch)return relationshipApi(request,env,relationshipMatch[1]?decodeURIComponent(relationshipMatch[1]):"");

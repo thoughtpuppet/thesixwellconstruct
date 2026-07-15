@@ -3,24 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Browse public Archive records by collection.">
+  <meta name="theme-color" content="#0e0e0e">
   <title>Archive Collections · the six.well construct</title>
-  <meta name="description" content="Published collections from the Six.Well Construct archive.">
-  <link rel="stylesheet" href="/css/managed-preview.css">
-  <link rel="stylesheet" href="/css/transitions.css">
+  <link rel="stylesheet" href="/css/archive-public.css">
   <link rel="stylesheet" href="/css/site-typography.css">
 </head>
-<body data-venture="archive">
-  <header>
-    <div><span class="eyebrow">The Six.Well Construct</span><h1>Archive Collections</h1></div>
-    <nav class="preview-nav"><a href="/archive/">Archive records</a><a href="/home/">Return to construct</a></nav>
+<body class="archive-public" data-venture="archive" data-archive-view="explorer" data-archive-room="collections">
+  <a class="archive-skip-link" href="#archive-main">Skip to collections</a>
+  <header class="archive-site-header">
+    <a class="archive-mark" href="/home/" aria-label="The Six.Well Construct home"><strong>The Six.Well</strong><span>Construct</span></a>
+    <nav class="archive-site-nav" aria-label="Archive navigation"><a href="/archive/">Archive</a><a href="/archive/collections/" aria-current="page">Collections</a><a href="/home/">Return to construct</a></nav>
   </header>
-  <main>
-    <p class="lede">Published groupings from the managed archive, in the order set in Studio.</p>
-    <section class="catalog" data-managed-catalog="archive-collections" aria-live="polite"></section>
-  </main>
-  <script src="/js/managed-preview.js"></script>
-  <script src="/js/transition.js"></script>
-  <script src="/js/construct-corner.js"></script>
-  <script src="/js/construct-nav.js"></script>
+  <main class="archive-app" id="archive-main" tabindex="-1" data-archive-app><div class="archive-loading" role="status"><span class="archive-loading-mark" aria-hidden="true"></span><p>Opening collections…</p></div></main>
+  <footer class="archive-site-footer"><p>© the six.well construct</p><nav aria-label="Footer"><a href="/about/">About</a><a href="/studio/">Studio</a></nav></footer>
+  <script src="/js/archive-public.js"></script>
 </body>
 </html>

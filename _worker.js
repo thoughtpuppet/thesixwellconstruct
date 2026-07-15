@@ -263,11 +263,20 @@ function isFlashDetailPagePath(pathname) {
   return !new Set(["claim", "detail", "maze"]).has(parts[2]) && !hasFileExtension(pathname);
 }
 
+function archiveDynamicAssetPath(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "archive" || hasFileExtension(pathname)) return "";
+  if (parts[1] === "records") return "/archive/records/index.html";
+  if (parts[1] === "timelines") return "/archive/timelines/index.html";
+  return "";
+}
+
 function isHiddenByHomeOnlyMode(pathname) {
   if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
   const normalizedPath = normalizePath(pathname);
   if (PUBLIC_HOME_PATHS.has(pathname)) return false;
   if (PUBLIC_ARCHIVE_PATHS.has(pathname) || normalizedPath === "/archive") return false;
+  if (archiveDynamicAssetPath(pathname)) return false;
   if (PUBLIC_CONSTRUCT_MAP_PATHS.has(pathname) || normalizedPath === "/construct-map") return false;
   if (PUBLIC_ERROR_PATHS.has(normalizedPath) || PUBLIC_ERROR_PATHS.has(pathname)) {
     return false;
@@ -732,6 +741,7 @@ export default {
       url.pathname === "/api/site/navigation" ||
       url.pathname.startsWith("/api/connections/") ||
       url.pathname.startsWith("/api/construct/media/") ||
+      url.pathname.startsWith("/api/construct/entity-media/") ||
       url.pathname === "/api/flash" || url.pathname.startsWith("/api/flash/") ||
       url.pathname === "/api/legend" || url.pathname.startsWith("/api/legend/") ||
       url.pathname === "/api/visual-language" || url.pathname.startsWith("/api/visual-language/") ||
@@ -853,6 +863,11 @@ export default {
 
     if (isFlashDetailPagePath(url.pathname)) {
       return env.ASSETS.fetch(assetRequest(request, "/tattoos/flash/detail/index.html"));
+    }
+
+    const archiveAssetPath = archiveDynamicAssetPath(url.pathname);
+    if (archiveAssetPath) {
+      return env.ASSETS.fetch(assetRequest(request, archiveAssetPath));
     }
 
     return env.ASSETS.fetch(assetRequest(request, assetPathForRequest(url.pathname)));

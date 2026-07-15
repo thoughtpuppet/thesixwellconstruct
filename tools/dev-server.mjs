@@ -72,6 +72,8 @@ const checkRoutes = [
   ["/archive/sixwell-construct/", 200],
   ["/archive/tattoos/", 200],
   ["/archive/writings/", 200],
+  ["/archive/records/lostmarbles/", 200],
+  ["/archive/timelines/art/", 200],
   ["/tattoos/", 200],
   ["/tattoos/special-projects/", 200],
   ["/tattoos/inquire/", 200],
@@ -201,6 +203,12 @@ function eventDetailRouteFile(urlPath) {
   return path.resolve(root, "events", parts[1], "index.html");
 }
 
+function archiveDynamicRouteFile(urlPath) {
+  const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "archive" || !["records", "timelines"].includes(parts[1])) return null;
+  return path.resolve(root, "archive", parts[1], "index.html");
+}
+
 function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
@@ -210,6 +218,7 @@ function isHiddenByHomeOnlyMode(urlPath) {
   if (publicHomePaths.has(decoded)) return false;
   if (publicErrorPaths.has(decoded) || publicErrorPaths.has(normalized)) return false;
   if (publicArchivePaths.has(decoded) || normalized === "/archive") return false;
+  if (normalized.startsWith("/archive/records/") || normalized.startsWith("/archive/timelines/")) return false;
   if (publicConstructMapPaths.has(decoded) || normalized === "/construct-map") return false;
   if (decoded.startsWith("/api/")) return false;
   if (isLocalOnlyRoute(urlPath)) return false;
@@ -249,6 +258,8 @@ function safePath(urlPath) {
 
   if (isFrontDoorRoute(decoded)) return path.resolve(root, "index.html");
   if (isHomeRoute(decoded)) return path.resolve(root, "home", "index.html");
+  const archiveDynamicFile = archiveDynamicRouteFile(decoded);
+  if (archiveDynamicFile) return archiveDynamicFile;
 
   const clean = decoded === "/" ? "/index.html" : decoded;
   if (isEventDetailRoute(clean)) return eventDetailRouteFile(clean);
