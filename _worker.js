@@ -826,6 +826,12 @@ export default {
       return handleSubmissionsApi(request, env);
     }
 
+    if (url.pathname === "/legend" || url.pathname.startsWith("/legend/")) {
+      const redirectUrl = new URL(request.url);
+      redirectUrl.pathname = url.pathname === "/legend" ? "/about/legend/" : `/about${url.pathname}`;
+      return Response.redirect(redirectUrl, 308);
+    }
+
     if (isFrontDoorPath(url.pathname)) {
       return env.ASSETS.fetch(assetRequest(request, "/index.html"));
     }

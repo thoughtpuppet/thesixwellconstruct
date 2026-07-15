@@ -891,25 +891,9 @@
     grid-column:2;
     justify-self:end;
     align-self:end;
-    display:inline-flex;
-    align-items:center;
-    min-height:32px;
-    color:var(--accent-hot);
-    font-family:var(--sans);
-    font-weight:900;
-    font-size:10px;
-    letter-spacing:0.18em;
-    line-height:1;
-    text-transform:uppercase;
-    border-bottom:2px solid rgba(240,143,21,0.42);
-    transition:color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
-  }
-  .brand-more:hover,
-  .brand-more:focus-visible {
-    color:var(--accent);
-    border-color:var(--accent);
-    outline:none;
-    transform:translateY(-1px);
+    --brand-band-link-color:var(--accent-hot);
+    --brand-band-link-hover:var(--accent);
+    --brand-band-link-border:rgba(240,143,21,0.42);
   }
   @media (max-width:1024px) {
     .brand-band { grid-template-columns:1fr; gap:24px; margin-top:-24px; padding:24px; }
@@ -993,7 +977,7 @@
         </div>
       </div>
       <p class="brand-copy" data-copy-id="merch-brand-copy">the merch <span style="color: rgb(109, 61, 21)">medium</span> of the construct began with a <span style="color: rgb(240, 143, 0)">clothing-based</span> <span style="color: rgb(0, 57, 189)">installation</span> known as <span style="color: rgb(252, 184, 103)">six.well</span>.</p>
-      <a class="brand-more" href="/about/six-well/">learn more</a>
+      <a class="brand-more brand-band-link" href="/about/six-well/">learn more</a>
     </section>
 
     <!-- filter rows — row 1: source medium, row 2: type (only when source active) -->

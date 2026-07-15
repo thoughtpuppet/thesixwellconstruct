@@ -1099,9 +1099,9 @@
     hide: function() { nav.style.opacity = '0'; },
   };
 
-  if (!window.__constructWayfindingLoaded && !document.querySelector('script[src="/js/construct-wayfinding.js"]')) {
+  if (!window.__constructWayfindingLoaded && !document.querySelector('script[src^="/js/construct-wayfinding.js"]')) {
     var wayfindingScript = document.createElement('script');
-    wayfindingScript.src = '/js/construct-wayfinding.js';
+    wayfindingScript.src = '/js/construct-wayfinding.js?v=20260715-breadcrumb-2';
     document.body.appendChild(wayfindingScript);
   }
 

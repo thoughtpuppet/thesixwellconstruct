@@ -236,20 +236,14 @@
   .brand-links {
     display:flex;
     align-items:center;
+    justify-content:flex-end;
     gap:18px;
     flex-wrap:wrap;
     margin-top:22px;
+    --brand-band-link-color:var(--text);
+    --brand-band-link-hover:var(--signal);
+    --brand-band-link-border:rgba(255,231,202,0.42);
   }
-  .brand-link {
-    display:inline-block;
-    font-family:var(--serif);
-    font-size:11px;
-    letter-spacing:0.18em;
-    text-transform:uppercase;
-    color:var(--text);
-    transition:color var(--t-fast);
-  }
-  .brand-link:hover { color:var(--signal); }
   .section {
     padding:48px 0;
     border-top:5px solid var(--ring-faint);
@@ -648,7 +642,7 @@
           <h2 class="brand-title" id="tattoo-house-title" data-copy-id="tattoos-brand-title">art.pill Tattoo <span style="font-family: Georgia, &quot;Times New Roman&quot;, Times, serif"><span><span><span><span style="font-family: Inter, Arial, sans-serif">House</span></span></span></span></span></h2>
         </div>
         <div class="brand-links">
-          <a class="brand-link" href="/about/artpilltattoohouse/">Learn more &rarr;</a>
+          <a class="brand-link brand-band-link" href="/about/artpilltattoohouse/">learn more</a>
         </div>
       </div>
       <p class="brand-copy" data-copy-id="tattoos-brand-copy"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 14px"><span style="font-size: 14px">a private tattoo studio in Atlanta, Georgia, owned and operated by Sai Solehman. The studio specializes in NARRATIVE COMPOSITIONS, FLORAL PIECES, script, and repeatable symbolic patterns, with color work designed thoughtfully for brown skin tones.</span></span></span></p>
@@ -670,8 +664,8 @@
         <h2 class="brand-title" id="artist-name-title">Saiel Dauhn Solehman</h2>
         <p class="brand-copy"><span style="font-size: 14px">an Atlanta-based interdisciplinary artist whose visions move through tattooing, painting, film, apparel, and woodworking. Her practice explores mysticism, introspection, communication, psychological tension, and cultural systems through layered symbolism and visual conversations set within vivid, surreal environments.</span></p>
         <div class="brand-links">
-          <a class="brand-link" href="/about/founder/">Learn more &rarr;</a>
-          <a class="brand-link" href="/tattoos/portfolio/">See the portfolio &rarr;</a>
+          <a class="brand-link brand-band-link" href="/about/founder/">learn more</a>
+          <a class="brand-link brand-band-link" href="/tattoos/portfolio/">see portfolio</a>
         </div>
       </div>
     </section>

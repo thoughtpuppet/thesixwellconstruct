@@ -292,7 +292,7 @@ function searchDocument(resource, row) {
       context.viewer_opening,
       ...(Array.isArray(context.sources) ? context.sources.flatMap((entry) => [entry.title, entry.creator, entry.note]) : []),
     ];
-    return { ...common, summary: row.meaning || "", body: [...influence, ...applications, ...variants, ...appearances].filter(Boolean).join(" "), theme_labels: parseJson(row.themes_json).join(", "), route: `/legend/?symbol=${encodeURIComponent(row.slug || row.id)}` };
+    return { ...common, summary: row.meaning || "", body: [...influence, ...applications, ...variants, ...appearances].filter(Boolean).join(" "), theme_labels: parseJson(row.themes_json).join(", "), route: `/about/legend/?symbol=${encodeURIComponent(row.slug || row.id)}` };
   }
   return null;
 }
@@ -418,7 +418,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/?work='||aw.slug)
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
       WHEN 'merch_item' THEN mi.route
-      WHEN 'visual_symbol' THEN '/legend/?symbol='||vs.slug
+      WHEN 'visual_symbol' THEN '/about/legend/?symbol='||vs.slug
       WHEN 'archive_record' THEN '/archive/?record='||ar.slug
       WHEN 'archive_collection' THEN '/archive/?collection='||ac.slug
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route

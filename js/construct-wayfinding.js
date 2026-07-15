@@ -129,6 +129,47 @@
     main.insertBefore(nav, main.firstElementChild);
   }
 
+  function normalizeBreadcrumbPosition() {
+    var breadcrumb = document.querySelector('.breadcrumb, .construct-breadcrumb');
+    if (!breadcrumb) return;
+
+    function alignBreadcrumb() {
+      /* Keep the Lost Marbles detail page as the sitewide vertical baseline.
+         The custom property lets the shared stylesheet win even when a page's
+         main element carries its own large top padding. */
+      breadcrumb.style.removeProperty('--breadcrumb-flow-offset');
+
+      var breadcrumbTop = breadcrumb.getBoundingClientRect().top + window.scrollY;
+      var baselineTop = window.innerWidth <= 900 ? 60 : 91;
+      var topBarBottom = 0;
+
+      Array.from(document.querySelectorAll('header')).forEach(function(header) {
+        var style = window.getComputedStyle(header);
+        if (style.position !== 'sticky' && style.position !== 'fixed') return;
+
+        var rect = header.getBoundingClientRect();
+        if (rect.top > 1 || rect.bottom <= 0 || rect.height > 140) return;
+        topBarBottom = Math.max(topBarBottom, header.offsetTop + rect.height);
+      });
+
+      var targetTop = Math.max(baselineTop, topBarBottom);
+      var offset = Math.round((targetTop - breadcrumbTop) * 100) / 100;
+      breadcrumb.style.setProperty('--breadcrumb-flow-offset', offset + 'px');
+    }
+
+    window.requestAnimationFrame(alignBreadcrumb);
+
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function() {
+        if (window.scrollY < 4) alignBreadcrumb();
+      });
+    }
+
+    window.addEventListener('resize', function() {
+      if (window.scrollY < 4) alignBreadcrumb();
+    }, { passive: true });
+  }
+
   function normalizeFooter(medium) {
     var footer = document.querySelector('footer');
     if (!footer) {
@@ -182,5 +223,6 @@
   appendStyles();
   var medium = currentMedium();
   addBreadcrumb(medium);
+  normalizeBreadcrumbPosition();
   normalizeFooter(medium);
 })();
