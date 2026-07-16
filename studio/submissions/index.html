@@ -363,6 +363,8 @@
   .portfolio-angle-manager summary::marker { color:var(--accent); }
   .portfolio-angle-content { display:grid; gap:10px; margin-top:12px; }
   .portfolio-angle-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .portfolio-angle-upload { display:flex; gap:8px; align-items:end; flex-wrap:wrap; }
+  .portfolio-angle-upload > label:first-child { display:grid; gap:5px; min-width:190px; }
   .portfolio-angle-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
   .portfolio-angle { display:grid; gap:6px; border:3px solid var(--ring-faint); padding:6px; }
   .portfolio-angle img { width:100%; aspect-ratio:4/5; object-fit:cover; background:#090909; }
@@ -393,6 +395,9 @@
   .lifecycle-strip .field { min-width:0; }
   @media (max-width:760px) { .portfolio-settings-grid { grid-template-columns:1fr; } }
   @media (max-width:760px) {
+    .portfolio-angle-head { align-items:stretch; flex-direction:column; }
+    .portfolio-angle-upload { align-items:stretch; flex-direction:column; }
+    .portfolio-angle-upload > label:first-child { min-width:0; }
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
     .tattoo-settings-row.special { grid-template-columns:1fr; }
@@ -1289,6 +1294,24 @@
     ["healed", "Healed"],
     ["in-progress", "In progress"],
   ];
+  const PORTFOLIO_PROJECT_TYPES = [
+    ["standard", "Standard tattoo"],
+    ["cover_up", "Cover-up"],
+  ];
+  const PORTFOLIO_IMAGE_ROLES = [
+    ["result", "Result"],
+    ["before", "Before / existing tattoo"],
+    ["process", "Process"],
+    ["detail", "Detail"],
+  ];
+  const PORTFOLIO_CONSENT_STATUSES = [
+    ["unknown", "Not reviewed - keep private"],
+    ["required", "Permission required - keep private"],
+    ["granted", "Permission granted"],
+    ["not-required", "Permission not required"],
+    ["denied", "Permission denied - keep private"],
+  ];
+  const PORTFOLIO_PUBLIC_CONSENT = new Set(["granted", "not-required"]);
 
   function portfolioOptionList(kind, currentValue = "") {
     const key = kind === "style" ? "styles" : "collections";
@@ -1315,18 +1338,58 @@
     return item.title || item.originalFilename || "Untitled portfolio image";
   }
 
+  function portfolioImagesForItem(item) {
+    const primary = item.primaryImage || {
+      id: "primary",
+      imageRef: "primary",
+      imageUrl: item.imageUrl,
+      altText: item.altText,
+      healingState: "unspecified",
+      imageRole: "result",
+      consentStatus: item.primaryConsentStatus || "unknown",
+      isCover: !item.coverImageRef || item.coverImageRef === "primary",
+    };
+    return [{ ...primary, imageRole: "result" }, ...(item.angles || [])];
+  }
+
+  function portfolioPublishIssue(item) {
+    if (!String(item.title || "").trim()) return "Add a title before publishing.";
+    if (!String(item.altText || "").trim()) return "Add alt text before publishing.";
+    const images = portfolioImagesForItem(item);
+    const primary = images[0];
+    if (!PORTFOLIO_PUBLIC_CONSENT.has(primary.consentStatus || "unknown")) {
+      return "Set the primary result's publication permission to Permission granted or Permission not required.";
+    }
+    if ((item.projectType || "standard") !== "cover_up" && images.some((image) => image.imageRole === "before")) {
+      return "Mark this tattoo as a Cover-up, or reclassify its Before / existing tattoo images.";
+    }
+    const cover = images.find((image) => image.isCover) || primary;
+    if ((cover.imageRole || "result") !== "result") return "Choose an image labeled Result as the portfolio cover.";
+    if (!PORTFOLIO_PUBLIC_CONSENT.has(cover.consentStatus || "unknown")) {
+      return "Set the cover result's publication permission to Permission granted or Permission not required.";
+    }
+    return "";
+  }
+
   function renderPortfolioImageEditor(item, image, index, images) {
     const primary = image.imageRef === "primary";
+    const imageRole = primary ? "result" : (image.imageRole || "result");
+    const consentStatus = image.consentStatus || "unknown";
+    const isCoverIneligible = imageRole !== "result";
     return `<article class="portfolio-angle">
       <img data-secure-src="${escapeHtml(image.imageUrl)}" alt="${escapeHtml(image.altText || `${portfolioLabel(item)} tattoo image`)}">
       <form class="portfolio-image-documentation" data-image-documentation="${escapeHtml(item.id)}" data-image-ref="${escapeHtml(image.imageRef)}">
         <span class="portfolio-image-state">${primary ? "Primary image" : `Image ${index + 1}`} ${image.isCover ? " / Cover" : ""}</span>
+        ${primary
+          ? `<label>Image role<input value="Result" disabled><input name="imageRole" type="hidden" value="result"></label>`
+          : `<label>Image role<select name="imageRole" data-image-role>${PORTFOLIO_IMAGE_ROLES.map(([value,label]) => `<option value="${value}"${value === imageRole ? " selected" : ""}${value === "before" && (item.projectType || "standard") !== "cover_up" && imageRole !== "before" ? " disabled" : ""}>${label}</option>`).join("")}</select></label>`}
         <label>Condition<select name="healingState">${PORTFOLIO_HEALING_STATES.map(([value,label]) => `<option value="${value}"${value === image.healingState ? " selected" : ""}>${label}</option>`).join("")}</select></label>
         <label>Timing note<input name="timingNote" value="${escapeHtml(image.timingNote || "")}" maxlength="160" placeholder="Example: day of, 8 weeks healed"></label>
         <label>Image caption<textarea name="caption" maxlength="1000">${escapeHtml(image.documentationCaption || "")}</textarea></label>
+        <label>Publication permission<select name="consentStatus">${PORTFOLIO_CONSENT_STATUSES.map(([value,label]) => `<option value="${value}"${value === consentStatus ? " selected" : ""}>${label}</option>`).join("")}</select><span class="portfolio-field-note">Only Permission granted or Permission not required photographs can appear publicly.${primary ? " This result must be eligible before the tattoo can be published." : ""}</span></label>
         <div class="portfolio-angle-actions">
           <button class="button" type="submit">Save image</button>
-          <button class="button" type="button" data-image-cover ${image.isCover ? "disabled" : ""}>${image.isCover ? "Current cover" : "Use as cover"}</button>
+          <button class="button" type="button" data-image-cover ${image.isCover || isCoverIneligible ? "disabled" : ""}>${image.isCover ? "Current cover" : isCoverIneligible ? "Only results can be covers" : "Use as cover"}</button>
           ${primary ? "" : `<button class="button" type="button" data-angle-move="up" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}" ${index === 1 ? "disabled" : ""}>Up</button><button class="button" type="button" data-angle-move="down" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}" ${index === images.length - 1 ? "disabled" : ""}>Down</button><button class="button danger-button" type="button" data-angle-delete data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}">Remove</button>`}
         </div>
       </form>
@@ -1335,7 +1398,8 @@
 
   function renderPortfolioCard(item, index, total) {
     const canSort = portfolioState !== "archived";
-    const portfolioImages = [item.primaryImage || { imageRef:"primary", imageUrl:item.imageUrl, altText:item.altText, healingState:"unspecified", isCover:true }, ...(item.angles || [])];
+    const portfolioImages = portfolioImagesForItem(item);
+    const projectType = item.projectType || "standard";
     const stateAction = item.state === "published"
       ? `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Unpublish</button>`
       : item.state === "draft"
@@ -1348,7 +1412,7 @@
         </div>
         <div class="portfolio-card-body">
           <div class="portfolio-card-title"><strong>${escapeHtml(portfolioLabel(item))}</strong><span class="pill">${index + 1} / ${total}</span></div>
-          <div class="meta">${escapeHtml(portfolioOptionLabel("style", item.primaryStyle))}${item.collection ? ` / ${escapeHtml(portfolioOptionLabel("collection", item.collection))}` : ""}</div>
+          <div class="meta">${escapeHtml(portfolioOptionLabel("style", item.primaryStyle))}${item.collection ? ` / ${escapeHtml(portfolioOptionLabel("collection", item.collection))}` : ""}${projectType === "cover_up" ? " / Cover-up" : ""}</div>
           <div class="portfolio-card-actions">
             ${canSort ? `<button class="button" type="button" data-portfolio-move="up" data-id="${escapeHtml(item.id)}" ${index === 0 ? "disabled" : ""}>Move up</button><button class="button" type="button" data-portfolio-move="down" data-id="${escapeHtml(item.id)}" ${index === total - 1 ? "disabled" : ""}>Move down</button>` : ""}
             ${stateAction}
@@ -1366,6 +1430,7 @@
                 <label>Year<input name="year" value="${escapeHtml(item.year)}" maxlength="20"></label>
                 <label>Placement<input name="placement" value="${escapeHtml(item.placement)}" maxlength="160"></label>
               </div>
+              <label>Project type<select name="projectType">${PORTFOLIO_PROJECT_TYPES.map(([value,label]) => `<option value="${value}"${value === projectType ? " selected" : ""}>${label}</option>`).join("")}</select><span class="portfolio-field-note">Choose Cover-up to document optional Before / existing tattoo photographs inside this tattoo record.</span></label>
               <label>Primary style<select name="primaryStyle">${portfolioOptionList("style", item.primaryStyle || "unclassified").map((option) => `<option value="${escapeHtml(option.value)}"${option.value === item.primaryStyle || (option.value === "unclassified" && !item.primaryStyle) ? " selected" : ""}>${escapeHtml(option.label)}${option.enabled ? "" : " (disabled)"}</option>`).join("")}</select></label>
               <label>Collection<select name="collection"><option value="">No collection</option>${portfolioOptionList("collection", item.collection).map((option) => `<option value="${escapeHtml(option.value)}"${option.value === item.collection ? " selected" : ""}>${escapeHtml(option.label)}${option.enabled ? "" : " (disabled)"}</option>`).join("")}</select></label>
               <label>Caption<textarea name="caption" maxlength="2000">${escapeHtml(item.caption)}</textarea></label>
@@ -1384,7 +1449,7 @@
           <details class="portfolio-angle-manager" data-angle-manager="${escapeHtml(item.id)}">
             <summary><span>Tattoo images</span><span class="pill">${portfolioImages.length} image${portfolioImages.length === 1 ? "" : "s"}</span></summary>
             <div class="portfolio-angle-content">
-              <div class="portfolio-angle-head"><div class="portfolio-field-note">Label each photograph as Fresh, Healed, In progress, or Unspecified.</div><label class="button">Add images<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-angle-upload="${escapeHtml(item.id)}"></label></div>
+              <div class="portfolio-angle-head"><div class="portfolio-field-note">Assign a role to each upload batch, then document condition, timing, caption, and publication permission per photograph.</div><div class="portfolio-angle-upload" data-angle-upload-control><label>Upload these as<select data-angle-upload-role>${PORTFOLIO_IMAGE_ROLES.map(([value,label]) => `<option value="${value}"${value === "before" && projectType !== "cover_up" ? " disabled" : ""}>${label}</option>`).join("")}</select></label><label class="button">Add images<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-angle-upload="${escapeHtml(item.id)}"></label></div></div>
               <div class="portfolio-angle-grid">${portfolioImages.map((image, imageIndex, images) => renderPortfolioImageEditor(item, image, imageIndex, images)).join("")}</div>
             </div>
           </details>
@@ -1476,32 +1541,33 @@
     }
   }
 
-  async function uploadPortfolioAngles(itemId, files) {
+  async function uploadPortfolioAngles(itemId, files, imageRole = "result") {
     const item = portfolioItems.find((record) => record.id === itemId);
+    if (!PORTFOLIO_IMAGE_ROLES.some(([value]) => value === imageRole)) throw new Error("Choose a valid image role before uploading.");
+    if (imageRole === "before" && (item?.projectType || "standard") !== "cover_up") {
+      throw new Error("Save the Project type as Cover-up before uploading Before / existing tattoo photographs.");
+    }
     const accepted = [...files].filter((file) => ["image/jpeg", "image/png", "image/webp"].includes(file.type) && file.size <= 15 * 1024 * 1024);
+    let uploadedCount = 0;
     for (let index = 0; index < accepted.length; index += 1) {
       const file = accepted[index];
       setStatus(`Uploading tattoo image ${index + 1} of ${accepted.length}: ${file.name}`);
       const upload = new FormData();
       upload.append("file", file);
-      upload.append("alt_text", item?.altText || portfolioLabel(item || {}));
-      upload.append("privacy", "public");
-      upload.append("consent_status", "granted");
-      const uploaded = await api("/api/admin/media", { method: "POST", body: upload });
-      await api(`/api/admin/entities/${encodeURIComponent(itemId)}/media`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          media_id: uploaded.record.id,
-          role: "gallery",
-          sort_order: (item?.angles?.length || 0) + index + 1,
-          public_visible: true,
-          alt_text_override: item?.altText || portfolioLabel(item || {}),
-        }),
-      });
+      upload.append("imageRole", imageRole);
+      try {
+        await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/images`, { method: "POST", body: upload });
+        uploadedCount += 1;
+      } catch (error) {
+        if (uploadedCount) await loadPortfolioItems();
+        throw new Error(uploadedCount
+          ? `${uploadedCount} image${uploadedCount === 1 ? " was" : "s were"} uploaded before the next file failed: ${error.message}`
+          : error.message);
+      }
     }
     await loadPortfolioItems();
-    setStatus(accepted.length ? `${accepted.length} tattoo image${accepted.length === 1 ? "" : "s"} attached` : "Use JPEG, PNG, or WebP images up to 15 MB");
+    const roleLabel = PORTFOLIO_IMAGE_ROLES.find(([value]) => value === imageRole)?.[1] || "Result";
+    setStatus(accepted.length ? `${accepted.length} ${roleLabel} image${accepted.length === 1 ? "" : "s"} attached privately; set publication permission before use` : "Use JPEG, PNG, or WebP images up to 15 MB");
   }
 
   async function movePortfolioAngle(itemId, mediaId, direction) {
@@ -1522,6 +1588,7 @@
 
   async function savePortfolioImageDocumentation(form, isCover = false) {
     const values = Object.fromEntries(new FormData(form));
+    if (form.dataset.imageRef === "primary") values.imageRole = "result";
     values.isCover = isCover;
     await api(`/api/admin/portfolio/${encodeURIComponent(form.dataset.imageDocumentation)}/images/${encodeURIComponent(form.dataset.imageRef)}`, {
       method: "PATCH",
@@ -1542,8 +1609,24 @@
     manager.addEventListener("change", (event) => {
       const toggle = event.target.closest("[data-similar-toggle]");
       if (toggle) toggle.closest("form")?.querySelector("[data-similar-note]")?.toggleAttribute("hidden", !toggle.checked);
+      const roleSelect = event.target.closest("[data-image-role]");
+      if (roleSelect) {
+        const form = roleSelect.closest("[data-image-documentation]");
+        const coverButton = form?.querySelector("[data-image-cover]");
+        if (coverButton && !coverButton.textContent.includes("Current cover")) {
+          const eligible = roleSelect.value === "result";
+          coverButton.disabled = !eligible;
+          coverButton.textContent = eligible ? "Use as cover" : "Only results can be covers";
+        }
+      }
       const angleInput = event.target.closest("[data-angle-upload]");
-      if (angleInput?.files?.length) uploadPortfolioAngles(angleInput.dataset.angleUpload, angleInput.files).catch((error) => setStatus(error.message));
+      if (angleInput?.files?.length) {
+        const uploadControl = angleInput.closest("[data-angle-upload-control]");
+        const imageRole = uploadControl?.querySelector("[data-angle-upload-role]")?.value || "result";
+        uploadPortfolioAngles(angleInput.dataset.angleUpload, angleInput.files, imageRole)
+          .catch((error) => setStatus(`Could not upload tattoo images: ${error.message}`))
+          .finally(() => { angleInput.value = ""; });
+      }
     });
     ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("is-over"); }));
     ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.remove("is-over"); }));
@@ -1575,7 +1658,13 @@
       const cover = event.target.closest("[data-image-cover]");
       if (cover) {
         const form = cover.closest("[data-image-documentation]");
-        if (form) await savePortfolioImageDocumentation(form, true);
+        if (form) {
+          try {
+            await savePortfolioImageDocumentation(form, true);
+          } catch (error) {
+            setStatus(`Cannot use that cover: ${error.message}`);
+          }
+        }
         return;
       }
       const angleMove = event.target.closest("[data-angle-move]");
@@ -1590,11 +1679,22 @@
       }
       const state = event.target.closest("[data-portfolio-state]");
       if (state) {
-        await api(`/api/admin/portfolio/${encodeURIComponent(state.dataset.id)}`, {
-          method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ state: state.dataset.portfolioState }),
-        });
-        await loadPortfolioItems();
-        setStatus(state.dataset.portfolioState === "published" ? "Portfolio item published" : "Portfolio item moved to draft");
+        const publishing = state.dataset.portfolioState === "published";
+        const item = portfolioItems.find((record) => record.id === state.dataset.id);
+        const issue = publishing && item ? portfolioPublishIssue(item) : "";
+        if (issue) {
+          setStatus(`Cannot publish: ${issue}`);
+          return;
+        }
+        try {
+          await api(`/api/admin/portfolio/${encodeURIComponent(state.dataset.id)}`, {
+            method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ state: state.dataset.portfolioState }),
+          });
+          await loadPortfolioItems();
+          setStatus(publishing ? "Portfolio item published" : "Portfolio item moved to draft");
+        } catch (error) {
+          setStatus(`${publishing ? "Cannot publish" : "Could not update portfolio state"}: ${error.message}`);
+        }
         return;
       }
       const archive = event.target.closest("[data-portfolio-archive]");
@@ -1641,7 +1741,11 @@
       const imageForm = event.target.closest("[data-image-documentation]");
       if (imageForm) {
         event.preventDefault();
-        await savePortfolioImageDocumentation(imageForm);
+        try {
+          await savePortfolioImageDocumentation(imageForm);
+        } catch (error) {
+          setStatus(`Could not save image documentation: ${error.message}`);
+        }
         return;
       }
       const form = event.target.closest("[data-portfolio-form]");
@@ -1649,11 +1753,15 @@
       event.preventDefault();
       const values = Object.fromEntries(new FormData(form));
       values.similarInquiriesEnabled = form.elements.similarInquiriesEnabled.checked;
-      await api(`/api/admin/portfolio/${encodeURIComponent(form.dataset.portfolioForm)}`, {
-        method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(values),
-      });
-      await loadPortfolioItems();
-      setStatus("Portfolio metadata saved");
+      try {
+        await api(`/api/admin/portfolio/${encodeURIComponent(form.dataset.portfolioForm)}`, {
+          method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(values),
+        });
+        await loadPortfolioItems();
+        setStatus("Portfolio metadata saved");
+      } catch (error) {
+        setStatus(`Could not save portfolio metadata: ${error.message}`);
+      }
     });
   }
 
@@ -1667,7 +1775,7 @@
         <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, publish, and order tattoo work. Saved changes appear on the public gallery immediately.</p></div>
           <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
         </div>
-        <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. New uploads stay in Draft.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
+        <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. New uploads stay in Draft with publication permission Not reviewed.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
         <div class="portfolio-grid" id="portfolioGrid"><div class="portfolio-empty">Loading portfolio...</div></div>
       </section>`;
     bindPortfolioManager();

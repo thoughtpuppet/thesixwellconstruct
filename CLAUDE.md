@@ -1,5 +1,28 @@
 # the six.well construct — Claude reference
 
+## Public page shell rule
+
+Every website page must begin from the established site shell. Before building
+or redesigning a page, inspect the closest current sibling and align its shared
+header/navigation, breadcrumb, hero anatomy, content shell and spacing, footer,
+transitions, typography, and medium accent. Do not create isolated replacement
+chrome when the shared systems already provide it.
+
+The root page canvas is always an opaque solid `var(--color-bg)`. Do not use a
+gradient, image, transparency, grain/noise, color wash, or full-viewport
+pseudo-element as the `html`, `body`, or page-shell background unless the user
+explicitly requests an exception. Decorative treatments belong inside
+contained media or components.
+
+Visible structural borders, dividers, frames, timeline rails, and graph strokes
+are 5px. Use no line when separation is unnecessary; do not introduce 1px
+hairlines. Record and card grids use a modest 12–16px gutter.
+
+The canonical working UI Guide is
+`http://localhost:4173/tools/ui-guide.html`; do not treat the direct `file://`
+rendering as authoritative. Its source is `tools/ui-guide.html`, and its Page
+Anatomy section is the canonical implementation reference.
+
 ## Medium accent color rule
 
 **Every medium page must use its medium color as the accent.**
@@ -72,6 +95,8 @@ Sheet variants (wider format): add `.card--wide` for `aspect-ratio: 3/2`.
 
 ## Key design reminders
 
+- Start every public page from the shared page shell and a solid opaque canvas.
+- Preserve the shared header, breadcrumb, hero, content rhythm, and footer.
 - Use **medium** for the top-level practice areas formerly called nodes or ventures.
 - Use **pathway** for the internal routes formerly called subnodes.
 - The `body[data-venture]` attribute must always be set to the correct medium key. The attribute name is legacy and should remain unchanged unless the whole navigation system is migrated.

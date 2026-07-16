@@ -25,6 +25,9 @@
   /* base */
   --color-bg:         #0e0e0e;
   --color-body:       #FFE7CA;
+  --color-text-muted: rgba(255,231,202,.66);
+  --color-text-dim:   rgba(255,231,202,.38);
+  --color-text-ghost: rgba(255,231,202,.16);
   --color-accent:     #FCB867;
   --color-accent-dim: rgba(252, 184, 103, 0.25);
 
@@ -45,9 +48,9 @@
 
   /* derived ink levels (from venture-pages.css) */
   --text:       var(--color-body);
-  --text-muted: rgba(255,231,202,.66);
-  --text-dim:   rgba(255,231,202,.38);
-  --text-ghost: rgba(255,231,202,.16);
+  --text-muted: var(--color-text-muted);
+  --text-dim:   var(--color-text-dim);
+  --text-ghost: var(--color-text-ghost);
   --ring-soft:  rgba(109,61,21,.4);
   --ring-faint: rgba(109,61,21,.18);
   --surface:      #111111;
@@ -207,7 +210,7 @@ td:first-child { color: var(--color-body); }
 
 /* ── component demos ── */
 .demo {
-  border: 1px dashed var(--ring-soft); padding: 28px; margin: 16px 0;
+  border: 5px dashed var(--ring-soft); padding: 28px; margin: 16px 0;
   background: var(--surface-deep); position: relative;
 }
 .demo::before {
@@ -217,7 +220,7 @@ td:first-child { color: var(--color-body); }
 }
 
 /* media card system — copied from css/media.css */
-.media-grid-demo { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 3px; }
+.media-grid-demo { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .media-card {
   position: relative; aspect-ratio: 4/5; overflow: hidden; cursor: pointer;
   background: #0f0f0f; border: 5px solid var(--ring-faint); display: block;
@@ -247,7 +250,7 @@ td:first-child { color: var(--color-body); }
 /* buttons — copied from css/tattoos.css */
 .btn-primary, .btn-secondary {
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: 48px; padding: 0 20px; border: 1px solid var(--ring-soft);
+  min-height: 48px; padding: 0 20px; border: 5px solid var(--ring-soft);
   font-family: var(--font-display); font-size: 11px; font-weight: 700;
   letter-spacing: .14em; text-transform: uppercase; cursor: pointer;
   text-decoration: none; transition: all .3s cubic-bezier(.16,1,.3,1);
@@ -414,8 +417,9 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <h1 class="doc-title">UI<br>Guide</h1>
     <p class="doc-sub">Everything needed to make edits to thesixwellconstruct without drifting from the system: colors, type, spacing, components, navigation, page anatomy, language, and known gotchas.</p>
     <div class="doc-meta">
-      <span>source of truth: css/tokens.css</span>
-      <span>last reviewed: June 2026</span>
+      <span>canonical working guide: http://localhost:4173/tools/ui-guide.html</span>
+      <span>palette source: css/tokens.css</span>
+      <span>last reviewed: July 2026</span>
       <span>export: toolbar → export pdf → enable background graphics</span>
     </div>
 
@@ -453,7 +457,13 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         <div class="info"><div class="name">Amber dim</div><div class="hex"></div><div class="token">--color-accent-dim</div></div></div>
     </div>
 
-    <div class="rule-note"><strong>Adjust these live:</strong> hit <strong>🎨 Edit colors</strong> in the toolbar (or the button below) to open the inline tuner — tweak the base palette, amber dim opacity, any medium's signal color, and the brighten/darken steps, then copy the CSS or write it straight back into <code>tokens.css</code>. The editor is hidden when you export the PDF.</div>
+    <div class="rule-note danger"><strong>Solid canvas rule (non-negotiable):</strong> every website page uses one opaque <code>var(--color-bg)</code> page canvas. Never put a gradient, image, transparency, grain/noise, color wash, or full-viewport pseudo-element on <code>html</code>, <code>body</code>, or the root page shell unless the page has an explicit approved exception. Atmospheric treatments belong inside contained media or components.</div>
+
+    <div class="rule-note danger"><strong>Structural rule (non-negotiable):</strong> every visible public-page border, divider, frame, timeline rail, and graph stroke is <strong>5px</strong>. Use no rule when separation is unnecessary; do not introduce 1px hairlines. Record and card grids use a modest 12–16px gutter so each framed item has room to read.</div>
+
+    <div class="rule-note"><strong>Archive surface:</strong> use <code>#B87A32</code> as the Archive's reading ink and set all Archive body copy in uppercase. Archive hero titles use <code>var(--color-archive)</code> so they match the Archive node, and hero framing uses the same node token.</div>
+
+    <div class="rule-note"><strong>Adjust these live:</strong> hit <strong>🎨 Edit colors</strong> in the toolbar (or the button below) to open the inline tuner — tweak the base palette, all four shared font-color levels, any medium's signal color, and the brighten/darken steps, then copy the CSS or write it straight back into <code>tokens.css</code>. The editor is hidden when you export the PDF.</div>
 
     <h3>Medium signal colors &amp; ramps</h3>
     <p class="lead">Each swatch is a three-stop ramp — <strong>dark</strong> (signal mixed toward black), the <strong>signal</strong> color, and <strong>bright</strong> (mixed toward white) — with the 25% dim variant as the thin strip beneath. Hex labels read dark · signal · bright. These swatches stay in sync with the live tuner.</p>
@@ -480,6 +490,8 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       </div>
       <div class="tn-section"><span>Base palette</span></div>
       <div id="base-list"></div>
+      <div class="tn-section"><span>Font colors</span></div>
+      <div id="font-list"></div>
       <div class="tn-section"><span>Medium signal colors</span></div>
       <div id="media-list"></div>
       <div class="tn-out">
@@ -566,18 +578,18 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   <section class="guide" id="ink">
     <span class="kicker">03 · ink &amp; surface levels</span>
     <h2>Ink &amp; surfaces</h2>
-    <p class="lead">Body ink <code>#FFE7CA</code> steps down through four opacity levels (defined on <code>.venture-page</code> in venture-pages.css). Structural borders are archive brown at two opacities, not gray.</p>
+    <p class="lead">The four shared font-color levels live in <code>css/tokens.css</code> and feed the public page system through <code>venture-pages.css</code>. Open <strong>Edit colors</strong> above to change the color and opacity of each level. Structural borders are archive brown at two opacities, not gray.</p>
 
-    <div class="ink-row"><div class="spec">--text · 1.0</div><div style="color:var(--text)">Full ink — titles, primary copy</div><div class="spec">#FFE7CA</div></div>
-    <div class="ink-row"><div class="spec">--text-muted · .66</div><div style="color:var(--text-muted)">Muted — section copy, descriptions, notes</div><div class="spec">rgba(255,231,202,.66)</div></div>
-    <div class="ink-row"><div class="spec">--text-dim · .38</div><div style="color:var(--text-dim)">Dim — metadata, footers, breadcrumb ancestor links</div><div class="spec">rgba(255,231,202,.38)</div></div>
-    <div class="ink-row"><div class="spec">--text-ghost · .16</div><div style="color:var(--text-ghost)">Ghost — empty states, placeholders</div><div class="spec">rgba(255,231,202,.16)</div></div>
-    <div class="ink-row"><div class="spec">--ring-soft · .4</div><div><span style="display:inline-block; width:120px; border-top:1px solid var(--ring-soft);"></span> stronger borders, button outlines</div><div class="spec">rgba(109,61,21,.4)</div></div>
+    <div class="ink-row"><div class="spec">--color-body / --text</div><div style="color:var(--text)">Full ink — titles, primary copy</div><div class="spec" data-ink-value="--color-body">#FFE7CA</div></div>
+    <div class="ink-row"><div class="spec">--color-text-muted / --text-muted</div><div style="color:var(--text-muted)">Muted — section copy, descriptions, notes</div><div class="spec" data-ink-value="--color-text-muted">rgba(255,231,202,.66)</div></div>
+    <div class="ink-row"><div class="spec">--color-text-dim / --text-dim</div><div style="color:var(--text-dim)">Dim — metadata, footers, breadcrumb ancestor links</div><div class="spec" data-ink-value="--color-text-dim">rgba(255,231,202,.38)</div></div>
+    <div class="ink-row"><div class="spec">--color-text-ghost / --text-ghost</div><div style="color:var(--text-ghost)">Ghost — empty states, placeholders</div><div class="spec" data-ink-value="--color-text-ghost">rgba(255,231,202,.16)</div></div>
+    <div class="ink-row"><div class="spec">--ring-soft · .4</div><div><span style="display:inline-block; width:120px; border-top:5px solid var(--ring-soft);"></span> stronger borders, button outlines</div><div class="spec">rgba(109,61,21,.4)</div></div>
     <div class="ink-row"><div class="spec">--ring-faint · .18</div><div><span style="display:inline-block; width:120px; border-top:5px solid var(--ring-faint);"></span> the signature 5px frame on grids, heroes, sections</div><div class="spec">rgba(109,61,21,.18)</div></div>
-    <div class="ink-row"><div class="spec">--surface</div><div><span style="display:inline-block; width:60px; height:18px; background:var(--surface); border:1px solid var(--ring-faint); vertical-align:middle;"></span> raised panels</div><div class="spec">#111111</div></div>
-    <div class="ink-row"><div class="spec">--surface-deep</div><div><span style="display:inline-block; width:60px; height:18px; background:var(--surface-deep); border:1px solid var(--ring-faint); vertical-align:middle;"></span> recessed boards, visual panels</div><div class="spec">#090909</div></div>
+    <div class="ink-row"><div class="spec">--surface</div><div><span style="display:inline-block; width:60px; height:18px; background:var(--surface); border:5px solid var(--ring-faint); vertical-align:middle;"></span> raised panels</div><div class="spec">#111111</div></div>
+    <div class="ink-row"><div class="spec">--surface-deep</div><div><span style="display:inline-block; width:60px; height:18px; background:var(--surface-deep); border:5px solid var(--ring-faint); vertical-align:middle;"></span> recessed boards, visual panels</div><div class="spec">#090909</div></div>
 
-    <div class="rule-note"><strong>Atmosphere:</strong> medium pages add a fixed full-viewport SVG fractal-noise grain at 3.5% opacity with <code>mix-blend-mode: overlay</code> (<code>.venture-grain</code> / <code>.tattoos-page::before</code>), and often a faint radial wash of the medium color at the top of the page.</div>
+    <div class="rule-note"><strong>Atmosphere:</strong> keep the root canvas solid. If a page needs texture, grain, a wash, or a gradient, confine it to a bounded hero panel, media frame, or other contained component with an opaque fallback. Existing legacy full-viewport effects are not a template for new pages.</div>
   </section>
 
 
@@ -625,7 +637,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <p class="lead">Shared pieces live in <code>css/media.css</code> (cards/grids), <code>css/venture-pages.css</code> (page shell, sections, links, pills, footer), and <code>css/tattoos.css</code> (buttons, panels, process list — the richest medium stylesheet, often the pattern source).</p>
 
     <h3>Media card · <code>.media-card</code> (css/media.css)</h3>
-    <p class="lead">The universal image card: 4/5 aspect, 5px faint border, hover darkens image + scales down 0.97 + border takes the medium color + overlay slides up. Wide variant <code>.card--wide</code> is 3/2 for sheets and landscapes. Grid: <code>auto-fill minmax(260px,1fr)</code>, 3px gap.</p>
+    <p class="lead">The universal image card: 4/5 aspect, 5px faint border, hover darkens image + scales down 0.97 + border takes the medium color + overlay slides up. Wide variant <code>.card--wide</code> is 3/2 for sheets and landscapes. Grid: <code>auto-fill minmax(260px,1fr)</code>, with a 12–16px gutter.</p>
     <div class="demo" data-medium="tattooing">
       <div class="media-grid-demo">
         <div class="media-card">
@@ -671,17 +683,17 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     </div>
 
     <h3>Section &amp; grid framing</h3>
-    <p class="lead">Sections separate with 5px <code>--ring-faint</code> bottom borders and clamp-padded vertical rhythm. Card grids (<code>.feature-grid</code>, <code>.record-grid</code> 3-up, <code>.path-grid</code> 4-up, <code>.status-grid</code> 2-up) share a 5px outer frame with 1px gaps; cards inside have 5px faint top borders and clamp(24–36px) padding. Card headings are Inter 900 18px uppercase in the medium color; card copy is muted 14px/1.75.</p>
+    <p class="lead">Sections separate with 5px <code>--ring-faint</code> bottom borders and clamp-padded vertical rhythm. Card grids (<code>.feature-grid</code>, <code>.record-grid</code> 3-up, <code>.path-grid</code> 4-up, <code>.status-grid</code> 2-up) use 12–16px gutters; every card carries its own complete 5px frame and clamp(24–36px) padding. Card headings are Inter 900 18px uppercase in the medium color; card copy is muted 14px/1.75.</p>
 
     <h3>Process list / price cards (tattoos pattern)</h3>
     <div class="demo" data-medium="tattooing">
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); border-top:1px solid var(--ring-soft); border-bottom:1px solid var(--ring-faint);">
-        <div style="padding:20px; border-right:1px solid var(--ring-faint);">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px;">
+        <div style="padding:20px; border:5px solid var(--ring-faint);">
           <span style="display:block; color:var(--venture-color); font-family:var(--font-display); font-weight:900; font-size:28px; letter-spacing:-0.04em; margin-bottom:8px;">01</span>
           <span style="display:block; font-family:var(--font-display); font-weight:900; font-size:13px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px;">Step title</span>
           <span style="color:var(--text-muted); font-size:13px;">Step copy at 13px/1.6.</span>
         </div>
-        <div style="padding:20px;">
+        <div style="padding:20px; border:5px solid var(--ring-faint);">
           <span style="display:block; color:var(--venture-color); font-family:var(--font-display); font-weight:900; font-size:34px; letter-spacing:-0.04em; margin-bottom:4px;">$160</span>
           <span style="color:var(--text-muted); font-size:13px;">Price figure — Inter 900 clamp(30–52px), medium color.</span>
         </div>
@@ -794,11 +806,16 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   &lt;/style&gt;
 &lt;/head&gt;
 &lt;body <span class="k">data-venture="tattooing"</span>&gt;   <span class="c">&lt;!-- legacy attr name — required --&gt;</span>
-  &lt;main&gt;
-    <span class="c">&lt;!-- breadcrumb is injected automatically, or hardcode construct / medium / page when needed --&gt;</span>
-    ...
+  &lt;header class="top"&gt;<span class="c">&lt;!-- shared chrome owns the lockup + medium nav --&gt;</span>&lt;/header&gt;
+  &lt;main class="venture-shell entrance-fade"&gt;
+    &lt;nav class="construct-breadcrumb" aria-label="Breadcrumb"&gt;...&lt;/nav&gt;
+    &lt;section class="venture-hero" aria-labelledby="page-title"&gt;
+      &lt;div&gt;&lt;span class="venture-kicker"&gt;Medium context&lt;/span&gt;&lt;h1 id="page-title"&gt;Page title.&lt;/h1&gt;&lt;/div&gt;
+      &lt;div class="hero-copy"&gt;...&lt;/div&gt;
+    &lt;/section&gt;
+    <span class="c">&lt;!-- page-specific content keeps the same shell width and section rhythm --&gt;</span>
   &lt;/main&gt;
-  <span class="c">&lt;!-- footer normalized/injected by wayfinding --&gt;</span>
+  &lt;footer class="footer"&gt;<span class="c">&lt;!-- normalized by wayfinding --&gt;</span>&lt;/footer&gt;
   &lt;script src="/js/transition.js"&gt;&lt;/script&gt;
   &lt;script src="/js/construct-corner.js"&gt;&lt;/script&gt;
   &lt;script src="/js/construct-nav.js"&gt;&lt;/script&gt;
@@ -808,6 +825,8 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <h3>Edit checklist</h3>
     <ul class="checklist">
+      <li><strong>Solid page canvas:</strong> <code>html</code>, <code>body</code>, and the root shell resolve to opaque <code>var(--color-bg)</code>. Keep gradients, texture, and imagery inside bounded components.</li>
+      <li><strong>Shared page anatomy:</strong> align the closest sibling page's header/navigation, breadcrumb, hero, shell width and rhythm, footer, and shared script order before adding page-specific styling.</li>
       <li><strong>Root-relative paths only</strong> (<code>/css/…</code>, <code>/art/</code>) — the site deploys at the domain root on Cloudflare Workers. No build step; static files + <code>_worker.js</code>.</li>
       <li><strong><code>data-venture</code> set correctly</strong> on <code>&lt;body&gt;</code> — it drives dot nav highlight, breadcrumb labels, and footer links.</li>
       <li><strong><code>--venture-color</code> set</strong> to this medium's token — never global amber on a medium page.</li>
@@ -903,6 +922,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><td>Two <code>.media-grid</code> definitions</td><td><code>css/media.css</code> defines the card grid (auto-fill 260px); <code>css/venture-pages.css</code> also defines a 2-up <code>.media-grid</code> for media panels. Don't load both on one page without checking which wins.</td></tr>
       <tr><td>Hidden pages</td><td>Hiding/showing is done through <code>/tools/page-visibility.html</code>, which edits <code>_worker.js</code> and moves files to <code>.hidden-pages/</code>. Don't hand-move page files.</td></tr>
       <tr><td>Token sync</td><td><code>css/tokens.css</code> is the palette source. The guide, homepage canvas, and injected dot nav read those variables when served locally. Refresh open pages after saving; use a literal search only for older one-off hardcoded surfaces.</td></tr>
+      <tr><td>UI Guide working URL</td><td>Use <code>http://localhost:4173/tools/ui-guide.html</code> as the canonical working surface. A direct <code>file://</code> view is not authoritative: root-relative styles, token reloads, and source-backed tool endpoints require the local HTTP server and can look stale or incomplete without it.</td></tr>
       <tr><td>Tiny colored labels</td><td>A saturated source color is not automatically legible as small type. Use a solid badge for merch/source labels, with the token color as fill and a computed or chosen readable ink color.</td></tr>
       <tr><td>Push policy</td><td>Never push. The user pushes manually. Work directly on main.</td></tr>
     </table>
@@ -910,7 +930,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
   <footer class="guide-footer">
     <p>the six.well construct — ui guide</p>
-    <p>tools/ui-guide.html · update when tokens or shared systems change</p>
+    <p>http://localhost:4173/tools/ui-guide.html · update when tokens or shared systems change</p>
   </footer>
 
 </div>
@@ -959,6 +979,11 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     {token:'--color-body',   name:'Body ink',     fallback:'#FFE7CA'},
     {token:'--color-accent', name:'Global amber', fallback:'#FCB867'},
   ];
+  var TEXTS = [
+    {token:'--color-text-muted', name:'Muted', fallback:'#FFE7CA', alpha:0.66},
+    {token:'--color-text-dim',   name:'Dim',   fallback:'#FFE7CA', alpha:0.38},
+    {token:'--color-text-ghost', name:'Ghost', fallback:'#FFE7CA', alpha:0.16},
+  ];
   var BASE_DIM_TOKEN = '--color-accent-dim';
   var DEFAULT_BASES = {};
   BASES.forEach(function(b){ DEFAULT_BASES[b.token]=baseDefault(b); });
@@ -966,6 +991,10 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   BASES.forEach(function(b){ baseState[b.token]=DEFAULT_BASES[b.token]; });
   var DEFAULT_ACCENT_DIM_ALPHA = alphaDefault(cssVar(BASE_DIM_TOKEN), 0.25);
   var accentDimAlpha = DEFAULT_ACCENT_DIM_ALPHA;
+  var DEFAULT_TEXTS = {};
+  TEXTS.forEach(function(t){ DEFAULT_TEXTS[t.token]=textDefault(t); });
+  var textState = {};
+  TEXTS.forEach(function(t){ textState[t.token]={color:DEFAULT_TEXTS[t.token].color, alpha:DEFAULT_TEXTS[t.token].alpha}; });
   var DEFAULTS = MEDIUMS.map(function(m){return signalDefault(m);});
   var state = MEDIUMS.map(function(m,i){return {signal:DEFAULTS[i], bright:null, dark:null};});
   var brightPct = 20, darkPct = 20, fileHandle = null;
@@ -1002,14 +1031,25 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     var a=parseFloat(mm[1]);
     return isNaN(a) ? null : Math.max(0,Math.min(1,a));
   }
+  function colorFromRgba(v,fallback){
+    var mm=/rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)/i.exec(v||'');
+    if(!mm){ return fallback; }
+    return toHex({r:+mm[1],g:+mm[2],b:+mm[3]}).toUpperCase();
+  }
+  function textDefault(t){
+    var v=cssVar(t.token);
+    return {color:colorFromRgba(v,t.fallback), alpha:alphaDefault(v,t.alpha)};
+  }
   function alphaText(a){
     return (Math.round(a*100)/100).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
   }
   function baseColor(token){ return (baseState[token] || '').toUpperCase(); }
   function baseAccentDim(){ return rgba(baseState['--color-accent'], alphaText(accentDimAlpha)); }
+  function textColor(token){ var t=textState[token]; return rgba(t.color, alphaText(t.alpha)); }
   function applyStateToCssVars(){
     BASES.forEach(function(b){ setRootVar(b.token, baseColor(b.token)); });
     setRootVar(BASE_DIM_TOKEN, baseAccentDim());
+    TEXTS.forEach(function(t){ setRootVar(t.token, textColor(t.token)); });
     MEDIUMS.forEach(function(m,i){
       setRootVar('--color-'+m.key, state[i].signal.toUpperCase());
       setRootVar('--color-'+m.key+'-dim', dim(i));
@@ -1045,9 +1085,26 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     dimStp.querySelector('#accent-dim-alpha').value=accentDimAlpha;
     dimStp.querySelector('.alpha span').textContent='Opacity';
   }
+  function syncFontRows(){
+    TEXTS.forEach(function(t){
+      var stp=fontList.querySelector('.stop[data-text-token="'+t.token+'"]');
+      var stateForToken=textState[t.token];
+      var value=textColor(t.token);
+      var inp=stp.querySelector('input[type=color]');
+      inp.value=stateForToken.color;
+      inp.parentElement.style.background=value;
+      stp.querySelector('.hx').textContent=Math.round(stateForToken.alpha*100)+'%';
+      stp.querySelector('input[type=range]').value=stateForToken.alpha;
+      stp.title=value;
+    });
+    document.querySelectorAll('[data-ink-value]').forEach(function(el){
+      el.textContent=cssVar(el.dataset.inkValue).replace(/\s+/g,' ');
+    });
+  }
 
   var grid = document.getElementById('medium-swatch-grid');
   var baseList = document.getElementById('base-list');
+  var fontList = document.getElementById('font-list');
   var list = document.getElementById('media-list');
   var tuner = document.getElementById('tuner');
 
@@ -1091,6 +1148,30 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       '<div class="meta"><span class="role">Amber dim</span><span class="hx"></span></div>'+
       '<label class="alpha"><span>Opacity</span><input id="accent-dim-alpha" type="range" min="0" max="1" step="0.01"></label></div>';
   }
+  function buildFontRows(){
+    fontList.innerHTML = '<div class="media-row font-row">'+
+      '<div class="ident"><span class="nm">Font colors</span><span class="ky">shared text hierarchy</span></div>'+
+      '<div class="stops">'+TEXTS.map(fontStop).join('')+'</div>'+
+    '</div>';
+    fontList.querySelectorAll('input[type=color]').forEach(function(inp){
+      inp.addEventListener('input', function(){
+        textState[inp.dataset.textToken].color=normHex(inp.value).toUpperCase();
+        refresh();
+      });
+    });
+    fontList.querySelectorAll('input[type=range]').forEach(function(inp){
+      inp.addEventListener('input', function(){
+        textState[inp.dataset.textToken].alpha=Math.max(0,Math.min(1,parseFloat(inp.value)||0));
+        refresh();
+      });
+    });
+  }
+  function fontStop(t){
+    return '<div class="stop" data-text-token="'+t.token+'">'+
+      '<label class="well"><input type="color" data-text-token="'+t.token+'"></label>'+
+      '<div class="meta"><span class="role">'+t.name+'</span><span class="hx"></span></div>'+
+      '<label class="alpha"><span>Opacity</span><input type="range" data-text-token="'+t.token+'" min="0" max="1" step="0.01"></label></div>';
+  }
 
   function buildRows(){
     list.innerHTML = MEDIUMS.map(function(m,i){
@@ -1130,6 +1211,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     applyStateToCssVars();
     syncBaseSwatches();
     syncBaseRows();
+    syncFontRows();
     MEDIUMS.forEach(function(m,i){
       var sig=state[i].signal, br=bright(i), dk=dark(i), dm=dim(i);
 
@@ -1168,6 +1250,11 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     });
     lines.push('  '+pad(BASE_DIM_TOKEN+':')+baseAccentDim()+';');
     lines.push('');
+    lines.push('  /* FONT COLORS */');
+    TEXTS.forEach(function(t){
+      lines.push('  '+pad(t.token+':')+textColor(t.token)+';');
+    });
+    lines.push('');
     MEDIUMS.forEach(function(m,i){
       lines.push('  /* '+m.label+' */');
       lines.push('  '+pad('--color-'+m.key+':')+state[i].signal.toUpperCase()+';');
@@ -1185,7 +1272,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   function loadFromTokens(){
     status('Loading tokens.css…');
     fetch('/css/tokens.css',{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
-      var n=0, bCount=0;
+      var n=0, bCount=0, textCount=0;
       BASES.forEach(function(b){
         var val=matchVar(txt,b.token);
         if(val && val.charAt(0)==='#'){
@@ -1195,6 +1282,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       });
       var dimVal=matchVar(txt,BASE_DIM_TOKEN);
       if(dimVal){ accentDimAlpha=alphaDefault(dimVal, accentDimAlpha); }
+      TEXTS.forEach(function(t){
+        var val=matchVar(txt,t.token);
+        if(val){
+          textState[t.token].color=colorFromRgba(val,textState[t.token].color);
+          textState[t.token].alpha=alphaDefault(val,textState[t.token].alpha);
+          textCount++;
+        }
+      });
       MEDIUMS.forEach(function(m,i){
         var sig=matchVar(txt,'--color-'+m.key);
         var br=matchVar(txt,'--color-'+m.key+'-bright');
@@ -1206,7 +1301,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         state[i].dark  =(dkN && dkN.toLowerCase()!==mixBlack(s,darkPct).toLowerCase())?dkN:null;
       });
       refresh();
-      status('Loaded '+bCount+' base colors and '+n+' signal colors from tokens.css.','ok');
+      status('Loaded '+bCount+' base colors, '+textCount+' font colors, and '+n+' signal colors from tokens.css.','ok');
     }).catch(function(e){ status('Could not fetch tokens.css ('+e.message+'). Using defaults.','err'); });
   }
   function matchVar(txt,name){
@@ -1225,6 +1320,9 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       txt=setVar(txt,b.token,baseColor(b.token));
     });
     txt=setVar(txt,BASE_DIM_TOKEN,baseAccentDim());
+    TEXTS.forEach(function(t){
+      txt=setVar(txt,t.token,textColor(t.token));
+    });
     MEDIUMS.forEach(function(m,i){
       txt=setVar(txt,'--color-'+m.key+'-bright', bright(i).toUpperCase());
       txt=setVar(txt,'--color-'+m.key+'-dark', dark(i).toUpperCase());
@@ -1244,17 +1342,18 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       var txt=await (await fileHandle.getFile()).text();
       if(txt.indexOf('--color-tattooing')===-1){ status('That isn\'t tokens.css — pick css/tokens.css.','err'); fileHandle=null; return; }
       var w=await fileHandle.createWritable(); await w.write(buildUpdated(txt)); await w.close();
-      status('Saved ✓  Wrote the base palette and all 9 ramps into '+fileHandle.name+'. Refresh open site pages to reload tokens.css.','ok');
+      status('Saved ✓  Wrote the base palette, font colors, and all 9 ramps into '+fileHandle.name+'. Refresh open site pages to reload tokens.css.','ok');
     }catch(e){ if(e.name==='AbortError'){status('Save cancelled.');return;} status('Save failed: '+e.message,'err'); }
   }
   function copyCSS(){
     navigator.clipboard.writeText(document.getElementById('css-out').textContent).then(
-      function(){ status('Copied — paste over the base and medium color blocks in css/tokens.css.','ok'); },
+      function(){ status('Copied — paste over the base, font-color, and medium color blocks in css/tokens.css.','ok'); },
       function(){ status('Copy failed — select the text manually.','err'); });
   }
   function resetAll(){
     BASES.forEach(function(b){ baseState[b.token]=DEFAULT_BASES[b.token]; });
     accentDimAlpha=DEFAULT_ACCENT_DIM_ALPHA;
+    TEXTS.forEach(function(t){ textState[t.token]={color:DEFAULT_TEXTS[t.token].color, alpha:DEFAULT_TEXTS[t.token].alpha}; });
     state=MEDIUMS.map(function(m,idx){return {signal:DEFAULTS[idx],bright:null,dark:null};});
     brightPct=20; darkPct=20;
     document.getElementById('bright-range').value=20; document.getElementById('bright-val').textContent='20';
@@ -1278,6 +1377,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
   buildGrid();
   buildBaseRows();
+  buildFontRows();
   buildRows();
   refresh();          // paint built-in defaults immediately (no blank flash)
   loadFromTokens();   // then sync to the live tokens.css values

@@ -34,6 +34,30 @@ traces, source threads, and optional doors that reward attention. A conversion
 page can stay focused while including at least one intentional, subtle reminder
 of the wider construct.
 
+## Public page shell default
+
+Every new public page starts from the existing site shell rather than inventing
+standalone chrome. Match the closest current sibling page and preserve the
+shared header/navigation, breadcrumb treatment, hero anatomy, content width and
+spacing rhythm, footer, transition behavior, typography, and medium accent.
+
+The page canvas is always one opaque solid color: `var(--color-bg)`. Do not put
+gradients, images, transparency, grain, noise, or color washes on `html`,
+`body`, a full-viewport shell, or a viewport-wide pseudo-element. Those effects
+may be used inside contained media or components only when they support the
+content. An explicit page-specific direction can override this rule.
+
+Visible structural borders, dividers, frames, timeline rails, and graph strokes
+are 5px. Use no rule where one is unnecessary instead of adding a 1px hairline.
+Record and card grids use a modest 12–16px gutter.
+
+For implementation details, use the Page Anatomy section at
+`http://localhost:4173/tools/ui-guide.html`, the base palette in
+`css/tokens.css`, and the shared
+`transition.js`, `construct-corner.js`, `construct-nav.js`, and
+`construct-wayfinding.js` systems. The source file is `tools/ui-guide.html`,
+but its direct `file://` rendering is not the authoritative working preview.
+
 ## Construct language
 
 Use **medium** for the top-level practice areas formerly called nodes or

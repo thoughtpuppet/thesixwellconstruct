@@ -19,6 +19,9 @@
 
   --color-bg:         #0E0E0E;   /* site background — near black */
   --color-body:       #FFE7CA;   /* all body text — warm off-white */
+  --color-text-muted: rgba(255, 231, 202, 0.66); /* secondary copy, descriptions, notes */
+  --color-text-dim:   rgba(255, 231, 202, 0.38); /* metadata, footers, breadcrumbs */
+  --color-text-ghost: rgba(255, 231, 202, 0.16); /* placeholders and empty states */
   --color-accent:     #FCB467;   /* global amber — wordmark, landing accents */
   --color-accent-dim: rgba(252, 180, 103, 0.25); /* amber at low opacity — borders, dividers */
 
@@ -211,10 +214,14 @@
 html {
   /* Prevent font-size inflation on mobile */
   -webkit-text-size-adjust: 100%;
+  background: var(--color-bg);
 }
 
 body {
-  background-color: var(--color-bg);
+  /* The page canvas is always an opaque solid color. Atmospheric treatments
+     belong inside contained components, never on html/body or a viewport-wide
+     pseudo-element. The shorthand also clears accidental background images. */
+  background: var(--color-bg);
   color: var(--color-body);
   font-family: var(--font-serif);
   font-size: var(--text-base);

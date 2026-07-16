@@ -7,6 +7,10 @@ const ALLOWED_UPLOADS = new Map([
 ]);
 const HEALING_STATES = new Set(["fresh", "healed", "in-progress", "unspecified"]);
 const IMAGE_PRESENTATIONS = new Set(["standard", "compare", "grouped"]);
+const PROJECT_TYPES = new Set(["standard", "cover_up"]);
+const IMAGE_ROLES = new Set(["result", "before", "process", "detail"]);
+const CONSENT_STATUSES = new Set(["not-required", "required", "granted", "denied", "unknown"]);
+const PUBLIC_CONSENT_STATUSES = new Set(["not-required", "granted"]);
 const EDITABLE_FIELDS = new Map([
   ["title", "title"],
   ["altText", "alt_text"],
@@ -55,6 +59,10 @@ function adminError(request, env) {
 
 function cleanText(value, max = 500) {
   return String(value ?? "").trim().slice(0, max);
+}
+
+function hasPublicConsent(value) {
+  return PUBLIC_CONSENT_STATUSES.has(String(value || ""));
 }
 
 function optionSlug(value) {
@@ -124,6 +132,7 @@ function itemFromRow(row, admin = false, detail = false) {
     primaryStyle: row.primary_style || "unclassified",
     collection: row.collection || "",
     caption: row.caption || "",
+    projectType: row.project_type || "standard",
     imagePresentation: row.image_presentation || "standard",
     coverImageRef: row.cover_image_ref || "primary",
     state: row.state,
@@ -145,23 +154,30 @@ function itemFromRow(row, admin = false, detail = false) {
     item.sourceUrl = row.source_url || "";
     item.storageKey = row.storage_key || "";
     item.contentType = row.content_type || "";
+    item.primaryConsentStatus = row.primary_consent_status || "unknown";
     if (row.storage_key) item.imageUrl = `/api/admin/portfolio/media/${encodeURIComponent(row.id)}`;
   }
   return item;
 }
 
 function mediaItem(row, admin = false) {
-  return {
+  const item = {
     id: row.media_id,
     role: row.role,
     sortOrder: Number(row.sort_order || 0),
     imageUrl: admin
-      ? `/api/admin/media/${encodeURIComponent(row.media_id)}`
-      : row.source_url || `/api/construct/media/${encodeURIComponent(row.media_id)}`,
+      ? `/api/admin/media/${encodeURIComponent(row.media_id)}/file`
+      : row.source_url || `/api/construct/entity-media/${encodeURIComponent(row.media_id)}`,
     altText: row.alt_text_override || row.alt_text || "",
     caption: row.caption_override || row.caption || "",
     originalFilename: row.original_filename || "",
   };
+  if (admin) {
+    item.consentStatus = row.consent_status || "unknown";
+    item.publicVisible = Number(row.public_visible || 0) === 1;
+    item.privacy = row.privacy || "internal";
+  }
+  return item;
 }
 
 async function galleryMedia(db, entityIds, admin = false) {
@@ -169,10 +185,19 @@ async function galleryMedia(db, entityIds, admin = false) {
   const placeholders = entityIds.map(() => "?").join(",");
   const visibility = admin
     ? ""
-    : "AND em.public_visible = 1 AND m.state = 'active' AND m.privacy IN ('public','unlisted')";
+    : `AND em.public_visible = 1
+       AND m.state = 'active'
+       AND m.privacy = 'public'
+       AND m.consent_status IN ('not-required','granted')
+       AND COALESCE(m.public_presentation, 'inline') = 'inline'
+       AND EXISTS (
+         SELECT 1 FROM content_entities ce
+         WHERE ce.id = em.entity_id AND ce.visibility = 'public'
+       )`;
   const result = await db.prepare(`
     SELECT em.entity_id, em.media_id, em.role, em.sort_order, em.alt_text_override,
-      em.caption_override, m.source_url, m.original_filename, m.alt_text, m.caption
+      em.caption_override, em.public_visible, m.source_url, m.original_filename,
+      m.alt_text, m.caption, m.privacy, m.consent_status, m.public_presentation
     FROM entity_media em
     JOIN media_assets m ON m.id = em.media_id
     WHERE em.entity_id IN (${placeholders}) AND em.role = 'gallery' ${visibility}
@@ -187,7 +212,7 @@ async function imageDetails(db, entityIds) {
   if (!entityIds.length) return new Map();
   const placeholders = entityIds.map(() => "?").join(",");
   const result = await db.prepare(`
-    SELECT portfolio_item_id, image_ref, healing_state, timing_note, caption
+    SELECT portfolio_item_id, image_ref, healing_state, image_role, timing_note, caption
     FROM portfolio_image_details
     WHERE portfolio_item_id IN (${placeholders})
   `).bind(...entityIds).all();
@@ -202,33 +227,46 @@ function documentedImage(image, imageRef, details, coverImageRef) {
     ...image,
     imageRef,
     healingState: documentation?.healing_state || "unspecified",
+    imageRole: documentation?.image_role || "result",
     timingNote: documentation?.timing_note || "",
     documentationCaption: documentation?.caption || "",
     isCover: imageRef === coverImageRef,
   };
 }
 
-function applyImageDocumentation(item, angles, details, includeImages = false) {
+function applyImageDocumentation(item, angles, details, options = {}) {
+  const includeImages = options.includeImages === true;
+  const admin = options.admin === true;
+  const primaryConsentStatus = options.primaryConsentStatus || "unknown";
   const primary = documentedImage({
     id: "primary",
     imageUrl: item.imageUrl,
     altText: item.altText,
     caption: "",
     originalFilename: item.originalFilename,
+    ...(admin ? { consentStatus: primaryConsentStatus, publicVisible: hasPublicConsent(primaryConsentStatus) } : {}),
   }, "primary", details, item.coverImageRef);
   const documentedAngles = angles.map((angle) => documentedImage(angle, angle.id, details, item.coverImageRef));
-  const images = [primary, ...documentedAngles];
-  const cover = images.find((image) => image.isCover) || primary;
-  if (!images.some((image) => image.isCover)) {
-    primary.isCover = true;
-    item.coverImageRef = "primary";
+  const images = [
+    ...(admin || hasPublicConsent(primaryConsentStatus) ? [primary] : []),
+    ...documentedAngles,
+  ];
+  let cover = images.find((image) => image.isCover && image.imageRole === "result");
+  if (!cover) {
+    cover = images.find((image) => image.imageRole === "result") || images[0] || null;
+    if (cover) {
+      primary.isCover = cover.imageRef === "primary";
+      documentedAngles.forEach((image) => { image.isCover = image.imageRef === cover.imageRef; });
+      item.coverImageRef = cover.imageRef;
+    }
   }
-  const states = [...new Set(images.map((image) => image.healingState).filter((state) => state !== "unspecified"))];
-  item.imageUrl = cover.imageUrl;
+  const resultImages = images.filter((image) => image.imageRole === "result");
+  const states = [...new Set(resultImages.map((image) => image.healingState).filter((state) => state !== "unspecified"))];
+  if (cover) item.imageUrl = cover.imageUrl;
   item.documentationStates = states;
   item.hasFreshAndHealed = states.includes("fresh") && states.includes("healed");
   if (includeImages) {
-    item.primaryImage = primary;
+    item.primaryImage = admin || hasPublicConsent(primaryConsentStatus) ? primary : null;
     item.angles = documentedAngles;
   }
   return item;
@@ -245,14 +283,25 @@ async function nextSortOrder(db, state) {
 async function listPublic(env) {
   const db = requireDb(env);
   const [result, options] = await Promise.all([
-    db.prepare("SELECT * FROM portfolio_items WHERE state = 'published' ORDER BY sort_order ASC, created_at ASC").all(),
+    db.prepare(`
+      SELECT * FROM portfolio_items
+      WHERE state = 'published'
+        AND primary_consent_status IN ('not-required','granted')
+        AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
+      ORDER BY sort_order ASC, created_at ASC
+    `).all(),
     portfolioOptions(db),
   ]);
   const rows = result.results || [];
   const ids = rows.map((row) => row.id);
   const [media, documentation] = await Promise.all([galleryMedia(db, ids), imageDetails(db, ids)]);
   return json({
-    items: rows.map((row) => applyImageDocumentation(decorateItem(itemFromRow(row), options), media.get(row.id) || [], documentation.get(row.id))),
+    items: rows.map((row) => applyImageDocumentation(
+      decorateItem(itemFromRow(row), options),
+      media.get(row.id) || [],
+      documentation.get(row.id),
+      { primaryConsentStatus: row.primary_consent_status }
+    )),
     options,
   });
 }
@@ -269,17 +318,32 @@ async function listAdmin(request, env) {
   const ids = rows.map((row) => row.id);
   const [media, documentation] = await Promise.all([galleryMedia(db, ids, true), imageDetails(db, ids)]);
   return json({
-    items: rows.map((row) => applyImageDocumentation(decorateItem(itemFromRow(row, true), options), media.get(row.id) || [], documentation.get(row.id), true)),
+    items: rows.map((row) => applyImageDocumentation(
+      decorateItem(itemFromRow(row, true), options),
+      media.get(row.id) || [],
+      documentation.get(row.id),
+      { includeImages: true, admin: true, primaryConsentStatus: row.primary_consent_status }
+    )),
     options,
   });
 }
 
 async function getPublicItem(env, id) {
   const db = requireDb(env);
-  const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ? AND state = 'published'").bind(id).first();
+  const row = await db.prepare(`
+    SELECT * FROM portfolio_items
+    WHERE id = ? AND state = 'published'
+      AND primary_consent_status IN ('not-required','granted')
+      AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
+  `).bind(id).first();
   if (!row) return errorResponse("Portfolio item not found.", 404);
   const [media, options, documentation] = await Promise.all([galleryMedia(db, [id]), portfolioOptions(db), imageDetails(db, [id])]);
-  const item = applyImageDocumentation(decorateItem(itemFromRow(row, false, true), options), media.get(id) || [], documentation.get(id), true);
+  const item = applyImageDocumentation(
+    decorateItem(itemFromRow(row, false, true), options),
+    media.get(id) || [],
+    documentation.get(id),
+    { includeImages: true, primaryConsentStatus: row.primary_consent_status }
+  );
   return json({ item, options });
 }
 
@@ -290,7 +354,11 @@ async function mediaResponse(request, env, id, admin = false) {
   }
   const db = requireDb(env);
   const row = await db.prepare(
-    `SELECT storage_key, content_type, original_filename FROM portfolio_items WHERE id = ?${admin ? "" : " AND state = 'published'"}`
+    `SELECT storage_key, content_type, original_filename FROM portfolio_items WHERE id = ?${admin ? "" : `
+      AND state = 'published'
+      AND primary_consent_status IN ('not-required','granted')
+      AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
+    `}`
   ).bind(id).first();
   if (!row?.storage_key) return errorResponse("Portfolio image not found.", 404);
   if (!env.SUBMISSION_FILES) return errorResponse("Portfolio storage is not configured.", 503);
@@ -300,7 +368,7 @@ async function mediaResponse(request, env, id, admin = false) {
   object.writeHttpMetadata(headers);
   headers.set("content-type", row.content_type || headers.get("content-type") || "application/octet-stream");
   headers.set("content-disposition", `inline; filename="${String(row.original_filename || "portfolio-image").replace(/["\\]/g, "")}"`);
-  headers.set("cache-control", admin ? "private, no-store" : "public, max-age=31536000, immutable");
+  headers.set("cache-control", "private, no-store");
   if (object.httpEtag) headers.set("etag", object.httpEtag);
   return new Response(object.body, { headers });
 }
@@ -328,7 +396,7 @@ async function createUpload(request, env) {
   await env.SUBMISSION_FILES.put(key, file.stream(), {
     httpMetadata: {
       contentType: file.type,
-      cacheControl: "public, max-age=31536000, immutable",
+      cacheControl: "private, no-store",
     },
     customMetadata: { itemId: id, originalFilename },
   });
@@ -351,6 +419,139 @@ async function createUpload(request, env) {
   return json({ item: itemFromRow(row, true) }, { status: 201 });
 }
 
+function defaultAngleAltText(item, imageRole) {
+  const subject = cleanText(item.title, 160) || "this tattoo project";
+  if (imageRole === "before") return `Before / existing tattoo photograph for ${subject}`;
+  if (imageRole === "process") return `Tattoo process photograph for ${subject}`;
+  if (imageRole === "detail") return `Tattoo detail photograph for ${subject}`;
+  return cleanText(item.alt_text, 1000) || `Finished tattoo result for ${subject}`;
+}
+
+async function createAngleUpload(request, env, itemId) {
+  const authError = adminError(request, env);
+  if (authError) return authError;
+  if (!env.SUBMISSION_FILES) return errorResponse("Portfolio storage is not configured.", 503);
+
+  const db = requireDb(env);
+  const item = await db.prepare("SELECT id,title,alt_text,project_type FROM portfolio_items WHERE id = ?").bind(itemId).first();
+  if (!item) return errorResponse("Portfolio item not found.", 404);
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!(file instanceof File) || !file.size) return errorResponse("Choose an image to upload.");
+  const extension = ALLOWED_UPLOADS.get(String(file.type || "").toLowerCase());
+  if (!extension) return errorResponse("Use a JPEG, PNG, or WebP image.", 415);
+  if (file.size > MAX_UPLOAD_BYTES) return errorResponse("Images must be 15 MB or smaller.", 413);
+  const imageRole = cleanText(form.get("imageRole"), 20) || "result";
+  if (!IMAGE_ROLES.has(imageRole)) return errorResponse("Choose Result, Before / existing tattoo, Process, or Detail.", 422);
+  if (imageRole === "before" && (item.project_type || "standard") !== "cover_up") {
+    return errorResponse("Save the Project type as Cover-up before uploading Before / existing tattoo photographs.", 409);
+  }
+
+  const mediaId = crypto.randomUUID();
+  const originalFilename = cleanText(file.name, 255) || `portfolio-angle.${extension}`;
+  const storageKey = `portfolio/${itemId}/${mediaId}.${extension}`;
+  const altText = cleanText(form.get("altText"), 1000) || defaultAngleAltText(item, imageRole);
+  const order = await db.prepare("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM entity_media WHERE entity_id = ? AND role = 'gallery'")
+    .bind(itemId).first();
+
+  await env.SUBMISSION_FILES.put(storageKey, file.stream(), {
+    httpMetadata: { contentType: file.type, cacheControl: "private, no-store" },
+    customMetadata: { portfolioItemId: itemId, mediaId, originalFilename, imageRole },
+  });
+  try {
+    await db.batch([
+      db.prepare(`
+        INSERT INTO media_assets(
+          id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,
+          consent_status,state,created_by,created_at,updated_at,public_presentation
+        ) VALUES(?,?,?,?,?,?,'private','unknown','active','studio',datetime('now'),datetime('now'),'inline')
+      `).bind(mediaId, storageKey, originalFilename, file.type, file.size, altText),
+      db.prepare(`
+        INSERT INTO entity_media(
+          entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at
+        ) VALUES(?,?,'gallery',?,0,?,'',datetime('now'))
+      `).bind(itemId, mediaId, Number(order?.next_order || 1), altText),
+      db.prepare(`
+        INSERT INTO portfolio_image_details(
+          portfolio_item_id,image_ref,healing_state,image_role,timing_note,caption,created_at,updated_at
+        ) VALUES(?,?,'unspecified',?,'','',datetime('now'),datetime('now'))
+      `).bind(itemId, mediaId, imageRole),
+    ]);
+  } catch (error) {
+    await env.SUBMISSION_FILES.delete(storageKey);
+    throw error;
+  }
+
+  return json({
+    image: {
+      id: mediaId,
+      imageRef: mediaId,
+      imageRole,
+      consentStatus: "unknown",
+      privacy: "private",
+      publicVisible: false,
+      altText,
+      originalFilename,
+    },
+  }, { status: 201 });
+}
+
+async function portfolioCoverImage(db, item) {
+  const imageRef = item.cover_image_ref || "primary";
+  if (imageRef === "primary") {
+    const details = await db.prepare(`
+      SELECT image_role FROM portfolio_image_details
+      WHERE portfolio_item_id = ? AND image_ref = 'primary'
+    `).bind(item.id).first();
+    return {
+      imageRef,
+      imageRole: details?.image_role || "result",
+      consentStatus: item.primary_consent_status || "unknown",
+      publicVisible: true,
+      privacy: "public",
+      state: "active",
+      publicPresentation: "inline",
+    };
+  }
+  const row = await db.prepare(`
+    SELECT COALESCE(pid.image_role, 'result') AS image_role,
+      em.public_visible, m.privacy, m.consent_status, m.state,
+      COALESCE(m.public_presentation, 'inline') AS public_presentation
+    FROM entity_media em
+    JOIN media_assets m ON m.id = em.media_id
+    LEFT JOIN portfolio_image_details pid
+      ON pid.portfolio_item_id = em.entity_id AND pid.image_ref = em.media_id
+    WHERE em.entity_id = ? AND em.media_id = ? AND em.role = 'gallery'
+  `).bind(item.id, imageRef).first();
+  if (!row) return null;
+  return {
+    imageRef,
+    imageRole: row.image_role || "result",
+    consentStatus: row.consent_status || "unknown",
+    publicVisible: Number(row.public_visible || 0) === 1,
+    privacy: row.privacy || "internal",
+    state: row.state || "active",
+    publicPresentation: row.public_presentation || "inline",
+  };
+}
+
+async function validatePublishedPortfolioItem(db, item) {
+  if (!hasPublicConsent(item.primary_consent_status)) {
+    return "Confirm publication permission for the primary result image before publishing.";
+  }
+  const cover = await portfolioCoverImage(db, item);
+  if (!cover) return "Choose an available result image as the portfolio cover before publishing.";
+  if (cover.imageRole !== "result") return "The portfolio cover must be a finished result image.";
+  if (!hasPublicConsent(cover.consentStatus)) return "Confirm publication permission for the selected cover image before publishing.";
+  if (cover.imageRef !== "primary" && (
+    !cover.publicVisible
+    || cover.privacy !== "public"
+    || cover.state !== "active"
+    || cover.publicPresentation !== "inline"
+  )) return "Make the selected cover image publicly visible before publishing.";
+  return "";
+}
+
 async function patchItem(request, env, id) {
   const authError = adminError(request, env);
   if (authError) return authError;
@@ -362,6 +563,7 @@ async function patchItem(request, env, id) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse("Send a JSON object.");
   const updates = [];
   const values = [];
+  let nextProjectType = current.project_type || "standard";
   for (const [apiField, sqlField] of EDITABLE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(body, apiField)) continue;
     const max = apiField === "statement" || apiField === "processNotes"
@@ -409,6 +611,24 @@ async function patchItem(request, env, id) {
     values.push(presentation);
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "projectType")) {
+    nextProjectType = cleanText(body.projectType, 20);
+    if (!PROJECT_TYPES.has(nextProjectType)) return errorResponse("Choose Standard tattoo or Cover-up.", 422);
+    if (nextProjectType === "standard") {
+      const before = await db.prepare(`
+        SELECT COUNT(*) AS count FROM portfolio_image_details
+        WHERE portfolio_item_id = ? AND image_role = 'before'
+      `).bind(id).first();
+      if (Number(before?.count || 0) > 0) {
+        return errorResponse("Reclassify or remove every Before / existing tattoo image before changing this project to Standard tattoo.", 409);
+      }
+    }
+    if (nextProjectType !== (current.project_type || "standard")) {
+      updates.push("project_type = ?");
+      values.push(nextProjectType);
+    }
+  }
+
   let nextState = current.state;
   if (Object.prototype.hasOwnProperty.call(body, "state")) {
     nextState = cleanText(body.state, 20);
@@ -424,6 +644,12 @@ async function patchItem(request, env, id) {
       updates.push("sort_order = ?");
       values.push(await nextSortOrder(db, nextState));
     }
+  }
+
+
+  if (nextState === "published") {
+    const publishError = await validatePublishedPortfolioItem(db, { ...current, project_type: nextProjectType });
+    if (publishError) return errorResponse(publishError, 422);
   }
 
   if (!updates.length) return errorResponse("No portfolio changes were supplied.");
@@ -442,27 +668,89 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse("Send a JSON object.");
   const db = requireDb(env);
-  const item = await db.prepare("SELECT id FROM portfolio_items WHERE id = ?").bind(itemId).first();
+  const item = await db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(itemId).first();
   if (!item) return errorResponse("Portfolio item not found.", 404);
+  let attached = null;
   if (imageRef !== "primary") {
-    const attached = await db.prepare("SELECT 1 AS found FROM entity_media WHERE entity_id = ? AND media_id = ? AND role = 'gallery'")
+    attached = await db.prepare(`
+      SELECT em.public_visible, m.privacy, m.consent_status, m.state,
+        COALESCE(m.public_presentation, 'inline') AS public_presentation
+      FROM entity_media em JOIN media_assets m ON m.id = em.media_id
+      WHERE em.entity_id = ? AND em.media_id = ? AND em.role = 'gallery'
+    `)
       .bind(itemId, imageRef).first();
     if (!attached) return errorResponse("Portfolio image not found.", 404);
   }
+  const currentDetails = await db.prepare(`
+    SELECT healing_state, image_role, timing_note, caption
+    FROM portfolio_image_details WHERE portfolio_item_id = ? AND image_ref = ?
+  `).bind(itemId, imageRef).first();
   const healingState = cleanText(body.healingState, 20) || "unspecified";
   if (!HEALING_STATES.has(healingState)) return errorResponse("Choose Fresh, Healed, In progress, or Unspecified.", 422);
+  const imageRole = imageRef === "primary"
+    ? "result"
+    : cleanText(body.imageRole ?? currentDetails?.image_role ?? "result", 20);
+  if (!IMAGE_ROLES.has(imageRole)) return errorResponse("Choose Result, Before / existing tattoo, Process, or Detail.", 422);
+  if (imageRole === "before" && (item.project_type || "standard") !== "cover_up") {
+    return errorResponse("Change this project to Cover-up before labeling an image Before / existing tattoo.", 409);
+  }
+  if ((item.cover_image_ref || "primary") === imageRef && imageRole !== "result") {
+    return errorResponse("Choose another result image as the cover before changing this image role.", 409);
+  }
+  const currentConsent = imageRef === "primary"
+    ? item.primary_consent_status || "unknown"
+    : attached.consent_status || "unknown";
+  const consentSupplied = Object.prototype.hasOwnProperty.call(body, "consentStatus");
+  const consentStatus = cleanText(body.consentStatus ?? currentConsent, 30) || "unknown";
+  if (!CONSENT_STATUSES.has(consentStatus)) return errorResponse("Choose a valid publication-permission status.", 422);
+  const isCover = body.isCover === true || body.isCover === "true" || body.isCover === "on";
+  if (isCover && imageRole !== "result") return errorResponse("Only a finished result image can be the portfolio cover.", 422);
+  if (item.state === "published" && imageRef === "primary" && !hasPublicConsent(consentStatus)) {
+    return errorResponse("Unpublish this portfolio item before removing permission from its primary result image.", 409);
+  }
+  if (item.state === "published" && (item.cover_image_ref || "primary") === imageRef && !hasPublicConsent(consentStatus)) {
+    return errorResponse("Unpublish this portfolio item or choose another permitted result image before removing permission from its cover.", 409);
+  }
+  if (item.state === "published" && isCover && !hasPublicConsent(consentStatus)) {
+    return errorResponse("Confirm publication permission before using this image as the cover.", 409);
+  }
+  if (item.state === "published" && isCover && imageRef !== "primary") {
+    const nextPublicVisible = consentSupplied ? hasPublicConsent(consentStatus) : Number(attached.public_visible || 0) === 1;
+    const nextPrivacy = consentSupplied ? (hasPublicConsent(consentStatus) ? "public" : "private") : attached.privacy;
+    const nextPresentation = consentSupplied ? "inline" : attached.public_presentation;
+    if (
+      !nextPublicVisible
+      || nextPrivacy !== "public"
+      || attached.state !== "active"
+      || nextPresentation !== "inline"
+    ) {
+      return errorResponse("Make this permitted result image publicly visible before using it as the cover.", 409);
+    }
+  }
   const timingNote = cleanText(body.timingNote, 160);
   const caption = cleanText(body.caption, 1000);
   const statements = [db.prepare(`
-    INSERT INTO portfolio_image_details(portfolio_item_id, image_ref, healing_state, timing_note, caption, created_at, updated_at)
-    VALUES(?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    INSERT INTO portfolio_image_details(portfolio_item_id, image_ref, healing_state, image_role, timing_note, caption, created_at, updated_at)
+    VALUES(?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     ON CONFLICT(portfolio_item_id, image_ref) DO UPDATE SET
       healing_state = excluded.healing_state,
+      image_role = excluded.image_role,
       timing_note = excluded.timing_note,
       caption = excluded.caption,
       updated_at = datetime('now')
-  `).bind(itemId, imageRef, healingState, timingNote, caption)];
-  if (body.isCover === true || body.isCover === "true" || body.isCover === "on") {
+  `).bind(itemId, imageRef, healingState, imageRole, timingNote, caption)];
+  if (consentSupplied && imageRef === "primary") {
+    statements.push(db.prepare("UPDATE portfolio_items SET primary_consent_status = ?, updated_at = datetime('now') WHERE id = ?").bind(consentStatus, itemId));
+  } else if (consentSupplied) {
+    const publicAllowed = hasPublicConsent(consentStatus);
+    statements.push(
+      db.prepare("UPDATE media_assets SET consent_status = ?, privacy = ?, public_presentation = 'inline', updated_at = datetime('now') WHERE id = ?")
+        .bind(consentStatus, publicAllowed ? "public" : "private", imageRef),
+      db.prepare("UPDATE entity_media SET public_visible = ? WHERE entity_id = ? AND media_id = ? AND role = 'gallery'")
+        .bind(publicAllowed ? 1 : 0, itemId, imageRef)
+    );
+  }
+  if (isCover) {
     statements.push(db.prepare("UPDATE portfolio_items SET cover_image_ref = ?, updated_at = datetime('now') WHERE id = ?").bind(imageRef, itemId));
   }
   await db.batch(statements);
@@ -776,6 +1064,11 @@ export async function handlePortfolioApi(request, env) {
       if (method !== "GET") return methodNotAllowed(["GET"]);
       return mediaResponse(request, env, decodeURIComponent(path.slice("/api/admin/portfolio/media/".length)), true);
     }
+    const imageUploadMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images$/);
+    if (imageUploadMatch) {
+      if (method !== "POST") return methodNotAllowed(["POST"]);
+      return createAngleUpload(request, env, decodeURIComponent(imageUploadMatch[1]));
+    }
     const imageDocumentationMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images\/([^/]+)$/);
     if (imageDocumentationMatch) {
       if (method !== "PATCH") return methodNotAllowed(["PATCH"]);
@@ -804,6 +1097,12 @@ export async function handlePortfolioApi(request, env) {
     }
     return errorResponse("Unknown portfolio API route.", 404);
   } catch (error) {
+    if (String(error?.message || error).includes("published portfolio cover must remain eligible")) {
+      return errorResponse("Unpublish this tattoo or choose another permitted result image before changing its published cover.", 409);
+    }
+    if (String(error?.message || error).includes("before images require a cover-up portfolio project")) {
+      return errorResponse("Save the Project type as Cover-up before adding Before / existing tattoo images.", 409);
+    }
     return errorResponse("Unable to process the portfolio request.", 500, error.message);
   }
 }

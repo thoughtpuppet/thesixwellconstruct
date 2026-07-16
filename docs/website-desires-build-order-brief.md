@@ -68,7 +68,8 @@ The existing direction is dark, tactile, symbolic, and editorial. The interface 
 - Large compressed display titles.
 - Thin, quiet supporting copy.
 - Thick 5px borders and hard-edged frames.
-- Grain/noise overlays.
+- Visible dividers, timeline rails, and graph strokes also use the 5px rule; record and card grids keep 12–16px of breathing room between frames.
+- A solid opaque page canvas; grain, noise, washes, or gradients stay inside contained media/components only when useful.
 - Fade transitions between pages.
 - A construct navigation system made of colored medium dots.
 

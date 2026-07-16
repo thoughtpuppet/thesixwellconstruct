@@ -680,6 +680,24 @@ function normalizedConsent(value, fallback="unknown") {
   return consent==="approved"?"granted":(consent||fallback);
 }
 
+function publicPortfolioMediaEligible(media) {
+  return media?.state === "active"
+    && media.privacy === "public"
+    && ["not-required", "granted"].includes(media.consent_status)
+    && media.public_presentation === "inline";
+}
+
+function isPortfolioCoverGuardError(error) {
+  return String(error?.message || error).includes("published portfolio cover must remain eligible");
+}
+
+async function publishedPortfolioCoverUsingMedia(database, mediaId) {
+  return database.prepare(`SELECT pi.id, pi.title FROM portfolio_items pi
+    JOIN entity_media em ON em.entity_id=pi.id AND em.media_id=? AND em.role='gallery'
+    WHERE pi.state='published' AND pi.cover_image_ref=?
+    LIMIT 1`).bind(mediaId, mediaId).first();
+}
+
 async function publicMediaApi(request,env,mediaId){
   if(request.method!=="GET")return failure("Method not allowed.",405);
   const database=db(env);
@@ -739,8 +757,15 @@ async function mediaApi(request, env, mediaId="") {
     if(!MEDIA_CONSENT_STATUSES.has(next.consent_status))return failure("Invalid consent status.");
     if(!MEDIA_TRANSCRIPT_STATUSES.has(next.transcript_status))return failure("Invalid transcript status.");
     if(!MEDIA_PRESENTATIONS.has(next.public_presentation))return failure("Invalid public presentation.");
-    await database.prepare("UPDATE media_assets SET state=?,alt_text=?,caption=?,privacy=?,consent_status=?,transcript=?,transcript_status=?,transcript_language=?,public_title=?,public_description=?,public_presentation=?,updated_at=datetime('now') WHERE id=?")
-      .bind(next.state,next.alt_text,next.caption,next.privacy,next.consent_status,next.transcript,next.transcript_status,next.transcript_language,next.public_title,next.public_description,next.public_presentation,mediaId).run();
+    const eligibilityChanged=["state","privacy","consent_status","public_presentation"].some(field=>Object.prototype.hasOwnProperty.call(body,field));
+    if(eligibilityChanged&&!publicPortfolioMediaEligible(next)){
+      const cover=await publishedPortfolioCoverUsingMedia(database,mediaId);
+      if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before making this media private.",409);
+    }
+    try{
+      await database.prepare("UPDATE media_assets SET state=?,alt_text=?,caption=?,privacy=?,consent_status=?,transcript=?,transcript_status=?,transcript_language=?,public_title=?,public_description=?,public_presentation=?,updated_at=datetime('now') WHERE id=?")
+        .bind(next.state,next.alt_text,next.caption,next.privacy,next.consent_status,next.transcript,next.transcript_status,next.transcript_language,next.public_title,next.public_description,next.public_presentation,mediaId).run();
+    }catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before making this media private.",409);throw error;}
     return json({record:await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(mediaId).first()});
   }
   if(request.method!=="POST"||mediaId)return failure("Method not allowed.",405);
@@ -924,7 +949,7 @@ async function legendCategoryApi(request,env,categoryId=""){
 
 function canonicalResource(resource){return resource==="legend"?"visual-language":resource;}
 
-async function entityMediaApi(request,env,entityId){const database=db(env);if(request.method==="GET"){const rows=(await database.prepare("SELECT em.*,m.original_filename,m.source_url,m.storage_key,m.mime_type FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? ORDER BY em.sort_order").bind(entityId).all()).results||[];return json({records:rows,count:rows.length});}const b=await readJson(request);if(!b?.media_id)return failure("media_id is required.");await database.prepare("INSERT OR REPLACE INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at) VALUES(?,?,?,?,?,?,?,datetime('now'))").bind(entityId,b.media_id,text(b.role,60)||"gallery",Number(b.sort_order)||0,b.public_visible?1:0,text(b.alt_text_override,1000),text(b.caption_override,3000)).run();return json({ok:true},{status:201});}
+async function entityMediaApi(request,env,entityId){const database=db(env);if(request.method==="GET"){const rows=(await database.prepare("SELECT em.*,m.original_filename,m.source_url,m.storage_key,m.mime_type FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? ORDER BY em.sort_order").bind(entityId).all()).results||[];return json({records:rows,count:rows.length});}const b=await readJson(request);if(!b?.media_id)return failure("media_id is required.");const role=text(b.role,60)||"gallery",publicVisible=b.public_visible?1:0;const cover=role==="gallery"&&!publicVisible?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,b.media_id).first():null;if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);try{await database.prepare("INSERT OR REPLACE INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at) VALUES(?,?,?,?,?,?,?,datetime('now'))").bind(entityId,b.media_id,role,Number(b.sort_order)||0,publicVisible,text(b.alt_text_override,1000),text(b.caption_override,3000)).run();}catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);throw error;}return json({ok:true},{status:201});}
 
 function archiveRecordType(entityType){return {art_work:"artwork",merch_item:"merchandise",portfolio_item:"tattoo",flash_item:"flash",event:"event",visual_symbol:"symbol"}[entityType]||String(entityType||"").replace(/_/g,"-");}
 function archivePreferredSlug(entityType,row){return slug(row?.archive_slug||row?.slug||row?.shopify_handle||row?.id)||String(row?.id||"");}

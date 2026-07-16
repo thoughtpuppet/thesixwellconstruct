@@ -44,6 +44,59 @@
     { key: 'film',      label: 'FILM',       token: '--color-film',      fallback: '#00857A', url: '/film/'      },
   ];
 
+  /* Bundled pathway fallback. Managed navigation replaces these after hydrate. */
+  var PATHWAYS_BY_KEY = {
+    tattooing: [
+      ['Art.Pill Tattoo House', '/tattoos/'], ['About', '/about/artpilltattoohouse/'],
+      ['Flash', '/tattoos/flash/'], ['Portfolio', '/tattoos/portfolio/'],
+      ['Booking', '/tattoos/inquire/'], ['Special Projects', '/tattoos/special-projects/'],
+      ['Build Your Own', '/tattoos/build/'],
+    ],
+    art: [
+      ['statements', '/writings/#featured'], ['artist bio', '/about/#saiel'],
+      ['portfolio', '/art/'], ['meridian in conflux', '/art/#sectionPainting'],
+      ['studio visit', '/booking/studio-visit/'],
+    ],
+    merch: [
+      ['six.well clothing', '/merch/?filter=six.well'], ['art.pill tattoo supply', '/merch/?filter=art.pill'],
+      ['thoughtpuppet artifacts', '/merch/?filter=thoughtpuppet'], ['CULT[&SHIFT] merch', '/merch/?filter=cultiv'],
+      ['all merch', '/merch/'],
+    ],
+    about: [
+      ['the construct', '/about/#construct'], ['saiel / founder', '/about/#saiel'],
+      ['architecture', '/about/#construct-architecture'], ['nodes', '/about/#access'],
+      ['method', '/about/#library'], ['faq', '/about/#faq'], ['Legend', '/about/legend/'],
+    ],
+    events: [
+      ['CULT[&SHIFT]', '/events/cultandshift/'], ['Signal & Symbol', '/events/signal-symbol/'],
+      ['calendar', '/events/calendar/'], ['rent the studio', '/booking/studio/'],
+      ['archive', '/archive/events/'], ["solehman's new years", '/events/solehmans-new-year/'],
+      ['SS&F live audience', '/events/ss-and-f-live-audience/'], ['open studios', '/events/open-studios/'],
+    ],
+    music: [
+      ['ringtones', '/music/#listening-surfaces'], ['MILOWALKSONWATER', '/music/#listening-index'],
+      ['scores', '/music/#forms'],
+    ],
+    writings: [
+      ['Mindful Darkness', '/writings/#reading-paths'], ['THE SOLEHMAN LETTERS', 'https://thesolehmanletters.com'],
+      ['essays & notes', '/writings/#featured'],
+    ],
+    archive: [
+      ['tattoos', '/archive/tattoos/'], ['art', '/archive/art/'], ['merch', '/archive/merch/'],
+      ['events', '/archive/events/'], ['music', '/archive/music/'], ['writings', '/archive/writings/'],
+      ['film', '/archive/film/'], ['The six.well Construct', '/archive/sixwell-construct/'],
+    ],
+    film: [
+      ['isolated.take', '/film/#projects'], ['&friends', '/film/#projects'],
+      ['animations', '/film/#forms'], ['sloth99', '/film/#status'],
+    ],
+  };
+  VENTURES.forEach(function(venture) {
+    venture.pathways = (PATHWAYS_BY_KEY[venture.key] || []).map(function(pathway) {
+      return { label: pathway[0], url: pathway[1] };
+    });
+  });
+
   function readTokenColor(token, fallback) {
     var value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
     return value || fallback;
@@ -268,11 +321,17 @@
   var MOBILE_BLOOM_DUR = 2200;
   var MOBILE_CLOSE_DUR = 520;
   var MOBILE_NODE_SIZE = 18;
-  var MOBILE_PARTICLE_COUNT = 26;
+  var MOBILE_PARTICLE_COUNT = 42;
   var MOBILE_TRAVEL_END = 0.85;
   var MOBILE_XFADE_START = 0.42;
-  var MOBILE_ORBIT_SPEED = 0.00007;
-  var MOBILE_ORBIT_RADIUS = 8;
+  var MOBILE_ORBIT_SPEED = 0.00012;
+  var MOBILE_ORBIT_RADIUS = 14;
+  var MOBILE_ACTIVE_NODE_RADIUS = 40;
+  var MOBILE_ACTIVE_NODE_INNER = 28;
+  var MOBILE_SUBNODE_SIZE = 14;
+  var MOBILE_SUBNODE_ORBIT_SPEED = 0.00012;
+  var MOBILE_SUBNODE_DUR = 2630;
+  var MOBILE_SUBNODE_CLOSE_DUR = 560;
   var GLYPH_R = 32;
   var GLYPH_INNER = 22;
   var HOME_DOT_POSITIONS = [[-18, -28], [18, -28], [-18, 0], [18, 0], [-18, 28], [18, 28]];
@@ -383,10 +442,41 @@
   mWordmark.appendChild(mWmCanvas);
   mWordmark.appendChild(mWmText);
 
+  var mBack = document.createElement('button');
+  mBack.id = 'cnav-mobile-back';
+  mBack.type = 'button';
+  mBack.setAttribute('aria-label', 'return to construct nodes');
+  mBack.innerHTML = '<span aria-hidden="true">&lsaquo;</span><span>return</span>';
+  mBack.style.cssText = [
+    'position:absolute',
+    'left:16px',
+    'bottom:max(20px,env(safe-area-inset-bottom,20px))',
+    'display:none',
+    'align-items:center',
+    'gap:6px',
+    'padding:6px 9px 6px 7px',
+    'background:rgba(20,18,15,0.55)',
+    'backdrop-filter:blur(6px)',
+    'border:2px solid rgba(252,184,103,0.47)',
+    'border-radius:4px',
+    'color:rgba(252,184,103,0.6)',
+    'font-family:' + CONFIG.labelFont,
+    'font-size:8.5px',
+    'font-weight:500',
+    'letter-spacing:0.18em',
+    'text-transform:uppercase',
+    'cursor:pointer',
+    'opacity:0',
+    'transition:opacity 350ms ease',
+    'pointer-events:none',
+    'z-index:2',
+  ].join(';');
+
   mScrim.appendChild(mCanvas);
   mScrim.appendChild(mLabels);
   mScrim.appendChild(mCenterLabel);
   mScrim.appendChild(mWordmark);
+  mScrim.appendChild(mBack);
 
   /* mRing remains as a compatibility handle for responsive hide/show code. */
   var mRing = mScrim;
@@ -421,6 +511,10 @@
 
   var mobileNodes = [];
   var mobileParticles = [];
+  var mobileSubNodes = [];
+  var activeMobileNode = null;
+  var mobileSubnodeProgress = 0;
+  var mobileSubnodeTarget = 0;
   var ringOpen = false;
   var mobileState = 'closed';
   var mobileAnimStart = 0;
@@ -498,18 +592,11 @@
   }
   function mobileAnchorForNode(nd) {
     var orbit = mobileMotionMs * MOBILE_ORBIT_SPEED;
-    var angle = nd.angle + orbit * 0.18;
-    var orbitX = (Math.cos(orbit + nd.orbitPhase) - Math.cos(nd.orbitPhase)) * MOBILE_ORBIT_RADIUS;
-    var orbitY = (Math.sin(orbit + nd.orbitPhase) - Math.sin(nd.orbitPhase)) * MOBILE_ORBIT_RADIUS;
-    var driftX = nd.dax * (
-      Math.sin((mobileMotionMs / nd.dpx) * Math.PI * 2 + nd.dox) - Math.sin(nd.dox)
-    );
-    var driftY = nd.day * (
-      Math.sin((mobileMotionMs / nd.dpy) * Math.PI * 2 + nd.doy) - Math.sin(nd.doy)
-    );
+    var angle = nd.angle + orbit;
+    var radius = MOBILE_RING_RADIUS + Math.sin(orbit * 0.65) * MOBILE_ORBIT_RADIUS;
     return {
-      x: mobileCx + Math.cos(angle) * MOBILE_RING_RADIUS + orbitX + driftX,
-      y: mobileCy + Math.sin(angle) * MOBILE_RING_RADIUS + orbitY + driftY,
+      x: mobileCx + Math.cos(angle) * radius,
+      y: mobileCy + Math.sin(angle) * radius,
     };
   }
 
@@ -530,6 +617,10 @@
   function buildMobileNodes() {
     mLabels.innerHTML = '';
     mobileNodes = [];
+    mobileSubNodes = [];
+    activeMobileNode = null;
+    mobileSubnodeProgress = 0;
+    mobileSubnodeTarget = 0;
     var list = otherVentures();
     var n = list.length;
     list.forEach(function(v, i) {
@@ -559,13 +650,6 @@
         y: mobileCy,
         r: 0,
         alpha: 0,
-        orbitPhase: i * 0.77,
-        dax: 4.5 + (i * 1.7) % 3.5,
-        day: 3.5 + (i * 2.3) % 3.5,
-        dpx: 18000 + (i * 3700) % 9000,
-        dpy: 22000 + (i * 4100) % 8000,
-        dox: i * 1.4,
-        doy: i * 2.1,
       });
     });
 
@@ -573,6 +657,168 @@
       mCenterLabel.textContent = currentVenture.label + ' .';
       mCenterLabel.style.color = currentVenture.color;
     }
+  }
+
+  function clearMobileSubnodes() {
+    mobileSubNodes.forEach(function(subnode) {
+      if (subnode.el && subnode.el.parentNode) subnode.el.parentNode.removeChild(subnode.el);
+    });
+    mobileSubNodes = [];
+    activeMobileNode = null;
+    mobileSubnodeProgress = 0;
+    mobileSubnodeTarget = 0;
+    mBack.style.opacity = '0';
+    mBack.style.pointerEvents = 'none';
+    mBack.style.display = 'none';
+    if (currentVenture) {
+      mCenterLabel.textContent = currentVenture.label + ' .';
+      mCenterLabel.style.color = currentVenture.color;
+    }
+  }
+
+  function collapseMobileSubnodes() {
+    mobileSubnodeTarget = 0;
+    mBack.style.opacity = '0';
+    mBack.style.pointerEvents = 'none';
+  }
+
+  function openMobileSubnodes(venture) {
+    var pathways = venture && Array.isArray(venture.pathways) ? venture.pathways : [];
+    if (!pathways.length) {
+      if (typeof window._constructFade === 'function') window._constructFade(venture.url);
+      else window.location.href = venture.url;
+      return;
+    }
+    if (activeMobileNode && activeMobileNode.venture === venture) {
+      if (venture.key === currentKey) {
+        mobileSubnodeTarget = 1;
+        mBack.style.display = 'inline-flex';
+        mBack.style.pointerEvents = 'auto';
+        requestAnimationFrame(function() { mBack.style.opacity = '0.65'; });
+        return;
+      }
+      if (typeof window._constructFade === 'function') window._constructFade(venture.url);
+      else window.location.href = venture.url;
+      return;
+    }
+
+    clearMobileSubnodes();
+    var selected = null;
+    mobileNodes.forEach(function(node) {
+      if (node.venture === venture) selected = node;
+    });
+    activeMobileNode = selected || {
+      venture: venture,
+      x: mobileCx,
+      y: mobileCy,
+      r: GLYPH_R,
+      el: null,
+      isCenter: true,
+    };
+    activeMobileNode.originX = activeMobileNode.x;
+    activeMobileNode.originY = activeMobileNode.y;
+
+    pathways.slice(0, 9).forEach(function(pathway, i) {
+      var el = document.createElement('div');
+      el.textContent = pathway.label;
+      el.style.cssText = [
+        'position:absolute',
+        'font-family:Georgia,Times New Roman,serif',
+        'font-size:clamp(11px,3.2vw,13px)',
+        'font-weight:bold',
+        'letter-spacing:0.03em',
+        'text-transform:lowercase',
+        'line-height:1.18',
+        'text-align:center',
+        'transform:translate(-50%,0)',
+        'white-space:normal',
+        'max-width:min(96px,28vw)',
+        'pointer-events:none',
+        'opacity:0',
+        'color:' + (pathway.color || venture.color),
+      ].join(';');
+      mLabels.appendChild(el);
+      mobileSubNodes.push({
+        pathway: pathway,
+        venture: venture,
+        index: i,
+        count: Math.min(pathways.length, 9),
+        el: el,
+        x: activeMobileNode.originX,
+        y: activeMobileNode.originY,
+        r: 0,
+      });
+    });
+    mCenterLabel.textContent = venture.label + ' .';
+    mCenterLabel.style.color = venture.color;
+    mobileSubnodeTarget = 1;
+    mBack.style.display = 'inline-flex';
+    mBack.style.pointerEvents = 'auto';
+    requestAnimationFrame(function() { mBack.style.opacity = '0.65'; });
+  }
+
+  function updateMobileSubnodes(dt) {
+    var duration = mobileSubnodeTarget > mobileSubnodeProgress
+      ? MOBILE_SUBNODE_DUR
+      : MOBILE_SUBNODE_CLOSE_DUR;
+    var step = dt / duration;
+    if (mobileSubnodeProgress < mobileSubnodeTarget) {
+      mobileSubnodeProgress = Math.min(mobileSubnodeTarget, mobileSubnodeProgress + step);
+    } else if (mobileSubnodeProgress > mobileSubnodeTarget) {
+      mobileSubnodeProgress = Math.max(mobileSubnodeTarget, mobileSubnodeProgress - step);
+      if (mobileSubnodeProgress === 0) clearMobileSubnodes();
+    }
+  }
+
+  function drawMobileSubnodes() {
+    if (!activeMobileNode || !mobileSubNodes.length || mobileSubnodeProgress <= 0) return;
+    var ringRadius = Math.min(mobileW * 0.34, mobileH * 0.26);
+    var subOrbit = mobileMotionMs * MOBILE_SUBNODE_ORBIT_SPEED;
+    var parentX = activeMobileNode.isCenter ? mobileCx : activeMobileNode.x;
+    var parentY = activeMobileNode.isCenter ? mobileCy : activeMobileNode.y;
+    mobileSubNodes.forEach(function(subnode) {
+      var delay = (subnode.index / subnode.count) * 0.42;
+      var ep = mobileSubnodeTarget === 0
+        ? easeInOut(mobileSubnodeProgress)
+        : easeOut(clamp01((mobileSubnodeProgress - delay) / (1 - delay + 0.001)));
+      var angle = Math.PI / 2 + (subnode.index / subnode.count) * Math.PI * 2 + subOrbit;
+      var targetX = parentX + Math.cos(angle) * ringRadius;
+      var targetY = parentY + Math.sin(angle) * ringRadius;
+      subnode.x = lerp(parentX, targetX, ep);
+      subnode.y = lerp(parentY, targetY, ep);
+      subnode.r = lerp(2, MOBILE_SUBNODE_SIZE, ep);
+
+      mCtx.globalAlpha = mobileAlpha * ep * 0.88;
+      mCtx.beginPath();
+      mCtx.arc(subnode.x, subnode.y, subnode.r, 0, Math.PI * 2);
+      mCtx.fillStyle = subnode.pathway.color || subnode.venture.color;
+      mCtx.fill();
+      mCtx.globalAlpha = 1;
+
+      subnode.el.style.left = subnode.x + 'px';
+      subnode.el.style.top = (subnode.y + MOBILE_SUBNODE_SIZE + 8) + 'px';
+      subnode.el.style.opacity = ep > 0.35 ? String(ep * 0.65) : '0';
+    });
+  }
+
+  function drawMobileActiveParent() {
+    if (!activeMobileNode || mobileSubnodeProgress <= 0) return;
+    var takeover = easeInOut(mobileSubnodeProgress);
+    var ringT = easeOutSoft(Math.min(mobileSubnodeProgress * 2.5, 1));
+    var parentX = activeMobileNode.isCenter ? mobileCx : activeMobileNode.x;
+    var parentY = activeMobileNode.isCenter ? mobileCy : activeMobileNode.y;
+    var startR = activeMobileNode.isCenter ? GLYPH_R : MOBILE_NODE_SIZE;
+    var outer = lerp(startR, MOBILE_ACTIVE_NODE_RADIUS, takeover);
+    var inner = lerp(Math.max(1, startR * 0.25), MOBILE_ACTIVE_NODE_INNER, takeover);
+
+    mCtx.save();
+    mCtx.globalAlpha = mobileAlpha * ringT;
+    mCtx.beginPath();
+    mCtx.arc(parentX, parentY, outer, 0, Math.PI * 2);
+    mCtx.arc(parentX, parentY, inner, 0, Math.PI * 2, true);
+    mCtx.fillStyle = activeMobileNode.venture.color;
+    mCtx.fill();
+    mCtx.restore();
   }
 
   function spawnMobileParticle(seeded) {
@@ -653,8 +899,11 @@
     var grow = 1 + 0.03 * (breath - 0.5);
     var outer = GLYPH_R * grow;
     var inner = GLYPH_INNER * grow;
+    var takeoverFade = activeMobileNode
+      ? 1 - easeOutSoft(Math.min(mobileSubnodeProgress * 2.5, 1))
+      : 1;
     mCtx.save();
-    mCtx.globalAlpha = mobileAlpha * (0.88 + 0.12 * breath);
+    mCtx.globalAlpha = mobileAlpha * takeoverFade * (0.88 + 0.12 * breath);
     mCtx.beginPath();
     mCtx.arc(mobileCx, mobileCy, outer, 0, Math.PI * 2);
     mCtx.arc(mobileCx, mobileCy, inner, 0, Math.PI * 2, true);
@@ -718,6 +967,7 @@
 
     if (visible) {
       updateMobileParticles(dt, now, mobileState === 'open' || mobileState === 'opening');
+      updateMobileSubnodes(dt);
       drawMobileGlyph(now);
 
       var n = mobileNodes.length;
@@ -732,12 +982,22 @@
         var anchor = mobileAnchorForNode(nd);
         var travelX = lerp(start.x, anchor.x, travel);
         var travelY = lerp(start.y, anchor.y, travel);
+        var takeover = activeMobileNode ? easeInOut(mobileSubnodeProgress) : 0;
+        var takeoverFade = activeMobileNode
+          ? easeOutSoft(Math.min(mobileSubnodeProgress * 2.5, 1))
+          : 0;
+
+        if (activeMobileNode === nd) {
+          travelX = lerp(travelX, mobileCx, takeover);
+          travelY = lerp(travelY, mobileCy, takeover);
+        }
 
         nd.x = travelX;
         nd.y = travelY;
 
         nd.r = lerp(start.r, MOBILE_NODE_SIZE, travel);
         nd.alpha = Math.max(bloomAlpha * 0.9, settledAlpha);
+        if (activeMobileNode) nd.alpha *= 1 - takeoverFade;
 
         mCtx.globalAlpha = mobileAlpha * nd.alpha;
         mCtx.beginPath();
@@ -748,11 +1008,29 @@
 
         nd.el.style.left = nd.x + 'px';
         nd.el.style.top = (nd.y + nd.r + 8) + 'px';
-        nd.el.style.opacity = (mobileState === 'closing') ? '0' : String(clamp01((settledAlpha - 0.25) / 0.75));
+        nd.el.style.opacity = (mobileState === 'closing')
+          ? '0'
+          : String(clamp01((settledAlpha - 0.25) / 0.75) * (1 - takeoverFade));
       }
 
+      drawMobileActiveParent();
+      drawMobileSubnodes();
+
       mCenterLabel.style.left = mobileCx + 'px';
-      mCenterLabel.style.top = (mobileCy + GLYPH_R + 10) + 'px';
+      if (activeMobileNode) {
+        var activeTakeover = easeInOut(mobileSubnodeProgress);
+        var activeRingT = easeOutSoft(Math.min(mobileSubnodeProgress * 2.5, 1));
+        var activeLabelY = activeMobileNode.isCenter ? mobileCy : activeMobileNode.y;
+        var activeStartR = activeMobileNode.isCenter ? GLYPH_R : MOBILE_NODE_SIZE;
+        mCenterLabel.style.left = (activeMobileNode.isCenter ? mobileCx : activeMobileNode.x) + 'px';
+        mCenterLabel.style.top = (
+          activeLabelY
+          + lerp(activeStartR, MOBILE_ACTIVE_NODE_RADIUS, activeTakeover)
+          + lerp(10, 27, activeRingT)
+        ) + 'px';
+      } else {
+        mCenterLabel.style.top = (mobileCy + GLYPH_R + 10) + 'px';
+      }
       mCenterLabel.style.opacity = (mobileState === 'closing') ? '0' : String(clamp01((prog - 0.5) / 0.5));
     }
 
@@ -787,6 +1065,8 @@
     mScrim.style.opacity = '0';
     mScrim.style.pointerEvents = 'none';
     mWordmark.style.opacity = '0';
+    mBack.style.opacity = '0';
+    mBack.style.pointerEvents = 'none';
     mobileNodes.forEach(function(nd) { nd.el.style.opacity = '0'; });
     mCenterLabel.style.opacity = '0';
     chipCaret.style.transform = 'rotate(0deg)';
@@ -799,21 +1079,44 @@
 
   function hitMobileNode(mx, my) {
     if (mobileState !== 'open') return null;
+    if (activeMobileNode) {
+      return Math.hypot(mx - mobileCx, my - mobileCy) < Math.max(34, activeMobileNode.r + 18)
+        ? activeMobileNode.venture
+        : null;
+    }
     for (var i = 0; i < mobileNodes.length; i++) {
       var nd = mobileNodes[i];
       if (Math.hypot(mx - nd.x, my - nd.y) < Math.max(28, nd.r + 18)) return nd.venture;
+    }
+    if (currentVenture && Math.hypot(mx - mobileCx, my - mobileCy) < GLYPH_R + 18) return currentVenture;
+    return null;
+  }
+
+  function hitMobileSubnode(mx, my) {
+    if (mobileState !== 'open' || mobileSubnodeProgress < 0.75) return null;
+    for (var i = 0; i < mobileSubNodes.length; i++) {
+      var subnode = mobileSubNodes[i];
+      if (Math.hypot(mx - subnode.x, my - subnode.y) < Math.max(24, subnode.r + 15)) {
+        return subnode.pathway;
+      }
     }
     return null;
   }
 
   mCanvas.addEventListener('click', function(e) {
+    var pathway = hitMobileSubnode(e.clientX, e.clientY);
+    if (pathway) {
+      if (typeof window._constructFade === 'function') window._constructFade(pathway.url);
+      else window.location.href = pathway.url;
+      return;
+    }
     var hit = hitMobileNode(e.clientX, e.clientY);
     if (hit) {
-      if (typeof window._constructFade === 'function') {
-        window._constructFade(hit.url);
-      } else {
-        window.location.href = hit.url;
-      }
+      openMobileSubnodes(hit);
+      return;
+    }
+    if (activeMobileNode) {
+      collapseMobileSubnodes();
       return;
     }
     closeRing();
@@ -836,6 +1139,11 @@
       e.preventDefault();
       goHomeFromWordmark();
     }
+  });
+
+  mBack.addEventListener('click', function(e) {
+    e.stopPropagation();
+    collapseMobileSubnodes();
   });
 
   mChip.addEventListener('click', function(e) {
@@ -1052,6 +1360,13 @@
       venture.label = node.name || venture.label;
       venture.url = node.route || venture.url;
       if (node.color) venture.color = node.color;
+      venture.pathways = (node.pathways || []).slice(0, 9).map(function(pathway) {
+        return {
+          label: pathway.name,
+          url: pathway.route,
+          color: pathway.color || node.color || venture.color,
+        };
+      });
       return venture;
     }).filter(Boolean);
     if (!ordered.length) return;

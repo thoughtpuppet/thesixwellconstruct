@@ -6,19 +6,24 @@
   <meta name="description" content="A permanent public Archive dossier from the Six.Well Construct.">
   <meta name="theme-color" content="#0e0e0e">
   <title>Archive record · the six.well construct</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/transitions.css">
   <link rel="stylesheet" href="/css/archive-public.css">
   <link rel="stylesheet" href="/css/site-typography.css">
 </head>
 <body class="archive-public" data-venture="archive" data-archive-view="record">
   <a class="archive-skip-link" href="#archive-main">Skip to record</a>
-  <header class="archive-site-header">
-    <a class="archive-mark" href="/home/" aria-label="The Six.Well Construct home"><strong>The Six.Well</strong><span>Construct</span></a>
-    <nav class="archive-site-nav" aria-label="Archive navigation"><a href="/archive/" aria-current="page">Archive</a><a href="/archive/collections/">Collections</a><a href="/home/">Return to construct</a></nav>
-  </header>
-  <main class="archive-app" id="archive-main" tabindex="-1" data-archive-app>
-    <div class="archive-loading" role="status"><span class="archive-loading-mark" aria-hidden="true"></span><p>Opening this dossier…</p></div>
+  <main class="archive-app entrance-fade" id="archive-main" tabindex="-1">
+    <nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><a href="/archive/">Archive</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><span class="construct-breadcrumb-current" data-archive-breadcrumb-current aria-current="page">Record</span></nav>
+    <div data-archive-app><div class="archive-loading" role="status"><span class="archive-loading-mark" aria-hidden="true"></span><p>Opening this dossier…</p></div></div>
   </main>
-  <footer class="archive-site-footer"><p>© the six.well construct</p><nav aria-label="Footer"><a href="/archive/">Search archive</a><a href="/about/">About</a></nav></footer>
+  <footer class="archive-site-footer construct-wayfinding-footer"><p>© the six.well construct</p><nav aria-label="Footer"><a href="/archive/">Search archive</a><a href="/about/">About</a><a href="/home/">Return to construct</a></nav></footer>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
   <script src="/js/archive-public.js"></script>
 </body>
 </html>

@@ -192,6 +192,14 @@
   }
   .work-card:hover .work-badge,
   .work-card:focus-visible .work-badge { opacity:0.85; }
+  .work-project-badge {
+    position:absolute; z-index:1; top:var(--s3); right:var(--s3);
+    padding:6px 9px;
+    background:var(--venture-color); color:var(--text);
+    font-family:var(--sans); font-size:9px; font-weight:900;
+    letter-spacing:0.12em; line-height:1; text-transform:uppercase;
+    pointer-events:none;
+  }
 
   .work-meta {
     position:absolute; bottom:0; left:0; right:0;
@@ -385,7 +393,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
-<link rel="stylesheet" href="/css/portfolio-detail.css?v=5">
+<link rel="stylesheet" href="/css/portfolio-detail.css?v=6">
 </head>
 
 <body data-venture="tattooing">
@@ -443,9 +451,9 @@
       <p class="intro-desc" id="introDesc" data-copy-id="portfolio-intro-desc">tattoo work by Saiel Dauhn Solehman</p>
     </section>
 
-    <nav class="filters" id="filters" role="tablist">
-      <div class="filter-row" id="typeRow"></div>
-      <div class="filter-row" id="modeRow"></div>
+    <nav class="filters" id="filters" aria-label="Filter portfolio">
+      <div class="filter-row" id="typeRow" role="group" aria-label="Filter by style or project type"></div>
+      <div class="filter-row" id="modeRow" role="group" aria-label="Filter by collection"></div>
     </nav>
 
     <!-- TATTOO WORK -->
@@ -467,7 +475,7 @@
 
 
   <script src="/js/construct-connections.js?v=3"></script>
-  <script src="/js/portfolio-detail.js?v=6"></script>
+  <script src="/js/portfolio-detail.js?v=7"></script>
   <script>
   (() => {
     if (window.PortfolioDetailExperience) {

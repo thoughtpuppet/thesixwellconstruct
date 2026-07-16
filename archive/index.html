@@ -6,20 +6,25 @@
   <meta name="description" content="Search the living public record of works, process materials, people, events, brands, and histories across the Six.Well Construct.">
   <meta name="theme-color" content="#0e0e0e">
   <title>Living Archive · the six.well construct</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/transitions.css">
   <link rel="stylesheet" href="/css/archive-public.css">
   <link rel="stylesheet" href="/css/site-typography.css">
 </head>
 <body class="archive-public" data-venture="archive" data-archive-view="explorer">
   <a class="archive-skip-link" href="#archive-main">Skip to archive</a>
-  <header class="archive-site-header">
-    <a class="archive-mark" href="/home/" aria-label="The Six.Well Construct home"><strong>The Six.Well</strong><span>Construct</span></a>
-    <nav class="archive-site-nav" aria-label="Archive navigation"><a href="/archive/" aria-current="page">Archive</a><a href="/archive/collections/">Collections</a><a href="/home/">Return to construct</a></nav>
-  </header>
-  <main class="archive-app" id="archive-main" tabindex="-1" data-archive-app>
-    <div class="archive-loading" role="status"><span class="archive-loading-mark" aria-hidden="true"></span><p>Opening the public record…</p></div>
+  <main class="archive-app entrance-fade" id="archive-main" tabindex="-1">
+    <nav class="construct-breadcrumb" aria-label="Breadcrumb"><a href="/home/">Construct</a><span class="construct-breadcrumb-sep" aria-hidden="true">/</span><span class="construct-breadcrumb-current" aria-current="page">Archive</span></nav>
+    <div data-archive-app><div class="archive-loading" role="status"><span class="archive-loading-mark" aria-hidden="true"></span><p>Opening the public record…</p></div></div>
   </main>
-  <footer class="archive-site-footer"><p>© the six.well construct</p><nav aria-label="Footer"><a href="/about/">About</a><a href="/studio/">Studio</a></nav></footer>
+  <footer class="archive-site-footer construct-wayfinding-footer"><p>© the six.well construct</p><nav aria-label="Footer"><a href="/archive/">Archive</a><a href="/about/">About</a><a href="/studio/">Studio</a><a href="/home/">Return to construct</a></nav></footer>
   <noscript><p class="archive-app">JavaScript is needed to search the Archive. The active works remain available throughout the Construct.</p></noscript>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
   <script src="/js/archive-public.js"></script>
 </body>
 </html>

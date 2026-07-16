@@ -1,9 +1,9 @@
 .venture-page {
   --bg: var(--color-bg);
   --text: var(--color-body);
-  --text-muted: rgba(255, 231, 202, 0.66);
-  --text-dim: rgba(255, 231, 202, 0.38);
-  --text-ghost: rgba(255, 231, 202, 0.16);
+  --text-muted: var(--color-text-muted, rgba(255, 231, 202, 0.66));
+  --text-dim: var(--color-text-dim, rgba(255, 231, 202, 0.38));
+  --text-ghost: var(--color-text-ghost, rgba(255, 231, 202, 0.16));
   --ring-soft: rgba(109, 61, 21, 0.4);
   --ring-faint: rgba(109, 61, 21, 0.18);
   --surface: #111111;
