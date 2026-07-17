@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>Booking Preview Hub - the six.well construct</title>
+<title>Studio Preview Hub - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
@@ -66,7 +66,7 @@
 </head>
 <body>
 <header>
-  <h1>Booking Preview Hub</h1>
+  <h1>Studio Preview Hub</h1>
   <p>
     Internal reference only (not linked from the public site). Links marked
     with <code>?preview=1</code> open with dummy data - nothing is read from
@@ -78,6 +78,7 @@
     <code>docs/email-templates/</code>.
   </p>
   <div class="state-links" style="margin-top:14px;">
+    <a href="/studio/submissions/">Back to Studio</a>
     <a href="#" id="baseLocalBtn">Open Links Locally</a>
     <a href="#" id="baseLiveBtn">Open Links on Live Site</a>
   </div>
@@ -88,6 +89,38 @@
 </header>
 <main>
   <section>
+    <h2>Preview Directories</h2>
+    <p class="section-note">Use this as the central access point for client flows, events, managed public content, internal relationship views, and shared interface references.</p>
+    <div class="page-grid">
+      <div class="page-card">
+        <h3>Booking Flows</h3>
+        <p>The inquiry, private booking, confirmation, cancellation, and email states collected on this page.</p>
+        <div class="state-links"><a href="#bookingFlows">Jump to Booking Flows</a></div>
+      </div>
+      <div class="page-card">
+        <h3>Event Previews</h3>
+        <p>Event pages, confirmation states, RSVP paths, and event-specific internal previews.</p>
+        <div class="state-links"><a href="/studio/events-previews/">Open Event Previews</a></div>
+      </div>
+      <div class="page-card">
+        <h3>Managed Page Previews</h3>
+        <p>Legend, Flash, Build, Art, Archive, Homepage, and other managed public-data surfaces.</p>
+        <div class="state-links"><a href="/studio/managed-previews/">Open Managed Previews</a></div>
+      </div>
+      <div class="page-card">
+        <h3>Connections Preview</h3>
+        <p>Internal relationship and connection views used by the Studio console.</p>
+        <div class="state-links"><a href="/studio/connections-preview/">Open Connections Preview</a></div>
+      </div>
+      <div class="page-card">
+        <h3>UI Guide</h3>
+        <p>The shared page anatomy, controls, typography, spacing, and interface reference.</p>
+        <div class="state-links"><a href="/tools/ui-guide.html">Open UI Guide</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="bookingFlows">
     <h2>Private Booking Page</h2>
     <p class="section-note">
       This is the page clients land on from their private booking link

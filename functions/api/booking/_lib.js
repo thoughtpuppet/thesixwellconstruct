@@ -85,7 +85,7 @@ const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
   fallbackNote: "Based on the current design, placement, and level of detail, this is the session format I recommend. We’ll continue to adjust around your comfort, skin response, and the natural pace of the work.",
   requiredPolicy: "This project is best completed across multiple sessions so the work can progress at a comfortable, considered pace.",
   notAvailablePolicy: "This project is currently planned as one session. If anything changes while we’re working, we’ll pause and discuss the best way to continue.",
-  clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit, and we can confirm the details together.",
+  clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
   artistReviewPolicy: "I’m still reviewing the best session format for this project. I’ll confirm the plan before scheduling.",
   studioPlanLabel: "Use the recommended plan",
   studioPlanDescription: "Schedule using the pacing outlined above.",

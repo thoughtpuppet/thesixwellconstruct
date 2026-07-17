@@ -82,6 +82,15 @@ h6,
   line-height: 0.9 !important;
 }
 
+/* Hero titles carry the same heavy Inter weight established by the Tattoo and
+   Merch landing pages, regardless of which page shell renders them. */
+.hero-title,
+.page-title,
+.intro h1,
+main > h1 {
+  font-weight: 900 !important;
+}
+
 body[data-venture="tattooing"] main h1,
 body[data-venture="tattooing"] .intro h1,
 body[data-venture="tattooing"] .hero-title,

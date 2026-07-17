@@ -1762,6 +1762,10 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(privateBookingPage, /clientNameInput/);
   assert.match(privateBookingPage, /clientEmailInput/);
   assert.match(privateBookingPage, /clientPhoneInput/);
+  assert.match(privateBookingPage, /The composition is planned across more than one sitting\./);
+  assert.match(privateBookingPage, /data-phone-menu/);
+  assert.match(privateBookingPage, /href="tel:\$\{e164\}"/);
+  assert.match(privateBookingPage, /href="sms:\$\{e164\}"/);
   assert.match(wrangler, /\*\/5 \* \* \* \*/);
 });
 

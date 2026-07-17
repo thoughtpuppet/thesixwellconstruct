@@ -26,11 +26,11 @@
   .grain { position:fixed; inset:0; z-index:1; pointer-events:none; opacity:0.035; mix-blend-mode:overlay; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
   header { position:sticky; top:0; z-index:10; min-height:72px; display:flex; justify-content:flex-end; padding:24px 40px; }
   main { position:relative; z-index:2; max-width:1180px; margin:0 auto; padding:72px 40px 80px; }
-  .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--ring); padding:5px 12px; margin-bottom:34px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
+  .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--ring); padding:5px 12px; margin-bottom:48px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
   .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--ring); }
   .section-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--muted); }
   h1 { max-width:720px; margin:16px 0 24px; font-family:var(--sans); font-size:clamp(42px,7vw,88px); line-height:0.88; letter-spacing:0; color:var(--signal); }
-  .lead { max-width:600px; margin:0 0 48px; color:rgba(255,231,202,0.62); font-size:16px; line-height:1.8; }
+  .lead { max-width:600px; margin:0 0 24px; color:rgba(255,231,202,0.62); font-size:16px; line-height:1.8; }
   .status { max-width:720px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:22px 0; color:var(--muted); line-height:1.7; }
   .pending-checkout-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
   .pending-checkout-link,.pending-checkout-button { display:inline-flex; min-height:44px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; padding:0 16px; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
@@ -49,6 +49,13 @@
   .session-plan-panel { border:5px solid rgba(110,4,4,.45); padding:20px; display:grid; gap:16px; }
   .session-plan-title { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
   .session-plan-copy { margin:0; color:rgba(255,231,202,.62); font-size:13px; line-height:1.7; }
+  .session-phone-wrap { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .session-phone-trigger { border:0; background:transparent; color:var(--accent); padding:0; font-family:var(--sans); font-size:inherit; font-weight:900; letter-spacing:.02em; text-decoration:underline; text-underline-offset:3px; }
+  .session-phone-trigger:hover,.session-phone-trigger:focus-visible { color:#FFE7CA; outline:0; }
+  .session-phone-menu { display:inline-flex; align-items:center; gap:6px; }
+  .session-phone-menu.hidden { display:none; }
+  .session-phone-menu a { display:inline-flex; align-items:center; min-height:32px; padding:0 9px; border:5px solid var(--ring-faint); color:#FFE7CA; font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.12em; text-decoration:none; text-transform:uppercase; }
+  .session-phone-menu a:hover,.session-phone-menu a:focus-visible { border-color:var(--accent); color:var(--accent); outline:0; }
   .session-plan-options { display:grid; gap:8px; }
   .session-plan-ack { display:grid; grid-template-columns:20px 1fr; gap:10px; align-items:start; color:var(--muted); font-size:12px; line-height:1.6; }
   .session-plan-ack input { width:18px; height:18px; margin-top:2px; accent-color:var(--signal); }
@@ -125,9 +132,9 @@
 <div class="grain"></div>
 <header></header>
 <main>
-  <div class="badge"><span class="badge-dot"></span>Private Booking</div>
   <h1 id="bookingTitle" data-copy-id="booking-title">BOOKING.</h1>
   <p class="lead" id="bookingLead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
+  <div class="badge"><span class="badge-dot"></span>Private Booking</div>
   <p class="local-edit-note" data-live-edit-ignore="true">Preview editing is local only. Use the toolbar at bottom right, then export the changes for source-file updates.</p>
 
   <section class="section">
@@ -267,7 +274,7 @@
     fallbackNote: "Based on the current design, placement, and level of detail, this is the session format I recommend. We’ll continue to adjust around your comfort, skin response, and the natural pace of the work.",
     requiredPolicy: "This project is best completed across multiple sessions so the work can progress at a comfortable, considered pace.",
     notAvailablePolicy: "This project is currently planned as one session. If anything changes while we’re working, we’ll pause and discuss the best way to continue.",
-    clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit, and we can confirm the details together.",
+    clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
     artistReviewPolicy: "I’m still reviewing the best session format for this project. I’ll confirm the plan before scheduling.",
     studioPlanLabel: "Use the recommended plan",
     studioPlanDescription: "Schedule using the pacing outlined above.",
@@ -312,7 +319,7 @@
         estimatedSessionsMax: 3,
         estimatedTotalMinutesMin: 420,
         estimatedTotalMinutesMax: 600,
-        artistNote: "The composition is planned across more than one sitting. Choose the pacing that best supports your body and the studio process.",
+        artistNote: "The composition is planned across more than one sitting.",
         clientPreference: "",
         clientAcknowledged: false,
         clientSelectedAt: "",
@@ -388,6 +395,24 @@
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({
       "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;",
     }[char]));
+  }
+
+  function sessionCopyHtml(value) {
+    const source = String(value ?? "");
+    const phonePattern = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g;
+    let html = "";
+    let cursor = 0;
+    for (const match of source.matchAll(phonePattern)) {
+      const display = match[0];
+      const digits = display.replace(/\D/g, "");
+      const national = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+      if (national.length !== 10) continue;
+      html += escapeHtml(source.slice(cursor, match.index));
+      const e164 = `+1${national}`;
+      html += `<span class="session-phone-wrap"><button class="session-phone-trigger" type="button" data-phone-menu aria-expanded="false">${escapeHtml(display)}</button><span class="session-phone-menu hidden"><a href="tel:${e164}">Call</a><a href="sms:${e164}">Text</a></span></span>`;
+      cursor = Number(match.index) + display.length;
+    }
+    return html + escapeHtml(source.slice(cursor));
   }
 
   function formatDate(value) {
@@ -678,8 +703,8 @@
     );
     sessionPlanPanel.innerHTML = `
       <h2 class="session-plan-title">${escapeHtml(category)}${estimate ? ` · ${escapeHtml(estimate)}` : ""}</h2>
-      <p class="session-plan-copy">${escapeHtml(plan.artistNote || copy.fallbackNote)}</p>
-      <p class="session-plan-copy">${escapeHtml(policyCopy)}</p>
+      <p class="session-plan-copy">${sessionCopyHtml(plan.artistNote || copy.fallbackNote)}</p>
+      <p class="session-plan-copy">${sessionCopyHtml(policyCopy)}</p>
       ${planIsReady(plan) ? `<div class="status">${escapeHtml(savedMessage)}</div>` : ""}
       <div class="session-plan-options">${choices.map(([value,title,meta]) => `<button class="choice ${selectedPlanPreference === value ? "active" : ""}" type="button" data-plan-preference="${value}"><span><span class="choice-title">${escapeHtml(title)}</span><span class="choice-meta">${escapeHtml(meta)}</span></span></button>`).join("")}</div>
       <label class="session-plan-ack"><input id="sessionPlanAck" type="checkbox" ${planAcknowledged ? "checked" : ""}><span>${escapeHtml(copy.acknowledgement)}</span></label>
@@ -793,6 +818,14 @@
   }
 
   sessionPlanSection.addEventListener("click", async (event) => {
+    const phoneButton = event.target.closest("[data-phone-menu]");
+    if (phoneButton) {
+      const menu = phoneButton.nextElementSibling;
+      const isOpen = !menu?.classList.contains("hidden");
+      menu?.classList.toggle("hidden", isOpen);
+      phoneButton.setAttribute("aria-expanded", String(!isOpen));
+      return;
+    }
     const choice = event.target.closest("[data-plan-preference]");
     if (choice) {
       selectedPlanPreference = choice.dataset.planPreference || "";
