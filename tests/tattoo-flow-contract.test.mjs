@@ -15,6 +15,7 @@ import {
   handleAdminCreateDirectBookingInvite,
   handleAdminRescheduleAppointment,
   handleAdminResolveTattooLifecycleReview,
+  handleAdminTattooSettings,
   handleAdminTattooSessionPlan,
   handleCancelAppointment,
   handleBookingContext,
@@ -370,6 +371,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("submissions").has("tattoo_stage"));
   assert.ok(columns("submissions").has("idempotency_key"));
   assert.ok(columns("booking_tokens").has("purpose"));
+  assert.ok(columns("tattoo_settings").has("session_estimate_copy_json"));
   for (const name of [
     "purpose",
     "hold_expires_at",
@@ -532,11 +534,31 @@ test("Studio can create a direct private booking invite without a prior inquiry"
     SUBMISSIONS_ADMIN_TOKEN: adminToken,
     PUBLIC_SITE_URL: "https://example.test",
   };
+  const templateResponse = await handleAdminTattooSettings(adminJsonRequest(
+    "/api/admin/tattoo/settings",
+    {
+      settings: {
+        sessionEstimateCopy: {
+          sectionHeading: "Plan Your Tattoo Session",
+          confirmButtonLabel: "Accept This Estimate",
+        },
+      },
+    },
+    adminToken,
+    "PATCH",
+  ), env);
+  assert.equal(templateResponse.status, 200);
+  const storedTemplate = JSON.parse(database.prepare(
+    "SELECT session_estimate_copy_json FROM tattoo_settings WHERE id = 'default'"
+  ).get().session_estimate_copy_json);
+  assert.equal(storedTemplate.sectionHeading, "Plan Your Tattoo Session");
+  assert.equal(storedTemplate.confirmButtonLabel, "Accept This Estimate");
 
   const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
     "/api/admin/booking/direct-invites",
     {
       projectNote: "Approved through an offline conversation.",
+      clientEstimateNote: "Plan for one half-day session with room for natural breaks.",
       purpose: "tattoo",
       bookingTypeId: "tattoo_half",
     },
@@ -569,6 +591,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(plan.estimated_total_minutes_min, 180);
   assert.equal(plan.estimated_total_minutes_max, 180);
   assert.equal(plan.client_acknowledged, 0);
+  assert.equal(plan.artist_note, "Plan for one half-day session with room for natural breaks.");
   assert.doesNotMatch(plan.artist_note, /offline conversation/i);
 
   const rawToken = new URL(payload.token.bookingUrl).searchParams.get("token");
@@ -581,6 +604,9 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(contextPayload.requiresClientDetails, true);
   assert.equal(contextPayload.client.email, "");
   assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_half"]);
+  assert.equal(contextPayload.sessionPlan.artistNote, "Plan for one half-day session with room for natural breaks.");
+  assert.equal(contextPayload.sessionEstimateCopy.sectionHeading, "Plan Your Tattoo Session");
+  assert.equal(contextPayload.sessionEstimateCopy.confirmButtonLabel, "Accept This Estimate");
   assert.doesNotMatch(JSON.stringify(contextPayload), /offline conversation/i);
 
   const acknowledged = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {

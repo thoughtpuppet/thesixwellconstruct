@@ -76,6 +76,32 @@ const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_STUDIO_CALENDAR_LOCATION = "364 Nelson Street SW, Atlanta, GA 30313";
 const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
 const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";
+const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
+  sectionHeading: "Your Session Estimate",
+  oneSessionLabel: "One session",
+  multipleSessionsLabel: "Multiple sessions",
+  artistReviewLabel: "Artist review",
+  fallbackNote: "Your estimate is based on the approved design, placement, and studio process.",
+  requiredPolicy: "This tattoo must be completed across multiple sessions.",
+  notAvailablePolicy: "This tattoo must be completed in one session; splitting is not available.",
+  clientChoicePolicy: "The studio has provided its recommendation, and you may choose how you would prefer to pace the work.",
+  artistReviewPolicy: "The artist is still reviewing the final session structure.",
+  studioPlanLabel: "Follow the studio recommendation",
+  studioPlanDescription: "Use the pacing shown in the estimate.",
+  oneLongerSessionLabel: "Request one longer session",
+  oneLongerSessionDescription: "The studio will confirm whether the work and your appointment window allow it.",
+  multipleShorterSessionsLabel: "Request multiple shorter sessions",
+  multipleShorterSessionsDescription: "Complete the work across shorter appointments.",
+  discussWithArtistLabel: "Discuss it with the artist",
+  discussWithArtistDescription: "Hold the scheduling decision until you speak with the studio.",
+  acceptRequiredLabel: "Accept the required session structure",
+  acceptRequiredDescription: "This structure is part of the approved process and is not optional.",
+  continuePlanLabel: "Continue with the studio plan",
+  continuePlanDescription: "The studio will confirm the final pacing.",
+  savedMessage: "Saved: {{preference}}. You may update this choice before booking.",
+  acknowledgement: "I have reviewed the estimated time and session structure. I understand the final count can change with placement, detail, skin response, breaks, and comfort during the appointment.",
+  confirmButtonLabel: "Confirm Session Plan",
+});
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -433,6 +459,24 @@ function zonedLocalToUtcIso(timezone, year, month, day, hour, minute) {
 
 function addMinutes(iso, minutes) {
   return new Date(new Date(iso).getTime() + minutes * 60 * 1000).toISOString();
+}
+
+function normalizeSessionEstimateCopy(value) {
+  const parsed = typeof value === "string" ? parseJsonField(value, {}) : value;
+  const source = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  return Object.fromEntries(
+    Object.entries(DEFAULT_SESSION_ESTIMATE_COPY).map(([key, fallback]) => [
+      key,
+      asString(source[key]) || fallback,
+    ]),
+  );
+}
+
+async function loadSessionEstimateCopy(db) {
+  const row = await db.prepare(
+    "SELECT session_estimate_copy_json FROM tattoo_settings WHERE id = 'default'"
+  ).first();
+  return normalizeSessionEstimateCopy(row?.session_estimate_copy_json);
 }
 
 async function bookingDayGuardForWindow(db, windowId) {
@@ -999,6 +1043,9 @@ export async function handleBookingContext(request, env) {
     const sessionPlan = context.purpose === "tattoo"
       ? await loadTattooSessionPlan(db, context.token.submission_id)
       : null;
+    const sessionEstimateCopy = context.purpose === "tattoo"
+      ? await loadSessionEstimateCopy(db)
+      : null;
     const pendingRow = await db.prepare(
       `SELECT * FROM appointments
        WHERE booking_token_id = ?
@@ -1032,6 +1079,7 @@ export async function handleBookingContext(request, env) {
       purpose: context.purpose,
       expiresAt: context.token.expires_at || "",
       sessionPlan: normalizeTattooSessionPlan(sessionPlan),
+      sessionEstimateCopy,
       bookingTypes,
       availabilityWindows: windows,
       pendingCheckout: pendingAppointment ? {
@@ -5144,11 +5192,15 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
   if (!body) return errorResponse("Expected JSON body.", 400);
 
   const projectNote = asString(body.projectNote);
+  const clientEstimateNote = asString(body.clientEstimateNote);
   const purpose = asString(body.purpose) || "tattoo";
   const bookingTypeId = asString(body.bookingTypeId);
   const allowed = bookingTypeId ? [bookingTypeId] : [];
   if (projectNote.length > 2000) {
     return errorResponse("Project note must be 2,000 characters or fewer.", 400);
+  }
+  if (clientEstimateNote.length > 5000) {
+    return errorResponse("Session estimate wording must be 5,000 characters or fewer.", 400);
   }
   if (!BOOKING_TOKEN_PURPOSES.has(purpose)) {
     return errorResponse("Booking purpose must be consultation or tattoo.", 400);
@@ -5176,6 +5228,9 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
     if (typeRows.length !== allowed.length) {
       return errorResponse("One or more selected booking types are unavailable.", 409);
     }
+    const sessionEstimateCopy = purpose === "tattoo"
+      ? await loadSessionEstimateCopy(db)
+      : DEFAULT_SESSION_ESTIMATE_COPY;
 
     const now = new Date().toISOString();
     const payload = {
@@ -5249,7 +5304,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
           minimumMinutes,
           maximumMinutes,
           "not_available",
-          "Your session type has been selected by the studio.",
+          clientEstimateNote || sessionEstimateCopy.fallbackNote,
           "one_session",
           0,
           now,
@@ -5450,6 +5505,7 @@ function normalizeTattooSettingsRow(row) {
     leadTimeDays: Number(row.lead_time_days || 0),
     walkInGuidance: row.walk_in_guidance || "",
     supportEmail: row.support_email || DEFAULT_SUPPORT_EMAIL,
+    sessionEstimateCopy: normalizeSessionEstimateCopy(row.session_estimate_copy_json),
     updatedAt: row.updated_at,
   };
 }
@@ -5542,20 +5598,35 @@ export async function handleAdminTattooSettings(request, env) {
       const leadTimeDays = asPositiveInteger(body.settings.leadTimeDays, Number(current?.lead_time_days ?? 14));
       const walkInGuidance = asString(body.settings.walkInGuidance ?? current?.walk_in_guidance).slice(0, 2000);
       const supportEmail = asString(body.settings.supportEmail ?? current?.support_email).toLowerCase();
+      const sessionEstimateCopy = normalizeSessionEstimateCopy(
+        body.settings.sessionEstimateCopy ?? current?.session_estimate_copy_json
+      );
+      const sessionEstimateCopyJson = JSON.stringify(Object.fromEntries(
+        Object.entries(sessionEstimateCopy).map(([key, value]) => [key, value.slice(0, 2000)])
+      ));
       if (!supportEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supportEmail)) {
         return errorResponse("A valid tattoo support email is required.", 400);
       }
       statements.push(db.prepare(
         `INSERT INTO tattoo_settings (
-          id, review_time_message, lead_time_days, walk_in_guidance, support_email, updated_at
-        ) VALUES ('default', ?, ?, ?, ?, ?)
+          id, review_time_message, lead_time_days, walk_in_guidance, support_email,
+          session_estimate_copy_json, updated_at
+        ) VALUES ('default', ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           review_time_message = excluded.review_time_message,
           lead_time_days = excluded.lead_time_days,
           walk_in_guidance = excluded.walk_in_guidance,
           support_email = excluded.support_email,
+          session_estimate_copy_json = excluded.session_estimate_copy_json,
           updated_at = excluded.updated_at`
-      ).bind(reviewTimeMessage, leadTimeDays, walkInGuidance, supportEmail, now));
+      ).bind(
+        reviewTimeMessage,
+        leadTimeDays,
+        walkInGuidance,
+        supportEmail,
+        sessionEstimateCopyJson,
+        now,
+      ));
     }
 
     if (Array.isArray(body.rateCards)) {

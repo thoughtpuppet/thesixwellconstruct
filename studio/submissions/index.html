@@ -591,6 +591,32 @@
   let portfolioObjectUrls = [];
   let portfolioOptions = { styles: [], collections: [] };
   let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
+  const sessionEstimateCopyFields = [
+    ["sectionHeading", "Section heading", "input"],
+    ["oneSessionLabel", "One-session heading", "input"],
+    ["multipleSessionsLabel", "Multiple-sessions heading", "input"],
+    ["artistReviewLabel", "Artist-review heading", "input"],
+    ["fallbackNote", "Default client-facing estimate note", "textarea"],
+    ["requiredPolicy", "Required multiple-session policy", "textarea"],
+    ["notAvailablePolicy", "One-session-only policy", "textarea"],
+    ["clientChoicePolicy", "Client-choice policy", "textarea"],
+    ["artistReviewPolicy", "Artist-review policy", "textarea"],
+    ["studioPlanLabel", "Studio recommendation option", "input"],
+    ["studioPlanDescription", "Studio recommendation description", "textarea"],
+    ["oneLongerSessionLabel", "Longer-session option", "input"],
+    ["oneLongerSessionDescription", "Longer-session description", "textarea"],
+    ["multipleShorterSessionsLabel", "Shorter-sessions option", "input"],
+    ["multipleShorterSessionsDescription", "Shorter-sessions description", "textarea"],
+    ["discussWithArtistLabel", "Discuss-with-artist option", "input"],
+    ["discussWithArtistDescription", "Discuss-with-artist description", "textarea"],
+    ["acceptRequiredLabel", "Required-structure option", "input"],
+    ["acceptRequiredDescription", "Required-structure description", "textarea"],
+    ["continuePlanLabel", "Continue-plan option", "input"],
+    ["continuePlanDescription", "Continue-plan description", "textarea"],
+    ["savedMessage", "Saved-response message", "input"],
+    ["acknowledgement", "Client acknowledgment", "textarea"],
+    ["confirmButtonLabel", "Confirmation button label", "input"],
+  ];
 
   function pad2(n) { return String(n).padStart(2, "0"); }
 
@@ -2233,6 +2259,19 @@
     </div>`;
   }
 
+  function sessionEstimateCopyEditor(copy = {}) {
+    return sessionEstimateCopyFields.map(([key, label, kind]) => {
+      const value = escapeHtml(copy[key] || "");
+      const control = kind === "textarea"
+        ? `<textarea data-session-estimate-copy="${escapeHtml(key)}" maxlength="2000" rows="3">${value}</textarea>`
+        : `<input data-session-estimate-copy="${escapeHtml(key)}" maxlength="500" value="${value}">`;
+      const hint = key === "savedMessage"
+        ? '<span class="contact">Use {{preference}} where the saved choice should appear.</span>'
+        : "";
+      return `<label>${escapeHtml(label)}${control}${hint}</label>`;
+    }).join("");
+  }
+
   async function renderTattooSettings() {
     layoutEl.classList.add("single");
     listPane.classList.add("hidden");
@@ -2263,6 +2302,13 @@
           <p class="contact">Closed calls stay visible for context but cannot accept applications.</p>
           <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
         </section>
+        <section class="tattoo-settings-card">
+          <h3>Session Estimate Copy</h3>
+          <p class="contact">Global wording for every private tattoo booking link. A client-specific estimate note can still override the default note without changing this template.</p>
+          <div class="session-plan-grid">
+            ${sessionEstimateCopyEditor(settingValue(settings, "sessionEstimateCopy", "session_estimate_copy", {}))}
+          </div>
+        </section>
         <div class="booking-actions"><button class="button" type="submit">Save Tattoo Settings</button></div>
         <div class="contact" id="tattooSettingsStatus" role="status" aria-live="polite"></div>
       </form>
@@ -2270,10 +2316,17 @@
     enhanceControls(detailEl);
   }
 
-  function renderDirectInviteManager() {
+  async function renderDirectInviteManager() {
     layoutEl.classList.add("single");
     listPane.classList.add("hidden");
     toolbarEl.innerHTML = "";
+    await loadTattooSettings();
+    const estimateCopy = settingValue(
+      tattooSettings.settings,
+      "sessionEstimateCopy",
+      "session_estimate_copy",
+      {},
+    );
     detailEl.innerHTML = `
       <section class="direct-invite-manager" id="directInviteManager">
         <div class="detail-head">
@@ -2305,6 +2358,10 @@
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Session</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Session</span></label>
             </div>
+            <label class="field">Session estimate wording <span class="contact">(client-facing)</span>
+              <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(estimateCopy.fallbackNote || "")}</textarea>
+              <span class="contact">This appears inside the client’s Session Estimate section. You can edit it again from the Studio record.</span>
+            </label>
           </fieldset>
           <fieldset class="direct-invite-types hidden" data-direct-invite-types="consultation">
             <legend>Session type</legend>
@@ -2351,6 +2408,7 @@
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             projectNote: form.elements.projectNote.value.trim(),
+            clientEstimateNote: form.elements.clientEstimateNote.value.trim(),
             purpose,
             bookingTypeId,
             expiresAt: expiresAt || undefined,
@@ -2425,7 +2483,7 @@
     }
 
     if (activeTab === "tattoo" && subView === "direct-invite") {
-      renderDirectInviteManager();
+      renderDirectInviteManager().catch((error) => setStatus(error.message));
       return;
     }
 
@@ -3168,7 +3226,7 @@ ${meetingLines}
     return url;
   }
 
-  function clientPreviewContext(submission, payload, sessionPlan = null) {
+  function clientPreviewContext(submission, payload, sessionPlan = null, sessionEstimateCopy = null) {
     const clientName = submission.contactName || payloadValue(submission, "name") || "Preview Client";
     return {
       createdAt: Date.now(),
@@ -3187,6 +3245,7 @@ ${meetingLines}
       },
       settings: payload.settings || null,
       sessionPlan,
+      sessionEstimateCopy,
       bookingTypes: payload.bookingTypes || [],
       availabilityWindows: payload.availabilityWindows || [],
     };
@@ -4936,11 +4995,17 @@ ${meetingLines}
       const submission = submissions.find((item) => item.id === activeId);
       if (!submission) return;
       setStatus("Building preview");
-      const [payload, planPayload] = await Promise.all([
+      const [payload, planPayload, settingsPayload] = await Promise.all([
         api("/api/admin/booking/availability-preview"),
         TATTOO_PROJECT_TYPES.has(submission.type) ? api(`/api/admin/booking/session-plans/${encodeURIComponent(activeId)}`) : Promise.resolve({ sessionPlan:null }),
+        TATTOO_PROJECT_TYPES.has(submission.type) ? api("/api/admin/tattoo/settings") : Promise.resolve({ settings:null }),
       ]);
-      localStorage.setItem(bookingPreviewKey, JSON.stringify(clientPreviewContext(submission, payload, planPayload.sessionPlan || null)));
+      localStorage.setItem(bookingPreviewKey, JSON.stringify(clientPreviewContext(
+        submission,
+        payload,
+        planPayload.sessionPlan || null,
+        settingsPayload.settings?.sessionEstimateCopy || null,
+      )));
       window.open(previewUrl().toString(), "_blank", "noopener,noreferrer");
       setStatus("Real-data preview opened");
       return;
@@ -5229,6 +5294,12 @@ ${meetingLines}
         summary: row.querySelector("[data-special-summary]")?.value.trim() || "",
         sortOrder: index,
       }));
+      const sessionEstimateCopy = Object.fromEntries(
+        [...tattooSettingsForm.querySelectorAll("[data-session-estimate-copy]")].map((field) => [
+          field.dataset.sessionEstimateCopy,
+          field.value.trim(),
+        ]),
+      );
       setStatus("Saving tattoo settings");
       await api("/api/admin/tattoo/settings", {
         method: "PATCH",
@@ -5239,6 +5310,7 @@ ${meetingLines}
             leadTimeDays: Number(values.leadTimeDays || 0),
             supportEmail: String(values.supportEmail || "").trim(),
             walkInGuidance: String(values.walkInGuidance || "").trim(),
+            sessionEstimateCopy,
           },
           rateCards,
           specialProjects,
