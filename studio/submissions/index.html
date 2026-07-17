@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/studio/construct-manager.css?v=multi-styles">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
+<link rel="stylesheet" href="/studio/people-manager.css?v=1">
 <style>
   :root {
     color-scheme: dark;
@@ -205,6 +206,15 @@
   .session-plan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
   .session-plan-grid .wide { grid-column:1 / -1; }
   .session-plan-client-state { color:var(--dim); font-family:var(--sans); font-size:11px; line-height:1.6; }
+  .direct-invite-manager { display:grid; gap:22px; }
+  .direct-invite-form { display:grid; gap:18px; max-width:920px; }
+  .direct-invite-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .direct-invite-form .wide { grid-column:1 / -1; }
+  .direct-invite-types { border:5px solid var(--ring-faint); padding:16px; display:grid; gap:12px; }
+  .direct-invite-type-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .direct-invite-result { border:5px solid rgba(85,186,90,0.52); padding:16px; display:grid; gap:12px; max-width:920px; }
+  .direct-invite-result input { width:100%; }
+  .direct-invite-result-heading { color:#55BA5A; font-family:var(--sans); font-size:11px; font-weight:900; letter-spacing:0.16em; text-transform:uppercase; }
   .availability-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:22px; }
   .availability-list { display:grid; gap:10px; }
   .availability-item { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:8px; }
@@ -416,6 +426,9 @@
     .portfolio-angle-head { align-items:stretch; flex-direction:column; }
     .portfolio-angle-upload { align-items:stretch; flex-direction:column; }
     .portfolio-angle-upload > label:first-child { min-width:0; }
+    .direct-invite-form-grid,
+    .direct-invite-type-grid { grid-template-columns:1fr; }
+    .direct-invite-form .wide { grid-column:auto; }
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
     .tattoo-settings-row.special { grid-template-columns:1fr; }
@@ -446,6 +459,7 @@
   </header>
   <nav class="tabs" id="tabs" aria-label="Console sections">
     <button class="tab is-active" type="button" data-tab="home">Home</button>
+    <button class="tab" type="button" data-tab="people">People</button>
     <button class="tab" type="button" data-tab="tattoo">Tattoo Booking</button>
     <button class="tab" type="button" data-tab="studio">Studio Booking</button>
     <button class="tab" type="button" data-tab="art">Art Inquiries</button>
@@ -555,6 +569,7 @@
     ["tattoo_full", "Full Session"],
   ];
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
+  const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
   let token = localStorage.getItem(tokenKey) || "";
   let submissions = [];
   let appointments = [];
@@ -858,6 +873,7 @@
     root.querySelectorAll('input[type="datetime-local"]:not([data-enhanced])').forEach(enhanceDateTimeInput);
     root.querySelectorAll('input[type="time"]:not([data-enhanced])').forEach(enhanceTimeInput);
   }
+  window.StudioEnhanceControls = enhanceControls;
 
   function nextActionBadge(submission) {
     const s = submission.status;
@@ -1001,6 +1017,18 @@
         <div class="field" style="margin-top:16px;"><label>Project Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+      `);
+    }
+
+    if (p("direct_booking_invite") === "yes") {
+      const allowedTypes = p("allowed_booking_types");
+      return card("Direct Booking Invite", `
+        <div class="grid">
+          ${field("Booking Purpose", p("booking_purpose"))}
+          ${field("Allowed Sessions", Array.isArray(allowedTypes) ? allowedTypes.map(titleize).join(", ") : allowedTypes)}
+          ${field("Source", submission.sourcePath || "")}
+        </div>
+        <div class="field" style="margin-top:16px;"><label>Project Note</label><div class="value full">${escapeHtml(p("message"))}</div></div>
       `);
     }
 
@@ -1232,9 +1260,12 @@
 
   function buildSubnav() {
     let html = "";
-    if (activeTab === "tattoo") {
+    if (activeTab === "people") {
+      html = [["directory","Directory"],["attention","Needs Attention"],["integrations","Integrations & Imports"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+    } else if (activeTab === "tattoo") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
+        <button class="subnav-btn ${subView === "direct-invite" ? "is-active" : ""}" type="button" data-subview="direct-invite">Direct Invite</button>
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>
         <button class="subnav-btn ${subView === "portfolio" ? "is-active" : ""}" type="button" data-subview="portfolio">Portfolio</button>
         <button class="subnav-btn ${subView === "portfolio-settings" ? "is-active" : ""}" type="button" data-subview="portfolio-settings">Portfolio Settings</button>
@@ -2239,7 +2270,149 @@
     enhanceControls(detailEl);
   }
 
+  function renderDirectInviteManager() {
+    layoutEl.classList.add("single");
+    listPane.classList.add("hidden");
+    toolbarEl.innerHTML = "";
+    detailEl.innerHTML = `
+      <section class="direct-invite-manager" id="directInviteManager">
+        <div class="detail-head">
+          <span class="pill">Tattoo Booking / Private Access</span>
+          <h2>Direct Invite</h2>
+          <p class="contact">For clients who reached the booking stage outside the public inquiry flow. This creates the minimum approved Studio record and a private, expiring booking link.</p>
+        </div>
+        <form class="direct-invite-form" data-direct-invite-form>
+          <div class="direct-invite-form-grid">
+            <label class="field">Client name
+              <input name="clientName" maxlength="160" autocomplete="name" required>
+            </label>
+            <label class="field">Client email
+              <input name="clientEmail" type="email" maxlength="254" autocomplete="email" required>
+            </label>
+            <label class="field">Client phone <span class="contact">(optional)</span>
+              <input name="clientPhone" maxlength="80" autocomplete="tel">
+            </label>
+            <label class="field">Link purpose
+              <select name="purpose" data-direct-invite-purpose>
+                <option value="tattoo">Tattoo appointment</option>
+                <option value="consultation">Prerequisite consultation</option>
+              </select>
+            </label>
+            <label class="field wide">Project note <span class="contact">(optional, internal and included in the Studio record)</span>
+              <textarea name="projectNote" maxlength="2000" rows="5" placeholder="Enough context to recognize this client and project later."></textarea>
+            </label>
+          </div>
+          <fieldset class="direct-invite-types" data-direct-invite-types="tattoo">
+            <legend>Session types this client may choose</legend>
+            <div class="direct-invite-type-grid">
+              <label class="check"><input type="checkbox" name="allowedBookingTypes" value="tattoo_quarter"><span>Quarter Session</span></label>
+              <label class="check"><input type="checkbox" name="allowedBookingTypes" value="tattoo_half"><span>Half Session</span></label>
+              <label class="check"><input type="checkbox" name="allowedBookingTypes" value="tattoo_full"><span>Full Session</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="direct-invite-types hidden" data-direct-invite-types="consultation">
+            <legend>Consultation access</legend>
+            <label class="check"><input type="checkbox" name="allowedBookingTypes" value="consult_in_person" checked><span>In-Person Consultation</span></label>
+          </fieldset>
+          <div class="direct-invite-form-grid">
+            <label class="field">Expires at <span class="contact">(optional)</span>
+              <input name="expiresAt" type="datetime-local">
+              <span class="contact">Blank uses the secure 30-day default.</span>
+            </label>
+            <label class="check" style="align-self:end;margin-bottom:10px;">
+              <input name="sendEmail" type="checkbox">
+              <span>Also email the private link to this client now</span>
+            </label>
+          </div>
+          <div class="booking-actions">
+            <button class="button" type="submit">Generate &amp; Copy Link</button>
+          </div>
+          <div class="contact" data-direct-invite-status role="status" aria-live="polite"></div>
+        </form>
+        <div class="direct-invite-result hidden" data-direct-invite-result></div>
+      </section>`;
+    enhanceControls(detailEl);
+
+    const form = detailEl.querySelector("[data-direct-invite-form]");
+    const status = form.querySelector("[data-direct-invite-status]");
+    const result = detailEl.querySelector("[data-direct-invite-result]");
+    const purposeInput = form.elements.purpose;
+    const syncPurpose = () => {
+      const purpose = purposeInput.value;
+      form.querySelectorAll("[data-direct-invite-types]").forEach((group) => {
+        group.classList.toggle("hidden", group.dataset.directInviteTypes !== purpose);
+      });
+    };
+    purposeInput.addEventListener("change", syncPurpose);
+    syncPurpose();
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      status.textContent = "Creating private booking access...";
+      setStatus("Generating direct invite");
+      result.classList.add("hidden");
+      try {
+        const purpose = purposeInput.value;
+        const allowedBookingTypes = [...form.querySelectorAll(
+          `[data-direct-invite-types="${purpose}"] input[name="allowedBookingTypes"]:checked`
+        )].map((input) => input.value);
+        if (!allowedBookingTypes.length) throw new Error("Choose at least one session type.");
+        const expiresAt = localDateTimeToIso(form.elements.expiresAt.value);
+        const payload = await api("/api/admin/booking/direct-invites", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            clientName: form.elements.clientName.value.trim(),
+            clientEmail: form.elements.clientEmail.value.trim(),
+            clientPhone: form.elements.clientPhone.value.trim(),
+            projectNote: form.elements.projectNote.value.trim(),
+            purpose,
+            allowedBookingTypes,
+            expiresAt: expiresAt || undefined,
+            sendEmail: form.elements.sendEmail.checked,
+          }),
+        });
+        const bookingUrl = payload.token?.bookingUrl || absoluteUrl(payload.token?.path || "");
+        await navigator.clipboard?.writeText(bookingUrl).catch(() => {});
+        const emailState = payload.delivery?.ok
+          ? "The link was copied and emailed to the client."
+          : payload.delivery?.reason === "not_requested"
+            ? "The link was copied. Email was not sent."
+            : "The link was copied, but email delivery needs attention.";
+        result.innerHTML = `
+          <div class="direct-invite-result-heading">Private link ready</div>
+          <input value="${escapeHtml(bookingUrl)}" readonly aria-label="Generated private booking URL">
+          <p class="contact">${escapeHtml(emailState)} It expires ${escapeHtml(formatDate(payload.token?.expiresAt))}.</p>
+          <div class="booking-actions">
+            <button class="button" type="button" data-direct-invite-copy>Copy Again</button>
+            <a class="button" href="${escapeHtml(bookingUrl)}" target="_blank" rel="noopener">Preview Client Flow</a>
+            <button class="button" type="button" data-direct-invite-record="${escapeHtml(payload.directInvite?.submissionId || "")}">View Studio Record</button>
+          </div>`;
+        result.classList.remove("hidden");
+        result.querySelector("[data-direct-invite-copy]")?.addEventListener("click", async () => {
+          await navigator.clipboard?.writeText(bookingUrl).catch(() => {});
+          status.textContent = "Link copied.";
+        });
+        result.querySelector("[data-direct-invite-record]")?.addEventListener("click", async (clickEvent) => {
+          const id = clickEvent.currentTarget.dataset.directInviteRecord;
+          await loadSubmissions();
+          goToSubmission(id);
+        });
+        status.textContent = emailState;
+        setStatus("Direct invite ready");
+      } catch (error) {
+        status.textContent = error.message;
+        setStatus(error.message);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  }
+
   function renderActiveTab() {
+    if (activeTab !== "people") window.PeopleManager?.unmount?.();
     tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
     buildSubnav();
 
@@ -2248,6 +2421,25 @@
       listPane.classList.add("hidden");
       toolbarEl.innerHTML = "";
       renderHome();
+      return;
+    }
+
+    if (activeTab === "people") {
+      if (!window.PeopleManager) {
+        layoutEl.classList.add("single");
+        listPane.classList.add("hidden");
+        toolbarEl.innerHTML = "";
+        detailEl.innerHTML = '<p class="empty">People manager could not be loaded.</p>';
+        setStatus("People unavailable");
+        return;
+      }
+      listPane.classList.remove("hidden");
+      window.PeopleManager.render(activeTab, subView).catch((error) => setStatus(error.message));
+      return;
+    }
+
+    if (activeTab === "tattoo" && subView === "direct-invite") {
+      renderDirectInviteManager();
       return;
     }
 
@@ -2312,7 +2504,7 @@
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
-    subView = tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
+    subView = tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
@@ -5456,7 +5648,13 @@ ${meetingLines}
     setStatus("Locked");
   });
 
-  if (token) {
+  if (directInvitePreview) {
+    tokenModal.classList.add("hidden");
+    activeTab = "tattoo";
+    subView = "direct-invite";
+    renderActiveTab();
+    setStatus("Direct invite preview");
+  } else if (token) {
     tokenModal.classList.add("hidden");
     loadAndRender().catch((error) => {
       setStatus(error.message);
@@ -5467,5 +5665,6 @@ ${meetingLines}
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=multi-styles-legend-variants"></script>
+<script src="/studio/people-manager.js?v=1"></script>
 </body>
 </html>

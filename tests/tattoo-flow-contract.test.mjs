@@ -12,10 +12,12 @@ import {
 import {
   handleAdminCompleteAppointment,
   handleAdminCreateBookingToken,
+  handleAdminCreateDirectBookingInvite,
   handleAdminRescheduleAppointment,
   handleAdminResolveTattooLifecycleReview,
   handleAdminTattooSessionPlan,
   handleCancelAppointment,
+  handleBookingContext,
   handleCreateBookingHold,
   handleCreateReplacementCheckout,
   handlePublicConsultationContext,
@@ -519,6 +521,98 @@ test("preview and direct-session spoofing cannot write through the generic submi
   assert.equal(preview.status, 403);
   assert.equal((await preview.json()).code, "PREVIEW_WRITE_BLOCKED");
   assert.equal(database.prepare("SELECT count(*) AS count FROM submissions").get().count, 0);
+});
+
+test("Studio can create a direct private booking invite without a prior inquiry", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+
+  const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
+    "/api/admin/booking/direct-invites",
+    {
+      clientName: "Direct Client",
+      clientEmail: "DIRECT@example.test",
+      clientPhone: "404-555-0119",
+      projectNote: "Approved through an offline conversation.",
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_quarter", "tattoo_half"],
+      sendEmail: false,
+    },
+    adminToken,
+  ), env);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.directInvite.clientEmail, "direct@example.test");
+  assert.equal(payload.delivery.skipped, true);
+  assert.equal(payload.delivery.reason, "not_requested");
+  assert.deepEqual(payload.token.allowedBookingTypes, ["tattoo_quarter", "tattoo_half"]);
+
+  const submission = database.prepare(
+    "SELECT * FROM submissions WHERE id = ?"
+  ).get(payload.directInvite.submissionId);
+  assert.equal(submission.type, "tattoo_inquiry");
+  assert.equal(submission.status, "approved");
+  assert.equal(submission.tattoo_stage, "ready_to_book");
+  assert.equal(submission.source_path, "/studio/direct-booking-invite");
+  assert.equal(JSON.parse(submission.payload_json).direct_booking_invite, "yes");
+
+  const plan = database.prepare(
+    "SELECT * FROM tattoo_session_plans WHERE submission_id = ?"
+  ).get(submission.id);
+  assert.equal(plan.session_category, "one_session");
+  assert.equal(plan.split_policy, "not_available");
+  assert.equal(plan.estimated_sessions_min, 1);
+  assert.equal(plan.estimated_total_minutes_min, 90);
+  assert.equal(plan.estimated_total_minutes_max, 180);
+  assert.equal(plan.client_acknowledged, 0);
+
+  const rawToken = new URL(payload.token.bookingUrl).searchParams.get("token");
+  const context = await handleBookingContext(
+    new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`),
+    env,
+  );
+  assert.equal(context.status, 200);
+  const contextPayload = await context.json();
+  assert.equal(contextPayload.client.email, "direct@example.test");
+  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_quarter", "tattoo_half"]);
+});
+
+test("Studio direct invites can route a client into prerequisite consultation", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
+    "/api/admin/booking/direct-invites",
+    {
+      clientName: "Consult Client",
+      clientEmail: "consult@example.test",
+      purpose: "consultation",
+      allowedBookingTypes: ["consult_in_person"],
+      sendEmail: false,
+    },
+    adminToken,
+  ), env);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.token.purpose, "consultation");
+  const submission = database.prepare(
+    "SELECT tattoo_stage FROM submissions WHERE id = ?"
+  ).get(payload.directInvite.submissionId);
+  assert.equal(submission.tattoo_stage, "consultation_required");
+  assert.equal(
+    database.prepare("SELECT count(*) AS count FROM tattoo_session_plans WHERE submission_id = ?")
+      .get(payload.directInvite.submissionId).count,
+    0,
+  );
 });
 
 test("large cover-ups move through prerequisite consultation completion before tattoo access", async () => {
@@ -1240,6 +1334,7 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
     "/api/booking/reschedule/context",
     "/api/booking/reschedule",
     "/api/booking/replacement-checkout",
+    "/api/admin/booking/direct-invites",
     "/api/tattoo/settings",
     "/api/admin/tattoo/settings",
   ]) assert.match(worker, new RegExp(route.replaceAll("/", "\\/")), route);
@@ -1253,6 +1348,7 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /Resolve Historic Lifecycle/);
   assert.match(submissionsStudio, /data-resolve-historic-lifecycle/);
   assert.match(submissionsStudio, /resolveHistorical/);
+  assert.match(submissionsStudio, /data-direct-invite-form/);
   assert.match(wrangler, /\*\/5 \* \* \* \*/);
 });
 

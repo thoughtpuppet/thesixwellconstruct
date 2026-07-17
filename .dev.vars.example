@@ -2,6 +2,14 @@ SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
 SHOPIFY_STOREFRONT_ACCESS_TOKEN=your-storefront-access-token
 SHOPIFY_STOREFRONT_API_VERSION=2025-07
 SHOPIFY_MERCH_QUERY=tag:construct-merch
+# Construct People reads completed orders and customers through a Shopify
+# custom app. Keep this Admin token secret and grant read_orders,
+# read_all_orders, and read_customers.
+SHOPIFY_ADMIN_ACCESS_TOKEN=replace-with-your-shopify-admin-access-token
+SHOPIFY_ADMIN_API_VERSION=2026-07
+SHOPIFY_WEBHOOK_SECRET=replace-with-your-shopify-webhook-secret
+BEEHIIV_API_KEY=replace-with-your-beehiiv-api-key
+BEEHIIV_PUBLICATION_IDS=replace-with-one-or-more-comma-separated-publication-ids
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
 SQUARE_ACCESS_TOKEN=replace-with-your-square-access-token
 SQUARE_LOCATION_ID=replace-with-your-square-location-id
@@ -13,6 +21,10 @@ SQUARE_WEBHOOK_SIGNATURE_KEY=replace-with-your-square-webhook-signature-key
 SQUARE_STUDIO_LOCATION_ID=replace-with-your-studio-square-location-id
 SQUARE_STUDIO_WEBHOOK_NOTIFICATION_URL=https://thesixwellconstruct.com/api/square-studio/webhook
 SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY=replace-with-your-studio-square-webhook-signature-key
+# Events use their own Square location and signed webhook.
+SQUARE_EVENTS_LOCATION_ID=replace-with-your-events-square-location-id
+SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL=https://thesixwellconstruct.com/api/square-events/webhook
+SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY=replace-with-your-events-square-webhook-signature-key
 STUDIO_CALENDAR_LOCATION=364 Nelson Street SW, Atlanta, GA 30313
 STUDIO_CONTACT_PHONE=(770) 820-5800
 ZOOM_ACCOUNT_ID=replace-with-your-zoom-account-id

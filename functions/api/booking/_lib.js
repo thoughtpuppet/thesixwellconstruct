@@ -5021,14 +5021,16 @@ export async function handleAdminCreateBookingToken(request, env) {
       return errorResponse("Submission lifecycle changed before booking access could be created.", 409);
     }
 
-    const delivery = await notifyBookingLinkCreated(env, request, submission, {
-      id,
-      bookingUrl: bookingUrl.toString(),
-      path: bookingUrl.pathname + bookingUrl.search,
-      expiresAt,
-      allowedBookingTypes: allowed,
-      purpose,
-    });
+    const delivery = body.sendEmail === false
+      ? { ok: false, skipped: true, reason: "not_requested" }
+      : await notifyBookingLinkCreated(env, request, submission, {
+          id,
+          bookingUrl: bookingUrl.toString(),
+          path: bookingUrl.pathname + bookingUrl.search,
+          expiresAt,
+          allowedBookingTypes: allowed,
+          purpose,
+        });
 
     return json({
       ok: true,
@@ -5044,6 +5046,196 @@ export async function handleAdminCreateBookingToken(request, env) {
     });
   } catch (error) {
     return errorResponse("Unable to create booking link.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminCreateDirectBookingInvite(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+
+  const clientName = asString(body.clientName);
+  const clientEmail = asString(body.clientEmail).toLowerCase();
+  const clientPhone = asString(body.clientPhone);
+  const projectNote = asString(body.projectNote);
+  const purpose = asString(body.purpose) || "tattoo";
+  const allowed = Array.isArray(body.allowedBookingTypes)
+    ? body.allowedBookingTypes.map(asString).filter(Boolean)
+    : [];
+
+  if (!clientName || clientName.length > 160) {
+    return errorResponse("Client name is required and must be 160 characters or fewer.", 400);
+  }
+  if (
+    !clientEmail ||
+    clientEmail.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)
+  ) {
+    return errorResponse("Enter a valid client email address.", 400);
+  }
+  if (clientPhone.length > 80) {
+    return errorResponse("Client phone must be 80 characters or fewer.", 400);
+  }
+  if (projectNote.length > 2000) {
+    return errorResponse("Project note must be 2,000 characters or fewer.", 400);
+  }
+  if (!BOOKING_TOKEN_PURPOSES.has(purpose)) {
+    return errorResponse("Booking purpose must be consultation or tattoo.", 400);
+  }
+  if (!allowed.length || new Set(allowed).size !== allowed.length || !bookingTypesMatchPurpose(purpose, allowed)) {
+    return errorResponse("Choose booking types that match the link purpose.", 400);
+  }
+
+  const requestedExpiry = asOptionalString(body.expiresAt);
+  if (requestedExpiry) {
+    const expiresAtMs = new Date(requestedExpiry).getTime();
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+      return errorResponse("Booking link expiration must be a valid future timestamp.", 400);
+    }
+  }
+
+  const submissionId = crypto.randomUUID();
+  try {
+    const db = requireBookingDb(env);
+    const configuredTypes = await db.prepare(
+      `SELECT id, duration_minutes FROM booking_types
+       WHERE active = 1 AND id IN (${allowed.map(() => "?").join(",")})`
+    ).bind(...allowed).all();
+    const typeRows = configuredTypes.results || [];
+    if (typeRows.length !== allowed.length) {
+      return errorResponse("One or more selected booking types are unavailable.", 409);
+    }
+
+    const now = new Date().toISOString();
+    const payload = {
+      project_type: "direct_booking_invite",
+      direct_booking_invite: "yes",
+      message: projectNote,
+      allowed_booking_types: allowed,
+      booking_purpose: purpose,
+    };
+    const statements = [
+      db.prepare(
+        `INSERT INTO submissions (
+          id, type, status, source_path, subject,
+          contact_name, contact_email, contact_phone, contact_json,
+          payload_json, request_meta_json, files_json, internal_notes,
+          booking_url, tattoo_stage, lifecycle_review_required,
+          lifecycle_review_note, created_at, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).bind(
+        submissionId,
+        "tattoo_inquiry",
+        "approved",
+        "/studio/direct-booking-invite",
+        "Direct booking invite",
+        clientName,
+        clientEmail,
+        clientPhone || null,
+        JSON.stringify({ name: clientName, email: clientEmail, phone: clientPhone }),
+        JSON.stringify(payload),
+        JSON.stringify({ created_via: "studio_direct_booking_invite" }),
+        "[]",
+        projectNote,
+        "",
+        purpose === "consultation" ? "consultation_required" : "ready_to_book",
+        0,
+        "",
+        now,
+        now,
+      ),
+      db.prepare(
+        `INSERT INTO submission_events (
+          id, submission_id, event_type, actor, note, created_at
+        ) VALUES (?,?,?,?,?,?)`
+      ).bind(
+        crypto.randomUUID(),
+        submissionId,
+        "direct_booking_invite_created",
+        "admin",
+        `${purpose}:${allowed.join(",")}`,
+        now,
+      ),
+    ];
+
+    if (purpose === "tattoo") {
+      const durations = typeRows.map((row) => Number(row.duration_minutes || 0)).filter((value) => value > 0);
+      const minimumMinutes = durations.length ? Math.min(...durations) : null;
+      const maximumMinutes = durations.length ? Math.max(...durations) : null;
+      statements.push(
+        db.prepare(
+          `INSERT INTO tattoo_session_plans (
+            id, submission_id, estimated_sessions_min, estimated_sessions_max,
+            estimated_total_minutes_min, estimated_total_minutes_max,
+            split_policy, artist_note, session_category, client_acknowledged,
+            created_at, updated_at
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).bind(
+          crypto.randomUUID(),
+          submissionId,
+          1,
+          1,
+          minimumMinutes,
+          maximumMinutes,
+          "not_available",
+          projectNote || "Direct booking invite created in Studio.",
+          "one_session",
+          0,
+          now,
+          now,
+        ),
+      );
+    }
+
+    await db.batch(statements);
+
+    const tokenRequest = new Request(
+      new URL("/api/admin/booking/tokens", request.url),
+      {
+        method: "POST",
+        headers: {
+          "authorization": request.headers.get("authorization") || "",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          submissionId,
+          purpose,
+          allowedBookingTypes: allowed,
+          expiresAt: requestedExpiry || undefined,
+          revokeExisting: true,
+          sendEmail: body.sendEmail === true,
+        }),
+      },
+    );
+    const tokenResponse = await handleAdminCreateBookingToken(tokenRequest, env);
+    const tokenPayload = await tokenResponse.json().catch(() => ({}));
+    if (!tokenResponse.ok) {
+      const tokenCount = await db.prepare(
+        "SELECT count(*) AS count FROM booking_tokens WHERE submission_id = ?"
+      ).bind(submissionId).first();
+      if (!Number(tokenCount?.count || 0)) {
+        await db.prepare(
+          "DELETE FROM submissions WHERE id = ? AND source_path = '/studio/direct-booking-invite'"
+        ).bind(submissionId).run();
+      }
+      return json(tokenPayload, { status: tokenResponse.status });
+    }
+
+    return json({
+      ...tokenPayload,
+      directInvite: {
+        submissionId,
+        clientName,
+        clientEmail,
+        purpose,
+        projectNote,
+      },
+    });
+  } catch (error) {
+    return errorResponse("Unable to create direct booking invite.", 500, {
       detail: error.message,
     });
   }

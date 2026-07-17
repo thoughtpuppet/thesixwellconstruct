@@ -39,6 +39,7 @@ import {
   handleAdminResolveTattooLifecycleReview,
   handleAdminRevokeBookingToken,
   handleAdminRevokeSubmissionBookingTokens,
+  handleAdminCreateDirectBookingInvite,
   handleAdminCreateWalkIn,
   handleAdminDeleteWalkIn,
   handleAdminUpdateBookingType,
@@ -82,6 +83,7 @@ import {
 } from "./functions/api/notifications/_lib.js";
 import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
 import { handleConstructApi } from "./functions/api/construct/_lib.js";
+import { handleAdminCrmApi } from "./functions/api/crm/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -591,6 +593,11 @@ async function handleBookingApi(request, env) {
     return handleAdminCreateBookingToken(request, env);
   }
 
+  if (pathname === "/api/admin/booking/direct-invites") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminCreateDirectBookingInvite(request, env);
+  }
+
   if (pathname === "/api/admin/booking/tokens/revoke-submission") {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleAdminRevokeSubmissionBookingTokens(request, env);
@@ -769,6 +776,10 @@ export default {
       url.pathname.startsWith("/api/admin/search/status")
     ) {
       return handleConstructApi(request, env);
+    }
+
+    if (url.pathname === "/api/admin/crm" || url.pathname.startsWith("/api/admin/crm/")) {
+      return handleAdminCrmApi(request, env);
     }
 
     if (url.pathname.startsWith("/api/shop/")) {
