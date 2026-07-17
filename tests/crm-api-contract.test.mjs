@@ -692,6 +692,7 @@ test("a late Square payment cannot resurrect a cancelled event ticket", async ()
   const payload = await response.json();
   assert.equal(response.status, 200, JSON.stringify(payload));
   assert.equal(payload.attention, true);
+  assert.equal(payload.durableAttention, true);
   assert.equal(payload.ticketStatus, "cancelled");
   const terminalTicket = database.prepare(`
     SELECT status,square_payment_id,paid_at
@@ -710,6 +711,107 @@ test("a late Square payment cannot resurrect a cancelled event ticket", async ()
     `).get() },
     { status: "cancelled", transaction_status: "settled", amount_cents: 9000 },
   );
+  const attention = database.prepare(`
+    SELECT person_id,status,metadata_json,active
+    FROM crm_interactions
+    WHERE source_provider='system'
+      AND source_type='event_payment_attention'
+      AND source_id='terminal-ticket'
+  `).get();
+  assert.deepEqual(
+    {
+      person_id: attention.person_id,
+      status: attention.status,
+      active: attention.active,
+    },
+    { person_id: null, status: "needs_review", active: 1 },
+  );
+  const attentionMetadata = JSON.parse(attention.metadata_json);
+  assert.equal(attentionMetadata.ticketId, "terminal-ticket");
+  assert.equal(attentionMetadata.providerPaymentId, "terminal-ticket-payment");
+  assert.equal(attentionMetadata.reason, "payment_reported_after_terminal_status");
+  assert.equal(attention.metadata_json.includes("terminal-guest@example.test"), false);
+  assert.equal(attention.metadata_json.includes("Terminal Guest"), false);
+});
+
+test("concurrent terminal payment webhooks merge durable payment attention", async () => {
+  const database = migratedDatabase();
+  const createdAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,raw_json,created_at,updated_at,cancelled_at
+    ) VALUES(
+      'terminal-concurrent-ticket','evt_signal_symbol','Concurrent Terminal Guest',
+      'terminal-concurrent@example.test',1,4500,'USD','cancelled',
+      'terminal-concurrent-order',
+      '{"eventCancellation":{"refundRequested":true}}',?,?,?
+    )
+  `).run(createdAt, createdAt, createdAt);
+  const notificationUrl = "https://example.test/api/square-events/webhook";
+  const signatureKey = "events-terminal-concurrent-key";
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+    SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+  });
+  const makeRequest = async (paymentId) => {
+    const body = JSON.stringify({
+      type: "payment.updated",
+      data: {
+        object: {
+          payment: {
+            id: paymentId,
+            order_id: "terminal-concurrent-order",
+            status: "COMPLETED",
+          },
+        },
+      },
+    });
+    const signature = await eventsWebhookSignature(body, signatureKey, notificationUrl);
+    return new Request(notificationUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-square-hmacsha256-signature": signature,
+      },
+      body,
+    });
+  };
+  const requests = await Promise.all([
+    makeRequest("terminal-concurrent-payment-one"),
+    makeRequest("terminal-concurrent-payment-two"),
+  ]);
+  const responses = await withMockFetch(async () => Response.json({
+    order: {
+      id: "terminal-concurrent-order",
+      state: "COMPLETED",
+      net_amount_due_money: { amount: 0, currency: "USD" },
+    },
+  }), () => Promise.all(
+    requests.map((webhookRequest) => handleEventsSquareWebhook(webhookRequest, runtime)),
+  ));
+  for (const response of responses) {
+    assert.equal(response.status, 200, await response.text());
+  }
+  const attentionRows = database.prepare(`
+    SELECT metadata_json FROM crm_interactions
+    WHERE source_provider='system'
+      AND source_type='event_payment_attention'
+      AND source_id='terminal-concurrent-ticket'
+  `).all();
+  assert.equal(attentionRows.length, 1);
+  const metadata = JSON.parse(attentionRows[0].metadata_json);
+  assert.deepEqual(
+    metadata.providerPaymentIds.sort(),
+    [
+      "terminal-concurrent-payment-one",
+      "terminal-concurrent-payment-two",
+    ],
+  );
+  assert.equal(metadata.refundRequested, true);
 });
 
 test("a repeated paid-ticket webhook repairs a missed CRM mirror without duplicates", async () => {
@@ -786,9 +888,368 @@ test("a repeated paid-ticket webhook repairs a missed CRM mirror without duplica
   );
 });
 
+test("ticket cancellation reconciles a just-completed Square payment before refunding", async () => {
+  const database = migratedDatabase();
+  const createdAt = "2026-07-02T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,square_payment_link_id,square_checkout_url,
+      raw_json,created_at,updated_at
+    ) VALUES(
+      'cancel-race-ticket','evt_signal_symbol','Cancellation Race Guest',
+      'cancel-race@example.test',1,4500,'USD','pending',
+      'cancel-race-order','cancel-race-link','https://square.test/cancel-race',
+      '{}',?,?
+    )
+  `).run(createdAt, createdAt);
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+  });
+  const cancelRequest = request(
+    "/api/admin/events/tickets/cancel-race-ticket/cancel",
+    { method: "POST", body: { refund: true }, admin: true },
+  );
+  const calls = [];
+  const response = await withMockFetch(async (input, options = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    const method = String(options.method || "GET").toUpperCase();
+    calls.push(`${method} ${url.pathname}`);
+    if (url.pathname === "/v2/orders/cancel-race-order") {
+      return Response.json({
+        order: {
+          id: "cancel-race-order",
+          state: "COMPLETED",
+          net_amount_due_money: { amount: 0, currency: "USD" },
+          closed_at: "2026-07-02T12:05:00.000Z",
+          tenders: [{
+            payment_id: "cancel-race-payment",
+            created_at: "2026-07-02T12:05:00.000Z",
+          }],
+        },
+      });
+    }
+    if (url.pathname === "/v2/refunds") {
+      assert.equal(method, "POST");
+      const body = JSON.parse(options.body);
+      assert.equal(body.payment_id, "cancel-race-payment");
+      assert.equal(body.amount_money.amount, 4500);
+      return Response.json({
+        refund: {
+          id: "cancel-race-refund",
+          status: "COMPLETED",
+          payment_id: "cancel-race-payment",
+          order_id: "cancel-race-order",
+          amount_money: { amount: 4500, currency: "USD" },
+          created_at: "2026-07-02T12:06:00.000Z",
+          updated_at: "2026-07-02T12:06:00.000Z",
+        },
+      });
+    }
+    throw new Error(`Unexpected Square request: ${method} ${url.pathname}`);
+  }, () => handleAdminEventTicketCancel(
+    cancelRequest,
+    runtime,
+    "cancel-race-ticket",
+  ));
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  assert.equal(payload.wasPaid, true);
+  assert.equal(payload.refund.completed, true);
+  assert.equal(payload.checkoutInvalidated, false);
+  assert.deepEqual(calls, [
+    "GET /v2/orders/cancel-race-order",
+    "POST /v2/refunds",
+  ]);
+  const cancelledTicket = database.prepare(`
+    SELECT status,square_payment_id,refund_id,raw_json
+    FROM event_tickets WHERE id='cancel-race-ticket'
+  `).get();
+  assert.equal(cancelledTicket.status, "cancelled");
+  assert.equal(cancelledTicket.square_payment_id, "cancel-race-payment");
+  assert.equal(cancelledTicket.refund_id, "cancel-race-refund");
+  assert.equal(JSON.parse(cancelledTicket.raw_json).eventCancellation.refundRequested, true);
+  assert.deepEqual(
+    database.prepare(`
+      SELECT transaction_type,status,amount_cents
+      FROM crm_transactions
+      WHERE source_type IN ('event_ticket_payment','event_ticket_refund')
+      ORDER BY transaction_type
+    `).all().map((row) => ({ ...row })),
+    [
+      { transaction_type: "charge", status: "settled", amount_cents: 4500 },
+      { transaction_type: "refund", status: "settled", amount_cents: 4500 },
+    ],
+  );
+});
+
+test("ticket cancellation refuses an unsafe multi-payment Square refund", async () => {
+  const database = migratedDatabase();
+  const paidAt = "2026-07-02T12:00:00.000Z";
+  const notificationUrl = "https://example.test/api/square-events/webhook";
+  const signatureKey = "events-multi-payment-webhook-key";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,square_payment_id,raw_json,paid_at,created_at,updated_at
+    ) VALUES(
+      'multi-payment-ticket','evt_signal_symbol','Multi Payment Guest',
+      'multi-payment@example.test',1,4500,'USD','paid',
+      'multi-payment-order','multi-payment-one','{}',?,?,?
+    )
+  `).run(paidAt, paidAt, paidAt);
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+    SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+  });
+  const calls = [];
+  const responses = await withMockFetch(async (input, options = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    const method = String(options.method || "GET").toUpperCase();
+    calls.push(`${method} ${url.pathname}`);
+    assert.equal(url.pathname, "/v2/orders/multi-payment-order");
+    assert.equal(method, "GET");
+    return Response.json({
+      order: {
+        id: "multi-payment-order",
+        state: "COMPLETED",
+        net_amount_due_money: { amount: 0, currency: "USD" },
+        tenders: [
+          { payment_id: "multi-payment-one" },
+          { payment_id: "multi-payment-two" },
+        ],
+      },
+    });
+  }, async () => {
+    const cancel = () => handleAdminEventTicketCancel(
+      request(
+        "/api/admin/events/tickets/multi-payment-ticket/cancel",
+        { method: "POST", body: { refund: true }, admin: true },
+      ),
+      runtime,
+      "multi-payment-ticket",
+    );
+    return [await cancel(), await cancel()];
+  });
+  for (const response of responses) {
+    const payload = await response.json();
+    assert.equal(response.status, 409, JSON.stringify(payload));
+    assert.match(payload.detail, /multiple payments/i);
+  }
+  assert.deepEqual(calls, [
+    "GET /v2/orders/multi-payment-order",
+    "GET /v2/orders/multi-payment-order",
+  ]);
+  assert.equal(database.prepare(`
+    SELECT status FROM event_tickets WHERE id='multi-payment-ticket'
+  `).get().status, "paid");
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_type='event_ticket_refund'
+  `).get().count, 0);
+  const attentionRows = database.prepare(`
+    SELECT status,active,metadata_json FROM crm_interactions
+    WHERE source_provider='system'
+      AND source_type='event_payment_attention'
+      AND source_id='multi-payment-ticket'
+  `).all();
+  assert.equal(attentionRows.length, 1);
+  assert.equal(attentionRows[0].status, "needs_review");
+  assert.equal(attentionRows[0].active, 1);
+  const metadata = JSON.parse(attentionRows[0].metadata_json);
+  assert.equal(metadata.reason, "multiple_payments_require_manual_refund");
+  assert.deepEqual(
+    metadata.providerPaymentIds.sort(),
+    ["multi-payment-one", "multi-payment-two"],
+  );
+  assert.equal(attentionRows[0].metadata_json.includes("multi-payment@example.test"), false);
+
+  const refundBody = JSON.stringify({
+    type: "refund.updated",
+    data: {
+      object: {
+        refund: {
+          id: "multi-payment-first-refund",
+          payment_id: "multi-payment-one",
+          order_id: "multi-payment-order",
+          status: "COMPLETED",
+          amount_money: { amount: 2250, currency: "USD" },
+          created_at: "2026-07-02T13:00:00.000Z",
+          updated_at: "2026-07-02T13:00:00.000Z",
+        },
+      },
+    },
+  });
+  const refundSignature = await eventsWebhookSignature(
+    refundBody,
+    signatureKey,
+    notificationUrl,
+  );
+  const refundResponse = await handleEventsSquareWebhook(
+    new Request(notificationUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-square-hmacsha256-signature": refundSignature,
+      },
+      body: refundBody,
+    }),
+    runtime,
+  );
+  assert.equal(refundResponse.status, 200, await refundResponse.text());
+  const afterRefundAttention = database.prepare(`
+    SELECT status,active,metadata_json FROM crm_interactions
+    WHERE source_provider='system'
+      AND source_type='event_payment_attention'
+      AND source_id='multi-payment-ticket'
+  `).get();
+  assert.equal(afterRefundAttention.status, "needs_review");
+  assert.equal(afterRefundAttention.active, 1);
+  assert.equal(
+    JSON.parse(afterRefundAttention.metadata_json).reason,
+    "multiple_payments_require_manual_refund",
+  );
+
+  const secondRefundBody = JSON.stringify({
+    type: "refund.updated",
+    data: {
+      object: {
+        refund: {
+          id: "multi-payment-second-refund",
+          payment_id: "multi-payment-two",
+          order_id: "multi-payment-order",
+          status: "COMPLETED",
+          amount_money: { amount: 2250, currency: "USD" },
+          created_at: "2026-07-02T13:05:00.000Z",
+          updated_at: "2026-07-02T13:05:00.000Z",
+        },
+      },
+    },
+  });
+  const secondRefundSignature = await eventsWebhookSignature(
+    secondRefundBody,
+    signatureKey,
+    notificationUrl,
+  );
+  const secondRefundResponse = await handleEventsSquareWebhook(
+    new Request(notificationUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-square-hmacsha256-signature": secondRefundSignature,
+      },
+      body: secondRefundBody,
+    }),
+    runtime,
+  );
+  const secondRefundPayload = await secondRefundResponse.json();
+  assert.equal(
+    secondRefundResponse.status,
+    200,
+    JSON.stringify(secondRefundPayload),
+  );
+  assert.equal(secondRefundPayload.durableAttention, true);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_type='event_ticket_refund' AND status='settled'
+      AND source_id IN (
+        'multi-payment-first-refund',
+        'multi-payment-second-refund'
+      )
+  `).get().count, 2);
+  assert.equal(
+    JSON.parse(database.prepare(`
+      SELECT metadata_json FROM crm_transactions
+      WHERE source_type='event_ticket_refund'
+        AND source_id='multi-payment-second-refund'
+    `).get().metadata_json).providerPaymentId,
+    "multi-payment-two",
+  );
+  const finalAttention = database.prepare(`
+    SELECT active,metadata_json FROM crm_interactions
+    WHERE source_type='event_payment_attention'
+      AND source_id='multi-payment-ticket'
+  `).get();
+  assert.equal(finalAttention.active, 1);
+  const finalMetadata = JSON.parse(finalAttention.metadata_json);
+  assert.deepEqual(
+    finalMetadata.providerRefundIds.sort(),
+    ["multi-payment-first-refund", "multi-payment-second-refund"],
+  );
+});
+
+test("ticket cancellation treats Square net amount due as authoritative", async () => {
+  const database = migratedDatabase();
+  const paidAt = "2026-07-02T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,square_payment_id,raw_json,paid_at,created_at,updated_at
+    ) VALUES(
+      'partial-payment-ticket','evt_signal_symbol','Partial Payment Guest',
+      'partial-payment@example.test',1,4500,'USD','paid',
+      'partial-payment-order',NULL,'{}',?,?,?
+    )
+  `).run(paidAt, paidAt, paidAt);
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+  });
+  let refundAttempted = false;
+  const response = await withMockFetch(async (input, options = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    if (url.pathname === "/v2/refunds") {
+      refundAttempted = true;
+      throw new Error("A partial order must never reach refund creation.");
+    }
+    assert.equal(url.pathname, "/v2/orders/partial-payment-order");
+    assert.equal(String(options.method || "GET").toUpperCase(), "GET");
+    return Response.json({
+      order: {
+        id: "partial-payment-order",
+        state: "COMPLETED",
+        net_amount_due_money: { amount: 1000, currency: "USD" },
+        tenders: [{ id: "tender-without-payment-id" }],
+      },
+    });
+  }, () => handleAdminEventTicketCancel(
+    request(
+      "/api/admin/events/tickets/partial-payment-ticket/cancel",
+      { method: "POST", body: { refund: true }, admin: true },
+    ),
+    runtime,
+    "partial-payment-ticket",
+  ));
+  const payload = await response.json();
+  assert.equal(response.status, 409, JSON.stringify(payload));
+  assert.match(payload.detail, /partial payment/i);
+  assert.equal(refundAttempted, false);
+  assert.equal(database.prepare(`
+    SELECT status FROM event_tickets WHERE id='partial-payment-ticket'
+  `).get().status, "paid");
+  const attention = database.prepare(`
+    SELECT active,metadata_json FROM crm_interactions
+    WHERE source_type='event_payment_attention'
+      AND source_id='partial-payment-ticket'
+  `).get();
+  assert.equal(attention.active, 1);
+  assert.equal(
+    JSON.parse(attention.metadata_json).reason,
+    "partial_payment_requires_review",
+  );
+});
+
 test("a pending event refund is recorded but excluded from settled CRM refunds", async () => {
   const database = migratedDatabase();
   const paidAt = "2026-07-02T12:00:00.000Z";
+  const notificationUrl = "https://example.test/api/square-events/webhook";
+  const signatureKey = "events-refund-webhook-key";
   database.prepare(`
     INSERT INTO event_tickets(
       id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
@@ -803,6 +1264,8 @@ test("a pending event refund is recorded but excluded from settled CRM refunds",
     SQUARE_ACCESS_TOKEN: "events-square-token",
     SQUARE_EVENTS_LOCATION_ID: "events-location",
     SQUARE_ENVIRONMENT: "production",
+    SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL: notificationUrl,
   });
   const cancelRequest = request(
     "/api/admin/events/tickets/pending-refund-ticket/cancel",
@@ -810,16 +1273,31 @@ test("a pending event refund is recorded but excluded from settled CRM refunds",
   );
 
   const response = await withMockFetch(async (input, options = {}) => {
-    assert.equal(String(input), "https://connect.squareup.com/v2/refunds");
-    assert.equal(String(options.method || "").toUpperCase(), "POST");
-    return Response.json({
-      refund: {
-        id: "pending-refund-id",
-        status: "PENDING",
-        created_at: "2026-07-03T12:00:00.000Z",
-        updated_at: "2026-07-03T12:00:00.000Z",
-      },
-    });
+    const url = new URL(input instanceof Request ? input.url : input);
+    const method = String(options.method || "GET").toUpperCase();
+    if (url.pathname === "/v2/orders/pending-refund-order") {
+      assert.equal(method, "GET");
+      return Response.json({
+        order: {
+          id: "pending-refund-order",
+          state: "COMPLETED",
+          net_amount_due_money: { amount: 0, currency: "USD" },
+          tenders: [{ payment_id: "pending-refund-payment" }],
+        },
+      });
+    }
+    if (url.pathname === "/v2/refunds") {
+      assert.equal(method, "POST");
+      return Response.json({
+        refund: {
+          id: "pending-refund-id",
+          status: "PENDING",
+          created_at: "2026-07-03T12:00:00.000Z",
+          updated_at: "2026-07-03T12:00:00.000Z",
+        },
+      });
+    }
+    throw new Error(`Unexpected Square request: ${method} ${url.pathname}`);
   }, () => handleAdminEventTicketCancel(cancelRequest, runtime, "pending-refund-ticket"));
   const payload = await response.json();
   assert.equal(response.status, 200, JSON.stringify(payload));
@@ -840,10 +1318,23 @@ test("a pending event refund is recorded but excluded from settled CRM refunds",
   assert.equal(ticket.status, "cancelled");
   assert.equal(ticket.refund_id, "pending-refund-id");
   assert.equal(JSON.parse(ticket.raw_json).eventRefund.status, "PENDING");
-  assert.equal(database.prepare(`
-    SELECT COUNT(*) count FROM crm_transactions
-    WHERE source_type='event_ticket_refund'
-  `).get().count, 0);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT transaction_type,status,amount_cents
+      FROM crm_transactions
+      WHERE source_type='event_ticket_refund'
+        AND source_id='pending-refund-id'
+    `).get() },
+    { transaction_type: "refund", status: "pending", amount_cents: 4500 },
+  );
+  const personId = database.prepare(`
+    SELECT person_id FROM crm_identities
+    WHERE kind='email' AND normalized_value='pending-refund@example.test'
+      AND active=1
+  `).get().person_id;
+  let profile = await responseJson(await api(database, `/api/admin/crm/people/${personId}`));
+  assert.equal(profile.response.status, 200);
+  assert.equal(profile.payload.person.pendingCents, -4500);
 
   const backfill = await responseJson(await api(database, "/api/admin/crm/backfill", {
     method: "POST",
@@ -854,6 +1345,10 @@ test("a pending event refund is recorded but excluded from settled CRM refunds",
     SELECT COUNT(*) count FROM crm_transactions
     WHERE transaction_type='refund' AND status='settled'
   `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE transaction_type='refund' AND status='pending'
+  `).get().count, 1);
   assert.deepEqual(
     { ...database.prepare(`
       SELECT transaction_type,status,amount_cents
@@ -861,6 +1356,72 @@ test("a pending event refund is recorded but excluded from settled CRM refunds",
         AND source_id='pending-refund-ticket'
     `).get() },
     { transaction_type: "charge", status: "settled", amount_cents: 4500 },
+  );
+
+  const refundBody = JSON.stringify({
+    type: "refund.updated",
+    data: {
+      object: {
+        refund: {
+          id: "pending-refund-id",
+          payment_id: "pending-refund-payment",
+          order_id: "pending-refund-order",
+          status: "COMPLETED",
+          amount_money: { amount: 4500, currency: "USD" },
+          created_at: "2026-07-03T12:00:00.000Z",
+          updated_at: "2026-07-03T13:00:00.000Z",
+        },
+      },
+    },
+  });
+  const refundSignature = await eventsWebhookSignature(
+    refundBody,
+    signatureKey,
+    notificationUrl,
+  );
+  const webhookResponse = await handleEventsSquareWebhook(
+    new Request(notificationUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-square-hmacsha256-signature": refundSignature,
+      },
+      body: refundBody,
+    }),
+    runtime,
+  );
+  const webhookPayload = await webhookResponse.json();
+  assert.equal(webhookResponse.status, 200, JSON.stringify(webhookPayload));
+  assert.equal(webhookPayload.refund, true);
+  assert.equal(webhookPayload.ticketStatus, "cancelled");
+  assert.equal(webhookPayload.refundStatus, "COMPLETED");
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT status,amount_cents
+      FROM crm_transactions
+      WHERE source_type='event_ticket_refund'
+        AND source_id='pending-refund-id'
+    `).get() },
+    { status: "settled", amount_cents: 4500 },
+  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_type='event_ticket_refund'
+      AND source_id='pending-refund-id'
+  `).get().count, 1);
+  profile = await responseJson(await api(database, `/api/admin/crm/people/${personId}`));
+  assert.equal(profile.response.status, 200);
+  assert.equal(profile.payload.person.settledGrossCents, 4500);
+  assert.equal(profile.payload.person.refundCents, 4500);
+  assert.equal(profile.payload.person.netSpendCents, 0);
+  assert.equal(profile.payload.person.pendingCents, 0);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT status,active FROM crm_interactions
+      WHERE source_type='event_payment_attention'
+        AND source_id='pending-refund-ticket'
+    `).get() },
+    { status: "resolved", active: 0 },
   );
 });
 
@@ -894,6 +1455,59 @@ test("the stale event ticket reaper keeps tickets pending on Square lookup error
   assert.equal(database.prepare(
     "SELECT status FROM event_tickets WHERE id='stale-provider-error'"
   ).get().status, "pending");
+});
+
+test("the stale event ticket reaper preserves partial tenders for review", async () => {
+  const database = migratedDatabase();
+  const staleAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,square_payment_link_id,square_checkout_url,
+      raw_json,created_at,updated_at
+    ) VALUES(
+      'stale-partial-ticket','evt_signal_symbol','Stale Partial Guest',
+      'stale-partial@example.test',1,4500,'USD','pending',
+      'stale-partial-order','stale-partial-link',
+      'https://square.test/stale-partial','{}',?,?
+    )
+  `).run(staleAt, staleAt);
+  const calls = [];
+  const result = await withMockFetch(async (input, options = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    calls.push(`${String(options.method || "GET").toUpperCase()} ${url.pathname}`);
+    assert.equal(url.pathname, "/v2/orders/stale-partial-order");
+    return Response.json({
+      order: {
+        id: "stale-partial-order",
+        state: "OPEN",
+        net_amount_due_money: { amount: 1000, currency: "USD" },
+        tenders: [{ id: "partial-tender-without-payment-id" }],
+      },
+    });
+  }, () => reapStalePendingTickets(env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+  })));
+  assert.deepEqual(result, { reaped: 0, recovered: 0, failed: 1 });
+  assert.deepEqual(calls, ["GET /v2/orders/stale-partial-order"]);
+  const ticket = database.prepare(`
+    SELECT status,square_checkout_url
+    FROM event_tickets WHERE id='stale-partial-ticket'
+  `).get();
+  assert.equal(ticket.status, "pending");
+  assert.equal(ticket.square_checkout_url, "https://square.test/stale-partial");
+  const attention = database.prepare(`
+    SELECT active,metadata_json FROM crm_interactions
+    WHERE source_type='event_payment_attention'
+      AND source_id='stale-partial-ticket'
+  `).get();
+  assert.equal(attention.active, 1);
+  assert.equal(
+    JSON.parse(attention.metadata_json).reason,
+    "partial_payment_requires_review",
+  );
 });
 
 test("people profiles preserve manual tier judgment and calculate relationship activity and spend", async () => {
@@ -1715,6 +2329,113 @@ test("CRM provider status reports integration readiness without exposing credent
   assert.equal(serialized.includes("beehiiv-test-key"), false);
 });
 
+test("phone-only Shopify guest orders stay unmatched without creating replay orphans", async () => {
+  const database = migratedDatabase();
+  const shopifyEnv = {
+    SHOPIFY_STORE_DOMAIN: "construct-test.myshopify.com",
+    SHOPIFY_ADMIN_ACCESS_TOKEN: "shopify-test-token",
+  };
+  const order = {
+    id: "gid://shopify/Order/phone-only",
+    name: "#PHONE",
+    email: null,
+    phone: "+1 (404) 555-0199",
+    customer: null,
+    processedAt: "2026-07-10T15:00:00.000Z",
+    updatedAt: "2026-07-10T15:01:00.000Z",
+    displayFinancialStatus: "PAID",
+    fullyPaid: true,
+    unpaid: false,
+    test: false,
+    sourceName: "web",
+    tags: [],
+    currentTotalPriceSet: {
+      shopMoney: { amount: "45.00", currencyCode: "USD" },
+    },
+    totalReceivedSet: {
+      shopMoney: { amount: "45.00", currencyCode: "USD" },
+    },
+    totalRefundedSet: {
+      shopMoney: { amount: "0.00", currencyCode: "USD" },
+    },
+    totalTipReceivedSet: {
+      shopMoney: { amount: "0.00", currencyCode: "USD" },
+    },
+    transactions: [{
+      id: "gid://shopify/OrderTransaction/phone-only",
+      kind: "SALE",
+      status: "SUCCESS",
+      gateway: "shopify_payments",
+      processedAt: "2026-07-10T15:00:00.000Z",
+      amountSet: {
+        shopMoney: { amount: "45.00", currencyCode: "USD" },
+      },
+    }],
+    refunds: [],
+    lineItems: {
+      nodes: [],
+      pageInfo: { hasNextPage: false },
+    },
+  };
+  const responses = await withMockFetch(async (input, options = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    assert.equal(url.hostname, "construct-test.myshopify.com");
+    const body = JSON.parse(options.body);
+    if (body.query.includes("CrmOrders")) {
+      return Response.json({
+        data: {
+          orders: {
+            nodes: [order],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      });
+    }
+    if (body.query.includes("CrmCustomers")) {
+      return Response.json({
+        data: {
+          customers: {
+            nodes: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      });
+    }
+    throw new Error(`Unexpected Shopify query at ${url}`);
+  }, async () => [
+    await responseJson(await api(database, "/api/admin/crm/sync/shopify", {
+      method: "POST",
+      body: { mode: "full", maxPages: 4 },
+      env: shopifyEnv,
+    })),
+    await responseJson(await api(database, "/api/admin/crm/sync/shopify", {
+      method: "POST",
+      body: { mode: "full", maxPages: 4 },
+      env: shopifyEnv,
+    })),
+  ]);
+  for (const result of responses) {
+    assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+    assert.equal(result.payload.status, "complete");
+  }
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_provider='shopify' AND person_id IS NULL
+  `).get().count, 1);
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id
+        === "crm-sync-conflict:shopify:order:gid://shopify/Order/phone-only"
+  );
+  assert.ok(conflict);
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).conflicts,
+    ["phone_only_identity"],
+  );
+});
+
 test("Square sync persists normalized CRM records and repeats idempotently", async (t) => {
   const database = migratedDatabase();
   const calls = installSquareApiMock(t, {
@@ -1859,54 +2580,89 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
   assert.equal(result.payload.local.transactionCount, 1);
 });
 
-test("concurrent Square syncs converge one provider customer without orphan people", async (t) => {
+test("a fresh Square sync lease blocks a concurrent provider run", async () => {
   const database = migratedDatabase();
   const occurredAt = "2026-07-11T16:00:00.000Z";
-  installSquareApiMock(t, {
-    payments: [
-      {
-        id: "square-payment-concurrent",
-        status: "COMPLETED",
-        customer_id: "square-customer-concurrent",
-        order_id: "square-order-concurrent",
-        location_id: "square-tattoo-location",
-        buyer_email_address: "square-concurrent@example.test",
-        total_money: { amount: 18_000, currency: "USD" },
-        tip_money: { amount: 2_000, currency: "USD" },
-        source_type: "CARD",
-        reference_id: "Concurrent Square payment",
-        created_at: occurredAt,
-        updated_at: occurredAt,
-      },
-      {
-        id: "square-payment-concurrent-second",
-        status: "COMPLETED",
-        customer_id: "square-customer-concurrent-second",
-        order_id: "square-order-concurrent-second",
-        location_id: "square-tattoo-location",
-        buyer_email_address: "square-concurrent@example.test",
-        total_money: { amount: 9_000, currency: "USD" },
-        tip_money: { amount: 0, currency: "USD" },
-        source_type: "CARD",
-        reference_id: "Second concurrent Square payment",
-        created_at: occurredAt,
-        updated_at: occurredAt,
-      },
-    ],
+  const payments = [
+    {
+      id: "square-payment-concurrent",
+      status: "COMPLETED",
+      customer_id: "square-customer-concurrent",
+      order_id: "square-order-concurrent",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "square-concurrent@example.test",
+      total_money: { amount: 18_000, currency: "USD" },
+      tip_money: { amount: 2_000, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Concurrent Square payment",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    },
+    {
+      id: "square-payment-concurrent-second",
+      status: "COMPLETED",
+      customer_id: "square-customer-concurrent-second",
+      order_id: "square-order-concurrent-second",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "square-concurrent@example.test",
+      total_money: { amount: 9_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Second concurrent Square payment",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    },
+  ];
+  let releasePayments;
+  const paymentsMayFinish = new Promise((resolve) => {
+    releasePayments = resolve;
   });
-
-  const responses = await Promise.all(
-    Array.from({ length: 2 }, () => api(database, "/api/admin/crm/sync/square", {
+  let reportPaymentsStarted;
+  const paymentsStarted = new Promise((resolve) => {
+    reportPaymentsStarted = resolve;
+  });
+  const calls = [];
+  const completed = await withMockFetch(async (input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    calls.push(url.pathname);
+    if (url.pathname === "/v2/payments") {
+      reportPaymentsStarted();
+      await paymentsMayFinish;
+      return Response.json({ payments });
+    }
+    if (url.pathname === "/v2/refunds") return Response.json({ refunds: [] });
+    throw new Error(`Unexpected Square request: ${url}`);
+  }, async () => {
+    const firstPromise = api(database, "/api/admin/crm/sync/square", {
       method: "POST",
       body: { mode: "full", maxPages: 4 },
       env: SQUARE_SYNC_ENV,
-    })),
-  );
-  for (const response of responses) {
-    const result = await responseJson(response);
-    assert.equal(result.response.status, 200, JSON.stringify(result.payload));
-    assert.equal(result.payload.status, "complete");
-  }
+    });
+    await paymentsStarted;
+    try {
+      const blocked = await responseJson(await api(
+        database,
+        "/api/admin/crm/sync/square",
+        {
+          method: "POST",
+          body: { mode: "full", maxPages: 4 },
+          env: SQUARE_SYNC_ENV,
+        },
+      ));
+      assert.equal(blocked.response.status, 409, JSON.stringify(blocked.payload));
+      assert.equal(blocked.payload.details.code, "SYNC_ALREADY_RUNNING");
+    } finally {
+      releasePayments();
+    }
+    return responseJson(await firstPromise);
+  });
+  assert.equal(completed.response.status, 200, JSON.stringify(completed.payload));
+  assert.equal(completed.payload.status, "complete");
+  assert.deepEqual(calls, ["/v2/payments", "/v2/refunds"]);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_sync_jobs
+    WHERE provider='square'
+  `).get().count, 1);
 
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
   const personId = database.prepare("SELECT id FROM crm_people").get().id;
@@ -1934,6 +2690,105 @@ test("concurrent Square syncs converge one provider customer without orphan peop
     WHERE source_provider='square' AND source_type='payment'
       AND source_id LIKE 'square-payment-concurrent%' AND person_id=?
   `).get(personId).count, 2);
+});
+
+test("an active provider sync lease blocks a concurrent resume of the same job", async () => {
+  const database = migratedDatabase();
+  const createdAt = "2026-07-11T15:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_sync_jobs(
+      id,provider,status,checkpoint_json,stats_json,warnings_json,error,
+      created_at,updated_at
+    ) VALUES(
+      'square-resume-job','square','pending',
+      '{"version":1,"provider":"square","mode":"full","complete":false,'
+        || '"windowStart":"2009-01-01T00:00:00.000Z",'
+        || '"windowEnd":"2026-07-11T16:00:00.000Z","taskIndex":0,"cursor":null}',
+      '{}','[]','',?,?
+    )
+  `).run(createdAt, createdAt);
+
+  let releasePayments;
+  const paymentsMayFinish = new Promise((resolve) => {
+    releasePayments = resolve;
+  });
+  let reportPaymentsStarted;
+  const paymentsStarted = new Promise((resolve) => {
+    reportPaymentsStarted = resolve;
+  });
+  const firstPromise = withMockFetch(async (input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    if (url.pathname === "/v2/payments") {
+      reportPaymentsStarted();
+      await paymentsMayFinish;
+      return Response.json({ payments: [] });
+    }
+    if (url.pathname === "/v2/refunds") return Response.json({ refunds: [] });
+    throw new Error(`Unexpected Square request: ${url}`);
+  }, async () => {
+    const first = api(database, "/api/admin/crm/sync/square", {
+      method: "POST",
+      body: { mode: "full", maxPages: 4 },
+      env: SQUARE_SYNC_ENV,
+    });
+    await paymentsStarted;
+    const second = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+      method: "POST",
+      body: { mode: "full", maxPages: 4 },
+      env: SQUARE_SYNC_ENV,
+    }));
+    assert.equal(second.response.status, 409);
+    assert.equal(second.payload.details.code, "SYNC_ALREADY_RUNNING");
+    releasePayments();
+    return first;
+  });
+  const first = await responseJson(await firstPromise);
+  assert.equal(first.response.status, 200, JSON.stringify(first.payload));
+  assert.equal(first.payload.jobId, "square-resume-job");
+  assert.equal(first.payload.status, "complete");
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_sync_jobs WHERE provider='square'"
+  ).get().count, 1);
+});
+
+test("a provider sync that loses its lease cannot persist a stale page", async () => {
+  const database = migratedDatabase();
+  const occurredAt = "2026-07-11T16:00:00.000Z";
+  const response = await withMockFetch(async (input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    assert.equal(url.pathname, "/v2/payments");
+    database.prepare(`
+      UPDATE crm_sync_jobs
+      SET lease_token='replacement-lease',updated_at=?
+      WHERE provider='square' AND status='running'
+    `).run(new Date().toISOString());
+    return Response.json({
+      payments: [{
+        id: "stale-lease-payment",
+        status: "COMPLETED",
+        customer_id: "stale-lease-customer",
+        order_id: "stale-lease-order",
+        location_id: "square-tattoo-location",
+        buyer_email_address: "stale-lease@example.test",
+        total_money: { amount: 9000, currency: "USD" },
+        tip_money: { amount: 0, currency: "USD" },
+        source_type: "CARD",
+        created_at: occurredAt,
+        updated_at: occurredAt,
+      }],
+    });
+  }, () => api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  const payload = await response.json();
+  assert.equal(response.status, 409, JSON.stringify(payload));
+  assert.equal(payload.details.code, "SYNC_LEASE_LOST");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_identities").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
 });
 
 test("Square sync recognizes a local providerPaymentId mirror without double-counting spend", async (t) => {
@@ -2012,6 +2867,225 @@ test("Square sync recognizes a local providerPaymentId mirror without double-cou
   assert.equal(result.payload.person.settledGrossCents, 22_000);
   assert.equal(result.payload.person.netSpendCents, 22_000);
   assert.equal(result.payload.person.tipCents, 4_000);
+});
+
+test("Square payment sync never promotes a refund row that carries the same payment id", async (t) => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Refund Row Owner",
+    email: "refund-row-owner@example.test",
+  });
+  const now = "2026-07-11T16:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,note,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'refund-row-with-payment-id',?,'node-events','refund','pending',
+      5000,0,'USD',?,'local','event_ticket_refund','refund-row-source',
+      'Pending partial refund',?,1,?,?
+    )
+  `).run(
+    person.id,
+    now,
+    JSON.stringify({
+      providerPaymentId: "square-payment-refund-row",
+      providerRefundId: "square-refund-row",
+    }),
+    now,
+    now,
+  );
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-refund-row",
+      status: "COMPLETED",
+      customer_id: "square-customer-refund-row",
+      order_id: "square-order-refund-row",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "refund-row-owner@example.test",
+      total_money: { amount: 12_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Payment sharing a refund metadata id",
+      created_at: now,
+      updated_at: now,
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT transaction_type,status,amount_cents
+      FROM crm_transactions WHERE id='refund-row-with-payment-id'
+    `).get() },
+    { transaction_type: "refund", status: "pending", amount_cents: 5000 },
+  );
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT transaction_type,status,amount_cents
+      FROM crm_transactions
+      WHERE source_provider='square' AND source_id='square-payment-refund-row'
+    `).get() },
+    { transaction_type: "charge", status: "settled", amount_cents: 12_000 },
+  );
+});
+
+test("Square sync creates a new provider person and attention for an ambiguous shared email", async (t) => {
+  const database = migratedDatabase();
+  const first = await createPerson(database, {
+    displayName: "First Shared Email Owner",
+    email: "shared-sync@example.test",
+  });
+  const second = await createPerson(database, {
+    displayName: "Second Shared Email Owner",
+    email: "second-shared-sync@example.test",
+  });
+  const now = "2026-07-11T16:00:00.000Z";
+  database.prepare(`
+    UPDATE crm_identities
+    SET value='shared-sync@example.test',
+        normalized_value='shared-sync@example.test',
+        is_shared=1,updated_at=?
+    WHERE person_id=? AND kind='email'
+  `).run(now, second.id);
+  database.prepare(`
+    UPDATE crm_identities
+    SET is_shared=1,updated_at=?
+    WHERE person_id=? AND kind='email'
+  `).run(now, first.id);
+  database.prepare(`
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES(
+      'legacy-shared-email-claim',?,'other','shared-sync@example.test',
+      'shared-sync@example.test','crm_email_claim','shared-sync@example.test',
+      '',0,0,0,'system','email_claim',NULL,0,?,?
+    )
+  `).run(first.id, now, now);
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-shared-email",
+      status: "COMPLETED",
+      customer_id: "square-customer-shared-email",
+      order_id: "square-order-shared-email",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "shared-sync@example.test",
+      total_money: { amount: 8_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Ambiguous shared email payment",
+      created_at: now,
+      updated_at: now,
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  const providerIdentity = database.prepare(`
+    SELECT person_id FROM crm_identities
+    WHERE provider='square' AND external_id='square-customer-shared-email'
+  `).get();
+  assert.ok(providerIdentity?.person_id);
+  assert.notEqual(providerIdentity.person_id, first.id);
+  assert.notEqual(providerIdentity.person_id, second.id);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 3);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND kind='email' AND active=1
+  `).get(providerIdentity.person_id).count, 0);
+
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  assert.equal(attention.response.status, 200);
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id
+        === "crm-sync-conflict:square:payment:square-payment-shared-email"
+  );
+  assert.ok(conflict);
+  const metadata = JSON.parse(conflict.metadata_json);
+  assert.deepEqual(metadata.conflicts, ["ambiguous_email"]);
+  assert.deepEqual(
+    [...metadata.personIds].sort(),
+    [first.id, second.id].sort(),
+  );
+});
+
+test("a stale hidden email claim cannot override the current unique email owner", async (t) => {
+  const database = migratedDatabase();
+  const staleClaimOwner = await createPerson(database, {
+    displayName: "Stale Claim Owner",
+    email: "stale-claim-owner@example.test",
+  });
+  const currentEmailOwner = await createPerson(database, {
+    displayName: "Current Email Owner",
+    email: "current-owner@example.test",
+  });
+  const now = "2026-07-11T16:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES(
+      'stale-unique-email-claim',?,'other','current-owner@example.test',
+      'current-owner@example.test','crm_email_claim','current-owner@example.test',
+      '',0,0,0,'system','email_claim',NULL,0,?,?
+    )
+  `).run(staleClaimOwner.id, now, now);
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-stale-claim",
+      status: "COMPLETED",
+      customer_id: "square-customer-stale-claim",
+      order_id: "square-order-stale-claim",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "current-owner@example.test",
+      total_money: { amount: 7000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Current owner payment",
+      created_at: now,
+      updated_at: now,
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_identities
+    WHERE provider='square' AND external_id='square-customer-stale-claim'
+  `).get().person_id, currentEmailOwner.id);
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE source_provider='square' AND source_id='square-payment-stale-claim'
+  `).get().person_id, currentEmailOwner.id);
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id
+        === "crm-sync-conflict:square:payment:square-payment-stale-claim"
+  );
+  assert.ok(conflict);
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).conflicts,
+    ["exact_identity_anchor_disagreement"],
+  );
 });
 
 test("Square sync surfaces exact person-anchor disagreements for owner review", async (t) => {
@@ -2188,4 +3262,72 @@ test("Square sync recognizes a local providerRefundId mirror without double-coun
   assert.equal(result.payload.person.settledGrossCents, 12_000);
   assert.equal(result.payload.person.refundCents, 5_000);
   assert.equal(result.payload.person.netSpendCents, 7_000);
+});
+
+test("Square refund ownership uses the original charge rather than another refund row", async (t) => {
+  const database = migratedDatabase();
+  const refundOwner = await createPerson(database, {
+    displayName: "Refund Row Person",
+    email: "refund-row-person@example.test",
+  });
+  const chargeOwner = await createPerson(database, {
+    displayName: "Charge Owner",
+    email: "charge-owner@example.test",
+  });
+  const now = "2026-07-12T17:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'refund-owner-row',?,'node-events','refund','pending',3000,0,'USD',?,
+      'local','event_ticket_refund','refund-owner-source',
+      '{"providerPaymentId":"refund-owner-payment","providerRefundId":"refund-owner-refund"}',
+      1,?,?
+    )
+  `).run(refundOwner.id, now, now, now);
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'refund-owner-charge',?,'node-events','charge','settled',9000,0,'USD',?,
+      'local','event_ticket_payment','charge-owner-source',
+      '{"providerPaymentId":"refund-owner-payment"}',1,?,?
+    )
+  `).run(chargeOwner.id, now, now, now);
+  installSquareApiMock(t, {
+    refunds: [{
+      id: "refund-owner-refund",
+      status: "COMPLETED",
+      payment_id: "refund-owner-payment",
+      order_id: "refund-owner-order",
+      location_id: "square-tattoo-location",
+      amount_money: { amount: 3000, currency: "USD" },
+      created_at: now,
+      updated_at: now,
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id
+        === "crm-sync-conflict:square:refund:refund-owner-refund"
+  );
+  assert.ok(conflict);
+  const metadata = JSON.parse(conflict.metadata_json);
+  assert.deepEqual(metadata.conflicts, ["payment_refund_person_disagreement"]);
+  assert.deepEqual(
+    [...metadata.personIds].sort(),
+    [refundOwner.id, chargeOwner.id].sort(),
+  );
 });

@@ -317,6 +317,27 @@ function eventRefundFromRaw(rawValue) {
   return refund && typeof refund === "object" && !Array.isArray(refund) ? refund : null;
 }
 
+function eventCancellationFromRaw(rawValue) {
+  const cancellation = parseTicketRawJson(rawValue).eventCancellation;
+  return cancellation && typeof cancellation === "object" && !Array.isArray(cancellation)
+    ? cancellation
+    : null;
+}
+
+function rawTicketJsonWithCancellation(rawValue, {
+  refundRequested,
+  requestedAt,
+} = {}) {
+  const value = parseTicketRawJson(rawValue);
+  const existing = eventCancellationFromRaw(rawValue) || {};
+  value.eventCancellation = {
+    ...existing,
+    refundRequested: Boolean(existing.refundRequested || refundRequested),
+    requestedAt: existing.requestedAt || requestedAt || new Date().toISOString(),
+  };
+  return JSON.stringify(value);
+}
+
 function eventRefundResult(squareRefundValue) {
   const squareRefund = squareRefundValue && typeof squareRefundValue === "object"
     ? squareRefundValue
@@ -467,17 +488,20 @@ function rawTicketJsonWithRefund(rawValue, refundSnapshot) {
 
 function rawTicketJsonWithOrder(rawValue, order) {
   const existingRefund = eventRefundFromRaw(rawValue);
+  const existingCancellation = eventCancellationFromRaw(rawValue);
   const next = order && typeof order === "object" && !Array.isArray(order)
     ? { ...order }
     : parseTicketRawJson(rawValue);
   if (existingRefund) next.eventRefund = existingRefund;
+  if (existingCancellation) next.eventCancellation = existingCancellation;
   return JSON.stringify(next);
 }
 
 function orderLooksPaid(order) {
   if (!order) return false;
-  const netDue = Number(order.net_amount_due_money?.amount ?? 1);
-  return order.state === "COMPLETED" || netDue <= 0 || Boolean(order.tenders?.length);
+  const netDue = Number(order.net_amount_due_money?.amount);
+  if (Number.isFinite(netDue)) return netDue <= 0;
+  return order.state === "COMPLETED";
 }
 
 function webhookOrderId(payload) {
@@ -505,7 +529,15 @@ function webhookRefund(payload) {
 
 function webhookLooksPaid(payload, order) {
   const payment = payload?.data?.object?.payment;
-  return orderLooksPaid(order) || payment?.status === "COMPLETED";
+  const hasOrderState = Boolean(
+    order
+    && (
+      order.state
+      || order.net_amount_due_money
+      || Array.isArray(order.tenders)
+    )
+  );
+  return hasOrderState ? orderLooksPaid(order) : payment?.status === "COMPLETED";
 }
 
 /* ------------------------------------------------------------------ */
@@ -553,6 +585,234 @@ function logCrmMirrorFailure(sourceType, sourceId, error) {
     sourceId: String(sourceId || ""),
     errorName: error?.name || "Error",
   }));
+}
+
+const EVENT_PAYMENT_ATTENTION_TYPE = "event_payment_attention";
+
+async function setEventPaymentAttention(database, ticketValue, {
+  active = true,
+  reason = "payment_reported_after_terminal_status",
+  refundId = null,
+  refundStatus = null,
+  paymentIds = [],
+  refundIds = [],
+} = {}) {
+  const ticketId = asString(ticketValue?.id);
+  if (!ticketId) return false;
+  const now = new Date().toISOString();
+  const cancellation = eventCancellationFromRaw(
+    ticketValue.raw_json ?? ticketValue.rawJson
+  );
+  const providerPaymentId = asString(
+    ticketValue.square_payment_id || ticketValue.squarePaymentId
+  ) || null;
+  const incomingPaymentIds = [...new Set([
+    ...paymentIds.map(asString),
+    providerPaymentId,
+  ].filter(Boolean))];
+  const providerRefundId = asString(
+    refundId || ticketValue.refund_id || ticketValue.refundId
+  ) || null;
+  const incomingRefundIds = [...new Set([
+    ...refundIds.map(asString),
+    providerRefundId,
+  ].filter(Boolean))];
+  const metadata = {
+    ticketId,
+    ticketStatus: asString(ticketValue.status).toLowerCase(),
+    providerPaymentId,
+    providerPaymentIds: incomingPaymentIds,
+    providerRefundId,
+    providerRefundIds: incomingRefundIds,
+    providerRefundStatus: asString(refundStatus).toUpperCase() || null,
+    refundRequested: Boolean(cancellation?.refundRequested),
+    reason,
+  };
+  if (!active) {
+    const update = await database.prepare(`
+      UPDATE crm_interactions
+      SET status=?,metadata_json=?,active=?,updated_at=?
+      WHERE source_provider='system' AND source_type=? AND source_id=?
+    `).bind(
+      "resolved",
+      JSON.stringify(metadata),
+      0,
+      now,
+      EVENT_PAYMENT_ATTENTION_TYPE,
+      ticketId,
+    ).run();
+    return Number(update?.meta?.changes || 0) > 0;
+  }
+  const metadataPatch = JSON.stringify({
+    ticketId: metadata.ticketId,
+    ticketStatus: metadata.ticketStatus,
+    providerRefundId: metadata.providerRefundId,
+    providerRefundStatus: metadata.providerRefundStatus,
+    refundRequested: metadata.refundRequested,
+  });
+  await database.batch([
+    database.prepare(`
+      INSERT OR IGNORE INTO crm_interactions(
+        id,person_id,node_id,channel,interaction_type,label,status,quantity,
+        occurred_at,source_provider,source_type,source_id,metadata_json,
+        active,created_at,updated_at
+      ) VALUES(
+        ?,NULL,'node-events','square','payment_exception',
+        'Event payment needs review','needs_review',1,
+        ?,'system',?,?,?,1,?,?
+      )
+    `).bind(
+      `crm-attention-${crypto.randomUUID()}`,
+      ticketValue.paid_at || ticketValue.paidAt
+        || ticketValue.updated_at || ticketValue.updatedAt
+        || now,
+      EVENT_PAYMENT_ATTENTION_TYPE,
+      ticketId,
+      JSON.stringify(metadata),
+      now,
+      now,
+    ),
+    database.prepare(`
+      UPDATE crm_interactions
+      SET status='needs_review',active=1,updated_at=?,
+        metadata_json=json_set(
+          json_patch(
+            CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+            ?
+          ),
+          '$.reason',
+          CASE
+            WHEN json_extract(metadata_json,'$.reason') IN (
+              'multiple_payments_require_manual_refund',
+              'partial_payment_requires_review',
+              'partial_payment_arrived_during_cancellation',
+              'missing_payment_id_requires_review',
+              'multiple_refunds_require_review',
+              'refund_persistence_conflict'
+            )
+            THEN json_extract(metadata_json,'$.reason')
+            ELSE ?
+          END,
+          '$.providerPaymentId',
+          COALESCE(json_extract(metadata_json,'$.providerPaymentId'),?),
+          '$.providerPaymentIds',
+          json((
+            SELECT json_group_array(value)
+            FROM (
+              SELECT value
+              FROM json_each(
+                CASE
+                  WHEN json_type(metadata_json,'$.providerPaymentIds')='array'
+                  THEN json_extract(metadata_json,'$.providerPaymentIds')
+                  ELSE '[]'
+                END
+              )
+              UNION
+              SELECT value FROM json_each(?)
+            )
+          )),
+          '$.providerRefundIds',
+          json((
+            SELECT json_group_array(value)
+            FROM (
+              SELECT value
+              FROM json_each(
+                CASE
+                  WHEN json_type(metadata_json,'$.providerRefundIds')='array'
+                  THEN json_extract(metadata_json,'$.providerRefundIds')
+                  ELSE '[]'
+                END
+              )
+              UNION
+              SELECT value FROM json_each(?)
+            )
+          ))
+        )
+      WHERE source_provider='system' AND source_type=? AND source_id=?
+    `).bind(
+      now,
+      metadataPatch,
+      reason,
+      providerPaymentId,
+      JSON.stringify(incomingPaymentIds),
+      JSON.stringify(incomingRefundIds),
+      EVENT_PAYMENT_ATTENTION_TYPE,
+      ticketId,
+    ),
+  ]);
+  return true;
+}
+
+async function reconcileEventPaymentAttentionAfterRefund(
+  database,
+  ticketValue,
+  refundValue,
+) {
+  const ticketId = asString(ticketValue?.id);
+  if (!ticketId) return false;
+  const attention = await database.prepare(`
+    SELECT id,metadata_json FROM crm_interactions
+    WHERE source_provider='system' AND source_type=? AND source_id=? AND active=1
+    LIMIT 1
+  `).bind(EVENT_PAYMENT_ATTENTION_TYPE, ticketId).first();
+  if (!attention?.id) return false;
+  const metadata = parseTicketRawJson(attention.metadata_json);
+  const paymentIds = Array.isArray(metadata.providerPaymentIds)
+    ? metadata.providerPaymentIds.map(asString).filter(Boolean)
+    : [];
+  const singlePaymentReasons = new Set([
+    "payment_reported_after_terminal_status",
+    "refund_pending",
+    "refund_failed",
+  ]);
+  const refundAmountCents = Number(
+    refundValue?.amountCents ?? refundValue?.refundSnapshot?.amountCents
+  );
+  const ticketAmountCents = Math.max(
+    0,
+    Number(ticketValue.amount_cents ?? ticketValue.amountCents) || 0,
+  );
+  const fullRefund = Number.isSafeInteger(refundAmountCents)
+    && refundAmountCents >= ticketAmountCents;
+  const canResolve = singlePaymentReasons.has(asString(metadata.reason))
+    && paymentIds.length <= 1
+    && fullRefund
+    && asString(refundValue?.refundStatus).toUpperCase() === "COMPLETED";
+  if (canResolve) {
+    const now = new Date().toISOString();
+    const resolved = await database.prepare(`
+      UPDATE crm_interactions
+      SET status='resolved',active=0,updated_at=?,
+        metadata_json=json_set(
+          CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+          '$.providerRefundId',?,
+          '$.providerRefundStatus','COMPLETED',
+          '$.resolution','full_refund_completed'
+        )
+      WHERE id=? AND active=1 AND metadata_json=?
+    `).bind(
+      now,
+      asString(refundValue?.refundId) || null,
+      attention.id,
+      attention.metadata_json,
+    ).run();
+    if (Number(resolved?.meta?.changes || 0) > 0) return true;
+    await setEventPaymentAttention(database, ticketValue, {
+      reason: asString(metadata.reason) || "refund_requires_review",
+      paymentIds,
+      refundId: refundValue?.refundId,
+      refundIds: [refundValue?.refundId],
+      refundStatus: refundValue?.refundStatus,
+    });
+    return false;
+  }
+  await setEventPaymentAttention(database, ticketValue, {
+    reason: asString(metadata.reason) || "refund_requires_review",
+    paymentIds,
+    refundId: refundValue?.refundId,
+    refundStatus: refundValue?.refundStatus,
+  });
+  return false;
 }
 
 async function mirrorEventTicketToCrm(database, ticketValue, eventValue = null) {
@@ -664,11 +924,18 @@ async function mirrorEventTicketRefundToCrm(database, ticketValue, refundValue) 
         occurredAt: refundSnapshot.updatedAt
           || refundSnapshot.createdAt
           || new Date().toISOString(),
-        externalOrderId: refundId,
+        externalOrderId: refundSnapshot.orderId
+          || ticketValue.square_order_id
+          || ticketValue.squareOrderId
+          || refundId,
         metadata: {
           eventId: ticketValue.event_id || ticketValue.eventId || "",
           ticketId: ticketValue.id,
-          providerPaymentId: ticketValue.square_payment_id || ticketValue.squarePaymentId || "",
+          providerPaymentId: refund.paymentId
+            || refundSnapshot.paymentId
+            || ticketValue.square_payment_id
+            || ticketValue.squarePaymentId
+            || "",
           providerRefundId: refundId,
           providerRefundStatus: providerStatus,
         },
@@ -756,6 +1023,13 @@ async function persistEventRefundStatus(database, ticketValue, refundValue) {
     refundSnapshot: effectiveSnapshot,
   };
   await mirrorEventTicketRefundToCrm(database, updatedTicket, effectiveRefund);
+  if (effectiveRefund.refundStatus === "COMPLETED") {
+    await reconcileEventPaymentAttentionAfterRefund(
+      database,
+      updatedTicket,
+      effectiveRefund,
+    );
+  }
   return {
     status: "updated",
     ticket: updatedTicket,
@@ -1422,7 +1696,7 @@ async function preserveTerminalTicketPayment(db, ticketId, paymentId, now) {
   await db
     .prepare(
       `UPDATE event_tickets
-       SET square_payment_id = COALESCE(?, square_payment_id),
+       SET square_payment_id = COALESCE(square_payment_id, ?),
            paid_at = COALESCE(paid_at, ?),
            updated_at = ?
        WHERE id = ? AND status NOT IN ('pending', 'paid')`
@@ -1435,6 +1709,9 @@ async function preserveTerminalTicketPayment(db, ticketId, paymentId, now) {
     .first();
   if (terminalTicket && !["pending", "paid"].includes(terminalTicket.status)) {
     await mirrorEventTicketToCrm(db, terminalTicket, null);
+    await setEventPaymentAttention(db, terminalTicket, {
+      paymentIds: [paymentId],
+    });
     console.warn(JSON.stringify({
       event: "events.terminal_ticket_payment_attention",
       ticketId,
@@ -1619,10 +1896,19 @@ async function applyEventRefundWebhook(database, refund) {
     return { ok: true, ignored: true, reason: "No matching event ticket." };
   }
   if (ticket.refund_id && ticket.refund_id !== result.refundId) {
+    await mirrorEventTicketRefundToCrm(database, ticket, result);
+    await setEventPaymentAttention(database, ticket, {
+      reason: "multiple_refunds_require_review",
+      paymentIds: [refund?.payment_id],
+      refundId: result.refundId,
+      refundIds: [ticket.refund_id, result.refundId],
+      refundStatus: result.refundStatus,
+    });
     return {
       ok: true,
       ignored: true,
       attention: true,
+      durableAttention: true,
       reason: "The event ticket is linked to a different Square refund.",
       ticketId: ticket.id,
       ticketStatus: ticket.status,
@@ -1632,10 +1918,19 @@ async function applyEventRefundWebhook(database, refund) {
   }
   const persisted = await persistEventRefundStatus(database, ticket, result);
   if (persisted.status === "conflict") {
+    await mirrorEventTicketRefundToCrm(database, ticket, result);
+    await setEventPaymentAttention(database, ticket, {
+      reason: "refund_persistence_conflict",
+      paymentIds: [refund?.payment_id],
+      refundId: result.refundId,
+      refundIds: [result.refundId],
+      refundStatus: result.refundStatus,
+    });
     return {
       ok: true,
       ignored: true,
       attention: true,
+      durableAttention: true,
       reason: "The event ticket refund changed concurrently.",
       ticketId: ticket.id,
       ticketStatus: ticket.status,
@@ -1699,6 +1994,7 @@ export async function handleEventsSquareWebhook(request, env) {
         paid: true,
         reconciled: false,
         attention: true,
+        durableAttention: true,
         reason: "Payment was reported for a terminal event ticket.",
         ticketId: ticketRow.id,
         ticketStatus: confirmation.status,
@@ -1745,23 +2041,47 @@ export async function reapStalePendingTickets(env) {
 
     for (const row of result.results || []) {
       try {
-        // Last-chance reconciliation in case the webhook never landed.
-        if (row.square_order_id) {
-          const order = await fetchEventsSquareOrder(env, row.square_order_id);
-          if (orderLooksPaid(order)) {
-            const confirmation = await markTicketPaid(db, env, null, row, order, "");
-            if (confirmation.paid) recovered += 1;
-            continue;
-          }
+        // Reuse the same guarded order check and checkout invalidation used by
+        // manual cancellation so a partial or just-completed payment cannot be
+        // swept as unpaid.
+        const reconciliation = await reconcileEventTicketForCancellation(
+          db,
+          env,
+          row,
+          false,
+        );
+        if (reconciliation.raced) {
+          failed += 1;
+          continue;
+        }
+        if (reconciliation.paid) {
+          const paidCandidate = reconciliation.ticket || row;
+          const confirmation = await markTicketPaid(
+            db,
+            env,
+            null,
+            paidCandidate,
+            parseTicketRawJson(paidCandidate.raw_json),
+            paidCandidate.square_payment_id || "",
+          );
+          if (confirmation.paid) recovered += 1;
+          else failed += 1;
+          continue;
         }
         const now = new Date().toISOString();
+        const current = reconciliation.ticket || row;
+        const rawJson = rawTicketJsonWithCancellation(current.raw_json, {
+          refundRequested: false,
+          requestedAt: now,
+        });
         const cancellation = await db
           .prepare(
             `UPDATE event_tickets
-             SET status = 'cancelled', cancelled_at = COALESCE(cancelled_at, ?), updated_at = ?
+             SET status='cancelled',cancelled_at=COALESCE(cancelled_at,?),
+                 square_checkout_url=NULL,raw_json=?,updated_at=?
              WHERE id = ? AND status = 'pending'`
           )
-          .bind(now, now, row.id)
+          .bind(now, rawJson, now, row.id)
           .run();
         if (Number(cancellation?.meta?.changes || 0) < 1) continue;
         const cancelledTicket = await db.prepare(
@@ -2029,17 +2349,39 @@ function eventTicketHasSettledPayment(ticket) {
     || Boolean(ticket?.refund_id);
 }
 
-function squarePaymentIdFromOrder(order) {
+function squarePaymentIdsFromOrder(order) {
+  const paymentIds = [];
   for (const tender of order?.tenders || []) {
-    const paymentId = asString(tender?.payment_id || tender?.id);
-    if (paymentId) return paymentId;
+    const paymentId = asString(tender?.payment_id);
+    if (paymentId && !paymentIds.includes(paymentId)) paymentIds.push(paymentId);
   }
-  return "";
+  return paymentIds;
 }
 
-async function persistEventTicketPaymentEvidence(database, ticket, order) {
+function squarePaymentIdFromOrder(order) {
+  return squarePaymentIdsFromOrder(order)[0] || "";
+}
+
+async function persistEventTicketPaymentEvidence(database, ticket, order, {
+  requireSinglePayment = false,
+} = {}) {
   const now = new Date().toISOString();
-  const paymentId = squarePaymentIdFromOrder(order);
+  const paymentIds = squarePaymentIdsFromOrder(order);
+  if (requireSinglePayment && paymentIds.length !== 1) {
+    const reason = paymentIds.length > 1
+      ? "multiple_payments_require_manual_refund"
+      : "missing_payment_id_requires_review";
+    await setEventPaymentAttention(database, ticket, {
+      reason,
+      paymentIds,
+    });
+    throw new Error(
+      paymentIds.length > 1
+        ? "This Square order used multiple payments and must be refunded manually before cancellation."
+        : "This paid Square order has no refundable payment id and must be reviewed manually."
+    );
+  }
+  const paymentId = paymentIds[0] || "";
   const paidAt = order?.closed_at
     || order?.tenders?.[0]?.created_at
     || ticket.paid_at
@@ -2064,7 +2406,7 @@ async function persistEventTicketPaymentEvidence(database, ticket, order) {
   };
 }
 
-async function reconcileEventTicketForCancellation(database, env, ticket) {
+async function reconcileEventTicketForCancellation(database, env, ticket, shouldRefund) {
   let current = ticket;
   let paid = eventTicketHasSettledPayment(current);
   let invalidated = false;
@@ -2072,12 +2414,26 @@ async function reconcileEventTicketForCancellation(database, env, ticket) {
     && (
       current.status === "pending"
       || (!current.square_payment_id && !current.refund_id)
+      || (shouldRefund && paid && !current.refund_id)
     );
 
   if (shouldFetchOrder) {
     const order = await fetchEventsSquareOrder(env, current.square_order_id);
+    const paymentIds = squarePaymentIdsFromOrder(order);
+    const hasTenderEvidence = Array.isArray(order?.tenders) && order.tenders.length > 0;
+    if (hasTenderEvidence && !orderLooksPaid(order)) {
+      await setEventPaymentAttention(database, current, {
+        reason: "partial_payment_requires_review",
+        paymentIds,
+      });
+      throw new Error(
+        "This Square order has a partial payment and must be reviewed before cancellation."
+      );
+    }
     if (orderLooksPaid(order)) {
-      const persisted = await persistEventTicketPaymentEvidence(database, current, order);
+      const persisted = await persistEventTicketPaymentEvidence(database, current, order, {
+        requireSinglePayment: Boolean(shouldRefund),
+      });
       return {
         ticket: persisted.ticket,
         paid: true,
@@ -2102,11 +2458,24 @@ async function reconcileEventTicketForCancellation(database, env, ticket) {
         ).bind(now, current.id, current.status).run();
         current = await selectAdminEventTicket(database, current.id) || current;
         const closedOrder = await fetchEventsSquareOrder(env, current.square_order_id);
+        const closedPaymentIds = squarePaymentIdsFromOrder(closedOrder);
+        const closedHasTenderEvidence = Array.isArray(closedOrder?.tenders)
+          && closedOrder.tenders.length > 0;
+        if (closedHasTenderEvidence && !orderLooksPaid(closedOrder)) {
+          await setEventPaymentAttention(database, current, {
+            reason: "partial_payment_arrived_during_cancellation",
+            paymentIds: closedPaymentIds,
+          });
+          throw new Error(
+            "This Square order received a partial payment while cancellation was in progress."
+          );
+        }
         if (orderLooksPaid(closedOrder)) {
           const persisted = await persistEventTicketPaymentEvidence(
             database,
             current,
             closedOrder,
+            { requireSinglePayment: Boolean(shouldRefund) },
           );
           return {
             ticket: persisted.ticket,
@@ -2156,7 +2525,12 @@ async function cancelEventTicketLifecycle(database, env, ticketId, shouldRefund,
   const initial = await selectAdminEventTicket(database, ticketId);
   if (!initial) return { missing: true };
   const alreadyCancelled = initial.status === "cancelled";
-  const reconciliation = await reconcileEventTicketForCancellation(database, env, initial);
+  const reconciliation = await reconcileEventTicketForCancellation(
+    database,
+    env,
+    initial,
+    shouldRefund,
+  );
   if (reconciliation.raced) {
     if (attempt >= 2) return { conflict: true };
     return cancelEventTicketLifecycle(database, env, ticketId, shouldRefund, attempt + 1);
@@ -2183,27 +2557,45 @@ async function cancelEventTicketLifecycle(database, env, ticketId, shouldRefund,
   let cancelledNow = false;
   if (current.status !== "cancelled") {
     const now = new Date().toISOString();
+    const rawJson = rawTicketJsonWithCancellation(current.raw_json, {
+      refundRequested: shouldRefund,
+      requestedAt: now,
+    });
     const cancellation = await database.prepare(
       `UPDATE event_tickets
        SET status='cancelled',cancelled_at=COALESCE(cancelled_at,?),
-           square_checkout_url=NULL,updated_at=?
+            square_checkout_url=NULL,raw_json=?,updated_at=?
        WHERE id=? AND status=?`
-    ).bind(now, now, current.id, current.status).run();
+    ).bind(now, rawJson, now, current.id, current.status).run();
     if (Number(cancellation?.meta?.changes || 0) < 1) {
       if (attempt >= 2) return { conflict: true };
       return cancelEventTicketLifecycle(database, env, ticketId, shouldRefund, attempt + 1);
     }
     cancelledNow = true;
-  } else if (current.square_checkout_url) {
+  } else {
     const now = new Date().toISOString();
+    const rawJson = rawTicketJsonWithCancellation(current.raw_json, {
+      refundRequested: shouldRefund,
+      requestedAt: now,
+    });
     await database.prepare(
-      "UPDATE event_tickets SET square_checkout_url=NULL,updated_at=? WHERE id=?"
-    ).bind(now, current.id).run();
+      `UPDATE event_tickets
+       SET square_checkout_url=NULL,raw_json=?,updated_at=?
+       WHERE id=? AND status='cancelled'`
+    ).bind(rawJson, now, current.id).run();
   }
 
   const finalTicket = await selectAdminEventTicket(database, ticketId) || current;
   wasPaid ||= eventTicketHasSettledPayment(finalTicket);
   await mirrorEventTicketToCrm(database, finalTicket, null);
+  if (wasPaid && shouldRefund && !refund.completed) {
+    await setEventPaymentAttention(database, finalTicket, {
+      reason: refund.pending ? "refund_pending" : "refund_failed",
+      paymentIds: [finalTicket.square_payment_id],
+      refundId: refund.refundId,
+      refundStatus: refund.refundStatus,
+    });
+  }
   return {
     ticket: finalTicket,
     wasPaid,

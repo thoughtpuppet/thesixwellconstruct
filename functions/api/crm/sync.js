@@ -150,7 +150,7 @@ async function readObject(request) {
 
 async function emailPersonMatch(database, email) {
   const normalized = normalizeEmail(email);
-  if (!normalized) return { personId: null, ambiguous: false };
+  if (!normalized) return { personId: null, ambiguous: false, personIds: [] };
   const result = await database.prepare(`
     SELECT DISTINCT COALESCE(p.merged_into_id,p.id) person_id,i.is_shared
     FROM crm_identities i
@@ -163,6 +163,7 @@ async function emailPersonMatch(database, email) {
   return {
     personId: ids.length === 1 && !shared ? ids[0] : null,
     ambiguous: shared || ids.length > 1,
+    personIds: ids,
   };
 }
 
@@ -339,24 +340,39 @@ async function ensureProviderPerson(database, {
   const preferred = await canonicalPersonId(database, preferredPersonId);
   const providerPersonId = await providerIdentityPerson(database, provider, externalId);
   const emailMatch = await emailPersonMatch(database, normalizedEmail);
-  const claimedEmailPersonId = await emailClaimOwner(database, normalizedEmail);
+  const claimedEmailPersonId = emailMatch.ambiguous
+    ? null
+    : await emailClaimOwner(database, normalizedEmail);
   const exactAnchors = [...new Set([
     preferred,
     providerPersonId,
     claimedEmailPersonId,
     emailMatch.personId,
   ].filter(Boolean))];
+  const phoneOnlyNeedsReview = !preferred
+    && !providerPersonId
+    && !claimedEmailPersonId
+    && !emailMatch.personId
+    && !externalId
+    && !normalizedEmail
+    && Boolean(normalizedPhone);
   const conflictRecordId = text(conflictSourceId || externalId, 300);
   if (conflictRecordId) {
     await setSyncConflict(database, {
       provider,
       sourceType: conflictSourceType,
       sourceId: conflictRecordId,
-      conflicts: exactAnchors.length > 1 ? ["exact_identity_anchor_disagreement"] : [],
-      personIds: exactAnchors,
+      conflicts: [
+        ...(emailMatch.ambiguous ? ["ambiguous_email"] : []),
+        ...(phoneOnlyNeedsReview ? ["phone_only_identity"] : []),
+        ...(exactAnchors.length > 1 ? ["exact_identity_anchor_disagreement"] : []),
+      ],
+      personIds: [...exactAnchors, ...(emailMatch.personIds || [])],
     });
   }
-  let personId = preferred || providerPersonId || claimedEmailPersonId || emailMatch.personId;
+  let personId = preferred || providerPersonId || emailMatch.personId || claimedEmailPersonId;
+  if (!personId && emailMatch.ambiguous && !externalId) return null;
+  if (!personId && phoneOnlyNeedsReview) return null;
   if (!personId && !externalId && !normalizedEmail && !normalizedPhone) return null;
 
   const now = nowIso();
@@ -712,7 +728,7 @@ async function persistSquare(database, records, counts) {
       : null;
     const mirrored = await database.prepare(`
       SELECT id,person_id FROM crm_transactions
-      WHERE source_provider='local' AND active=1
+      WHERE source_provider='local' AND transaction_type='charge' AND active=1
         AND (
           json_extract(metadata_json,'$.providerPaymentId')=?
           OR (
@@ -831,7 +847,10 @@ async function persistSquare(database, records, counts) {
           SELECT person_id FROM crm_transactions
           WHERE (
             (source_provider='square' AND source_type='payment' AND source_id=?)
-            OR (source_provider='local' AND json_extract(metadata_json,'$.providerPaymentId')=?)
+            OR (
+              source_provider='local' AND transaction_type='charge'
+              AND json_extract(metadata_json,'$.providerPaymentId')=?
+            )
           ) AND active=1 LIMIT 1
         `).bind(refund.paymentExternalId, refund.paymentExternalId).first()
       : null;
@@ -1168,12 +1187,14 @@ async function selectResumeCheckpoint(database, provider, mode) {
     const updatedAtMs = new Date(latest.updated_at || latest.started_at || 0).getTime();
     const stale = !Number.isFinite(updatedAtMs)
       || Date.now() - updatedAtMs > 15 * 60 * 1000;
-    if (!stale || (checkpoint?.mode && checkpoint.mode !== mode)) {
+    if (!stale) {
       return { job: null, checkpoint: null, busy: true };
     }
     return {
       job: latest,
-      checkpoint: checkpoint || { mode, complete: false },
+      checkpoint: checkpoint?.mode === mode
+        ? checkpoint
+        : { mode, complete: false },
       busy: false,
     };
   }
@@ -1198,6 +1219,12 @@ async function selectResumeCheckpoint(database, provider, mode) {
   };
 }
 
+function isProviderSyncLeaseConflict(error) {
+  const message = String(error?.message || error || "");
+  return /unique constraint failed:\s*crm_sync_jobs\.provider/i.test(message)
+    || /idx_crm_sync_jobs_one_running_provider/i.test(message);
+}
+
 export async function handleCrmProviderSync(request, database, env, providerValue) {
   const provider = text(providerValue, 80).toLowerCase();
   if (!SYNC_PROVIDERS.has(provider)) return failure("Unknown CRM provider.", 404);
@@ -1214,19 +1241,30 @@ export async function handleCrmProviderSync(request, database, env, providerValu
     });
   }
   const jobId = resume.job?.id || recordId("crm-sync");
+  const leaseToken = recordId("crm-sync-lease");
   const startedAt = nowIso();
   if (resume.job) {
-    const claimed = await database.prepare(`
-      UPDATE crm_sync_jobs
-      SET status='running',error='',started_at=COALESCE(started_at,?),updated_at=?
-      WHERE id=? AND status=? AND updated_at=?
-    `).bind(
-      startedAt,
-      startedAt,
-      jobId,
-      resume.job.status,
-      resume.job.updated_at,
-    ).run();
+    let claimed;
+    try {
+      claimed = await database.prepare(`
+        UPDATE crm_sync_jobs
+        SET status='running',error='',lease_token=?,
+          started_at=COALESCE(started_at,?),updated_at=?
+        WHERE id=? AND status=? AND updated_at=?
+      `).bind(
+        leaseToken,
+        startedAt,
+        startedAt,
+        jobId,
+        resume.job.status,
+        resume.job.updated_at,
+      ).run();
+    } catch (error) {
+      if (!isProviderSyncLeaseConflict(error)) throw error;
+      return failure("A sync for this provider is already running.", 409, {
+        code: "SYNC_ALREADY_RUNNING",
+      });
+    }
     if (Number(claimed?.meta?.changes || 0) < 1) {
       return failure("A sync for this provider is already running.", 409, {
         code: "SYNC_ALREADY_RUNNING",
@@ -1238,19 +1276,27 @@ export async function handleCrmProviderSync(request, database, env, providerValu
       mode,
       complete: false,
     };
-    await database.prepare(`
-      INSERT INTO crm_sync_jobs(
-        id,provider,status,checkpoint_json,stats_json,warnings_json,error,
-        started_at,created_at,updated_at
-      ) VALUES(?,?,'running',?,'{}','[]','',?,?,?)
-    `).bind(
-      jobId,
-      provider,
-      JSON.stringify(initialCheckpoint),
-      startedAt,
-      startedAt,
-      startedAt,
-    ).run();
+    try {
+      await database.prepare(`
+        INSERT INTO crm_sync_jobs(
+          id,provider,status,checkpoint_json,stats_json,warnings_json,error,
+          lease_token,started_at,created_at,updated_at
+        ) VALUES(?,?,'running',?,'{}','[]','',?,?,?,?)
+      `).bind(
+        jobId,
+        provider,
+        JSON.stringify(initialCheckpoint),
+        leaseToken,
+        startedAt,
+        startedAt,
+        startedAt,
+      ).run();
+    } catch (error) {
+      if (!isProviderSyncLeaseConflict(error)) throw error;
+      return failure("A sync for this provider is already running.", 409, {
+        code: "SYNC_ALREADY_RUNNING",
+      });
+    }
   }
 
   const persisted = {
@@ -1266,17 +1312,28 @@ export async function handleCrmProviderSync(request, database, env, providerValu
     checkpoint: resume.checkpoint,
     collectRecords: false,
     onBatch: async ({ records, checkpoint }) => {
+      const fence = await database.prepare(`
+        UPDATE crm_sync_jobs SET updated_at=?
+        WHERE id=? AND status='running' AND lease_token=?
+      `).bind(nowIso(), jobId, leaseToken).run();
+      if (Number(fence?.meta?.changes || 0) < 1) {
+        throw new Error("CRM provider sync lease was lost.");
+      }
       await persistProviderPage(database, provider, records, persisted);
-      await database.prepare(`
+      const heartbeat = await database.prepare(`
         UPDATE crm_sync_jobs
         SET checkpoint_json=?,stats_json=?,updated_at=?
-        WHERE id=?
+        WHERE id=? AND status='running' AND lease_token=?
       `).bind(
         JSON.stringify(checkpoint || {}),
         JSON.stringify({ persistence: persisted }),
         nowIso(),
         jobId,
+        leaseToken,
       ).run();
+      if (Number(heartbeat?.meta?.changes || 0) < 1) {
+        throw new Error("CRM provider sync lease was lost.");
+      }
     },
   });
 
@@ -1285,11 +1342,11 @@ export async function handleCrmProviderSync(request, database, env, providerValu
     ? (result.checkpoint?.complete ? "complete" : "pending")
     : "failed";
   const stats = { ...(result.stats || {}), persistence: persisted };
-  await database.prepare(`
+  const completion = await database.prepare(`
     UPDATE crm_sync_jobs
     SET status=?,checkpoint_json=?,stats_json=?,warnings_json=?,error=?,
-      completed_at=?,updated_at=?
-    WHERE id=?
+      completed_at=?,lease_token=NULL,updated_at=?
+    WHERE id=? AND status='running' AND lease_token=?
   `).bind(
     status,
     JSON.stringify(result.checkpoint || resume.checkpoint || {}),
@@ -1299,7 +1356,13 @@ export async function handleCrmProviderSync(request, database, env, providerValu
     status === "complete" || status === "failed" ? completedAt : null,
     completedAt,
     jobId,
+    leaseToken,
   ).run();
+  if (Number(completion?.meta?.changes || 0) < 1) {
+    return failure("This sync lost its provider lease.", 409, {
+      code: "SYNC_LEASE_LOST",
+    });
+  }
 
   return json({
     ok: result.ok,
