@@ -21,6 +21,7 @@ const STAGING_RETENTION_DAYS = 30;
 const TIERS = new Set([1, 2, 3]);
 const RELATIONSHIP_STATUSES = new Set(["active", "inactive", "archived", "suppressed"]);
 const CONTACT_METHODS = new Set(["", "email", "phone", "instagram", "none"]);
+const CONTACT_IDENTITY_KINDS = new Set(["email", "phone", "instagram"]);
 const TRANSACTION_TYPES = new Set(["charge", "refund", "adjustment"]);
 const TRANSACTION_STATUSES = new Set(["pending", "settled", "void", "failed"]);
 const SUBSCRIPTION_STATUSES = new Set(["subscribed", "unsubscribed", "paused", "unknown"]);
@@ -333,7 +334,12 @@ function identityStatement(database, personId, kind, value, options = {}) {
       id,person_id,kind,value,normalized_value,provider,external_id,label,
       is_primary,is_verified,is_shared,source_provider,source_type,source_id,
       import_batch_id,active,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)
+    )
+    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?
+    WHERE NOT EXISTS(
+      SELECT 1 FROM crm_identities
+      WHERE person_id=? AND kind=? AND normalized_value=? AND active=1
+    )
   `).bind(
     id("crm-identity"),
     personId,
@@ -352,6 +358,9 @@ function identityStatement(database, personId, kind, value, options = {}) {
     options.importBatchId || null,
     options.now || nowIso(),
     options.now || nowIso(),
+    personId,
+    kind,
+    normalized,
   );
 }
 
@@ -978,8 +987,55 @@ async function handleCreateIdentity(request, database, requestedId) {
         : value.toLowerCase();
   const provider = asString(body.provider || "manual", 80) || "manual";
   const now = nowIso();
+  const wantsPrimary = Boolean(body.isPrimary || body.primary);
+  const existing = CONTACT_IDENTITY_KINDS.has(kind)
+    ? await database.prepare(`
+        SELECT * FROM crm_identities
+        WHERE person_id=? AND kind=? AND normalized_value=? AND active=1
+        LIMIT 1
+      `).bind(person.id, kind, normalized).first()
+    : null;
+  if (existing) {
+    const statements = [];
+    if (wantsPrimary) {
+      statements.push(database.prepare(`
+        UPDATE crm_identities SET is_primary=0,updated_at=?
+        WHERE person_id=? AND kind=? AND active=1
+      `).bind(now, person.id, kind));
+    }
+    statements.push(database.prepare(`
+      UPDATE crm_identities
+      SET
+        is_primary=CASE WHEN ?=1 THEN 1 ELSE is_primary END,
+        is_verified=MAX(is_verified,?),
+        is_shared=MAX(is_shared,?),
+        label=CASE WHEN label='' AND ?!='' THEN ? ELSE label END,
+        updated_at=?
+      WHERE id=?
+    `).bind(
+      wantsPrimary ? 1 : 0,
+      body.verified || body.isVerified ? 1 : 0,
+      body.shared || body.isShared ? 1 : 0,
+      asString(body.label, 100),
+      asString(body.label, 100),
+      now,
+      existing.id,
+    ));
+    statements.push(auditStatement(database, {
+      personId: person.id,
+      action: "duplicate_identity_ignored",
+      resourceType: "identity",
+      resourceId: existing.id,
+      after: { kind, primary: wantsPrimary, deduplicated: true },
+    }));
+    await database.batch(statements);
+    const retained = await database.prepare(
+      "SELECT * FROM crm_identities WHERE id=?"
+    ).bind(existing.id).first();
+    return json({ identity: retained, deduplicated: true });
+  }
   const statements = [];
-  if (body.isPrimary || body.primary) {
+  if (wantsPrimary) {
     statements.push(database.prepare(`
       UPDATE crm_identities SET is_primary=0,updated_at=?
       WHERE person_id=? AND kind=? AND active=1
@@ -1000,7 +1056,7 @@ async function handleCreateIdentity(request, database, requestedId) {
     provider,
     asNullableString(body.externalId || body.external_id, 200),
     asString(body.label, 100),
-    body.isPrimary || body.primary ? 1 : 0,
+    wantsPrimary ? 1 : 0,
     body.verified || body.isVerified ? 1 : 0,
     body.shared || body.isShared ? 1 : 0,
     "manual",
@@ -1014,13 +1070,26 @@ async function handleCreateIdentity(request, database, requestedId) {
     action: "identity_created",
     resourceType: "identity",
     resourceId: identityId,
-    after: { kind, provider, primary: Boolean(body.isPrimary || body.primary) },
+    after: { kind, provider, primary: wantsPrimary },
   }));
   try {
     await database.batch(statements);
   } catch (error) {
     if (/UNIQUE constraint/i.test(error.message || "")) {
-      return failure("That provider identity is already connected to another person.", 409);
+      if (CONTACT_IDENTITY_KINDS.has(kind)) {
+        const retained = await database.prepare(`
+          SELECT * FROM crm_identities
+          WHERE person_id=? AND kind=? AND normalized_value=? AND active=1
+          LIMIT 1
+        `).bind(person.id, kind, normalized).first();
+        if (retained) return json({ identity: retained, deduplicated: true });
+      }
+      return failure(
+        CONTACT_IDENTITY_KINDS.has(kind)
+          ? "That contact value is already recorded for this person."
+          : "That provider identity is already connected to another person.",
+        409,
+      );
     }
     throw error;
   }

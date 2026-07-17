@@ -79,13 +79,14 @@ class LocalD1 {
   }
 }
 
-function migratedDatabase() {
+function migratedDatabase(throughMigration = "") {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
   const migrations = readdirSync(join(ROOT, "migrations"))
     .filter((name) => name.endsWith(".sql"))
     .sort();
   for (const migration of migrations) {
+    if (throughMigration && migration > throughMigration) break;
     database.exec(readFileSync(join(ROOT, "migrations", migration), "utf8"));
   }
   return database;
@@ -1690,6 +1691,258 @@ test("people profiles preserve manual tier judgment and calculate relationship a
   }));
   assert.equal(result.response.status, 409);
   assert.equal(result.payload.details.code, "EMAIL_ALREADY_CONNECTED");
+});
+
+test("manual contact writes stay idempotent within one person", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Unique Contact",
+    email: "unique-contact@example.test",
+  });
+  const originalEmail = database.prepare(`
+    SELECT id FROM crm_identities
+    WHERE person_id=? AND kind='email' AND active=1
+  `).get(person.id);
+
+  let result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${person.id}/identities`,
+    {
+      method: "POST",
+      body: {
+        kind: "email",
+        value: "UNIQUE-CONTACT@example.test",
+        isPrimary: true,
+        isVerified: true,
+      },
+    },
+  ));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.deduplicated, true);
+  assert.equal(result.payload.identity.id, originalEmail.id);
+  assert.equal(result.payload.identity.is_primary, 1);
+  assert.equal(result.payload.identity.is_verified, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND kind='email' AND active=1
+  `).get(person.id).count, 1);
+
+  result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${person.id}/identities`,
+    {
+      method: "POST",
+      body: {
+        kind: "phone",
+        value: "+1 (404) 555-0199",
+      },
+    },
+  ));
+  assert.equal(result.response.status, 201);
+
+  result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${person.id}/identities`,
+    {
+      method: "POST",
+      body: {
+        kind: "phone",
+        value: "+14045550199",
+      },
+    },
+  ));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.deduplicated, true);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND kind='phone' AND active=1
+  `).get(person.id).count, 1);
+
+  result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`, {
+    method: "PATCH",
+    body: { email: "Unique-Contact@Example.Test" },
+  }));
+  assert.equal(result.response.status, 200);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND kind='email' AND active=1
+  `).get(person.id).count, 1);
+
+  assert.ok(database.prepare(`
+    SELECT name FROM sqlite_master
+    WHERE type='index' AND name='idx_crm_identities_active_contact_value'
+  `).get());
+});
+
+test("the contact uniqueness guard never merges two people who share an email", async () => {
+  const database = migratedDatabase();
+  const first = await createPerson(database, {
+    displayName: "First Household Contact",
+    email: "household@example.test",
+  });
+  const second = await createPerson(database, {
+    displayName: "Second Household Contact",
+    email: "second-household@example.test",
+  });
+
+  database.prepare(`
+    UPDATE crm_identities
+    SET
+      value='household@example.test',
+      normalized_value='household@example.test',
+      is_shared=1
+    WHERE person_id=? AND kind='email'
+  `).run(second.id);
+  database.prepare(`
+    UPDATE crm_identities SET is_shared=1
+    WHERE person_id=? AND kind='email'
+  `).run(first.id);
+
+  assert.equal(database.prepare(`
+    SELECT COUNT(DISTINCT person_id) count
+    FROM crm_identities
+    WHERE kind='email' AND normalized_value='household@example.test' AND active=1
+  `).get().count, 2);
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  assert.equal(attention.response.status, 200);
+  const duplicate = attention.payload.duplicates.find(
+    (item) => item.normalizedEmail === "household@example.test"
+  );
+  assert.ok(duplicate);
+  assert.equal(duplicate.personCount, 2);
+});
+
+test("the contact dedupe migration preserves one preferred row and deactivates older copies", () => {
+  const database = migratedDatabase("0050_tattoo_day_session_labels.sql");
+  const now = "2026-07-17T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_people(
+      id,display_name,relationship_status,preferred_contact_method,created_at,updated_at
+    ) VALUES('dedupe-person','Dedupe Person','active','email',?,?)
+  `).run(now, now);
+  const insertIdentity = database.prepare(`
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES(
+      ?,'dedupe-person','email',?,'same@example.test',?,'',
+      ?,0,0,?,?,?,1,?,?
+    )
+  `);
+  insertIdentity.run(
+    "dedupe-local-one",
+    "same@example.test",
+    "local",
+    0,
+    "local",
+    "submission",
+    "submission:one:email",
+    "2026-07-15T12:00:00.000Z",
+    now,
+  );
+  insertIdentity.run(
+    "dedupe-local-two",
+    "SAME@example.test",
+    "local",
+    0,
+    "local",
+    "appointment",
+    "appointment:two:email",
+    "2026-07-16T12:00:00.000Z",
+    now,
+  );
+  insertIdentity.run(
+    "dedupe-square-primary",
+    "same@example.test",
+    "square",
+    1,
+    "square",
+    "customer_profile",
+    "square:customer:email",
+    "2026-07-17T12:00:00.000Z",
+    now,
+  );
+  database.prepare(`
+    UPDATE crm_identities SET is_verified=1
+    WHERE id='dedupe-local-one'
+  `).run();
+  database.prepare(`
+    UPDATE crm_identities SET is_shared=1
+    WHERE id='dedupe-local-two'
+  `).run();
+
+  database.exec(readFileSync(
+    join(ROOT, "migrations", "0051_crm_contact_identity_dedupe.sql"),
+    "utf8",
+  ));
+
+  assert.deepEqual(
+    database.prepare(`
+      SELECT
+        id,provider,source_type,source_id,active,is_primary,is_verified,is_shared
+      FROM crm_identities
+      WHERE person_id='dedupe-person'
+      ORDER BY id
+    `).all().map((row) => ({ ...row })),
+    [
+      {
+        id: "dedupe-local-one",
+        provider: "local",
+        source_type: "submission",
+        source_id: "submission:one:email",
+        active: 0,
+        is_primary: 0,
+        is_verified: 1,
+        is_shared: 0,
+      },
+      {
+        id: "dedupe-local-two",
+        provider: "local",
+        source_type: "appointment",
+        source_id: "appointment:two:email",
+        active: 0,
+        is_primary: 0,
+        is_verified: 0,
+        is_shared: 1,
+      },
+      {
+        id: "dedupe-square-primary",
+        provider: "square",
+        source_type: "customer_profile",
+        source_id: "square:customer:email",
+        active: 1,
+        is_primary: 1,
+        is_verified: 1,
+        is_shared: 1,
+      },
+    ],
+  );
+  const audit = database.prepare(`
+    SELECT action,resource_id,after_json
+    FROM crm_audit_events
+    WHERE actor='migration:0051'
+  `).get();
+  assert.equal(audit.action, "duplicate_contact_identities_consolidated");
+  assert.equal(audit.resource_id, "dedupe-square-primary");
+  assert.deepEqual(JSON.parse(audit.after_json), {
+    kind: "email",
+    retainedIdentityId: "dedupe-square-primary",
+    deactivatedRows: 2,
+  });
+  assert.throws(() => {
+    insertIdentity.run(
+      "dedupe-blocked-copy",
+      "same@example.test",
+      "manual",
+      0,
+      "manual",
+      "identity",
+      "manual:copy",
+      now,
+      now,
+    );
+  }, /UNIQUE constraint/i);
 });
 
 test("Personal Context stays profile-only, client-shared, editable, scrub-removable, and tier-neutral", async () => {
