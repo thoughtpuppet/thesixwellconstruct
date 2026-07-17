@@ -146,6 +146,18 @@ function attachImage(database, itemId, {
   `).run(itemId, id, healingState, role, "", "");
 }
 
+function assignTattooStyles(database, entityId, values) {
+  database.prepare("DELETE FROM tattoo_item_styles WHERE entity_id=?").run(entityId);
+  values.forEach((value, index) => {
+    const option = database.prepare("SELECT id FROM portfolio_options WHERE kind='style' AND value=? COLLATE NOCASE").get(value);
+    assert.ok(option, `Expected tattoo style option ${value}`);
+    database.prepare(`
+      INSERT INTO tattoo_item_styles(entity_id,style_option_id,is_primary,sort_order,created_at,updated_at)
+      VALUES(?,?,?,?,datetime('now'),datetime('now'))
+    `).run(entityId, option.id, index === 0 ? 1 : 0, index + 1);
+  });
+}
+
 test("cover-up migration preserves published work and keeps new drafts permission-gated", () => {
   const migration = "0044_portfolio_cover_up_documentation.sql";
   const database = migratedDatabase({ before: migration });
@@ -254,10 +266,11 @@ test("role-based additional uploads are atomic, private, and described for their
   insertPortfolioItem(database, { id: "angle-cover", projectType: "cover_up" });
   insertPortfolioItem(database, { id: "angle-standard", projectType: "standard" });
 
-  const upload = (itemId, imageRole) => {
+  const upload = (itemId, imageRole, { promoteToCoverUp = false } = {}) => {
     const form = new FormData();
     form.set("file", new File([new Uint8Array([1, 2, 3])], "before.jpg", { type: "image/jpeg" }));
     form.set("imageRole", imageRole);
+    if (promoteToCoverUp) form.set("promoteToCoverUp", "true");
     return handlePortfolioApi(new Request(`https://example.test/api/admin/portfolio/${itemId}/images`, {
       method: "POST",
       headers: { authorization: `Bearer ${TOKEN}` },
@@ -268,6 +281,11 @@ test("role-based additional uploads are atomic, private, and described for their
   let response = await upload("angle-standard", "before");
   assert.equal(response.status, 409);
   assert.equal(bucket.objects.size, 0);
+
+  response = await upload("angle-standard", "before", { promoteToCoverUp: true });
+  assert.equal(response.status, 201);
+  assert.equal(database.prepare("SELECT project_type FROM portfolio_items WHERE id='angle-standard'").get().project_type, "cover_up");
+  assert.equal((await response.json()).image.imageRole, "before");
 
   response = await upload("angle-cover", "before");
   assert.equal(response.status, 201);
@@ -284,7 +302,7 @@ test("role-based additional uploads are atomic, private, and described for their
   });
   assert.equal(database.prepare("SELECT public_visible FROM entity_media WHERE entity_id='angle-cover' AND media_id=? AND role='gallery'").get(image.id).public_visible, 0);
   assert.equal(database.prepare("SELECT image_role FROM portfolio_image_details WHERE portfolio_item_id='angle-cover' AND image_ref=?").get(image.id).image_role, "before");
-  assert.equal(bucket.objects.size, 1);
+  assert.equal(bucket.objects.size, 2);
 });
 
 test("image roles, cover selection, consent changes, and project reclassification are guarded", async () => {
@@ -303,10 +321,11 @@ test("image roles, cover selection, consent changes, and project reclassificatio
   }), env(database));
   assert.equal(response.status, 409);
 
-  response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft", {
-    method: "PATCH", admin: true, body: { projectType: "cover_up" },
+  response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/before-photo", {
+    method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", consentStatus: "granted", promoteToCoverUp: true },
   }), env(database));
   assert.equal(response.status, 200);
+  assert.equal(database.prepare("SELECT project_type FROM portfolio_items WHERE id='cover-draft'").get().project_type, "cover_up");
 
   response = await handlePortfolioApi(request("/api/admin/portfolio/cover-draft/images/before-photo", {
     method: "PATCH", admin: true, body: { imageRole: "before", healingState: "unspecified", consentStatus: "granted", isCover: true },
@@ -355,6 +374,83 @@ test("image roles, cover selection, consent changes, and project reclassificatio
     method: "PATCH", admin: true, body: { imageRole: "result", healingState: "healed", consentStatus: "denied" },
   }), env(database));
   assert.equal(response.status, 409);
+});
+
+test("automatic cover-up promotion does not commit when the image change is invalid", async () => {
+  const database = migratedDatabase();
+  insertPortfolioItem(database, { id: "atomic-promotion", projectType: "standard", coverImageRef: "atomic-cover" });
+  attachImage(database, "atomic-promotion", { id: "atomic-cover", role: "result" });
+
+  const response = await handlePortfolioApi(request("/api/admin/portfolio/atomic-promotion/images/atomic-cover", {
+    method: "PATCH",
+    admin: true,
+    body: {
+      imageRole: "before",
+      healingState: "unspecified",
+      consentStatus: "unknown",
+      promoteToCoverUp: true,
+    },
+  }), env(database));
+
+  assert.equal(response.status, 409);
+  assert.equal(database.prepare("SELECT project_type FROM portfolio_items WHERE id='atomic-promotion'").get().project_type, "standard");
+  assert.equal(database.prepare("SELECT image_role FROM portfolio_image_details WHERE portfolio_item_id='atomic-promotion' AND image_ref='atomic-cover'").get().image_role, "result");
+});
+
+test("automatic cover-up upload survives a stale project snapshot", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  insertPortfolioItem(database, { id: "stale-promotion", projectType: "cover_up" });
+  const originalPut = bucket.put.bind(bucket);
+  bucket.put = async (...args) => {
+    await originalPut(...args);
+    database.prepare("UPDATE portfolio_items SET project_type='standard' WHERE id='stale-promotion'").run();
+  };
+  const form = new FormData();
+  form.set("file", new File([new Uint8Array([1, 2, 3])], "before.jpg", { type: "image/jpeg" }));
+  form.set("imageRole", "before");
+  form.set("promoteToCoverUp", "true");
+
+  const response = await handlePortfolioApi(new Request("https://example.test/api/admin/portfolio/stale-promotion/images", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}` },
+    body: form,
+  }), env(database, bucket));
+
+  assert.equal(response.status, 201);
+  assert.equal(database.prepare("SELECT project_type FROM portfolio_items WHERE id='stale-promotion'").get().project_type, "cover_up");
+  const image = (await response.json()).image;
+  assert.equal(database.prepare("SELECT image_role FROM portfolio_image_details WHERE portfolio_item_id='stale-promotion' AND image_ref=?").get(image.id).image_role, "before");
+});
+
+test("automatic cover-up upload rolls back its project and stored file when image insertion fails", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  insertPortfolioItem(database, { id: "failed-promotion", projectType: "standard" });
+  database.exec(`
+    CREATE TRIGGER fail_promoted_before_insert
+    BEFORE INSERT ON portfolio_image_details
+    WHEN NEW.portfolio_item_id = 'failed-promotion' AND NEW.image_role = 'before'
+    BEGIN
+      SELECT RAISE(ABORT, 'forced promoted upload failure');
+    END;
+  `);
+  const form = new FormData();
+  form.set("file", new File([new Uint8Array([1, 2, 3])], "before.jpg", { type: "image/jpeg" }));
+  form.set("imageRole", "before");
+  form.set("promoteToCoverUp", "true");
+
+  const response = await handlePortfolioApi(new Request("https://example.test/api/admin/portfolio/failed-promotion/images", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}` },
+    body: form,
+  }), env(database, bucket));
+
+  assert.equal(response.status, 500);
+  assert.equal(database.prepare("SELECT project_type FROM portfolio_items WHERE id='failed-promotion'").get().project_type, "standard");
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM entity_media WHERE entity_id='failed-promotion'").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM media_assets WHERE storage_key LIKE 'portfolio/failed-promotion/%'").get().count, 0);
+  assert.equal(bucket.objects.size, 0);
 });
 
 test("public portfolio and primary media refuse a published row without recorded permission", async () => {
@@ -406,4 +502,244 @@ test("generic media and attachment APIs cannot privatize a published portfolio c
   }), env(database));
   assert.equal(response.status, 200);
   assert.equal(database.prepare("SELECT consent_status FROM media_assets WHERE id='generic-process'").get().consent_status, "denied");
+});
+
+test("multi-style migration backfills Portfolio and Flash without inventing classifications", () => {
+  const migration = "0045_tattoo_item_styles.sql";
+  const database = migratedDatabase({ before: migration });
+  insertPortfolioItem(database, { id: "style-blank" });
+  insertPortfolioItem(database, { id: "style-known" });
+  insertPortfolioItem(database, { id: "style-legacy" });
+  database.prepare("UPDATE portfolio_items SET primary_style='symbolic' WHERE id='style-known'").run();
+  database.prepare("UPDATE portfolio_items SET primary_style='Fine Line' WHERE id='style-legacy'").run();
+
+  database.exec(readFileSync(join(ROOT, "migrations", migration), "utf8"));
+
+  const assignment = (id) => database.prepare(`
+    SELECT option_row.value, assignment.is_primary
+    FROM tattoo_item_styles assignment
+    JOIN portfolio_options option_row ON option_row.id=assignment.style_option_id
+    WHERE assignment.entity_id=?
+  `).get(id);
+  assert.deepEqual({ ...assignment("style-blank") }, { value: "unclassified", is_primary: 1 });
+  assert.deepEqual({ ...assignment("style-known") }, { value: "symbolic", is_primary: 1 });
+  assert.deepEqual({ ...assignment("style-legacy") }, { value: "Fine Line", is_primary: 1 });
+  assert.deepEqual({ ...assignment("ap-flash-001") }, { value: "unclassified", is_primary: 1 });
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM portfolio_options WHERE kind='style' AND value='Fine Line' COLLATE NOCASE").get().count, 1);
+  assert.equal(database.prepare("SELECT theme_labels FROM search_documents WHERE entity_id='ap-flash-001'").get().theme_labels, "");
+
+  const surreal = database.prepare("SELECT id FROM portfolio_options WHERE kind='style' AND value='surreal'").get();
+  assert.throws(() => database.prepare(`
+    INSERT INTO tattoo_item_styles(entity_id,style_option_id,is_primary,sort_order,created_at,updated_at)
+    VALUES('style-known',?,1,2,datetime('now'),datetime('now'))
+  `).run(surreal.id), /UNIQUE constraint failed/);
+  const collectionId = `test-collection-${crypto.randomUUID()}`;
+  database.prepare(`
+    INSERT INTO portfolio_options(id,kind,value,label,enabled,sort_order,created_at,updated_at)
+    VALUES(?,'collection','test-collection','Test collection',1,999,datetime('now'),datetime('now'))
+  `).run(collectionId);
+  assert.throws(() => database.prepare(`
+    INSERT INTO tattoo_item_styles(entity_id,style_option_id,is_primary,sort_order,created_at,updated_at)
+    VALUES('style-known',?,0,2,datetime('now'),datetime('now'))
+  `).run(collectionId), /tattoo styles require a style option/);
+});
+
+test("Portfolio API stores ordered style sets and preserves secondary styles for legacy clients", async () => {
+  const database = migratedDatabase();
+  insertPortfolioItem(database, { id: "multi-style", state: "published", consent: "granted" });
+
+  let response = await handlePortfolioApi(request("/api/admin/portfolio/multi-style", {
+    method: "PATCH", admin: true, body: { styles: ["unclassified", "symbolic", "surreal"] },
+  }), env(database));
+  assert.equal(response.status, 200);
+  let item = (await response.json()).item;
+  assert.deepEqual(item.styles, ["symbolic", "surreal"]);
+  assert.deepEqual(item.styleLabels, ["Symbolic", "Surreal"]);
+  assert.equal(item.primaryStyle, "symbolic");
+  assert.equal(database.prepare("SELECT primary_style FROM portfolio_items WHERE id='multi-style'").get().primary_style, "symbolic");
+
+  response = await handlePortfolioApi(request("/api/portfolio/multi-style"), env(database));
+  assert.equal(response.status, 200);
+  item = (await response.json()).item;
+  assert.deepEqual(item.styles, ["symbolic", "surreal"]);
+  assert.equal(item.primaryStyleLabel, "Symbolic");
+
+  response = await handlePortfolioApi(request("/api/admin/portfolio/multi-style", {
+    method: "PATCH", admin: true, body: { primaryStyle: "mythic" },
+  }), env(database));
+  assert.equal(response.status, 200);
+  item = (await response.json()).item;
+  assert.deepEqual(item.styles, ["mythic", "symbolic", "surreal"]);
+  assert.equal(item.primaryStyle, "mythic");
+
+  database.prepare("UPDATE portfolio_options SET enabled=0 WHERE kind='style' AND value='surreal'").run();
+  response = await handlePortfolioApi(request("/api/admin/portfolio/multi-style", {
+    method: "PATCH", admin: true, body: { styles: ["mythic", "symbolic", "surreal"] },
+  }), env(database));
+  assert.equal(response.status, 200, "an already assigned disabled style remains editable");
+
+  insertPortfolioItem(database, { id: "new-disabled-style" });
+  response = await handlePortfolioApi(request("/api/admin/portfolio/new-disabled-style", {
+    method: "PATCH", admin: true, body: { styles: ["surreal"] },
+  }), env(database));
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /disabled/i);
+
+  response = await handlePortfolioApi(request("/api/admin/portfolio/settings", { admin: true }), env(database));
+  const surrealOption = (await response.json()).options.styles.find((option) => option.value === "surreal");
+  assert.equal(surrealOption.usageCount, 1);
+  response = await handlePortfolioApi(request(`/api/admin/portfolio/settings/${encodeURIComponent(surrealOption.id)}`, {
+    method: "DELETE", admin: true,
+  }), env(database));
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /tattoo work/i);
+
+  const beforeTitle = database.prepare("SELECT title FROM portfolio_items WHERE id='multi-style'").get().title;
+  database.exec(`
+    CREATE TRIGGER fail_style_replacement
+    BEFORE INSERT ON tattoo_item_styles
+    WHEN NEW.entity_id='multi-style' AND NEW.sort_order=2
+    BEGIN SELECT RAISE(ABORT, 'forced style failure'); END;
+  `);
+  response = await handlePortfolioApi(request("/api/admin/portfolio/multi-style", {
+    method: "PATCH", admin: true, body: { title: "Should roll back", styles: ["symbolic", "mythic"] },
+  }), env(database));
+  assert.equal(response.status, 500);
+  assert.equal(database.prepare("SELECT title FROM portfolio_items WHERE id='multi-style'").get().title, beforeTitle);
+  assert.deepEqual(database.prepare(`
+    SELECT option_row.value FROM tattoo_item_styles assignment
+    JOIN portfolio_options option_row ON option_row.id=assignment.style_option_id
+    WHERE assignment.entity_id='multi-style'
+    ORDER BY assignment.is_primary DESC,assignment.sort_order
+  `).all().map((row) => row.value), ["mythic", "symbolic", "surreal"]);
+});
+
+test("Flash API hydrates and updates the shared tattoo style classifications", async () => {
+  const database = migratedDatabase();
+  let response = await handleConstructApi(request("/api/admin/flash/ap-flash-001", {
+    method: "PATCH", admin: true, body: { styles: [] },
+  }), env(database));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).record.styles, ["unclassified"]);
+  assert.equal(database.prepare("SELECT theme_labels FROM search_documents WHERE entity_id='ap-flash-001'").get().theme_labels, "");
+
+  response = await handleConstructApi(request("/api/admin/flash/ap-flash-001", {
+    method: "PATCH", admin: true, body: { styles: ["symbolic", "mythic"] },
+  }), env(database));
+  assert.equal(response.status, 200);
+  let record = (await response.json()).record;
+  assert.deepEqual(record.styles, ["symbolic", "mythic"]);
+  assert.deepEqual(record.styleLabels, ["Symbolic", "Mythic"]);
+  assert.equal(record.primaryStyle, "symbolic");
+
+  response = await handleConstructApi(request("/api/flash/ap-flash-001"), env(database));
+  assert.equal(response.status, 200);
+  record = (await response.json()).record;
+  assert.deepEqual(record.styles, ["symbolic", "mythic"]);
+  assert.equal(record.primaryStyleLabel, "Symbolic");
+  assert.equal(database.prepare("SELECT theme_labels FROM search_documents WHERE entity_id='ap-flash-001'").get().theme_labels, "Symbolic, Mythic");
+
+  response = await handlePortfolioApi(request("/api/admin/portfolio/settings/portfolio-style-symbolic", {
+    method: "PATCH", admin: true, body: { label: "Symbolic Mark" },
+  }), env(database));
+  assert.equal(response.status, 200);
+  assert.equal(database.prepare("SELECT theme_labels FROM search_documents WHERE entity_id='ap-flash-001'").get().theme_labels, "Symbolic Mark, Mythic");
+  response = await handleConstructApi(request("/api/flash/ap-flash-001"), env(database));
+  assert.deepEqual((await response.json()).record.styleLabels, ["Symbolic Mark", "Mythic"]);
+
+  response = await handleConstructApi(request("/api/admin/flash/ap-flash-001", {
+    method: "PATCH", admin: true, body: { styles: ["unclassified", "surreal"] },
+  }), env(database));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).record.styles, ["surreal"]);
+
+  response = await handleConstructApi(request("/api/admin/flash", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "flash-default-style",
+      slug: "flash-default-style",
+      title: "Default style flash",
+      state: "draft",
+      item_type: "individual",
+      session_category: "artist_review",
+      split_policy: "artist_review",
+    },
+  }), env(database));
+  assert.equal(response.status, 201);
+  assert.deepEqual((await response.json()).record.styles, ["unclassified"]);
+});
+
+test("new Portfolio uploads begin with the shared Unclassified style assignment", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const form = new FormData();
+  form.set("file", new File([new Uint8Array([1, 2, 3])], "new-work.jpg", { type: "image/jpeg" }));
+  form.set("title", "New work");
+  form.set("altText", "New tattoo work");
+  const response = await handlePortfolioApi(new Request("https://example.test/api/admin/portfolio", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}` },
+    body: form,
+  }), env(database, bucket));
+  assert.equal(response.status, 201);
+  const item = (await response.json()).item;
+  assert.deepEqual(item.styles, ["unclassified"]);
+  assert.deepEqual(item.styleLabels, ["Unclassified"]);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_item_styles WHERE entity_id=?").get(item.id).count, 1);
+});
+
+test("a new Studio upload can save multi-style metadata and primary permission before publishing", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const form = new FormData();
+  form.set("file", new File([new Uint8Array([4, 5, 6])], "publish-ready.jpg", { type: "image/jpeg" }));
+
+  let response = await handlePortfolioApi(new Request("https://example.test/api/admin/portfolio", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}` },
+    body: form,
+  }), env(database, bucket));
+  assert.equal(response.status, 201);
+  const itemId = (await response.json()).item.id;
+
+  response = await handlePortfolioApi(request(`/api/admin/portfolio/${itemId}`, {
+    method: "PATCH",
+    admin: true,
+    body: {
+      title: "Publish-ready tattoo",
+      altText: "Finished black and grey tattoo",
+      projectType: "standard",
+      styles: ["symbolic", "surreal"],
+    },
+  }), env(database, bucket));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).item.styles, ["symbolic", "surreal"]);
+
+  response = await handlePortfolioApi(request(`/api/admin/portfolio/${itemId}/images/primary`, {
+    method: "PATCH",
+    admin: true,
+    body: {
+      imageRole: "result",
+      healingState: "healed",
+      timingNote: "Eight weeks healed",
+      caption: "Finished result",
+      consentStatus: "granted",
+    },
+  }), env(database, bucket));
+  assert.equal(response.status, 200);
+
+  response = await handlePortfolioApi(request(`/api/admin/portfolio/${itemId}`, {
+    method: "PATCH",
+    admin: true,
+    body: { state: "published" },
+  }), env(database, bucket));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).item.state, "published");
+  assert.deepEqual({ ...database.prepare(`
+    SELECT visibility,search_visibility FROM content_entities WHERE id=?
+  `).get(itemId) }, { visibility: "public", search_visibility: 1 });
+
+  response = await handlePortfolioApi(request(`/api/portfolio/${itemId}`), env(database, bucket));
+  assert.equal(response.status, 200);
 });

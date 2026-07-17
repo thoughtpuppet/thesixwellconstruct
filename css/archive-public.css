@@ -133,6 +133,35 @@ body.archive-public {
   border-bottom: var(--archive-rule) solid var(--venture-color);
 }
 
+.archive-origin-thread {
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  margin: clamp(1.5rem, 4vw, 3rem) 0;
+  border: var(--archive-rule) solid var(--archive-signal);
+  background: var(--archive-panel);
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.archive-origin-thread[hidden] { display: none; }
+
+.archive-origin-thread-header {
+  display: grid;
+  grid-template-columns: minmax(0, .8fr) minmax(18rem, 1.2fr);
+  gap: clamp(1rem, 4vw, 3rem);
+  padding-bottom: clamp(1rem, 3vw, 2rem);
+  border-bottom: var(--archive-rule) solid var(--archive-faint);
+}
+
+.archive-origin-thread-header h2 {
+  margin: .35rem 0 0;
+  font: 900 clamp(2rem, 6vw, 5rem)/.9 var(--sans);
+  letter-spacing: -.05em;
+  text-transform: uppercase;
+}
+
+.archive-origin-thread-header p { margin: 0 0 1rem; color: var(--archive-muted); }
+.archive-origin-evidence { display: grid; gap: 1rem; }
+
 .archive-hero h1,
 .archive-record-title,
 .archive-timeline-title {
@@ -1239,4 +1268,14 @@ button.archive-chip::after {
 .archive-public :where(.archive-section-title, .archive-card h3) {
   letter-spacing: -0.045em !important;
   line-height: 0.96 !important;
+}
+
+.archive-public .archive-origin-thread-header h2 {
+  font-size: clamp(2rem, 5vw, 4.5rem) !important;
+  letter-spacing: -0.055em !important;
+  line-height: .9 !important;
+}
+
+@media (max-width: 760px) {
+  .archive-origin-thread-header { grid-template-columns: 1fr; }
 }

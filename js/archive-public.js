@@ -215,6 +215,7 @@
           </form>
         </div>
       </section>
+      <section class="archive-origin-thread" data-origin-thread hidden></section>
       <section class="archive-explorer" aria-label="Archive explorer">
         <aside class="archive-filter-panel" aria-labelledby="archive-filter-title">
           <div class="archive-filter-heading"><h2 id="archive-filter-title">Refine</h2><button class="archive-clear" type="button" data-clear-filters>Clear all</button></div>
@@ -236,6 +237,7 @@
     const count = app.querySelector("[data-archive-count]");
     const activeFilters = app.querySelector("[data-active-filters]");
     const pagination = app.querySelector("[data-archive-pagination]");
+    const originHost = app.querySelector("[data-origin-thread]");
     let controller;
     let searchTimer;
     let lastFacetPayload = {};
@@ -290,8 +292,20 @@
       const meta = metadata(record);
       return `<a class="archive-card" href="${escapeHtml(recordHref(record, match))}">
         <span class="archive-card-media">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(text(media.alt, media.alt_text, title))}" loading="lazy" decoding="async">` : `<span class="archive-card-placeholder" aria-hidden="true">${escapeHtml(title.slice(0, 2))}</span>`}</span>
-        <span class="archive-card-copy"><span class="archive-meta">${meta.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</span><h3>${escapeHtml(title)}</h3>${summary ? `<p>${escapeHtml(truncate(summary, 190))}</p>` : ""}${matchText ? `<p class="archive-match"><strong>Matched in ${escapeHtml(titleCase(text(match.type, match.kind, match.field, "record")))}</strong><br>${escapeHtml(truncate(matchText, 180))}</p>` : ""}</span>
+        <span class="archive-card-copy"><span class="archive-meta">${record.is_current?"<span>Current record</span>":""}${meta.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</span><h3>${escapeHtml(title)}</h3>${summary ? `<p>${escapeHtml(truncate(summary, 190))}</p>` : ""}${matchText ? `<p class="archive-match"><strong>Matched in ${escapeHtml(titleCase(text(match.type, match.kind, match.field, "record")))}</strong><br>${escapeHtml(truncate(matchText, 180))}</p>` : ""}</span>
       </a>`;
+    }
+
+    function renderOriginThread(payload) {
+      const thread = first(payload.origin_thread, payload.originThread);
+      if (!thread) {
+        originHost.hidden = true;
+        originHost.innerHTML = "";
+        return;
+      }
+      const evidence = list(payload.evidence);
+      originHost.hidden = false;
+      originHost.innerHTML = `<header class="archive-origin-thread-header"><div><span class="archive-kicker">Origin thread</span><h2>${escapeHtml(text(thread.title, thread.slug))}</h2></div><div><p>${escapeHtml(text(thread.summary, "A curated record of the evidence and works that share this inception."))}</p><a class="archive-button" href="/archive/">Leave this thread</a></div></header><section class="archive-origin-evidence" aria-labelledby="origin-evidence-title"><div class="archive-section-heading"><span class="archive-section-index">Inception evidence</span><h2 class="archive-section-title" id="origin-evidence-title">Notes, references, and process</h2></div>${evidence.length?`<div class="archive-notebook">${evidence.map(materialMarkup).join("")}</div>`:`<div class="archive-note-empty"><p>No public inception evidence has been released for this thread yet.</p></div>`}</section>`;
     }
 
     function renderPagination(payload, total) {
@@ -315,7 +329,7 @@
       pagination.hidden = true;
       const current = params();
       const request = new URLSearchParams();
-      ["q", ...facetDefinitions.map(([key]) => key), "page"].forEach((key) => {
+      ["q", "origin", "from", ...facetDefinitions.map(([key]) => key), "page"].forEach((key) => {
         const value = current.get(key);
         if (value) request.set(key, value);
       });
@@ -328,6 +342,7 @@
         const searched = normalizeItems(searchPayload);
         const records = searchPayload && (searched.length || Number(first(searchPayload.total, searchPayload.pagination && searchPayload.pagination.total, 0)) === 0) ? searched : itemResults;
         const total = Number(first(searchPayload && searchPayload.total, searchPayload && searchPayload.pagination && searchPayload.pagination.total, itemPayload.total, itemPayload.pagination && itemPayload.pagination.total, records.length)) || 0;
+        renderOriginThread(itemPayload);
         renderFacets(itemPayload);
         count.textContent = `${total} ${total === 1 ? "record" : "records"}`;
         results.innerHTML = records.length ? `<div class="archive-card-grid">${records.map(card).join("")}</div>` : `<section class="archive-empty"><span class="archive-kicker">No match</span><h2>Nothing public here yet.</h2><p>Try a broader term or clear one of the filters. Internal and unreviewed materials never appear in this index.</p><p><button class="archive-button" type="button" data-empty-clear>Clear filters</button></p></section>`;
@@ -353,7 +368,7 @@
     facets.addEventListener("change", (event) => navigate({ [event.target.name]: event.target.value }));
     app.querySelector("[data-clear-filters]").addEventListener("click", () => {
       const url = new URL(location.href);
-      ["q", ...facetDefinitions.map(([key]) => key), "page"].forEach((key) => url.searchParams.delete(key));
+      ["q", "origin", "from", ...facetDefinitions.map(([key]) => key), "page"].forEach((key) => url.searchParams.delete(key));
       history.pushState({}, "", url);
       syncControls();
       load();
@@ -387,6 +402,8 @@
       materials: list(first(payload && payload.materials, dossier.materials, item.materials, [])),
       activities: list(first(payload && payload.activities, payload && payload.history, dossier.activities, item.activities, [])),
       relationships: list(first(payload && payload.relationships, payload && payload.connections, dossier.relationships, item.relationships, [])),
+      originThreads: list(first(payload && payload.origin_threads, payload && payload.originThreads, dossier.origin_threads, item.origin_threads, [])),
+      primaryOriginThread: first(payload && payload.primary_origin_thread, payload && payload.primaryOriginThread, dossier.primary_origin_thread, item.primary_origin_thread, null),
       subjects: list(first(payload && payload.subjects, dossier.subjects, item.subjects, [])),
       collections: list(first(payload && payload.collections, dossier.collections, item.collections, [])),
     };
@@ -413,7 +430,8 @@
     } else if (body) {
       viewer = `<div class="archive-material-viewer archive-inline-note">${escapeHtml(body)}</div>`;
     }
-    return `<article class="archive-material" id="${id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(titleCase(type))}</span><div class="archive-date">${escapeHtml(dateLabel(material))}</div></div><div class="archive-material-copy"><h3>${escapeHtml(title)}</h3>${caption && !viewer.includes("figcaption") ? `<p>${escapeHtml(caption)}</p>` : ""}</div></div>${viewer}</article>`;
+    const sourceRoute = safeUrl(first(material.archive_route, material.archiveRoute));
+    return `<article class="archive-material" id="${id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(titleCase(type))}</span><div class="archive-date">${escapeHtml(dateLabel(material))}</div></div><div class="archive-material-copy"><h3>${escapeHtml(title)}</h3>${caption && !viewer.includes("figcaption") ? `<p>${escapeHtml(caption)}</p>` : ""}${sourceRoute?`<p><a href="${escapeHtml(sourceRoute)}">Open source dossier</a></p>`:""}</div></div>${viewer}</article>`;
   }
 
   function historyMarkup(activity, index) {
@@ -475,12 +493,13 @@
       const primaryMaterialAnchor = primaryMaterial ? `material-${slugify(first(primaryMaterial.slug, primaryMaterial.id, "final-image"))}` : "";
       const activities = data.activities.slice().sort((a, b) => text(a.sort_date, a.occurred_at, a.date_start, a.date, "9999").localeCompare(text(b.sort_date, b.occurred_at, b.date_start, b.date, "9999")));
       const relationships = data.relationships;
+      const primaryOriginThread = data.primaryOriginThread;
       const breadcrumbCurrent = document.querySelector("[data-archive-breadcrumb-current]");
       if (breadcrumbCurrent) breadcrumbCurrent.textContent = title;
       document.title = `${title} · Archive · the six.well construct`;
       app.innerHTML = `
         <article>
-          <header class="archive-record-header" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.record_type, item.entity_type, "Archive dossier")))}</span><h1 class="archive-record-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadata(item).map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}<a class="archive-button" href="/archive/?${encodeURIComponent(text(item.medium) ? "medium" : "record_type")}=${encodeURIComponent(text(item.medium, item.record_type))}">Find related records</a></div></div></div>${imageUrl ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}"><figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
+          <header class="archive-record-header" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.record_type, item.entity_type, "Archive dossier")))}</span><h1 class="archive-record-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadata(item).map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${primaryOriginThread?`<a class="archive-button" href="/archive/?origin=${encodeURIComponent(text(primaryOriginThread.slug))}&from=${encodeURIComponent(text(item.entity_id,item.entityId,item.archive_slug,item.slug))}">Find related records</a>`:`<a class="archive-button" href="/archive/?${encodeURIComponent(text(item.medium) ? "medium" : "record_type")}=${encodeURIComponent(text(item.medium, item.record_type))}">Browse same ${escapeHtml(text(item.medium)?"medium":"record type")}</a>`}</div></div></div>${imageUrl ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}"><figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
           <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a><a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
           <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.subjects.length || data.collections.length ? `<div class="archive-link-chips">${data.subjects.map((subject) => `<a class="archive-chip" href="${escapeHtml(subjectExplorerUrl(subject))}">${escapeHtml(text(subject.name, subject.title, subject.slug))}</a>`).join("")}${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div></section>
           <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">02 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${notebookMaterials.length ? `<div class="archive-notebook">${notebookMaterials.map(materialMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>

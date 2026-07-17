@@ -66,10 +66,34 @@
     const routeParts = location.pathname.split('/').filter(Boolean);
     const routeReference = decodeURIComponent(routeParts[2] === 'detail' ? new URLSearchParams(location.search).get('slug') || '' : routeParts[2] || '');
 
+    function styleLabels(record = {}) {
+      const values = Array.isArray(record.styles) && record.styles.length
+        ? record.styles
+        : [record.primaryStyle || record.primary_style];
+      const supplied = Array.isArray(record.styleLabels)
+        ? record.styleLabels
+        : (Array.isArray(record.style_labels) ? record.style_labels : []);
+      const labels = [];
+      values.forEach((rawValue, index) => {
+        const value = String(rawValue || '').trim();
+        const primaryValue = record.primaryStyle || record.primary_style;
+        const primaryLabel = record.primaryStyleLabel || record.primary_style_label;
+        const label = String(supplied[index] || (value === primaryValue ? primaryLabel : '') || titleCase(value)).trim();
+        if (!value || value.toLowerCase() === 'unclassified' || label.toLowerCase() === 'unclassified' || labels.includes(label)) return;
+        labels.push(label);
+      });
+      if (!values.some(Boolean)) supplied.forEach((rawLabel) => {
+        const label = String(rawLabel || '').trim();
+        if (label && label.toLowerCase() !== 'unclassified' && !labels.includes(label)) labels.push(label);
+      });
+      return labels;
+    }
+
     function staticRecord(item) {
       return {
         id:item.id,slug:item.slug||item.id,title:item.title,description:item.description,state:String(item.status||'').toLowerCase()==='available'?'available':'retired',claimable:item.claimable?1:0,
         series_id:item.series,size_bucket:item.sizeBucket,price_label:item.price,item_type:String(item.type||'').toLowerCase(),sheet_code:item.sheetCode,design_code:item.designCode,
+        styles:Array.isArray(item.styles)?item.styles:[],styleLabels:Array.isArray(item.styleLabels)?item.styleLabels:[],primaryStyle:item.primaryStyle,primaryStyleLabel:item.primaryStyleLabel,
         session_category:item.sessionCategory,split_policy:item.splitPolicy,session_plan_note:item.sessionPlanNote,legacy_path:`/tattoos/flash/${item.id}/`,media:item.image?[{url:item.image,alt:item.title}]:[]
       };
     }
@@ -121,6 +145,7 @@
         row('Size', record.size_bucket),
         row('Pricing', record.pricingNote || record.pricing_note || record.price_label),
         row('Format', titleCase(record.item_type)),
+        row('Styles', styleLabels(record).join(' · ')),
         row('Session plan', sessionLabel(record))
       ].join('');
       const managedClaimable = typeof record.claimableNow === 'boolean'

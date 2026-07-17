@@ -1,4 +1,11 @@
 import { db, entityMedia, failure, id, json, nextRevision, parseJson, readJson, requireStudioAdmin, RESOURCE_CONFIG, slug, text } from "../_shared/construct.js";
+import {
+  loadTattooStyleAssignments,
+  replaceTattooStyleAssignmentStatements,
+  resolveTattooStyleSelection,
+  tattooStylePayload,
+  TattooStyleValidationError,
+} from "../_shared/tattoo-styles.js";
 
 function safeLegendUrl(value) {
   const url = text(value, 2000);
@@ -146,14 +153,16 @@ function normalizeRecord(config, body, existing = {}) {
     if (merged[minimum] !== null && merged[maximum] !== null && Number(merged[minimum]) > Number(merged[maximum])) throw new Error(`Minimum ${label} cannot exceed maximum.`);
   }
   if (config.entityType === "flash_item") {
-    if (merged.split_policy === "required" && merged.session_category !== "multiple_sessions") throw new Error("Required splitting must use the multiple-sessions category.");
-    if (merged.split_policy === "not_available" && merged.session_category !== "one_session") throw new Error("Splitting unavailable must use the one-session category.");
-    if (merged.session_category === "one_session") {
+    const sessionCategory = merged.session_category || "artist_review";
+    const splitPolicy = merged.split_policy || "artist_review";
+    if (splitPolicy === "required" && sessionCategory !== "multiple_sessions") throw new Error("Required splitting must use the multiple-sessions category.");
+    if (splitPolicy === "not_available" && sessionCategory !== "one_session") throw new Error("Splitting unavailable must use the one-session category.");
+    if (sessionCategory === "one_session") {
       out.estimated_sessions_min = 1;
       out.estimated_sessions_max = 1;
     }
-    if (merged.session_category === "multiple_sessions" && Number(merged.estimated_sessions_min) < 2) throw new Error("Multiple-session flash requires a minimum of at least two sessions.");
-    if (merged.session_category !== "artist_review" && (!Number(merged.estimated_sessions_max) || Number(merged.estimated_sessions_max) < Number(merged.estimated_sessions_min))) throw new Error("Enter a valid maximum session count.");
+    if (sessionCategory === "multiple_sessions" && Number(merged.estimated_sessions_min) < 2) throw new Error("Multiple-session flash requires a minimum of at least two sessions.");
+    if (sessionCategory !== "artist_review" && (!Number(merged.estimated_sessions_max) || Number(merged.estimated_sessions_max) < Number(merged.estimated_sessions_min))) throw new Error("Enter a valid maximum session count.");
   }
   if (config.entityType === "construct_node" && out.homepage_enabled && out.state === "published") out.homepage_enabled = 1;
   if (config.entityType === "visual_symbol") {
@@ -191,11 +200,19 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
       ? await statement.bind(recordSlug).all()
       : await statement.all();
   const rows = result.results || [];
-  const media = await entityMedia(database, rows.map((row) => row.id));
+  const entityIds = rows.map((row) => row.id);
+  const [media, tattooStyles] = await Promise.all([
+    entityMedia(database, entityIds),
+    resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
+  ]);
   const records = rows.map((row) => {
     const { reserved_submission_id: _reservationOwner, ...publicRow } = row;
+    const stylePayload = resource === "flash"
+      ? tattooStylePayload(tattooStyles.get(row.id), { fallbackValue: "unclassified", fallbackLabel: "Unclassified" })
+      : {};
     const record = {
       ...publicRow,
+      ...stylePayload,
       themes: parseJson(row.themes_json),
       context: parseJson(row.context_json, {}),
       applications: parseJson(row.applications_json),
@@ -249,6 +266,32 @@ const ARCHIVE_DATE_PRECISIONS = new Set(["exact","approximate","year","range","u
 const ARCHIVE_VISIBILITIES = new Set(["public","unlisted","internal","private"]);
 const ARCHIVE_STATES = new Set(["draft","published","archived"]);
 const ARCHIVE_TIMELINE_STATES = new Set(["draft","published","archived"]);
+
+function originThreadIds(value){
+  const source=Array.isArray(value)?value:String(value||"").split(",");
+  return [...new Set(source.map(item=>text(typeof item==="object"?(item.id||item.thread_id||item.threadId):item,200)).filter(Boolean))].slice(0,50);
+}
+
+async function validateOriginThreadIds(database,ids){
+  if(!ids.length)return true;
+  const rows=(await database.prepare(`SELECT id FROM archive_origin_threads WHERE id IN (${ids.map(()=>"?").join(",")})`).bind(...ids).all()).results||[];
+  return rows.length===ids.length;
+}
+
+async function replaceDossierOriginThreads(database,entityId,ids,primaryId=""){
+  if(primaryId&&!ids.includes(primaryId))throw new Error("The primary origin thread must also be assigned to this dossier.");
+  if(!await validateOriginThreadIds(database,ids))throw new Error("Choose valid origin threads.");
+  const statements=[database.prepare("DELETE FROM archive_origin_thread_dossiers WHERE dossier_entity_id=?").bind(entityId)];
+  ids.forEach((threadId,index)=>statements.push(database.prepare("INSERT INTO archive_origin_thread_dossiers(thread_id,dossier_entity_id,is_primary,sort_order,created_at) VALUES(?,?,?,?,datetime('now'))").bind(threadId,entityId,threadId===primaryId?1:0,index+1)));
+  await database.batch(statements);
+}
+
+async function replaceMaterialOriginThreads(database,materialId,ids){
+  if(!await validateOriginThreadIds(database,ids))throw new Error("Choose valid origin threads.");
+  const statements=[database.prepare("DELETE FROM archive_origin_thread_materials WHERE material_id=?").bind(materialId)];
+  ids.forEach((threadId,index)=>statements.push(database.prepare("INSERT INTO archive_origin_thread_materials(thread_id,material_id,sort_order,created_at) VALUES(?,?,?,datetime('now'))").bind(threadId,materialId,index+1)));
+  await database.batch(statements);
+}
 const MEDIA_PRIVACIES = new Set(["public","unlisted","internal","private"]);
 const MEDIA_CONSENT_STATUSES = new Set(["not-required","required","granted","denied","unknown"]);
 const MEDIA_TRANSCRIPT_STATUSES = new Set(["not-requested","pending","ready","failed"]);
@@ -404,6 +447,11 @@ function archivePublicConditions(url, alias = "ad") {
     conditions.push(`EXISTS (SELECT 1 FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE am.dossier_entity_id=${alias}.entity_id AND am.material_type=? AND am.state='published' AND am.visibility='public' AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline')))`);
     values.push(materialType);
   }
+  const origin=text(url.searchParams.get("origin"),160).toLowerCase();
+  if(origin){
+    conditions.push(`EXISTS (SELECT 1 FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=${alias}.entity_id AND ot.slug=? AND ot.state='published' AND ot.public_visible=1)`);
+    values.push(origin);
+  }
   return { conditions, values, q };
 }
 
@@ -414,11 +462,14 @@ async function publicArchiveItems(request, env) {
   const limit = Math.min(100,Math.max(1,Math.floor(Number(url.searchParams.get("limit"))||24)));
   const offset = (page-1)*limit;
   const {conditions,values,q} = archivePublicConditions(url);
+  const originSlug=text(url.searchParams.get("origin"),160).toLowerCase();
+  const originThread=originSlug?await database.prepare("SELECT id,slug,title,summary,sort_order,updated_at FROM archive_origin_threads WHERE slug=? AND state='published' AND public_visible=1").bind(originSlug).first():null;
+  if(originSlug&&!originThread)return failure("Origin thread not found.",404);
   const where = conditions.join(" AND ");
-  const itemSql = `${archiveEntitySql(where)} ORDER BY ad.featured DESC,ad.sort_order,ad.published_at DESC,ad.entity_id LIMIT ? OFFSET ?`;
+  const itemSql = `${archiveEntitySql(where)} ORDER BY ${originThread?"COALESCE((SELECT otd.sort_order FROM archive_origin_thread_dossiers otd WHERE otd.thread_id=? AND otd.dossier_entity_id=ad.entity_id),999999),":""}ad.featured DESC,ad.sort_order,ad.published_at DESC,ad.entity_id LIMIT ? OFFSET ?`;
   const countSql = `SELECT COUNT(*) total FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ${where}`;
   const [itemsResult,countResult,facetResult,materialFacetResult,collectionFacetResult] = await database.batch([
-    database.prepare(itemSql).bind(...values,limit,offset),
+    database.prepare(itemSql).bind(...values,...(originThread?[originThread.id]:[]),limit,offset),
     database.prepare(countSql).bind(...values),
     database.prepare(`SELECT f.kind,f.name,f.slug,COUNT(DISTINCT adf.dossier_entity_id) count
       FROM archive_facets f JOIN archive_dossier_facets adf ON adf.facet_id=f.id
@@ -439,11 +490,30 @@ async function publicArchiveItems(request, env) {
       JOIN content_entities ce ON ce.id=ad.entity_id AND ce.visibility='public'
       GROUP BY ac.id ORDER BY ac.sort_order,ac.name`),
   ]);
-  const items=(itemsResult.results||[]).map(presentArchiveItem);const total=Number(countResult.results?.[0]?.total||0);
+  let items=(itemsResult.results||[]).map(presentArchiveItem);const total=Number(countResult.results?.[0]?.total||0);
+  let evidence=[],currentRecordPosition=null;
+  if(originThread){
+    const assignments=items.length?(await database.prepare(`SELECT dossier_entity_id,is_primary,sort_order FROM archive_origin_thread_dossiers WHERE thread_id=? AND dossier_entity_id IN (${items.map(()=>"?").join(",")})`).bind(originThread.id,...items.map(item=>item.entity_id)).all()).results||[]:[];
+    const assignmentMap=new Map(assignments.map(row=>[row.dossier_entity_id,row]));
+    const currentId=text(url.searchParams.get("from"),200);
+    items=items.map(item=>{const assignment=assignmentMap.get(item.entity_id)||{},isCurrent=Boolean(currentId&&(currentId===item.entity_id||currentId===item.archive_slug));return {...item,origin_thread_role:Number(assignment.is_primary)?"primary":"supporting",origin_position:Number(assignment.sort_order||0),is_current:isCurrent}}).sort((a,b)=>a.origin_position-b.origin_position||a.title.localeCompare(b.title));
+    const currentItem=items.find(item=>item.is_current);if(currentItem)currentRecordPosition=currentItem.origin_position;
+    const evidenceRows=(await database.prepare(`SELECT am.*,otm.sort_order origin_sort_order,ad.archive_slug,
+        COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END) media_url,
+        m.mime_type,m.alt_text,m.public_title,m.public_description,m.transcript,m.transcript_status
+      FROM archive_origin_thread_materials otm
+      JOIN archive_materials am ON am.id=otm.material_id AND am.state='published' AND am.visibility='public'
+      JOIN archive_dossiers ad ON ad.entity_id=am.dossier_entity_id AND ad.state='published' AND ad.public_visible=1
+      JOIN content_entities ce ON ce.id=ad.entity_id AND ce.visibility='public'
+      LEFT JOIN media_assets m ON m.id=am.media_id
+      WHERE otm.thread_id=? AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
+      ORDER BY CASE WHEN am.occurred_at IS NULL THEN 1 ELSE 0 END,am.occurred_at,otm.sort_order,am.sort_order,am.created_at`).bind(originThread.id).all()).results||[];
+    evidence=evidenceRows.map((row,index)=>({...row,url:row.media_url||"",archive_route:`/archive/records/${encodeURIComponent(row.archive_slug)}/#material-${encodeURIComponent(row.id)}`,origin_position:index+1}));
+  }
   const facets={medium:[],brand:[],person:[],era:[],collection:collectionFacetResult.results||[],record_type:[],material_type:materialFacetResult.results||[]};
   for(const facet of facetResult.results||[]){if(facets[facet.kind])facets[facet.kind].push({name:facet.name,slug:facet.slug,count:Number(facet.count||0)});}
   const pagination={page,limit,total,total_pages:Math.max(1,Math.ceil(total/limit)),totalPages:Math.max(1,Math.ceil(total/limit))};
-  return json({items,records:items,facets,pagination,count:items.length,query:q},{cache:"public, max-age=30"});
+  return json({items,records:items,facets,pagination,count:items.length,query:q,origin_thread:originThread,originThread,evidence,current_record_position:currentRecordPosition,currentRecordPosition},{cache:"public, max-age=30"});
 }
 
 async function publicArchiveDetail(request,env,archiveSlug){
@@ -452,7 +522,7 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const row=await database.prepare(archiveEntitySql("ce.visibility='public' AND ad.state='published' AND ad.public_visible=1 AND (ad.archive_slug=? OR ad.entity_id=?)")).bind(archiveSlug,archiveSlug).first();
   if(!row)return failure("Archive item not found.",404);
   const item=presentArchiveItem(row),entityId=row.entity_id;
-  const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult]=await database.batch([
+  const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult,originThreadsResult]=await database.batch([
     database.prepare(`SELECT am.*,m.mime_type,m.duration_seconds,m.alt_text,m.public_title,m.public_description,
         CASE WHEN m.transcript_status='ready' THEN m.transcript ELSE '' END transcript,m.transcript_status,m.transcript_language,m.public_presentation,
         CASE WHEN m.public_presentation='inline' THEN COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END) ELSE '' END media_url
@@ -481,6 +551,10 @@ async function publicArchiveDetail(request,env,archiveSlug){
       FROM entity_relationships er JOIN relationship_types rt ON rt.id=er.relationship_type_id
       WHERE er.public_visible=1 AND rt.public_visible=1 AND (er.source_entity_id=? OR er.target_entity_id=?)
       ORDER BY er.sort_order,er.created_at`).bind(entityId,entityId),
+    database.prepare(`SELECT ot.id,ot.slug,ot.title,ot.summary,otd.is_primary,otd.sort_order
+      FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id
+      WHERE otd.dossier_entity_id=? AND ot.state='published' AND ot.public_visible=1
+      ORDER BY otd.is_primary DESC,otd.sort_order,ot.sort_order,ot.title`).bind(entityId),
   ]);
   const relationshipRows=relationshipsResult.results||[];
   const relatedIds=relationshipRows.map(r=>r.source_entity_id===entityId?r.target_entity_id:r.source_entity_id);
@@ -490,7 +564,8 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const archive_slug=relatedSlugs.get(relatedId)||"";relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,imageUrl:"",archive_slug,archiveRoute:archive_slug?`/archive/records/${encodeURIComponent(archive_slug)}/`:""}});}
   const materials=(materialsResult.results||[]).map(material=>({...material,anchor:`material-${material.id}`,url:material.media_url||"",inline_text:material.body||""}));
   const activities=activitiesResult.results||[];
-  return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships},{cache:"public, max-age=30"});
+  const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
+  return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
 }
 
 function timelineSubjectName(row){return row.organization_name||row.person_name||row.node_name||row.title||row.slug;}
@@ -582,7 +657,22 @@ function searchDocument(resource, row) {
     date_label: "",
     route: row.route || "",
   };
-  if (resource === "flash") return { ...common, node_id: "tattooing", summary: row.description || "", route: row.legacy_path || "/tattoos/flash/" };
+  if (resource === "flash") {
+    const styles = Array.isArray(row.styles) ? row.styles : [];
+    const publicStyleLabels = Array.isArray(row.styleLabels)
+      ? row.styleLabels.filter((label, index) => (
+        String(styles[index] || "").toLowerCase() !== "unclassified"
+        && String(label || "").toLowerCase() !== "unclassified"
+      ))
+      : [];
+    return {
+      ...common,
+      node_id: "tattooing",
+      summary: row.description || "",
+      theme_labels: publicStyleLabels.join(", "),
+      route: row.legacy_path || "/tattoos/flash/",
+    };
+  }
   if (resource === "art") return { ...common, node_id: "art", summary: row.statement || "", date_label: row.year || "", route: row.legacy_path || `/art/?work=${encodeURIComponent(row.slug || row.id)}` };
   if (resource === "archive") return { ...common, node_id: "archive", summary: row.summary || "", body: row.body || "", date_label: row.date_or_period || "", route: `/archive/?record=${encodeURIComponent(row.slug || row.id)}` };
   if (resource === "visual-language") {
@@ -624,14 +714,38 @@ function entityVisibilityStatement(database, resource, row) {
 
 async function adminList(env, resource) {
   const config = RESOURCE_CONFIG[resource]; if (!config) return failure("Unknown resource.", 404);
-  const rows = (await db(env).prepare(`SELECT * FROM ${config.table} ORDER BY sort_order,id`).all()).results || [];
-  const media = await entityMedia(db(env), rows.map((row) => row.id));
-  return json({ records: rows.map((row) => ({ ...row, media: media.get(row.id) || [] })), count: rows.length });
+  const database = db(env);
+  const rows = (await database.prepare(`SELECT * FROM ${config.table} ORDER BY sort_order,id`).all()).results || [];
+  const entityIds = rows.map((row) => row.id);
+  const [media, tattooStyles] = await Promise.all([
+    entityMedia(database, entityIds),
+    resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
+  ]);
+  return json({
+    records: rows.map((row) => ({
+      ...row,
+      ...(resource === "flash" ? tattooStylePayload(tattooStyles.get(row.id), { fallbackValue: "unclassified", fallbackLabel: "Unclassified" }) : {}),
+      media: media.get(row.id) || [],
+    })),
+    count: rows.length,
+  });
 }
 
 async function adminCreate(request, env, resource) {
   const config = RESOURCE_CONFIG[resource]; const body = await readJson(request); if (!config || !body) return failure("Invalid request.");
   const database = db(env); const recordId = text(body.id, 160) || id(config.entityType); const values = normalizeRecord(config, body);
+  let styleSelection = [];
+  if (resource === "flash") {
+    try {
+      styleSelection = await resolveTattooStyleSelection(
+        database,
+        Object.prototype.hasOwnProperty.call(body, "styles") ? body.styles : [],
+      );
+    } catch (error) {
+      if (error instanceof TattooStyleValidationError) return failure(error.message, error.status);
+      throw error;
+    }
+  }
   if (config.fields.includes("sort_order") && (!Number.isFinite(Number(values.sort_order)) || Number(values.sort_order) <= 0)) {
     const last = await database.prepare(`SELECT COALESCE(MAX(sort_order),0) AS max_order FROM ${config.table}`).first();
     values.sort_order = Number(last?.max_order || 0) + 1;
@@ -639,12 +753,14 @@ async function adminCreate(request, env, resource) {
   if (resource === "nodes" && values.homepage_enabled) { const c = await database.prepare("SELECT COUNT(*) c FROM construct_nodes WHERE homepage_enabled=1").first(); if (Number(c?.c || 0) >= 9) return failure("Homepage node capacity is 9.", 409); }
   if (resource === "pathways" && values.homepage_enabled) { const c = await database.prepare("SELECT COUNT(*) c FROM construct_pathways WHERE node_id=? AND homepage_enabled=1").bind(values.node_id).first(); if (Number(c?.c || 0) >= 9) return failure("Pathway capacity is 9 per node.", 409); }
   const keys = Object.keys(values); if (!keys.length) return failure("No editable fields supplied.");
-  const initial = { id: recordId, ...values };
-  await database.batch([
+  const createStatements = [
     database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId,config.entityType,values.node_id || (config.entityType==="visual_symbol"?"node-legend":null),"internal"),
     database.prepare(`INSERT INTO ${config.table}(id,${keys.join(",")},created_at,updated_at) VALUES(?,${keys.map(()=>"?").join(",")},datetime('now'),datetime('now'))`).bind(recordId,...keys.map(k=>values[k])),
-  ]);
-  const created = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
+  ];
+  if (resource === "flash") createStatements.push(...replaceTattooStyleAssignmentStatements(database, recordId, styleSelection));
+  await database.batch(createStatements);
+  const createdRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
+  const created = resource === "flash" ? { ...createdRow, ...tattooStylePayload(styleSelection) } : createdRow;
   const publishStatements=[entityVisibilityStatement(database, resource, created),searchSyncStatement(database, resource, created)];
   if(archiveEligibleEntityType(config.entityType))publishStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,created),archiveRecordType(config.entityType)));
   await database.batch(publishStatements);
@@ -653,17 +769,48 @@ async function adminCreate(request, env, resource) {
 
 async function adminUpdate(request, env, resource, recordId, archive = false) {
   const config = RESOURCE_CONFIG[resource]; const body = archive ? { state: "archived" } : await readJson(request); if (!config || !body) return failure("Invalid request.");
-  const database = db(env); const before = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first(); if (!before) return failure("Not found.",404);
-  const values = normalizeRecord(config,body,before); const keys = Object.keys(values); if (!keys.length) return failure("No editable fields supplied.");
-  const projected = { ...before, ...values, id: recordId };
-  const updateStatements=[
-    database.prepare(`UPDATE ${config.table} SET ${keys.map(k=>`${k}=?`).join(",")},updated_at=datetime('now') WHERE id=?`).bind(...keys.map(k=>values[k]),recordId),
+  const database = db(env); const beforeRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first(); if (!beforeRow) return failure("Not found.",404);
+  const hasStyleUpdate = resource === "flash" && Object.prototype.hasOwnProperty.call(body, "styles");
+  let beforeStyleSelection = [];
+  let nextStyleSelection = [];
+  let shouldReplaceStyles = false;
+  if (resource === "flash") {
+    const styleMap = await loadTattooStyleAssignments(database, [recordId]);
+    beforeStyleSelection = styleMap.get(recordId) || [];
+    nextStyleSelection = beforeStyleSelection;
+    try {
+      if (hasStyleUpdate) {
+        nextStyleSelection = await resolveTattooStyleSelection(database, body.styles, {
+          currentValues: beforeStyleSelection.map((entry) => entry.value),
+        });
+        shouldReplaceStyles = true;
+      } else if (!beforeStyleSelection.length) {
+        nextStyleSelection = await resolveTattooStyleSelection(database, []);
+        shouldReplaceStyles = true;
+      }
+    } catch (error) {
+      if (error instanceof TattooStyleValidationError) return failure(error.message, error.status);
+      throw error;
+    }
+  }
+  const before = resource === "flash" ? { ...beforeRow, ...tattooStylePayload(beforeStyleSelection) } : beforeRow;
+  const values = normalizeRecord(config,body,beforeRow); const keys = Object.keys(values); if (!keys.length && !hasStyleUpdate) return failure("No editable fields supplied.");
+  const projectedRow = { ...beforeRow, ...values, id: recordId };
+  const projected = resource === "flash" ? { ...projectedRow, ...tattooStylePayload(nextStyleSelection) } : projectedRow;
+  const updateStatements=[];
+  if (keys.length) updateStatements.push(
+    database.prepare(`UPDATE ${config.table} SET ${keys.map(k=>`${k}=?`).join(",")},updated_at=datetime('now') WHERE id=?`).bind(...keys.map(k=>values[k]),recordId)
+  );
+  else updateStatements.push(database.prepare(`UPDATE ${config.table} SET updated_at=datetime('now') WHERE id=?`).bind(recordId));
+  if (shouldReplaceStyles) updateStatements.push(...replaceTattooStyleAssignmentStatements(database, recordId, nextStyleSelection));
+  updateStatements.push(
     entityVisibilityStatement(database, resource, projected),
     searchSyncStatement(database, resource, projected),
-  ];
+  );
   if(archiveEligibleEntityType(config.entityType))updateStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,projected),archiveRecordType(config.entityType)));
   await database.batch(updateStatements);
-  const after = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
+  const afterRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
+  const after = resource === "flash" ? { ...afterRow, ...tattooStylePayload(nextStyleSelection) } : afterRow;
   await nextRevision(database,recordId,archive?"archive":"update",before,after); return json({record:after});
 }
 
@@ -971,7 +1118,9 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
   const database=db(env);
   if(request.method==="GET"){
     const where=entityId?"ad.entity_id=?":"1=1";const statement=database.prepare(`${archiveEntitySql(where)} ORDER BY ad.updated_at DESC,ad.entity_id`);const result=entityId?await statement.bind(entityId).all():await statement.all();const records=(result.results||[]).map(row=>({...row,...presentArchiveItem(row)}));
-    if(entityId&&!records[0])return failure("Dossier not found.",404);return json(entityId?{record:records[0],dossier:records[0]}:{records,count:records.length});
+    if(entityId&&!records[0])return failure("Dossier not found.",404);
+    if(entityId){const originThreads=(await database.prepare(`SELECT ot.*,otd.is_primary,otd.sort_order assignment_sort_order FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=? ORDER BY otd.is_primary DESC,otd.sort_order,ot.title`).bind(entityId).all()).results||[];const enriched={...records[0],origin_threads:originThreads,origin_thread_ids:originThreads.map(thread=>thread.id),primary_origin_thread_id:originThreads.find(thread=>Number(thread.is_primary))?.id||""};return json({record:enriched,dossier:enriched,origin_threads:originThreads});}
+    return json({records,count:records.length});
   }
   if(request.method==="POST"&&!entityId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const ownerId=text(body.entity_id||body.entityId,200);if(!ownerId)return failure("entity_id is required.");
@@ -985,8 +1134,11 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!before)return failure("Dossier not found.",404);const owner=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(entityId).first();
     const next={archive_slug:slug(body.archive_slug??body.archiveSlug??body.slug??before.archive_slug),orientation:text(body.orientation??before.orientation,8000),story:text(body.story??before.story,50000),story_html:text(body.story_html??before.story_html,50000),empty_materials_note:text(body.empty_materials_note??before.empty_materials_note,3000),record_type:text(body.record_type??body.recordType??before.record_type,100),state:text(body.state??before.state,30),public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible)?1:0,featured:body.featured===undefined?Number(before.featured):truthy(body.featured)?1:0,sort_order:Number(body.sort_order??before.sort_order)||0};
     if(!next.archive_slug)return failure("archive_slug is required.");if(!ARCHIVE_STATES.has(next.state))return failure("Invalid dossier state.");if(next.state==="published"&&next.public_visible&&owner?.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
+    const hasOriginUpdate=Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds"),assignmentIds=hasOriginUpdate?originThreadIds(body.origin_thread_ids??body.originThreadIds):[],primaryOriginId=hasOriginUpdate?text(body.primary_origin_thread_id??body.primaryOriginThreadId,200):"";
+    if(hasOriginUpdate&&(primaryOriginId&&!assignmentIds.includes(primaryOriginId)||!await validateOriginThreadIds(database,assignmentIds)))return failure("Choose valid origin threads and make the primary thread part of the dossier assignment.",409);
     await database.prepare(`UPDATE archive_dossiers SET archive_slug=?,orientation=?,story=?,story_html=?,empty_materials_note=?,record_type=?,state=?,public_visible=?,featured=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(next.archive_slug,next.orientation,next.story,next.story_html,next.empty_materials_note,next.record_type,next.state,next.public_visible,next.featured,next.sort_order,next.state,next.public_visible,entityId).run();
-    const after=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();await nextRevision(database,entityId,"archive-dossier-update",before,after);return json({record:after,dossier:after});
+    if(hasOriginUpdate)await replaceDossierOriginThreads(database,entityId,assignmentIds,primaryOriginId);
+    const after=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();await nextRevision(database,entityId,"archive-dossier-update",before,after);return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
   }
   if(request.method==="DELETE"&&entityId){await database.prepare("UPDATE archive_dossiers SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(entityId).run();return json({ok:true});}
   return failure("Method not allowed.",405);
@@ -1019,10 +1171,10 @@ async function archiveMaterialsAdminApi(request,env,materialId=""){
       m.alt_text,m.caption media_caption,m.privacy media_privacy,m.consent_status,m.state media_state,
       m.transcript,m.transcript_status,m.transcript_language,m.public_title,m.public_description,m.public_presentation
       FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id ${where}
-      ORDER BY am.dossier_entity_id,am.sort_order,am.created_at`);const result=entityId?await statement.bind(entityId).all():await statement.all();return json({records:result.results||[],materials:result.results||[],count:(result.results||[]).length});}
+      ORDER BY am.dossier_entity_id,am.sort_order,am.created_at`);const result=entityId?await statement.bind(entityId).all():await statement.all();const rows=result.results||[],ids=rows.map(row=>row.id),assignmentRows=ids.length?(await database.prepare(`SELECT material_id,thread_id FROM archive_origin_thread_materials WHERE material_id IN (${ids.map(()=>"?").join(",")}) ORDER BY sort_order`).bind(...ids).all()).results||[]:[],byMaterial=new Map();assignmentRows.forEach(row=>{if(!byMaterial.has(row.material_id))byMaterial.set(row.material_id,[]);byMaterial.get(row.material_id).push(row.thread_id)});const records=rows.map(row=>({...row,origin_thread_ids:byMaterial.get(row.id)||[]}));return json({records,materials:records,count:records.length});}
   if(request.method==="POST"&&materialId==="reorder"){const body=await readJson(request);const entityId=text(body?.entity_id||body?.entityId,200),ids=body?.ids;if(!entityId||!Array.isArray(ids))return failure("entity_id and ids are required.");const current=(await database.prepare("SELECT id FROM archive_materials WHERE dossier_entity_id=? ORDER BY sort_order,id").bind(entityId).all()).results||[];const set=new Set(ids);if(ids.length!==current.length||set.size!==current.length||current.some(row=>!set.has(row.id)))return failure("The material list changed. Refresh before reordering.",409);await database.batch(ids.map((recordId,index)=>database.prepare("UPDATE archive_materials SET sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND dossier_entity_id=?").bind(index+1,recordId,entityId)));return json({ok:true});}
-  if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const materialIdNew=text(body.id,200)||id("archive-material");await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,"studio").run();return json({record:await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialIdNew).first()},{status:201});}
-  if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,materialId).run();return json({record:await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first()});}
+  if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409);const materialIdNew=text(body.id,200)||id("archive-material");await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,"studio").run();await replaceMaterialOriginThreads(database,materialIdNew,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialIdNew).first(),origin_thread_ids:ids}},{status:201});}
+  if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;let ids=null;if(Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds")){ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409)}await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,materialId).run();if(ids)await replaceMaterialOriginThreads(database,materialId,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first(),...(ids?{origin_thread_ids:ids}:{})}});}
   if(request.method==="DELETE"&&materialId){const before=await database.prepare("SELECT id FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);await database.prepare("UPDATE archive_materials SET state='archived',visibility='internal',updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(materialId).run();return json({ok:true,archived:true});}
   return failure("Method not allowed.",405);
 }
@@ -1054,6 +1206,22 @@ async function archiveTimelinesAdminApi(request,env,timelineId="",chapterId=""){
   return failure("Method not allowed.",405);
 }
 
+function normalizeOriginThread(body,existing={}){return {slug:slug(body.slug??existing.slug),title:text(body.title??existing.title,300),summary:text(body.summary??existing.summary,8000),state:text(body.state??existing.state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):truthy(body.public_visible??body.publicVisible)?1:0,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};}
+
+async function archiveOriginThreadsAdminApi(request,env,threadId=""){
+  const database=db(env);
+  if(request.method==="GET"){
+    const where=threadId?"WHERE ot.id=?":"";const statement=database.prepare(`SELECT ot.*,
+      (SELECT COUNT(*) FROM archive_origin_thread_dossiers otd WHERE otd.thread_id=ot.id) dossier_count,
+      (SELECT COUNT(*) FROM archive_origin_thread_materials otm WHERE otm.thread_id=ot.id) material_count
+      FROM archive_origin_threads ot ${where} ORDER BY ot.sort_order,ot.title`);const result=threadId?await statement.bind(threadId).all():await statement.all();const records=result.results||[];if(threadId&&!records[0])return failure("Origin thread not found.",404);return json(threadId?{record:records[0],origin_thread:records[0]}:{records,origin_threads:records,count:records.length});
+  }
+  if(request.method==="POST"&&!threadId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const thread=normalizeOriginThread(body);if(!thread.slug||!thread.title||!ARCHIVE_STATES.has(thread.state))return failure("Slug, title, and a valid state are required.");const newId=text(body.id,200)||id("origin-thread");await database.prepare("INSERT INTO archive_origin_threads(id,slug,title,summary,state,public_visible,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))").bind(newId,thread.slug,thread.title,thread.summary,thread.state,thread.public_visible,thread.sort_order).run();return json({record:await database.prepare("SELECT * FROM archive_origin_threads WHERE id=?").bind(newId).first()},{status:201});}
+  if(request.method==="PATCH"&&threadId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_origin_threads WHERE id=?").bind(threadId).first();if(!before)return failure("Origin thread not found.",404);const thread=normalizeOriginThread(body,before);if(!thread.slug||!thread.title||!ARCHIVE_STATES.has(thread.state))return failure("Slug, title, and a valid state are required.");await database.prepare("UPDATE archive_origin_threads SET slug=?,title=?,summary=?,state=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(thread.slug,thread.title,thread.summary,thread.state,thread.public_visible,thread.sort_order,threadId).run();return json({record:await database.prepare("SELECT * FROM archive_origin_threads WHERE id=?").bind(threadId).first()});}
+  if(request.method==="DELETE"&&threadId){const found=await database.prepare("SELECT id FROM archive_origin_threads WHERE id=?").bind(threadId).first();if(!found)return failure("Origin thread not found.",404);await database.prepare("UPDATE archive_origin_threads SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(threadId).run();return json({ok:true,archived:true});}
+  return failure("Method not allowed.",405);
+}
+
 async function eventArchive(request,env,eventId){const database=db(env);const existing=await database.prepare("SELECT * FROM archive_records WHERE source_event_id=?").bind(eventId).first();if(existing)return json({record:existing,created:false});const event=await database.prepare("SELECT id,slug,title,description,starts_at,ends_at,location,status FROM events WHERE id=?").bind(eventId).first();if(!event)return failure("Event not found.",404);const attendance=await database.prepare("SELECT COALESCE(SUM(seats),0) total FROM event_tickets WHERE event_id=? AND status='paid'").bind(eventId).first();const recordId=`archive-event-${event.id}`;await database.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'archive_record','archive','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(recordId).run();await database.prepare("INSERT INTO archive_records(id,slug,source_event_id,title,node_label,record_type,room,date_or_period,timeline_period,summary,body,record_status,state,aggregate_attendance,created_at,updated_at) VALUES(?,?,?,?,?,'event','Events',?,?,?,?,'event handoff','draft',?,datetime('now'),datetime('now'))").bind(recordId,`event-${event.slug}`,event.id,event.title,'The Six.Well Construct',event.starts_at||'',event.starts_at||'',event.description||'',event.description||'',Number(attendance?.total||0)).run();const record=await database.prepare("SELECT * FROM archive_records WHERE id=?").bind(recordId).first();await nextRevision(database,recordId,"event-archive-handoff",null,record);return json({record,created:true},{status:201});}
 
 export async function handleConstructApi(request,env){
@@ -1076,6 +1244,7 @@ export async function handleConstructApi(request,env){
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
   const materialMatch=path.match(/^\/api\/admin\/archive-materials(?:\/([^/]+))?$/);if(materialMatch)return archiveMaterialsAdminApi(request,env,materialMatch[1]?decodeURIComponent(materialMatch[1]):"");
   const activityMatch=path.match(/^\/api\/admin\/archive-activities(?:\/([^/]+))?$/);if(activityMatch)return archiveActivitiesAdminApi(request,env,activityMatch[1]?decodeURIComponent(activityMatch[1]):"");
+  const originThreadMatch=path.match(/^\/api\/admin\/archive-origin-threads(?:\/([^/]+))?$/);if(originThreadMatch)return archiveOriginThreadsAdminApi(request,env,originThreadMatch[1]?decodeURIComponent(originThreadMatch[1]):"");
   const timelineChapterMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters\/([^/]+)$/);if(timelineChapterMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChapterMatch[1]),decodeURIComponent(timelineChapterMatch[2]));
   const timelineChaptersMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters$/);if(timelineChaptersMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChaptersMatch[1]),"");
   const timelineMatch=path.match(/^\/api\/admin\/archive-timelines(?:\/([^/]+))?$/);if(timelineMatch)return archiveTimelinesAdminApi(request,env,timelineMatch[1]?decodeURIComponent(timelineMatch[1]):"");

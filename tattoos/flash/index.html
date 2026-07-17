@@ -36,7 +36,7 @@
   .hero-left { display:flex; flex-direction:column; }
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; }
   .hero-desc { font-size:14px; letter-spacing:0.03em; line-height:1.75; color:var(--text-mute); text-align:right; max-width:400px; flex-shrink:0; }
-  nav.filters { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)) auto; gap:14px; align-items:end; margin-bottom:var(--s6); padding:20px 0 16px; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
+  nav.filters { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)) auto; gap:14px; align-items:end; margin-bottom:var(--s6); padding:20px 0 16px; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
   .filter-control { display:grid; gap:8px; min-width:0; }
   .filter-control-label { font-family:var(--sans); font-weight:900; font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-dim); }
   .filter-select { width:100%; min-height:48px; border:5px solid var(--ring-faint); border-radius:0; background-color:rgba(14,14,14,.82); color:var(--text-mute); font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:.08em; text-transform:uppercase; padding:0 38px 0 12px; appearance:none; cursor:pointer; background-image:linear-gradient(45deg,transparent 50%,var(--signal) 50%),linear-gradient(135deg,var(--signal) 50%,transparent 50%); background-position:calc(100% - 19px) 20px,calc(100% - 13px) 20px; background-size:6px 6px,6px 6px; background-repeat:no-repeat; transition:border-color var(--t-fast),color var(--t-fast); }
@@ -198,8 +198,7 @@
     .filter-group { border-right:none; padding-right:0; }
     .detail { grid-template-columns:1fr; gap:10px; }
     nav.filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .filter-control:nth-of-type(5),.filter-reset { grid-column:1 / -1; }
-    .filter-reset { width:100%; }
+    .filter-reset { grid-column:1 / -1; width:100%; }
     .modal-panel { width:calc(100vw - 24px); max-height:calc(100vh - 24px); }
     .modal-image { max-height:38vh; }
     .modal-image img { max-height:34vh; padding:14px; }
@@ -261,6 +260,7 @@
     <nav class="filters" aria-label="Flash catalog filters">
       <label class="filter-control"><span class="filter-control-label">Type</span><select class="filter-select" data-filter-group="type" aria-label="Filter by type"></select></label>
       <label class="filter-control"><span class="filter-control-label">Series</span><select class="filter-select" data-filter-group="series" aria-label="Filter by series"></select></label>
+      <label class="filter-control"><span class="filter-control-label">Style</span><select class="filter-select" data-filter-group="style" aria-label="Filter by style"></select></label>
       <label class="filter-control"><span class="filter-control-label">Size</span><select class="filter-select" data-filter-group="sizeBucket" aria-label="Filter by size"></select></label>
       <label class="filter-control"><span class="filter-control-label">Availability</span><select class="filter-select" data-filter-group="status" aria-label="Filter by availability"></select></label>
       <label class="filter-control"><span class="filter-control-label">Sessions</span><select class="filter-select" data-filter-group="session" aria-label="Filter by sessions"></select></label>
@@ -308,14 +308,17 @@
       items: []
     };
     const requestedSeries = new URLSearchParams(window.location.search).get("series") || "";
-    const state = { type: "All", series: "All", sizeBucket: "All", status: "All", session: "All", items: [], seriesMeta: [] };
+    const requestedStyle = new URLSearchParams(window.location.search).get("style") || "";
+    const state = { type: "All", series: "All", style: "All", sizeBucket: "All", status: "All", session: "All", items: [], seriesMeta: [] };
     const groups = {
       type: ["All", "Series", "Standalone", "Placed", "Experimental"],
       series: ["All", "MAZE", "Sairoglyphs"],
+      style: ["All"],
       sizeBucket: ["All", "Small", "Medium", "Large"],
       status: ["All", "Available", "Reserved", "Past"],
       session: ["All", "One session", "Multiple sessions"]
     };
+    let styleOptions = [];
     const els = {
       sheetGrid: document.getElementById("sheetGrid"),
       catalogGrid: document.getElementById("catalogGrid"),
@@ -336,6 +339,39 @@
     function slug(value) {
       return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     }
+
+    function styleEntries(item = {}) {
+      const values = Array.isArray(item.styles) && item.styles.length
+        ? item.styles
+        : [item.primaryStyle || item.primary_style];
+      const supplied = Array.isArray(item.styleLabels)
+        ? item.styleLabels
+        : (Array.isArray(item.style_labels) ? item.style_labels : []);
+      const seen = new Set();
+      const entries = values.map((rawValue, index) => {
+        const value = String(rawValue || "").trim();
+        const primaryValue = item.primaryStyle || item.primary_style;
+        const primaryLabel = item.primaryStyleLabel || item.primary_style_label;
+        const label = String(supplied[index] || (value === primaryValue ? primaryLabel : "") || titleCase(value)).trim();
+        return { value, label };
+      }).filter(({ value, label }) => {
+        const key = value.toLowerCase();
+        if (!value || key === "unclassified" || label.toLowerCase() === "unclassified" || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (!entries.length && !values.some(Boolean)) {
+        supplied.forEach((rawLabel) => {
+          const label = String(rawLabel || "").trim();
+          const value = slug(label);
+          if (label && value !== "unclassified" && !seen.has(value)) { seen.add(value); entries.push({ value, label }); }
+        });
+      }
+      return entries;
+    }
+
+    function styleValues(item) { return styleEntries(item).map((entry) => entry.value); }
+    function styleLabels(item) { return styleEntries(item).map((entry) => entry.label); }
 
     function codeFor(item) {
       return item.sheetCode || item.designCode || item.id;
@@ -359,6 +395,7 @@
       if (state.type === "Standalone" && item.series !== "Standalones") return false;
       if (state.type === "Experimental" && item.processCategory !== "experimental") return false;
       if (state.series !== "All" && item.series !== state.series) return false;
+      if (state.style !== "All" && !styleValues(item).includes(state.style)) return false;
       if (state.status !== "All" && item.status !== state.status) return false;
       if (state.sizeBucket !== "All" && item.sizeBucket !== state.sizeBucket) return false;
       if (state.session !== "All" && sessionLabel(item) !== state.session) return false;
@@ -366,8 +403,9 @@
     }
 
     function optionLabel(group, value) {
-      if (value !== "All") return value;
-      return "All";
+      if (value === "All") return "All";
+      if (group === "style") return styleOptions.find((option) => option.value === value)?.label || titleCase(value);
+      return value;
     }
 
     function updateFilterUi() {
@@ -390,6 +428,16 @@
       }
     }
 
+    function updateFilterUrl() {
+      const url = new URL(window.location.href);
+      if (state.series === "All") url.searchParams.delete("series");
+      else url.searchParams.set("series", slug(state.series));
+      if (state.style === "All") url.searchParams.delete("style");
+      else url.searchParams.set("style", slug(state.style));
+      const currentState = history.state && typeof history.state === "object" ? history.state : {};
+      history.replaceState({ ...currentState, flashFilters: { series: state.series, style: state.style } }, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
     function renderFilters() {
       Object.entries(groups).forEach(([group, values]) => {
         const select = document.querySelector(`[data-filter-group="${group}"]`);
@@ -398,12 +446,7 @@
         select.value = state[group];
         select.addEventListener("change", () => {
           state[group] = select.value;
-          if (group === "series") {
-            const url = new URL(window.location.href);
-            if (state.series === "All") url.searchParams.delete("series");
-            else url.searchParams.set("series", slug(state.series));
-            history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
-          }
+          if (group === "series" || group === "style") updateFilterUrl();
           updateFilterUi();
           renderCatalog();
         });
@@ -413,9 +456,7 @@
           state[group] = "All";
           document.querySelector(`[data-filter-group="${group}"]`).value = "All";
         });
-        const url = new URL(window.location.href);
-        url.searchParams.delete("series");
-        history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+        updateFilterUrl();
         updateFilterUi();
         renderCatalog();
       });
@@ -430,12 +471,13 @@
       const sessions = sessionLabel(item);
       const policy = String(item.splitPolicy || "").toLowerCase().replace(/[ -]+/g, "_");
       const required = policy === "required" || policy === "not_available";
+      const cardSub = [item.series, styleLabels(item).join(" / "), codeFor(item)].filter(Boolean).join(" · ");
       link.innerHTML = `
         <span class="card-image"><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy"></span>
         <span class="card-badge">${item.processCategory === "experimental" ? '<span class="pill experimental">Experimental</span>' : ''}${item.placed ? '<span class="pill placed">Placed</span>' : ''}<span class="pill ${slug(item.status)}">${escapeHtml(item.status)}</span><span class="pill session">${escapeHtml(sessions)}</span>${required ? '<span class="pill required">Required plan</span>' : ''}</span>
         <span class="card-overlay">
           <span class="card-title">${escapeHtml(item.title)}</span>
-          <span class="card-sub">${escapeHtml(item.series)} · ${escapeHtml(codeFor(item))}</span>
+          <span class="card-sub">${escapeHtml(cardSub)}</span>
         </span>
       `;
       if (isSheet) {
@@ -492,6 +534,9 @@
     function managedItem(record, fallback = {}) {
       const stateValue = String(record.state || "").toLowerCase();
       const media = Array.isArray(record.media) ? record.media[0] : null;
+      const managedStyleFields = ["styles","styleLabels","style_labels","primaryStyle","primary_style","primaryStyleLabel","primary_style_label"];
+      const styleSource = managedStyleFields.some((field) => Object.prototype.hasOwnProperty.call(record, field)) ? record : fallback;
+      const normalizedStyles = styleEntries(styleSource);
       return {
         ...fallback,
         id: record.id || fallback.id,
@@ -505,6 +550,8 @@
         price: record.price_label || fallback.price || "",
         image: media?.url || fallback.image || "",
         type: record.item_type === "sheet" ? "Sheet" : (fallback.type || "Individual"),
+        styles: normalizedStyles.map((entry) => entry.value),
+        styleLabels: normalizedStyles.map((entry) => entry.label),
         processCategory: record.process_category || fallback.processCategory || "standard",
         placed: stateValue === "placed",
         description: record.description || fallback.description || "",
@@ -521,6 +568,30 @@
       };
     }
 
+    function seriesOptionFromQuery(requested) {
+      if (!requested) return "All";
+      const normalizedRequest = slug(requested);
+      const itemMatch = state.items.find((item) =>
+        [item.series, item.seriesId].some((value) => slug(value) === normalizedRequest)
+      );
+      const metaMatch = state.seriesMeta.find((series) =>
+        [series.id, series.name].some((value) => slug(value) === normalizedRequest)
+      );
+      const option = itemMatch?.series || metaMatch?.name || titleCase(metaMatch?.id);
+      return option && groups.series.includes(option) ? option : "All";
+    }
+
+    function styleOptionFromQuery(requested) {
+      if (!requested) return "All";
+      const normalizedRequest = slug(requested);
+      return styleOptions.find((option) => [option.value, option.label].some((value) => slug(value) === normalizedRequest))?.value || "All";
+    }
+
+    function restoreQueryFilters(seriesQuery, styleQuery) {
+      state.series = seriesOptionFromQuery(seriesQuery);
+      state.style = styleOptionFromQuery(styleQuery);
+    }
+
     async function init() {
       let catalog = fallbackCatalog;
       try {
@@ -530,7 +601,10 @@
       } catch {
         catalog = fallbackCatalog;
       }
-      state.items = catalog.items || [];
+      state.items = (catalog.items || []).map((item) => {
+        const normalizedStyles = styleEntries(item);
+        return { ...item, styles: normalizedStyles.map((entry) => entry.value), styleLabels: normalizedStyles.map((entry) => entry.label) };
+      });
       state.seriesMeta = catalog.series || [];
       try {
         const response = await fetch("/api/flash", { cache: "no-store" });
@@ -544,20 +618,25 @@
       const managedSeries = state.seriesMeta.map((series) => series.name || titleCase(series.id)).filter(Boolean);
       const itemSeries = state.items.map((item) => item.series).filter(Boolean);
       groups.series = ["All", ...new Set([...managedSeries, ...itemSeries].filter((series) => series !== "Standalones"))];
-      if (requestedSeries) {
-        const normalizedRequest = slug(requestedSeries);
-        const itemMatch = state.items.find((item) =>
-          [item.series, item.seriesId].some((value) => slug(value) === normalizedRequest)
-        );
-        const metaMatch = state.seriesMeta.find((series) =>
-          [series.id, series.name].some((value) => slug(value) === normalizedRequest)
-        );
-        const requestedOption = itemMatch?.series || metaMatch?.name || titleCase(metaMatch?.id);
-        if (requestedOption && groups.series.includes(requestedOption)) state.series = requestedOption;
-      }
+      const stylesByValue = new Map();
+      state.items.flatMap(styleEntries).forEach((entry) => { if (!stylesByValue.has(entry.value)) stylesByValue.set(entry.value, entry.label); });
+      styleOptions = [...stylesByValue].map(([value, label]) => ({ value, label }));
+      groups.style = ["All", ...styleOptions.map((option) => option.value)];
+      restoreQueryFilters(requestedSeries, requestedStyle);
       renderFilters();
       renderCatalog();
     }
+
+    window.addEventListener("popstate", () => {
+      const params = new URLSearchParams(window.location.search);
+      restoreQueryFilters(params.get("series") || "", params.get("style") || "");
+      const seriesSelect = document.querySelector('[data-filter-group="series"]');
+      const styleSelect = document.querySelector('[data-filter-group="style"]');
+      if (seriesSelect) seriesSelect.value = state.series;
+      if (styleSelect) styleSelect.value = state.style;
+      updateFilterUi();
+      renderCatalog();
+    });
 
     init();
   </script>

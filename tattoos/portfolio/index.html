@@ -475,7 +475,7 @@
 
 
   <script src="/js/construct-connections.js?v=3"></script>
-  <script src="/js/portfolio-detail.js?v=7"></script>
+  <script src="/js/portfolio-detail.js?v=8"></script>
   <script>
   (() => {
     if (window.PortfolioDetailExperience) {
@@ -489,7 +489,10 @@
       'special-project': 'special projects',
     };
     const COLLECTION_LABELS = {};
-    const optionLabel = (kind, value) => kind === 'style' ? (STYLE_LABELS[value] || value) : (COLLECTION_LABELS[value] || value);
+    const optionLabel = (kind, value) => {
+      if (kind === 'style' && String(value || '').trim().toLowerCase() === 'unclassified') return '';
+      return kind === 'style' ? (STYLE_LABELS[value] || value) : (COLLECTION_LABELS[value] || value);
+    };
     const DEFAULT_ALT = 'Tattoo portfolio work by Saiel Dauhn Solehman';
     const grid = document.getElementById('gridTattoo');
     const typeRow = document.getElementById('typeRow');
@@ -524,20 +527,50 @@
       return span.innerHTML;
     }
 
+    function itemStyleEntries(item) {
+      const values = Array.isArray(item?.styles) && item.styles.length ? item.styles : [item?.primaryStyle];
+      const supplied = Array.isArray(item?.styleLabels) ? item.styleLabels : [];
+      const seen = new Set();
+      const entries = values.map((rawValue, index) => {
+        const value = String(rawValue || '').trim();
+        const label = String(supplied[index] || (value === item?.primaryStyle ? item?.primaryStyleLabel : '') || optionLabel('style', value) || value).trim();
+        return { value, label };
+      }).filter(({ value, label }) => {
+        const key = value.toLowerCase();
+        if (!value || key === 'unclassified' || label.toLowerCase() === 'unclassified' || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (!entries.length && !values.some(Boolean)) {
+        supplied.forEach((rawLabel) => {
+          const label = String(rawLabel || '').trim();
+          const key = label.toLowerCase();
+          if (label && key !== 'unclassified' && !seen.has(key)) { seen.add(key); entries.push({ value: label, label }); }
+        });
+      }
+      return entries;
+    }
+
+    function itemStyleValues(item) { return itemStyleEntries(item).map((entry) => entry.value); }
+    function itemStyleLabels(item) { return itemStyleEntries(item).map((entry) => entry.label); }
+    function itemHasStyle(item, style) { return !style || itemStyleValues(item).includes(style); }
+
     function renderedItems() {
       return items.filter((item) => !failedIds.has(item.id));
     }
 
     function visibleItems() {
       return renderedItems().filter((item) =>
-        (!activeStyle || item.primaryStyle === activeStyle) &&
+        itemHasStyle(item, activeStyle) &&
         (!activeCollection || item.collection === activeCollection)
       );
     }
 
     function renderFilters() {
       const available = renderedItems();
-      const styles = [...new Set(available.map((item) => item.primaryStyle).filter((style) => STYLE_LABELS[style]))];
+      const styleEntries = available.flatMap(itemStyleEntries);
+      styleEntries.forEach(({ value, label }) => { if (!STYLE_LABELS[value]) STYLE_LABELS[value] = label; });
+      const styles = [...new Set(styleEntries.map((entry) => entry.value))];
       const collections = [...new Set(available.map((item) => item.collection).filter(Boolean))]
         .sort((a, b) => a.localeCompare(b));
       if (activeStyle && !styles.includes(activeStyle)) activeStyle = '';
@@ -547,7 +580,7 @@
         activeStyle = ''; activeCollection = ''; render();
       }));
       styles.forEach((style) => {
-        const count = available.filter((item) => item.primaryStyle === style).length;
+        const count = available.filter((item) => itemHasStyle(item, style)).length;
         typeRow.appendChild(chip(optionLabel('style', style), count, activeStyle === style, () => {
           activeStyle = activeStyle === style ? '' : style;
           render();
@@ -555,7 +588,7 @@
       });
       collectionRow.replaceChildren();
       collections.forEach((collection) => {
-        const count = available.filter((item) => item.collection === collection && (!activeStyle || item.primaryStyle === activeStyle)).length;
+        const count = available.filter((item) => item.collection === collection && itemHasStyle(item, activeStyle)).length;
         if (!count) return;
         collectionRow.appendChild(chip(optionLabel('collection', collection), count, activeCollection === collection, () => {
           activeCollection = activeCollection === collection ? '' : collection;
@@ -576,7 +609,7 @@
       overlaySub.textContent = itemInfo(item);
       overlaySub.style.display = itemInfo(item) ? '' : 'none';
       overlayTags.replaceChildren();
-      [optionLabel('style', item.primaryStyle), optionLabel('collection', item.collection)].filter(Boolean).forEach((label) => {
+      [...itemStyleLabels(item), optionLabel('collection', item.collection)].filter(Boolean).forEach((label) => {
         const tag = document.createElement('span');
         tag.className = 'overlay-tag';
         tag.textContent = label;

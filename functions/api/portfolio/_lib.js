@@ -1,3 +1,11 @@
+import {
+  loadTattooStyleAssignments,
+  replaceTattooStyleAssignmentStatements,
+  resolveTattooStyleSelection,
+  tattooStylePayload,
+  TattooStyleValidationError,
+} from "../_shared/tattoo-styles.js";
+
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const MAX_DELETE_ROLLBACK_BYTES = 60 * 1024 * 1024;
 const ALLOWED_UPLOADS = new Map([
@@ -16,7 +24,6 @@ const EDITABLE_FIELDS = new Map([
   ["altText", "alt_text"],
   ["year", "year"],
   ["placement", "placement"],
-  ["primaryStyle", "primary_style"],
   ["collection", "collection"],
   ["caption", "caption"],
   ["statement", "statement"],
@@ -87,7 +94,7 @@ function optionFromRow(row, admin = false) {
 async function portfolioOptions(db, admin = false) {
   const usage = admin ? `,
     CASE kind
-      WHEN 'style' THEN (SELECT COUNT(*) FROM portfolio_items p WHERE COALESCE(NULLIF(p.primary_style, ''), 'unclassified') = portfolio_options.value)
+      WHEN 'style' THEN (SELECT COUNT(DISTINCT tis.entity_id) FROM tattoo_item_styles tis WHERE tis.style_option_id = portfolio_options.id)
       ELSE (SELECT COUNT(*) FROM portfolio_items p WHERE p.collection = portfolio_options.value)
     END AS usage_count` : "";
   const result = await db.prepare(`
@@ -102,12 +109,16 @@ async function portfolioOptions(db, admin = false) {
   return options;
 }
 
-function decorateItem(item, options) {
+function decorateItem(item, options, assignments = []) {
   const style = options.styles.find((entry) => entry.value === item.primaryStyle);
   const collection = options.collections.find((entry) => entry.value === item.collection);
+  const styleData = tattooStylePayload(assignments, {
+    fallbackValue: item.primaryStyle || "unclassified",
+    fallbackLabel: style?.label || item.primaryStyle || "Unclassified",
+  });
   return {
     ...item,
-    primaryStyleLabel: style?.label || item.primaryStyle,
+    ...styleData,
     collectionLabel: collection?.label || item.collection,
   };
 }
@@ -294,10 +305,14 @@ async function listPublic(env) {
   ]);
   const rows = result.results || [];
   const ids = rows.map((row) => row.id);
-  const [media, documentation] = await Promise.all([galleryMedia(db, ids), imageDetails(db, ids)]);
+  const [media, documentation, styleAssignments] = await Promise.all([
+    galleryMedia(db, ids),
+    imageDetails(db, ids),
+    loadTattooStyleAssignments(db, ids),
+  ]);
   return json({
     items: rows.map((row) => applyImageDocumentation(
-      decorateItem(itemFromRow(row), options),
+      decorateItem(itemFromRow(row), options, styleAssignments.get(row.id)),
       media.get(row.id) || [],
       documentation.get(row.id),
       { primaryConsentStatus: row.primary_consent_status }
@@ -316,10 +331,14 @@ async function listAdmin(request, env) {
   ]);
   const rows = result.results || [];
   const ids = rows.map((row) => row.id);
-  const [media, documentation] = await Promise.all([galleryMedia(db, ids, true), imageDetails(db, ids)]);
+  const [media, documentation, styleAssignments] = await Promise.all([
+    galleryMedia(db, ids, true),
+    imageDetails(db, ids),
+    loadTattooStyleAssignments(db, ids),
+  ]);
   return json({
     items: rows.map((row) => applyImageDocumentation(
-      decorateItem(itemFromRow(row, true), options),
+      decorateItem(itemFromRow(row, true), options, styleAssignments.get(row.id)),
       media.get(row.id) || [],
       documentation.get(row.id),
       { includeImages: true, admin: true, primaryConsentStatus: row.primary_consent_status }
@@ -337,9 +356,14 @@ async function getPublicItem(env, id) {
       AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
   `).bind(id).first();
   if (!row) return errorResponse("Portfolio item not found.", 404);
-  const [media, options, documentation] = await Promise.all([galleryMedia(db, [id]), portfolioOptions(db), imageDetails(db, [id])]);
+  const [media, options, documentation, styleAssignments] = await Promise.all([
+    galleryMedia(db, [id]),
+    portfolioOptions(db),
+    imageDetails(db, [id]),
+    loadTattooStyleAssignments(db, [id]),
+  ]);
   const item = applyImageDocumentation(
-    decorateItem(itemFromRow(row, false, true), options),
+    decorateItem(itemFromRow(row, false, true), options, styleAssignments.get(id)),
     media.get(id) || [],
     documentation.get(id),
     { includeImages: true, primaryConsentStatus: row.primary_consent_status }
@@ -392,6 +416,7 @@ async function createUpload(request, env) {
   const originalFilename = cleanText(file.name, 255) || `portfolio.${extension}`;
   const title = cleanText(form.get("title"), 160);
   const altText = cleanText(form.get("altText"), 300);
+  const styleAssignments = await resolveTattooStyleSelection(db, []);
 
   await env.SUBMISSION_FILES.put(key, file.stream(), {
     httpMetadata: {
@@ -402,21 +427,28 @@ async function createUpload(request, env) {
   });
 
   try {
-    await db.batch([db.prepare(`
-      INSERT INTO portfolio_items (
-        id, storage_key, original_filename, content_type, title, alt_text,
-        state, sort_order, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, datetime('now'), datetime('now'))
-    `).bind(id, key, originalFilename, file.type, title, altText, order),
-    db.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'portfolio_item','node-tattoos','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(id),
-    db.prepare("INSERT INTO portfolio_image_details(portfolio_item_id,image_ref,healing_state,timing_note,caption,created_at,updated_at) VALUES(?,'primary','unspecified','','',datetime('now'),datetime('now'))").bind(id)]);
+    await db.batch([
+      db.prepare(`
+        INSERT INTO portfolio_items (
+          id, storage_key, original_filename, content_type, title, alt_text, primary_style,
+          state, sort_order, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, datetime('now'), datetime('now'))
+      `).bind(id, key, originalFilename, file.type, title, altText, styleAssignments[0].value, order),
+      db.prepare("INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES(?,'portfolio_item','node-tattoos','internal',0,'studio','studio',datetime('now'),datetime('now'))").bind(id),
+      db.prepare("INSERT INTO portfolio_image_details(portfolio_item_id,image_ref,healing_state,timing_note,caption,created_at,updated_at) VALUES(?,'primary','unspecified','','',datetime('now'),datetime('now'))").bind(id),
+      ...replaceTattooStyleAssignmentStatements(db, id, styleAssignments),
+    ]);
   } catch (error) {
     await env.SUBMISSION_FILES.delete(key);
     throw error;
   }
 
-  const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first();
-  return json({ item: itemFromRow(row, true) }, { status: 201 });
+  const [row, options, assignmentMap] = await Promise.all([
+    db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first(),
+    portfolioOptions(db, true),
+    loadTattooStyleAssignments(db, [id]),
+  ]);
+  return json({ item: decorateItem(itemFromRow(row, true), options, assignmentMap.get(id)) }, { status: 201 });
 }
 
 function defaultAngleAltText(item, imageRole) {
@@ -443,7 +475,9 @@ async function createAngleUpload(request, env, itemId) {
   if (file.size > MAX_UPLOAD_BYTES) return errorResponse("Images must be 15 MB or smaller.", 413);
   const imageRole = cleanText(form.get("imageRole"), 20) || "result";
   if (!IMAGE_ROLES.has(imageRole)) return errorResponse("Choose Result, Before / existing tattoo, Process, or Detail.", 422);
-  if (imageRole === "before" && (item.project_type || "standard") !== "cover_up") {
+  const promoteToCoverUp = form.get("promoteToCoverUp") === "true";
+  const promotionRequested = imageRole === "before" && promoteToCoverUp;
+  if (imageRole === "before" && (item.project_type || "standard") !== "cover_up" && !promotionRequested) {
     return errorResponse("Save the Project type as Cover-up before uploading Before / existing tattoo photographs.", 409);
   }
 
@@ -459,7 +493,7 @@ async function createAngleUpload(request, env, itemId) {
     customMetadata: { portfolioItemId: itemId, mediaId, originalFilename, imageRole },
   });
   try {
-    await db.batch([
+    const statements = [
       db.prepare(`
         INSERT INTO media_assets(
           id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,
@@ -476,7 +510,11 @@ async function createAngleUpload(request, env, itemId) {
           portfolio_item_id,image_ref,healing_state,image_role,timing_note,caption,created_at,updated_at
         ) VALUES(?,?,'unspecified',?,'','',datetime('now'),datetime('now'))
       `).bind(itemId, mediaId, imageRole),
-    ]);
+    ];
+    if (promotionRequested) {
+      statements.unshift(db.prepare("UPDATE portfolio_items SET project_type = 'cover_up', updated_at = datetime('now') WHERE id = ? AND project_type = 'standard'").bind(itemId));
+    }
+    await db.batch(statements);
   } catch (error) {
     await env.SUBMISSION_FILES.delete(storageKey);
     throw error;
@@ -564,6 +602,35 @@ async function patchItem(request, env, id) {
   const updates = [];
   const values = [];
   let nextProjectType = current.project_type || "standard";
+  const currentStyleMap = await loadTattooStyleAssignments(db, [id]);
+  const currentStyleValues = (currentStyleMap.get(id) || []).map((assignment) => assignment.value);
+  if (!currentStyleValues.length) currentStyleValues.push(current.primary_style || "unclassified");
+  let nextStyleAssignments = null;
+  try {
+    if (Object.prototype.hasOwnProperty.call(body, "styles")) {
+      nextStyleAssignments = await resolveTattooStyleSelection(db, body.styles, { currentValues: currentStyleValues });
+    } else if (Object.prototype.hasOwnProperty.call(body, "primaryStyle")) {
+      const requestedPrimary = await resolveTattooStyleSelection(db, [body.primaryStyle], { currentValues: currentStyleValues });
+      const primaryValue = requestedPrimary[0].value;
+      const preservedValues = primaryValue === "unclassified"
+        ? []
+        : currentStyleValues.filter((value) => value !== "unclassified" && value.toLowerCase() !== primaryValue.toLowerCase());
+      nextStyleAssignments = await resolveTattooStyleSelection(
+        db,
+        [primaryValue, ...preservedValues],
+        { currentValues: currentStyleValues }
+      );
+    }
+  } catch (error) {
+    if (error instanceof TattooStyleValidationError || Number(error?.status) === 422) {
+      return errorResponse(error.message, Number(error.status || 422));
+    }
+    throw error;
+  }
+  if (nextStyleAssignments) {
+    updates.push("primary_style = ?");
+    values.push(nextStyleAssignments[0].value);
+  }
   for (const [apiField, sqlField] of EDITABLE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(body, apiField)) continue;
     const max = apiField === "statement" || apiField === "processNotes"
@@ -577,10 +644,6 @@ async function patchItem(request, env, id) {
             : 160;
     const value = cleanText(body[apiField], max);
     let storedValue = value;
-    if (apiField === "primaryStyle") {
-      storedValue = await resolveOptionValue(db, "style", value, current.primary_style || "unclassified");
-      if (storedValue === null) return errorResponse("Choose an enabled primary style.");
-    }
     if (apiField === "collection") {
       storedValue = await resolveOptionValue(db, "collection", value, current.collection || "");
       if (storedValue === null) return errorResponse("Choose an enabled collection.");
@@ -655,11 +718,18 @@ async function patchItem(request, env, id) {
   if (!updates.length) return errorResponse("No portfolio changes were supplied.");
   updates.push("updated_at = datetime('now')");
   values.push(id);
-  await db.prepare(`UPDATE portfolio_items SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
-  await db.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,public_at=CASE WHEN ?='public' THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?")
-    .bind(nextState === "published" ? "public" : "internal", nextState === "published" ? 1 : 0, nextState === "published" ? "public" : "internal", id).run();
-  const row = await db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first();
-  return json({ item: itemFromRow(row, true) });
+  await db.batch([
+    db.prepare(`UPDATE portfolio_items SET ${updates.join(", ")} WHERE id = ?`).bind(...values),
+    ...(nextStyleAssignments ? replaceTattooStyleAssignmentStatements(db, id, nextStyleAssignments) : []),
+    db.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,public_at=CASE WHEN ?='public' THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?")
+      .bind(nextState === "published" ? "public" : "internal", nextState === "published" ? 1 : 0, nextState === "published" ? "public" : "internal", id),
+  ]);
+  const [row, options, assignmentMap] = await Promise.all([
+    db.prepare("SELECT * FROM portfolio_items WHERE id = ?").bind(id).first(),
+    portfolioOptions(db, true),
+    loadTattooStyleAssignments(db, [id]),
+  ]);
+  return json({ item: decorateItem(itemFromRow(row, true), options, assignmentMap.get(id)) });
 }
 
 async function patchImageDocumentation(request, env, itemId, imageRef) {
@@ -691,7 +761,9 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
     ? "result"
     : cleanText(body.imageRole ?? currentDetails?.image_role ?? "result", 20);
   if (!IMAGE_ROLES.has(imageRole)) return errorResponse("Choose Result, Before / existing tattoo, Process, or Detail.", 422);
-  if (imageRole === "before" && (item.project_type || "standard") !== "cover_up") {
+  const promoteToCoverUp = body.promoteToCoverUp === true || body.promoteToCoverUp === "true";
+  const promotionRequested = imageRole === "before" && promoteToCoverUp;
+  if (imageRole === "before" && (item.project_type || "standard") !== "cover_up" && !promotionRequested) {
     return errorResponse("Change this project to Cover-up before labeling an image Before / existing tattoo.", 409);
   }
   if ((item.cover_image_ref || "primary") === imageRef && imageRole !== "result") {
@@ -739,6 +811,9 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
       caption = excluded.caption,
       updated_at = datetime('now')
   `).bind(itemId, imageRef, healingState, imageRole, timingNote, caption)];
+  if (promotionRequested) {
+    statements.unshift(db.prepare("UPDATE portfolio_items SET project_type = 'cover_up', updated_at = datetime('now') WHERE id = ? AND project_type = 'standard'").bind(itemId));
+  }
   if (consentSupplied && imageRef === "primary") {
     statements.push(db.prepare("UPDATE portfolio_items SET primary_consent_status = ?, updated_at = datetime('now') WHERE id = ?").bind(consentStatus, itemId));
   } else if (consentSupplied) {
@@ -807,13 +882,34 @@ async function patchOption(request, env, id) {
   if (Object.prototype.hasOwnProperty.call(body, "enabled")) {
     const enabled = body.enabled === true || body.enabled === "true" || body.enabled === "on";
     if (current.kind === "style" && current.value === "unclassified" && !enabled) {
-      return errorResponse("Unclassified must remain enabled because it is the portfolio fallback.", 409);
+      return errorResponse("Unclassified must remain enabled because it is the tattoo-style fallback.", 409);
     }
     updates.push("enabled = ?"); values.push(enabled ? 1 : 0);
   }
   if (!updates.length) return errorResponse("No option changes were supplied.");
   updates.push("updated_at = datetime('now')"); values.push(id);
-  await db.prepare(`UPDATE portfolio_options SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  const statements = [db.prepare(`UPDATE portfolio_options SET ${updates.join(", ")} WHERE id = ?`).bind(...values)];
+  if (current.kind === "style" && Object.prototype.hasOwnProperty.call(body, "label")) {
+    statements.push(db.prepare(`
+      UPDATE search_documents
+      SET theme_labels = COALESCE((
+        SELECT group_concat(style_label, ', ')
+        FROM (
+          SELECT option_row.label AS style_label
+          FROM tattoo_item_styles assignment
+          JOIN portfolio_options option_row ON option_row.id = assignment.style_option_id
+          WHERE assignment.entity_id = search_documents.entity_id
+            AND lower(option_row.value) <> 'unclassified'
+          ORDER BY assignment.is_primary DESC, assignment.sort_order
+        ) public_styles
+      ), ''), updated_at = datetime('now')
+      WHERE entity_type = 'flash_item'
+        AND entity_id IN (
+          SELECT entity_id FROM tattoo_item_styles WHERE style_option_id = ?
+        )
+    `).bind(id));
+  }
+  await db.batch(statements);
   return json({ ok: true, id });
 }
 
@@ -825,9 +921,9 @@ async function deleteOption(request, env, id) {
   if (!option) return errorResponse("Portfolio option not found.", 404);
   if (option.kind === "style" && option.value === "unclassified") return errorResponse("Unclassified cannot be deleted.", 409);
   const usage = option.kind === "style"
-    ? await db.prepare("SELECT COUNT(*) AS count FROM portfolio_items WHERE COALESCE(NULLIF(primary_style, ''), 'unclassified') = ?").bind(option.value).first()
+    ? await db.prepare("SELECT COUNT(DISTINCT entity_id) AS count FROM tattoo_item_styles WHERE style_option_id = ?").bind(option.id).first()
     : await db.prepare("SELECT COUNT(*) AS count FROM portfolio_items WHERE collection = ?").bind(option.value).first();
-  if (Number(usage?.count || 0) > 0) return errorResponse("This option is assigned to portfolio work. Disable it instead.", 409);
+  if (Number(usage?.count || 0) > 0) return errorResponse("This option is assigned to tattoo work. Disable it instead.", 409);
   await db.prepare("DELETE FROM portfolio_options WHERE id = ?").bind(id).run();
   return json({ ok: true, deletedId: id });
 }
@@ -1067,12 +1163,12 @@ export async function handlePortfolioApi(request, env) {
     const imageUploadMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images$/);
     if (imageUploadMatch) {
       if (method !== "POST") return methodNotAllowed(["POST"]);
-      return createAngleUpload(request, env, decodeURIComponent(imageUploadMatch[1]));
+      return await createAngleUpload(request, env, decodeURIComponent(imageUploadMatch[1]));
     }
     const imageDocumentationMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images\/([^/]+)$/);
     if (imageDocumentationMatch) {
       if (method !== "PATCH") return methodNotAllowed(["PATCH"]);
-      return patchImageDocumentation(request, env, decodeURIComponent(imageDocumentationMatch[1]), decodeURIComponent(imageDocumentationMatch[2]));
+      return await patchImageDocumentation(request, env, decodeURIComponent(imageDocumentationMatch[1]), decodeURIComponent(imageDocumentationMatch[2]));
     }
     const angleOrderMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/angles\/reorder$/);
     if (angleOrderMatch) {
@@ -1091,7 +1187,7 @@ export async function handlePortfolioApi(request, env) {
     }
     if (path.startsWith("/api/admin/portfolio/")) {
       const id = decodeURIComponent(path.slice("/api/admin/portfolio/".length));
-      if (method === "PATCH") return patchItem(request, env, id);
+      if (method === "PATCH") return await patchItem(request, env, id);
       if (method === "DELETE") return archiveItem(request, env, id);
       return methodNotAllowed(["PATCH", "DELETE"]);
     }

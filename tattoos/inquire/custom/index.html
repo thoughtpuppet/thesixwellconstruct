@@ -270,6 +270,22 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 
       var referenceId = new URLSearchParams(window.location.search).get("reference");
       var referenceCard = document.getElementById("portfolioReference");
+      function publicStyleLabels(item) {
+        var values = Array.isArray(item && item.styles) && item.styles.length ? item.styles : [item && item.primaryStyle];
+        var supplied = Array.isArray(item && item.styleLabels) ? item.styleLabels : [];
+        var labels = [];
+        values.forEach(function(rawValue, index){
+          var value = String(rawValue || "").trim();
+          var label = String(supplied[index] || (value === (item && item.primaryStyle) ? item.primaryStyleLabel : "") || value).trim();
+          if (!value || value.toLowerCase() === "unclassified" || label.toLowerCase() === "unclassified" || labels.indexOf(label) !== -1) return;
+          labels.push(label);
+        });
+        if (!values.some(Boolean)) supplied.forEach(function(rawLabel){
+          var label = String(rawLabel || "").trim();
+          if (label && label.toLowerCase() !== "unclassified" && labels.indexOf(label) === -1) labels.push(label);
+        });
+        return labels;
+      }
       if (referenceId && referenceCard) {
         fetch("/api/portfolio/" + encodeURIComponent(referenceId), { headers:{ accept:"application/json" }, cache:"no-store" })
           .then(function(response){ if(!response.ok) throw new Error(); return response.json(); })
@@ -280,7 +296,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             var copy = document.createElement("div"); copy.className = "portfolio-reference-copy";
             var label = document.createElement("span"); label.className = "portfolio-reference-label"; label.textContent = "Your selected direction";
             var title = document.createElement("strong"); title.className = "portfolio-reference-title"; title.textContent = item.title || "Tattoo work";
-            var meta = document.createElement("span"); meta.className = "portfolio-reference-meta"; meta.textContent = [item.year,item.placement,item.primaryStyle].filter(Boolean).join(" · ");
+            var meta = document.createElement("span"); meta.className = "portfolio-reference-meta"; meta.textContent = [item.year,item.placement].concat(publicStyleLabels(item)).filter(Boolean).join(" · ");
             var note = document.createElement("span"); note.className = "portfolio-reference-note"; note.textContent = "This completed tattoo will not be copied. It is attached only as context for visual direction, process, technique, or atmosphere in a new original project.";
             copy.append(label,title); if(meta.textContent) copy.append(meta); copy.append(note); referenceCard.replaceChildren(image,copy); referenceCard.hidden = false;
             form.elements.reference_entity_id.value = item.id;

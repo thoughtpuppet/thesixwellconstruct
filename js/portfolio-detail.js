@@ -4,8 +4,40 @@
   let portfolioOptions = { styles: [], collections: [] };
 
   function optionLabel(kind, value) {
+    if (kind === "style" && String(value || "").trim().toLowerCase() === "unclassified") return "";
     const options = kind === "style" ? portfolioOptions.styles : portfolioOptions.collections;
     return options.find((option) => option.value === value)?.label || (kind === "style" ? STYLE_LABELS[value] : value) || "";
+  }
+
+  function itemStyleEntries(item) {
+    const values = Array.isArray(item?.styles) && item.styles.length ? item.styles : [item?.primaryStyle];
+    const supplied = Array.isArray(item?.styleLabels) ? item.styleLabels : [];
+    const seen = new Set();
+    const entries = values.map((rawValue, index) => {
+      const value = String(rawValue || "").trim();
+      const label = String(supplied[index] || (value === item?.primaryStyle ? item?.primaryStyleLabel : "") || optionLabel("style", value) || value).trim();
+      return { value, label };
+    }).filter(({ value, label }) => {
+      const key = value.toLowerCase();
+      if (!value || key === "unclassified" || label.toLowerCase() === "unclassified" || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (!entries.length && !values.some(Boolean)) {
+      supplied.forEach((rawLabel) => {
+        const label = String(rawLabel || "").trim();
+        const key = label.toLowerCase();
+        if (label && key !== "unclassified" && !seen.has(key)) { seen.add(key); entries.push({ value: label, label }); }
+      });
+    }
+    return entries;
+  }
+
+  function itemStyleValues(item) { return itemStyleEntries(item).map((entry) => entry.value); }
+  function itemStyleLabels(item) { return itemStyleEntries(item).map((entry) => entry.label); }
+
+  function itemHasStyle(item, style) {
+    return !style || itemStyleValues(item).includes(style);
   }
 
   function node(tag, className, text) {
@@ -38,7 +70,7 @@
     function renderedItems() { return items.filter((item) => !failedIds.has(item.id)); }
     function visibleItems() {
       return renderedItems().filter((item) =>
-        (!activeStyle || item.primaryStyle === activeStyle) &&
+        itemHasStyle(item, activeStyle) &&
         (!activeCollection || item.collection === activeCollection) &&
         (!activeCoverUps || isCoverUp(item))
       );
@@ -54,11 +86,17 @@
     }
     function renderFilters() {
       const available = renderedItems();
-      const styles = [...new Set(available.map((item) => item.primaryStyle).filter((style) => optionLabel("style", style)))];
+      const styleEntries = available.flatMap(itemStyleEntries);
+      styleEntries.forEach(({ value, label }) => { if (!STYLE_LABELS[value]) STYLE_LABELS[value] = label; });
+      const usedStyles = new Set(styleEntries.map((entry) => entry.value));
+      const configuredStyles = (portfolioOptions.styles || []).map((option) => option.value).filter((style) => usedStyles.has(style));
+      const styles = [...configuredStyles, ...[...usedStyles].filter((style) => !configuredStyles.includes(style))];
       const collections = [...new Set(available.map((item) => item.collection).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+      if (activeStyle && !usedStyles.has(activeStyle)) activeStyle = "";
+      if (activeCollection && !collections.includes(activeCollection)) activeCollection = "";
       const coverUpCount = available.filter((item) =>
         isCoverUp(item) &&
-        (!activeStyle || item.primaryStyle === activeStyle) &&
+        itemHasStyle(item, activeStyle) &&
         (!activeCollection || item.collection === activeCollection)
       ).length;
       typeRow.replaceChildren(chip("all", available.length, !activeStyle && !activeCollection && !activeCoverUps, () => {
@@ -75,7 +113,7 @@
       }
       styles.forEach((style) => {
         const count = available.filter((item) =>
-          item.primaryStyle === style &&
+          itemHasStyle(item, style) &&
           (!activeCollection || item.collection === activeCollection) &&
           (!activeCoverUps || isCoverUp(item))
         ).length;
@@ -88,7 +126,7 @@
       collections.forEach((collection) => {
         const count = available.filter((item) =>
           item.collection === collection &&
-          (!activeStyle || item.primaryStyle === activeStyle) &&
+          itemHasStyle(item, activeStyle) &&
           (!activeCoverUps || isCoverUp(item))
         ).length;
         if (count || activeCollection === collection) collectionRow.append(chip(optionLabel("collection", collection), count, activeCollection === collection, () => { activeCollection = activeCollection === collection ? "" : collection; render(); }));
@@ -199,7 +237,7 @@
       viewerControlledMedia(item,leadImages,media);
       const copy=node("div","overlay-details"),head=node("header"),detailTitle=node("h1","overlay-title",item.title||"Tattoo work");detailTitle.tabIndex=-1;head.append(node("p","portfolio-detail-kicker",isCoverUp(item)?"Cover-up tattoo work":"Tattoo work"),detailTitle);
       const info=itemInfo(item);if(info)head.append(node("p","overlay-subtitle",info));
-      const tags=node("div","overlay-tags");[isCoverUp(item)?"Cover-up":"",optionLabel("style",item.primaryStyle),optionLabel("collection",item.collection)].filter(Boolean).forEach((value)=>tags.append(node("span","overlay-tag",value)));if(tags.childElementCount)head.append(tags);copy.append(head);
+      const tags=node("div","overlay-tags");[isCoverUp(item)?"Cover-up":"",...itemStyleLabels(item),optionLabel("collection",item.collection)].filter(Boolean).forEach((value)=>tags.append(node("span","overlay-tag",value)));if(tags.childElementCount)head.append(tags);copy.append(head);
       [block("About this tattoo",item.caption),block("Statement / story",item.statement,"statement")].filter(Boolean).forEach((section)=>copy.append(section));
       if(item.sessionCount||item.sessionNote){const session=node("section","portfolio-detail-block"),grid=node("div","portfolio-session-grid");session.append(node("p","portfolio-detail-label","Sessions"));if(item.sessionCount){const cell=node("div");cell.append(node("span","portfolio-detail-label","Completed in"),node("span","portfolio-session-value",`${item.sessionCount} session${item.sessionCount===1?"":"s"}`));grid.append(cell)}if(item.sessionNote){const cell=node("div");cell.append(node("span","portfolio-detail-label","Session notes"),node("span","portfolio-session-value",item.sessionNote));grid.append(cell)}session.append(grid);copy.append(session)}
       [block("Process",item.processNotes),block("Techniques",item.techniques)].filter(Boolean).forEach((section)=>copy.append(section));
