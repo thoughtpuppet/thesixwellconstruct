@@ -273,7 +273,7 @@
     artistReviewLabel: "Plan in progress",
     fallbackNote: "Based on the current design, placement, and level of detail, this is the session format I recommend. We’ll continue to adjust around your comfort, skin response, and the natural pace of the work.",
     requiredPolicy: "This project is best completed across multiple sessions so the work can progress at a comfortable, considered pace.",
-    notAvailablePolicy: "This project is currently planned as one session. If anything changes while we’re working, we’ll pause and discuss the best way to continue.",
+    notAvailablePolicy: "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
     clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
     artistReviewPolicy: "I’m still reviewing the best session format for this project. I’ll confirm the plan before scheduling.",
     studioPlanLabel: "Use the recommended plan",
@@ -282,8 +282,6 @@
     oneLongerSessionDescription: "I’ll confirm whether the design and available appointment time make this a good fit.",
     multipleShorterSessionsLabel: "Ask about shorter sessions",
     multipleShorterSessionsDescription: "Spread the work across shorter appointments.",
-    discussWithArtistLabel: "Talk it through first",
-    discussWithArtistDescription: "Pause scheduling until we’ve confirmed the best approach together.",
     acceptRequiredLabel: "Continue with this plan",
     acceptRequiredDescription: "Choose a date for the recommended session.",
     continuePlanLabel: "Continue with this plan",
@@ -328,7 +326,7 @@
       bookingTypes: [
         {
           id: "tattoo_quarter",
-          label: "Quarter Session",
+          label: "Quarter Day Session",
           description: "Approx. 1.5 hours for small approved projects, flash, or focused work.",
           durationMinutes: 90,
           depositCents: 5000,
@@ -337,7 +335,7 @@
         },
         {
           id: "tattoo_half",
-          label: "Half Session",
+          label: "Half Day Session",
           description: "Approx. 3 hours for medium approved projects or developed symbolic work.",
           durationMinutes: 180,
           depositCents: 10000,
@@ -346,7 +344,7 @@
         },
         {
           id: "tattoo_full",
-          label: "Full Session",
+          label: "Full Day Session",
           description: "Up to 6 hours for large approved work, special projects, or deeper sessions.",
           durationMinutes: 360,
           depositCents: 20000,
@@ -688,7 +686,6 @@
       ["studio_plan", copy.studioPlanLabel, copy.studioPlanDescription],
       ["one_longer_session", copy.oneLongerSessionLabel, copy.oneLongerSessionDescription],
       ["multiple_shorter_sessions", copy.multipleShorterSessionsLabel, copy.multipleShorterSessionsDescription],
-      ["discuss_with_artist", copy.discussWithArtistLabel, copy.discussWithArtistDescription],
     ] : [["studio_plan", fixed ? copy.acceptRequiredLabel : copy.continuePlanLabel, fixed ? copy.acceptRequiredDescription : copy.continuePlanDescription]];
     const policyCopy = plan.splitPolicy === "required"
       ? copy.requiredPolicy

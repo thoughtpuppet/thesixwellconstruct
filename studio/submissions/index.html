@@ -533,9 +533,9 @@
         ["consult_in_person", "In-Person Consultation"],
         ["consult_virtual", "Virtual Consultation"],
         ["build_in_person", "In-Person Build Session"],
-        ["tattoo_quarter", "Quarter Session"],
-        ["tattoo_half", "Half Session"],
-        ["tattoo_full", "Full Session"],
+        ["tattoo_quarter", "Quarter Day Session"],
+        ["tattoo_half", "Half Day Session"],
+        ["tattoo_full", "Full Day Session"],
       ],
       bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_full", "consult_in_person", "consult_virtual", "build_in_person"],
       walkInPlaceholder: "Small flash, build consults, or studio note",
@@ -567,10 +567,15 @@
   const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
   const PRIVATE_BOOKING_TYPE_OPTIONS = [
     ["consult_in_person", "In-Person Consultation"],
-    ["tattoo_quarter", "Quarter Session"],
-    ["tattoo_half", "Half Session"],
-    ["tattoo_full", "Full Session"],
+    ["tattoo_quarter", "Quarter Day Session"],
+    ["tattoo_half", "Half Day Session"],
+    ["tattoo_full", "Full Day Session"],
   ];
+  const DIRECT_INVITE_SESSION_NOTES = {
+    tattoo_quarter: "The composition is planned for a Quarter Day Session.",
+    tattoo_half: "The composition is planned for a Half Day Session.",
+    tattoo_full: "The composition is planned for a Full Day Session.",
+  };
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
   let token = localStorage.getItem(tokenKey) || "";
@@ -610,8 +615,6 @@
     ["oneLongerSessionDescription", "Longer-session description", "textarea"],
     ["multipleShorterSessionsLabel", "Shorter-sessions option", "input"],
     ["multipleShorterSessionsDescription", "Shorter-sessions description", "textarea"],
-    ["discussWithArtistLabel", "Discuss-with-artist option", "input"],
-    ["discussWithArtistDescription", "Discuss-with-artist description", "textarea"],
     ["acceptRequiredLabel", "Required-structure option", "input"],
     ["acceptRequiredDescription", "Required-structure description", "textarea"],
     ["continuePlanLabel", "Continue-plan option", "input"],
@@ -2357,12 +2360,12 @@
           <fieldset class="direct-invite-types" data-direct-invite-types="tattoo">
             <legend>Session type</legend>
             <div class="direct-invite-type-grid">
-              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Session</span></label>
-              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Session</span></label>
-              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Session</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Day Session</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Day Session</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Day Session</span></label>
             </div>
             <label class="field">Session plan wording <span class="contact">(client-facing)</span>
-              <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(estimateCopy.fallbackNote || "")}</textarea>
+              <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(DIRECT_INVITE_SESSION_NOTES.tattoo_quarter)}</textarea>
               <span class="contact">This appears inside the client’s Session Estimate section. You can edit it again from the Studio record.</span>
             </label>
           </fieldset>
@@ -2383,6 +2386,19 @@
     const status = form.querySelector("[data-direct-invite-status]");
     const result = detailEl.querySelector("[data-direct-invite-result]");
     const purposeInput = form.elements.purpose;
+    const estimateNoteInput = form.elements.clientEstimateNote;
+    estimateNoteInput.dataset.autoValue = DIRECT_INVITE_SESSION_NOTES.tattoo_quarter;
+    const syncDirectInviteEstimateNote = () => {
+      const bookingTypeId = form.querySelector(
+        '[data-direct-invite-types="tattoo"] input[type="radio"]:checked'
+      )?.value || "";
+      const nextValue = DIRECT_INVITE_SESSION_NOTES[bookingTypeId] || "";
+      const currentValue = estimateNoteInput.value.trim();
+      if (!currentValue || currentValue === estimateNoteInput.dataset.autoValue || currentValue === estimateCopy.fallbackNote) {
+        estimateNoteInput.value = nextValue;
+      }
+      estimateNoteInput.dataset.autoValue = nextValue;
+    };
     const syncPurpose = () => {
       const purpose = purposeInput.value;
       form.querySelectorAll("[data-direct-invite-types]").forEach((group) => {
@@ -2390,6 +2406,10 @@
       });
     };
     purposeInput.addEventListener("change", syncPurpose);
+    form.querySelectorAll('[data-direct-invite-types="tattoo"] input[type="radio"]').forEach((input) => {
+      input.addEventListener("change", syncDirectInviteEstimateNote);
+    });
+    syncDirectInviteEstimateNote();
     syncPurpose();
 
     form.addEventListener("submit", async (event) => {
@@ -3507,9 +3527,12 @@ ${meetingLines}
   }
 
   function renderDetail(submission) {
-    const isProtected = ["booked", "paid", "cancelled"].includes(submission.status);
     const hasAppointment = !!latestAppointmentFor(submission.id);
     const latestAppointment = latestAppointmentFor(submission.id);
+    const hasStoredFiles = Array.isArray(submission.files) && submission.files.some((file) => file?.storageKey);
+    const isProtected = ["booked", "paid", "cancelled", "archived"].includes(submission.status)
+      || hasAppointment
+      || hasStoredFiles;
     const historicPrerequisiteAppointment = historicPrerequisiteAppointmentFor(submission.id);
     const hasDirectAppointment = hasAppointment && !TATTOO_PROJECT_TYPES.has(submission.type);
     const tattooStage = submission.tattooStage || submission.tattoo_stage || "";
@@ -3603,7 +3626,7 @@ ${meetingLines}
       <div class="booking-actions" style="margin-top:16px;">
         ${isProtected
           ? `<button class="button" id="archiveSubmissionBtn" type="button">Archive Entry</button>
-             <button class="button danger-button" id="deleteSubmissionBtn" type="button" disabled title="Cannot delete a booked or paid submission — archive instead">Delete Entry</button>`
+             <button class="button danger-button" id="deleteSubmissionBtn" type="button" disabled title="Entries with appointment, payment, archive, or stored-file history must be archived instead">Delete Entry</button>`
           : `<button class="button danger-button" id="deleteSubmissionBtn" type="button">Delete Entry</button>`
         }
       </div>
@@ -5206,7 +5229,9 @@ ${meetingLines}
 
     if (event.target.id === "deleteSubmissionBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
-      if (submission?.status === "booked" || submission?.status === "paid") {
+      const hasAppointment = !!latestAppointmentFor(activeId);
+      const hasStoredFiles = Array.isArray(submission?.files) && submission.files.some((file) => file?.storageKey);
+      if (["booked", "paid", "cancelled", "archived"].includes(submission?.status) || hasAppointment || hasStoredFiles) {
         setStatus("Cannot delete — archive instead");
         return;
       }

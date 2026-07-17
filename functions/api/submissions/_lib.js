@@ -1482,12 +1482,8 @@ export async function handleDeleteSubmission(request, env, id) {
       return errorResponse("Submission has appointment history. Archive it instead of deleting.", 409);
     }
 
-    const tokenCount = await db
-      .prepare("SELECT COUNT(*) AS count FROM booking_tokens WHERE submission_id = ?")
-      .bind(id)
-      .first();
-    if (Number(tokenCount?.count || 0) > 0 || current.status === "approved" || current.status === "booked") {
-      return errorResponse("Submission has booking or approval history. Archive it instead of deleting.", 409);
+    if (["booked", "cancelled", "archived"].includes(current.status)) {
+      return errorResponse("Submission has protected lifecycle history. Archive it instead of deleting.", 409);
     }
 
     const reservation = await db
@@ -1504,6 +1500,7 @@ export async function handleDeleteSubmission(request, env, id) {
     }
 
     await db.batch([
+      db.prepare("DELETE FROM booking_tokens WHERE submission_id = ?").bind(id),
       db.prepare("DELETE FROM submission_events WHERE submission_id = ?").bind(id),
       db.prepare("DELETE FROM submissions WHERE id = ?").bind(id),
     ]);

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   handleCreateSubmission,
+  handleDeleteSubmission,
   handleUpdateSubmission,
 } from "../functions/api/submissions/_lib.js";
 import {
@@ -402,6 +403,16 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   });
   assert.equal(database.prepare("SELECT count(*) AS count FROM special_project_calls WHERE status = 'open'").get().count, 3);
   assert.equal(database.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days, 14);
+  assert.deepEqual(
+    database.prepare(
+      "SELECT id, label FROM booking_types WHERE id IN ('tattoo_quarter','tattoo_half','tattoo_full') ORDER BY id"
+    ).all().map((row) => ({ ...row })),
+    [
+      { id: "tattoo_full", label: "Full Day Session" },
+      { id: "tattoo_half", label: "Half Day Session" },
+      { id: "tattoo_quarter", label: "Quarter Day Session" },
+    ],
+  );
 });
 
 test("the applied tattoo baseline keeps its production filename and 0039 stays replay-safe", () => {
@@ -587,7 +598,6 @@ test("Studio can create a direct private booking invite without a prior inquiry"
     "/api/admin/booking/direct-invites",
     {
       projectNote: "Approved through an offline conversation.",
-      clientEstimateNote: "Plan for one half-day session with room for natural breaks.",
       purpose: "tattoo",
       bookingTypeId: "tattoo_half",
     },
@@ -620,7 +630,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(plan.estimated_total_minutes_min, 180);
   assert.equal(plan.estimated_total_minutes_max, 180);
   assert.equal(plan.client_acknowledged, 0);
-  assert.equal(plan.artist_note, "Plan for one half-day session with room for natural breaks.");
+  assert.equal(plan.artist_note, "The composition is planned for a Half Day Session.");
   assert.doesNotMatch(plan.artist_note, /offline conversation/i);
 
   const rawToken = new URL(payload.token.bookingUrl).searchParams.get("token");
@@ -633,9 +643,14 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(contextPayload.requiresClientDetails, true);
   assert.equal(contextPayload.client.email, "");
   assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_half"]);
-  assert.equal(contextPayload.sessionPlan.artistNote, "Plan for one half-day session with room for natural breaks.");
+  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.label), ["Half Day Session"]);
+  assert.equal(contextPayload.sessionPlan.artistNote, "The composition is planned for a Half Day Session.");
   assert.equal(contextPayload.sessionEstimateCopy.sectionHeading, "Plan Your Tattoo Session");
   assert.equal(contextPayload.sessionEstimateCopy.confirmButtonLabel, "Accept This Estimate");
+  assert.equal(
+    contextPayload.sessionEstimateCopy.notAvailablePolicy,
+    "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
+  );
   assert.doesNotMatch(JSON.stringify(contextPayload), /offline conversation/i);
 
   const acknowledged = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
@@ -708,6 +723,39 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(claimedSubmission.contact_email, "direct@example.test");
   assert.equal(claimedSubmission.contact_phone, "404-555-0119");
   assert.equal(claimedSubmission.internal_notes, "Approved through an offline conversation.");
+});
+
+test("unused approved direct booking invites can be permanently deleted with their private links", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
+    "/api/admin/booking/direct-invites",
+    {
+      purpose: "tattoo",
+      bookingTypeId: "tattoo_quarter",
+    },
+    adminToken,
+  ), env);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  const submissionId = payload.directInvite.submissionId;
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id = ?").get(submissionId).count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_session_plans WHERE submission_id = ?").get(submissionId).count, 1);
+
+  const deleted = await handleDeleteSubmission(
+    adminJsonRequest(`/api/admin/submissions/${submissionId}`, {}, adminToken, "DELETE"),
+    env,
+    submissionId,
+  );
+  assert.equal(deleted.status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM submissions WHERE id = ?").get(submissionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id = ?").get(submissionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_session_plans WHERE submission_id = ?").get(submissionId).count, 0);
 });
 
 test("Studio direct invites can route a client into prerequisite consultation", async () => {

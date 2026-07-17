@@ -52,13 +52,18 @@ const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
   consultation: ["consult_in_person", "consult_virtual", "build_in_person"],
   studio: STUDIO_BOOKING_TYPE_IDS,
 };
+const TATTOO_DAY_SESSION_LABELS = Object.freeze({
+  tattoo_quarter: "Quarter Day Session",
+  tattoo_half: "Half Day Session",
+  tattoo_full: "Full Day Session",
+});
 
 // Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.
 const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
 const TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
 const SESSION_CATEGORIES = new Set(["artist_review", "one_session", "multiple_sessions"]);
 const SPLIT_POLICIES = new Set(["artist_review", "required", "client_choice", "not_available"]);
-const CLIENT_SESSION_PREFERENCES = new Set(["studio_plan", "one_longer_session", "multiple_shorter_sessions", "discuss_with_artist"]);
+const CLIENT_SESSION_PREFERENCES = new Set(["studio_plan", "one_longer_session", "multiple_shorter_sessions"]);
 
 const CONFIRMATION_PATHS = {
   consult_in_person: "/booking/confirmed/consultation/",
@@ -84,7 +89,7 @@ const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
   artistReviewLabel: "Plan in progress",
   fallbackNote: "Based on the current design, placement, and level of detail, this is the session format I recommend. We’ll continue to adjust around your comfort, skin response, and the natural pace of the work.",
   requiredPolicy: "This project is best completed across multiple sessions so the work can progress at a comfortable, considered pace.",
-  notAvailablePolicy: "This project is currently planned as one session. If anything changes while we’re working, we’ll pause and discuss the best way to continue.",
+  notAvailablePolicy: "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
   clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
   artistReviewPolicy: "I’m still reviewing the best session format for this project. I’ll confirm the plan before scheduling.",
   studioPlanLabel: "Use the recommended plan",
@@ -93,8 +98,6 @@ const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
   oneLongerSessionDescription: "I’ll confirm whether the design and available appointment time make this a good fit.",
   multipleShorterSessionsLabel: "Ask about shorter sessions",
   multipleShorterSessionsDescription: "Spread the work across shorter appointments.",
-  discussWithArtistLabel: "Talk it through first",
-  discussWithArtistDescription: "Pause scheduling until we’ve confirmed the best approach together.",
   acceptRequiredLabel: "Continue with this plan",
   acceptRequiredDescription: "Choose a date for the recommended session.",
   continuePlanLabel: "Continue with this plan",
@@ -102,6 +105,30 @@ const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
   savedMessage: "Your preference is saved: {{preference}}. You can update it before booking.",
   acknowledgement: "I’ve reviewed the estimated session time and understand that the final timing may adjust as the work progresses.",
   confirmButtonLabel: "Continue to Scheduling",
+});
+const LEGACY_SESSION_ESTIMATE_COPY = Object.freeze({
+  sectionHeading: "Your Session Estimate",
+  oneSessionLabel: "One session",
+  multipleSessionsLabel: "Multiple sessions",
+  artistReviewLabel: "Artist review",
+  fallbackNote: "Your estimate is based on the approved design, placement, and studio process.",
+  requiredPolicy: "This tattoo will have to be completed across multiple sessions.",
+  notAvailablePolicy: "This tattoo will be completed in one session; splitting is not available for this project.",
+  clientChoicePolicy: "The studio has provided its recommendation, but you may choose how you would prefer to pace the work.",
+  artistReviewPolicy: "The artist is still reviewing the final session structure.",
+  studioPlanLabel: "Follow the studio recommendation",
+  studioPlanDescription: "Use the pacing shown in the estimate.",
+  oneLongerSessionLabel: "Request one longer session",
+  oneLongerSessionDescription: "The studio will confirm whether the work and your appointment window allow it.",
+  multipleShorterSessionsLabel: "Request multiple shorter sessions",
+  multipleShorterSessionsDescription: "Complete the work across shorter appointments.",
+  acceptRequiredLabel: "Accept the required session structure",
+  acceptRequiredDescription: "This structure is part of the approved process.",
+  continuePlanLabel: "Continue with the studio plan",
+  continuePlanDescription: "The studio will confirm the final pacing.",
+  savedMessage: "Saved: {{preference}}. You may update this choice before booking.",
+  acknowledgement: "I have reviewed the estimated time and session structure. I understand the final pace can change with placement, detail, skin response, breaks, and my comfort during the appointment.",
+  confirmButtonLabel: "Confirm Session Plan",
 });
 
 function json(data, init = {}) {
@@ -189,7 +216,7 @@ function normalizeBookingType(row) {
   return {
     id: row.id,
     venture: row.venture,
-    label: row.label,
+    label: TATTOO_DAY_SESSION_LABELS[row.id] || row.label,
     description: row.description || "",
     durationMinutes: row.duration_minutes,
     depositCents: row.deposit_cents,
@@ -273,12 +300,13 @@ function normalizeRule(row) {
 }
 
 function normalizeAppointment(row) {
+  const bookingTypeId = row.booking_type_id || row.bookingTypeId || "";
   return {
     id: row.id,
     submissionId: row.submission_id || "",
     bookingTokenId: row.booking_token_id || "",
-    bookingTypeId: row.booking_type_id,
-    bookingTypeLabel: row.booking_type_label || row.bookingTypeLabel || "",
+    bookingTypeId,
+    bookingTypeLabel: TATTOO_DAY_SESSION_LABELS[bookingTypeId] || row.booking_type_label || row.bookingTypeLabel || "",
     availabilityWindowId: row.availability_window_id || "",
     status: row.status,
     purpose: row.purpose || purposeForBookingType(row.booking_type_id, Boolean(row.booking_token_id)),
@@ -462,13 +490,20 @@ function addMinutes(iso, minutes) {
   return new Date(new Date(iso).getTime() + minutes * 60 * 1000).toISOString();
 }
 
+function directInviteSessionNote(bookingTypeId) {
+  const label = TATTOO_DAY_SESSION_LABELS[bookingTypeId] || "selected session";
+  return `The composition is planned for a ${label}.`;
+}
+
 function normalizeSessionEstimateCopy(value) {
   const parsed = typeof value === "string" ? parseJsonField(value, {}) : value;
   const source = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.fromEntries(
     Object.entries(DEFAULT_SESSION_ESTIMATE_COPY).map(([key, fallback]) => [
       key,
-      asString(source[key]) || fallback,
+      asString(source[key]) && asString(source[key]) !== LEGACY_SESSION_ESTIMATE_COPY[key]
+        ? asString(source[key])
+        : fallback,
     ]),
   );
 }
@@ -1210,7 +1245,7 @@ export async function handleSaveBookingSessionPlan(request, env) {
     if (["required", "not_available"].includes(plan.split_policy) && preference !== "studio_plan") {
       return errorResponse("This project has a required session structure.", 409);
     }
-    if (plan.split_policy === "artist_review" && !["studio_plan", "discuss_with_artist"].includes(preference)) {
+    if (plan.split_policy === "artist_review" && preference !== "studio_plan") {
       return errorResponse("The artist must finish reviewing this session structure.", 409);
     }
     const now = new Date().toISOString();
@@ -5526,7 +5561,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
           minimumMinutes,
           maximumMinutes,
           "not_available",
-          clientEstimateNote || sessionEstimateCopy.fallbackNote,
+          clientEstimateNote || directInviteSessionNote(bookingTypeId),
           "one_session",
           0,
           now,

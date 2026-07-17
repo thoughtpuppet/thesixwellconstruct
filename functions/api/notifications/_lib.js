@@ -16,27 +16,32 @@ const TATTOO_FORM_NAMES = Object.freeze({
 const DEFAULT_REVIEW_TIME_MESSAGE = "Most project submissions are reviewed within 5–7 business days.";
 const DEFAULT_BOOKING_TYPES = {
   tattoo_quarter: {
-    label: "Quarter Session",
+    label: "Quarter Day Session",
     description: "Approx. 1.5 hours for small approved projects, flash, or focused work.",
     durationMinutes: 90,
     depositCents: 5000,
     currency: "USD",
   },
   tattoo_half: {
-    label: "Half Session",
+    label: "Half Day Session",
     description: "Approx. 3 hours for medium approved projects or developed symbolic work.",
     durationMinutes: 180,
     depositCents: 10000,
     currency: "USD",
   },
   tattoo_full: {
-    label: "Full Session",
+    label: "Full Day Session",
     description: "Up to 6 hours for large approved work, special projects, or deeper sessions.",
     durationMinutes: 360,
     depositCents: 20000,
     currency: "USD",
   },
 };
+const TATTOO_DAY_SESSION_LABELS = Object.freeze({
+  tattoo_quarter: "Quarter Day Session",
+  tattoo_half: "Half Day Session",
+  tattoo_full: "Full Day Session",
+});
 
 function notificationDb(env) {
   return env.SUBMISSIONS_DB || null;
@@ -221,7 +226,7 @@ function formatDuration(minutes) {
 function normalizeBookingType(row) {
   return {
     id: row.id,
-    label: row.label,
+    label: TATTOO_DAY_SESSION_LABELS[row.id] || row.label,
     description: row.description || "",
     durationMinutes: row.duration_minutes ?? row.durationMinutes ?? 0,
     depositCents: row.deposit_cents ?? row.depositCents ?? 0,
@@ -490,11 +495,12 @@ function normalizeSubmission(rowOrSubmission) {
 
 function normalizeAppointment(row) {
   const meetingJoinUrl = row.meeting_join_url || row.meetingJoinUrl || row.meeting?.joinUrl || "";
+  const bookingTypeId = row.booking_type_id || row.bookingTypeId || "";
   return {
     id: row.id,
     submissionId: row.submission_id || row.submissionId || "",
-    bookingTypeId: row.booking_type_id || row.bookingTypeId || "",
-    bookingTypeLabel: row.booking_type_label || row.bookingTypeLabel || "Tattoo session",
+    bookingTypeId,
+    bookingTypeLabel: TATTOO_DAY_SESSION_LABELS[bookingTypeId] || row.booking_type_label || row.bookingTypeLabel || "Tattoo session",
     clientName: row.client_name || row.clientName || "",
     clientEmail: row.client_email || row.clientEmail || "",
     clientPhone: row.client_phone || row.clientPhone || "",
