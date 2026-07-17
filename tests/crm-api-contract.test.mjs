@@ -2960,13 +2960,13 @@ test("retryable per-customer Square errors keep the payment page resumable", asy
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
 });
 
-test("Square sync rejects a customer profile whose returned id does not match", async (t) => {
+test("Square sync accepts Square's canonical customer id after a profile merge", async (t) => {
   const database = migratedDatabase();
   installSquareApiMock(t, {
     payments: [{
-      id: "square-payment-mismatched-profile",
+      id: "square-payment-merged-profile",
       status: "COMPLETED",
-      customer_id: "square-customer-requested",
+      customer_id: "square-customer-merged-old",
       location_id: "square-tattoo-location",
       total_money: { amount: 7_500, currency: "USD" },
       tip_money: { amount: 0, currency: "USD" },
@@ -2976,12 +2976,12 @@ test("Square sync rejects a customer profile whose returned id does not match", 
     }],
     customerLookupPayload: {
       responses: {
-        "square-customer-requested": {
+        "square-customer-merged-old": {
           customer: {
-            id: "square-customer-other",
-            given_name: "Wrong",
-            family_name: "Person",
-            email_address: "wrong-person@example.test",
+            id: "square-customer-merged-canonical",
+            given_name: "Morgan",
+            family_name: "Merged",
+            email_address: "morgan-merged@example.test",
           },
         },
       },
@@ -2995,22 +2995,155 @@ test("Square sync rejects a customer profile whose returned id does not match", 
   }));
   assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
   assert.equal(sync.payload.status, "complete");
-  assert.ok(sync.payload.warnings.some((warning) => /unavailable/i.test(warning)));
+  assert.equal(sync.payload.stats.customerProfilesReceived, 1);
+  assert.equal(sync.payload.stats.customerProfilesCanonicalized, 1);
+  assert.equal(sync.payload.stats.customerProfilesUnavailable, 0);
   const person = database.prepare(
     "SELECT id,display_name FROM crm_people"
   ).get();
-  assert.equal(person.display_name, "square contact");
+  assert.equal(person.display_name, "Morgan Merged");
+  assert.deepEqual(
+    database.prepare(`
+      SELECT external_id FROM crm_identities
+      WHERE person_id=? AND kind='square_customer'
+      ORDER BY external_id
+    `).all(person.id).map((row) => row.external_id),
+    [
+      "square-customer-merged-canonical",
+      "square-customer-merged-old",
+    ],
+  );
+  const transaction = database.prepare(`
+    SELECT external_customer_id,metadata_json FROM crm_transactions
+    WHERE source_provider='square' AND source_type='payment'
+  `).get();
+  assert.equal(transaction.external_customer_id, "square-customer-merged-old");
+  assert.equal(
+    JSON.parse(transaction.metadata_json).canonicalCustomerExternalId,
+    "square-customer-merged-canonical",
+  );
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_identities
-    WHERE person_id=? AND kind IN ('email','phone')
-  `).get(person.id).count, 0);
-  assert.equal(database.prepare(`
-    SELECT external_id FROM crm_identities
-    WHERE person_id=? AND kind='square_customer'
-  `).get(person.id).external_id, "square-customer-requested");
+    WHERE person_id=? AND kind='email'
+  `).get(person.id).count, 1);
 });
 
-test("an empty Square customer profile remains a warned placeholder", async (t) => {
+test("a merged Square customer id conflict remains separated for owner review", async (t) => {
+  const database = migratedDatabase();
+  const oldIdOwner = await createPerson(database, {
+    displayName: "Old Square Id Owner",
+    email: "old-square-id-owner@example.test",
+  });
+  const canonicalIdOwner = await createPerson(database, {
+    displayName: "Canonical Square Id Owner",
+    email: "canonical-square-id-owner@example.test",
+  });
+  const occurredAt = "2026-07-13T16:35:00.000Z";
+  for (const [identityId, personId, externalId] of [
+    ["square-merged-old-owner", oldIdOwner.id, "square-customer-conflict-old"],
+    [
+      "square-merged-canonical-owner",
+      canonicalIdOwner.id,
+      "square-customer-conflict-canonical",
+    ],
+  ]) {
+    database.prepare(`
+      INSERT INTO crm_identities(
+        id,person_id,kind,value,normalized_value,provider,external_id,
+        source_provider,source_type,source_id,created_at,updated_at
+      ) VALUES(
+        ?,?,'square_customer',?,?, 'square',?,
+        'square','provider_contact',?,?,?
+      )
+    `).run(
+      identityId,
+      personId,
+      externalId,
+      externalId,
+      externalId,
+      `square:${externalId}`,
+      occurredAt,
+      occurredAt,
+    );
+  }
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-merged-id-conflict",
+      status: "COMPLETED",
+      customer_id: "square-customer-conflict-old",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 8_500, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    }],
+    customerLookupPayload: {
+      responses: {
+        "square-customer-conflict-old": {
+          customer: {
+            id: "square-customer-conflict-canonical",
+            given_name: "Returned",
+            family_name: "Merged Profile",
+          },
+        },
+      },
+    },
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.stats.customerProfilesCanonicalized, 1);
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE source_provider='square' AND source_id='square-payment-merged-id-conflict'
+  `).get().person_id, oldIdOwner.id);
+  assert.deepEqual(
+    database.prepare(`
+      SELECT external_id,person_id FROM crm_identities
+      WHERE provider='square'
+        AND external_id IN (
+          'square-customer-conflict-old',
+          'square-customer-conflict-canonical'
+        )
+      ORDER BY external_id
+    `).all().map((row) => ({ ...row })),
+    [
+      {
+        external_id: "square-customer-conflict-canonical",
+        person_id: canonicalIdOwner.id,
+      },
+      {
+        external_id: "square-customer-conflict-old",
+        person_id: oldIdOwner.id,
+      },
+    ],
+  );
+  assert.equal(database.prepare(
+    "SELECT display_name FROM crm_people WHERE id=?"
+  ).get(oldIdOwner.id).display_name, "Old Square Id Owner");
+  assert.equal(database.prepare(
+    "SELECT display_name FROM crm_people WHERE id=?"
+  ).get(canonicalIdOwner.id).display_name, "Canonical Square Id Owner");
+
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id
+        === "crm-sync-conflict:square:payment:square-payment-merged-id-conflict"
+  );
+  assert.ok(conflict);
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).conflicts,
+    ["exact_identity_anchor_disagreement"],
+  );
+});
+
+test("an empty Square customer profile remains a warned placeholder without payment hints", async (t) => {
   const database = migratedDatabase();
   installSquareApiMock(t, {
     payments: [{
@@ -3020,6 +3153,10 @@ test("an empty Square customer profile remains a warned placeholder", async (t) 
       location_id: "square-tattoo-location",
       total_money: { amount: 4_000, currency: "USD" },
       tip_money: { amount: 0, currency: "USD" },
+      shipping_address: {
+        first_name: "Shipping",
+        last_name: "Recipient",
+      },
       source_type: "CASH",
       created_at: "2026-07-13T16:40:00.000Z",
       updated_at: "2026-07-13T16:41:00.000Z",
@@ -3034,10 +3171,395 @@ test("an empty Square customer profile remains a warned placeholder", async (t) 
   }));
   assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
   assert.equal(sync.payload.stats.customerProfilesReceived, 0);
-  assert.ok(sync.payload.warnings.some((warning) => /unavailable/i.test(warning)));
+  assert.equal(sync.payload.stats.customerProfilesEmpty, 1);
+  assert.equal(sync.payload.stats.customerProfilesUnavailable, 0);
+  assert.equal(sync.payload.stats.paymentNameHintsReceived, 0);
+  assert.ok(sync.payload.warnings.some((warning) => /no public name/i.test(warning)));
   assert.equal(database.prepare(
     "SELECT display_name FROM crm_people"
   ).get().display_name, "square contact");
+});
+
+test("Square payment name hints label exact customers without matching people by name", async (t) => {
+  const database = migratedDatabase();
+  const existing = await createPerson(database, {
+    displayName: "Alex Billing",
+    email: "existing-alex-billing@example.test",
+  });
+  installSquareApiMock(t, {
+    payments: [
+      {
+        id: "square-payment-billing-name",
+        status: "COMPLETED",
+        customer_id: "square-customer-billing-name",
+        location_id: "square-tattoo-location",
+        billing_address: {
+          first_name: "Alex",
+          last_name: "Billing",
+        },
+        card_details: {
+          card: {
+            cardholder_name: "Cardholder Name",
+          },
+        },
+        shipping_address: {
+          first_name: "Shipping",
+          last_name: "Name",
+        },
+        total_money: { amount: 5_000, currency: "USD" },
+        tip_money: { amount: 0, currency: "USD" },
+        source_type: "CARD",
+        created_at: "2026-07-13T16:45:00.000Z",
+        updated_at: "2026-07-13T16:46:00.000Z",
+      },
+      {
+        id: "square-payment-cardholder-name",
+        status: "COMPLETED",
+        customer_id: "square-customer-cardholder-name",
+        location_id: "square-tattoo-location",
+        card_details: {
+          card: {
+            cardholder_name: "Taylor Cardholder",
+          },
+        },
+        total_money: { amount: 6_000, currency: "USD" },
+        tip_money: { amount: 1_000, currency: "USD" },
+        source_type: "CARD",
+        created_at: "2026-07-13T16:50:00.000Z",
+        updated_at: "2026-07-13T16:51:00.000Z",
+      },
+    ],
+    customers: [
+      { id: "square-customer-billing-name" },
+      { id: "square-customer-cardholder-name" },
+    ],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.stats.paymentNameHintsReceived, 2);
+  assert.equal(sync.payload.stats.customerProfilesEmpty, 2);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 3);
+
+  const billingPerson = database.prepare(`
+    SELECT p.id,p.display_name
+    FROM crm_people p
+    JOIN crm_identities i ON i.person_id=p.id
+    WHERE i.kind='square_customer' AND i.external_id='square-customer-billing-name'
+  `).get();
+  assert.equal(billingPerson.display_name, "Alex Billing");
+  assert.notEqual(billingPerson.id, existing.id);
+  const cardholderPerson = database.prepare(`
+    SELECT p.id,p.display_name
+    FROM crm_people p
+    JOIN crm_identities i ON i.person_id=p.id
+    WHERE i.kind='square_customer' AND i.external_id='square-customer-cardholder-name'
+  `).get();
+  assert.equal(cardholderPerson.display_name, "Taylor Cardholder");
+  assert.deepEqual(
+    database.prepare(`
+      SELECT person_id,value,label,is_verified,source_type
+      FROM crm_identities
+      WHERE provider='square_payer_label'
+      ORDER BY value
+    `).all().map((row) => ({ ...row })),
+    [
+      {
+        person_id: billingPerson.id,
+        value: "Alex Billing",
+        label: "Unverified Square payer name (billing address)",
+        is_verified: 0,
+        source_type: "payment_name_hint",
+      },
+      {
+        person_id: cardholderPerson.id,
+        value: "Taylor Cardholder",
+        label: "Unverified Square payer name (cardholder name)",
+        is_verified: 0,
+        source_type: "payment_name_hint",
+      },
+    ],
+  );
+
+  const paymentMetadata = database.prepare(`
+    SELECT source_id,metadata_json FROM crm_transactions
+    WHERE source_provider='square' AND source_type='payment'
+    ORDER BY source_id
+  `).all().map((row) => [
+    row.source_id,
+    JSON.parse(row.metadata_json).payerDisplayNameSource,
+  ]);
+  assert.deepEqual(paymentMetadata, [
+    ["square-payment-billing-name", "billing_address"],
+    ["square-payment-cardholder-name", "cardholder_name"],
+  ]);
+});
+
+test("a later Square customer profile replaces an unverified payer label", async (t) => {
+  const database = migratedDatabase();
+  const customer = {
+    id: "square-customer-later-profile",
+    email_address: "later-profile@example.test",
+  };
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-later-profile",
+      status: "COMPLETED",
+      customer_id: customer.id,
+      location_id: "square-tattoo-location",
+      card_details: {
+        card: {
+          cardholder_name: "Unverified Card Name",
+        },
+      },
+      total_money: { amount: 9_000, currency: "USD" },
+      tip_money: { amount: 1_000, currency: "USD" },
+      source_type: "CARD",
+      created_at: "2026-07-13T16:52:00.000Z",
+      updated_at: "2026-07-13T16:53:00.000Z",
+    }],
+    customers: [customer],
+  });
+
+  let sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  const person = database.prepare("SELECT id,display_name FROM crm_people").get();
+  assert.equal(person.display_name, "Unverified Card Name");
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND kind='email'
+      AND normalized_value='later-profile@example.test' AND active=1
+  `).get(person.id).count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND provider='square_payer_label'
+      AND source_type='payment_name_hint' AND active=1
+  `).get(person.id).count, 1);
+
+  customer.given_name = "Authoritative";
+  customer.family_name = "Directory Name";
+  customer.updated_at = "2026-07-14T12:00:00.000Z";
+  sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare(
+    "SELECT display_name FROM crm_people WHERE id=?"
+  ).get(person.id).display_name, "Authoritative Directory Name");
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND provider='square_payer_label'
+      AND source_type='payment_name_hint' AND active=1
+  `).get(person.id).count, 1);
+});
+
+test("conflicting Square payer labels stay on one exact customer and require review", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [
+      {
+        id: "square-payment-payer-hint-one",
+        status: "COMPLETED",
+        customer_id: "square-customer-conflicting-payer-hints",
+        location_id: "square-tattoo-location",
+        card_details: {
+          card: {
+            cardholder_name: "First Payer Hint",
+          },
+        },
+        total_money: { amount: 4_500, currency: "USD" },
+        tip_money: { amount: 0, currency: "USD" },
+        source_type: "CARD",
+        created_at: "2026-07-13T16:53:00.000Z",
+        updated_at: "2026-07-13T16:54:00.000Z",
+      },
+      {
+        id: "square-payment-payer-hint-two",
+        status: "COMPLETED",
+        customer_id: "square-customer-conflicting-payer-hints",
+        location_id: "square-tattoo-location",
+        card_details: {
+          card: {
+            cardholder_name: "Second Payer Hint",
+          },
+        },
+        total_money: { amount: 5_500, currency: "USD" },
+        tip_money: { amount: 0, currency: "USD" },
+        source_type: "CARD",
+        created_at: "2026-07-13T16:54:00.000Z",
+        updated_at: "2026-07-13T16:55:00.000Z",
+      },
+    ],
+    customers: [{ id: "square-customer-conflicting-payer-hints" }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
+  const person = database.prepare("SELECT id,display_name FROM crm_people").get();
+  assert.equal(person.display_name, "First Payer Hint");
+  assert.deepEqual(
+    database.prepare(`
+      SELECT value FROM crm_identities
+      WHERE person_id=? AND provider='square_payer_label' AND active=1
+      ORDER BY value
+    `).all(person.id).map((row) => row.value),
+    ["First Payer Hint", "Second Payer Hint"],
+  );
+
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id ===
+        "crm-sync-conflict:square:payment_name_hint:square-payment-payer-hint-two"
+  );
+  assert.ok(conflict);
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).conflicts,
+    ["payer_name_disagreement"],
+  );
+  assert.deepEqual(JSON.parse(conflict.metadata_json).personIds, [person.id]);
+});
+
+test("a changed payer label on the same Square payment preserves both hints for review", async (t) => {
+  const database = migratedDatabase();
+  const payment = {
+    id: "square-payment-changing-payer-hint",
+    status: "COMPLETED",
+    customer_id: "square-customer-changing-payer-hint",
+    location_id: "square-tattoo-location",
+    card_details: {
+      card: {
+        cardholder_name: "Original Payer Hint",
+      },
+    },
+    total_money: { amount: 7_000, currency: "USD" },
+    tip_money: { amount: 0, currency: "USD" },
+    source_type: "CARD",
+    created_at: "2026-07-13T16:56:00.000Z",
+    updated_at: "2026-07-13T16:57:00.000Z",
+  };
+  installSquareApiMock(t, {
+    payments: [payment],
+    customers: [{ id: payment.customer_id }],
+  });
+
+  let sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  const person = database.prepare("SELECT id,display_name FROM crm_people").get();
+  assert.equal(person.display_name, "Original Payer Hint");
+
+  payment.card_details.card.cardholder_name = "Changed Payer Hint";
+  payment.updated_at = "2026-07-14T12:00:00.000Z";
+  sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare(
+    "SELECT display_name FROM crm_people WHERE id=?"
+  ).get(person.id).display_name, "Original Payer Hint");
+  assert.deepEqual(
+    database.prepare(`
+      SELECT value FROM crm_identities
+      WHERE person_id=? AND provider='square_payer_label' AND active=1
+      ORDER BY value
+    `).all(person.id).map((row) => row.value),
+    ["Changed Payer Hint", "Original Payer Hint"],
+  );
+
+  sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND provider='square_payer_label' AND active=1
+  `).get(person.id).count, 2);
+  const conflict = database.prepare(`
+    SELECT metadata_json FROM crm_interactions
+    WHERE source_provider='system' AND source_type='crm_sync_conflict'
+      AND source_id=?
+  `).get(
+    "crm-sync-conflict:square:payment_name_hint:square-payment-changing-payer-hint"
+  );
+  assert.ok(conflict);
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).conflicts,
+    ["payer_name_disagreement"],
+  );
+});
+
+test("a Square payment name hint alone stays unmatched", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-name-only",
+      status: "COMPLETED",
+      location_id: "square-tattoo-location",
+      card_details: {
+        card: {
+          cardholder_name: "Name Without Exact Anchor",
+        },
+      },
+      total_money: { amount: 3_500, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: "2026-07-13T16:55:00.000Z",
+      updated_at: "2026-07-13T16:56:00.000Z",
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.stats.paymentNameHintsReceived, 1);
+  assert.equal(sync.payload.stats.persistence.unmatched, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  const transaction = database.prepare(`
+    SELECT person_id,metadata_json FROM crm_transactions
+    WHERE source_provider='square' AND source_id='square-payment-name-only'
+  `).get();
+  assert.equal(transaction.person_id, null);
+  assert.equal(
+    JSON.parse(transaction.metadata_json).payerDisplayNameSource,
+    "cardholder_name",
+  );
+  assert.equal(
+    JSON.parse(transaction.metadata_json).payerDisplayName,
+    "Name Without Exact Anchor",
+  );
+  assert.equal(database.prepare(`
+    SELECT external_id FROM crm_identities
+    WHERE kind='square_customer'
+  `).get(), undefined);
 });
 
 test("sparse Square profile data does not overwrite richer site client data", async (t) => {

@@ -142,6 +142,16 @@
     return payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
   }
 
+  function jsonObject(value) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    try {
+      const parsed = JSON.parse(String(value || ""));
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
   function truthy(value) {
     return value === true || value === 1 || value === "1" || value === "true";
   }
@@ -753,17 +763,19 @@
     if (!identities.length) return '<div class="people-empty">No contact identities recorded.</div>';
     return `<div class="people-record-list">${identities.map((identity) => {
       const kind = first(identity, "kind", "type", "identityType", "identity_type") || "identity";
+      const label = first(identity, "label");
       const value = first(identity, "displayValue", "display_value", "value", "normalizedValue", "normalized_value");
       const provider = first(identity, "provider", "sourceProvider", "source_provider");
+      const providerLabel = provider === "square_payer_label" ? "Square payment" : provider;
       const primary = truthy(first(identity, "primary", "isPrimary", "is_primary"));
       const verified = truthy(first(identity, "verified", "isVerified", "is_verified"));
       return `<article class="people-record">
         <div class="people-record-head">
-          <strong class="people-record-title">${esc(kind)}</strong>
+          <strong class="people-record-title">${esc(label || kind)}</strong>
           ${primary ? statusChip("active", "Primary") : ""}
         </div>
         <div class="people-record-body">${esc(value || "Value unavailable")}</div>
-        <div class="people-record-meta">${esc([provider, verified ? "verified" : ""].filter(Boolean).join(" · ") || "manual")}</div>
+        <div class="people-record-meta">${esc([providerLabel, verified ? "verified" : ""].filter(Boolean).join(" · ") || "manual")}</div>
       </article>`;
     }).join("")}</div>`;
   }
@@ -1541,15 +1553,33 @@
 
   function attentionCard(item) {
     const record = objectFrom(item, "record");
+    const metadata = jsonObject(first(record, "metadata_json", "metadataJson", "metadata"));
+    const payerNameHint = first(metadata, "payerDisplayName", "payer_display_name");
+    const conflicts = listFrom(metadata, "conflicts");
+    const conflictPersonIds = listFrom(metadata, "personIds", "person_ids");
+    const conflictMessage = conflicts.includes("payer_name_disagreement")
+      ? "Square supplied different unverified payer names for this exact customer. Open the person and review the saved labels."
+      : conflicts.length
+        ? `Review: ${conflicts.map((value) => String(value).replace(/_/g, " ")).join(", ")}.`
+        : "";
     const kind = first(item, "kind", "type", "category") || "attention";
     const title = first(item, "title", "label", "categoryLabel")
       || first(record, "title", "label", "action", "displayName", "display_name")
       || String(kind).replace(/_/g, " ");
     const message = first(item, "message", "description", "reason", "summary")
+      || (payerNameHint
+        ? `Square supplied the unverified payer name “${payerNameHint}”. Review it before attaching this payment.`
+        : "")
+      || conflictMessage
       || first(record, "message", "description", "reason", "error", "note", "action")
       || "This record needs review.";
     const person = objectFrom(item, "person");
-    const id = String(first(item, "personId", "person_id") || first(record, "personId", "person_id") || personId(person));
+    const id = String(
+      first(item, "personId", "person_id")
+      || first(record, "personId", "person_id")
+      || personId(person)
+      || (conflictPersonIds.length === 1 ? conflictPersonIds[0] : "")
+    );
     const createdAt = first(item, "createdAt", "created_at", "dueAt", "due_at", "occurredAt", "occurred_at")
       || first(record, "createdAt", "created_at", "dueAt", "due_at", "occurredAt", "occurred_at");
     const amount = centsValue(item, "amountCents", "amount_cents") || centsValue(record, "amountCents", "amount_cents");
@@ -1841,6 +1871,7 @@
       first(stats, "skipped") ? `${first(stats, "skipped")} skipped` : "",
       first(stats, "pages") ? `${first(stats, "pages")} pages` : "",
       first(stats, "customerProfilesReceived") ? `${first(stats, "customerProfilesReceived")} customer profiles` : "",
+      first(stats, "paymentNameHintsReceived") ? `${first(stats, "paymentNameHintsReceived")} payment-name hints` : "",
       first(summary, "peopleCreated", "people_created") ? `${first(summary, "peopleCreated", "people_created")} people created` : "",
       first(summary, "matched") ? `${first(summary, "matched")} matched` : "",
       first(records, "payments") ? `${first(records, "payments")} payments` : "",

@@ -816,7 +816,29 @@ function nextTaskCheckpoint(state, taskCount, cursor) {
   return next;
 }
 
+function squareAddressName(address) {
+  const givenName = asString(address?.first_name, 200);
+  const familyName = asString(address?.last_name, 200);
+  return asString(`${givenName} ${familyName}`, 400) || null;
+}
+
+function squarePaymentName(payment) {
+  const billingName = squareAddressName(payment?.billing_address);
+  if (billingName) {
+    return { displayName: billingName, source: "billing_address" };
+  }
+  const cardholderName = asString(
+    payment?.card_details?.card?.cardholder_name,
+    200
+  );
+  if (cardholderName) {
+    return { displayName: cardholderName, source: "cardholder_name" };
+  }
+  return { displayName: null, source: null };
+}
+
 function normalizeSquarePayment(payment, location) {
+  const payerName = squarePaymentName(payment);
   return {
     externalId: asString(payment.id, 300),
     provider: "square",
@@ -828,6 +850,8 @@ function normalizeSquarePayment(payment, location) {
     locationKey: location.key,
     nodeId: location.nodeId,
     email: normalizeEmail(payment.buyer_email_address) || null,
+    payerDisplayName: payerName.displayName,
+    payerDisplayNameSource: payerName.source,
     amount: squareMoney(payment.total_money || payment.amount_money),
     tip: squareMoney(payment.tip_money),
     refunded: squareMoney(payment.refunded_money),
@@ -840,9 +864,9 @@ function normalizeSquarePayment(payment, location) {
 }
 
 function normalizeSquareCustomer(customer, requestedId) {
-  const externalId =
-    asString(customer?.id, 300) ||
-    asString(requestedId, 300);
+  const requestedExternalId = asString(requestedId, 300);
+  const canonicalExternalId = asString(customer?.id, 300);
+  const externalId = requestedExternalId || canonicalExternalId;
   if (!externalId) return null;
   const givenName = asString(customer?.given_name, 200);
   const familyName = asString(customer?.family_name, 200);
@@ -850,16 +874,21 @@ function normalizeSquareCustomer(customer, requestedId) {
   const organization = asString(customer?.company_name, 200);
   const email = normalizeEmail(customer?.email_address) || null;
   const phone = normalizePhone(customer?.phone_number) || null;
-  const displayName =
+  const directoryDisplayName =
     asString(`${givenName} ${familyName}`, 400) ||
     nickname ||
     organization ||
+    null;
+  const displayName =
+    directoryDisplayName ||
     email ||
     phone ||
     null;
   return {
     externalId,
+    canonicalExternalId: canonicalExternalId || externalId,
     displayName,
+    directoryDisplayName,
     givenName: givenName || null,
     familyName: familyName || null,
     organization: organization || null,
@@ -962,7 +991,9 @@ async function squareCustomerProfiles(
   }
 
   const profiles = new Map();
+  let empty = 0;
   let unavailable = 0;
+  let canonicalized = 0;
   for (const customerId of customerIds) {
     const entry = responses[customerId];
     if (squareCustomerEntryRetryable(entry)) {
@@ -975,7 +1006,7 @@ async function squareCustomerProfiles(
     const customer = entry?.customer;
     const returnedCustomerId = asString(customer?.id, 300);
     const profile =
-      returnedCustomerId === customerId
+      returnedCustomerId
         ? normalizeSquareCustomer(customer, customerId)
         : null;
     if (
@@ -983,20 +1014,32 @@ async function squareCustomerProfiles(
       (profile.displayName || profile.organization || profile.email || profile.phone)
     ) {
       profiles.set(customerId, profile);
+      if (profile.canonicalExternalId !== customerId) canonicalized += 1;
+    } else if (profile) {
+      empty += 1;
     } else {
       unavailable += 1;
     }
   }
+  if (empty > 0) {
+    addProviderWarning(
+      warnings,
+      `${empty} Square customer profile${empty === 1 ? " contained" : "s contained"} no public name, email, phone, or company; payment details were used when available.`
+    );
+  }
   if (unavailable > 0) {
     addProviderWarning(
       warnings,
-      `${unavailable} Square customer profile${unavailable === 1 ? " was" : "s were"} unavailable; linked payments were still imported.`
+      `${unavailable} Square customer profile${unavailable === 1 ? " could" : "s could"} not be retrieved; linked payments were still imported.`
     );
   }
   return {
     profiles,
     requested: customerIds.length,
     received: profiles.size,
+    empty,
+    unavailable,
+    canonicalized,
   };
 }
 
@@ -1066,6 +1109,13 @@ async function squarePage(
     .filter((entry) => entry.externalId);
   let customerProfilesRequested = 0;
   let customerProfilesReceived = 0;
+  let customerProfilesEmpty = 0;
+  let customerProfilesUnavailable = 0;
+  let customerProfilesCanonicalized = 0;
+  const paymentNameHintsReceived =
+    task.resource === "payments"
+      ? accepted.filter((payment) => payment.payerDisplayName).length
+      : 0;
   if (task.resource === "payments" && accepted.length) {
     const customerResult = await squareCustomerProfiles(
       env,
@@ -1076,6 +1126,9 @@ async function squarePage(
     );
     customerProfilesRequested = customerResult.requested;
     customerProfilesReceived = customerResult.received;
+    customerProfilesEmpty = customerResult.empty || 0;
+    customerProfilesUnavailable = customerResult.unavailable || 0;
+    customerProfilesCanonicalized = customerResult.canonicalized || 0;
     accepted = accepted.map((payment) => ({
       ...payment,
       customer: payment.customerExternalId
@@ -1089,6 +1142,10 @@ async function squarePage(
     cursor: asString(payload?.cursor, 10_000) || null,
     customerProfilesRequested,
     customerProfilesReceived,
+    customerProfilesEmpty,
+    customerProfilesUnavailable,
+    customerProfilesCanonicalized,
+    paymentNameHintsReceived,
   };
 }
 
@@ -1150,6 +1207,10 @@ export async function syncSquareProvider(env, options = {}) {
           page: stats.pages + 1,
           customerProfilesRequested: page.customerProfilesRequested,
           customerProfilesReceived: page.customerProfilesReceived,
+          customerProfilesEmpty: page.customerProfilesEmpty,
+          customerProfilesUnavailable: page.customerProfilesUnavailable,
+          customerProfilesCanonicalized: page.customerProfilesCanonicalized,
+          paymentNameHintsReceived: page.paymentNameHintsReceived,
         }
       );
       if (persisted) stats.persistedPages += 1;
@@ -1162,6 +1223,14 @@ export async function syncSquareProvider(env, options = {}) {
         (stats.customerProfilesRequested || 0) + page.customerProfilesRequested;
       stats.customerProfilesReceived =
         (stats.customerProfilesReceived || 0) + page.customerProfilesReceived;
+      stats.customerProfilesEmpty =
+        (stats.customerProfilesEmpty || 0) + page.customerProfilesEmpty;
+      stats.customerProfilesUnavailable =
+        (stats.customerProfilesUnavailable || 0) + page.customerProfilesUnavailable;
+      stats.customerProfilesCanonicalized =
+        (stats.customerProfilesCanonicalized || 0) + page.customerProfilesCanonicalized;
+      stats.paymentNameHintsReceived =
+        (stats.paymentNameHintsReceived || 0) + page.paymentNameHintsReceived;
       checkpoint = nextCheckpoint;
     }
 

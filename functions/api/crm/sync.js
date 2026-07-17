@@ -300,6 +300,77 @@ async function addIdentity(database, personId, {
   ).run();
 }
 
+async function addPayerNameHint(database, personId, {
+  provider,
+  sourceId,
+  displayName,
+  hintSource,
+}) {
+  const normalizedProvider = text(provider, 80).toLowerCase();
+  const normalizedSourceId = text(sourceId, 300);
+  const raw = text(displayName, 200);
+  const normalized = raw.toLowerCase();
+  if (!personId || !normalizedProvider || !normalizedSourceId || !raw) return;
+  const markerProvider = `${normalizedProvider}_payer_label`;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(normalized),
+  );
+  const fingerprint = [...new Uint8Array(digest).slice(0, 12)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  const identitySourceId = text(
+    `${normalizedProvider}:${normalizedSourceId}:payer-name:${fingerprint}`,
+    500,
+  );
+  const labelSource = text(hintSource, 80).replace(/_/g, " ");
+  const providerLabel =
+    normalizedProvider === "square" ? "Square" : normalizedProvider;
+  const label = text(
+    `Unverified ${providerLabel} payer name${labelSource ? ` (${labelSource})` : ""}`,
+    200,
+  );
+  const now = nowIso();
+  await database.prepare(`
+    INSERT OR IGNORE INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES(
+      ?,?,'other',?,?,?,NULL,?,0,0,0,?,'payment_name_hint',?,1,?,?
+    )
+  `).bind(
+    recordId("crm-identity"),
+    personId,
+    raw,
+    normalized,
+    markerProvider,
+    label,
+    normalizedProvider,
+    identitySourceId,
+    now,
+    now,
+  ).run();
+}
+
+async function payerNameHints(database, personId, provider) {
+  if (!personId) return [];
+  const result = await database.prepare(`
+    SELECT DISTINCT normalized_value
+    FROM crm_identities
+    WHERE person_id=? AND kind='other' AND provider=?
+      AND source_type='payment_name_hint' AND active=1
+    ORDER BY normalized_value
+    LIMIT 10
+  `).bind(
+    personId,
+    `${text(provider, 80).toLowerCase()}_payer_label`,
+  ).all();
+  return (result.results || [])
+    .map((row) => text(row.normalized_value, 200))
+    .filter(Boolean);
+}
+
 async function addTags(database, personId, tags, provider) {
   const values = [...new Set((Array.isArray(tags) ? tags : [])
     .map((value) => text(value, 100))
@@ -326,6 +397,7 @@ async function enrichProviderPerson(database, personId, {
   provider,
   displayName,
   organization,
+  authoritativeDisplayName = true,
 }) {
   if (!personId) return;
   const incomingDisplayName = text(displayName, 200);
@@ -335,9 +407,18 @@ async function enrichProviderPerson(database, personId, {
     SET display_name=CASE
           WHEN ?!='' AND (
             TRIM(display_name)=''
-            OR LOWER(display_name)='construct contact'
-            OR LOWER(display_name)=LOWER(?)
-            OR EXISTS(
+             OR LOWER(display_name)='construct contact'
+             OR LOWER(display_name)=LOWER(?)
+             OR (
+               ?=1 AND EXISTS(
+                 SELECT 1 FROM crm_identities i
+                 WHERE i.person_id=crm_people.id AND i.active=1
+                   AND i.kind='other' AND i.provider=?
+                   AND i.source_type='payment_name_hint'
+                   AND LOWER(i.normalized_value)=LOWER(TRIM(crm_people.display_name))
+               )
+             )
+             OR EXISTS(
               SELECT 1 FROM crm_identities i
               WHERE i.person_id=crm_people.id AND i.active=1
                 AND i.kind IN ('email','phone')
@@ -369,6 +450,8 @@ async function enrichProviderPerson(database, personId, {
   `).bind(
     incomingDisplayName,
     `${text(provider, 80).toLowerCase()} contact`,
+    authoritativeDisplayName ? 1 : 0,
+    `${text(provider, 80).toLowerCase()}_payer_label`,
     incomingDisplayName,
     incomingOrganization,
     incomingOrganization,
@@ -380,6 +463,7 @@ async function enrichProviderPerson(database, personId, {
 async function ensureProviderPerson(database, {
   provider,
   externalId,
+  additionalExternalIds = [],
   displayName,
   organization,
   email,
@@ -388,10 +472,21 @@ async function ensureProviderPerson(database, {
   verifiedEmail = false,
   occurredAt,
   tags = [],
+  authoritativeDisplayName = true,
   preferredPersonId = null,
   conflictSourceType = "provider_contact",
   conflictSourceId = null,
 }) {
+  const normalizedExternalId = text(externalId, 300);
+  const normalizedAdditionalExternalIds = [...new Set(
+    (Array.isArray(additionalExternalIds) ? additionalExternalIds : [])
+      .map((value) => text(value, 300))
+      .filter((value) => value && value !== normalizedExternalId)
+  )].slice(0, 5);
+  const providerExternalIds = [
+    normalizedExternalId,
+    ...normalizedAdditionalExternalIds,
+  ].filter(Boolean);
   const normalizedEmail = normalizeEmail(email);
   const normalizedAdditionalEmails = [...new Set(
     (Array.isArray(additionalEmails) ? additionalEmails : [])
@@ -400,7 +495,17 @@ async function ensureProviderPerson(database, {
   )].slice(0, 5);
   const normalizedPhone = normalizePhone(phone);
   const preferred = await canonicalPersonId(database, preferredPersonId);
-  const providerPersonId = await providerIdentityPerson(database, provider, externalId);
+  const providerIdentityMatches = [];
+  for (const value of providerExternalIds) {
+    providerIdentityMatches.push({
+      value,
+      personId: await providerIdentityPerson(database, provider, value),
+    });
+  }
+  const providerPersonIds = [...new Set(
+    providerIdentityMatches.map((entry) => entry.personId).filter(Boolean)
+  )];
+  const providerPersonId = providerPersonIds[0] || null;
   const emailMatch = await emailPersonMatch(database, normalizedEmail);
   const additionalEmailMatches = [];
   for (const value of normalizedAdditionalEmails) {
@@ -414,14 +519,14 @@ async function ensureProviderPerson(database, {
     : await emailClaimOwner(database, normalizedEmail);
   const exactAnchors = [...new Set([
     preferred,
-    providerPersonId,
+    ...providerPersonIds,
     claimedEmailPersonId,
     emailMatch.personId,
     ...additionalEmailMatches.map((entry) => entry.match.personId),
   ].filter(Boolean))];
   const profileAnchors = [...new Set([
     preferred,
-    providerPersonId,
+    ...providerPersonIds,
     emailMatch.personId,
   ].filter(Boolean))];
   const alternateEmailDisagreement = additionalEmailMatches.some((entry) =>
@@ -437,10 +542,13 @@ async function ensureProviderPerson(database, {
     && !providerPersonId
     && !claimedEmailPersonId
     && !emailMatch.personId
-    && !externalId
+    && providerExternalIds.length === 0
     && !normalizedEmail
     && Boolean(normalizedPhone);
-  const conflictRecordId = text(conflictSourceId || externalId, 300);
+  const conflictRecordId = text(
+    conflictSourceId || normalizedExternalId || normalizedAdditionalExternalIds[0],
+    300
+  );
   if (conflictRecordId) {
     await setSyncConflict(database, {
       provider,
@@ -470,9 +578,16 @@ async function ensureProviderPerson(database, {
   if (profileAnchors.length > 1 || alternateOwnerConflict) {
     return preferred || providerPersonId || null;
   }
-  if (!personId && emailMatch.ambiguous && !externalId) return null;
+  if (!personId && emailMatch.ambiguous && providerExternalIds.length === 0) return null;
   if (!personId && phoneOnlyNeedsReview) return null;
-  if (!personId && !externalId && !normalizedEmail && !normalizedPhone) return null;
+  if (
+    !personId &&
+    providerExternalIds.length === 0 &&
+    !normalizedEmail &&
+    !normalizedPhone
+  ) {
+    return null;
+  }
 
   const now = nowIso();
   let created = false;
@@ -494,16 +609,18 @@ async function ensureProviderPerson(database, {
     ).run();
   }
   const kind = IDENTITY_KINDS[provider];
-  if (kind && externalId) {
-    await addIdentity(database, personId, {
-      kind,
-      value: externalId,
-      normalizedValue: text(externalId, 500).toLowerCase(),
-      provider,
-      externalId,
-      sourceType: "provider_contact",
-      sourceId: `${provider}:${externalId}`,
-    });
+  if (kind) {
+    for (const value of providerExternalIds) {
+      await addIdentity(database, personId, {
+        kind,
+        value,
+        normalizedValue: value.toLowerCase(),
+        provider,
+        externalId: value,
+        sourceType: "provider_contact",
+        sourceId: `${provider}:${value}`,
+      });
+    }
   }
   const emailCandidates = [
     {
@@ -537,8 +654,8 @@ async function ensureProviderPerson(database, {
       verified: verifiedEmail,
       sourceType: candidate.sourceType,
       sourceId: candidate.sourceType === "provider_email"
-        ? `${provider}:${externalId || candidate.value}:email:${candidate.value}`
-        : `${provider}:${externalId || candidate.value}:payment-email:${candidate.value}`,
+        ? `${provider}:${normalizedExternalId || candidate.value}:email:${candidate.value}`
+        : `${provider}:${normalizedExternalId || candidate.value}:payment-email:${candidate.value}`,
     });
     attachedEmail = true;
   }
@@ -550,7 +667,8 @@ async function ensureProviderPerson(database, {
       provider,
       primary: created && !attachedEmail,
       sourceType: "provider_phone",
-      sourceId: `${provider}:${externalId || normalizedPhone}:phone:${normalizedPhone}`,
+      sourceId:
+        `${provider}:${normalizedExternalId || normalizedPhone}:phone:${normalizedPhone}`,
     });
   }
   await addTags(database, personId, tags, provider);
@@ -558,7 +676,10 @@ async function ensureProviderPerson(database, {
     const claimedPersonId = normalizedEmail && !emailMatch.ambiguous
       ? await emailClaimOwner(database, normalizedEmail)
       : null;
-    const providerOwnerId = await providerIdentityPerson(database, provider, externalId);
+    let providerOwnerId = null;
+    for (const value of providerExternalIds) {
+      providerOwnerId ||= await providerIdentityPerson(database, provider, value);
+    }
     const winningPersonId = claimedPersonId || preferred || providerOwnerId
       || emailMatch.personId || personId;
     if (winningPersonId !== personId) {
@@ -569,6 +690,7 @@ async function ensureProviderPerson(database, {
     provider,
     displayName,
     organization,
+    authoritativeDisplayName,
   });
   return personId;
 }
@@ -847,9 +969,16 @@ async function persistSquare(database, records, counts) {
         ? payment.customer
         : {};
     const customerExternalId =
-      text(customer.externalId, 300) ||
       text(payment.customerExternalId, 300) ||
+      text(customer.externalId, 300) ||
       null;
+    const canonicalCustomerExternalId =
+      text(customer.canonicalExternalId, 300) || customerExternalId;
+    const additionalCustomerExternalIds =
+      canonicalCustomerExternalId &&
+      canonicalCustomerExternalId !== customerExternalId
+        ? [canonicalCustomerExternalId]
+        : [];
     const profileEmail = normalizeEmail(customer.email) || null;
     const buyerEmail = normalizeEmail(payment.email) || null;
     const customerEmail = profileEmail || buyerEmail;
@@ -858,8 +987,13 @@ async function persistSquare(database, records, counts) {
         ? [buyerEmail]
         : [];
     const customerPhone = normalizePhone(customer.phone) || null;
+    const directoryDisplayName = text(customer.directoryDisplayName, 200);
+    const profileFallbackDisplayName = text(customer.displayName, 200);
+    const payerDisplayName = text(payment.payerDisplayName, 200);
     const customerDisplayName =
-      text(customer.displayName, 200) ||
+      directoryDisplayName ||
+      payerDisplayName ||
+      profileFallbackDisplayName ||
       customerEmail ||
       customerPhone ||
       "";
@@ -895,16 +1029,39 @@ async function persistSquare(database, records, counts) {
     let personId = await ensureProviderPerson(database, {
       provider: "square",
       externalId: customerExternalId,
+      additionalExternalIds: additionalCustomerExternalIds,
       displayName: customerDisplayName,
       organization: customer.organization,
       email: customerEmail,
       additionalEmails,
       phone: customerPhone,
+      authoritativeDisplayName: Boolean(directoryDisplayName),
       occurredAt: customer.createdAt || payment.occurredAt,
       preferredPersonId: mirrored?.person_id || null,
       conflictSourceType: "payment",
       conflictSourceId: payment.externalId,
     });
+    if (personId && payerDisplayName) {
+      if (!directoryDisplayName) {
+        await addPayerNameHint(database, personId, {
+          provider: "square",
+          sourceId: payment.externalId,
+          displayName: payerDisplayName,
+          hintSource: payment.payerDisplayNameSource,
+        });
+      }
+      const hintValues = await payerNameHints(database, personId, "square");
+      await setSyncConflict(database, {
+        provider: "square",
+        sourceType: "payment_name_hint",
+        sourceId: payment.externalId,
+        conflicts:
+          !directoryDisplayName && hintValues.length > 1
+            ? ["payer_name_disagreement"]
+            : [],
+        personIds: [personId],
+      });
+    }
     if (mirrored) {
       personId = mirrored.person_id || personId || null;
       await database.prepare(`
@@ -961,6 +1118,12 @@ async function persistSquare(database, records, counts) {
           receiptUrl: payment.receiptUrl,
           sourceType: payment.sourceTypeLabel,
           customerProfileUpdatedAt: customer.updatedAt || null,
+          payerDisplayName: payerDisplayName || null,
+          payerDisplayNameSource: payment.payerDisplayNameSource || null,
+          canonicalCustomerExternalId:
+            canonicalCustomerExternalId !== customerExternalId
+              ? canonicalCustomerExternalId
+              : null,
         },
       });
       if (inserted) counts.transactions += 1;
@@ -980,6 +1143,8 @@ async function persistSquare(database, records, counts) {
         locationId: payment.locationId,
         locationKey: payment.locationKey,
         orderExternalId: payment.orderExternalId,
+        payerDisplayName: payerDisplayName || null,
+        payerDisplayNameSource: payment.payerDisplayNameSource || null,
       },
     });
     counts.interactions += 1;
