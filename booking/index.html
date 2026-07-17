@@ -38,6 +38,13 @@
   .pending-checkout-button:disabled { opacity:.45; cursor:not-allowed; }
   .booking-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:56px; align-items:start; }
   .section { display:grid; gap:14px; margin-bottom:36px; }
+  .client-intake-panel { border:5px solid var(--ring-soft); padding:20px; display:grid; gap:16px; }
+  .client-intake-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .client-intake-field { display:grid; gap:7px; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+  .client-intake-field:first-child { grid-column:1 / -1; }
+  .client-intake-field input { width:100%; min-height:46px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; padding:0 12px; font-family:var(--sans); font-size:14px; text-transform:none; letter-spacing:0; }
+  .client-intake-field input:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
+  .client-intake-note { margin:0; color:var(--muted); font-size:12px; line-height:1.7; }
   .session-list,.window-list { display:grid; gap:10px; }
   .session-plan-panel { border:5px solid rgba(110,4,4,.45); padding:20px; display:grid; gap:16px; }
   .session-plan-title { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
@@ -95,6 +102,8 @@
     header { padding:18px 24px; min-height:60px; }
     main { padding:48px 24px 64px; }
     .booking-grid { grid-template-columns:1fr; gap:24px; }
+    .client-intake-grid { grid-template-columns:1fr; }
+    .client-intake-field:first-child { grid-column:auto; }
     .panel { position:static; }
   }
 </style>
@@ -137,6 +146,23 @@
 
   <div id="bookingApp" class="booking-grid hidden">
     <div>
+      <section class="section hidden" id="clientDetailsSection">
+        <p class="section-label">Your Information</p>
+        <div class="client-intake-panel">
+          <p class="client-intake-note">Enter the contact information the studio should use for this appointment.</p>
+          <div class="client-intake-grid">
+            <label class="client-intake-field">Full name
+              <input id="clientNameInput" autocomplete="name" maxlength="160" required>
+            </label>
+            <label class="client-intake-field">Email
+              <input id="clientEmailInput" type="email" autocomplete="email" maxlength="254" required>
+            </label>
+            <label class="client-intake-field">Phone
+              <input id="clientPhoneInput" type="tel" autocomplete="tel" maxlength="80" required>
+            </label>
+          </div>
+        </div>
+      </section>
       <section class="section hidden" id="sessionPlanSection">
         <p class="section-label">Your Session Estimate</p>
         <div class="session-plan-panel" id="sessionPlanPanel"></div>
@@ -196,6 +222,10 @@
   const resumeCheckoutLink = document.getElementById("resumeCheckoutLink");
   const releaseCheckoutBtn = document.getElementById("releaseCheckoutBtn");
   const appEl = document.getElementById("bookingApp");
+  const clientDetailsSection = document.getElementById("clientDetailsSection");
+  const clientNameInput = document.getElementById("clientNameInput");
+  const clientEmailInput = document.getElementById("clientEmailInput");
+  const clientPhoneInput = document.getElementById("clientPhoneInput");
   const sessionListEl = document.getElementById("sessionList");
   const sessionPlanSection = document.getElementById("sessionPlanSection");
   const sessionPlanPanel = document.getElementById("sessionPlanPanel");
@@ -316,6 +346,7 @@
     if (!Array.isArray(payload.bookingTypes) || !Array.isArray(payload.availabilityWindows)) return null;
     return {
       client: payload.client || { name: "Preview Client", email: "", phone: "" },
+      requiresClientDetails: Boolean(payload.requiresClientDetails),
       submission: payload.submission || { id: "preview", type: "tattoo_inquiry" },
       settings: payload.settings || null,
       sessionPlan: payload.sessionPlan || null,
@@ -347,6 +378,25 @@
     const value = Number(customTipInput.value || 0);
     if (!Number.isFinite(value) || value < 0) return 0;
     return Math.round(value * 100);
+  }
+
+  function clientDetailsAreReady() {
+    if (!context?.requiresClientDetails) return true;
+    const name = clientNameInput.value.trim();
+    const email = clientEmailInput.value.trim();
+    const phone = clientPhoneInput.value.trim();
+    return Boolean(name && phone && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+  }
+
+  function updateCheckoutState() {
+    const enteredName = clientNameInput.value.trim();
+    clientValue.textContent = context?.requiresClientDetails
+      ? enteredName || "Enter your information"
+      : context?.client?.name || context?.client?.email || "-";
+    checkoutBtn.disabled = !selectedType
+      || !selectedWindow
+      || !planIsReady(context?.sessionPlan)
+      || !clientDetailsAreReady();
   }
 
   function setTip(cents, fromCustom = false) {
@@ -646,13 +696,13 @@
       windowListEl.innerHTML = dayWindows.length ? dayWindows.map((windowItem) => renderWindowButton(windowItem)).join("") : '<div class="status">No open time slots remain for that day.</div>';
     }
 
-    clientValue.textContent = context.client?.name || context.client?.email || "-";
+    clientDetailsSection.classList.toggle("hidden", !context.requiresClientDetails);
     sessionValue.textContent = selectedType ? selectedType.label : "Select a session";
     windowValue.textContent = selectedWindow ? formatDate(selectedWindow.startAt) : "Select a time";
     depositValue.textContent = selectedType ? selectedType.depositLabel : "-";
     tipValue.textContent = money(selectedTipCents, selectedType?.currency || "USD");
     totalValue.textContent = selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
-    checkoutBtn.disabled = !selectedType || !selectedWindow || !planIsReady(context.sessionPlan);
+    updateCheckoutState();
     window.dispatchEvent(new CustomEvent("sixwell:booking-rendered"));
   }
 
@@ -803,6 +853,9 @@
   });
 
   customTipInput.addEventListener("input", () => setTip(customTipCents(), true));
+  [clientNameInput, clientEmailInput, clientPhoneInput].forEach((input) => {
+    input.addEventListener("input", updateCheckoutState);
+  });
 
   checkoutBtn.addEventListener("click", async () => {
     if (!selectedType || !selectedWindow) return;
@@ -820,6 +873,9 @@
         bookingTypeId: selectedType.id,
         availabilityWindowId: selectedWindow.id,
         tipCents: selectedTipCents,
+        clientName: clientNameInput.value.trim(),
+        clientEmail: clientEmailInput.value.trim(),
+        clientPhone: clientPhoneInput.value.trim(),
       }),
     });
     const payload = await response.json().catch(() => ({}));

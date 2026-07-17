@@ -26,6 +26,7 @@ import {
   handleReleasePendingBookingHold,
   handleRescheduleAppointment,
   handleRescheduleContext,
+  handleSaveBookingSessionPlan,
   handleSquareWebhook,
   reapExpiredBookingHolds,
 } from "../functions/api/booking/_lib.js";
@@ -535,22 +536,17 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
     "/api/admin/booking/direct-invites",
     {
-      clientName: "Direct Client",
-      clientEmail: "DIRECT@example.test",
-      clientPhone: "404-555-0119",
       projectNote: "Approved through an offline conversation.",
       purpose: "tattoo",
-      allowedBookingTypes: ["tattoo_quarter", "tattoo_half"],
-      sendEmail: false,
+      bookingTypeId: "tattoo_half",
     },
     adminToken,
   ), env);
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.equal(payload.directInvite.clientEmail, "direct@example.test");
   assert.equal(payload.delivery.skipped, true);
   assert.equal(payload.delivery.reason, "not_requested");
-  assert.deepEqual(payload.token.allowedBookingTypes, ["tattoo_quarter", "tattoo_half"]);
+  assert.deepEqual(payload.token.allowedBookingTypes, ["tattoo_half"]);
 
   const submission = database.prepare(
     "SELECT * FROM submissions WHERE id = ?"
@@ -559,6 +555,9 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(submission.status, "approved");
   assert.equal(submission.tattoo_stage, "ready_to_book");
   assert.equal(submission.source_path, "/studio/direct-booking-invite");
+  assert.equal(submission.contact_name, "");
+  assert.equal(submission.contact_email, "");
+  assert.equal(submission.internal_notes, "Approved through an offline conversation.");
   assert.equal(JSON.parse(submission.payload_json).direct_booking_invite, "yes");
 
   const plan = database.prepare(
@@ -567,9 +566,10 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(plan.session_category, "one_session");
   assert.equal(plan.split_policy, "not_available");
   assert.equal(plan.estimated_sessions_min, 1);
-  assert.equal(plan.estimated_total_minutes_min, 90);
+  assert.equal(plan.estimated_total_minutes_min, 180);
   assert.equal(plan.estimated_total_minutes_max, 180);
   assert.equal(plan.client_acknowledged, 0);
+  assert.doesNotMatch(plan.artist_note, /offline conversation/i);
 
   const rawToken = new URL(payload.token.bookingUrl).searchParams.get("token");
   const context = await handleBookingContext(
@@ -578,8 +578,71 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   );
   assert.equal(context.status, 200);
   const contextPayload = await context.json();
-  assert.equal(contextPayload.client.email, "direct@example.test");
-  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_quarter", "tattoo_half"]);
+  assert.equal(contextPayload.requiresClientDetails, true);
+  assert.equal(contextPayload.client.email, "");
+  assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_half"]);
+  assert.doesNotMatch(JSON.stringify(contextPayload), /offline conversation/i);
+
+  const acknowledged = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: rawToken,
+    preference: "studio_plan",
+    acknowledged: true,
+  }), env);
+  assert.equal(acknowledged.status, 200);
+
+  const start = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+  const end = new Date(Date.now() + 75 * 60 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO availability_windows (
+      id, venture, booking_type_id, start_at, end_at, capacity,
+      buffer_before_minutes, buffer_after_minutes, is_blackout, active,
+      note, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    "direct-invite-window",
+    "tattooing",
+    "tattoo_half",
+    start,
+    end,
+    1,
+    0,
+    0,
+    0,
+    1,
+    "Contract test",
+    now,
+    now,
+  );
+  const missingClientDetails = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: rawToken,
+    bookingTypeId: "tattoo_half",
+    availabilityWindowId: "direct-invite-window",
+  }), env);
+  assert.equal(missingClientDetails.status, 400);
+  const unclaimedSubmission = database.prepare(
+    "SELECT contact_name, contact_email, contact_phone FROM submissions WHERE id = ?"
+  ).get(submission.id);
+  assert.equal(unclaimedSubmission.contact_name, "");
+  assert.equal(unclaimedSubmission.contact_email, "");
+  assert.equal(unclaimedSubmission.contact_phone, null);
+
+  const hold = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: rawToken,
+    bookingTypeId: "tattoo_half",
+    availabilityWindowId: "direct-invite-window",
+    clientName: "Direct Client",
+    clientEmail: "DIRECT@example.test",
+    clientPhone: "404-555-0119",
+  }), env);
+  assert.equal(hold.status, 200);
+  const claimedSubmission = database.prepare(
+    "SELECT contact_name, contact_email, contact_phone, internal_notes FROM submissions WHERE id = ?"
+  ).get(submission.id);
+  assert.equal(claimedSubmission.contact_name, "Direct Client");
+  assert.equal(claimedSubmission.contact_email, "direct@example.test");
+  assert.equal(claimedSubmission.contact_phone, "404-555-0119");
+  assert.equal(claimedSubmission.internal_notes, "Approved through an offline conversation.");
 });
 
 test("Studio direct invites can route a client into prerequisite consultation", async () => {
@@ -593,11 +656,8 @@ test("Studio direct invites can route a client into prerequisite consultation", 
   const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
     "/api/admin/booking/direct-invites",
     {
-      clientName: "Consult Client",
-      clientEmail: "consult@example.test",
       purpose: "consultation",
-      allowedBookingTypes: ["consult_in_person"],
-      sendEmail: false,
+      bookingTypeId: "consult_in_person",
     },
     adminToken,
   ), env);
@@ -1326,6 +1386,7 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
   const wrangler = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8");
   const submissionsStudio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const privateBookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   for (const route of [
     "/api/booking/public-session/context",
     "/api/booking/public-session/checkout",
@@ -1349,6 +1410,10 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /data-resolve-historic-lifecycle/);
   assert.match(submissionsStudio, /resolveHistorical/);
   assert.match(submissionsStudio, /data-direct-invite-form/);
+  assert.match(privateBookingPage, /id="clientDetailsSection"/);
+  assert.match(privateBookingPage, /clientNameInput/);
+  assert.match(privateBookingPage, /clientEmailInput/);
+  assert.match(privateBookingPage, /clientPhoneInput/);
   assert.match(wrangler, /\*\/5 \* \* \* \*/);
 });
 

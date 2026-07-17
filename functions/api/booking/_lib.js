@@ -719,7 +719,7 @@ async function loadTokenContext(db, rawToken) {
   const token = await db
     .prepare(
       `SELECT bt.*, s.status AS submission_status, s.contact_name, s.contact_email,
-        s.contact_phone, s.type AS submission_type, s.tattoo_stage,
+        s.contact_phone, s.type AS submission_type, s.source_path, s.tattoo_stage,
         s.lifecycle_review_required, s.lifecycle_review_note
        FROM booking_tokens bt
        JOIN submissions s ON s.id = bt.submission_id
@@ -1028,6 +1028,7 @@ export async function handleBookingContext(request, env) {
         lifecycleReviewRequired: Boolean(context.token.lifecycle_review_required),
         lifecycleReviewNote: context.token.lifecycle_review_note || "",
       },
+      requiresClientDetails: directInviteNeedsClient(context.token),
       purpose: context.purpose,
       expiresAt: context.token.expires_at || "",
       sessionPlan: normalizeTattooSessionPlan(sessionPlan),
@@ -1580,6 +1581,85 @@ async function handlePublicSessionContextForTypes(request, env, allowedTypeIds, 
       detail: error.message,
     });
   }
+}
+
+function directInviteNeedsClient(token) {
+  return token?.source_path === "/studio/direct-booking-invite"
+    && (!asString(token.contact_name) || !asString(token.contact_email) || !asString(token.contact_phone));
+}
+
+async function claimDirectInviteClient(db, context, body) {
+  if (context?.token?.source_path !== "/studio/direct-booking-invite") {
+    return { context };
+  }
+  if (!directInviteNeedsClient(context.token)) {
+    return { context };
+  }
+
+  const clientName = asString(body.clientName);
+  const clientEmail = asString(body.clientEmail).toLowerCase();
+  const clientPhone = asString(body.clientPhone);
+  if (!clientName || clientName.length > 160) {
+    return { error: "Enter your full name.", status: 400 };
+  }
+  if (
+    !clientEmail ||
+    clientEmail.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)
+  ) {
+    return { error: "Enter a valid email address.", status: 400 };
+  }
+  if (!clientPhone || clientPhone.length > 80) {
+    return { error: "Enter your phone number.", status: 400 };
+  }
+
+  const now = new Date().toISOString();
+  const update = await db.prepare(
+    `UPDATE submissions
+     SET contact_name = ?, contact_email = ?, contact_phone = ?, contact_json = ?, updated_at = ?
+     WHERE id = ? AND source_path = '/studio/direct-booking-invite'
+       AND contact_name = '' AND contact_email = ''`
+  ).bind(
+    clientName,
+    clientEmail,
+    clientPhone,
+    JSON.stringify({ name: clientName, email: clientEmail, phone: clientPhone }),
+    now,
+    context.token.submission_id,
+  ).run();
+
+  if (Number(update?.meta?.changes || 0) < 1) {
+    const existing = await db.prepare(
+      "SELECT contact_name, contact_email, contact_phone FROM submissions WHERE id = ?"
+    ).bind(context.token.submission_id).first();
+    if (!existing || asString(existing.contact_email).toLowerCase() !== clientEmail) {
+      return {
+        error: "This private booking link has already been started by another client. Ask the studio for a new link.",
+        status: 409,
+      };
+    }
+    context.token.contact_name = existing.contact_name;
+    context.token.contact_email = existing.contact_email;
+    context.token.contact_phone = existing.contact_phone;
+    return { context };
+  }
+
+  await db.prepare(
+    `INSERT INTO submission_events (
+      id, submission_id, event_type, actor, note, created_at
+    ) VALUES (?,?,?,?,?,?)`
+  ).bind(
+    crypto.randomUUID(),
+    context.token.submission_id,
+    "direct_invite_client_identified",
+    "client",
+    clientEmail,
+    now,
+  ).run();
+  context.token.contact_name = clientName;
+  context.token.contact_email = clientEmail;
+  context.token.contact_phone = clientPhone;
+  return { context };
 }
 
 export function handlePublicConsultationContext(request, env) {
@@ -2289,13 +2369,16 @@ export async function handleCreateBookingHold(request, env) {
 
   try {
     const db = requireBookingDb(env);
-    const context = await loadTokenContext(db, asString(body.token));
+    let context = await loadTokenContext(db, asString(body.token));
     if (!context) return errorResponse("A private booking link is required.", 401);
     if (context.invalid) return errorResponse(context.invalid, 403);
     if (context.purpose === "tattoo") {
       const sessionPlanCheck = await ensureSessionPlanResponse(db, context);
       if (sessionPlanCheck.error) return errorResponse(sessionPlanCheck.error, 409);
     }
+    const clientClaim = await claimDirectInviteClient(db, context, body);
+    if (clientClaim.error) return errorResponse(clientClaim.error, clientClaim.status);
+    context = clientClaim.context;
 
     const result = await createPendingAppointment(
       db,
@@ -2769,13 +2852,16 @@ export async function handleCreateBookingCheckout(request, env) {
 
   try {
     const db = requireBookingDb(env);
-    const context = await loadTokenContext(db, asString(body.token));
+    let context = await loadTokenContext(db, asString(body.token));
     if (!context) return errorResponse("A private booking link is required.", 401);
     if (context.invalid) return errorResponse(context.invalid, 403);
     if (context.purpose === "tattoo") {
       const sessionPlanCheck = await ensureSessionPlanResponse(db, context);
       if (sessionPlanCheck.error) return errorResponse(sessionPlanCheck.error, 409);
     }
+    const clientClaim = await claimDirectInviteClient(db, context, body);
+    if (clientClaim.error) return errorResponse(clientClaim.error, clientClaim.status);
+    context = clientClaim.context;
 
     const tip = parseTipCents(body.tipCents);
     if (tip.error) return errorResponse(tip.error, 400);
@@ -5057,36 +5143,18 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
   const body = await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
 
-  const clientName = asString(body.clientName);
-  const clientEmail = asString(body.clientEmail).toLowerCase();
-  const clientPhone = asString(body.clientPhone);
   const projectNote = asString(body.projectNote);
   const purpose = asString(body.purpose) || "tattoo";
-  const allowed = Array.isArray(body.allowedBookingTypes)
-    ? body.allowedBookingTypes.map(asString).filter(Boolean)
-    : [];
-
-  if (!clientName || clientName.length > 160) {
-    return errorResponse("Client name is required and must be 160 characters or fewer.", 400);
-  }
-  if (
-    !clientEmail ||
-    clientEmail.length > 254 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail)
-  ) {
-    return errorResponse("Enter a valid client email address.", 400);
-  }
-  if (clientPhone.length > 80) {
-    return errorResponse("Client phone must be 80 characters or fewer.", 400);
-  }
+  const bookingTypeId = asString(body.bookingTypeId);
+  const allowed = bookingTypeId ? [bookingTypeId] : [];
   if (projectNote.length > 2000) {
     return errorResponse("Project note must be 2,000 characters or fewer.", 400);
   }
   if (!BOOKING_TOKEN_PURPOSES.has(purpose)) {
     return errorResponse("Booking purpose must be consultation or tattoo.", 400);
   }
-  if (!allowed.length || new Set(allowed).size !== allowed.length || !bookingTypesMatchPurpose(purpose, allowed)) {
-    return errorResponse("Choose booking types that match the link purpose.", 400);
+  if (!allowed.length || !bookingTypesMatchPurpose(purpose, allowed)) {
+    return errorResponse("Choose a session type that matches the link purpose.", 400);
   }
 
   const requestedExpiry = asOptionalString(body.expiresAt);
@@ -5132,10 +5200,10 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
         "approved",
         "/studio/direct-booking-invite",
         "Direct booking invite",
-        clientName,
-        clientEmail,
-        clientPhone || null,
-        JSON.stringify({ name: clientName, email: clientEmail, phone: clientPhone }),
+        "",
+        "",
+        null,
+        "{}",
         JSON.stringify(payload),
         JSON.stringify({ created_via: "studio_direct_booking_invite" }),
         "[]",
@@ -5181,7 +5249,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
           minimumMinutes,
           maximumMinutes,
           "not_available",
-          projectNote || "Direct booking invite created in Studio.",
+          "Your session type has been selected by the studio.",
           "one_session",
           0,
           now,
@@ -5206,7 +5274,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
           allowedBookingTypes: allowed,
           expiresAt: requestedExpiry || undefined,
           revokeExisting: true,
-          sendEmail: body.sendEmail === true,
+          sendEmail: false,
         }),
       },
     );
@@ -5228,10 +5296,7 @@ export async function handleAdminCreateDirectBookingInvite(request, env) {
       ...tokenPayload,
       directInvite: {
         submissionId,
-        clientName,
-        clientEmail,
         purpose,
-        projectNote,
       },
     });
   } catch (error) {

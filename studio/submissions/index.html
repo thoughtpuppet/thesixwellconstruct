@@ -1025,7 +1025,7 @@
       return card("Direct Booking Invite", `
         <div class="grid">
           ${field("Booking Purpose", p("booking_purpose"))}
-          ${field("Allowed Sessions", Array.isArray(allowedTypes) ? allowedTypes.map(titleize).join(", ") : allowedTypes)}
+          ${field("Session Type", Array.isArray(allowedTypes) ? allowedTypes.map(titleize).join(", ") : allowedTypes)}
           ${field("Source", submission.sourcePath || "")}
         </div>
         <div class="field" style="margin-top:16px;"><label>Project Note</label><div class="value full">${escapeHtml(p("message"))}</div></div>
@@ -2279,51 +2279,37 @@
         <div class="detail-head">
           <span class="pill">Tattoo Booking / Private Access</span>
           <h2>Direct Invite</h2>
-          <p class="contact">For clients who reached the booking stage outside the public inquiry flow. This creates the minimum approved Studio record and a private, expiring booking link.</p>
+          <p class="contact">Choose the link purpose, session type, and expiration. The client enters their own contact information after opening the private link.</p>
         </div>
         <form class="direct-invite-form" data-direct-invite-form>
           <div class="direct-invite-form-grid">
-            <label class="field">Client name
-              <input name="clientName" maxlength="160" autocomplete="name" required>
-            </label>
-            <label class="field">Client email
-              <input name="clientEmail" type="email" maxlength="254" autocomplete="email" required>
-            </label>
-            <label class="field">Client phone <span class="contact">(optional)</span>
-              <input name="clientPhone" maxlength="80" autocomplete="tel">
-            </label>
             <label class="field">Link purpose
               <select name="purpose" data-direct-invite-purpose>
                 <option value="tattoo">Tattoo appointment</option>
                 <option value="consultation">Prerequisite consultation</option>
               </select>
             </label>
-            <label class="field wide">Project note <span class="contact">(optional, internal and included in the Studio record)</span>
-              <textarea name="projectNote" maxlength="2000" rows="5" placeholder="Enough context to recognize this client and project later."></textarea>
-            </label>
-          </div>
-          <fieldset class="direct-invite-types" data-direct-invite-types="tattoo">
-            <legend>Session types this client may choose</legend>
-            <div class="direct-invite-type-grid">
-              <label class="check"><input type="checkbox" name="allowedBookingTypes" value="tattoo_quarter"><span>Quarter Session</span></label>
-              <label class="check"><input type="checkbox" name="allowedBookingTypes" value="tattoo_half"><span>Half Session</span></label>
-              <label class="check"><input type="checkbox" name="allowedBookingTypes" value="tattoo_full"><span>Full Session</span></label>
-            </div>
-          </fieldset>
-          <fieldset class="direct-invite-types hidden" data-direct-invite-types="consultation">
-            <legend>Consultation access</legend>
-            <label class="check"><input type="checkbox" name="allowedBookingTypes" value="consult_in_person" checked><span>In-Person Consultation</span></label>
-          </fieldset>
-          <div class="direct-invite-form-grid">
             <label class="field">Expires at <span class="contact">(optional)</span>
               <input name="expiresAt" type="datetime-local">
               <span class="contact">Blank uses the secure 30-day default.</span>
             </label>
-            <label class="check" style="align-self:end;margin-bottom:10px;">
-              <input name="sendEmail" type="checkbox">
-              <span>Also email the private link to this client now</span>
+            <label class="field wide">Private project notes <span class="contact">(optional)</span>
+              <textarea name="projectNote" maxlength="2000" rows="5" placeholder="Enough context to recognize this client and project later."></textarea>
+              <span class="contact">Studio only. These notes never appear in the client booking flow or checkout.</span>
             </label>
           </div>
+          <fieldset class="direct-invite-types" data-direct-invite-types="tattoo">
+            <legend>Session type</legend>
+            <div class="direct-invite-type-grid">
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Session</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Session</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Session</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="direct-invite-types hidden" data-direct-invite-types="consultation">
+            <legend>Session type</legend>
+            <label class="check"><input type="radio" name="consultationBookingType" value="consult_in_person" checked><span>In-Person Consultation</span></label>
+          </fieldset>
           <div class="booking-actions">
             <button class="button" type="submit">Generate &amp; Copy Link</button>
           </div>
@@ -2355,38 +2341,38 @@
       result.classList.add("hidden");
       try {
         const purpose = purposeInput.value;
-        const allowedBookingTypes = [...form.querySelectorAll(
-          `[data-direct-invite-types="${purpose}"] input[name="allowedBookingTypes"]:checked`
-        )].map((input) => input.value);
-        if (!allowedBookingTypes.length) throw new Error("Choose at least one session type.");
+        const bookingTypeId = form.querySelector(
+          `[data-direct-invite-types="${purpose}"] input[type="radio"]:checked`
+        )?.value || "";
+        if (!bookingTypeId) throw new Error("Choose a session type.");
         const expiresAt = localDateTimeToIso(form.elements.expiresAt.value);
         const payload = await api("/api/admin/booking/direct-invites", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            clientName: form.elements.clientName.value.trim(),
-            clientEmail: form.elements.clientEmail.value.trim(),
-            clientPhone: form.elements.clientPhone.value.trim(),
             projectNote: form.elements.projectNote.value.trim(),
             purpose,
-            allowedBookingTypes,
+            bookingTypeId,
             expiresAt: expiresAt || undefined,
-            sendEmail: form.elements.sendEmail.checked,
           }),
         });
         const bookingUrl = payload.token?.bookingUrl || absoluteUrl(payload.token?.path || "");
-        await navigator.clipboard?.writeText(bookingUrl).catch(() => {});
-        const emailState = payload.delivery?.ok
-          ? "The link was copied and emailed to the client."
-          : payload.delivery?.reason === "not_requested"
-            ? "The link was copied. Email was not sent."
-            : "The link was copied, but email delivery needs attention.";
+        let copied = false;
+        try {
+          if (navigator.clipboard) {
+            await navigator.clipboard.writeText(bookingUrl);
+            copied = true;
+          }
+        } catch {}
+        const linkState = copied
+          ? "The link was copied. It is ready to paste into a text message."
+          : "The link is ready. Use Copy Link before sending it by text.";
         result.innerHTML = `
           <div class="direct-invite-result-heading">Private link ready</div>
           <input value="${escapeHtml(bookingUrl)}" readonly aria-label="Generated private booking URL">
-          <p class="contact">${escapeHtml(emailState)} It expires ${escapeHtml(formatDate(payload.token?.expiresAt))}.</p>
+          <p class="contact">${escapeHtml(linkState)} It expires ${escapeHtml(formatDate(payload.token?.expiresAt))}.</p>
           <div class="booking-actions">
-            <button class="button" type="button" data-direct-invite-copy>Copy Again</button>
+            <button class="button" type="button" data-direct-invite-copy>Copy Link</button>
             <a class="button" href="${escapeHtml(bookingUrl)}" target="_blank" rel="noopener">Preview Client Flow</a>
             <button class="button" type="button" data-direct-invite-record="${escapeHtml(payload.directInvite?.submissionId || "")}">View Studio Record</button>
           </div>`;
@@ -2400,7 +2386,7 @@
           await loadSubmissions();
           goToSubmission(id);
         });
-        status.textContent = emailState;
+        status.textContent = linkState;
         setStatus("Direct invite ready");
       } catch (error) {
         status.textContent = error.message;
@@ -3052,19 +3038,23 @@
       return;
     }
 
-    listEl.innerHTML = visible.map((submission) => `
+    listEl.innerHTML = visible.map((submission) => {
+      const isPendingDirectInvite = submission.payload?.direct_booking_invite === "yes" && !submission.contactName;
+      const displayName = submission.contactName || (isPendingDirectInvite ? "Awaiting Client Details" : "Unnamed");
+      const displayType = isPendingDirectInvite ? "direct booking invite" : submission.type;
+      return `
       <button class="submission ${submission.id === activeId ? "active" : ""}" type="button" data-id="${submission.id}">
         <span class="submission-top">
-          <span class="name">${escapeHtml(submission.contactName || "Unnamed")}</span>
+          <span class="name">${escapeHtml(displayName)}</span>
           <span class="pill">${escapeHtml(submission.status)}</span>
         </span>
-        <span class="meta">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.contactEmail || "")}${submission.tattooStage ? ` / ${escapeHtml(titleize(submission.tattooStage))}` : ""}</span>
+        <span class="meta">${escapeHtml(titleize(displayType))} / ${escapeHtml(submission.contactEmail || "")}${submission.tattooStage ? ` / ${escapeHtml(titleize(submission.tattooStage))}` : ""}</span>
         <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
           ${nextActionBadge(submission)}
         </span>
       </button>
-    `).join("");
+    `}).join("");
   }
 
   function escapeHtml(value) {
@@ -3187,6 +3177,8 @@ ${meetingLines}
         email: submission.contactEmail || "",
         phone: submission.contactPhone || "",
       },
+      requiresClientDetails: submission.sourcePath === "/studio/direct-booking-invite"
+        && (!submission.contactName || !submission.contactEmail || !submission.contactPhone),
       submission: {
         id: submission.id || "preview",
         type: submission.type || "tattoo_inquiry",
