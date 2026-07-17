@@ -34,7 +34,11 @@ import {
 import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
 import {
   handleAdminResendNotification,
+  notifyAdminAppointmentConfirmed,
+  notifyAdminAppointmentRescheduled,
+  notifyAdminSubmissionReceived,
   notifyAppointmentCancelled,
+  notifySubmissionReceived,
   retryPendingAdminAppointmentNotifications,
 } from "../functions/api/notifications/_lib.js";
 
@@ -1413,10 +1417,80 @@ test("pending admin appointment notifications survive the request and retry from
   assert.deepEqual(result, { sent: 1, skipped: 0, failed: 0 });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].to, "studio@example.test");
-  assert.match(sent[0].subject, /Booking confirmed/);
+  assert.equal(sent[0].subject, "art.pill Tattoo House Tattoo Booking Confirmed");
   assert.equal(database.prepare(
     "SELECT status FROM notification_deliveries WHERE idempotency_key = ?",
   ).get(`admin_appointment_confirmed:${appointmentId}`).status, "sent");
+});
+
+test("tattoo admin notification subjects use canonical art.pill names without changing client subjects", async () => {
+  const database = migratedDatabase();
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
+    ADMIN_NOTIFICATION_FROM_EMAIL: "notifications@example.test",
+    NOTIFICATION_REPLY_TO: "studio@example.test",
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { messageId: `subject-${sent.length}` };
+      },
+    },
+  };
+  const formNames = {
+    tattoo_inquiry: "Custom Tattoo Inquiry",
+    flash_claim: "Flash Claim",
+    build_brief: "Build Your Own",
+    maze_design: "Maze Studio Submission",
+    special_project: "Special Projects Application",
+  };
+  for (const [type, name] of Object.entries(formNames)) {
+    await notifyAdminSubmissionReceived(env, {
+      id: `subject-${type}`,
+      type,
+      contact: { name: "Collector", email: "collector@example.test" },
+      payload: {},
+    });
+    assert.equal(sent.at(-1).subject, `art.pill Tattoo House ${name}`);
+  }
+
+  await notifySubmissionReceived(env, {
+    id: "client-subject-unchanged",
+    type: "tattoo_inquiry",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: {},
+  });
+  assert.equal(sent.at(-1).subject, "art.pill TATTOO HOUSE — Custom tattoo project received");
+
+  const appointmentFixtures = [
+    ["tattoo_full", "tattoo", "art.pill Tattoo House Tattoo Booking Confirmed"],
+    ["consult_in_person", "standalone_consultation", "art.pill Tattoo House In-Person Consultation Confirmed"],
+    ["consult_virtual", "standalone_consultation", "art.pill Tattoo House Virtual Consultation Confirmed"],
+    ["build_in_person", "build_session", "art.pill Tattoo House In-Person Build Session Confirmed"],
+  ];
+  for (const [bookingTypeId, purpose, expectedSubject] of appointmentFixtures) {
+    const appointment = {
+      id: `subject-${bookingTypeId}`,
+      bookingTypeId,
+      purpose,
+      bookingTypeLabel: bookingTypeId,
+      clientName: "Collector",
+      clientEmail: "collector@example.test",
+      startAt: "2026-08-08T16:00:00.000Z",
+      endAt: "2026-08-08T17:00:00.000Z",
+      depositCents: 5000,
+      currency: "USD",
+    };
+    await notifyAdminAppointmentConfirmed(env, null, appointment);
+    assert.equal(sent.at(-1).subject, expectedSubject);
+    await notifyAdminAppointmentRescheduled(env, null, appointment, {
+      previousStartAt: "2026-08-07T16:00:00.000Z",
+      previousEndAt: "2026-08-07T17:00:00.000Z",
+    });
+    assert.equal(sent.at(-1).subject, expectedSubject.replace("Confirmed", "Rescheduled"));
+  }
 });
 
 test("expired replacement holds never expose a stale Square checkout URL", async () => {

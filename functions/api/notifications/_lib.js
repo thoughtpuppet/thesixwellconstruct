@@ -3,6 +3,16 @@ const DEFAULT_FROM_NAME = "art.pill TATTOO HOUSE";
 const DEFAULT_REPLY_TO = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_ADMIN_FROM_ADDRESS = "notifications@artpilltattoohouse.com";
 const DEFAULT_TIMEZONE = "America/New_York";
+const TATTOO_SUBJECT_PREFIX = "art.pill Tattoo House";
+const TATTOO_FORM_NAMES = Object.freeze({
+  tattoo_inquiry: "Custom Tattoo Inquiry",
+  flash_claim: "Flash Claim",
+  build_brief: "Build Your Own",
+  maze_design: "Maze Studio Submission",
+  special_project: "Special Projects Application",
+  consultation: "Consultation",
+  build_session: "In-Person Build Session",
+});
 const DEFAULT_REVIEW_TIME_MESSAGE = "Most project submissions are reviewed within 5–7 business days.";
 const DEFAULT_BOOKING_TYPES = {
   tattoo_quarter: {
@@ -118,6 +128,30 @@ function appointmentConfirmationUrl(env, request, appointment) {
 
 function appointmentCalendarUrl(env, request, appointment) {
   return `${publicBaseUrl(env, request)}/api/booking/calendar?appointment=${encodeURIComponent(appointment.id)}`;
+}
+
+function tattooSubject(label) {
+  return `${TATTOO_SUBJECT_PREFIX} ${label}`;
+}
+
+function tattooFormName(type) {
+  return TATTOO_FORM_NAMES[normalizedSubmissionType(type)] || "";
+}
+
+function tattooBookingName(appointment) {
+  if (appointment.bookingTypeId === IN_PERSON_CONSULTATION_BOOKING_TYPE_ID) return "In-Person Consultation";
+  if (appointment.bookingTypeId === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) return "Virtual Consultation";
+  if (appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session") {
+    return "In-Person Build Session";
+  }
+  if (["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose)) {
+    return "Consultation";
+  }
+  return "Tattoo Booking";
+}
+
+function tattooAdminBookingSubject(appointment, state) {
+  return tattooSubject(`${tattooBookingName(appointment)} ${state}`);
 }
 
 function clientResourceUrls(env, request) {
@@ -695,6 +729,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
 
 export async function notifyAdminSubmissionReceived(env, submission, options = {}) {
   const normalized = normalizeSubmission(submission);
+  const formName = tattooFormName(normalized.type);
   const detailLines = submissionDetailLines(normalized);
   const lines = [
     "New form submission received.",
@@ -714,7 +749,9 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
   ];
 
   return sendAdminNotification(env, null, {
-    subject: `New submission: ${labelFromKey(normalized.type)}`,
+    subject: formName
+      ? tattooSubject(formName)
+      : `New submission: ${labelFromKey(normalized.type)}`,
     lines,
     templateKey: "admin_submission_received",
     relatedType: "submission",
@@ -981,6 +1018,7 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow, o
 
 export async function notifyAdminAppointmentConfirmed(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
+  const studio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
   const when = [formatDate(appointment.startAt), formatDate(appointment.endAt)]
     .filter(Boolean)
     .join(" - ");
@@ -1007,7 +1045,9 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
   ];
 
   return sendAdminNotification(env, request, {
-    subject: `Booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`,
+    subject: studio
+      ? `Booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
+      : tattooAdminBookingSubject(appointment, "Confirmed"),
     lines,
     templateKey: "admin_appointment_confirmed",
     relatedType: "appointment",
@@ -1078,7 +1118,9 @@ export async function notifyAdminAppointmentRescheduled(env, request, appointmen
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
   return sendAdminNotification(env, request, {
-    subject: `Booking rescheduled: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`,
+    subject: profile.studio
+      ? `Booking rescheduled: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
+      : tattooAdminBookingSubject(appointment, "Rescheduled"),
     lines: [
       "A paid booking was moved without a new charge.",
       "",
@@ -1254,7 +1296,7 @@ export async function handleAdminResendNotification(request, env) {
 
     if (asString(body.templateKey) === "admin_test") {
       const delivery = await sendAdminNotification(env, request, {
-        subject: "TEST - form submission notifications",
+        subject: tattooSubject("Notification Test"),
         lines: [
           "This is a test of the admin form-submission notification system.",
           "",
