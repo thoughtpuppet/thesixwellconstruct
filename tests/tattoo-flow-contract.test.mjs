@@ -31,6 +31,7 @@ import {
   handleSquareWebhook,
   reapExpiredBookingHolds,
 } from "../functions/api/booking/_lib.js";
+import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
 import {
   handleAdminResendNotification,
   notifyAppointmentCancelled,
@@ -481,6 +482,29 @@ test("Build submissions require intent, snapshot stable published symbol IDs, an
   assert.equal(secondBody.submissionId, firstBody.submissionId);
   assert.equal(secondBody.idempotent, true);
   assert.equal(database.prepare("SELECT count(*) AS count FROM submissions WHERE idempotency_key = ?").get("build-contract-test").count, 1);
+  const crmPerson = database.prepare(
+    `SELECT p.id,p.display_name
+     FROM crm_people p
+     JOIN crm_identities i ON i.person_id=p.id
+     WHERE i.kind='email' AND i.normalized_value='build@example.test' AND i.active=1`
+  ).get();
+  assert.equal(crmPerson.display_name, "Build Client");
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT person_id,interaction_type,status
+       FROM crm_interactions
+       WHERE source_provider='local' AND source_type='submission' AND source_id=?`
+    ).get(firstBody.submissionId) },
+    {
+      person_id: crmPerson.id,
+      interaction_type: "build_brief",
+      status: "new",
+    },
+  );
+  assert.equal(database.prepare(
+    `SELECT COUNT(*) count FROM crm_interactions
+     WHERE source_provider='local' AND source_type='submission' AND source_id=?`
+  ).get(firstBody.submissionId).count, 1);
 
   const row = database.prepare("SELECT status, tattoo_stage, payload_json FROM submissions WHERE id = ?").get(firstBody.submissionId);
   const saved = JSON.parse(row.payload_json);
@@ -663,6 +687,16 @@ test("Studio can create a direct private booking invite without a prior inquiry"
     clientPhone: "404-555-0119",
   }), env);
   assert.equal(hold.status, 200);
+  const holdPayload = await hold.json();
+  const crmAppointment = database.prepare(
+    `SELECT i.person_id,i.status,p.display_name
+     FROM crm_interactions i
+     JOIN crm_people p ON p.id=i.person_id
+     WHERE i.source_provider='local' AND i.source_type='appointment' AND i.source_id=?`
+  ).get(holdPayload.appointment.id);
+  assert.ok(crmAppointment.person_id);
+  assert.equal(crmAppointment.status, "pending_deposit");
+  assert.equal(crmAppointment.display_name, "Direct Client");
   const claimedSubmission = database.prepare(
     "SELECT contact_name, contact_email, contact_phone, internal_notes FROM submissions WHERE id = ?"
   ).get(submission.id);
@@ -1074,7 +1108,7 @@ test("completed Square webhooks fail for retry when order reconciliation is tran
     },
   });
   const signature = await squareWebhookSignatureForTest(rawBody, signatureKey, notificationUrl);
-  const request = new Request(notificationUrl, {
+  const makeRequest = () => new Request(notificationUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -1089,13 +1123,249 @@ test("completed Square webhooks fail for retry when order reconciliation is tran
 
   const response = await withMockFetch(
     async () => jsonFetchResponse({ errors: [{ detail: "Temporary Square order outage" }] }, 503),
-    () => handleSquareWebhook(request, env),
+    () => handleSquareWebhook(makeRequest(), env),
   );
   const payload = await response.json();
   assert.equal(response.status, 500, JSON.stringify(payload));
   assert.match(payload.detail, /Temporary Square order outage/);
   assert.equal(database.prepare("SELECT status FROM appointments WHERE id = ?").get(appointmentId).status, "deposit_pending");
   assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id = ?").get(appointmentId).status, "pending");
+});
+
+test("a completed Square webhook settles the booking once in People", async () => {
+  const database = migratedDatabase();
+  const appointmentId = "crm-paid-appointment";
+  const paymentRowId = "crm-paid-payment";
+  const orderId = "crm-paid-order";
+  insertAppointmentFixture(database, {
+    id: appointmentId,
+    status: "deposit_pending",
+    purpose: "standalone_consultation",
+    name: "Paid CRM Client",
+    email: "paid-crm@example.test",
+    startAt: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString(),
+    endAt: new Date(Date.now() + 97 * 60 * 60 * 1000).toISOString(),
+    depositCents: 5000,
+    squareOrderId: orderId,
+    squarePaymentLinkId: "crm-paid-link",
+    squareCheckoutUrl: "https://square.example.test/crm-paid",
+    holdExpiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    holdState: "active",
+  });
+  insertPaymentFixture(database, {
+    id: paymentRowId,
+    appointmentId,
+    checkoutId: "crm-paid-link",
+    orderId,
+    amountCents: 5000,
+  });
+
+  const notificationUrl = "https://example.test/api/square/webhook";
+  const signatureKey = "crm-paid-webhook-signature";
+  const rawBody = JSON.stringify({
+    type: "payment.updated",
+    data: {
+      object: {
+        payment: {
+          id: "crm-paid-square-payment",
+          order_id: orderId,
+          status: "COMPLETED",
+        },
+      },
+    },
+  });
+  const signature = await squareWebhookSignatureForTest(rawBody, signatureKey, notificationUrl);
+  const makeRequest = () => new Request(notificationUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-square-hmacsha256-signature": signature,
+    },
+    body: rawBody,
+  });
+  const env = squareEnv(database, {
+    SQUARE_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+  });
+
+  const responses = await withMockFetch(async (url) => {
+    assert.match(String(url), new RegExp(`/v2/orders/${orderId}$`));
+    return jsonFetchResponse({
+      order: {
+        id: orderId,
+        state: "COMPLETED",
+        net_amount_due_money: { amount: 0, currency: "USD" },
+      },
+    });
+  }, async () => [
+    await handleSquareWebhook(makeRequest(), env),
+    await handleSquareWebhook(makeRequest(), env),
+  ]);
+  for (const response of responses) {
+    assert.equal(response.status, 200, await response.text());
+  }
+
+  assert.equal(database.prepare(
+    "SELECT status FROM appointments WHERE id=?"
+  ).get(appointmentId).status, "confirmed");
+  assert.equal(database.prepare(
+    "SELECT status FROM deposit_payments WHERE id=?"
+  ).get(paymentRowId).status, "paid");
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT status,person_id FROM crm_interactions
+       WHERE source_provider='local' AND source_type='appointment' AND source_id=?`
+    ).get(appointmentId) },
+    {
+      status: "confirmed",
+      person_id: database.prepare(
+        "SELECT person_id FROM crm_transactions WHERE source_provider='local' AND source_type='deposit_payment' AND source_id=?"
+      ).get(paymentRowId).person_id,
+    },
+  );
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT status,amount_cents
+       FROM crm_transactions
+       WHERE source_provider='local' AND source_type='deposit_payment' AND source_id=?`
+    ).get(paymentRowId) },
+    { status: "settled", amount_cents: 5000 },
+  );
+  assert.equal(database.prepare(
+    `SELECT COUNT(*) count FROM crm_transactions
+     WHERE source_provider='local' AND source_type='deposit_payment' AND source_id=?`
+  ).get(paymentRowId).count, 1);
+});
+
+test("a paid replacement updates both appointment states in People", async () => {
+  const database = migratedDatabase();
+  const originalId = "crm-replacement-original";
+  const replacementId = "crm-replacement-new";
+  const orderId = "crm-replacement-order";
+  const originalStart = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const originalEnd = new Date(new Date(originalStart).getTime() + 45 * 60 * 1000).toISOString();
+  const replacementStart = new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString();
+  const replacementEnd = new Date(new Date(replacementStart).getTime() + 45 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: originalId,
+    status: "confirmed",
+    name: "Replacement CRM Client",
+    email: "crm-replacement@example.test",
+    startAt: originalStart,
+    endAt: originalEnd,
+    holdState: "converted",
+  });
+  insertPaymentFixture(database, {
+    id: "crm-replacement-original-payment",
+    appointmentId: originalId,
+    checkoutId: "crm-replacement-original-link",
+    orderId: "crm-replacement-original-order",
+    status: "paid",
+  });
+  insertAppointmentFixture(database, {
+    id: replacementId,
+    status: "deposit_pending",
+    name: "Replacement CRM Client",
+    email: "crm-replacement@example.test",
+    startAt: replacementStart,
+    endAt: replacementEnd,
+    squareOrderId: orderId,
+    squarePaymentLinkId: "crm-replacement-link",
+    squareCheckoutUrl: "https://square.example.test/crm-replacement",
+    holdExpiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    holdState: "active",
+    replacementForAppointmentId: originalId,
+    rescheduleCount: 1,
+  });
+  insertPaymentFixture(database, {
+    id: "crm-replacement-new-payment",
+    appointmentId: replacementId,
+    checkoutId: "crm-replacement-link",
+    orderId,
+    status: "pending",
+  });
+  await ingestCrmSourceRecord(new LocalD1(database), {
+    contact: {
+      displayName: "Replacement CRM Client",
+      email: "crm-replacement@example.test",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: originalId,
+      nodeId: "node-tattoos",
+      interactionType: "appointment",
+      status: "confirmed",
+      occurredAt: originalStart,
+    },
+  });
+
+  const notificationUrl = "https://example.test/api/square/webhook";
+  const signatureKey = "crm-replacement-webhook-signature";
+  const rawBody = JSON.stringify({
+    type: "payment.updated",
+    data: {
+      object: {
+        payment: {
+          id: "crm-replacement-square-payment",
+          order_id: orderId,
+          status: "COMPLETED",
+        },
+      },
+    },
+  });
+  const signature = await squareWebhookSignatureForTest(rawBody, signatureKey, notificationUrl);
+  const makeRequest = () => new Request(notificationUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-square-hmacsha256-signature": signature,
+    },
+    body: rawBody,
+  });
+  const env = squareEnv(database, {
+    SQUARE_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+  });
+
+  const responses = await withMockFetch(async (url) => {
+    assert.match(String(url), new RegExp(`/v2/orders/${orderId}$`));
+    return jsonFetchResponse({
+      order: {
+        id: orderId,
+        state: "COMPLETED",
+        net_amount_due_money: { amount: 0, currency: "USD" },
+      },
+    });
+  }, async () => [
+    await handleSquareWebhook(makeRequest(), env),
+    await handleSquareWebhook(makeRequest(), env),
+  ]);
+  for (const response of responses) {
+    assert.equal(response.status, 200, await response.text());
+  }
+
+  assert.deepEqual(
+    database.prepare(`
+      SELECT id,status FROM appointments WHERE id IN (?,?) ORDER BY id
+    `).all(replacementId, originalId).map((row) => ({ ...row })),
+    [
+      { id: replacementId, status: "confirmed" },
+      { id: originalId, status: "cancelled" },
+    ],
+  );
+  assert.deepEqual(
+    database.prepare(`
+      SELECT source_id,status FROM crm_interactions
+      WHERE source_provider='local' AND source_type='appointment'
+        AND source_id IN (?,?)
+      ORDER BY source_id
+    `).all(replacementId, originalId).map((row) => ({ ...row })),
+    [
+      { source_id: replacementId, status: "confirmed" },
+      { source_id: originalId, status: "cancelled" },
+    ],
+  );
 });
 
 test("pending admin appointment notifications survive the request and retry from the scheduler", async () => {
@@ -1817,6 +2087,52 @@ test("direct public checkout is resumable and idempotent without creating a seco
   assert.equal(database.prepare(
     "SELECT COUNT(*) AS count FROM deposit_payments WHERE appointment_id = ?",
   ).get(first.payload.appointmentId).count, 1);
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT status,interaction_type FROM crm_interactions
+       WHERE source_provider='local' AND source_type='appointment' AND source_id=?`
+    ).get(first.payload.appointmentId) },
+    { status: "deposit_pending", interaction_type: "appointment" },
+  );
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT status,amount_cents FROM crm_transactions
+       WHERE source_provider='local' AND source_type='deposit_payment'
+         AND source_id=(SELECT id FROM deposit_payments WHERE appointment_id=?)`
+    ).get(first.payload.appointmentId) },
+    { status: "pending", amount_cents: 5000 },
+  );
+
+  const released = await withMockFetch(async (url, options = {}) => {
+    const target = String(url);
+    if (target.endsWith("/v2/orders/square-order-idempotent")) {
+      return jsonFetchResponse({
+        order: { id: "square-order-idempotent", state: "OPEN" },
+      });
+    }
+    if (target.endsWith("/v2/online-checkout/payment-links/square-link-idempotent")) {
+      assert.equal(options.method, "DELETE");
+      return jsonFetchResponse({});
+    }
+    throw new Error(`Unexpected Square release request: ${target}`);
+  }, () => handleReleasePendingBookingHold(jsonRequest(
+    "/api/booking/pending-hold/release",
+    {
+      appointmentId: first.payload.appointmentId,
+      email: payload.email,
+      reason: "Contract release",
+    },
+  ), env));
+  assert.equal(released.status, 200, await released.text());
+  assert.equal(database.prepare(
+    `SELECT status FROM crm_interactions
+     WHERE source_provider='local' AND source_type='appointment' AND source_id=?`
+  ).get(first.payload.appointmentId).status, "cancelled");
+  assert.equal(database.prepare(
+    `SELECT status FROM crm_transactions
+     WHERE source_provider='local' AND source_type='deposit_payment'
+       AND source_id=(SELECT id FROM deposit_payments WHERE appointment_id=?)`
+  ).get(first.payload.appointmentId).status, "void");
 });
 
 test("concurrent public checkout attempts cannot overbook a capacity-one window", async () => {
@@ -2026,6 +2342,20 @@ test("a paid webhook arriving after terminal hold expiry records payment attenti
   assert.equal(database.prepare(
     "SELECT COUNT(*) AS count FROM appointment_events WHERE appointment_id = ? AND event_type = 'late_payment_attention'",
   ).get("appointment-late-webhook").count, 1);
+  assert.deepEqual(
+    rowObject(database.prepare(`
+      SELECT i.status interaction_status,t.status transaction_status,t.amount_cents
+      FROM crm_interactions i
+      JOIN crm_transactions t ON t.person_id=i.person_id
+      WHERE i.source_type='appointment' AND i.source_id='appointment-late-webhook'
+        AND t.source_type='deposit_payment' AND t.source_id='payment-late-webhook'
+    `).get()),
+    {
+      interaction_status: "cancelled",
+      transaction_status: "settled",
+      amount_cents: 5000,
+    },
+  );
 });
 
 test("a signed completed-payment webhook remains retryable when Square order reconciliation fails", async () => {

@@ -2,6 +2,7 @@ import {
   notifyAdminSubmissionReceived,
   notifySubmissionReceived,
 } from "../notifications/_lib.js";
+import { ingestCrmSourceRecord } from "../crm/ingest.js";
 
 const VALID_STATUSES = new Set([
   "new",
@@ -550,6 +551,67 @@ function normalizeRow(row) {
   };
 }
 
+function crmNodeForSubmission(type, payload = {}) {
+  if (["tattoo_inquiry", "flash_claim", "special_project", "build_brief", "maze_design", "consultation", "build_session"].includes(type)) {
+    return "node-tattoos";
+  }
+  if (type === "art_acquisition") return "node-art";
+  if (type === "studio_booking") {
+    return payload.booking_type_id === "studio_visit" ? "node-art" : "node-events";
+  }
+  if (/event|rsvp|waitlist|open_mic/.test(type)) return "node-events";
+  if (/merch|shop|order/.test(type)) return "node-merch";
+  return null;
+}
+
+async function mirrorSubmissionToCrm(database, row) {
+  if (!row?.id) return { status: "skipped", reason: "source_required" };
+  const contact = row.contact && typeof row.contact === "object"
+    ? row.contact
+    : parseJsonField(row.contact_json, {});
+  const payload = row.payload && typeof row.payload === "object"
+    ? row.payload
+    : parseJsonField(row.payload_json, {});
+  const type = row.type || "";
+  try {
+    return await ingestCrmSourceRecord(database, {
+      contact: {
+        displayName: row.contactName || row.contact_name || contact.name,
+        email: row.contactEmail || row.contact_email || contact.email,
+        phone: row.contactPhone || row.contact_phone || contact.phone,
+        instagram: contact.instagram,
+        organization: contact.organization || payload.organization,
+        pronouns: contact.pronouns,
+      },
+      interaction: {
+        sourceProvider: "local",
+        sourceType: "submission",
+        sourceId: row.id,
+        nodeId: crmNodeForSubmission(type, payload),
+        channel: "website",
+        interactionType: type || "submission",
+        label: row.subject || type || "Website submission",
+        status: row.status || "new",
+        occurredAt: row.createdAt || row.created_at,
+        metadata: {
+          submissionId: row.id,
+          sourcePath: row.sourcePath || row.source_path || "",
+        },
+      },
+    });
+  } catch (error) {
+    // The source submission remains authoritative; the protected CRM backfill
+    // can reconcile this record if live mirroring is temporarily unavailable.
+    console.warn(JSON.stringify({
+      event: "crm.live_mirror_failed",
+      sourceType: "submission",
+      sourceId: String(row.id),
+      errorName: error?.name || "Error",
+    }));
+    return { status: "skipped", reason: "ingest_failed" };
+  }
+}
+
 function validateSubmissionFiles(type, files, env) {
   const limit = FILE_LIMITS_BY_TYPE[type] ?? 4;
   if (files.length > limit) {
@@ -749,6 +811,7 @@ export async function handleCreateSubmission(request, env) {
           });
         }
         const normalized = normalizeRow(existing);
+        await mirrorSubmissionToCrm(db, existing);
         return json({
           ok: true,
           submissionId: normalized.id,
@@ -919,6 +982,17 @@ export async function handleCreateSubmission(request, env) {
       ).bind(crypto.randomUUID(), id, "created", "system", null, now),
     ]);
 
+    await mirrorSubmissionToCrm(db, {
+      id,
+      type: submission.type,
+      status: submission.status,
+      sourcePath: submission.sourcePath,
+      subject: submission.subject,
+      contact: submission.contact,
+      payload: submission.payload,
+      createdAt: now,
+    });
+
     const clientNotification = await notifySubmissionReceived(env, {
       id,
       ...submission,
@@ -960,6 +1034,7 @@ export async function handleCreateSubmission(request, env) {
             });
           }
           const normalized = normalizeRow(existing);
+          await mirrorSubmissionToCrm(db, existing);
           return json({
             ok: true,
             submissionId: normalized.id,
@@ -1381,6 +1456,7 @@ export async function handleUpdateSubmission(request, env, id) {
     }
 
     const updated = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
+    await mirrorSubmissionToCrm(db, updated);
     return json({ submission: normalizeRow(updated) });
   } catch (error) {
     return errorResponse("Unable to update submission.", 500, {

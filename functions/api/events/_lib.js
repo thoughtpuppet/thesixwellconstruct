@@ -21,6 +21,7 @@ import {
   notifyEventTicketCancelled,
   notifyEventOpenMicSlotAssigned,
 } from "../notifications/_lib.js";
+import { ingestCrmSourceRecord } from "../crm/ingest.js";
 
 const SQUARE_VERSION = "2026-05-20";
 
@@ -251,7 +252,10 @@ async function createEventSquarePaymentLink(request, env, ticket, event) {
 }
 
 async function fetchEventsSquareOrder(env, orderId) {
-  if (!orderId || !eventsSquareConfigured(env)) return null;
+  if (!orderId) return null;
+  if (!eventsSquareConfigured(env)) {
+    throw new Error("Events Square is not configured.");
+  }
   const response = await fetch(
     `${eventsSquareBaseUrl(env)}/v2/orders/${encodeURIComponent(orderId)}`,
     {
@@ -261,16 +265,146 @@ async function fetchEventsSquareOrder(env, orderId) {
       },
     }
   );
-  if (!response.ok) return null;
   const payload = await response.json().catch(() => ({}));
-  return payload.order || null;
+  if (!response.ok) {
+    throw new Error(
+      payload.errors?.[0]?.detail || `Square order lookup failed (${response.status}).`
+    );
+  }
+  if (!payload.order) {
+    throw new Error("Square order lookup returned no order.");
+  }
+  return payload.order;
+}
+
+async function invalidateEventSquarePaymentLink(env, paymentLinkId) {
+  if (!paymentLinkId || !eventsSquareConfigured(env)) {
+    throw new Error("Events Square checkout invalidation is not configured.");
+  }
+  const response = await fetch(
+    `${eventsSquareBaseUrl(env)}/v2/online-checkout/payment-links/${encodeURIComponent(paymentLinkId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Square-Version": SQUARE_VERSION,
+        Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+      },
+    }
+  );
+  if (response.ok || response.status === 404) {
+    return { invalidated: true, alreadyMissing: response.status === 404 };
+  }
+  const payload = await response.json().catch(() => ({}));
+  throw new Error(
+    payload.errors?.[0]?.detail
+      || `Square event checkout invalidation failed (${response.status}).`
+  );
+}
+
+function parseTicketRawJson(rawValue) {
+  try {
+    const parsed = JSON.parse(rawValue || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : { squareOrder: parsed };
+  } catch {
+    return {};
+  }
+}
+
+function eventRefundFromRaw(rawValue) {
+  const refund = parseTicketRawJson(rawValue).eventRefund;
+  return refund && typeof refund === "object" && !Array.isArray(refund) ? refund : null;
+}
+
+function eventRefundResult(squareRefundValue) {
+  const squareRefund = squareRefundValue && typeof squareRefundValue === "object"
+    ? squareRefundValue
+    : {};
+  const refundId = asString(squareRefund.id) || null;
+  const refundStatus = asString(squareRefund.status).toUpperCase() || "UNKNOWN";
+  const failed = ["FAILED", "REJECTED"].includes(refundStatus);
+  const amountValue = Number(squareRefund.amount_money?.amount);
+  const amountCents = Number.isFinite(amountValue)
+    ? Math.max(0, Math.trunc(amountValue))
+    : null;
+  const currency = asString(squareRefund.amount_money?.currency).toUpperCase() || null;
+  return {
+    ok: Boolean(refundId) && refundStatus === "COMPLETED",
+    accepted: Boolean(refundId) && !failed,
+    completed: Boolean(refundId) && refundStatus === "COMPLETED",
+    pending: refundStatus === "PENDING",
+    refundId,
+    refundStatus,
+    amountCents,
+    currency,
+    refundSnapshot: refundId
+      ? {
+          id: refundId,
+          status: refundStatus,
+          amountCents,
+          currency,
+          paymentId: asString(squareRefund.payment_id) || null,
+          orderId: asString(squareRefund.order_id) || null,
+          createdAt: squareRefund.created_at || null,
+          updatedAt: squareRefund.updated_at || null,
+        }
+      : null,
+    error: !refundId
+      ? "Square refund response did not include an id."
+      : failed
+        ? `Square refund ${refundStatus.toLowerCase()}.`
+        : null,
+  };
+}
+
+async function fetchEventSquareRefund(env, refundId) {
+  if (!refundId || !eventsSquareConfigured(env)) {
+    throw new Error("Events Square refund lookup is not configured.");
+  }
+  const response = await fetch(
+    `${eventsSquareBaseUrl(env)}/v2/refunds/${encodeURIComponent(refundId)}`,
+    {
+      headers: {
+        "Square-Version": SQUARE_VERSION,
+        Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+      },
+    }
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      payload.errors?.[0]?.detail || `Square refund lookup failed (${response.status}).`
+    );
+  }
+  if (!payload.refund) throw new Error("Square refund lookup returned no refund.");
+  return eventRefundResult(payload.refund);
 }
 
 async function refundEventSquarePayment(env, ticketRow) {
-  // Best-effort full refund of a paid ticket. Returns { ok, refundId, error }.
+  // A successful API request does not necessarily mean the money has settled:
+  // Square can first return PENDING and later move the refund to COMPLETED.
   const paymentId = asString(ticketRow.square_payment_id);
   if (!eventsSquareConfigured(env)) {
     return { ok: false, error: "Events Square is not configured." };
+  }
+  const existingRefundId = asString(ticketRow.refund_id);
+  if (existingRefundId) {
+    try {
+      return await fetchEventSquareRefund(env, existingRefundId);
+    } catch (error) {
+      const existingSnapshot = eventRefundFromRaw(ticketRow.raw_json);
+      return {
+        ok: false,
+        accepted: true,
+        completed: false,
+        pending: asString(existingSnapshot?.status).toUpperCase() === "PENDING",
+        refundId: existingRefundId,
+        refundStatus: asString(existingSnapshot?.status).toUpperCase() || "UNKNOWN",
+        refundSnapshot: existingSnapshot,
+        error: error.message,
+      };
+    }
   }
   if (!paymentId) {
     return { ok: false, error: "No Square payment id on file; refund manually." };
@@ -297,10 +431,47 @@ async function refundEventSquarePayment(env, ticketRow) {
     if (!response.ok) {
       return { ok: false, error: payload.errors?.[0]?.detail || "Square refund failed." };
     }
-    return { ok: true, refundId: payload.refund?.id || null };
+    return eventRefundResult(payload.refund);
   } catch (error) {
     return { ok: false, error: error.message };
   }
+}
+
+function rawTicketJsonWithRefund(rawValue, refundSnapshot) {
+  const value = parseTicketRawJson(rawValue);
+  const existing = eventRefundFromRaw(rawValue);
+  const incoming = refundSnapshot && typeof refundSnapshot === "object"
+    ? refundSnapshot
+    : {};
+  let next = { ...(existing || {}), ...incoming };
+  const existingStatus = asString(existing?.status).toUpperCase();
+  const incomingStatus = asString(incoming.status).toUpperCase();
+  const existingUpdated = Date.parse(existing?.updatedAt || existing?.createdAt || "");
+  const incomingUpdated = Date.parse(incoming.updatedAt || incoming.createdAt || "");
+  const existingIsNewer = Number.isFinite(existingUpdated)
+    && Number.isFinite(incomingUpdated)
+    && existingUpdated > incomingUpdated;
+  const existingIsTerminal = ["COMPLETED", "FAILED", "REJECTED"].includes(existingStatus);
+  const incomingIsTerminal = ["COMPLETED", "FAILED", "REJECTED"].includes(incomingStatus);
+  if (
+    existing
+    && asString(existing.id) === asString(incoming.id)
+    && (existingIsNewer || (existingIsTerminal && !incomingIsTerminal))
+  ) {
+    next = { ...incoming, ...existing };
+  }
+  next.status = asString(next.status).toUpperCase() || "UNKNOWN";
+  value.eventRefund = next;
+  return JSON.stringify(value);
+}
+
+function rawTicketJsonWithOrder(rawValue, order) {
+  const existingRefund = eventRefundFromRaw(rawValue);
+  const next = order && typeof order === "object" && !Array.isArray(order)
+    ? { ...order }
+    : parseTicketRawJson(rawValue);
+  if (existingRefund) next.eventRefund = existingRefund;
+  return JSON.stringify(next);
 }
 
 function orderLooksPaid(order) {
@@ -325,6 +496,11 @@ function webhookOrderId(payload) {
 function webhookPaymentId(payload) {
   const object = payload?.data?.object || {};
   return asString(object.payment?.id) || asString(object.payment_id) || "";
+}
+
+function webhookRefund(payload) {
+  const refund = payload?.data?.object?.refund;
+  return refund && typeof refund === "object" && !Array.isArray(refund) ? refund : null;
 }
 
 function webhookLooksPaid(payload, order) {
@@ -368,6 +544,285 @@ async function getEventBySlug(db, slug) {
     .bind(slug)
     .first();
   return normalizeEvent(row);
+}
+
+function logCrmMirrorFailure(sourceType, sourceId, error) {
+  console.warn(JSON.stringify({
+    event: "crm.live_mirror_failed",
+    sourceType,
+    sourceId: String(sourceId || ""),
+    errorName: error?.name || "Error",
+  }));
+}
+
+async function mirrorEventTicketToCrm(database, ticketValue, eventValue = null) {
+  if (!ticketValue?.id) return { status: "skipped", reason: "source_required" };
+  try {
+    const event = eventValue || normalizeEvent(await database.prepare(
+      "SELECT * FROM events WHERE id=?"
+    ).bind(ticketValue.event_id || ticketValue.eventId).first());
+    const status = asString(ticketValue.status || "pending").toLowerCase();
+    const hasSettledPayment = status === "paid"
+      || Boolean(ticketValue.paid_at || ticketValue.paidAt)
+      || Boolean(ticketValue.square_payment_id || ticketValue.squarePaymentId);
+    return await ingestCrmSourceRecord(database, {
+      contact: {
+        displayName: ticketValue.contact_name || ticketValue.contactName,
+        email: ticketValue.contact_email || ticketValue.contactEmail,
+        phone: ticketValue.contact_phone || ticketValue.contactPhone,
+      },
+      interaction: {
+        sourceProvider: "local",
+        sourceType: "event_ticket",
+        sourceId: ticketValue.id,
+        nodeId: "node-events",
+        channel: "website",
+        interactionType: "event_ticket_purchase",
+        label: event?.title || "Event ticket",
+        status,
+        quantity: Number(ticketValue.seats || 1),
+        occurredAt: ticketValue.paid_at || ticketValue.paidAt
+          || ticketValue.created_at || ticketValue.createdAt,
+        metadata: {
+          eventId: event?.id || ticketValue.event_id || ticketValue.eventId || "",
+          eventSlug: event?.slug || "",
+          purchaserNotAttendee: true,
+        },
+      },
+      transaction: {
+        sourceProvider: "local",
+        sourceType: "event_ticket_payment",
+        sourceId: ticketValue.id,
+        nodeId: "node-events",
+        transactionType: "charge",
+        status: hasSettledPayment
+          ? "settled"
+          : status === "cancelled"
+            ? "void"
+            : "pending",
+        amountCents: ticketValue.amount_cents ?? ticketValue.amountCents ?? 0,
+        currency: ticketValue.currency || "USD",
+        occurredAt: ticketValue.paid_at || ticketValue.paidAt
+          || ticketValue.updated_at || ticketValue.updatedAt
+          || ticketValue.created_at || ticketValue.createdAt,
+        externalOrderId: ticketValue.square_order_id || ticketValue.squareOrderId,
+        metadata: {
+          eventId: event?.id || ticketValue.event_id || ticketValue.eventId || "",
+          ticketId: ticketValue.id,
+          providerPaymentId: ticketValue.square_payment_id || ticketValue.squarePaymentId || "",
+        },
+      },
+    });
+  } catch (error) {
+    logCrmMirrorFailure("event_ticket", ticketValue.id, error);
+    return { status: "skipped", reason: "ingest_failed" };
+  }
+}
+
+async function mirrorEventTicketRefundToCrm(database, ticketValue, refundValue) {
+  const refund = typeof refundValue === "string"
+    ? { refundId: refundValue, refundStatus: "COMPLETED" }
+    : (refundValue || {});
+  const refundSnapshot = refund.refundSnapshot && typeof refund.refundSnapshot === "object"
+    ? refund.refundSnapshot
+    : refund;
+  const refundId = asString(refund.refundId || refund.id);
+  if (!ticketValue?.id || !refundId) {
+    return { status: "skipped", reason: "source_required" };
+  }
+  const providerStatus = asString(
+    refund.refundStatus || refund.status || refund.refundSnapshot?.status
+  ).toUpperCase() || "UNKNOWN";
+  const transactionStatus = providerStatus === "COMPLETED"
+    ? "settled"
+    : ["FAILED", "REJECTED"].includes(providerStatus)
+      ? "failed"
+      : "pending";
+  try {
+    return await ingestCrmSourceRecord(database, {
+      contact: {
+        displayName: ticketValue.contact_name || ticketValue.contactName,
+        email: ticketValue.contact_email || ticketValue.contactEmail,
+        phone: ticketValue.contact_phone || ticketValue.contactPhone,
+      },
+      transaction: {
+        sourceProvider: "local",
+        sourceType: "event_ticket_refund",
+        sourceId: refundId,
+        nodeId: "node-events",
+        transactionType: "refund",
+        status: transactionStatus,
+        amountCents: refund.amountCents
+          ?? refundSnapshot.amountCents
+          ?? ticketValue.amount_cents
+          ?? ticketValue.amountCents
+          ?? 0,
+        currency: refund.currency
+          || refundSnapshot.currency
+          || ticketValue.currency
+          || "USD",
+        occurredAt: refundSnapshot.updatedAt
+          || refundSnapshot.createdAt
+          || new Date().toISOString(),
+        externalOrderId: refundId,
+        metadata: {
+          eventId: ticketValue.event_id || ticketValue.eventId || "",
+          ticketId: ticketValue.id,
+          providerPaymentId: ticketValue.square_payment_id || ticketValue.squarePaymentId || "",
+          providerRefundId: refundId,
+          providerRefundStatus: providerStatus,
+        },
+      },
+    });
+  } catch (error) {
+    logCrmMirrorFailure("event_ticket_refund", refundId, error);
+    return { status: "skipped", reason: "ingest_failed" };
+  }
+}
+
+async function persistEventRefundStatus(database, ticketValue, refundValue) {
+  const refund = refundValue || {};
+  const refundSnapshot = refund.refundSnapshot && typeof refund.refundSnapshot === "object"
+    ? refund.refundSnapshot
+    : refund;
+  const refundId = asString(refund.refundId || refund.id || refundSnapshot.id);
+  if (!ticketValue?.id || !refundId) {
+    return { status: "skipped", reason: "source_required", ticket: ticketValue || null };
+  }
+  let updatedTicket = ticketValue;
+  let persisted = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const existingRefundId = asString(updatedTicket.refund_id || updatedTicket.refundId);
+    if (existingRefundId && existingRefundId !== refundId) {
+      return {
+        status: "conflict",
+        reason: "refund_id_conflict",
+        ticket: updatedTicket,
+      };
+    }
+    const currentRawJson = updatedTicket.raw_json ?? updatedTicket.rawJson ?? null;
+    const rawJson = rawTicketJsonWithRefund(
+      currentRawJson,
+      {
+        ...refundSnapshot,
+        id: refundId,
+        status: asString(
+          refund.refundStatus || refund.status || refundSnapshot.status
+        ).toUpperCase() || "UNKNOWN",
+      },
+    );
+    const now = new Date().toISOString();
+    const update = await database.prepare(
+      `UPDATE event_tickets
+       SET refund_id=COALESCE(refund_id,?),raw_json=?,updated_at=?
+       WHERE id=? AND raw_json IS ? AND (refund_id IS NULL OR refund_id=?)`
+    ).bind(
+      refundId,
+      rawJson,
+      now,
+      ticketValue.id,
+      currentRawJson,
+      refundId,
+    ).run();
+    updatedTicket = await database.prepare(
+      "SELECT * FROM event_tickets WHERE id=?"
+    ).bind(ticketValue.id).first();
+    if (!updatedTicket || asString(updatedTicket.refund_id) !== refundId) {
+      return {
+        status: "conflict",
+        reason: "refund_id_conflict",
+        ticket: updatedTicket || ticketValue,
+      };
+    }
+    if (Number(update?.meta?.changes || 0) > 0) {
+      persisted = true;
+      break;
+    }
+  }
+  if (!persisted) {
+    return {
+      status: "conflict",
+      reason: "refund_status_race",
+      ticket: updatedTicket,
+    };
+  }
+  const effectiveSnapshot = eventRefundFromRaw(updatedTicket.raw_json) || refundSnapshot;
+  const effectiveRefund = {
+    ...refund,
+    refundId,
+    refundStatus: asString(effectiveSnapshot.status).toUpperCase() || "UNKNOWN",
+    amountCents: effectiveSnapshot.amountCents ?? refund.amountCents ?? null,
+    currency: effectiveSnapshot.currency || refund.currency || null,
+    refundSnapshot: effectiveSnapshot,
+  };
+  await mirrorEventTicketRefundToCrm(database, updatedTicket, effectiveRefund);
+  return {
+    status: "updated",
+    ticket: updatedTicket,
+    refund: effectiveRefund,
+  };
+}
+
+async function mirrorEventWaitlistToCrm(database, row, event) {
+  try {
+    return await ingestCrmSourceRecord(database, {
+      contact: {
+        displayName: row.contactName,
+        email: row.contactEmail,
+        phone: row.contactPhone,
+      },
+      interaction: {
+        sourceProvider: "local",
+        sourceType: "event_waitlist",
+        sourceId: row.id,
+        nodeId: "node-events",
+        channel: "website",
+        interactionType: "event_waitlist",
+        label: event?.title || "Event waitlist",
+        status: row.status || "new",
+        quantity: Number(row.seats || 1),
+        occurredAt: row.createdAt,
+        metadata: {
+          eventId: event?.id || "",
+          eventSlug: event?.slug || "",
+        },
+      },
+    });
+  } catch (error) {
+    logCrmMirrorFailure("event_waitlist", row.id, error);
+    return { status: "skipped", reason: "ingest_failed" };
+  }
+}
+
+async function mirrorEventOpenMicToCrm(database, row, event) {
+  try {
+    return await ingestCrmSourceRecord(database, {
+      contact: {
+        displayName: row.performerName,
+        email: row.performerEmail,
+        phone: row.performerPhone,
+      },
+      interaction: {
+        sourceProvider: "local",
+        sourceType: "event_open_mic",
+        sourceId: row.id,
+        nodeId: "node-events",
+        channel: "website",
+        interactionType: "performance",
+        label: row.pieceTitle || row.actType || event?.title || "Open mic signup",
+        status: row.status || "requested",
+        occurredAt: row.createdAt,
+        metadata: {
+          eventId: event?.id || "",
+          eventSlug: event?.slug || "",
+          actType: row.actType || "",
+        },
+      },
+    });
+  } catch (error) {
+    logCrmMirrorFailure("event_open_mic", row.id, error);
+    return { status: "skipped", reason: "ingest_failed" };
+  }
 }
 
 async function seatsTaken(db, eventId) {
@@ -683,6 +1138,10 @@ export async function handleEventCheckout(request, env, slug) {
 
     // Mirror into the studio submissions console for visibility.
     await recordEventSubmission(db, env, request, { event, ticket, name, email, phone });
+    const pendingTicket = await db.prepare(
+      "SELECT * FROM event_tickets WHERE id=?"
+    ).bind(ticketId).first();
+    await mirrorEventTicketToCrm(db, pendingTicket, event);
 
     return json({
       ok: true,
@@ -734,6 +1193,16 @@ export async function handleEventWaitlist(request, env, slug) {
       )
       .bind(id, event.id, name, email, phone, seats, note, now, now)
       .run();
+
+    await mirrorEventWaitlistToCrm(db, {
+      id,
+      contactName: name,
+      contactEmail: email,
+      contactPhone: phone,
+      seats,
+      status: "new",
+      createdAt: now,
+    }, event);
 
     await notifyAdminEventWaitlistReceived(
       env,
@@ -824,6 +1293,17 @@ export async function handleEventOpenMicSignup(request, env, slug) {
       )
       .run();
 
+    await mirrorEventOpenMicToCrm(db, {
+      id,
+      performerName,
+      performerEmail,
+      performerPhone,
+      actType,
+      pieceTitle,
+      status: "requested",
+      createdAt: now,
+    }, event);
+
     await notifyAdminEventOpenMicReceived(
       env,
       request,
@@ -903,11 +1383,19 @@ export async function handleEventTicketStatus(request, env, ticketId) {
     if (!row) return errorResponse("Ticket not found.", 404);
 
     // Fallback verification in case the webhook has not landed yet.
-    if (row.status === "pending" && row.square_order_id) {
-      const order = await fetchEventsSquareOrder(env, row.square_order_id);
-      if (orderLooksPaid(order)) {
-        await markTicketPaid(db, env, request, row, order, "");
-        row.status = "paid";
+    if (row.status === "pending" && row.square_order_id && eventsSquareConfigured(env)) {
+      try {
+        const order = await fetchEventsSquareOrder(env, row.square_order_id);
+        if (orderLooksPaid(order)) {
+          const confirmation = await markTicketPaid(db, env, request, row, order, "");
+          if (confirmation.paid) row.status = "paid";
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({
+          event: "events.ticket_status_reconciliation_failed",
+          ticketId: row.id,
+          errorName: error?.name || "Error",
+        }));
       }
     }
 
@@ -930,20 +1418,144 @@ export async function handleEventTicketStatus(request, env, ticketId) {
   }
 }
 
-async function markTicketPaid(db, env, request, ticketRow, order, paymentId) {
-  const now = new Date().toISOString();
-  const alreadyPaid = ticketRow.status === "paid";
-
+async function preserveTerminalTicketPayment(db, ticketId, paymentId, now) {
   await db
+    .prepare(
+      `UPDATE event_tickets
+       SET square_payment_id = COALESCE(?, square_payment_id),
+           paid_at = COALESCE(paid_at, ?),
+           updated_at = ?
+       WHERE id = ? AND status NOT IN ('pending', 'paid')`
+    )
+    .bind(paymentId || null, now, now, ticketId)
+    .run();
+  const terminalTicket = await db
+    .prepare("SELECT * FROM event_tickets WHERE id = ?")
+    .bind(ticketId)
+    .first();
+  if (terminalTicket && !["pending", "paid"].includes(terminalTicket.status)) {
+    await mirrorEventTicketToCrm(db, terminalTicket, null);
+    console.warn(JSON.stringify({
+      event: "events.terminal_ticket_payment_attention",
+      ticketId,
+      ticketStatus: terminalTicket.status,
+    }));
+  }
+  return asString(terminalTicket?.status).toLowerCase() || "missing";
+}
+
+async function markTicketPaid(db, env, request, ticketRow, order, paymentId) {
+  const startingStatus = asString(ticketRow?.status).toLowerCase();
+  const now = new Date().toISOString();
+  const providerPaymentId = paymentId || squarePaymentIdFromOrder(order) || null;
+  if (startingStatus === "paid") {
+    const refresh = await db
+      .prepare(
+        `UPDATE event_tickets
+         SET square_payment_id = COALESCE(?, square_payment_id),
+             raw_json = ?, updated_at = ?
+         WHERE id = ? AND status = 'paid'`
+    )
+      .bind(
+        providerPaymentId,
+        rawTicketJsonWithOrder(ticketRow.raw_json, order),
+        now,
+        ticketRow.id,
+      )
+      .run();
+    if (Number(refresh?.meta?.changes || 0) > 0) {
+      const paidTicket = await db
+        .prepare("SELECT * FROM event_tickets WHERE id = ?")
+        .bind(ticketRow.id)
+        .first();
+      if (paidTicket) await mirrorEventTicketToCrm(db, paidTicket, null);
+      return { paid: true, changed: false, status: "paid" };
+    }
+    const current = await db
+      .prepare("SELECT status FROM event_tickets WHERE id = ?")
+      .bind(ticketRow.id)
+      .first();
+    const currentStatus = asString(current?.status).toLowerCase() || "missing";
+    if (currentStatus === "paid") {
+      const paidTicket = await db
+        .prepare("SELECT * FROM event_tickets WHERE id = ?")
+        .bind(ticketRow.id)
+        .first();
+      if (paidTicket) await mirrorEventTicketToCrm(db, paidTicket, null);
+    }
+    return {
+      paid: currentStatus === "paid",
+      changed: false,
+      terminal: !["pending", "paid"].includes(currentStatus),
+      status: currentStatus,
+    };
+  }
+  if (startingStatus !== "pending") {
+    const currentStatus = await preserveTerminalTicketPayment(
+      db,
+      ticketRow.id,
+      providerPaymentId,
+      now
+    );
+    return {
+      paid: false,
+      changed: false,
+      terminal: true,
+      status: currentStatus,
+    };
+  }
+
+  const update = await db
     .prepare(
       `UPDATE event_tickets
        SET status = 'paid',
            square_payment_id = COALESCE(?, square_payment_id),
            raw_json = ?, paid_at = COALESCE(paid_at, ?), updated_at = ?
-       WHERE id = ?`
+       WHERE id = ? AND status = 'pending'`
     )
-    .bind(paymentId || null, JSON.stringify(order || {}), now, now, ticketRow.id)
+    .bind(
+      providerPaymentId,
+      rawTicketJsonWithOrder(ticketRow.raw_json, order),
+      now,
+      now,
+      ticketRow.id,
+    )
     .run();
+
+  if (Number(update?.meta?.changes || 0) < 1) {
+    const current = await db
+      .prepare("SELECT status FROM event_tickets WHERE id = ?")
+      .bind(ticketRow.id)
+      .first();
+    const currentStatus = asString(current?.status).toLowerCase() || "missing";
+    if (!["pending", "paid"].includes(currentStatus)) {
+      const terminalStatus = await preserveTerminalTicketPayment(
+        db,
+        ticketRow.id,
+        providerPaymentId,
+        now
+      );
+      return {
+        paid: false,
+        changed: false,
+        terminal: true,
+        status: terminalStatus,
+      };
+    }
+    if (currentStatus === "paid") {
+      const paidTicket = await db
+        .prepare("SELECT * FROM event_tickets WHERE id = ?")
+        .bind(ticketRow.id)
+        .first();
+      if (paidTicket) await mirrorEventTicketToCrm(db, paidTicket, null);
+    }
+    return {
+      paid: currentStatus === "paid",
+      changed: false,
+      terminal: !["pending", "paid"].includes(currentStatus),
+      status: currentStatus,
+    };
+  }
 
   // Move the mirrored submission to booked.
   try {
@@ -959,14 +1571,86 @@ async function markTicketPaid(db, env, request, ticketRow, order, paymentId) {
     /* submissions mirror is best-effort */
   }
 
-  if (!alreadyPaid) {
-    await notifyEventTicketPaid(env, request, ticketRow).catch((error) => {
-      console.warn("Event confirmation email failed.", error.message);
-    });
-    await notifyAdminEventTicketPaid(env, request, ticketRow).catch((error) => {
-      console.warn("Admin event ticket notification failed.", error.message);
-    });
+  const paidTicket = await db.prepare(
+    "SELECT * FROM event_tickets WHERE id=?"
+  ).bind(ticketRow.id).first();
+  await mirrorEventTicketToCrm(db, paidTicket, null);
+
+  await notifyEventTicketPaid(env, request, ticketRow).catch((error) => {
+    console.warn("Event confirmation email failed.", error.message);
+  });
+  await notifyAdminEventTicketPaid(env, request, ticketRow).catch((error) => {
+    console.warn("Admin event ticket notification failed.", error.message);
+  });
+  return { paid: true, changed: true, status: "paid" };
+}
+
+async function eventTicketForRefundWebhook(database, refund) {
+  const refundId = asString(refund?.id);
+  const paymentId = asString(refund?.payment_id);
+  const orderId = asString(refund?.order_id);
+  if (refundId) {
+    const byRefund = await database.prepare(
+      "SELECT * FROM event_tickets WHERE refund_id=? ORDER BY created_at DESC LIMIT 1"
+    ).bind(refundId).first();
+    if (byRefund) return byRefund;
   }
+  if (paymentId) {
+    const byPayment = await database.prepare(
+      "SELECT * FROM event_tickets WHERE square_payment_id=? ORDER BY created_at DESC LIMIT 1"
+    ).bind(paymentId).first();
+    if (byPayment) return byPayment;
+  }
+  if (orderId) {
+    return database.prepare(
+      "SELECT * FROM event_tickets WHERE square_order_id=? ORDER BY created_at DESC LIMIT 1"
+    ).bind(orderId).first();
+  }
+  return null;
+}
+
+async function applyEventRefundWebhook(database, refund) {
+  const result = eventRefundResult(refund);
+  if (!result.refundId) {
+    return { ok: true, ignored: true, reason: "No Square refund id." };
+  }
+  const ticket = await eventTicketForRefundWebhook(database, refund);
+  if (!ticket) {
+    return { ok: true, ignored: true, reason: "No matching event ticket." };
+  }
+  if (ticket.refund_id && ticket.refund_id !== result.refundId) {
+    return {
+      ok: true,
+      ignored: true,
+      attention: true,
+      reason: "The event ticket is linked to a different Square refund.",
+      ticketId: ticket.id,
+      ticketStatus: ticket.status,
+      refundId: result.refundId,
+      refundStatus: result.refundStatus,
+    };
+  }
+  const persisted = await persistEventRefundStatus(database, ticket, result);
+  if (persisted.status === "conflict") {
+    return {
+      ok: true,
+      ignored: true,
+      attention: true,
+      reason: "The event ticket refund changed concurrently.",
+      ticketId: ticket.id,
+      ticketStatus: ticket.status,
+      refundId: result.refundId,
+      refundStatus: result.refundStatus,
+    };
+  }
+  return {
+    ok: true,
+    refund: true,
+    ticketId: ticket.id,
+    ticketStatus: persisted.ticket?.status || ticket.status,
+    refundId: result.refundId,
+    refundStatus: persisted.refund?.refundStatus || result.refundStatus,
+  };
 }
 
 export async function handleEventsSquareWebhook(request, env) {
@@ -977,6 +1661,11 @@ export async function handleEventsSquareWebhook(request, env) {
     if (!signature.ok) return errorResponse(signature.error, signature.status);
 
     const payload = JSON.parse(rawBody || "{}");
+    const refund = webhookRefund(payload);
+    if (refund) {
+      const db = requireEventsDb(env);
+      return json(await applyEventRefundWebhook(db, refund));
+    }
     const orderId = webhookOrderId(payload);
     if (!orderId) return json({ ok: true, ignored: true, reason: "No Square order id." });
 
@@ -996,8 +1685,31 @@ export async function handleEventsSquareWebhook(request, env) {
       return json({ ok: true, paid: false, ticketId: ticketRow.id });
     }
 
-    await markTicketPaid(db, env, request, ticketRow, order || payload, webhookPaymentId(payload));
-    return json({ ok: true, paid: true, ticketId: ticketRow.id });
+    const confirmation = await markTicketPaid(
+      db,
+      env,
+      request,
+      ticketRow,
+      order || payload,
+      webhookPaymentId(payload)
+    );
+    if (!confirmation.paid) {
+      return json({
+        ok: true,
+        paid: true,
+        reconciled: false,
+        attention: true,
+        reason: "Payment was reported for a terminal event ticket.",
+        ticketId: ticketRow.id,
+        ticketStatus: confirmation.status,
+      });
+    }
+    return json({
+      ok: true,
+      paid: true,
+      reconciled: confirmation.changed,
+      ticketId: ticketRow.id,
+    });
   } catch (error) {
     return errorResponse("Unable to process Square webhook.", 500, {
       detail: error.message,
@@ -1037,20 +1749,25 @@ export async function reapStalePendingTickets(env) {
         if (row.square_order_id) {
           const order = await fetchEventsSquareOrder(env, row.square_order_id);
           if (orderLooksPaid(order)) {
-            await markTicketPaid(db, env, null, row, order, "");
-            recovered += 1;
+            const confirmation = await markTicketPaid(db, env, null, row, order, "");
+            if (confirmation.paid) recovered += 1;
             continue;
           }
         }
         const now = new Date().toISOString();
-        await db
+        const cancellation = await db
           .prepare(
             `UPDATE event_tickets
              SET status = 'cancelled', cancelled_at = COALESCE(cancelled_at, ?), updated_at = ?
-             WHERE id = ?`
+             WHERE id = ? AND status = 'pending'`
           )
           .bind(now, now, row.id)
           .run();
+        if (Number(cancellation?.meta?.changes || 0) < 1) continue;
+        const cancelledTicket = await db.prepare(
+          "SELECT * FROM event_tickets WHERE id=?"
+        ).bind(row.id).first();
+        await mirrorEventTicketToCrm(db, cancelledTicket, null);
         // Remove the mirror submission unless it already converted.
         await db
           .prepare(
@@ -1295,6 +2012,208 @@ export async function handleAdminEventUpdate(request, env, slug) {
   }
 }
 
+async function selectAdminEventTicket(database, ticketId) {
+  return database.prepare(
+    `SELECT t.*, e.title AS event_title, e.starts_at AS event_starts_at,
+            e.location AS event_location
+     FROM event_tickets t
+     JOIN events e ON e.id=t.event_id
+     WHERE t.id=?`
+  ).bind(ticketId).first();
+}
+
+function eventTicketHasSettledPayment(ticket) {
+  return asString(ticket?.status).toLowerCase() === "paid"
+    || Boolean(ticket?.paid_at)
+    || Boolean(ticket?.square_payment_id)
+    || Boolean(ticket?.refund_id);
+}
+
+function squarePaymentIdFromOrder(order) {
+  for (const tender of order?.tenders || []) {
+    const paymentId = asString(tender?.payment_id || tender?.id);
+    if (paymentId) return paymentId;
+  }
+  return "";
+}
+
+async function persistEventTicketPaymentEvidence(database, ticket, order) {
+  const now = new Date().toISOString();
+  const paymentId = squarePaymentIdFromOrder(order);
+  const paidAt = order?.closed_at
+    || order?.tenders?.[0]?.created_at
+    || ticket.paid_at
+    || now;
+  const update = await database.prepare(
+    `UPDATE event_tickets
+     SET square_payment_id=COALESCE(square_payment_id,?),
+         paid_at=COALESCE(paid_at,?),raw_json=?,updated_at=?
+     WHERE id=? AND status=?`
+  ).bind(
+    paymentId || null,
+    paidAt,
+    rawTicketJsonWithOrder(ticket.raw_json, order),
+    now,
+    ticket.id,
+    ticket.status,
+  ).run();
+  const current = await selectAdminEventTicket(database, ticket.id);
+  return {
+    ticket: current || ticket,
+    raced: Number(update?.meta?.changes || 0) < 1,
+  };
+}
+
+async function reconcileEventTicketForCancellation(database, env, ticket) {
+  let current = ticket;
+  let paid = eventTicketHasSettledPayment(current);
+  let invalidated = false;
+  const shouldFetchOrder = Boolean(current.square_order_id)
+    && (
+      current.status === "pending"
+      || (!current.square_payment_id && !current.refund_id)
+    );
+
+  if (shouldFetchOrder) {
+    const order = await fetchEventsSquareOrder(env, current.square_order_id);
+    if (orderLooksPaid(order)) {
+      const persisted = await persistEventTicketPaymentEvidence(database, current, order);
+      return {
+        ticket: persisted.ticket,
+        paid: true,
+        invalidated,
+        raced: persisted.raced,
+      };
+    }
+    if (!paid && ["pending", "cancelled"].includes(current.status)) {
+      if (!current.square_payment_link_id && current.square_checkout_url) {
+        throw new Error(
+          "The pending event checkout has no Square payment-link id and cannot be closed safely."
+        );
+      }
+      if (current.square_payment_link_id) {
+        await invalidateEventSquarePaymentLink(env, current.square_payment_link_id);
+        invalidated = true;
+        const now = new Date().toISOString();
+        await database.prepare(
+          `UPDATE event_tickets
+           SET square_checkout_url=NULL,updated_at=?
+           WHERE id=? AND status=?`
+        ).bind(now, current.id, current.status).run();
+        current = await selectAdminEventTicket(database, current.id) || current;
+        const closedOrder = await fetchEventsSquareOrder(env, current.square_order_id);
+        if (orderLooksPaid(closedOrder)) {
+          const persisted = await persistEventTicketPaymentEvidence(
+            database,
+            current,
+            closedOrder,
+          );
+          return {
+            ticket: persisted.ticket,
+            paid: true,
+            invalidated,
+            raced: persisted.raced,
+          };
+        }
+      }
+    }
+  } else if (
+    !paid
+    && ["pending", "cancelled"].includes(current.status)
+    && (current.square_checkout_url || current.square_payment_link_id)
+    && !current.square_order_id
+  ) {
+    throw new Error(
+      "The pending event checkout has no Square order id and cannot be reconciled safely."
+    );
+  }
+
+  paid = eventTicketHasSettledPayment(current);
+  return { ticket: current, paid, invalidated, raced: false };
+}
+
+function normalizedRefundOutcome(refundValue) {
+  const refund = refundValue || {};
+  const status = asString(
+    refund.refundStatus || refund.status || refund.refundSnapshot?.status
+  ).toUpperCase() || null;
+  const completed = status === "COMPLETED";
+  const failed = ["FAILED", "REJECTED"].includes(status);
+  return {
+    ...refund,
+    ok: completed,
+    accepted: Boolean(refund.refundId) && !failed,
+    completed,
+    pending: status === "PENDING",
+    refundStatus: status,
+    error: failed
+      ? (refund.error || `Square refund ${status.toLowerCase()}.`)
+      : (refund.error || null),
+  };
+}
+
+async function cancelEventTicketLifecycle(database, env, ticketId, shouldRefund, attempt = 0) {
+  const initial = await selectAdminEventTicket(database, ticketId);
+  if (!initial) return { missing: true };
+  const alreadyCancelled = initial.status === "cancelled";
+  const reconciliation = await reconcileEventTicketForCancellation(database, env, initial);
+  if (reconciliation.raced) {
+    if (attempt >= 2) return { conflict: true };
+    return cancelEventTicketLifecycle(database, env, ticketId, shouldRefund, attempt + 1);
+  }
+
+  let current = reconciliation.ticket;
+  let wasPaid = reconciliation.paid;
+  let refund = { ok: false, skipped: true };
+  if (wasPaid && shouldRefund) {
+    refund = await refundEventSquarePayment(env, current);
+    if (refund.refundId && refund.refundSnapshot) {
+      const persisted = await persistEventRefundStatus(database, current, refund);
+      if (persisted.status === "conflict") return { conflict: true };
+      current = persisted.ticket || current;
+      refund = normalizedRefundOutcome({
+        ...refund,
+        ...(persisted.refund || {}),
+      });
+    } else {
+      refund = normalizedRefundOutcome(refund);
+    }
+  }
+
+  let cancelledNow = false;
+  if (current.status !== "cancelled") {
+    const now = new Date().toISOString();
+    const cancellation = await database.prepare(
+      `UPDATE event_tickets
+       SET status='cancelled',cancelled_at=COALESCE(cancelled_at,?),
+           square_checkout_url=NULL,updated_at=?
+       WHERE id=? AND status=?`
+    ).bind(now, now, current.id, current.status).run();
+    if (Number(cancellation?.meta?.changes || 0) < 1) {
+      if (attempt >= 2) return { conflict: true };
+      return cancelEventTicketLifecycle(database, env, ticketId, shouldRefund, attempt + 1);
+    }
+    cancelledNow = true;
+  } else if (current.square_checkout_url) {
+    const now = new Date().toISOString();
+    await database.prepare(
+      "UPDATE event_tickets SET square_checkout_url=NULL,updated_at=? WHERE id=?"
+    ).bind(now, current.id).run();
+  }
+
+  const finalTicket = await selectAdminEventTicket(database, ticketId) || current;
+  wasPaid ||= eventTicketHasSettledPayment(finalTicket);
+  await mirrorEventTicketToCrm(database, finalTicket, null);
+  return {
+    ticket: finalTicket,
+    wasPaid,
+    refund,
+    alreadyCancelled,
+    cancelledNow,
+    invalidated: reconciliation.invalidated,
+  };
+}
+
 export async function handleAdminEventTicketCancel(request, env, ticketId) {
   const authError = requireEventsAdmin(request, env);
   if (authError) return authError;
@@ -1304,65 +2223,54 @@ export async function handleAdminEventTicketCancel(request, env, ticketId) {
 
   try {
     const db = requireEventsDb(env);
-    const row = await db
-      .prepare(
-        `SELECT t.*, e.title AS event_title, e.starts_at AS event_starts_at,
-                e.location AS event_location
-         FROM event_tickets t
-         JOIN events e ON e.id = t.event_id
-         WHERE t.id = ?`
-      )
-      .bind(ticketId)
-      .first();
-    if (!row) return errorResponse("Ticket not found.", 404);
-    if (row.status === "cancelled") {
-      return json({ ok: true, alreadyCancelled: true });
+    const outcome = await cancelEventTicketLifecycle(db, env, ticketId, shouldRefund);
+    if (outcome.missing) return errorResponse("Ticket not found.", 404);
+    if (outcome.conflict) {
+      return errorResponse("The ticket changed while it was being cancelled. Retry safely.", 409);
     }
-
-    const wasPaid = row.status === "paid";
-    let refund = { ok: false, skipped: true };
-    if (wasPaid && shouldRefund) {
-      refund = await refundEventSquarePayment(env, row);
-    }
-
     const now = new Date().toISOString();
-    await db
-      .prepare(
-        `UPDATE event_tickets
-         SET status = 'cancelled', cancelled_at = ?,
-             refund_id = COALESCE(?, refund_id), updated_at = ?
-         WHERE id = ?`
-      )
-      .bind(now, refund.refundId || null, now, row.id)
-      .run();
 
     // Archive the mirror submission so it leaves the active queue.
     await db
       .prepare(
-        `UPDATE submissions SET status = 'archived', updated_at = ?
-         WHERE type = 'event_rsvp'
-           AND json_extract(payload_json, '$.ticket_id') = ?`
+        `UPDATE submissions SET status='archived',updated_at=?
+         WHERE type='event_rsvp'
+           AND json_extract(payload_json,'$.ticket_id')=?`
       )
-      .bind(now, row.id)
+      .bind(now, ticketId)
       .run()
       .catch(() => {});
 
-    if (wasPaid) {
-      await notifyEventTicketCancelled(env, request, row, { refunded: refund.ok }).catch(
-        (error) => console.warn("Event cancellation email failed.", error.message)
-      );
+    if (outcome.cancelledNow && outcome.wasPaid) {
+      await notifyEventTicketCancelled(
+        env,
+        request,
+        outcome.ticket,
+        { refunded: Boolean(outcome.refund.completed) },
+      ).catch((error) => console.warn("Event cancellation email failed.", error.message));
     }
 
     return json({
       ok: true,
       cancelled: true,
-      wasPaid,
+      alreadyCancelled: outcome.alreadyCancelled,
+      wasPaid: outcome.wasPaid,
+      checkoutInvalidated: outcome.invalidated,
       refund: shouldRefund
-        ? { attempted: wasPaid, ok: refund.ok, refundId: refund.refundId || null, error: refund.error || null }
+        ? {
+            attempted: outcome.wasPaid,
+            ok: Boolean(outcome.refund.completed),
+            accepted: Boolean(outcome.refund.accepted),
+            completed: Boolean(outcome.refund.completed),
+            pending: Boolean(outcome.refund.pending),
+            status: outcome.refund.refundStatus || null,
+            refundId: outcome.refund.refundId || null,
+            error: outcome.refund.error || null,
+          }
         : { attempted: false },
     });
   } catch (error) {
-    return errorResponse("Unable to cancel ticket.", 500, { detail: error.message });
+    return errorResponse("Unable to cancel ticket safely.", 409, { detail: error.message });
   }
 }
 
@@ -1386,8 +2294,13 @@ export async function handleAdminEventTicketReconcile(request, env, ticketId) {
 
     const order = await fetchEventsSquareOrder(env, row.square_order_id);
     if (orderLooksPaid(order)) {
-      await markTicketPaid(db, env, request, row, order, "");
-      return json({ ok: true, status: "paid", reconciled: true });
+      const confirmation = await markTicketPaid(db, env, request, row, order, "");
+      return json({
+        ok: true,
+        status: confirmation.status,
+        reconciled: confirmation.paid && confirmation.changed,
+        attention: Boolean(confirmation.terminal),
+      });
     }
     return json({ ok: true, status: "pending", reconciled: false });
   } catch (error) {
@@ -1587,6 +2500,7 @@ export async function handleAdminEventOpenMicUpdate(request, env, slug, signupId
       )
       .bind(signupId)
       .first();
+    await mirrorEventOpenMicToCrm(db, normalizeOpenMicSignup(updated), event);
 
     let delivery = null;
     if (body.sendEmail) {

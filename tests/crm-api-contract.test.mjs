@@ -6,6 +6,15 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { handleAdminCrmApi } from "../functions/api/crm/_lib.js";
+import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
+import {
+  handleAdminEventTicketCancel,
+  handleEventCheckout,
+  handleEventOpenMicSignup,
+  handleEventWaitlist,
+  handleEventsSquareWebhook,
+  reapStalePendingTickets,
+} from "../functions/api/events/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "crm-contract-token";
@@ -44,6 +53,7 @@ class D1Statement {
 class LocalD1 {
   constructor(database) {
     this.database = database;
+    this.batchQueue = Promise.resolve();
   }
 
   prepare(sql) {
@@ -51,16 +61,21 @@ class LocalD1 {
   }
 
   async batch(statements) {
-    this.database.exec("BEGIN");
-    try {
-      const results = [];
-      for (const statement of statements) results.push(await statement.run());
-      this.database.exec("COMMIT");
-      return results;
-    } catch (error) {
-      this.database.exec("ROLLBACK");
-      throw error;
-    }
+    const execute = async () => {
+      this.database.exec("BEGIN");
+      try {
+        const results = [];
+        for (const statement of statements) results.push(await statement.run());
+        this.database.exec("COMMIT");
+        return results;
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+    };
+    const result = this.batchQueue.then(execute, execute);
+    this.batchQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 }
 
@@ -112,6 +127,34 @@ async function api(database, path, options = {}) {
 async function responseJson(response) {
   const payload = await response.json();
   return { response, payload };
+}
+
+async function withMockFetch(mockFetch, action) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mockFetch;
+  try {
+    return await action();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function eventsWebhookSignature(rawBody, signatureKey, notificationUrl) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(signatureKey),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`${notificationUrl}${rawBody}`),
+  );
+  let binary = "";
+  for (const byte of new Uint8Array(signature)) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 async function createPerson(database, values = {}) {
@@ -184,6 +227,673 @@ test("CRM routes are owner-token protected", async () => {
   );
   assert.equal(response.status, 503);
   assert.match((await response.json()).error, /not configured/i);
+});
+
+test("live source ingestion is idempotent and advances pending activity to settled", async () => {
+  const database = migratedDatabase();
+  const d1 = new LocalD1(database);
+  const base = {
+    contact: {
+      displayName: "Live Booking Client",
+      email: "LIVE@example.test",
+      phone: "(404) 555-0188",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: "live-appointment-1",
+      nodeId: "node-tattoos",
+      channel: "website",
+      interactionType: "appointment",
+      label: "Half Session",
+      status: "deposit_pending",
+      occurredAt: "2026-08-01T15:00:00.000Z",
+      metadata: { appointmentId: "live-appointment-1" },
+    },
+    transaction: {
+      sourceProvider: "local",
+      sourceType: "deposit_payment",
+      sourceId: "live-payment-1",
+      nodeId: "node-tattoos",
+      transactionType: "charge",
+      status: "pending",
+      amountCents: 15000,
+      tipCents: 5000,
+      currency: "USD",
+      occurredAt: "2026-07-17T15:00:00.000Z",
+      externalOrderId: "square-order-live-1",
+      metadata: { appointmentId: "live-appointment-1" },
+    },
+  };
+
+  const first = await ingestCrmSourceRecord(d1, base);
+  assert.equal(first.status, "applied");
+  assert.equal(first.match, "new");
+  assert.equal(first.createdPerson, true);
+
+  const replay = await ingestCrmSourceRecord(d1, {
+    ...base,
+    interaction: { ...base.interaction, status: "confirmed" },
+    transaction: { ...base.transaction, status: "settled" },
+  });
+  assert.equal(replay.status, "applied");
+  assert.equal(replay.match, "source");
+  assert.equal(replay.personId, first.personId);
+
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_people WHERE id=?"
+  ).get(first.personId).count, 1);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_identities WHERE person_id=? AND kind='email' AND active=1"
+  ).get(first.personId).count, 1);
+  assert.deepEqual(
+    { ...database.prepare(
+      "SELECT person_id,status FROM crm_interactions WHERE source_provider='local' AND source_type='appointment' AND source_id='live-appointment-1'"
+    ).get() },
+    { person_id: first.personId, status: "confirmed" },
+  );
+  assert.deepEqual(
+    { ...database.prepare(
+      "SELECT person_id,status,amount_cents,tip_cents FROM crm_transactions WHERE source_provider='local' AND source_type='deposit_payment' AND source_id='live-payment-1'"
+    ).get() },
+    {
+      person_id: first.personId,
+      status: "settled",
+      amount_cents: 15000,
+      tip_cents: 5000,
+    },
+  );
+});
+
+test("live identity conflicts remain visible in Needs Attention until a clean replay", async () => {
+  const database = migratedDatabase();
+  const d1 = new LocalD1(database);
+  const source = {
+    contact: {
+      displayName: "Original Booking Client",
+      email: "original-booking@example.test",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: "attention-booking-1",
+      nodeId: "node-tattoos",
+      interactionType: "appointment",
+      status: "confirmed",
+    },
+  };
+  const original = await ingestCrmSourceRecord(d1, source);
+  assert.equal(original.status, "applied");
+  await createPerson(database, {
+    displayName: "Different Email Owner",
+    email: "different-owner@example.test",
+  });
+
+  const conflicted = await ingestCrmSourceRecord(d1, {
+    ...source,
+    contact: {
+      displayName: "Original Booking Client",
+      email: "different-owner@example.test",
+    },
+  });
+  assert.equal(conflicted.personId, original.personId);
+  assert.equal(conflicted.status, "needs_review");
+  assert.ok(conflicted.warnings.includes("email_owned_by_another_person"));
+
+  let attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  assert.equal(attention.response.status, 200);
+  assert.equal(attention.payload.summary.unmatchedInteractions, 1);
+  assert.equal(attention.payload.unmatchedInteractions[0].source_type, "crm_ingest_conflict");
+  const metadata = JSON.parse(attention.payload.unmatchedInteractions[0].metadata_json);
+  assert.deepEqual(metadata.conflicts, ["email_owned_by_another_person"]);
+  assert.deepEqual(metadata.source, {
+    provider: "local",
+    type: "appointment",
+    id: "attention-booking-1",
+  });
+  assert.equal(JSON.stringify(metadata).includes("different-owner@example.test"), false);
+
+  const clean = await ingestCrmSourceRecord(d1, source);
+  assert.equal(clean.status, "applied");
+  attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  assert.equal(attention.payload.summary.unmatchedInteractions, 0);
+});
+
+test("live ingestion recognizes a provider transaction that arrived before its booking mirror", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Provider First Client",
+    email: "provider-first@example.test",
+  });
+  const occurredAt = "2026-07-17T15:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,
+      external_order_id,note,metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'square-provider-first',?,'node-tattoos','charge','settled',15000,0,
+      'USD',?,'square','payment','square-payment-provider-first',
+      'square-order-provider-first','Square payment','{}',1,?,?
+    )
+  `).run(person.id, occurredAt, occurredAt, occurredAt);
+
+  const result = await ingestCrmSourceRecord(new LocalD1(database), {
+    contact: {
+      displayName: "Provider First Client",
+      email: "provider-first@example.test",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: "appointment-provider-first",
+      nodeId: "node-tattoos",
+      interactionType: "appointment",
+      status: "confirmed",
+      occurredAt,
+    },
+    transaction: {
+      sourceProvider: "local",
+      sourceType: "deposit_payment",
+      sourceId: "deposit-provider-first",
+      nodeId: "node-tattoos",
+      transactionType: "charge",
+      status: "settled",
+      amountCents: 15000,
+      currency: "USD",
+      occurredAt,
+      externalOrderId: "square-order-provider-first",
+      metadata: { providerPaymentId: "square-payment-provider-first" },
+    },
+  });
+
+  assert.equal(result.status, "applied");
+  assert.equal(result.personId, person.id);
+  assert.equal(result.match, "provider_transaction");
+  assert.equal(result.transactionOverlap, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions WHERE source_provider='local'
+  `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND provider='local'
+      AND external_id='deposit_payment:deposit-provider-first'
+  `).get(person.id).count, 1);
+});
+
+test("live source ingestion skips cleanly before the CRM schema exists", async () => {
+  const database = new DatabaseSync(":memory:");
+  const result = await ingestCrmSourceRecord(new LocalD1(database), {
+    contact: { displayName: "Pre-migration Client", email: "pre@example.test" },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "submission",
+      sourceId: "pre-migration-submission",
+      interactionType: "tattoo_inquiry",
+    },
+  });
+  assert.equal(result.status, "skipped");
+  assert.equal(result.reason, "schema_unavailable");
+});
+
+test("concurrent live sources with one email converge without orphan people", async () => {
+  const database = migratedDatabase();
+  const d1 = new LocalD1(database);
+  const results = await Promise.all(
+    Array.from({ length: 8 }, (_, index) => ingestCrmSourceRecord(d1, {
+      contact: {
+        displayName: "Concurrent Client",
+        email: "concurrent-crm@example.test",
+      },
+      interaction: {
+        sourceProvider: "local",
+        sourceType: "submission",
+        sourceId: `concurrent-submission-${index}`,
+        nodeId: "node-tattoos",
+        interactionType: "tattoo_inquiry",
+        status: "new",
+      },
+    })),
+  );
+  assert.ok(results.every((result) => result.status === "applied"));
+  assert.equal(database.prepare(
+    `SELECT COUNT(DISTINCT p.id) count
+     FROM crm_people p
+     JOIN crm_identities i ON i.person_id=p.id
+     WHERE i.kind='email' AND i.normalized_value='concurrent-crm@example.test'`
+  ).get().count, 1);
+  assert.equal(database.prepare(
+    `SELECT COUNT(*) count FROM crm_people
+     WHERE display_name='Concurrent Client'`
+  ).get().count, 1);
+  const interactionPeople = database.prepare(
+    `SELECT DISTINCT person_id FROM crm_interactions
+     WHERE source_provider='local' AND source_type='submission'
+       AND source_id LIKE 'concurrent-submission-%'`
+  ).all();
+  assert.equal(interactionPeople.length, 1);
+  assert.ok(interactionPeople[0].person_id);
+  assert.equal(database.prepare(
+    `SELECT COUNT(*) count FROM crm_interactions
+     WHERE source_provider='local' AND source_type='submission'
+       AND source_id LIKE 'concurrent-submission-%'`
+  ).get().count, 8);
+});
+
+test("a real booking enriches only blank or placeholder person fields", async () => {
+  const database = migratedDatabase();
+  const d1 = new LocalD1(database);
+  const initial = await ingestCrmSourceRecord(d1, {
+    contact: { email: "enrich@example.test" },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "newsletter",
+      sourceId: "enrich-newsletter",
+      interactionType: "newsletter_signup",
+    },
+  });
+  assert.equal(initial.status, "applied");
+
+  await ingestCrmSourceRecord(d1, {
+    contact: {
+      displayName: "Actual Client Name",
+      email: "enrich@example.test",
+      organization: "Client Organization",
+      pronouns: "they/them",
+      instagram: "@actualclient",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: "enrich-appointment",
+      nodeId: "node-tattoos",
+      interactionType: "appointment",
+    },
+  });
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT display_name,organization,pronouns,instagram
+       FROM crm_people WHERE id=?`
+    ).get(initial.personId) },
+    {
+      display_name: "Actual Client Name",
+      organization: "Client Organization",
+      pronouns: "they/them",
+      instagram: "actualclient",
+    },
+  );
+
+  database.prepare(
+    `UPDATE crm_people
+     SET display_name='Studio Chosen Name',organization='Studio Organization'
+     WHERE id=?`
+  ).run(initial.personId);
+  await ingestCrmSourceRecord(d1, {
+    contact: {
+      displayName: "Should Not Replace",
+      email: "enrich@example.test",
+      organization: "Should Not Replace",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: "enrich-appointment-2",
+      interactionType: "appointment",
+    },
+  });
+  assert.deepEqual(
+    { ...database.prepare(
+      "SELECT display_name,organization FROM crm_people WHERE id=?"
+    ).get(initial.personId) },
+    {
+      display_name: "Studio Chosen Name",
+      organization: "Studio Organization",
+    },
+  );
+});
+
+test("event tickets, waitlists, and open-mic signups register the same person live", async () => {
+  const database = migratedDatabase();
+  database.prepare(
+    `UPDATE events
+     SET price_cents=0,status='open',waitlist_enabled=1
+     WHERE slug='signal-symbol'`
+  ).run();
+  const runtime = env(database);
+
+  const ticketResponse = await handleEventCheckout(request(
+    "/api/events/signal-symbol/checkout",
+    {
+      method: "POST",
+      body: {
+        name: "Event Person",
+        email: "event-person@example.test",
+        phone: "404-555-0195",
+        seats: 2,
+      },
+    },
+  ), runtime, "signal-symbol");
+  assert.equal(ticketResponse.status, 200, await ticketResponse.text());
+
+  const waitlistResponse = await handleEventWaitlist(request(
+    "/api/events/signal-symbol/waitlist",
+    {
+      method: "POST",
+      body: {
+        name: "Event Person",
+        email: "event-person@example.test",
+        seats: 1,
+      },
+    },
+  ), runtime, "signal-symbol");
+  assert.equal(waitlistResponse.status, 200, await waitlistResponse.text());
+
+  const openMicResponse = await handleEventOpenMicSignup(request(
+    "/api/events/signal-symbol/open-mic",
+    {
+      method: "POST",
+      body: {
+        performerName: "Event Person",
+        performerEmail: "event-person@example.test",
+        actType: "poetry",
+        pieceTitle: "Construct Poem",
+      },
+    },
+  ), runtime, "signal-symbol");
+  assert.equal(openMicResponse.status, 200, await openMicResponse.text());
+
+  const person = database.prepare(
+    `SELECT DISTINCT p.id
+     FROM crm_people p
+     JOIN crm_identities i ON i.person_id=p.id
+     WHERE i.kind='email' AND i.normalized_value='event-person@example.test'`
+  ).get();
+  assert.ok(person?.id);
+  assert.deepEqual(
+    database.prepare(
+      `SELECT interaction_type,status
+       FROM crm_interactions
+       WHERE person_id=?
+       ORDER BY interaction_type`
+    ).all(person.id).map((row) => ({ ...row })),
+    [
+      { interaction_type: "event_ticket_purchase", status: "paid" },
+      { interaction_type: "event_waitlist", status: "new" },
+      { interaction_type: "performance", status: "requested" },
+    ],
+  );
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT status,amount_cents
+       FROM crm_transactions
+       WHERE person_id=? AND source_type='event_ticket_payment'`
+    ).get(person.id) },
+    { status: "settled", amount_cents: 0 },
+  );
+});
+
+test("a late Square payment cannot resurrect a cancelled event ticket", async () => {
+  const database = migratedDatabase();
+  const createdAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,created_at,updated_at,cancelled_at
+    ) VALUES(
+      'terminal-ticket','evt_signal_symbol','Terminal Guest',
+      'terminal-guest@example.test',2,9000,'USD','cancelled',
+      'terminal-ticket-order',?,?,?
+    )
+  `).run(createdAt, createdAt, createdAt);
+
+  const notificationUrl = "https://example.test/api/square-events/webhook";
+  const signatureKey = "events-terminal-webhook-key";
+  const rawBody = JSON.stringify({
+    type: "payment.updated",
+    data: {
+      object: {
+        payment: {
+          id: "terminal-ticket-payment",
+          order_id: "terminal-ticket-order",
+          status: "COMPLETED",
+        },
+      },
+    },
+  });
+  const signature = await eventsWebhookSignature(rawBody, signatureKey, notificationUrl);
+  const webhookRequest = new Request(notificationUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-square-hmacsha256-signature": signature,
+    },
+    body: rawBody,
+  });
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+    SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+  });
+
+  const response = await withMockFetch(async (input, options = {}) => {
+    assert.equal(String(input), "https://connect.squareup.com/v2/orders/terminal-ticket-order");
+    assert.equal(String(options.method || "GET").toUpperCase(), "GET");
+    return Response.json({
+      order: {
+        id: "terminal-ticket-order",
+        state: "COMPLETED",
+        net_amount_due_money: { amount: 0, currency: "USD" },
+      },
+    });
+  }, () => handleEventsSquareWebhook(webhookRequest, runtime));
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  assert.equal(payload.attention, true);
+  assert.equal(payload.ticketStatus, "cancelled");
+  const terminalTicket = database.prepare(`
+    SELECT status,square_payment_id,paid_at
+    FROM event_tickets WHERE id='terminal-ticket'
+  `).get();
+  assert.equal(terminalTicket.status, "cancelled");
+  assert.equal(terminalTicket.square_payment_id, "terminal-ticket-payment");
+  assert.ok(terminalTicket.paid_at);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT i.status,t.status transaction_status,t.amount_cents
+      FROM crm_interactions i
+      JOIN crm_transactions t ON t.person_id=i.person_id
+      WHERE i.source_type='event_ticket' AND i.source_id='terminal-ticket'
+        AND t.source_type='event_ticket_payment' AND t.source_id='terminal-ticket'
+    `).get() },
+    { status: "cancelled", transaction_status: "settled", amount_cents: 9000 },
+  );
+});
+
+test("a repeated paid-ticket webhook repairs a missed CRM mirror without duplicates", async () => {
+  const database = migratedDatabase();
+  const paidAt = "2026-07-02T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,square_payment_id,paid_at,created_at,updated_at
+    ) VALUES(
+      'paid-repair-ticket','evt_signal_symbol','Repair Guest',
+      'repair-guest@example.test',1,4500,'USD','paid',
+      'paid-repair-order','paid-repair-payment',?,?,?
+    )
+  `).run(paidAt, paidAt, paidAt);
+  const notificationUrl = "https://example.test/api/square-events/webhook";
+  const signatureKey = "events-repair-webhook-key";
+  const rawBody = JSON.stringify({
+    type: "payment.updated",
+    data: {
+      object: {
+        payment: {
+          id: "paid-repair-payment",
+          order_id: "paid-repair-order",
+          status: "COMPLETED",
+        },
+      },
+    },
+  });
+  const signature = await eventsWebhookSignature(rawBody, signatureKey, notificationUrl);
+  const makeRequest = () => new Request(notificationUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-square-hmacsha256-signature": signature,
+    },
+    body: rawBody,
+  });
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+    SQUARE_EVENTS_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_EVENTS_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+  });
+
+  const responses = await withMockFetch(async () => Response.json({
+    order: {
+      id: "paid-repair-order",
+      state: "COMPLETED",
+      net_amount_due_money: { amount: 0, currency: "USD" },
+    },
+  }), async () => [
+    await handleEventsSquareWebhook(makeRequest(), runtime),
+    await handleEventsSquareWebhook(makeRequest(), runtime),
+  ]);
+  for (const response of responses) {
+    assert.equal(response.status, 200, await response.text());
+  }
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people
+    WHERE display_name='Repair Guest'
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_interactions
+    WHERE source_type='event_ticket' AND source_id='paid-repair-ticket'
+  `).get().count, 1);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT status,amount_cents FROM crm_transactions
+      WHERE source_type='event_ticket_payment' AND source_id='paid-repair-ticket'
+    `).get() },
+    { status: "settled", amount_cents: 4500 },
+  );
+});
+
+test("a pending event refund is recorded but excluded from settled CRM refunds", async () => {
+  const database = migratedDatabase();
+  const paidAt = "2026-07-02T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,square_payment_id,raw_json,paid_at,created_at,updated_at
+    ) VALUES(
+      'pending-refund-ticket','evt_signal_symbol','Pending Refund Guest',
+      'pending-refund@example.test',1,4500,'USD','paid',
+      'pending-refund-order','pending-refund-payment','{}',?,?,?
+    )
+  `).run(paidAt, paidAt, paidAt);
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+  });
+  const cancelRequest = request(
+    "/api/admin/events/tickets/pending-refund-ticket/cancel",
+    { method: "POST", body: { refund: true }, admin: true },
+  );
+
+  const response = await withMockFetch(async (input, options = {}) => {
+    assert.equal(String(input), "https://connect.squareup.com/v2/refunds");
+    assert.equal(String(options.method || "").toUpperCase(), "POST");
+    return Response.json({
+      refund: {
+        id: "pending-refund-id",
+        status: "PENDING",
+        created_at: "2026-07-03T12:00:00.000Z",
+        updated_at: "2026-07-03T12:00:00.000Z",
+      },
+    });
+  }, () => handleAdminEventTicketCancel(cancelRequest, runtime, "pending-refund-ticket"));
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  assert.deepEqual(payload.refund, {
+    attempted: true,
+    ok: false,
+    accepted: true,
+    completed: false,
+    pending: true,
+    status: "PENDING",
+    refundId: "pending-refund-id",
+    error: null,
+  });
+  const ticket = database.prepare(`
+    SELECT status,refund_id,raw_json FROM event_tickets
+    WHERE id='pending-refund-ticket'
+  `).get();
+  assert.equal(ticket.status, "cancelled");
+  assert.equal(ticket.refund_id, "pending-refund-id");
+  assert.equal(JSON.parse(ticket.raw_json).eventRefund.status, "PENDING");
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_type='event_ticket_refund'
+  `).get().count, 0);
+
+  const backfill = await responseJson(await api(database, "/api/admin/crm/backfill", {
+    method: "POST",
+    body: { limit: 100 },
+  }));
+  assert.equal(backfill.response.status, 200, JSON.stringify(backfill.payload));
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE transaction_type='refund' AND status='settled'
+  `).get().count, 0);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT transaction_type,status,amount_cents
+      FROM crm_transactions WHERE source_type='event_ticket_payment'
+        AND source_id='pending-refund-ticket'
+    `).get() },
+    { transaction_type: "charge", status: "settled", amount_cents: 4500 },
+  );
+});
+
+test("the stale event ticket reaper keeps tickets pending on Square lookup errors", async () => {
+  const database = migratedDatabase();
+  const staleAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,created_at,updated_at
+    ) VALUES(
+      'stale-provider-error','evt_signal_symbol','Stale Guest',
+      'stale-guest@example.test',1,4500,'USD','pending',
+      'stale-provider-order',?,?
+    )
+  `).run(staleAt, staleAt);
+  const runtime = env(database, {
+    SQUARE_ACCESS_TOKEN: "events-square-token",
+    SQUARE_EVENTS_LOCATION_ID: "events-location",
+    SQUARE_ENVIRONMENT: "production",
+  });
+
+  const result = await withMockFetch(
+    async () => Response.json(
+      { errors: [{ detail: "Temporary Square outage" }] },
+      { status: 503 },
+    ),
+    () => reapStalePendingTickets(runtime),
+  );
+  assert.deepEqual(result, { reaped: 0, recovered: 0, failed: 1 });
+  assert.equal(database.prepare(
+    "SELECT status FROM event_tickets WHERE id='stale-provider-error'"
+  ).get().status, "pending");
 });
 
 test("people profiles preserve manual tier judgment and calculate relationship activity and spend", async () => {
@@ -781,6 +1491,174 @@ test("local historical backfill ignores mirrored event submissions and is repeat
   assert.equal(result.payload.person.interactionCount, 1);
 });
 
+test("historical backfill preserves cancelled booking deposits as void", async () => {
+  const database = migratedDatabase();
+  const createdAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO appointments(
+      id,booking_type_id,status,purpose,client_name,client_email,
+      start_at,end_at,deposit_cents,currency,created_at,updated_at
+    ) VALUES(
+      'cancelled-deposit-appointment','tattoo_half','cancelled','tattoo',
+      'Cancelled Deposit Client','cancelled-deposit@example.test',
+      '2026-08-01T12:00:00.000Z','2026-08-01T15:00:00.000Z',
+      10000,'USD',?,?
+    )
+  `).run(createdAt, createdAt);
+  database.prepare(`
+    INSERT INTO deposit_payments(
+      id,appointment_id,provider,amount_cents,currency,status,
+      raw_json,created_at,updated_at
+    ) VALUES(
+      'cancelled-deposit-payment','cancelled-deposit-appointment','square',
+      10000,'USD','cancelled','{}',?,?
+    )
+  `).run(createdAt, createdAt);
+
+  const result = await responseJson(await api(database, "/api/admin/crm/backfill", {
+    method: "POST",
+    body: { limit: 100 },
+  }));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT transaction_type,status,amount_cents
+      FROM crm_transactions
+      WHERE source_provider='local' AND source_type='deposit_payment'
+        AND source_id='cancelled-deposit-payment'
+    `).get() },
+    { transaction_type: "charge", status: "void", amount_cents: 10_000 },
+  );
+});
+
+test("historical backfill does not duplicate a Square transaction imported first", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Square First Guest",
+    email: "square-first-guest@example.test",
+  });
+  const paidAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,
+      external_order_id,note,metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'square-first-event-payment',?,'node-events','charge','settled',4500,0,
+      'USD',?,'square','payment','square-first-payment',
+      'square-first-order','Square ticket payment','{}',1,?,?
+    )
+  `).run(person.id, paidAt, paidAt, paidAt);
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      square_order_id,square_payment_id,paid_at,created_at,updated_at
+    ) VALUES(
+      'square-first-ticket','evt_signal_symbol','Square First Guest',
+      'square-first-guest@example.test',1,4500,'USD','paid',
+      'square-first-order','square-first-payment',?,?,?
+    )
+  `).run(paidAt, paidAt, paidAt);
+
+  const result = await responseJson(await api(database, "/api/admin/crm/backfill", {
+    method: "POST",
+    body: { limit: 100 },
+  }));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions WHERE active=1
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_provider='local' AND active=1
+  `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions WHERE id='square-first-event-payment'
+  `).get().person_id, person.id);
+
+  const profile = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`));
+  assert.equal(profile.response.status, 200);
+  assert.equal(profile.payload.person.netSpendCents, 4_500);
+});
+
+test("historical backfill repairs a cancelled ticket after paid and refunded evidence arrives", async () => {
+  const database = migratedDatabase();
+  const createdAt = "2026-07-01T15:00:00.000Z";
+  const paidAt = "2026-07-02T15:00:00.000Z";
+  const cancelledAt = "2026-07-03T15:00:00.000Z";
+  database.prepare(`
+    INSERT INTO event_tickets(
+      id,event_id,contact_name,contact_email,seats,amount_cents,currency,status,
+      created_at,updated_at,cancelled_at
+    ) VALUES(
+      'ticket-lifecycle-backfill','evt_signal_symbol','Refunded Guest',
+      'refunded-guest@example.test',1,5000,'USD','cancelled',?,?,?
+    )
+  `).run(createdAt, createdAt, createdAt);
+
+  let result = await responseJson(await api(database, "/api/admin/crm/backfill", {
+    method: "POST",
+    body: { limit: 100 },
+  }));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT transaction_type,status,amount_cents
+      FROM crm_transactions
+      WHERE source_provider='local' AND source_type='event_ticket_payment'
+        AND source_id='ticket-lifecycle-backfill'
+    `).get() },
+    { transaction_type: "charge", status: "void", amount_cents: 5000 },
+  );
+
+  database.prepare(`
+    UPDATE event_tickets
+    SET paid_at=?,square_payment_id='square-ticket-lifecycle-payment',
+        refund_id='square-ticket-lifecycle-refund',
+        raw_json='{"eventRefund":{"id":"square-ticket-lifecycle-refund","status":"COMPLETED"}}',
+        cancelled_at=?,updated_at=?
+    WHERE id='ticket-lifecycle-backfill'
+  `).run(paidAt, cancelledAt, cancelledAt);
+  result = await responseJson(await api(database, "/api/admin/crm/backfill", {
+    method: "POST",
+    body: { limit: 100 },
+  }));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+
+  assert.deepEqual(
+    database.prepare(`
+      SELECT transaction_type,status,amount_cents,source_type,source_id
+      FROM crm_transactions
+      WHERE source_provider='local' AND person_id IS NOT NULL
+      ORDER BY transaction_type
+    `).all().map((row) => ({ ...row })),
+    [
+      {
+        transaction_type: "charge",
+        status: "settled",
+        amount_cents: 5000,
+        source_type: "event_ticket_payment",
+        source_id: "ticket-lifecycle-backfill",
+      },
+      {
+        transaction_type: "refund",
+        status: "settled",
+        amount_cents: 5000,
+        source_type: "event_ticket_refund",
+        source_id: "square-ticket-lifecycle-refund",
+      },
+    ],
+  );
+  const person = database.prepare(
+    "SELECT id FROM crm_people WHERE display_name='Refunded Guest'"
+  ).get();
+  result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.person.settledGrossCents, 5_000);
+  assert.equal(result.payload.person.refundCents, 5_000);
+  assert.equal(result.payload.person.netSpendCents, 0);
+});
+
 test("CRM provider status reports integration readiness without exposing credentials", async () => {
   const database = migratedDatabase();
 
@@ -886,7 +1764,7 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
   assert.deepEqual(
     database.prepare(`
       SELECT kind,value,normalized_value,provider,external_id
-      FROM crm_identities WHERE person_id=? ORDER BY kind
+      FROM crm_identities WHERE person_id=? AND active=1 ORDER BY kind
     `).all(person.id).map((row) => ({ ...row })),
     [
       {
@@ -959,7 +1837,9 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(result.payload.status, "complete");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_identities").get().count, 2);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_identities WHERE active=1"
+  ).get().count, 2);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 1);
   assert.deepEqual(
@@ -979,6 +1859,83 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
   assert.equal(result.payload.local.transactionCount, 1);
 });
 
+test("concurrent Square syncs converge one provider customer without orphan people", async (t) => {
+  const database = migratedDatabase();
+  const occurredAt = "2026-07-11T16:00:00.000Z";
+  installSquareApiMock(t, {
+    payments: [
+      {
+        id: "square-payment-concurrent",
+        status: "COMPLETED",
+        customer_id: "square-customer-concurrent",
+        order_id: "square-order-concurrent",
+        location_id: "square-tattoo-location",
+        buyer_email_address: "square-concurrent@example.test",
+        total_money: { amount: 18_000, currency: "USD" },
+        tip_money: { amount: 2_000, currency: "USD" },
+        source_type: "CARD",
+        reference_id: "Concurrent Square payment",
+        created_at: occurredAt,
+        updated_at: occurredAt,
+      },
+      {
+        id: "square-payment-concurrent-second",
+        status: "COMPLETED",
+        customer_id: "square-customer-concurrent-second",
+        order_id: "square-order-concurrent-second",
+        location_id: "square-tattoo-location",
+        buyer_email_address: "square-concurrent@example.test",
+        total_money: { amount: 9_000, currency: "USD" },
+        tip_money: { amount: 0, currency: "USD" },
+        source_type: "CARD",
+        reference_id: "Second concurrent Square payment",
+        created_at: occurredAt,
+        updated_at: occurredAt,
+      },
+    ],
+  });
+
+  const responses = await Promise.all(
+    Array.from({ length: 2 }, () => api(database, "/api/admin/crm/sync/square", {
+      method: "POST",
+      body: { mode: "full", maxPages: 4 },
+      env: SQUARE_SYNC_ENV,
+    })),
+  );
+  for (const response of responses) {
+    const result = await responseJson(response);
+    assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+    assert.equal(result.payload.status, "complete");
+  }
+
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
+  const personId = database.prepare("SELECT id FROM crm_people").get().id;
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='square'
+      AND external_id IN (
+        'square-customer-concurrent',
+        'square-customer-concurrent-second'
+      )
+      AND person_id=?
+  `).get(personId).count, 2);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE kind='email' AND normalized_value='square-concurrent@example.test'
+      AND person_id=?
+  `).get(personId).count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_interactions
+    WHERE source_provider='square' AND source_type='payment'
+      AND source_id LIKE 'square-payment-concurrent%' AND person_id=?
+  `).get(personId).count, 2);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_provider='square' AND source_type='payment'
+      AND source_id LIKE 'square-payment-concurrent%' AND person_id=?
+  `).get(personId).count, 2);
+});
+
 test("Square sync recognizes a local providerPaymentId mirror without double-counting spend", async (t) => {
   const database = migratedDatabase();
   const person = await createPerson(database, {
@@ -992,7 +1949,7 @@ test("Square sync recognizes a local providerPaymentId mirror without double-cou
       currency,occurred_at,source_provider,source_type,source_id,note,
       metadata_json,active,created_at,updated_at
     ) VALUES(
-      'local-mirrored-transaction',?,'node-tattoos','charge','settled',
+      'local-mirrored-transaction',?,'node-tattoos','charge','pending',
       22000,4000,'USD',?,'local','appointment_payment','appointment-22',
       'Settled appointment payment',?,1,?,?
     )
@@ -1011,7 +1968,6 @@ test("Square sync recognizes a local providerPaymentId mirror without double-cou
       customer_id: "square-customer-mirrored",
       order_id: "square-order-mirrored",
       location_id: "square-tattoo-location",
-      buyer_email_address: "already-paid@example.com",
       total_money: { amount: 22_000, currency: "USD" },
       tip_money: { amount: 4_000, currency: "USD" },
       source_type: "CARD",
@@ -1047,10 +2003,189 @@ test("Square sync recognizes a local providerPaymentId mirror without double-cou
     SELECT COUNT(*) count FROM crm_identities
     WHERE person_id=? AND provider='square'
   `).get(person.id).count, 1);
+  assert.equal(database.prepare(`
+    SELECT status FROM crm_transactions WHERE id='local-mirrored-transaction'
+  `).get().status, "settled");
 
   result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`));
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.person.settledGrossCents, 22_000);
   assert.equal(result.payload.person.netSpendCents, 22_000);
   assert.equal(result.payload.person.tipCents, 4_000);
+});
+
+test("Square sync surfaces exact person-anchor disagreements for owner review", async (t) => {
+  const database = migratedDatabase();
+  const localPerson = await createPerson(database, {
+    displayName: "Local Booking Owner",
+    email: "local-anchor@example.test",
+  });
+  const providerPerson = await createPerson(database, {
+    displayName: "Provider Identity Owner",
+    email: "provider-anchor@example.test",
+  });
+  const occurredAt = "2026-07-11T16:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,
+      source_provider,source_type,source_id,created_at,updated_at
+    ) VALUES(
+      'square-conflicting-customer-identity',?,'square_customer',
+      'square-customer-conflict','square-customer-conflict','square',
+      'square-customer-conflict','square','provider_contact',
+      'square:square-customer-conflict',?,?
+    )
+  `).run(providerPerson.id, occurredAt, occurredAt);
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'local-anchor-payment',?,'node-tattoos','charge','pending',12000,0,
+      'USD',?,'local','deposit_payment','local-anchor-deposit',
+      '{"providerPaymentId":"square-payment-anchor-conflict"}',1,?,?
+    )
+  `).run(localPerson.id, occurredAt, occurredAt, occurredAt);
+
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-anchor-conflict",
+      status: "COMPLETED",
+      customer_id: "square-customer-conflict",
+      order_id: "square-order-anchor-conflict",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 12_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Conflicting anchor payment",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare(
+    "SELECT status FROM crm_transactions WHERE id='local-anchor-payment'"
+  ).get().status, "settled");
+
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  assert.equal(attention.response.status, 200);
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+  );
+  assert.ok(conflict);
+  const metadata = JSON.parse(conflict.metadata_json);
+  assert.deepEqual(metadata.conflicts, ["exact_identity_anchor_disagreement"]);
+  assert.deepEqual(
+    [...metadata.personIds].sort(),
+    [localPerson.id, providerPerson.id].sort(),
+  );
+});
+
+test("Square sync recognizes a local providerRefundId mirror without double-counting refunds", async (t) => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Already Refunded Client",
+    email: "already-refunded@example.com",
+  });
+  const paidAt = "2026-07-11T16:00:00.000Z";
+  const refundedAt = "2026-07-12T17:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,note,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'local-refunded-charge',?,'node-events','charge','settled',
+      12000,0,'USD',?,'local','event_ticket','event-ticket-12',
+      'Settled event ticket',?,1,?,?
+    )
+  `).run(
+    person.id,
+    paidAt,
+    JSON.stringify({ providerPaymentId: "square-payment-refunded" }),
+    paidAt,
+    paidAt,
+  );
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,note,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'local-mirrored-refund',?,'node-events','refund','pending',
+      5000,0,'USD',?,'local','event_ticket_refund','event-ticket-12-refund',
+      'Settled event ticket refund',?,1,?,?
+    )
+  `).run(
+    person.id,
+    refundedAt,
+    JSON.stringify({ providerRefundId: "square-refund-mirrored" }),
+    refundedAt,
+    refundedAt,
+  );
+
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-refunded",
+      status: "COMPLETED",
+      customer_id: "square-customer-refunded",
+      order_id: "square-order-refunded",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "already-refunded@example.com",
+      total_money: { amount: 12_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Mirrored event ticket payment",
+      created_at: paidAt,
+      updated_at: paidAt,
+    }],
+    refunds: [{
+      id: "square-refund-mirrored",
+      status: "COMPLETED",
+      payment_id: "square-payment-refunded",
+      order_id: "square-order-refunded",
+      location_id: "square-tattoo-location",
+      amount_money: { amount: 5_000, currency: "USD" },
+      reason: "Partial ticket refund",
+      created_at: refundedAt,
+      updated_at: refundedAt,
+    }],
+  });
+
+  let result = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  assert.deepEqual(result.payload.stats.persistence, {
+    interactions: 1,
+    transactions: 0,
+    unmatched: 0,
+    overlapsSkipped: 2,
+  });
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 2);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions WHERE source_provider='square'
+  `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE transaction_type='refund' AND status='settled'
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT status FROM crm_transactions WHERE id='local-mirrored-refund'
+  `).get().status, "settled");
+
+  result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.person.settledGrossCents, 12_000);
+  assert.equal(result.payload.person.refundCents, 5_000);
+  assert.equal(result.payload.person.netSpendCents, 7_000);
 });

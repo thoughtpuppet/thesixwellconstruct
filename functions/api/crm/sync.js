@@ -51,6 +51,73 @@ function recordId(prefix) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+async function setSyncConflict(database, {
+  provider,
+  sourceType,
+  sourceId,
+  conflicts = [],
+  personIds = [],
+}) {
+  const normalizedProvider = text(provider, 80) || "provider";
+  const normalizedSourceType = text(sourceType, 120) || "record";
+  const normalizedSourceId = text(sourceId, 300);
+  if (!normalizedSourceId) return;
+  const attentionSourceId = text(
+    `crm-sync-conflict:${normalizedProvider}:${normalizedSourceType}:${normalizedSourceId}`,
+    500,
+  );
+  const now = nowIso();
+  const normalizedConflicts = [...new Set(conflicts.map((value) => text(value, 120)).filter(Boolean))];
+  if (!normalizedConflicts.length) {
+    await database.prepare(`
+      UPDATE crm_interactions
+      SET status='resolved',active=0,updated_at=?
+      WHERE source_provider='system' AND source_type='crm_sync_conflict'
+        AND source_id=?
+    `).bind(now, attentionSourceId).run();
+    return;
+  }
+  const metadataJson = JSON.stringify({
+    conflicts: normalizedConflicts,
+    source: {
+      provider: normalizedProvider,
+      type: normalizedSourceType,
+      id: normalizedSourceId,
+    },
+    personIds: [...new Set(personIds.map((value) => text(value, 200)).filter(Boolean))],
+  });
+  await database.batch([
+    database.prepare(`
+      INSERT OR IGNORE INTO crm_interactions(
+        id,person_id,node_id,channel,interaction_type,label,status,quantity,
+        occurred_at,source_provider,source_type,source_id,metadata_json,
+        active,created_at,updated_at
+      ) VALUES(
+        ?,NULL,NULL,'system','crm_sync_conflict',
+        'Provider identity or payment conflict','needs_review',1,?,
+        'system','crm_sync_conflict',?,?,1,?,?
+      )
+    `).bind(
+      recordId("crm-interaction"),
+      now,
+      attentionSourceId,
+      metadataJson,
+      now,
+      now,
+    ),
+    database.prepare(`
+      UPDATE crm_interactions
+      SET person_id=NULL,node_id=NULL,channel='system',
+        interaction_type='crm_sync_conflict',
+        label='Provider identity or payment conflict',
+        status='needs_review',quantity=1,occurred_at=?,
+        metadata_json=?,active=1,updated_at=?
+      WHERE source_provider='system' AND source_type='crm_sync_conflict'
+        AND source_id=?
+    `).bind(now, metadataJson, now, attentionSourceId),
+  ]);
+}
+
 function parseJson(value, fallback = {}) {
   try {
     const parsed = JSON.parse(value || "");
@@ -81,18 +148,22 @@ async function readObject(request) {
   }
 }
 
-async function uniqueEmailPerson(database, email) {
+async function emailPersonMatch(database, email) {
   const normalized = normalizeEmail(email);
-  if (!normalized) return null;
+  if (!normalized) return { personId: null, ambiguous: false };
   const result = await database.prepare(`
-    SELECT DISTINCT COALESCE(p.merged_into_id,p.id) person_id
+    SELECT DISTINCT COALESCE(p.merged_into_id,p.id) person_id,i.is_shared
     FROM crm_identities i
     JOIN crm_people p ON p.id=i.person_id
     WHERE i.kind='email' AND i.normalized_value=? AND i.active=1
-      AND i.is_shared=0 AND p.anonymized_at IS NULL
+      AND p.anonymized_at IS NULL
   `).bind(normalized).all();
   const ids = [...new Set((result.results || []).map((row) => row.person_id).filter(Boolean))];
-  return ids.length === 1 ? ids[0] : null;
+  const shared = (result.results || []).some((row) => Boolean(row.is_shared));
+  return {
+    personId: ids.length === 1 && !shared ? ids[0] : null,
+    ambiguous: shared || ids.length > 1,
+  };
 }
 
 async function providerIdentityPerson(database, provider, externalId) {
@@ -105,6 +176,72 @@ async function providerIdentityPerson(database, provider, externalId) {
     LIMIT 1
   `).bind(provider, externalId).first();
   return row?.person_id || null;
+}
+
+async function canonicalPersonId(database, value) {
+  let personId = text(value, 200);
+  const seen = new Set();
+  while (personId && !seen.has(personId)) {
+    seen.add(personId);
+    const row = await database.prepare(
+      "SELECT id,merged_into_id FROM crm_people WHERE id=? LIMIT 1"
+    ).bind(personId).first();
+    if (!row) return null;
+    if (!row.merged_into_id) return row.id;
+    personId = text(row.merged_into_id, 200);
+  }
+  return null;
+}
+
+async function emailClaimOwner(database, normalizedEmail) {
+  if (!normalizedEmail) return null;
+  const row = await database.prepare(`
+    SELECT person_id FROM crm_identities
+    WHERE provider='crm_email_claim' AND external_id=?
+    LIMIT 1
+  `).bind(normalizedEmail).first();
+  return row?.person_id ? canonicalPersonId(database, row.person_id) : null;
+}
+
+async function addEmailClaim(database, personId, normalizedEmail, now) {
+  if (!personId || !normalizedEmail) return;
+  await database.prepare(`
+    INSERT OR IGNORE INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES(?,?,'other',?,?,'crm_email_claim',?,'',0,0,0,
+      'system','email_claim',NULL,0,?,?)
+  `).bind(
+    recordId("crm-identity"),
+    personId,
+    normalizedEmail,
+    normalizedEmail,
+    normalizedEmail,
+    now,
+    now,
+  ).run();
+}
+
+async function convergeFreshProviderPerson(database, losingPersonId, winningPersonId) {
+  const losing = await canonicalPersonId(database, losingPersonId);
+  const winning = await canonicalPersonId(database, winningPersonId);
+  if (!losing || !winning || losing === winning) return winning || losing || null;
+  const now = nowIso();
+  await database.batch([
+    database.prepare(`
+      UPDATE OR IGNORE crm_identities
+      SET person_id=?,updated_at=?
+      WHERE person_id=?
+    `).bind(winning, now, losing),
+    database.prepare(`
+      INSERT OR IGNORE INTO crm_person_tags(person_id,tag_id,source,import_batch_id,created_at)
+      SELECT ?,tag_id,source,import_batch_id,created_at
+      FROM crm_person_tags WHERE person_id=?
+    `).bind(winning, losing),
+    database.prepare("DELETE FROM crm_people WHERE id=?").bind(losing),
+  ]);
+  return winning;
 }
 
 async function addIdentity(database, personId, {
@@ -193,11 +330,33 @@ async function ensureProviderPerson(database, {
   verifiedEmail = false,
   occurredAt,
   tags = [],
+  preferredPersonId = null,
+  conflictSourceType = "provider_contact",
+  conflictSourceId = null,
 }) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedPhone = normalizePhone(phone);
-  let personId = await providerIdentityPerson(database, provider, externalId);
-  if (!personId && normalizedEmail) personId = await uniqueEmailPerson(database, normalizedEmail);
+  const preferred = await canonicalPersonId(database, preferredPersonId);
+  const providerPersonId = await providerIdentityPerson(database, provider, externalId);
+  const emailMatch = await emailPersonMatch(database, normalizedEmail);
+  const claimedEmailPersonId = await emailClaimOwner(database, normalizedEmail);
+  const exactAnchors = [...new Set([
+    preferred,
+    providerPersonId,
+    claimedEmailPersonId,
+    emailMatch.personId,
+  ].filter(Boolean))];
+  const conflictRecordId = text(conflictSourceId || externalId, 300);
+  if (conflictRecordId) {
+    await setSyncConflict(database, {
+      provider,
+      sourceType: conflictSourceType,
+      sourceId: conflictRecordId,
+      conflicts: exactAnchors.length > 1 ? ["exact_identity_anchor_disagreement"] : [],
+      personIds: exactAnchors,
+    });
+  }
+  let personId = preferred || providerPersonId || claimedEmailPersonId || emailMatch.personId;
   if (!personId && !externalId && !normalizedEmail && !normalizedPhone) return null;
 
   const now = nowIso();
@@ -218,6 +377,9 @@ async function ensureProviderPerson(database, {
       now,
     ).run();
   }
+  if (normalizedEmail && !emailMatch.ambiguous) {
+    await addEmailClaim(database, personId, normalizedEmail, now);
+  }
 
   const kind = IDENTITY_KINDS[provider];
   if (kind && externalId) {
@@ -231,7 +393,10 @@ async function ensureProviderPerson(database, {
       sourceId: `${provider}:${externalId}`,
     });
   }
-  if (normalizedEmail) {
+  const emailMayAttach = normalizedEmail
+    && !emailMatch.ambiguous
+    && (!emailMatch.personId || emailMatch.personId === personId);
+  if (emailMayAttach) {
     await addIdentity(database, personId, {
       kind: "email",
       value: normalizedEmail,
@@ -255,6 +420,17 @@ async function ensureProviderPerson(database, {
     });
   }
   await addTags(database, personId, tags, provider);
+  if (created) {
+    const claimedPersonId = normalizedEmail && !emailMatch.ambiguous
+      ? await emailClaimOwner(database, normalizedEmail)
+      : null;
+    const providerOwnerId = await providerIdentityPerson(database, provider, externalId);
+    const winningPersonId = claimedPersonId || preferred || providerOwnerId
+      || emailMatch.personId || personId;
+    if (winningPersonId !== personId) {
+      personId = await convergeFreshProviderPerson(database, personId, winningPersonId);
+    }
+  }
   return personId;
 }
 
@@ -525,13 +701,15 @@ async function upsertSubscription(database, {
 
 async function persistSquare(database, records, counts) {
   for (const payment of records.payments || []) {
-    let personId = await ensureProviderPerson(database, {
-      provider: "square",
-      externalId: payment.customerExternalId,
-      displayName: payment.email,
-      email: payment.email,
-      occurredAt: payment.occurredAt,
-    });
+    const paymentAmountCents = Number.isSafeInteger(Number(payment.amount?.amountMinor))
+      ? Number(payment.amount.amountMinor)
+      : null;
+    const paymentTipCents = Number.isSafeInteger(Number(payment.tip?.amountMinor))
+      ? Number(payment.tip.amountMinor)
+      : null;
+    const paymentCurrency = payment.amount?.currency
+      ? normalizeCurrency(payment.amount.currency)
+      : null;
     const mirrored = await database.prepare(`
       SELECT id,person_id FROM crm_transactions
       WHERE source_provider='local' AND active=1
@@ -539,6 +717,7 @@ async function persistSquare(database, records, counts) {
           json_extract(metadata_json,'$.providerPaymentId')=?
           OR (
             COALESCE(?,'')!=''
+            AND ? IS NOT NULL
             AND external_order_id=?
             AND amount_cents=?
           )
@@ -547,13 +726,55 @@ async function persistSquare(database, records, counts) {
     `).bind(
       payment.externalId,
       payment.orderExternalId,
+      paymentAmountCents,
       payment.orderExternalId,
-      safeInteger(payment.amount?.amountMinor, 0),
+      paymentAmountCents,
     ).first();
+    let personId = await ensureProviderPerson(database, {
+      provider: "square",
+      externalId: payment.customerExternalId,
+      displayName: payment.email,
+      email: payment.email,
+      occurredAt: payment.occurredAt,
+      preferredPersonId: mirrored?.person_id || null,
+      conflictSourceType: "payment",
+      conflictSourceId: payment.externalId,
+    });
     if (mirrored) {
-      personId ||= mirrored.person_id || null;
+      personId = mirrored.person_id || personId || null;
+      await database.prepare(`
+        UPDATE crm_transactions
+        SET person_id=COALESCE(person_id,?),node_id=COALESCE(?,node_id),
+          status='settled',
+          amount_cents=COALESCE(?,amount_cents),
+          tip_cents=COALESCE(?,tip_cents),
+          currency=COALESCE(?,currency),
+          occurred_at=COALESCE(?,occurred_at),
+          external_customer_id=COALESCE(?,external_customer_id),
+          external_order_id=COALESCE(?,external_order_id),
+          metadata_json=json_set(
+            CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+            '$.providerPaymentId',?,
+            '$.squareLocationId',?
+          ),
+          active=1,updated_at=?
+        WHERE id=?
+      `).bind(
+        personId,
+        payment.nodeId,
+        paymentAmountCents,
+        paymentTipCents,
+        paymentCurrency,
+        payment.occurredAt || null,
+        payment.customerExternalId || null,
+        payment.orderExternalId || null,
+        payment.externalId,
+        payment.locationId || null,
+        nowIso(),
+        mirrored.id,
+      ).run();
       counts.overlapsSkipped += 1;
-    } else if (payment.amount?.amountMinor !== null && payment.amount?.amountMinor !== undefined) {
+    } else if (paymentAmountCents !== null) {
       const inserted = await upsertTransaction(database, {
         personId,
         provider: "square",
@@ -562,8 +783,8 @@ async function persistSquare(database, records, counts) {
         nodeId: payment.nodeId,
         transactionType: "charge",
         status: "settled",
-        amountCents: safeInteger(payment.amount.amountMinor, 0),
-        tipCents: safeInteger(payment.tip?.amountMinor, 0),
+        amountCents: paymentAmountCents,
+        tipCents: paymentTipCents || 0,
         currency: payment.amount.currency,
         occurredAt: payment.occurredAt,
         externalCustomerId: payment.customerExternalId,
@@ -599,6 +820,12 @@ async function persistSquare(database, records, counts) {
     if (!personId) counts.unmatched += 1;
   }
   for (const refund of records.refunds || []) {
+    const refundAmountCents = Number.isSafeInteger(Number(refund.amount?.amountMinor))
+      ? Number(refund.amount.amountMinor)
+      : null;
+    const refundCurrency = refund.amount?.currency
+      ? normalizeCurrency(refund.amount.currency)
+      : null;
     const payment = refund.paymentExternalId
       ? await database.prepare(`
           SELECT person_id FROM crm_transactions
@@ -608,27 +835,80 @@ async function persistSquare(database, records, counts) {
           ) AND active=1 LIMIT 1
         `).bind(refund.paymentExternalId, refund.paymentExternalId).first()
       : null;
-    const personId = payment?.person_id || null;
-    const inserted = await upsertTransaction(database, {
-      personId,
+    const mirroredRefund = await database.prepare(`
+      SELECT id,person_id FROM crm_transactions
+      WHERE source_provider='local' AND transaction_type='refund' AND active=1
+        AND (
+          source_id=?
+          OR json_extract(metadata_json,'$.providerRefundId')=?
+        )
+      LIMIT 1
+    `).bind(refund.externalId, refund.externalId).first();
+    const refundPersonIds = [...new Set([
+      payment?.person_id,
+      mirroredRefund?.person_id,
+    ].filter(Boolean))];
+    await setSyncConflict(database, {
       provider: "square",
       sourceType: "refund",
       sourceId: refund.externalId,
-      nodeId: refund.nodeId,
-      transactionType: "refund",
-      status: "settled",
-      amountCents: safeInteger(refund.amount?.amountMinor, 0),
-      currency: refund.amount?.currency,
-      occurredAt: refund.occurredAt,
-      externalOrderId: refund.orderExternalId,
-      note: refund.reason || "Square refund",
-      metadata: {
-        paymentExternalId: refund.paymentExternalId,
-        locationId: refund.locationId,
-        locationKey: refund.locationKey,
-      },
+      conflicts: refundPersonIds.length > 1 ? ["payment_refund_person_disagreement"] : [],
+      personIds: refundPersonIds,
     });
-    if (inserted) counts.transactions += 1;
+    const personId = payment?.person_id || mirroredRefund?.person_id || null;
+    if (mirroredRefund) {
+      await database.prepare(`
+        UPDATE crm_transactions
+        SET person_id=COALESCE(person_id,?),node_id=COALESCE(?,node_id),
+          status='settled',
+          amount_cents=COALESCE(?,amount_cents),
+          currency=COALESCE(?,currency),
+          occurred_at=COALESCE(?,occurred_at),
+          external_order_id=COALESCE(?,external_order_id),
+          metadata_json=json_set(
+            CASE WHEN json_valid(metadata_json) THEN metadata_json ELSE '{}' END,
+            '$.providerRefundId',?,
+            '$.providerPaymentId',?,
+            '$.squareLocationId',?
+          ),
+          active=1,updated_at=?
+        WHERE id=?
+      `).bind(
+        personId,
+        refund.nodeId,
+        refundAmountCents,
+        refundCurrency,
+        refund.occurredAt || null,
+        refund.orderExternalId || null,
+        refund.externalId,
+        refund.paymentExternalId || "",
+        refund.locationId || null,
+        nowIso(),
+        mirroredRefund.id,
+      ).run();
+      counts.overlapsSkipped += 1;
+    } else if (refundAmountCents !== null) {
+      const inserted = await upsertTransaction(database, {
+        personId,
+        provider: "square",
+        sourceType: "refund",
+        sourceId: refund.externalId,
+        nodeId: refund.nodeId,
+        transactionType: "refund",
+        status: "settled",
+        amountCents: refundAmountCents,
+        currency: refund.amount?.currency,
+        occurredAt: refund.occurredAt,
+        externalOrderId: refund.orderExternalId,
+        note: refund.reason || "Square refund",
+        metadata: {
+          paymentExternalId: refund.paymentExternalId,
+          locationId: refund.locationId,
+          locationKey: refund.locationKey,
+        },
+      });
+      if (inserted) counts.transactions += 1;
+    }
     if (!personId) counts.unmatched += 1;
   }
 }
@@ -669,6 +949,8 @@ async function persistShopify(database, records, counts) {
       verifiedEmail: customer.verifiedEmail,
       occurredAt: customer.createdAt,
       tags: customer.tags,
+      conflictSourceType: "customer",
+      conflictSourceId: customer.externalId,
     });
     await persistShopifyMarketing(database, personId, customer);
     if (!personId) counts.unmatched += 1;
@@ -685,6 +967,8 @@ async function persistShopify(database, records, counts) {
       verifiedEmail: contact.verifiedEmail,
       occurredAt: order.occurredAt,
       tags: order.tags,
+      conflictSourceType: "order",
+      conflictSourceId: order.externalId,
     });
     await persistShopifyMarketing(database, personId, contact);
     await upsertInteraction(database, {
@@ -768,6 +1052,8 @@ async function persistBeehiiv(database, records, counts) {
       displayName: subscription.email,
       email: subscription.email,
       occurredAt: subscription.subscribedAt,
+      conflictSourceType: "subscription",
+      conflictSourceId: subscription.externalId,
     });
     await upsertSubscription(database, {
       personId,
@@ -876,17 +1162,30 @@ async function selectResumeCheckpoint(database, provider, mode) {
     SELECT * FROM crm_sync_jobs WHERE provider=?
     ORDER BY created_at DESC LIMIT 1
   `).bind(provider).first();
-  if (!latest) return { job: null, checkpoint: null };
+  if (!latest) return { job: null, checkpoint: null, busy: false };
   const checkpoint = parseJson(latest.checkpoint_json, null);
-  if (!checkpoint) return { job: null, checkpoint: null };
+  if (latest.status === "running") {
+    const updatedAtMs = new Date(latest.updated_at || latest.started_at || 0).getTime();
+    const stale = !Number.isFinite(updatedAtMs)
+      || Date.now() - updatedAtMs > 15 * 60 * 1000;
+    if (!stale || (checkpoint?.mode && checkpoint.mode !== mode)) {
+      return { job: null, checkpoint: null, busy: true };
+    }
+    return {
+      job: latest,
+      checkpoint: checkpoint || { mode, complete: false },
+      busy: false,
+    };
+  }
+  if (!checkpoint) return { job: null, checkpoint: null, busy: false };
   if (
     checkpoint.complete === false
     && checkpoint.mode === mode
-    && ["pending", "failed", "running"].includes(latest.status)
+    && ["pending", "failed"].includes(latest.status)
   ) {
-    return { job: latest, checkpoint };
+    return { job: latest, checkpoint, busy: false };
   }
-  if (checkpoint.complete === true) return { job: null, checkpoint };
+  if (checkpoint.complete === true) return { job: null, checkpoint, busy: false };
   const completed = await database.prepare(`
     SELECT * FROM crm_sync_jobs
     WHERE provider=? AND status='complete'
@@ -895,6 +1194,7 @@ async function selectResumeCheckpoint(database, provider, mode) {
   return {
     job: null,
     checkpoint: completed ? parseJson(completed.checkpoint_json, null) : null,
+    busy: false,
   };
 }
 
@@ -908,15 +1208,36 @@ export async function handleCrmProviderSync(request, database, env, providerValu
   const mode = body.mode === "full" ? "full" : "incremental";
   const maxPages = Math.max(1, Math.min(4, safeInteger(body.maxPages, 1)));
   const resume = await selectResumeCheckpoint(database, provider, mode);
+  if (resume.busy) {
+    return failure("A sync for this provider is already running.", 409, {
+      code: "SYNC_ALREADY_RUNNING",
+    });
+  }
   const jobId = resume.job?.id || recordId("crm-sync");
   const startedAt = nowIso();
   if (resume.job) {
-    await database.prepare(`
+    const claimed = await database.prepare(`
       UPDATE crm_sync_jobs
       SET status='running',error='',started_at=COALESCE(started_at,?),updated_at=?
-      WHERE id=?
-    `).bind(startedAt, startedAt, jobId).run();
+      WHERE id=? AND status=? AND updated_at=?
+    `).bind(
+      startedAt,
+      startedAt,
+      jobId,
+      resume.job.status,
+      resume.job.updated_at,
+    ).run();
+    if (Number(claimed?.meta?.changes || 0) < 1) {
+      return failure("A sync for this provider is already running.", 409, {
+        code: "SYNC_ALREADY_RUNNING",
+      });
+    }
   } else {
+    const initialCheckpoint = {
+      ...(resume.checkpoint || {}),
+      mode,
+      complete: false,
+    };
     await database.prepare(`
       INSERT INTO crm_sync_jobs(
         id,provider,status,checkpoint_json,stats_json,warnings_json,error,
@@ -925,7 +1246,7 @@ export async function handleCrmProviderSync(request, database, env, providerValu
     `).bind(
       jobId,
       provider,
-      JSON.stringify(resume.checkpoint || {}),
+      JSON.stringify(initialCheckpoint),
       startedAt,
       startedAt,
       startedAt,

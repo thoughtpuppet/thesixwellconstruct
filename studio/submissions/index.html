@@ -60,6 +60,7 @@
   .hub-entry:hover { border-color:var(--accent); }
   .hub-entry .he-top { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
   .hub-entry .he-kind { font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; }
+  .hub-entry .he-when { color:var(--dim); font-family:var(--sans); font-size:10px; text-align:right; }
   .hub-entry.kind-tattoo .he-kind { color:var(--color-tattooing-bright,#9A2323); }
   .hub-entry.kind-art .he-kind { color:var(--color-art-bright,#0F72DB); }
   .hub-entry.kind-event .he-kind { color:var(--color-events-bright,#397F34); }
@@ -2303,7 +2304,7 @@
           <div class="tattoo-settings-list">${tattooSettings.specialProjects.map(specialProjectRow).join("") || '<p class="empty">No Special Project calls configured.</p>'}</div>
         </section>
         <section class="tattoo-settings-card">
-          <h3>Session Estimate Copy</h3>
+          <h3>Session Plan Copy</h3>
           <p class="contact">Global wording for every private tattoo booking link. A client-specific estimate note can still override the default note without changing this template.</p>
           <div class="session-plan-grid">
             ${sessionEstimateCopyEditor(settingValue(settings, "sessionEstimateCopy", "session_estimate_copy", {}))}
@@ -2358,7 +2359,7 @@
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Session</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Session</span></label>
             </div>
-            <label class="field">Session estimate wording <span class="contact">(client-facing)</span>
+            <label class="field">Session plan wording <span class="contact">(client-facing)</span>
               <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(estimateCopy.fallbackNote || "")}</textarea>
               <span class="contact">This appears inside the client’s Session Estimate section. You can edit it again from the Studio record.</span>
             </label>
@@ -2974,6 +2975,62 @@
     return map;
   }
 
+  function upcomingHomeEntries() {
+    const now = Date.now();
+    return [
+      ...liveAppointments()
+        .filter((appointment) => appointment.startAt && Date.parse(appointment.startAt) >= now && appointment.status !== "completed")
+        .map((appointment) => ({ kind: "appointment", startsAt: appointment.startAt, record: appointment })),
+      ...events
+        .filter((event) => event.startsAt && Date.parse(event.startsAt) >= now && !["cancelled", "completed"].includes(event.status))
+        .map((event) => ({ kind: "event", startsAt: event.startsAt, record: event })),
+    ]
+      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  }
+
+  function homeWhen(value, includeDate = false) {
+    if (!value) return "";
+    const options = includeDate
+      ? { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
+      : { hour: "numeric", minute: "2-digit" };
+    return new Date(value).toLocaleString([], options);
+  }
+
+  function homeAppointmentCard(appointment, includeDate = false) {
+    const kind = homeAppointmentKind(appointment);
+    const kindLabel = kind === "art" ? "Art Studio" : "Tattoo";
+    return `
+      <button class="hub-entry kind-appt kind-${escapeHtml(kind)}" type="button" data-home-appointment="${escapeHtml(appointment.id || "")}" data-appt-submission="${escapeHtml(appointment.submissionId || "")}">
+        <span class="he-top"><span class="he-kind">${escapeHtml(kindLabel)}</span><span class="he-when">${escapeHtml(homeWhen(appointment.startAt, includeDate))}</span></span>
+        <span class="name">${escapeHtml(appointment.clientName || "Unnamed")}</span>
+        <span class="appt-meta">${escapeHtml(titleize(appointment.bookingTypeId || "session"))} · ${escapeHtml(appointment.status || "")}</span>
+      </button>`;
+  }
+
+  function homeEventCard(event, includeDate = false) {
+    return `
+      <button class="hub-entry kind-event" type="button" data-home-event="${escapeHtml(event.slug)}">
+        <span class="he-top"><span class="he-kind">Event</span><span class="he-when">${escapeHtml(homeWhen(event.startsAt, includeDate))}</span></span>
+        <span class="name">${escapeHtml(event.title)}</span>
+        <span class="appt-meta">${event.paidSeats || 0}/${event.capacity || 0} seats · ${rsvpsForEvent(event).length} RSVPs</span>
+      </button>`;
+  }
+
+  function renderHomeUpcoming() {
+    const panel = document.getElementById("homeDayList");
+    const label = document.getElementById("homeDayLabel");
+    const countEl = document.getElementById("homeDayCount");
+    if (!panel) return;
+    const upcoming = upcomingHomeEntries();
+    if (label) label.textContent = "Upcoming";
+    if (countEl) countEl.textContent = `${upcoming.length} item${upcoming.length !== 1 ? "s" : ""}`;
+    panel.innerHTML = upcoming.length
+      ? upcoming.map((entry) => entry.kind === "appointment"
+        ? homeAppointmentCard(entry.record, true)
+        : homeEventCard(entry.record, true)).join("")
+      : '<p class="empty" style="font-family:var(--sans);font-size:11px;">No upcoming bookings or events.</p>';
+  }
+
   function renderHome() {
     const byDay = homeEntriesByDay();
     const monthKeys = [...new Set([
@@ -2990,7 +3047,7 @@
         <div class="detail-head">
           <span class="pill">Hub</span>
           <h2>Everything Booked</h2>
-          <p class="contact">All tattoo, consult, and studio appointments plus events in one calendar. Click a day, then an entry to open it in its tab.</p>
+          <p class="contact">Upcoming tattoo, consult, and studio appointments plus events appear beside the full calendar. Click a day to focus it, then click an entry to open it in its tab.</p>
         </div>
         <div class="hub-head">
           <div class="calendar-tools" style="grid-template-columns:38px minmax(0,220px) 38px;">
@@ -3008,10 +3065,10 @@
           <div class="mini-calendar hub-cal"><div id="homeCalendar"></div></div>
           <div class="appt-day-panel">
             <div class="appt-day-header">
-              <span class="appt-day-label" id="homeDayLabel">Select a day</span>
+              <span class="appt-day-label" id="homeDayLabel">Upcoming</span>
               <span class="appt-day-count" id="homeDayCount"></span>
             </div>
-            <div id="homeDayList" class="appt-day-list"><p class="empty" style="font-family:var(--sans);font-size:11px;">Pick a day to see its bookings and events.</p></div>
+            <div id="homeDayList" class="appt-day-list"><p class="empty" style="font-family:var(--sans);font-size:11px;">Loading upcoming bookings and events.</p></div>
           </div>
         </div>
       </div>`;
@@ -3055,9 +3112,7 @@
     if (!panel) return;
     byDay = byDay || homeEntriesByDay();
     if (!selectedHomeDay) {
-      if (label) label.textContent = "Select a day";
-      if (countEl) countEl.textContent = "";
-      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">Pick a day to see its bookings and events.</p>';
+      renderHomeUpcoming();
       return;
     }
     const entry = byDay.get(selectedHomeDay) || { appts: [], events: [] };
@@ -3316,7 +3371,7 @@ ${meetingLines}
     const preference = plan.clientPreference ? titleize(plan.clientPreference) : "No client response yet";
     const responseTime = plan.clientSelectedAt ? ` · ${formatDate(plan.clientSelectedAt)}` : "";
     return `
-      <h3>Session Estimate &amp; Splitting</h3>
+      <h3>Session Plan &amp; Pacing</h3>
       <p class="contact">Set the structure the client will review before booking. Required plans cannot be overridden by client preference. Saving a revision clears any earlier client response so they must confirm the updated estimate.</p>
       <form id="tattooSessionPlanForm" class="session-plan-grid">
         <div class="field"><label for="planSessionCategory">Session category</label><select id="planSessionCategory" name="sessionCategory">
@@ -3334,7 +3389,7 @@ ${meetingLines}
         <div class="field"><label for="planSessionsMax">Sessions maximum</label><input id="planSessionsMax" name="estimatedSessionsMax" type="number" min="1" step="1" value="${escapeHtml(plan.estimatedSessionsMax ?? "")}"></div>
         <div class="field"><label for="planMinutesMin">Total minutes minimum</label><input id="planMinutesMin" name="estimatedTotalMinutesMin" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMin ?? "")}"></div>
         <div class="field"><label for="planMinutesMax">Total minutes maximum</label><input id="planMinutesMax" name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMax ?? "")}"></div>
-        <div class="field wide"><label for="planArtistNote">Client-facing estimate note</label><textarea id="planArtistNote" name="artistNote" placeholder="Explain the process, required breaks, or why this structure is necessary.">${escapeHtml(plan.artistNote || "")}</textarea></div>
+        <div class="field wide"><label for="planArtistNote">Client-facing session note</label><textarea id="planArtistNote" name="artistNote" placeholder="Explain the recommended pacing, breaks, or anything the client should know before scheduling.">${escapeHtml(plan.artistNote || "")}</textarea></div>
       </form>
       <p class="session-plan-client-state">Client response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}</p>
       <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button">Save Session Plan</button></div>
@@ -4964,7 +5019,13 @@ ${meetingLines}
         body: JSON.stringify({ refund }),
       });
       const refundNote = result.refund && result.refund.attempted
-        ? (result.refund.ok ? " · refunded" : ` · refund failed (${result.refund.error || "manual refund needed"})`)
+        ? result.refund.completed || result.refund.ok
+          ? " · refund completed"
+          : result.refund.pending
+            ? " · refund pending with Square"
+            : result.refund.accepted
+              ? ` · refund accepted${result.refund.status ? ` (${result.refund.status})` : ""}`
+              : ` · refund failed (${result.refund.error || "manual refund needed"})`
         : "";
       await loadAndRender();
       setStatus(`Ticket cancelled${refundNote}`);

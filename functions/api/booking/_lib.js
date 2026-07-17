@@ -6,6 +6,7 @@ import {
   notifyAppointmentRescheduled,
   notifyBookingLinkCreated,
 } from "../notifications/_lib.js";
+import { ingestCrmSourceRecord } from "../crm/ingest.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -77,30 +78,30 @@ const DEFAULT_STUDIO_CALENDAR_LOCATION = "364 Nelson Street SW, Atlanta, GA 3031
 const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
 const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";
 const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
-  sectionHeading: "Your Session Estimate",
-  oneSessionLabel: "One session",
-  multipleSessionsLabel: "Multiple sessions",
-  artistReviewLabel: "Artist review",
-  fallbackNote: "Your estimate is based on the approved design, placement, and studio process.",
-  requiredPolicy: "This tattoo must be completed across multiple sessions.",
-  notAvailablePolicy: "This tattoo must be completed in one session; splitting is not available.",
-  clientChoicePolicy: "The studio has provided its recommendation, and you may choose how you would prefer to pace the work.",
-  artistReviewPolicy: "The artist is still reviewing the final session structure.",
-  studioPlanLabel: "Follow the studio recommendation",
-  studioPlanDescription: "Use the pacing shown in the estimate.",
-  oneLongerSessionLabel: "Request one longer session",
-  oneLongerSessionDescription: "The studio will confirm whether the work and your appointment window allow it.",
-  multipleShorterSessionsLabel: "Request multiple shorter sessions",
-  multipleShorterSessionsDescription: "Complete the work across shorter appointments.",
-  discussWithArtistLabel: "Discuss it with the artist",
-  discussWithArtistDescription: "Hold the scheduling decision until you speak with the studio.",
-  acceptRequiredLabel: "Accept the required session structure",
-  acceptRequiredDescription: "This structure is part of the approved process and is not optional.",
-  continuePlanLabel: "Continue with the studio plan",
-  continuePlanDescription: "The studio will confirm the final pacing.",
-  savedMessage: "Saved: {{preference}}. You may update this choice before booking.",
-  acknowledgement: "I have reviewed the estimated time and session structure. I understand the final count can change with placement, detail, skin response, breaks, and comfort during the appointment.",
-  confirmButtonLabel: "Confirm Session Plan",
+  sectionHeading: "Your Session Plan",
+  oneSessionLabel: "One-session plan",
+  multipleSessionsLabel: "Multi-session plan",
+  artistReviewLabel: "Plan in progress",
+  fallbackNote: "Based on the current design, placement, and level of detail, this is the session format I recommend. We’ll continue to adjust around your comfort, skin response, and the natural pace of the work.",
+  requiredPolicy: "This project is best completed across multiple sessions so the work can progress at a comfortable, considered pace.",
+  notAvailablePolicy: "This project is currently planned as one session. If anything changes while we’re working, we’ll pause and discuss the best way to continue.",
+  clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit, and we can confirm the details together.",
+  artistReviewPolicy: "I’m still reviewing the best session format for this project. I’ll confirm the plan before scheduling.",
+  studioPlanLabel: "Use the recommended plan",
+  studioPlanDescription: "Schedule using the pacing outlined above.",
+  oneLongerSessionLabel: "Ask about one longer session",
+  oneLongerSessionDescription: "I’ll confirm whether the design and available appointment time make this a good fit.",
+  multipleShorterSessionsLabel: "Ask about shorter sessions",
+  multipleShorterSessionsDescription: "Spread the work across shorter appointments.",
+  discussWithArtistLabel: "Talk it through first",
+  discussWithArtistDescription: "Pause scheduling until we’ve confirmed the best approach together.",
+  acceptRequiredLabel: "Continue with this plan",
+  acceptRequiredDescription: "Choose a date for the recommended session.",
+  continuePlanLabel: "Continue with this plan",
+  continuePlanDescription: "Choose a date for the recommended session.",
+  savedMessage: "Your preference is saved: {{preference}}. You can update it before booking.",
+  acknowledgement: "I’ve reviewed the estimated session time and understand that the final timing may adjust as the work progresses.",
+  confirmButtonLabel: "Continue to Scheduling",
 });
 
 function json(data, init = {}) {
@@ -503,6 +504,99 @@ async function bookingDayGuardForWindow(db, windowId) {
     ),
     maxBookingsPerDay: Math.max(1, Number(row.max_bookings_per_day || 999999)),
   };
+}
+
+function crmNodeForAppointment(appointment) {
+  if (appointment.bookingTypeId === "studio_visit") return "node-art";
+  if (["studio_gathering", "studio_rental"].includes(appointment.bookingTypeId)) {
+    return "node-events";
+  }
+  return appointment.purpose === "studio" ? "node-events" : "node-tattoos";
+}
+
+async function mirrorAppointmentToCrm(database, appointmentValue, { includePayment = false } = {}) {
+  if (!appointmentValue?.id) return { status: "skipped", reason: "source_required" };
+  const appointment = appointmentValue.start_at !== undefined
+    ? normalizeAppointment(appointmentValue)
+    : appointmentValue;
+  const nodeId = crmNodeForAppointment(appointment);
+  let transaction = null;
+
+  try {
+    if (includePayment) {
+      const payment = await database.prepare(
+        `SELECT * FROM deposit_payments
+         WHERE appointment_id=?
+         ORDER BY created_at DESC,id DESC
+         LIMIT 1`
+      ).bind(appointment.id).first();
+      if (payment) {
+        const paymentStatus = String(payment.status || "").toLowerCase();
+        transaction = {
+          sourceProvider: "local",
+          sourceType: "deposit_payment",
+          sourceId: payment.id,
+          nodeId,
+          transactionType: "charge",
+          status: ["paid", "completed", "settled", "payment_attention"].includes(paymentStatus)
+            ? "settled"
+            : paymentStatus === "failed"
+              ? "failed"
+              : paymentStatus === "cancelled" || paymentStatus === "void"
+                ? "void"
+                : "pending",
+          amountCents: payment.amount_cents,
+          tipCents: payment.tip_cents,
+          currency: payment.currency,
+          occurredAt: payment.updated_at || payment.created_at,
+          externalOrderId: payment.provider_order_id,
+          metadata: {
+            appointmentId: appointment.id,
+            provider: payment.provider || "square",
+            providerPaymentId: payment.provider_payment_id || "",
+          },
+        };
+      }
+    }
+
+    return await ingestCrmSourceRecord(database, {
+      contact: {
+        displayName: appointment.clientName,
+        email: appointment.clientEmail,
+        phone: appointment.clientPhone,
+      },
+      interaction: {
+        sourceProvider: "local",
+        sourceType: "appointment",
+        sourceId: appointment.id,
+        nodeId,
+        channel: "website",
+        interactionType: "appointment",
+        label: appointment.bookingTypeLabel || appointment.bookingTypeId || appointment.purpose,
+        status: appointment.status,
+        occurredAt: appointment.startAt || appointment.createdAt,
+        metadata: {
+          appointmentId: appointment.id,
+          submissionId: appointment.submissionId || "",
+          bookingTypeId: appointment.bookingTypeId || "",
+          purpose: appointment.purpose || "",
+          startAt: appointment.startAt || "",
+          endAt: appointment.endAt || "",
+        },
+      },
+      transaction,
+    });
+  } catch (error) {
+    // Booking remains the source of truth. The owner-only CRM backfill can
+    // reconcile the appointment if live mirroring is temporarily unavailable.
+    console.warn(JSON.stringify({
+      event: "crm.live_mirror_failed",
+      sourceType: "appointment",
+      sourceId: String(appointment.id),
+      errorName: error?.name || "Error",
+    }));
+    return { status: "skipped", reason: "ingest_failed" };
+  }
 }
 
 function generatedWindowPolicyVersion(rule, settings, bookingType) {
@@ -1522,8 +1616,11 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     .bind(tokenContext.token.id, bookingType.id, windowId, now)
     .first();
   if (existingForSelection) {
+    const existingAppointment = normalizeAppointment(existingForSelection);
+    existingAppointment.bookingTypeLabel ||= bookingType.label || "";
+    await mirrorAppointmentToCrm(db, existingAppointment);
     return {
-      appointment: normalizeAppointment(existingForSelection),
+      appointment: existingAppointment,
       bookingType: normalizeBookingType(bookingType),
       existing: true,
     };
@@ -1571,7 +1668,9 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
   if (!inserted) return { error: "That appointment time has already been claimed." };
 
   const appointment = await selectAppointmentWithMeeting(db, id);
-  return { appointment: normalizeAppointment(appointment), bookingType: normalizeBookingType(bookingType) };
+  const normalizedAppointment = normalizeAppointment(appointment);
+  await mirrorAppointmentToCrm(db, normalizedAppointment);
+  return { appointment: normalizedAppointment, bookingType: normalizeBookingType(bookingType) };
 }
 
 async function publicConsultationBookingTypes(
@@ -2004,6 +2103,7 @@ async function handlePublicSessionCheckoutForTypes(request, env, allowedTypeIds,
       ...(result.code ? { code: result.code } : {}),
       ...(result.appointment ? { appointment: result.appointment } : {}),
     });
+    await mirrorAppointmentToCrm(db, result.appointment);
     if (result.existing && result.appointment.squareCheckoutUrl) {
       return json({
         ok: true,
@@ -2365,6 +2465,7 @@ export async function handlePublicStudioCheckout(request, env) {
       ...(result.code ? { code: result.code } : {}),
       ...(result.appointment ? { appointment: result.appointment } : {}),
     });
+    await mirrorAppointmentToCrm(db, result.appointment);
     if (result.existing && result.appointment.squareCheckoutUrl) {
       return json({
         ok: true,
@@ -2683,7 +2784,16 @@ async function savePendingPaymentLink(db, appointment, paymentLink) {
       now,
     ),
   ]);
-  return Number(results?.[0]?.meta?.changes || 0) > 0;
+  const saved = Number(results?.[0]?.meta?.changes || 0) > 0;
+  if (saved) {
+    const updatedAppointment = await selectAppointmentWithMeeting(db, appointment.id);
+    if (updatedAppointment) {
+      await mirrorAppointmentToCrm(db, normalizeAppointment(updatedAppointment), {
+        includePayment: true,
+      });
+    }
+  }
+  return saved;
 }
 
 async function selectAppointmentWithMeeting(db, appointmentId) {
@@ -3226,7 +3336,16 @@ async function expireBookingHold(db, appointmentRow, now) {
     ).bind(now, appointmentRow.submission_id, appointmentRow.id));
   }
   const results = await db.batch(statements);
-  return Number(results?.[0]?.meta?.changes || 0) > 0;
+  const expired = Number(results?.[0]?.meta?.changes || 0) > 0;
+  if (expired) {
+    const updated = await selectAppointmentWithMeeting(db, appointmentRow.id);
+    if (updated) {
+      await mirrorAppointmentToCrm(db, normalizeAppointment(updated), {
+        includePayment: true,
+      });
+    }
+  }
+  return expired;
 }
 
 export async function reapExpiredBookingHolds(env) {
@@ -3291,8 +3410,30 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
   if (wasConfirmed || appointment.status === "completed") {
     if (appointment.replacementForAppointmentId) {
       await cleanupZoomMeetingForAppointment(db, env, appointment.replacementForAppointmentId);
+      try {
+        const originalAfterReplacement = await selectAppointmentWithMeeting(
+          db,
+          appointment.replacementForAppointmentId,
+        );
+        if (originalAfterReplacement) {
+          await mirrorAppointmentToCrm(db, normalizeAppointment(originalAfterReplacement), {
+            includePayment: true,
+          });
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({
+          event: "crm.live_mirror_failed",
+          sourceType: "appointment",
+          sourceId: String(appointment.replacementForAppointmentId),
+          errorName: error?.name || "Error",
+        }));
+      }
     }
-    return normalizeAppointment(await selectAppointmentWithMeeting(db, appointment.id) || appointmentRow);
+    const currentAppointment = normalizeAppointment(
+      await selectAppointmentWithMeeting(db, appointment.id) || appointmentRow
+    );
+    await mirrorAppointmentToCrm(db, currentAppointment, { includePayment: true });
+    return currentAppointment;
   }
 
   const statements = [
@@ -3519,10 +3660,35 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
 
   if (appointment.replacementForAppointmentId) {
     await cleanupZoomMeetingForAppointment(db, env, appointment.replacementForAppointmentId);
+    try {
+      const originalAfterReplacement = await selectAppointmentWithMeeting(
+        db,
+        appointment.replacementForAppointmentId,
+      );
+      if (originalAfterReplacement) {
+        await mirrorAppointmentToCrm(db, normalizeAppointment(originalAfterReplacement), {
+          includePayment: true,
+        });
+      }
+    } catch (error) {
+      // The paid replacement remains authoritative even if its original
+      // appointment cannot be mirrored to the owner-only CRM immediately.
+      console.warn(JSON.stringify({
+        event: "crm.live_mirror_failed",
+        sourceType: "appointment",
+        sourceId: String(appointment.replacementForAppointmentId),
+        errorName: error?.name || "Error",
+      }));
+    }
   }
   const appointmentWithMeeting = await selectAppointmentWithMeeting(db, appointment.id);
   await maybeCreateVirtualMeeting(db, env, appointmentWithMeeting || appointmentRow);
   const appointmentWithType = await selectAppointmentWithMeeting(db, appointment.id);
+  await mirrorAppointmentToCrm(
+    db,
+    normalizeAppointment(appointmentWithType || appointmentRow),
+    { includePayment: true },
+  );
   await Promise.all([
     notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow),
     notifyAdminAppointmentConfirmed(env, request, appointmentWithType || appointmentRow),
@@ -3771,6 +3937,7 @@ export async function handleCancelAppointment(request, env) {
 
     const updated = await selectAppointmentWithMeeting(db, appointmentId);
     const appointment = normalizeAppointment(updated || appointmentRow);
+    await mirrorAppointmentToCrm(db, appointment, { includePayment: true });
     await notifyAppointmentCancelled(env, request, updated || appointmentRow);
 
     const hoursUntilStart = (new Date(appointment.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
@@ -3912,7 +4079,16 @@ async function releasePendingBookingHold(db, appointmentRow, actor, reason) {
     ));
   }
   const results = await db.batch(statements);
-  return Number(results?.[0]?.meta?.changes || 0) > 0;
+  const released = Number(results?.[0]?.meta?.changes || 0) > 0;
+  if (released) {
+    const updated = await selectAppointmentWithMeeting(db, appointmentRow.id);
+    if (updated) {
+      await mirrorAppointmentToCrm(db, normalizeAppointment(updated), {
+        includePayment: true,
+      });
+    }
+  }
+  return released;
 }
 
 async function safelyReleasePendingHold(db, env, request, appointmentRow, actor, reason) {
@@ -4339,6 +4515,9 @@ async function moveConfirmedAppointment(
     }
   }
   const updatedRow = await selectAppointmentWithMeeting(db, original.id);
+  await mirrorAppointmentToCrm(db, normalizeAppointment(updatedRow), {
+    includePayment: true,
+  });
   const notificationKey = `${original.id}:${now}`;
   const [delivery, adminDelivery] = await Promise.all([
     notifyAppointmentRescheduled(env, request, updatedRow, {
@@ -4569,10 +4748,19 @@ async function processSquareWebhookPayload(request, env, rawBody) {
       now,
       appointmentRow.id,
     ).run();
+    const currentAppointment = await selectAppointmentWithMeeting(db, appointmentRow.id);
+    if (currentAppointment) {
+      await mirrorAppointmentToCrm(db, normalizeAppointment(currentAppointment), {
+        includePayment: true,
+      });
+    }
     return json({ ok: true, paid: true, ignored: true, reason: "Appointment is already confirmed.", appointmentId: appointmentRow.id });
   }
   if (["cancelled", "archived"].includes(appointmentRow.status)) {
     if (paymentRow?.status === "paid") {
+      await mirrorAppointmentToCrm(db, normalizeAppointment(appointmentRow), {
+        includePayment: true,
+      });
       return json({ ok: true, paid: true, ignored: true, reason: "Payment was already recorded for a terminal appointment.", appointmentId: appointmentRow.id });
     }
     await db.batch([
@@ -4603,6 +4791,12 @@ async function processSquareWebhookPayload(request, env, rawBody) {
         now,
       ),
     ]);
+    const terminalAppointment = await selectAppointmentWithMeeting(db, appointmentRow.id);
+    if (terminalAppointment) {
+      await mirrorAppointmentToCrm(db, normalizeAppointment(terminalAppointment), {
+        includePayment: true,
+      });
+    }
     return json({ ok: true, paid: true, attention: true, reason: "Late payment requires Studio review.", appointmentId: appointmentRow.id });
   }
   if (
@@ -4638,6 +4832,12 @@ async function processSquareWebhookPayload(request, env, rawBody) {
         now,
       ),
     ]);
+    const expiredAppointment = await selectAppointmentWithMeeting(db, appointmentRow.id);
+    if (expiredAppointment) {
+      await mirrorAppointmentToCrm(db, normalizeAppointment(expiredAppointment), {
+        includePayment: true,
+      });
+    }
     return json({ ok: true, paid: true, attention: true, reason: "Payment after hold expiry requires Studio review.", appointmentId: appointmentRow.id });
   }
   if (
@@ -6607,6 +6807,7 @@ export async function handleAdminCompleteAppointment(request, env, appointmentId
       });
     }
     const updated = normalizeAppointment(await selectAppointmentWithMeeting(db, appointmentId));
+    await mirrorAppointmentToCrm(db, updated, { includePayment: true });
     const submission = row.submission_id
       ? await db.prepare(
         `SELECT id, status, tattoo_stage, lifecycle_review_required, lifecycle_review_note

@@ -2949,26 +2949,50 @@ async function insertLocalInteraction(database, personId, {
   metadata = {},
 }) {
   const now = nowIso();
-  await database.prepare(`
-    INSERT OR IGNORE INTO crm_interactions(
-      id,person_id,node_id,channel,interaction_type,label,status,quantity,occurred_at,
-      source_provider,source_type,source_id,metadata_json,active,created_at,updated_at
-    ) VALUES(?,?,?,'local',?,?,?,?,?,'local',?,?,?,1,?,?)
-  `).bind(
-    id("crm-interaction"),
-    personId,
-    nodeId,
-    interactionType,
-    label,
-    status,
-    Math.max(1, Number(quantity || 1)),
-    occurredAt || now,
-    sourceType,
-    sourceId,
-    JSON.stringify(metadata),
-    now,
-    now,
-  ).run();
+  const normalizedQuantity = Math.max(1, Number(quantity || 1));
+  const normalizedOccurredAt = occurredAt || now;
+  const metadataJson = JSON.stringify(metadata);
+  await database.batch([
+    database.prepare(`
+      INSERT OR IGNORE INTO crm_interactions(
+        id,person_id,node_id,channel,interaction_type,label,status,quantity,occurred_at,
+        source_provider,source_type,source_id,metadata_json,active,created_at,updated_at
+      ) VALUES(?,?,?,'local',?,?,?,?,?,'local',?,?,?,1,?,?)
+    `).bind(
+      id("crm-interaction"),
+      personId,
+      nodeId,
+      interactionType,
+      label,
+      status,
+      normalizedQuantity,
+      normalizedOccurredAt,
+      sourceType,
+      sourceId,
+      metadataJson,
+      now,
+      now,
+    ),
+    database.prepare(`
+      UPDATE crm_interactions
+      SET person_id=COALESCE(person_id,?),node_id=COALESCE(?,node_id),
+          channel='local',interaction_type=?,label=?,status=?,quantity=?,
+          occurred_at=?,metadata_json=?,active=1,updated_at=?
+      WHERE source_provider='local' AND source_type=? AND source_id=?
+    `).bind(
+      personId,
+      nodeId,
+      interactionType,
+      label,
+      status,
+      normalizedQuantity,
+      normalizedOccurredAt,
+      metadataJson,
+      now,
+      sourceType,
+      sourceId,
+    ),
+  ]);
 }
 
 async function insertLocalTransaction(database, personId, {
@@ -2985,29 +3009,99 @@ async function insertLocalTransaction(database, personId, {
   metadata = {},
 }) {
   const now = nowIso();
-  await database.prepare(`
-    INSERT OR IGNORE INTO crm_transactions(
-      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,currency,
-      occurred_at,source_provider,source_type,source_id,external_order_id,
-      metadata_json,active,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,?,?,'local',?,?,?,?,1,?,?)
-  `).bind(
-    id("crm-transaction"),
-    personId,
-    nodeId,
-    transactionType,
-    status,
-    Math.max(0, Number(amountCents || 0)),
-    Math.max(0, Number(tipCents || 0)),
-    normalizeCurrency(currency),
-    occurredAt || now,
-    sourceType,
-    sourceId,
-    externalOrderId,
-    JSON.stringify(metadata),
-    now,
-    now,
-  ).run();
+  const normalizedAmountCents = Math.max(0, Number(amountCents || 0));
+  const normalizedTipCents = Math.max(0, Number(tipCents || 0));
+  const normalizedCurrency = normalizeCurrency(currency);
+  const normalizedOccurredAt = occurredAt || now;
+  const metadataJson = JSON.stringify(metadata);
+  const providerPaymentId = text(metadata?.providerPaymentId, 300);
+  const providerRefundId = text(metadata?.providerRefundId, 300);
+  let providerOverlap = null;
+  if (transactionType === "refund" && providerRefundId) {
+    providerOverlap = await database.prepare(`
+      SELECT id FROM crm_transactions
+      WHERE source_provider='square' AND source_type='refund' AND source_id=?
+        AND active=1
+      LIMIT 1
+    `).bind(providerRefundId).first();
+  } else if (transactionType !== "refund" && providerPaymentId) {
+    providerOverlap = await database.prepare(`
+      SELECT id FROM crm_transactions
+      WHERE source_provider='square' AND source_type='payment' AND source_id=?
+        AND active=1
+      LIMIT 1
+    `).bind(providerPaymentId).first();
+  }
+  if (!providerOverlap && transactionType !== "refund" && externalOrderId) {
+    providerOverlap = await database.prepare(`
+      SELECT id FROM crm_transactions
+      WHERE source_provider='square' AND transaction_type='charge'
+        AND external_order_id=? AND amount_cents=? AND active=1
+      LIMIT 1
+    `).bind(externalOrderId, normalizedAmountCents).first();
+  }
+  if (providerOverlap) {
+    await database.batch([
+      database.prepare(`
+        UPDATE crm_transactions
+        SET person_id=COALESCE(person_id,?),updated_at=?
+        WHERE id=?
+      `).bind(personId, now, providerOverlap.id),
+      database.prepare(`
+        UPDATE crm_transactions
+        SET active=0,updated_at=?
+        WHERE source_provider='local' AND source_type=? AND source_id=?
+      `).bind(now, sourceType, sourceId),
+    ]);
+    return;
+  }
+  await database.batch([
+    database.prepare(`
+      INSERT OR IGNORE INTO crm_transactions(
+        id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,currency,
+        occurred_at,source_provider,source_type,source_id,external_order_id,
+        metadata_json,active,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,'local',?,?,?,?,1,?,?)
+    `).bind(
+      id("crm-transaction"),
+      personId,
+      nodeId,
+      transactionType,
+      status,
+      normalizedAmountCents,
+      normalizedTipCents,
+      normalizedCurrency,
+      normalizedOccurredAt,
+      sourceType,
+      sourceId,
+      externalOrderId,
+      metadataJson,
+      now,
+      now,
+    ),
+    database.prepare(`
+      UPDATE crm_transactions
+      SET person_id=COALESCE(person_id,?),node_id=COALESCE(?,node_id),
+          transaction_type=?,status=?,amount_cents=?,tip_cents=?,currency=?,
+          occurred_at=?,external_order_id=COALESCE(?,external_order_id),
+          metadata_json=?,active=1,updated_at=?
+      WHERE source_provider='local' AND source_type=? AND source_id=?
+    `).bind(
+      personId,
+      nodeId,
+      transactionType,
+      status,
+      normalizedAmountCents,
+      normalizedTipCents,
+      normalizedCurrency,
+      normalizedOccurredAt,
+      externalOrderId,
+      metadataJson,
+      now,
+      sourceType,
+      sourceId,
+    ),
+  ]);
 }
 
 async function localBackfillSources(database, limit, offsets) {
@@ -3022,7 +3116,8 @@ async function localBackfillSources(database, limit, offsets) {
       count: "SELECT COUNT(*) count FROM appointments",
     },
     depositPayments: {
-      sql: `SELECT d.*,a.client_name,a.client_email,a.client_phone,a.purpose,a.submission_id
+      sql: `SELECT d.*,a.client_name,a.client_email,a.client_phone,a.purpose,
+          a.booking_type_id,a.submission_id
         FROM deposit_payments d JOIN appointments a ON a.id=d.appointment_id
         ORDER BY d.created_at,d.id LIMIT ? OFFSET ?`,
       count: "SELECT COUNT(*) count FROM deposit_payments",
@@ -3120,7 +3215,11 @@ async function handleBackfill(request, database) {
     await insertLocalInteraction(database, personId, {
       sourceType: "appointment",
       sourceId: row.id,
-      nodeId: row.purpose === "studio" ? "node-events" : "node-tattoos",
+      nodeId: row.booking_type_id === "studio_visit"
+        ? "node-art"
+        : row.purpose === "studio"
+          ? "node-events"
+          : "node-tattoos",
       interactionType: "appointment",
       label: row.purpose || row.booking_type_id,
       status: row.status,
@@ -3137,12 +3236,24 @@ async function handleBackfill(request, database) {
       phone: row.client_phone,
       occurredAt: row.updated_at || row.created_at,
     });
-    const settled = ["paid", "completed", "settled"].includes(String(row.status || "").toLowerCase());
+    const settled = ["paid", "completed", "settled", "payment_attention"].includes(
+      String(row.status || "").toLowerCase()
+    );
     await insertLocalTransaction(database, personId, {
       sourceType: "deposit_payment",
       sourceId: row.id,
-      nodeId: row.purpose === "studio" ? "node-events" : "node-tattoos",
-      status: settled ? "settled" : row.status === "failed" ? "failed" : "pending",
+      nodeId: row.booking_type_id === "studio_visit"
+        ? "node-art"
+        : row.purpose === "studio"
+          ? "node-events"
+          : "node-tattoos",
+      status: settled
+        ? "settled"
+        : row.status === "failed"
+          ? "failed"
+          : ["cancelled", "void"].includes(String(row.status || "").toLowerCase())
+            ? "void"
+            : "pending",
       amountCents: row.amount_cents,
       tipCents: row.tip_cents,
       currency: row.currency,
@@ -3171,17 +3282,55 @@ async function handleBackfill(request, database) {
       occurredAt: row.paid_at || row.created_at,
       metadata: { eventId: row.event_id, eventSlug: row.event_slug, purchaserNotAttendee: true },
     });
+    const hasSettledPayment = row.status === "paid"
+      || Boolean(row.paid_at)
+      || Boolean(row.square_payment_id)
+      || Boolean(row.refund_id);
     await insertLocalTransaction(database, personId, {
       sourceType: "event_ticket_payment",
       sourceId: row.id,
       nodeId: "node-events",
-      status: row.status === "paid" ? "settled" : row.status === "cancelled" ? "void" : "pending",
+      status: hasSettledPayment
+        ? "settled"
+        : row.status === "cancelled"
+          ? "void"
+          : "pending",
       amountCents: row.amount_cents,
       currency: row.currency,
       occurredAt: row.paid_at || row.created_at,
       externalOrderId: row.square_order_id,
-      metadata: { eventId: row.event_id, ticketId: row.id },
+      metadata: {
+        eventId: row.event_id,
+        ticketId: row.id,
+        providerPaymentId: row.square_payment_id || "",
+      },
     });
+    const eventRefund = parseJson(row.raw_json, {}).eventRefund || {};
+    if (row.refund_id) {
+      const providerRefundStatus = String(eventRefund.status || "").toUpperCase();
+      await insertLocalTransaction(database, personId, {
+        sourceType: "event_ticket_refund",
+        sourceId: row.refund_id,
+        nodeId: "node-events",
+        transactionType: "refund",
+        status: providerRefundStatus === "COMPLETED"
+          ? "settled"
+          : ["FAILED", "REJECTED"].includes(providerRefundStatus)
+            ? "failed"
+            : "pending",
+        amountCents: row.amount_cents,
+        currency: row.currency,
+        occurredAt: eventRefund.updatedAt || eventRefund.createdAt
+          || row.cancelled_at || row.updated_at || row.paid_at || row.created_at,
+        externalOrderId: row.square_order_id,
+        metadata: {
+          eventId: row.event_id,
+          ticketId: row.id,
+          providerPaymentId: row.square_payment_id || "",
+          providerRefundId: row.refund_id,
+        },
+      });
+    }
   }
   for (const row of data.eventWaitlist) {
     const personId = await processPerson({
