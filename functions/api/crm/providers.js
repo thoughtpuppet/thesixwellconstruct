@@ -17,6 +17,7 @@ export const CRM_PROVIDER_ENV = Object.freeze({
       "SQUARE_STUDIO_LOCATION_ID",
       "SQUARE_EVENTS_LOCATION_ID",
     ],
+    requiredScopes: ["PAYMENTS_READ", "CUSTOMERS_READ"],
     optionalWebhookSecrets: [
       "SQUARE_WEBHOOK_SIGNATURE_KEY",
       "SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY",
@@ -46,6 +47,7 @@ export const PROVIDER_SYNC_LIMITS = Object.freeze({
   maxPages: 12,
   defaultPages: 4,
   squarePageSize: 100,
+  squareCustomerBatchSize: 100,
   shopifyOrderPageSize: 20,
   shopifyCustomerPageSize: 50,
   beehiivPageSize: 100,
@@ -837,6 +839,167 @@ function normalizeSquarePayment(payment, location) {
   };
 }
 
+function normalizeSquareCustomer(customer, requestedId) {
+  const externalId =
+    asString(customer?.id, 300) ||
+    asString(requestedId, 300);
+  if (!externalId) return null;
+  const givenName = asString(customer?.given_name, 200);
+  const familyName = asString(customer?.family_name, 200);
+  const nickname = asString(customer?.nickname, 200);
+  const organization = asString(customer?.company_name, 200);
+  const email = normalizeEmail(customer?.email_address) || null;
+  const phone = normalizePhone(customer?.phone_number) || null;
+  const displayName =
+    asString(`${givenName} ${familyName}`, 400) ||
+    nickname ||
+    organization ||
+    email ||
+    phone ||
+    null;
+  return {
+    externalId,
+    displayName,
+    givenName: givenName || null,
+    familyName: familyName || null,
+    organization: organization || null,
+    email,
+    phone,
+    createdAt: safeIso(customer?.created_at),
+    updatedAt: safeIso(customer?.updated_at),
+  };
+}
+
+function addProviderWarning(warnings, message) {
+  if (!Array.isArray(warnings) || !message || warnings.includes(message)) return;
+  warnings.push(message);
+}
+
+function squareCustomerPermissionDenied(response, payload) {
+  if (response.status !== 403) return false;
+  return safeArray(payload?.errors, 10).some((error) => {
+    const code = asString(error?.code, 100).toUpperCase();
+    const detail = asString(error?.detail || error?.message, 500).toLowerCase();
+    return code === "FORBIDDEN" ||
+      code === "INSUFFICIENT_SCOPES" ||
+      code === "INSUFFICIENT_PERMISSIONS" ||
+      detail.includes("scope") ||
+      detail.includes("permission");
+  });
+}
+
+function squareCustomerEntryRetryable(entry) {
+  return safeArray(entry?.errors, 10).some((error) => {
+    const category = asString(error?.category, 100).toUpperCase();
+    const code = asString(error?.code, 100).toUpperCase();
+    return category === "API_ERROR" ||
+      category === "RATE_LIMIT_ERROR" ||
+      [
+        "GATEWAY_TIMEOUT",
+        "INTERNAL_SERVER_ERROR",
+        "RATE_LIMITED",
+        "REQUEST_TIMEOUT",
+        "SERVICE_UNAVAILABLE",
+        "TEMPORARY_ERROR",
+      ].includes(code);
+  });
+}
+
+async function squareCustomerProfiles(
+  env,
+  options,
+  payments,
+  lookupState,
+  warnings
+) {
+  const customerIds = uniqueStrings(
+    safeArray(payments, PROVIDER_SYNC_LIMITS.squarePageSize)
+      .map((payment) => payment.customerExternalId)
+  ).slice(0, PROVIDER_SYNC_LIMITS.squareCustomerBatchSize);
+  if (!customerIds.length || lookupState.disabled) {
+    return { profiles: new Map(), requested: customerIds.length, received: 0 };
+  }
+
+  const url = new URL("/v2/customers/bulk-retrieve", squareBaseUrl(env));
+  const { response, payload } = await fetchJson(
+    url,
+    {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+        "content-type": "application/json",
+        "square-version": SQUARE_API_VERSION,
+      },
+      body: JSON.stringify({ customer_ids: customerIds }),
+    },
+    options
+  );
+  if (!response.ok) {
+    if (squareCustomerPermissionDenied(response, payload)) {
+      lookupState.disabled = true;
+      addProviderWarning(
+        warnings,
+        "Square customer profiles are unavailable. Grant CUSTOMERS_READ, then run a full Square sync to populate names, email, and phone."
+      );
+      return { profiles: new Map(), requested: customerIds.length, received: 0 };
+    }
+    throw httpError("square", response, payload);
+  }
+
+  const responses =
+    payload?.responses &&
+    typeof payload.responses === "object" &&
+    !Array.isArray(payload.responses)
+      ? payload.responses
+      : null;
+  if (!responses) {
+    throw new ProviderSyncError(
+      "square_customer_response_invalid",
+      "Square returned an invalid customer profile response.",
+      { retryable: true }
+    );
+  }
+
+  const profiles = new Map();
+  let unavailable = 0;
+  for (const customerId of customerIds) {
+    const entry = responses[customerId];
+    if (squareCustomerEntryRetryable(entry)) {
+      throw new ProviderSyncError(
+        "square_customer_profile_retryable_error",
+        "Square temporarily could not return one or more customer profiles.",
+        { retryable: true }
+      );
+    }
+    const customer = entry?.customer;
+    const returnedCustomerId = asString(customer?.id, 300);
+    const profile =
+      returnedCustomerId === customerId
+        ? normalizeSquareCustomer(customer, customerId)
+        : null;
+    if (
+      profile &&
+      (profile.displayName || profile.organization || profile.email || profile.phone)
+    ) {
+      profiles.set(customerId, profile);
+    } else {
+      unavailable += 1;
+    }
+  }
+  if (unavailable > 0) {
+    addProviderWarning(
+      warnings,
+      `${unavailable} Square customer profile${unavailable === 1 ? " was" : "s were"} unavailable; linked payments were still imported.`
+    );
+  }
+  return {
+    profiles,
+    requested: customerIds.length,
+    received: profiles.size,
+  };
+}
+
 function normalizeSquareRefund(refund, location) {
   return {
     externalId: asString(refund.id, 300),
@@ -855,7 +1018,15 @@ function normalizeSquareRefund(refund, location) {
   };
 }
 
-async function squarePage(env, options, state, task, location) {
+async function squarePage(
+  env,
+  options,
+  state,
+  task,
+  location,
+  customerLookupState,
+  warnings
+) {
   const url = new URL(
     task.resource === "payments" ? "/v2/payments" : "/v2/refunds",
     squareBaseUrl(env)
@@ -885,7 +1056,7 @@ async function squarePage(env, options, state, task, location) {
   if (!response.ok) throw httpError("square", response, payload);
 
   const source = safeArray(payload?.[task.resource], PROVIDER_SYNC_LIMITS.squarePageSize);
-  const accepted = source
+  let accepted = source
     .filter((entry) => asString(entry?.status).toUpperCase() === "COMPLETED")
     .map((entry) =>
       task.resource === "payments"
@@ -893,10 +1064,31 @@ async function squarePage(env, options, state, task, location) {
         : normalizeSquareRefund(entry, location)
     )
     .filter((entry) => entry.externalId);
+  let customerProfilesRequested = 0;
+  let customerProfilesReceived = 0;
+  if (task.resource === "payments" && accepted.length) {
+    const customerResult = await squareCustomerProfiles(
+      env,
+      options,
+      accepted,
+      customerLookupState,
+      warnings
+    );
+    customerProfilesRequested = customerResult.requested;
+    customerProfilesReceived = customerResult.received;
+    accepted = accepted.map((payment) => ({
+      ...payment,
+      customer: payment.customerExternalId
+        ? customerResult.profiles.get(payment.customerExternalId) || null
+        : null,
+    }));
+  }
   return {
     received: source.length,
     accepted,
     cursor: asString(payload?.cursor, 10_000) || null,
+    customerProfilesRequested,
+    customerProfilesReceived,
   };
 }
 
@@ -911,6 +1103,7 @@ export async function syncSquareProvider(env, options = {}) {
     checkpoint = squareCheckpoint(env, options, parsedCheckpoint);
     const locations = squareLocations(env);
     const tasks = squareTasks(locations);
+    const customerLookupState = { disabled: false };
     const pageBudget = clampInteger(
       options.maxPages,
       PROVIDER_SYNC_LIMITS.defaultPages,
@@ -928,7 +1121,15 @@ export async function syncSquareProvider(env, options = {}) {
           "Square locations changed while a sync checkpoint was active."
         );
       }
-      const page = await squarePage(env, options, checkpoint, task, location);
+      const page = await squarePage(
+        env,
+        options,
+        checkpoint,
+        task,
+        location,
+        customerLookupState,
+        warnings
+      );
       const nextCheckpoint = nextTaskCheckpoint(
         checkpoint,
         tasks.length,
@@ -947,6 +1148,8 @@ export async function syncSquareProvider(env, options = {}) {
           resource: task.resource,
           locationKey: task.locationKey,
           page: stats.pages + 1,
+          customerProfilesRequested: page.customerProfilesRequested,
+          customerProfilesReceived: page.customerProfilesReceived,
         }
       );
       if (persisted) stats.persistedPages += 1;
@@ -955,6 +1158,10 @@ export async function syncSquareProvider(env, options = {}) {
       stats.received += page.received;
       stats.accepted += page.accepted.length;
       stats.skipped += page.received - page.accepted.length;
+      stats.customerProfilesRequested =
+        (stats.customerProfilesRequested || 0) + page.customerProfilesRequested;
+      stats.customerProfilesReceived =
+        (stats.customerProfilesReceived || 0) + page.customerProfilesReceived;
       checkpoint = nextCheckpoint;
     }
 
@@ -1648,6 +1855,7 @@ export function getCrmProviderStatus(env) {
           env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
         configuredLocations: locations.map((entry) => entry.key),
         apiVersion: SQUARE_API_VERSION,
+        requiredScopes: CRM_PROVIDER_ENV.square.requiredScopes,
       }
     ),
     readinessItem(

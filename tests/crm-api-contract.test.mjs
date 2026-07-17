@@ -173,29 +173,55 @@ async function createPerson(database, values = {}) {
 function installSquareApiMock(testContext, {
   payments = [],
   refunds = [],
+  customers = [],
+  customerLookupStatus = 200,
+  customerLookupPayload = null,
 } = {}) {
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
     const headers = new Headers(init.headers);
+    const method = String(init.method || "GET").toUpperCase();
     calls.push({
       url,
-      method: String(init.method || "GET").toUpperCase(),
+      method,
       headers,
+      body: init.body ? JSON.parse(String(init.body)) : null,
     });
 
     assert.equal(url.origin, "https://connect.squareup.com");
-    assert.equal(String(init.method || "GET").toUpperCase(), "GET");
     assert.equal(headers.get("authorization"), "Bearer square-test-token");
     assert.equal(headers.get("square-version"), "2026-05-20");
-    assert.equal(url.searchParams.get("location_id"), "square-tattoo-location");
 
     if (url.pathname === "/v2/payments") {
+      assert.equal(method, "GET");
+      assert.equal(url.searchParams.get("location_id"), "square-tattoo-location");
       return Response.json({ payments });
     }
     if (url.pathname === "/v2/refunds") {
+      assert.equal(method, "GET");
+      assert.equal(url.searchParams.get("location_id"), "square-tattoo-location");
       return Response.json({ refunds });
+    }
+    if (url.pathname === "/v2/customers/bulk-retrieve") {
+      assert.equal(method, "POST");
+      const customerIds = calls.at(-1).body?.customer_ids;
+      assert.ok(Array.isArray(customerIds));
+      assert.ok(customerIds.length > 0);
+      assert.ok(customerIds.length <= 100);
+      const payload = customerLookupPayload || (
+        customerLookupStatus === 200
+          ? {
+              responses: Object.fromEntries(
+                customers
+                  .filter((customer) => customer?.id)
+                  .map((customer) => [customer.id, { customer }]),
+              ),
+            }
+          : { errors: [{ code: "FORBIDDEN", detail: "Customer lookup unavailable." }] }
+      );
+      return Response.json(payload, { status: customerLookupStatus });
     }
     throw new Error(`Unexpected Square request: ${url}`);
   };
@@ -494,6 +520,9 @@ test("a real booking enriches only blank or placeholder person fields", async ()
     },
   });
   assert.equal(initial.status, "applied");
+  database.prepare(
+    "UPDATE crm_people SET display_name='square contact' WHERE id=?"
+  ).run(initial.personId);
 
   await ingestCrmSourceRecord(d1, {
     contact: {
@@ -2476,7 +2505,7 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
   });
   assert.deepEqual(
     calls.map((call) => call.url.pathname),
-    ["/v2/payments", "/v2/refunds"],
+    ["/v2/payments", "/v2/customers/bulk-retrieve", "/v2/refunds"],
   );
 
   const person = database.prepare("SELECT * FROM crm_people").get();
@@ -2565,7 +2594,14 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 1);
   assert.deepEqual(
     calls.map((call) => call.url.pathname),
-    ["/v2/payments", "/v2/refunds", "/v2/payments", "/v2/refunds"],
+    [
+      "/v2/payments",
+      "/v2/customers/bulk-retrieve",
+      "/v2/refunds",
+      "/v2/payments",
+      "/v2/customers/bulk-retrieve",
+      "/v2/refunds",
+    ],
   );
 
   result = await responseJson(await api(database, "/api/admin/crm/sync/status", {
@@ -2578,6 +2614,544 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
   assert.equal(result.payload.local.peopleCount, 1);
   assert.equal(result.payload.local.interactionCount, 1);
   assert.equal(result.payload.local.transactionCount, 1);
+});
+
+test("Square sync enriches linked payments from customer profiles", async (t) => {
+  const database = migratedDatabase();
+  const placeholderPersonId = "square-profile-placeholder-person";
+  const placeholderCreatedAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_people(
+      id,display_name,relationship_status,preferred_contact_method,
+      created_at,updated_at
+    ) VALUES(?,'square contact','active','',?,?)
+  `).run(placeholderPersonId, placeholderCreatedAt, placeholderCreatedAt);
+  database.prepare(`
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,
+      source_provider,source_type,source_id,created_at,updated_at
+    ) VALUES(
+      'square-profile-placeholder-identity',?,'square_customer',
+      'square-customer-profile-enrichment',
+      'square-customer-profile-enrichment','square',
+      'square-customer-profile-enrichment','square','provider_contact',
+      'square:square-customer-profile-enrichment',?,?
+    )
+  `).run(placeholderPersonId, placeholderCreatedAt, placeholderCreatedAt);
+  const calls = installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-profile-enrichment",
+      status: "COMPLETED",
+      customer_id: "square-customer-profile-enrichment",
+      order_id: "square-order-profile-enrichment",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 15_000, currency: "USD" },
+      tip_money: { amount: 2_500, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Customer profile enrichment",
+      created_at: "2026-07-13T15:00:00.000Z",
+      updated_at: "2026-07-13T15:01:00.000Z",
+    }],
+    customers: [{
+      id: "square-customer-profile-enrichment",
+      given_name: "Morgan",
+      family_name: "Rivera",
+      email_address: "Morgan.Rivera@example.test",
+      phone_number: "(404) 555-0176",
+      created_at: "2025-02-01T12:00:00.000Z",
+      updated_at: "2026-07-12T12:00:00.000Z",
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.status, "complete");
+
+  const customerLookup = calls.find(
+    (call) => call.url.pathname === "/v2/customers/bulk-retrieve"
+  );
+  assert.ok(customerLookup);
+  assert.deepEqual(
+    customerLookup.body,
+    { customer_ids: ["square-customer-profile-enrichment"] },
+  );
+
+  const person = database.prepare(`
+    SELECT id,display_name,preferred_contact_method FROM crm_people
+  `).get();
+  assert.equal(person.id, placeholderPersonId);
+  assert.deepEqual(
+    {
+      display_name: person.display_name,
+      preferred_contact_method: person.preferred_contact_method,
+    },
+    {
+      display_name: "Morgan Rivera",
+      preferred_contact_method: "email",
+    },
+  );
+  assert.deepEqual(
+    database.prepare(`
+      SELECT kind,normalized_value,provider,external_id
+      FROM crm_identities
+      WHERE person_id=? AND active=1
+      ORDER BY kind
+    `).all(person.id).map((row) => ({ ...row })),
+    [
+      {
+        kind: "email",
+        normalized_value: "morgan.rivera@example.test",
+        provider: "square",
+        external_id: null,
+      },
+      {
+        kind: "phone",
+        normalized_value: "+14045550176",
+        provider: "square",
+        external_id: null,
+      },
+      {
+        kind: "square_customer",
+        normalized_value: "square-customer-profile-enrichment",
+        provider: "square",
+        external_id: "square-customer-profile-enrichment",
+      },
+    ],
+  );
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE source_provider='square'
+      AND source_id='square-payment-profile-enrichment'
+  `).get().person_id, person.id);
+});
+
+test("Square customer contact changes are retained on a later full sync", async (t) => {
+  const database = migratedDatabase();
+  const customer = {
+    id: "square-customer-contact-change",
+    given_name: "Jordan",
+    family_name: "Lee",
+    email_address: "jordan.old@example.test",
+    phone_number: "(404) 555-0101",
+    created_at: "2025-02-01T12:00:00.000Z",
+    updated_at: "2026-07-12T12:00:00.000Z",
+  };
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-contact-change",
+      status: "COMPLETED",
+      customer_id: customer.id,
+      location_id: "square-tattoo-location",
+      total_money: { amount: 11_000, currency: "USD" },
+      tip_money: { amount: 1_000, currency: "USD" },
+      source_type: "CARD",
+      created_at: "2026-07-13T15:00:00.000Z",
+      updated_at: "2026-07-13T15:01:00.000Z",
+    }],
+    customers: [customer],
+  });
+
+  let sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+
+  customer.email_address = "jordan.new@example.test";
+  customer.phone_number = "(404) 555-0202";
+  customer.updated_at = "2026-07-14T12:00:00.000Z";
+  sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.status, "complete");
+
+  const person = database.prepare(`
+    SELECT person_id FROM crm_identities
+    WHERE provider='square' AND external_id=?
+  `).get(customer.id);
+  assert.ok(person?.person_id);
+  assert.deepEqual(
+    database.prepare(`
+      SELECT kind,normalized_value FROM crm_identities
+      WHERE person_id=? AND provider='square'
+        AND kind IN ('email','phone') AND active=1
+      ORDER BY kind,normalized_value
+    `).all(person.person_id).map((row) => ({ ...row })),
+    [
+      { kind: "email", normalized_value: "jordan.new@example.test" },
+      { kind: "email", normalized_value: "jordan.old@example.test" },
+      { kind: "phone", normalized_value: "+14045550101" },
+      { kind: "phone", normalized_value: "+14045550202" },
+    ],
+  );
+});
+
+test("Square payments still import when customer profile lookup is unavailable", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-profile-unavailable",
+      status: "COMPLETED",
+      customer_id: "square-customer-profile-unavailable",
+      order_id: "square-order-profile-unavailable",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 9_500, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Payment without customer permission",
+      created_at: "2026-07-13T16:00:00.000Z",
+      updated_at: "2026-07-13T16:01:00.000Z",
+    }],
+    customerLookupStatus: 403,
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.status, "complete");
+  assert.ok(sync.payload.warnings.some((warning) => /customer/i.test(warning)));
+
+  const transaction = database.prepare(`
+    SELECT person_id,status,amount_cents
+    FROM crm_transactions
+    WHERE source_provider='square'
+      AND source_id='square-payment-profile-unavailable'
+  `).get();
+  assert.ok(transaction?.person_id);
+  assert.equal(transaction.status, "settled");
+  assert.equal(transaction.amount_cents, 9_500);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_interactions
+    WHERE source_provider='square'
+      AND source_id='square-payment-profile-unavailable'
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND provider='square'
+      AND external_id='square-customer-profile-unavailable'
+  `).get(transaction.person_id).count, 1);
+});
+
+test("a resumed Square sync preserves earlier customer-profile warnings and stats", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-resumed-warning",
+      status: "COMPLETED",
+      customer_id: "square-customer-resumed-warning",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 6_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: "2026-07-13T16:10:00.000Z",
+      updated_at: "2026-07-13T16:11:00.000Z",
+    }],
+    customerLookupStatus: 403,
+  });
+
+  const first = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 1 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(first.response.status, 200, JSON.stringify(first.payload));
+  assert.equal(first.payload.status, "pending");
+  assert.equal(first.payload.stats.customerProfilesRequested, 1);
+  assert.ok(first.payload.warnings.some((warning) => /CUSTOMERS_READ/.test(warning)));
+
+  const second = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 1 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(second.response.status, 200, JSON.stringify(second.payload));
+  assert.equal(second.payload.status, "complete");
+  assert.equal(second.payload.stats.customerProfilesRequested, 1);
+  assert.equal(second.payload.stats.accepted, 1);
+  assert.ok(second.payload.warnings.some((warning) => /CUSTOMERS_READ/.test(warning)));
+
+  const status = await responseJson(await api(database, "/api/admin/crm/sync/status", {
+    env: SQUARE_SYNC_ENV,
+  }));
+  const square = status.payload.providers.find((provider) => provider.id === "square");
+  assert.equal(square.lastSync.status, "complete");
+  assert.ok(square.lastSync.warnings.some((warning) => /CUSTOMERS_READ/.test(warning)));
+});
+
+test("Square customer-profile authentication failures do not advance or import the page", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-profile-auth-failure",
+      status: "COMPLETED",
+      customer_id: "square-customer-profile-auth-failure",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 11_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: "2026-07-13T16:20:00.000Z",
+      updated_at: "2026-07-13T16:21:00.000Z",
+    }],
+    customerLookupStatus: 401,
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 502, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.status, "failed");
+  assert.equal(sync.payload.error.code, "square_http_error");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
+  const checkpoint = JSON.parse(database.prepare(`
+    SELECT checkpoint_json FROM crm_sync_jobs WHERE provider='square'
+  `).get().checkpoint_json);
+  assert.equal(checkpoint.taskIndex, 0);
+});
+
+test("retryable per-customer Square errors keep the payment page resumable", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-profile-retry",
+      status: "COMPLETED",
+      customer_id: "square-customer-profile-retry",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 12_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: "2026-07-13T16:25:00.000Z",
+      updated_at: "2026-07-13T16:26:00.000Z",
+    }],
+    customerLookupPayload: {
+      responses: {
+        "square-customer-profile-retry": {
+          errors: [{
+            category: "API_ERROR",
+            code: "INTERNAL_SERVER_ERROR",
+            detail: "Temporary customer service error.",
+          }],
+        },
+      },
+    },
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 502, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.error.code, "square_customer_profile_retryable_error");
+  assert.equal(sync.payload.error.retryable, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
+});
+
+test("Square sync rejects a customer profile whose returned id does not match", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-mismatched-profile",
+      status: "COMPLETED",
+      customer_id: "square-customer-requested",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 7_500, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: "2026-07-13T16:30:00.000Z",
+      updated_at: "2026-07-13T16:31:00.000Z",
+    }],
+    customerLookupPayload: {
+      responses: {
+        "square-customer-requested": {
+          customer: {
+            id: "square-customer-other",
+            given_name: "Wrong",
+            family_name: "Person",
+            email_address: "wrong-person@example.test",
+          },
+        },
+      },
+    },
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.status, "complete");
+  assert.ok(sync.payload.warnings.some((warning) => /unavailable/i.test(warning)));
+  const person = database.prepare(
+    "SELECT id,display_name FROM crm_people"
+  ).get();
+  assert.equal(person.display_name, "square contact");
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND kind IN ('email','phone')
+  `).get(person.id).count, 0);
+  assert.equal(database.prepare(`
+    SELECT external_id FROM crm_identities
+    WHERE person_id=? AND kind='square_customer'
+  `).get(person.id).external_id, "square-customer-requested");
+});
+
+test("an empty Square customer profile remains a warned placeholder", async (t) => {
+  const database = migratedDatabase();
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-empty-profile",
+      status: "COMPLETED",
+      customer_id: "square-customer-empty-profile",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 4_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CASH",
+      created_at: "2026-07-13T16:40:00.000Z",
+      updated_at: "2026-07-13T16:41:00.000Z",
+    }],
+    customers: [{ id: "square-customer-empty-profile" }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.stats.customerProfilesReceived, 0);
+  assert.ok(sync.payload.warnings.some((warning) => /unavailable/i.test(warning)));
+  assert.equal(database.prepare(
+    "SELECT display_name FROM crm_people"
+  ).get().display_name, "square contact");
+});
+
+test("sparse Square profile data does not overwrite richer site client data", async (t) => {
+  const database = migratedDatabase();
+  const existing = await createPerson(database, {
+    displayName: "Morgan Rivera — Returning Client",
+    email: "morgan-rich-profile@example.test",
+    phone: "(404) 555-0119",
+    preferredContactMethod: "phone",
+  });
+  const existingPhone = database.prepare(`
+    SELECT normalized_value FROM crm_identities
+    WHERE person_id=? AND kind='phone' AND active=1
+  `).get(existing.id).normalized_value;
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-sparse-profile",
+      status: "COMPLETED",
+      customer_id: "square-customer-sparse-profile",
+      order_id: "square-order-sparse-profile",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "morgan-rich-profile@example.test",
+      total_money: { amount: 21_000, currency: "USD" },
+      tip_money: { amount: 3_000, currency: "USD" },
+      source_type: "CARD",
+      reference_id: "Sparse customer profile payment",
+      created_at: "2026-07-13T17:00:00.000Z",
+      updated_at: "2026-07-13T17:01:00.000Z",
+    }],
+    customers: [{
+      id: "square-customer-sparse-profile",
+      given_name: "Morgan",
+      email_address: "morgan-rich-profile@example.test",
+      updated_at: "2026-07-13T17:01:00.000Z",
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.status, "complete");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT display_name,preferred_contact_method
+      FROM crm_people WHERE id=?
+    `).get(existing.id) },
+    {
+      display_name: "Morgan Rivera — Returning Client",
+      preferred_contact_method: "phone",
+    },
+  );
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE source_provider='square' AND source_id='square-payment-sparse-profile'
+  `).get().person_id, existing.id);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id=? AND kind='square_customer'
+      AND external_id='square-customer-sparse-profile'
+  `).get(existing.id).count, 1);
+  assert.equal(database.prepare(`
+    SELECT normalized_value FROM crm_identities
+    WHERE person_id=? AND kind='phone' AND active=1
+  `).get(existing.id).normalized_value, existingPhone);
+});
+
+test("anonymous Square payments remain visible in Needs Attention", async (t) => {
+  const database = migratedDatabase();
+  const calls = installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-anonymous",
+      status: "COMPLETED",
+      order_id: "square-order-anonymous",
+      location_id: "square-tattoo-location",
+      total_money: { amount: 5_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CASH",
+      reference_id: "Anonymous counter payment",
+      created_at: "2026-07-13T18:00:00.000Z",
+      updated_at: "2026-07-13T18:01:00.000Z",
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(sync.payload.status, "complete");
+  assert.equal(sync.payload.stats.persistence.unmatched, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE source_provider='square' AND source_id='square-payment-anonymous'
+  `).get().person_id, null);
+  assert.equal(
+    calls.some((call) => call.url.pathname === "/v2/customers/bulk-retrieve"),
+    false,
+  );
+
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  assert.equal(attention.response.status, 200);
+  const anonymousPayment = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_provider === "square"
+      && item.source_type === "payment"
+      && item.source_id === "square-payment-anonymous"
+  );
+  assert.ok(anonymousPayment);
+  assert.equal(anonymousPayment.person_id, null);
 });
 
 test("a fresh Square sync lease blocks a concurrent provider run", async () => {
@@ -2622,13 +3196,38 @@ test("a fresh Square sync lease blocks a concurrent provider run", async () => {
     reportPaymentsStarted = resolve;
   });
   const calls = [];
-  const completed = await withMockFetch(async (input) => {
+  const completed = await withMockFetch(async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
     calls.push(url.pathname);
     if (url.pathname === "/v2/payments") {
       reportPaymentsStarted();
       await paymentsMayFinish;
       return Response.json({ payments });
+    }
+    if (url.pathname === "/v2/customers/bulk-retrieve") {
+      assert.deepEqual(
+        JSON.parse(String(init.body)).customer_ids,
+        [
+          "square-customer-concurrent",
+          "square-customer-concurrent-second",
+        ],
+      );
+      return Response.json({
+        responses: {
+          "square-customer-concurrent": {
+            customer: {
+              id: "square-customer-concurrent",
+              email_address: "square-concurrent@example.test",
+            },
+          },
+          "square-customer-concurrent-second": {
+            customer: {
+              id: "square-customer-concurrent-second",
+              email_address: "square-concurrent@example.test",
+            },
+          },
+        },
+      });
     }
     if (url.pathname === "/v2/refunds") return Response.json({ refunds: [] });
     throw new Error(`Unexpected Square request: ${url}`);
@@ -2658,7 +3257,10 @@ test("a fresh Square sync lease blocks a concurrent provider run", async () => {
   });
   assert.equal(completed.response.status, 200, JSON.stringify(completed.payload));
   assert.equal(completed.payload.status, "complete");
-  assert.deepEqual(calls, ["/v2/payments", "/v2/refunds"]);
+  assert.deepEqual(
+    calls,
+    ["/v2/payments", "/v2/customers/bulk-retrieve", "/v2/refunds"],
+  );
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_sync_jobs
     WHERE provider='square'
@@ -2754,29 +3356,47 @@ test("an active provider sync lease blocks a concurrent resume of the same job",
 test("a provider sync that loses its lease cannot persist a stale page", async () => {
   const database = migratedDatabase();
   const occurredAt = "2026-07-11T16:00:00.000Z";
-  const response = await withMockFetch(async (input) => {
+  const response = await withMockFetch(async (input, init = {}) => {
     const url = new URL(input instanceof Request ? input.url : input);
-    assert.equal(url.pathname, "/v2/payments");
-    database.prepare(`
-      UPDATE crm_sync_jobs
-      SET lease_token='replacement-lease',updated_at=?
-      WHERE provider='square' AND status='running'
-    `).run(new Date().toISOString());
-    return Response.json({
-      payments: [{
-        id: "stale-lease-payment",
-        status: "COMPLETED",
-        customer_id: "stale-lease-customer",
-        order_id: "stale-lease-order",
-        location_id: "square-tattoo-location",
-        buyer_email_address: "stale-lease@example.test",
-        total_money: { amount: 9000, currency: "USD" },
-        tip_money: { amount: 0, currency: "USD" },
-        source_type: "CARD",
-        created_at: occurredAt,
-        updated_at: occurredAt,
-      }],
-    });
+    if (url.pathname === "/v2/payments") {
+      database.prepare(`
+        UPDATE crm_sync_jobs
+        SET lease_token='replacement-lease',updated_at=?
+        WHERE provider='square' AND status='running'
+      `).run(new Date().toISOString());
+      return Response.json({
+        payments: [{
+          id: "stale-lease-payment",
+          status: "COMPLETED",
+          customer_id: "stale-lease-customer",
+          order_id: "stale-lease-order",
+          location_id: "square-tattoo-location",
+          buyer_email_address: "stale-lease@example.test",
+          total_money: { amount: 9000, currency: "USD" },
+          tip_money: { amount: 0, currency: "USD" },
+          source_type: "CARD",
+          created_at: occurredAt,
+          updated_at: occurredAt,
+        }],
+      });
+    }
+    if (url.pathname === "/v2/customers/bulk-retrieve") {
+      assert.deepEqual(
+        JSON.parse(String(init.body)),
+        { customer_ids: ["stale-lease-customer"] },
+      );
+      return Response.json({
+        responses: {
+          "stale-lease-customer": {
+            customer: {
+              id: "stale-lease-customer",
+              email_address: "stale-lease@example.test",
+            },
+          },
+        },
+      });
+    }
+    throw new Error(`Unexpected Square request: ${url}`);
   }, () => api(database, "/api/admin/crm/sync/square", {
     method: "POST",
     body: { mode: "full", maxPages: 4 },
@@ -3022,6 +3642,144 @@ test("Square sync creates a new provider person and attention for an ambiguous s
   );
 });
 
+test("differing Square profile and buyer emails require review instead of guessing", async (t) => {
+  const database = migratedDatabase();
+  const profileEmailOwner = await createPerson(database, {
+    displayName: "Profile Email Owner",
+    email: "profile-email-owner@example.test",
+  });
+  const buyerEmailOwner = await createPerson(database, {
+    displayName: "Buyer Email Owner",
+    email: "buyer-email-owner@example.test",
+  });
+  const occurredAt = "2026-07-11T16:00:00.000Z";
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-email-disagreement",
+      status: "COMPLETED",
+      customer_id: "square-customer-email-disagreement",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "buyer-email-owner@example.test",
+      total_money: { amount: 10_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    }],
+    customers: [{
+      id: "square-customer-email-disagreement",
+      given_name: "Conflicting",
+      family_name: "Profile",
+      email_address: "profile-email-owner@example.test",
+      phone_number: "(404) 555-0188",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE source_provider='square'
+      AND source_id='square-payment-email-disagreement'
+  `).get().person_id, null);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='square'
+      AND external_id='square-customer-email-disagreement'
+  `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE kind='phone' AND normalized_value='+14045550188'
+  `).get().count, 0);
+
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id
+        === "crm-sync-conflict:square:payment:square-payment-email-disagreement"
+  );
+  assert.ok(conflict);
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).conflicts,
+    ["alternate_email_disagreement", "exact_identity_anchor_disagreement"],
+  );
+  assert.deepEqual(
+    [...JSON.parse(conflict.metadata_json).personIds].sort(),
+    [profileEmailOwner.id, buyerEmailOwner.id].sort(),
+  );
+});
+
+test("a buyer-email owner cannot absorb a different unclaimed Square profile", async (t) => {
+  const database = migratedDatabase();
+  const buyerEmailOwner = await createPerson(database, {
+    displayName: "Existing Buyer Email Owner",
+    email: "known-buyer@example.test",
+  });
+  const occurredAt = "2026-07-11T17:00:00.000Z";
+  installSquareApiMock(t, {
+    payments: [{
+      id: "square-payment-one-owned-email",
+      status: "COMPLETED",
+      customer_id: "square-customer-one-owned-email",
+      location_id: "square-tattoo-location",
+      buyer_email_address: "known-buyer@example.test",
+      total_money: { amount: 8_000, currency: "USD" },
+      tip_money: { amount: 0, currency: "USD" },
+      source_type: "CARD",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    }],
+    customers: [{
+      id: "square-customer-one-owned-email",
+      given_name: "Unclaimed",
+      family_name: "Profile",
+      email_address: "unclaimed-profile@example.test",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    }],
+  });
+
+  const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: SQUARE_SYNC_ENV,
+  }));
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE source_provider='square'
+      AND source_id='square-payment-one-owned-email'
+  `).get().person_id, null);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='square'
+      AND external_id='square-customer-one-owned-email'
+  `).get().count, 0);
+
+  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
+  const conflict = attention.payload.unmatchedInteractions.find(
+    (item) => item.source_type === "crm_sync_conflict"
+      && item.source_id
+        === "crm-sync-conflict:square:payment:square-payment-one-owned-email"
+  );
+  assert.ok(conflict);
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).conflicts,
+    ["alternate_email_disagreement"],
+  );
+  assert.deepEqual(
+    JSON.parse(conflict.metadata_json).personIds,
+    [buyerEmailOwner.id],
+  );
+});
+
 test("a stale hidden email claim cannot override the current unique email owner", async (t) => {
   const database = migratedDatabase();
   const staleClaimOwner = await createPerson(database, {
@@ -3100,6 +3858,11 @@ test("Square sync surfaces exact person-anchor disagreements for owner review", 
   });
   const occurredAt = "2026-07-11T16:00:00.000Z";
   database.prepare(`
+    DELETE FROM crm_identities
+    WHERE provider='crm_email_claim'
+      AND external_id='provider-anchor@example.test'
+  `).run();
+  database.prepare(`
     INSERT INTO crm_identities(
       id,person_id,kind,value,normalized_value,provider,external_id,
       source_provider,source_type,source_id,created_at,updated_at
@@ -3136,6 +3899,16 @@ test("Square sync surfaces exact person-anchor disagreements for owner review", 
       created_at: occurredAt,
       updated_at: occurredAt,
     }],
+    customers: [{
+      id: "square-customer-conflict",
+      given_name: "Wrong",
+      family_name: "Profile",
+      company_name: "Wrong Organization",
+      email_address: "provider-anchor@example.test",
+      phone_number: "(404) 555-0198",
+      created_at: occurredAt,
+      updated_at: occurredAt,
+    }],
   });
 
   const sync = await responseJson(await api(database, "/api/admin/crm/sync/square", {
@@ -3147,6 +3920,30 @@ test("Square sync surfaces exact person-anchor disagreements for owner review", 
   assert.equal(database.prepare(
     "SELECT status FROM crm_transactions WHERE id='local-anchor-payment'"
   ).get().status, "settled");
+  assert.equal(database.prepare(`
+    SELECT person_id FROM crm_transactions
+    WHERE id='local-anchor-payment'
+  `).get().person_id, localPerson.id);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT display_name,organization,preferred_contact_method
+      FROM crm_people WHERE id=?
+    `).get(localPerson.id) },
+    {
+      display_name: "Local Booking Owner",
+      organization: "",
+      preferred_contact_method: "",
+    },
+  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE person_id IN (?,?) AND kind='phone'
+  `).get(localPerson.id, providerPerson.id).count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='crm_email_claim'
+      AND external_id='provider-anchor@example.test'
+  `).get().count, 0);
 
   const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
   assert.equal(attention.response.status, 200);

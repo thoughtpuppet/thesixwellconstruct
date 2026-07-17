@@ -322,11 +322,68 @@ async function addTags(database, personId, tags, provider) {
   }
 }
 
+async function enrichProviderPerson(database, personId, {
+  provider,
+  displayName,
+  organization,
+}) {
+  if (!personId) return;
+  const incomingDisplayName = text(displayName, 200);
+  const incomingOrganization = text(organization, 200);
+  await database.prepare(`
+    UPDATE crm_people
+    SET display_name=CASE
+          WHEN ?!='' AND (
+            TRIM(display_name)=''
+            OR LOWER(display_name)='construct contact'
+            OR LOWER(display_name)=LOWER(?)
+            OR EXISTS(
+              SELECT 1 FROM crm_identities i
+              WHERE i.person_id=crm_people.id AND i.active=1
+                AND i.kind IN ('email','phone')
+                AND (
+                  LOWER(i.value)=LOWER(crm_people.display_name)
+                  OR LOWER(i.normalized_value)=LOWER(crm_people.display_name)
+                )
+            )
+          ) THEN ?
+          ELSE display_name
+        END,
+        organization=CASE
+          WHEN TRIM(organization)='' AND ?!='' THEN ?
+          ELSE organization
+        END,
+        preferred_contact_method=CASE
+          WHEN preferred_contact_method='' AND EXISTS(
+            SELECT 1 FROM crm_identities i
+            WHERE i.person_id=crm_people.id AND i.kind='email' AND i.active=1
+          ) THEN 'email'
+          WHEN preferred_contact_method='' AND EXISTS(
+            SELECT 1 FROM crm_identities i
+            WHERE i.person_id=crm_people.id AND i.kind='phone' AND i.active=1
+          ) THEN 'phone'
+          ELSE preferred_contact_method
+        END,
+        updated_at=?
+    WHERE id=?
+  `).bind(
+    incomingDisplayName,
+    `${text(provider, 80).toLowerCase()} contact`,
+    incomingDisplayName,
+    incomingOrganization,
+    incomingOrganization,
+    nowIso(),
+    personId,
+  ).run();
+}
+
 async function ensureProviderPerson(database, {
   provider,
   externalId,
   displayName,
+  organization,
   email,
+  additionalEmails = [],
   phone,
   verifiedEmail = false,
   occurredAt,
@@ -336,10 +393,22 @@ async function ensureProviderPerson(database, {
   conflictSourceId = null,
 }) {
   const normalizedEmail = normalizeEmail(email);
+  const normalizedAdditionalEmails = [...new Set(
+    (Array.isArray(additionalEmails) ? additionalEmails : [])
+      .map((value) => normalizeEmail(value))
+      .filter((value) => value && value !== normalizedEmail)
+  )].slice(0, 5);
   const normalizedPhone = normalizePhone(phone);
   const preferred = await canonicalPersonId(database, preferredPersonId);
   const providerPersonId = await providerIdentityPerson(database, provider, externalId);
   const emailMatch = await emailPersonMatch(database, normalizedEmail);
+  const additionalEmailMatches = [];
+  for (const value of normalizedAdditionalEmails) {
+    additionalEmailMatches.push({
+      value,
+      match: await emailPersonMatch(database, value),
+    });
+  }
   const claimedEmailPersonId = emailMatch.ambiguous
     ? null
     : await emailClaimOwner(database, normalizedEmail);
@@ -348,7 +417,22 @@ async function ensureProviderPerson(database, {
     providerPersonId,
     claimedEmailPersonId,
     emailMatch.personId,
+    ...additionalEmailMatches.map((entry) => entry.match.personId),
   ].filter(Boolean))];
+  const profileAnchors = [...new Set([
+    preferred,
+    providerPersonId,
+    emailMatch.personId,
+  ].filter(Boolean))];
+  const alternateEmailDisagreement = additionalEmailMatches.some((entry) =>
+    !emailMatch.personId ||
+    entry.match.ambiguous ||
+    entry.match.personId !== emailMatch.personId
+  );
+  const alternateOwnerConflict = additionalEmailMatches.some((entry) =>
+    entry.match.personId &&
+    !profileAnchors.includes(entry.match.personId)
+  );
   const phoneOnlyNeedsReview = !preferred
     && !providerPersonId
     && !claimedEmailPersonId
@@ -363,14 +447,29 @@ async function ensureProviderPerson(database, {
       sourceType: conflictSourceType,
       sourceId: conflictRecordId,
       conflicts: [
-        ...(emailMatch.ambiguous ? ["ambiguous_email"] : []),
+        ...(emailMatch.ambiguous ||
+          additionalEmailMatches.some((entry) => entry.match.ambiguous)
+          ? ["ambiguous_email"]
+          : []),
         ...(phoneOnlyNeedsReview ? ["phone_only_identity"] : []),
+        ...(alternateEmailDisagreement ? ["alternate_email_disagreement"] : []),
         ...(exactAnchors.length > 1 ? ["exact_identity_anchor_disagreement"] : []),
       ],
-      personIds: [...exactAnchors, ...(emailMatch.personIds || [])],
+      personIds: [
+        ...exactAnchors,
+        ...(emailMatch.personIds || []),
+        ...additionalEmailMatches.flatMap((entry) => entry.match.personIds || []),
+      ],
     });
   }
-  let personId = preferred || providerPersonId || emailMatch.personId || claimedEmailPersonId;
+  let personId =
+    preferred ||
+    providerPersonId ||
+    emailMatch.personId ||
+    claimedEmailPersonId;
+  if (profileAnchors.length > 1 || alternateOwnerConflict) {
+    return preferred || providerPersonId || null;
+  }
   if (!personId && emailMatch.ambiguous && !externalId) return null;
   if (!personId && phoneOnlyNeedsReview) return null;
   if (!personId && !externalId && !normalizedEmail && !normalizedPhone) return null;
@@ -382,21 +481,18 @@ async function ensureProviderPerson(database, {
     created = true;
     await database.prepare(`
       INSERT INTO crm_people(
-        id,display_name,relationship_status,preferred_contact_method,
+        id,display_name,organization,relationship_status,preferred_contact_method,
         created_at,updated_at
-      ) VALUES(?,?,'active',?,?,?)
+      ) VALUES(?,?,?,'active',?,?,?)
     `).bind(
       personId,
       text(displayName, 200) || normalizedEmail || normalizedPhone || `${provider} contact`,
-      normalizedEmail ? "email" : normalizedPhone ? "phone" : "",
+      text(organization, 200),
+      "",
       occurredAt || now,
       now,
     ).run();
   }
-  if (normalizedEmail && !emailMatch.ambiguous) {
-    await addEmailClaim(database, personId, normalizedEmail, now);
-  }
-
   const kind = IDENTITY_KINDS[provider];
   if (kind && externalId) {
     await addIdentity(database, personId, {
@@ -409,20 +505,42 @@ async function ensureProviderPerson(database, {
       sourceId: `${provider}:${externalId}`,
     });
   }
-  const emailMayAttach = normalizedEmail
-    && !emailMatch.ambiguous
-    && (!emailMatch.personId || emailMatch.personId === personId);
-  if (emailMayAttach) {
+  const emailCandidates = [
+    {
+      value: normalizedEmail,
+      match: emailMatch,
+      primary: created,
+      sourceType: "provider_email",
+    },
+    ...(!alternateEmailDisagreement
+      ? additionalEmailMatches.map((entry) => ({
+          value: entry.value,
+          match: entry.match,
+          primary: false,
+          sourceType: "provider_payment_email",
+        }))
+      : []),
+  ];
+  let attachedEmail = false;
+  for (const candidate of emailCandidates) {
+    const emailMayAttach = candidate.value
+      && !candidate.match.ambiguous
+      && (!candidate.match.personId || candidate.match.personId === personId);
+    if (!emailMayAttach) continue;
+    await addEmailClaim(database, personId, candidate.value, now);
     await addIdentity(database, personId, {
       kind: "email",
-      value: normalizedEmail,
-      normalizedValue: normalizedEmail,
+      value: candidate.value,
+      normalizedValue: candidate.value,
       provider,
-      primary: created,
+      primary: candidate.primary,
       verified: verifiedEmail,
-      sourceType: "provider_email",
-      sourceId: `${provider}:${externalId || normalizedEmail}:email`,
+      sourceType: candidate.sourceType,
+      sourceId: candidate.sourceType === "provider_email"
+        ? `${provider}:${externalId || candidate.value}:email:${candidate.value}`
+        : `${provider}:${externalId || candidate.value}:payment-email:${candidate.value}`,
     });
+    attachedEmail = true;
   }
   if (normalizedPhone) {
     await addIdentity(database, personId, {
@@ -430,9 +548,9 @@ async function ensureProviderPerson(database, {
       value: text(phone, 80),
       normalizedValue: normalizedPhone,
       provider,
-      primary: created && !normalizedEmail,
+      primary: created && !attachedEmail,
       sourceType: "provider_phone",
-      sourceId: `${provider}:${externalId || normalizedPhone}:phone`,
+      sourceId: `${provider}:${externalId || normalizedPhone}:phone:${normalizedPhone}`,
     });
   }
   await addTags(database, personId, tags, provider);
@@ -447,6 +565,11 @@ async function ensureProviderPerson(database, {
       personId = await convergeFreshProviderPerson(database, personId, winningPersonId);
     }
   }
+  await enrichProviderPerson(database, personId, {
+    provider,
+    displayName,
+    organization,
+  });
   return personId;
 }
 
@@ -717,6 +840,29 @@ async function upsertSubscription(database, {
 
 async function persistSquare(database, records, counts) {
   for (const payment of records.payments || []) {
+    const customer =
+      payment.customer &&
+      typeof payment.customer === "object" &&
+      !Array.isArray(payment.customer)
+        ? payment.customer
+        : {};
+    const customerExternalId =
+      text(customer.externalId, 300) ||
+      text(payment.customerExternalId, 300) ||
+      null;
+    const profileEmail = normalizeEmail(customer.email) || null;
+    const buyerEmail = normalizeEmail(payment.email) || null;
+    const customerEmail = profileEmail || buyerEmail;
+    const additionalEmails =
+      profileEmail && buyerEmail && profileEmail !== buyerEmail
+        ? [buyerEmail]
+        : [];
+    const customerPhone = normalizePhone(customer.phone) || null;
+    const customerDisplayName =
+      text(customer.displayName, 200) ||
+      customerEmail ||
+      customerPhone ||
+      "";
     const paymentAmountCents = Number.isSafeInteger(Number(payment.amount?.amountMinor))
       ? Number(payment.amount.amountMinor)
       : null;
@@ -748,10 +894,13 @@ async function persistSquare(database, records, counts) {
     ).first();
     let personId = await ensureProviderPerson(database, {
       provider: "square",
-      externalId: payment.customerExternalId,
-      displayName: payment.email,
-      email: payment.email,
-      occurredAt: payment.occurredAt,
+      externalId: customerExternalId,
+      displayName: customerDisplayName,
+      organization: customer.organization,
+      email: customerEmail,
+      additionalEmails,
+      phone: customerPhone,
+      occurredAt: customer.createdAt || payment.occurredAt,
       preferredPersonId: mirrored?.person_id || null,
       conflictSourceType: "payment",
       conflictSourceId: payment.externalId,
@@ -782,7 +931,7 @@ async function persistSquare(database, records, counts) {
         paymentTipCents,
         paymentCurrency,
         payment.occurredAt || null,
-        payment.customerExternalId || null,
+        customerExternalId,
         payment.orderExternalId || null,
         payment.externalId,
         payment.locationId || null,
@@ -803,7 +952,7 @@ async function persistSquare(database, records, counts) {
         tipCents: paymentTipCents || 0,
         currency: payment.amount.currency,
         occurredAt: payment.occurredAt,
-        externalCustomerId: payment.customerExternalId,
+        externalCustomerId: customerExternalId,
         externalOrderId: payment.orderExternalId,
         note: payment.referenceId || "Square payment",
         metadata: {
@@ -811,6 +960,7 @@ async function persistSquare(database, records, counts) {
           locationKey: payment.locationKey,
           receiptUrl: payment.receiptUrl,
           sourceType: payment.sourceTypeLabel,
+          customerProfileUpdatedAt: customer.updatedAt || null,
         },
       });
       if (inserted) counts.transactions += 1;
@@ -1225,6 +1375,47 @@ function isProviderSyncLeaseConflict(error) {
     || /idx_crm_sync_jobs_one_running_provider/i.test(message);
 }
 
+function mergePersistenceCounts(previous, current) {
+  const merged = {};
+  for (const key of [
+    "interactions",
+    "transactions",
+    "unmatched",
+    "overlapsSkipped",
+  ]) {
+    merged[key] =
+      safeInteger(previous?.[key], 0) +
+      safeInteger(current?.[key], 0);
+  }
+  return merged;
+}
+
+function mergeSyncStats(previous, current, persistence) {
+  const merged = { ...(previous || {}) };
+  for (const [key, value] of Object.entries(current || {})) {
+    if (key === "persistence") continue;
+    if (key === "hasMore") {
+      merged.hasMore = Boolean(value);
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      merged[key] = Number(merged[key] || 0) + value;
+    } else {
+      merged[key] = value;
+    }
+  }
+  merged.persistence = mergePersistenceCounts(
+    previous?.persistence,
+    persistence,
+  );
+  return merged;
+}
+
+function mergeSyncWarnings(previous, current) {
+  return [...new Set([
+    ...(Array.isArray(previous) ? previous : []),
+    ...(Array.isArray(current) ? current : []),
+  ].map((value) => text(value, 1000)).filter(Boolean))].slice(0, 100);
+}
+
 export async function handleCrmProviderSync(request, database, env, providerValue) {
   const provider = text(providerValue, 80).toLowerCase();
   if (!SYNC_PROVIDERS.has(provider)) return failure("Unknown CRM provider.", 404);
@@ -1240,6 +1431,18 @@ export async function handleCrmProviderSync(request, database, env, providerValu
       code: "SYNC_ALREADY_RUNNING",
     });
   }
+  const storedCheckpoint = parseJson(resume.job?.checkpoint_json, null);
+  const continuingJob = Boolean(
+    resume.job &&
+    storedCheckpoint?.mode === mode &&
+    resume.checkpoint?.mode === mode
+  );
+  const previousStats = continuingJob
+    ? parseJson(resume.job?.stats_json, {})
+    : {};
+  const previousWarnings = continuingJob
+    ? parseJson(resume.job?.warnings_json, [])
+    : [];
   const jobId = resume.job?.id || recordId("crm-sync");
   const leaseToken = recordId("crm-sync-lease");
   const startedAt = nowIso();
@@ -1326,7 +1529,13 @@ export async function handleCrmProviderSync(request, database, env, providerValu
         WHERE id=? AND status='running' AND lease_token=?
       `).bind(
         JSON.stringify(checkpoint || {}),
-        JSON.stringify({ persistence: persisted }),
+        JSON.stringify({
+          ...previousStats,
+          persistence: mergePersistenceCounts(
+            previousStats.persistence,
+            persisted,
+          ),
+        }),
         nowIso(),
         jobId,
         leaseToken,
@@ -1341,7 +1550,8 @@ export async function handleCrmProviderSync(request, database, env, providerValu
   const status = result.ok
     ? (result.checkpoint?.complete ? "complete" : "pending")
     : "failed";
-  const stats = { ...(result.stats || {}), persistence: persisted };
+  const stats = mergeSyncStats(previousStats, result.stats, persisted);
+  const warnings = mergeSyncWarnings(previousWarnings, result.warnings);
   const completion = await database.prepare(`
     UPDATE crm_sync_jobs
     SET status=?,checkpoint_json=?,stats_json=?,warnings_json=?,error=?,
@@ -1351,7 +1561,7 @@ export async function handleCrmProviderSync(request, database, env, providerValu
     status,
     JSON.stringify(result.checkpoint || resume.checkpoint || {}),
     JSON.stringify(stats),
-    JSON.stringify(result.warnings || []),
+    JSON.stringify(warnings),
     text(result.error?.message || "", 1000),
     status === "complete" || status === "failed" ? completedAt : null,
     completedAt,
@@ -1371,7 +1581,7 @@ export async function handleCrmProviderSync(request, database, env, providerValu
     status,
     hasMore: Boolean(result.stats?.hasMore),
     stats,
-    warnings: result.warnings || [],
+    warnings,
     error: result.error || null,
   }, result.ok ? 200 : 502);
 }

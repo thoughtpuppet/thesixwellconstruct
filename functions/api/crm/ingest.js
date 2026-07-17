@@ -417,6 +417,12 @@ function personEnrichmentStatement(database, personId, contact, now) {
            WHEN ?!='' AND (
              TRIM(display_name)=''
              OR display_name='Construct contact'
+             OR LOWER(display_name) IN (
+               'square contact',
+               'shopify contact',
+               'beehiiv contact',
+               'substack contact'
+             )
              OR LOWER(display_name)=LOWER(?)
              OR display_name=?
            ) THEN ?

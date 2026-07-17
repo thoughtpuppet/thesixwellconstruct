@@ -1840,6 +1840,7 @@
       first(stats, "accepted") ? `${first(stats, "accepted")} accepted` : "",
       first(stats, "skipped") ? `${first(stats, "skipped")} skipped` : "",
       first(stats, "pages") ? `${first(stats, "pages")} pages` : "",
+      first(stats, "customerProfilesReceived") ? `${first(stats, "customerProfilesReceived")} customer profiles` : "",
       first(summary, "peopleCreated", "people_created") ? `${first(summary, "peopleCreated", "people_created")} people created` : "",
       first(summary, "matched") ? `${first(summary, "matched")} matched` : "",
       first(records, "payments") ? `${first(records, "payments")} payments` : "",
@@ -1848,7 +1849,14 @@
     ].filter(Boolean);
     const warnings = listFrom(payload, "warnings");
     const base = values.join(" · ") || first(payload, "message") || "Complete.";
-    return warnings.length ? `${base} · ${warnings.length} warning${warnings.length === 1 ? "" : "s"}` : base;
+    if (!warnings.length) return base;
+    const warningText = warnings
+      .slice(0, 2)
+      .map((warning) => String(warning || "").trim())
+      .filter(Boolean)
+      .join(" ");
+    const extraWarnings = Math.max(0, warnings.length - 2);
+    return `${base} · ${warningText || `${warnings.length} warning${warnings.length === 1 ? "" : "s"}`}${extraWarnings ? ` (+${extraWarnings} more)` : ""}`;
   }
 
   function bindIntegrations(detail) {
@@ -1874,7 +1882,10 @@
         try {
           sync.disabled = true;
           if (output) output.textContent = `${mode === "full" ? "Full" : "Incremental"} sync running…`;
-          const payload = await api(`/sync/${encodeURIComponent(provider)}`, { method: "POST", body: { mode } });
+          const payload = await api(`/sync/${encodeURIComponent(provider)}`, {
+            method: "POST",
+            body: { mode, maxPages: 4 },
+          });
           if (output) output.textContent = integrationResultSummary(payload);
           await loadIntegrationData();
         } catch (error) {
