@@ -1704,7 +1704,20 @@
     const configured = truthy(first(provider, "configured"));
     const missing = listFrom(provider, "missing");
     const details = objectFrom(provider, "details");
+    const lastSyncRecord = first(provider, "lastSync", "last_sync");
+    const lastSyncRecordAt = lastSyncRecord && typeof lastSyncRecord === "object"
+      ? first(
+          lastSyncRecord,
+          "completedAt",
+          "completed_at",
+          "updatedAt",
+          "updated_at",
+          "startedAt",
+          "started_at"
+        )
+      : lastSyncRecord;
     const lastSyncRaw = first(provider, "lastSyncAt", "last_sync_at", "checkpoint", "updatedAt", "updated_at")
+      || lastSyncRecordAt
       || first(details, "lastSyncAt", "last_sync_at");
     const lastSync = lastSyncRaw && typeof lastSyncRaw === "object"
       ? first(lastSyncRaw, "updatedAt", "updated_at", "occurredAt", "occurred_at", "beginTime", "begin_time")
