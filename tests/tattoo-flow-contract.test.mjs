@@ -34,6 +34,7 @@ import {
 import {
   handleAdminResendNotification,
   notifyAppointmentCancelled,
+  retryPendingAdminAppointmentNotifications,
 } from "../functions/api/notifications/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -1095,6 +1096,57 @@ test("completed Square webhooks fail for retry when order reconciliation is tran
   assert.match(payload.detail, /Temporary Square order outage/);
   assert.equal(database.prepare("SELECT status FROM appointments WHERE id = ?").get(appointmentId).status, "deposit_pending");
   assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id = ?").get(appointmentId).status, "pending");
+});
+
+test("pending admin appointment notifications survive the request and retry from the scheduler", async () => {
+  const database = migratedDatabase();
+  const appointmentId = "durable-admin-notification";
+  const createdAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: appointmentId,
+    status: "confirmed",
+    purpose: "tattoo",
+    bookingTypeId: "tattoo_full",
+    email: "collector@example.test",
+    startAt: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString(),
+    endAt: new Date(Date.now() + 102 * 60 * 60 * 1000).toISOString(),
+  });
+  database.prepare(
+    `INSERT INTO notification_deliveries (
+      id, channel, template_key, recipient, subject, related_type,
+      related_id, idempotency_key, status, error, sent_at, created_at
+    ) VALUES (?, 'email', 'admin_appointment_confirmed', ?, NULL, 'appointment',
+              ?, ?, 'pending', NULL, NULL, ?)`
+  ).run(
+    "durable-admin-notification-delivery",
+    "studio@example.test",
+    appointmentId,
+    `admin_appointment_confirmed:${appointmentId}`,
+    createdAt,
+  );
+
+  const sent = [];
+  const result = await retryPendingAdminAppointmentNotifications({
+    SUBMISSIONS_DB: new LocalD1(database),
+    ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
+    ADMIN_NOTIFICATION_FROM_EMAIL: "notifications@example.test",
+    NOTIFICATION_REPLY_TO: "studio@example.test",
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { messageId: "durable-admin-notification-message" };
+      },
+    },
+  });
+
+  assert.deepEqual(result, { sent: 1, skipped: 0, failed: 0 });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, "studio@example.test");
+  assert.match(sent[0].subject, /Booking confirmed/);
+  assert.equal(database.prepare(
+    "SELECT status FROM notification_deliveries WHERE idempotency_key = ?",
+  ).get(`admin_appointment_confirmed:${appointmentId}`).status, "sent");
 });
 
 test("expired replacement holds never expose a stale Square checkout URL", async () => {

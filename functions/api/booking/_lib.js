@@ -3491,6 +3491,26 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
       )
     );
   }
+  statements.push(
+    db.prepare(
+      `INSERT INTO notification_deliveries (
+        id, channel, template_key, recipient, subject, related_type,
+        related_id, idempotency_key, status, error, sent_at, created_at
+      )
+      SELECT ?, 'email', 'admin_appointment_confirmed', ?, NULL, 'appointment',
+             id, ?, 'pending', NULL, NULL, ?
+      FROM appointments
+      WHERE id = ? AND status = 'confirmed' AND updated_at = ?
+      ON CONFLICT(idempotency_key) DO NOTHING`
+    ).bind(
+      crypto.randomUUID(),
+      env.ADMIN_NOTIFICATION_EMAIL || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
+      `admin_appointment_confirmed:${appointment.id}`,
+      now,
+      appointment.id,
+      now,
+    )
+  );
 
   const results = await db.batch(statements);
   if (Number(results?.[0]?.meta?.changes || 0) < 1) {
@@ -3503,8 +3523,10 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
   const appointmentWithMeeting = await selectAppointmentWithMeeting(db, appointment.id);
   await maybeCreateVirtualMeeting(db, env, appointmentWithMeeting || appointmentRow);
   const appointmentWithType = await selectAppointmentWithMeeting(db, appointment.id);
-  await notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow);
-  await notifyAdminAppointmentConfirmed(env, request, appointmentWithType || appointmentRow);
+  await Promise.all([
+    notifyAppointmentConfirmed(env, request, appointmentWithType || appointmentRow),
+    notifyAdminAppointmentConfirmed(env, request, appointmentWithType || appointmentRow),
+  ]);
 
   const updated = await selectAppointmentWithMeeting(db, appointment.id);
   return normalizeAppointment(updated || appointmentRow);

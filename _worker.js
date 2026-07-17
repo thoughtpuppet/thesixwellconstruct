@@ -78,6 +78,7 @@ import {
 } from "./functions/api/events/_lib.js";
 import {
   handleAdminResendNotification,
+  retryPendingAdminAppointmentNotifications,
   sendDueAppointmentReminders,
   sendDueEventTicketReminders,
 } from "./functions/api/notifications/_lib.js";
@@ -884,6 +885,7 @@ export default {
     return env.ASSETS.fetch(assetRequest(request, assetPathForRequest(url.pathname)));
   },
   async scheduled(controller, env, ctx) {
+    ctx.waitUntil(retryPendingAdminAppointmentNotifications(env));
     ctx.waitUntil(sendDueAppointmentReminders(env));
     ctx.waitUntil(sendDueEventTicketReminders(env));
     ctx.waitUntil(reapStalePendingTickets(env));

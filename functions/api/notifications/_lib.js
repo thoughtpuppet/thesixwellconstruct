@@ -280,7 +280,9 @@ async function recordDelivery(db, delivery) {
           status = excluded.status,
           error = excluded.error,
           sent_at = excluded.sent_at,
-          subject = excluded.subject`
+          subject = excluded.subject,
+          recipient = excluded.recipient,
+          created_at = excluded.created_at`
       )
       .bind(
         crypto.randomUUID(),
@@ -1784,6 +1786,54 @@ export async function sendDueAppointmentReminders(env) {
     return { sent, skipped, failed };
   } catch (error) {
     console.warn("Unable to send due appointment reminders.", error.message);
+    return { sent: 0, skipped: 0, failed: 1, error: error.message };
+  }
+}
+
+export async function retryPendingAdminAppointmentNotifications(env) {
+  const db = notificationDb(env);
+  if (!db) return { sent: 0, skipped: 0, failed: 0 };
+
+  const retryBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  try {
+    const result = await db
+      .prepare(
+        `SELECT a.*, bt.label AS booking_type_label,
+                am.provider AS meeting_provider,
+                am.provider_meeting_id,
+                am.join_url AS meeting_join_url,
+                am.password AS meeting_password,
+                am.created_at AS meeting_created_at,
+                am.updated_at AS meeting_updated_at,
+                nd.idempotency_key AS notification_idempotency_key
+         FROM notification_deliveries nd
+         JOIN appointments a ON a.id = nd.related_id
+         LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+         LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
+         WHERE nd.template_key = 'admin_appointment_confirmed'
+           AND nd.status IN ('pending', 'failed')
+           AND nd.created_at <= ?
+           AND a.status = 'confirmed'
+         ORDER BY nd.created_at ASC
+         LIMIT 25`
+      )
+      .bind(retryBefore)
+      .all();
+
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const row of result.results || []) {
+      const delivery = await notifyAdminAppointmentConfirmed(env, null, row, {
+        idempotencyKey: row.notification_idempotency_key,
+      });
+      if (delivery.skipped) skipped += 1;
+      else if (delivery.ok) sent += 1;
+      else failed += 1;
+    }
+    return { sent, skipped, failed };
+  } catch (error) {
+    console.warn("Unable to retry pending admin appointment notifications.", error.message);
     return { sent: 0, skipped: 0, failed: 1, error: error.message };
   }
 }
