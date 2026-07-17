@@ -22,6 +22,7 @@ import {
 import {
   handleAdminCreateAvailability,
   handleAdminCreateAppointmentMeeting,
+  handleAdminCancelAppointment,
   handleAdminCompleteAppointment,
   handleAdminCreateBookingToken,
   handleAdminDeleteAvailability,
@@ -694,6 +695,12 @@ async function handleBookingApi(request, env) {
   if (appointmentCompleteMatch) {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleAdminCompleteAppointment(request, env, decodeURIComponent(appointmentCompleteMatch[1]));
+  }
+
+  const appointmentCancelMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/cancel$/);
+  if (appointmentCancelMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminCancelAppointment(request, env, decodeURIComponent(appointmentCancelMatch[1]));
   }
 
   const appointmentRescheduleMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/reschedule$/);

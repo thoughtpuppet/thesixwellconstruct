@@ -18,10 +18,8 @@ function normalizePhone(value) {
   const raw = valueString(value, 80);
   if (!raw) return "";
   const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-  if (raw.startsWith("+")) return `+${digits}`;
+  if (digits.length < 7 || digits.length > 15) return "";
   if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
   return `+${digits}`;
 }
 

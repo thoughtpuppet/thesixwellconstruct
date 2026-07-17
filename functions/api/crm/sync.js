@@ -33,9 +33,9 @@ function normalizePhone(value) {
   const raw = text(value, 80);
   if (!raw) return "";
   const digits = raw.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) return "";
   if (digits.length === 10) return `+1${digits}`;
-  if (digits.length >= 8 && digits.length <= 15) return `+${digits}`;
-  return "";
+  return `+${digits}`;
 }
 
 function normalizeCurrency(value) {

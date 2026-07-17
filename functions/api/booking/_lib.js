@@ -2896,11 +2896,29 @@ function appointmentDurationMinutes(appointment, bookingType) {
   return Math.max(1, Math.round(diff / 60000));
 }
 
+function zoomLocalStartTime(value, timezone = DEFAULT_CALENDAR_TIME_ZONE) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error("Appointment start time is invalid.");
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const local = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${local.year}-${local.month}-${local.day}T${local.hour}:${local.minute}:${local.second}`;
+}
+
 async function createZoomMeeting(env, appointment, bookingType) {
   const token = await createZoomAccessToken(env);
   const host = encodeURIComponent(asString(env.ZOOM_HOST_USER_ID));
   const clientName = appointment.clientName || appointment.client_name || "Client";
   const label = bookingType.label || bookingType.booking_type_label || "Virtual Consultation";
+  const timezone = DEFAULT_CALENDAR_TIME_ZONE;
   const response = await fetch(`https://api.zoom.us/v2/users/${host}/meetings`, {
     method: "POST",
     headers: {
@@ -2910,9 +2928,9 @@ async function createZoomMeeting(env, appointment, bookingType) {
     body: JSON.stringify({
       topic: `${label} - ${clientName}`,
       type: 2,
-      start_time: appointment.startAt || appointment.start_at,
+      start_time: zoomLocalStartTime(appointment.startAt || appointment.start_at, timezone),
       duration: appointmentDurationMinutes(appointment, bookingType),
-      timezone: "America/New_York",
+      timezone,
       agenda: "Virtual consultation booked through The Six Well Construct.",
       password: "",
       settings: {
@@ -3822,21 +3840,22 @@ export async function handleBookingCalendar(request, env) {
   }
 }
 
-export async function handleCancelAppointment(request, env) {
-  const body = await readJsonBody(request);
+export async function handleCancelAppointment(request, env, options = {}) {
+  const body = options.body || await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
 
   try {
     const db = requireBookingDb(env);
-    const appointmentId = asString(body.appointmentId);
+    const appointmentId = asString(options.appointmentId || body.appointmentId);
     const email = asString(body.email).toLowerCase();
-    if (!appointmentId || !email) {
+    const actor = options.actor === "admin" ? "admin" : "client";
+    if (!appointmentId || (actor !== "admin" && !email)) {
       return errorResponse("Appointment id and email are required.", 400);
     }
 
     const appointmentRow = await selectAppointmentWithMeeting(db, appointmentId);
     if (!appointmentRow) return errorResponse("Appointment not found.", 404);
-    if (asString(appointmentRow.client_email).toLowerCase() !== email) {
+    if (actor !== "admin" && asString(appointmentRow.client_email).toLowerCase() !== email) {
       return errorResponse("That email does not match this booking.", 403);
     }
     if (["cancelled", "archived"].includes(appointmentRow.status)) {
@@ -3847,7 +3866,7 @@ export async function handleCancelAppointment(request, env) {
         code: "USE_PENDING_HOLD_RELEASE",
       });
     }
-    if (new Date(appointmentRow.start_at).getTime() <= Date.now()) {
+    if (actor !== "admin" && new Date(appointmentRow.start_at).getTime() <= Date.now()) {
       return errorResponse("This appointment has already passed and cannot be cancelled online.", 400);
     }
 
@@ -3859,7 +3878,7 @@ export async function handleCancelAppointment(request, env) {
           env,
           request,
           pendingReplacement,
-          "client",
+          actor,
           "Replacement checkout released because the original appointment was cancelled",
         );
         if (release.paid) {
@@ -3878,7 +3897,7 @@ export async function handleCancelAppointment(request, env) {
     }
 
     const now = new Date().toISOString();
-    const reason = asString(body.reason).slice(0, 500) || "Cancelled by client";
+    const reason = asString(body.reason).slice(0, 500) || (actor === "admin" ? "Cancelled by Studio" : "Cancelled by client");
     const appointmentPurpose = appointmentRow.purpose || purposeForBookingType(appointmentRow.booking_type_id, Boolean(appointmentRow.booking_token_id));
     const statements = [
       db.prepare(
@@ -3901,10 +3920,11 @@ export async function handleCancelAppointment(request, env) {
         `INSERT INTO appointment_events (
           id, appointment_id, event_type, actor, note, metadata_json, created_at
         )
-        SELECT ?, id, 'cancelled', 'client', ?, ?, ? FROM appointments
+        SELECT ?, id, 'cancelled', ?, ?, ?, ? FROM appointments
         WHERE id = ? AND status = 'cancelled' AND updated_at = ?`
       ).bind(
         crypto.randomUUID(),
+        actor,
         reason,
         JSON.stringify({ previousStatus: appointmentRow.status }),
         now,
@@ -3947,13 +3967,14 @@ export async function handleCancelAppointment(request, env) {
       }
       statements.push(db.prepare(
         `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
-         SELECT ?, id, 'appointment_cancelled', 'client', ?, ? FROM submissions
+         SELECT ?, id, 'appointment_cancelled', ?, ?, ? FROM submissions
          WHERE id = ? AND EXISTS (
            SELECT 1 FROM appointments a
            WHERE a.id = ? AND a.status = 'cancelled' AND a.updated_at = ?
          )`
       ).bind(
         crypto.randomUUID(),
+        actor,
         `${appointmentPurpose}:${appointmentId}`,
         now,
         appointmentRow.submission_id,
@@ -3991,6 +4012,17 @@ export async function handleCancelAppointment(request, env) {
       detail: error.message,
     });
   }
+}
+
+export async function handleAdminCancelAppointment(request, env, appointmentId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request) || {};
+  return handleCancelAppointment(request, env, {
+    actor: "admin",
+    appointmentId,
+    body,
+  });
 }
 
 async function cleanupZoomMeetingForAppointment(db, env, appointmentId) {
@@ -6887,6 +6919,16 @@ export async function handleAdminCreateAppointmentMeeting(request, env, appointm
     if (row.booking_type_id !== VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) {
       return errorResponse("Only virtual consultation appointments can receive Zoom meetings.", 400);
     }
+    const existing = await selectAppointmentWithMeeting(db, appointmentId);
+    const replacing = existing?.meeting_provider === "zoom";
+    if (replacing) {
+      const cleanup = await cleanupZoomMeetingForAppointment(db, env, appointmentId);
+      if (!cleanup.cleaned) {
+        return errorResponse("The existing Zoom meeting could not be removed, so it was not replaced.", 409, {
+          detail: cleanup.error || "Zoom cleanup needs attention.",
+        });
+      }
+    }
 
     const appointment = normalizeAppointment(row);
     const bookingType = {
@@ -6897,7 +6939,7 @@ export async function handleAdminCreateAppointmentMeeting(request, env, appointm
     };
     await createOrReplaceZoomMeetingForAppointment(db, env, appointment, bookingType);
     const updated = await selectAppointmentWithMeeting(db, appointmentId);
-    return json({ appointment: normalizeAppointment(updated) });
+    return json({ appointment: normalizeAppointment(updated), replaced: replacing });
   } catch (error) {
     return errorResponse("Unable to create Zoom meeting.", 500, {
       detail: error.message,

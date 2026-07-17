@@ -96,7 +96,8 @@ function normalizePhone(value) {
   if (!raw) return "";
   const digits = raw.replace(/\D/g, "");
   if (digits.length < 7 || digits.length > 15) return "";
-  return raw.trim().startsWith("+") ? `+${digits}` : digits;
+  if (digits.length === 10) return `+1${digits}`;
+  return `+${digits}`;
 }
 
 function normalizeInstagram(value) {

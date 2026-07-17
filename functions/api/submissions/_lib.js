@@ -1468,6 +1468,10 @@ export async function handleUpdateSubmission(request, env, id) {
 export async function handleDeleteSubmission(request, env, id) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
+  const force = new URL(request.url).searchParams.get("force") === "1";
+  if (force && request.headers.get("x-confirm-submission-id") !== id) {
+    return errorResponse("Permanent deletion requires the exact submission reference.", 400);
+  }
 
   try {
     const db = requireSubmissionDb(env);
@@ -1478,11 +1482,11 @@ export async function handleDeleteSubmission(request, env, id) {
       .prepare("SELECT COUNT(*) AS count FROM appointments WHERE submission_id = ?")
       .bind(id)
       .first();
-    if (Number(appointmentCount?.count || 0) > 0) {
+    if (!force && Number(appointmentCount?.count || 0) > 0) {
       return errorResponse("Submission has appointment history. Archive it instead of deleting.", 409);
     }
 
-    if (["booked", "cancelled", "archived"].includes(current.status)) {
+    if (!force && ["booked", "paid", "cancelled", "archived"].includes(current.status)) {
       return errorResponse("Submission has protected lifecycle history. Archive it instead of deleting.", 409);
     }
 
@@ -1490,22 +1494,71 @@ export async function handleDeleteSubmission(request, env, id) {
       .prepare("SELECT id FROM flash_items WHERE reserved_submission_id = ? LIMIT 1")
       .bind(id)
       .first();
-    if (reservation) {
+    if (!force && reservation) {
       return errorResponse("Submission owns a Flash reservation. Archive or decline it through the lifecycle workflow instead.", 409);
     }
 
     const storedFiles = parseJsonField(current.files_json, []).filter((file) => file?.storageKey);
-    if (storedFiles.length) {
+    if (!force && storedFiles.length) {
       return errorResponse("Submission has stored files. Archive it instead of deleting so file history is not orphaned.", 409);
     }
+    if (force && storedFiles.length && !env.SUBMISSION_FILES) {
+      return errorResponse("File storage is unavailable, so this entry cannot be permanently deleted without orphaning its stored files.", 503);
+    }
 
-    await db.batch([
+    const statements = [];
+    if (force) {
+      statements.push(
+        db.prepare(
+          `UPDATE flash_items
+           SET state = 'available', claimable = 1, reserved_submission_id = NULL, updated_at = ?
+           WHERE reserved_submission_id = ? AND state = 'reserved'`
+        ).bind(new Date().toISOString(), id),
+        db.prepare(
+          `UPDATE appointments
+           SET submission_id = NULL, booking_token_id = NULL, updated_at = ?
+           WHERE submission_id = ?`
+        ).bind(new Date().toISOString(), id),
+      );
+    }
+    statements.push(
       db.prepare("DELETE FROM booking_tokens WHERE submission_id = ?").bind(id),
       db.prepare("DELETE FROM submission_events WHERE submission_id = ?").bind(id),
       db.prepare("DELETE FROM submissions WHERE id = ?").bind(id),
-    ]);
+    );
+    await db.batch(statements);
 
-    return json({ ok: true, deletedId: id });
+    const cleanupWarnings = [];
+    let deletedFileCount = 0;
+    if (force) {
+      try {
+        await db.prepare(
+          `UPDATE crm_interactions
+           SET active = 0, status = 'deleted', updated_at = ?
+           WHERE source_provider = 'local' AND source_type = 'submission' AND source_id = ?`
+        ).bind(new Date().toISOString(), id).run();
+      } catch {
+        // CRM backfill is optional; the submission database remains authoritative.
+        cleanupWarnings.push("CRM source history could not be deactivated.");
+      }
+      for (const file of storedFiles) {
+        try {
+          await env.SUBMISSION_FILES?.delete(file.storageKey);
+          deletedFileCount += 1;
+        } catch {
+          cleanupWarnings.push(`Stored file cleanup failed for ${file.id || file.storageKey}.`);
+        }
+      }
+    }
+
+    return json({
+      ok: true,
+      deletedId: id,
+      permanent: force,
+      detachedAppointments: force ? Number(appointmentCount?.count || 0) : 0,
+      deletedFiles: force ? deletedFileCount : 0,
+      cleanupWarnings,
+    });
   } catch (error) {
     return errorResponse("Unable to delete submission.", 500, {
       detail: error.message,

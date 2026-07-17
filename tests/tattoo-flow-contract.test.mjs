@@ -11,7 +11,9 @@ import {
   handleUpdateSubmission,
 } from "../functions/api/submissions/_lib.js";
 import {
+  handleAdminCancelAppointment,
   handleAdminCompleteAppointment,
+  handleAdminCreateAppointmentMeeting,
   handleAdminCreateBookingToken,
   handleAdminCreateDirectBookingInvite,
   handleAdminRescheduleAppointment,
@@ -756,6 +758,65 @@ test("unused approved direct booking invites can be permanently deleted with the
   assert.equal(database.prepare("SELECT COUNT(*) count FROM submissions WHERE id = ?").get(submissionId).count, 0);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id = ?").get(submissionId).count, 0);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_session_plans WHERE submission_id = ?").get(submissionId).count, 0);
+});
+
+test("Studio can permanently delete a protected submission while retaining detached appointment and payment history", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  insertSubmissionFixture(database, {
+    id: "submission-force-delete",
+    type: "tattoo_inquiry",
+    status: "booked",
+    tattooStage: "tattoo_scheduled",
+    email: "force-delete@example.test",
+  });
+  insertAppointmentFixture(database, {
+    id: "appointment-force-delete",
+    submissionId: "submission-force-delete",
+    bookingTypeId: "tattoo_half",
+    status: "cancelled",
+    purpose: "tattoo",
+    email: "force-delete@example.test",
+    startAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    endAt: new Date(Date.now() + 27 * 60 * 60 * 1000).toISOString(),
+  });
+  insertPaymentFixture(database, {
+    id: "payment-force-delete",
+    appointmentId: "appointment-force-delete",
+    checkoutId: "checkout-force-delete",
+    orderId: "order-force-delete",
+    status: "paid",
+    amountCents: 10000,
+  });
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+  };
+
+  const protectedResponse = await handleDeleteSubmission(
+    adminJsonRequest("/api/admin/submissions/submission-force-delete", {}, adminToken, "DELETE"),
+    env,
+    "submission-force-delete",
+  );
+  assert.equal(protectedResponse.status, 409);
+
+  const deleted = await handleDeleteSubmission(
+    new Request("https://example.test/api/admin/submissions/submission-force-delete?force=1", {
+      method: "DELETE",
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+        "x-confirm-submission-id": "submission-force-delete",
+      },
+    }),
+    env,
+    "submission-force-delete",
+  );
+  const payload = await deleted.json();
+  assert.equal(deleted.status, 200, JSON.stringify(payload));
+  assert.equal(payload.detachedAppointments, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM submissions WHERE id = ?").get("submission-force-delete").count, 0);
+  assert.equal(database.prepare("SELECT submission_id FROM appointments WHERE id = ?").get("appointment-force-delete").submission_id, null);
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE id = ?").get("payment-force-delete").status, "paid");
 });
 
 test("Studio direct invites can route a client into prerequisite consultation", async () => {
@@ -1684,6 +1745,84 @@ test("admin reschedule atomically enforces availability and increments calendar 
   assert.equal(payload.appointment.startAt, targetStart);
 });
 
+test("Zoom meetings send Eastern wall-clock time without applying the UTC offset twice", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  insertAppointmentFixture(database, {
+    id: "zoom-time-contract",
+    bookingTypeId: "consult_virtual",
+    status: "confirmed",
+    purpose: "standalone_consultation",
+    name: "Taylor Bond",
+    email: "taylor@example.test",
+    startAt: "2026-07-24T16:30:00.000Z",
+    endAt: "2026-07-24T17:15:00.000Z",
+    holdState: "converted",
+  });
+  const meetingCreatedAt = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO appointment_meetings (
+      id, appointment_id, provider, provider_meeting_id, join_url,
+      password, raw_json, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    "zoom-time-contract-existing-row",
+    "zoom-time-contract",
+    "zoom",
+    "zoom-time-contract-existing",
+    "https://zoom.example.test/j/old-time-contract",
+    "",
+    "{}",
+    meetingCreatedAt,
+    meetingCreatedAt,
+  );
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    ZOOM_ACCOUNT_ID: "zoom-account",
+    ZOOM_CLIENT_ID: "zoom-client",
+    ZOOM_CLIENT_SECRET: "zoom-secret",
+    ZOOM_HOST_USER_ID: "zoom-host",
+  };
+  let zoomRequest = null;
+  let oldMeetingDeleted = false;
+  const response = await withMockFetch(async (input, options = {}) => {
+    const url = String(input);
+    if (url.includes("zoom.us/oauth/token")) {
+      return jsonFetchResponse({ access_token: "zoom-access-token" });
+    }
+    if (url.includes("api.zoom.us/v2/meetings/zoom-time-contract-existing") && options.method === "DELETE") {
+      oldMeetingDeleted = true;
+      return new Response(null, { status: 204 });
+    }
+    if (url.includes("api.zoom.us/v2/users/") && options.method === "POST") {
+      zoomRequest = JSON.parse(options.body);
+      return jsonFetchResponse({
+        id: "zoom-meeting-time-contract",
+        join_url: "https://zoom.example.test/j/time-contract",
+        password: "",
+      }, 201);
+    }
+    throw new Error(`Unexpected Zoom time-contract fetch: ${options.method || "GET"} ${url}`);
+  }, () => handleAdminCreateAppointmentMeeting(
+    adminJsonRequest(
+      "/api/admin/booking/appointments/zoom-time-contract/meeting",
+      {},
+      adminToken,
+    ),
+    env,
+    "zoom-time-contract",
+  ));
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  assert.equal(payload.replaced, true);
+  assert.equal(oldMeetingDeleted, true);
+  assert.equal(zoomRequest.start_time, "2026-07-24T12:30:00");
+  assert.equal(zoomRequest.timezone, "America/New_York");
+  assert.equal(zoomRequest.duration, 45);
+});
+
 test("client and admin reschedules surface Zoom recreation attention", async () => {
   for (const actor of ["client", "admin"]) {
     const database = migratedDatabase();
@@ -1875,11 +2014,16 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(worker, /handleAdminResolveTattooLifecycleReview/);
   assert.match(worker, /handleAdminRescheduleAppointment/);
   assert.match(worker, /appointmentRescheduleMatch/);
+  assert.match(worker, /handleAdminCancelAppointment/);
+  assert.match(worker, /appointmentCancelMatch/);
   assert.match(worker, /tattoos\/flash\/detail\/index\.html/);
   assert.match(submissionsStudio, /Resolve Historic Lifecycle/);
   assert.match(submissionsStudio, /data-resolve-historic-lifecycle/);
   assert.match(submissionsStudio, /resolveHistorical/);
   assert.match(submissionsStudio, /data-direct-invite-form/);
+  assert.match(submissionsStudio, /data-cancel-appointment/);
+  assert.match(submissionsStudio, /data-force-delete="1"/);
+  assert.match(submissionsStudio, /if \(nextStatus !== submission\.status\) changes\.status = nextStatus/);
   assert.match(privateBookingPage, /id="clientDetailsSection"/);
   assert.match(privateBookingPage, /clientNameInput/);
   assert.match(privateBookingPage, /clientEmailInput/);
@@ -2685,6 +2829,67 @@ test("tattoo cancellation checks ownership, preserves paid funds, and returns th
   assert.equal(database.prepare(
     "SELECT COUNT(*) AS count FROM submission_events WHERE submission_id = ? AND event_type = 'appointment_cancelled'",
   ).get("submission-tattoo-cancel").count, 1);
+});
+
+test("Studio can cancel a confirmed appointment without client-email ownership and records the admin actor", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const startAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(new Date(startAt).getTime() + 90 * 60 * 1000).toISOString();
+  insertSubmissionFixture(database, {
+    id: "submission-admin-cancel",
+    type: "tattoo_inquiry",
+    status: "booked",
+    tattooStage: "tattoo_scheduled",
+    email: "admin-cancel@example.test",
+  });
+  insertAppointmentFixture(database, {
+    id: "appointment-admin-cancel",
+    submissionId: "submission-admin-cancel",
+    bookingTypeId: "tattoo_quarter",
+    status: "confirmed",
+    purpose: "tattoo",
+    email: "admin-cancel@example.test",
+    startAt,
+    endAt,
+    holdState: "converted",
+  });
+  insertPaymentFixture(database, {
+    id: "payment-admin-cancel",
+    appointmentId: "appointment-admin-cancel",
+    checkoutId: "checkout-admin-cancel",
+    orderId: "order-admin-cancel",
+    status: "paid",
+    amountCents: 5000,
+  });
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+
+  const response = await handleAdminCancelAppointment(
+    adminJsonRequest(
+      "/api/admin/booking/appointments/appointment-admin-cancel/cancel",
+      { reason: "Cancelled during Studio review" },
+      adminToken,
+    ),
+    env,
+    "appointment-admin-cancel",
+  );
+  const payload = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  assert.equal(database.prepare(
+    "SELECT status FROM appointments WHERE id = ?",
+  ).get("appointment-admin-cancel").status, "cancelled");
+  assert.equal(database.prepare(
+    "SELECT status FROM deposit_payments WHERE appointment_id = ?",
+  ).get("appointment-admin-cancel").status, "paid");
+  assert.equal(database.prepare(
+    "SELECT actor FROM appointment_events WHERE appointment_id = ? AND event_type = 'cancelled'",
+  ).get("appointment-admin-cancel").actor, "admin");
+  assert.deepEqual(rowObject(database.prepare(
+    "SELECT status, tattoo_stage FROM submissions WHERE id = ?",
+  ).get("submission-admin-cancel")), {
+    status: "approved",
+    tattoo_stage: "ready_to_book",
+  });
 });
 
 test("a client reschedule with at least 48 hours notice moves the paid appointment once", async () => {

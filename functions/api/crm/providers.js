@@ -276,10 +276,10 @@ function normalizeEmail(value) {
 function normalizePhone(value) {
   const raw = asString(value, 100);
   if (!raw) return "";
-  const leadingPlus = raw.startsWith("+");
   const digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-  return `${leadingPlus ? "+" : ""}${digits}`.slice(0, 32);
+  if (digits.length < 7 || digits.length > 15) return "";
+  if (digits.length === 10) return `+1${digits}`;
+  return `+${digits}`;
 }
 
 function normalizeMarketingStatus(value) {

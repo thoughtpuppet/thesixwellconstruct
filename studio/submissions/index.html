@@ -2883,6 +2883,7 @@
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
           ${checkoutHref ? `<a class="button" href="${escapeHtml(checkoutHref)}" target="_blank" rel="noopener noreferrer">Open Square Checkout</a>` : ""}
           ${appointmentIsPending(appointment) ? `<button class="button danger-button" type="button" data-release-pending="${escapeHtml(appointment.id)}">Release Pending Checkout</button>` : ""}
+          ${appointmentIsConfirmed(appointment) ? `<button class="button danger-button" type="button" data-cancel-appointment="${escapeHtml(appointment.id)}">Cancel Appointment</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}" data-submission-id="${escapeHtml(related?.id || appointment.submissionId || "")}">Resend Confirmation Email</button>` : ""}
           ${related ? `<button class="button" type="button" data-open-submission="${escapeHtml(related.id)}">View Request</button>` : ""}
         </div>
@@ -3259,7 +3260,8 @@
       ? `Zoom: ready
 <a class="button" href="${escapeHtml(meeting.joinUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;margin-top:8px;min-height:32px;padding:0 10px;font-size:10px;">Open Zoom Link</a>
 Raw Zoom URL: ${escapeHtml(meeting.joinUrl)}
-Zoom password: ${escapeHtml(meeting.password || "none")}`
+Zoom password: ${escapeHtml(meeting.password || "none")}
+${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-create-meeting="${escapeHtml(appointment.id)}" data-replace-meeting="1" style="margin-top:8px;min-height:32px;padding:0 10px;font-size:10px;">Recreate Zoom Meeting</button>` : ""}`
       : isVirtual
         ? `Zoom: not created
 ${["archived", "cancelled"].includes(appointment.status) ? "" : `<button class="button" type="button" data-create-meeting="${escapeHtml(appointment.id)}" style="margin-top:8px;min-height:32px;padding:0 10px;font-size:10px;">Create Zoom Meeting</button>`}`
@@ -3286,6 +3288,7 @@ ${meetingLines}
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
           ${appointmentIsPending(appointment) ? `<button class="button danger-button" type="button" data-release-pending="${escapeHtml(appointment.id)}">Release Pending Checkout</button>` : ""}
+          ${appointmentIsConfirmed(appointment) ? `<button class="button danger-button" type="button" data-cancel-appointment="${escapeHtml(appointment.id)}">Cancel Appointment</button>` : ""}
           ${canCompleteConsultation ? `<button class="button" type="button" data-complete-appointment="${escapeHtml(appointment.id)}">Mark Consultation Complete</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
         </div>
@@ -3626,7 +3629,7 @@ ${meetingLines}
       <div class="booking-actions" style="margin-top:16px;">
         ${isProtected
           ? `<button class="button" id="archiveSubmissionBtn" type="button">Archive Entry</button>
-             <button class="button danger-button" id="deleteSubmissionBtn" type="button" disabled title="Entries with appointment, payment, archive, or stored-file history must be archived instead">Delete Entry</button>`
+             <button class="button danger-button" id="deleteSubmissionBtn" type="button" data-force-delete="1" title="Permanent deletion requires entering the exact submission reference">Delete Permanently</button>`
           : `<button class="button danger-button" id="deleteSubmissionBtn" type="button">Delete Entry</button>`
         }
       </div>
@@ -4920,19 +4923,56 @@ ${meetingLines}
     const createMeeting = event.target.closest("[data-create-meeting]");
     if (createMeeting) {
       const appointmentId = createMeeting.dataset.createMeeting;
-      setStatus("Creating Zoom meeting");
-      const payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/meeting`, {
-        method: "POST",
-      });
-      const index = appointments.findIndex((a) => a.id === appointmentId);
-      if (index >= 0) appointments[index] = payload.appointment;
-      if (activeId) {
-        const submission = submissions.find((item) => item.id === activeId);
-        if (submission) renderDetail(submission);
+      const replacing = createMeeting.dataset.replaceMeeting === "1";
+      if (replacing && !window.confirm("Recreate this Zoom meeting using the appointment's current scheduled time? The existing Zoom link will stop working.")) return;
+      createMeeting.disabled = true;
+      setStatus(replacing ? "Recreating Zoom meeting" : "Creating Zoom meeting");
+      try {
+        const payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/meeting`, {
+          method: "POST",
+        });
+        const index = appointments.findIndex((a) => a.id === appointmentId);
+        if (index >= 0) appointments[index] = payload.appointment;
+        if (activeId) {
+          const submission = submissions.find((item) => item.id === activeId);
+          if (submission) renderDetail(submission);
+        }
+        refreshStudioBookingViews();
+        renderDayAppointments(selectedCalendarDay);
+        setStatus(payload.replaced ? "Zoom meeting recreated with the scheduled time" : "Zoom meeting ready");
+      } catch (error) {
+        setStatus(error.message || "Zoom meeting could not be created");
+        if (createMeeting.isConnected) createMeeting.disabled = false;
       }
-      refreshStudioBookingViews();
-      renderDayAppointments(selectedCalendarDay);
-      setStatus("Zoom meeting ready");
+      return;
+    }
+
+    const cancelAppointment = event.target.closest("[data-cancel-appointment]");
+    if (cancelAppointment) {
+      const appointmentId = cancelAppointment.dataset.cancelAppointment;
+      const reason = window.prompt(
+        "Cancel this appointment? The time will be freed, the client will be notified, and any recorded payment will remain in the history.\n\nOptional cancellation reason:",
+        "Cancelled by Studio",
+      );
+      if (reason === null) return;
+      cancelAppointment.disabled = true;
+      setStatus("Cancelling appointment");
+      try {
+        const payload = await api(`/api/admin/booking/appointments/${encodeURIComponent(appointmentId)}/cancel`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: reason.trim() || "Cancelled by Studio" }),
+        });
+        const index = appointments.findIndex((appointment) => appointment.id === appointmentId);
+        if (index >= 0 && payload.appointment) appointments[index] = payload.appointment;
+        await loadAndRender();
+        setStatus(payload.meetingNeedsAttention
+          ? "Appointment cancelled; Zoom cleanup needs attention"
+          : "Appointment cancelled");
+      } catch (error) {
+        setStatus(error.message || "Appointment could not be cancelled");
+        if (cancelAppointment.isConnected) cancelAppointment.disabled = false;
+      }
       return;
     }
 
@@ -5227,23 +5267,41 @@ ${meetingLines}
       return;
     }
 
-    if (event.target.id === "deleteSubmissionBtn" && activeId) {
+    const deleteSubmissionButton = event.target.closest("#deleteSubmissionBtn");
+    if (deleteSubmissionButton && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
       const hasAppointment = !!latestAppointmentFor(activeId);
       const hasStoredFiles = Array.isArray(submission?.files) && submission.files.some((file) => file?.storageKey);
-      if (["booked", "paid", "cancelled", "archived"].includes(submission?.status) || hasAppointment || hasStoredFiles) {
-        setStatus("Cannot delete — archive instead");
+      const force = deleteSubmissionButton.dataset.forceDelete === "1"
+        || ["booked", "paid", "cancelled", "archived"].includes(submission?.status)
+        || hasAppointment
+        || hasStoredFiles;
+      const label = submission?.contactName || submission?.contactEmail || "this entry";
+      if (force) {
+        const confirmation = window.prompt(
+          `Permanently delete ${label}?\n\nThis removes the submission and private links. Appointment and payment history will be retained without this submission link. Stored files will be deleted. This cannot be undone.\n\nType the submission reference to continue:\n${activeId}`,
+        );
+        if (confirmation !== activeId) {
+          if (confirmation !== null) setStatus("Permanent deletion cancelled: submission reference did not match");
+          return;
+        }
+      } else if (!window.confirm(`Delete ${label}? This permanently removes the submission record and any booking tokens. This cannot be undone.`)) {
         return;
       }
-      const label = submission?.contactName || submission?.contactEmail || "this entry";
-      if (!window.confirm(`Delete ${label}? This permanently removes the submission record and any booking tokens. This cannot be undone.`)) return;
       setStatus("Deleting entry");
-      await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, { method: "DELETE" });
+      const result = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}${force ? "?force=1" : ""}`, {
+        method: "DELETE",
+        headers: force ? { "x-confirm-submission-id": activeId } : {},
+      });
       submissions = submissions.filter((item) => item.id !== activeId);
       activeId = "";
       renderList();
       detailEl.innerHTML = '<p class="empty">Select a submission to review details.</p>';
-      setStatus("Entry deleted");
+      setStatus(result.cleanupWarnings?.length
+        ? `Entry deleted with cleanup warning: ${result.cleanupWarnings.join(" ")}`
+        : result.detachedAppointments
+          ? `Entry deleted; ${result.detachedAppointments} appointment record${result.detachedAppointments === 1 ? "" : "s"} retained`
+          : "Entry deleted");
       return;
     }
 
@@ -5343,21 +5401,32 @@ ${meetingLines}
     }
 
     if (event.target.id !== "saveBtn" || !activeId) return;
+    const submission = submissions.find((item) => item.id === activeId);
+    if (!submission) return;
+    const saveButton = event.target;
+    const nextStatus = document.getElementById("detailStatus").value;
+    const changes = {
+      bookingUrl: document.getElementById("bookingUrl").value,
+      internalNotes: document.getElementById("internalNotes").value,
+    };
+    if (nextStatus !== submission.status) changes.status = nextStatus;
+    saveButton.disabled = true;
     setStatus("Saving");
-    const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        status: document.getElementById("detailStatus").value,
-        bookingUrl: document.getElementById("bookingUrl").value,
-        internalNotes: document.getElementById("internalNotes").value,
-      }),
-    });
-    const index = submissions.findIndex((submission) => submission.id === activeId);
-    if (index >= 0) submissions[index] = payload.submission;
-    renderList();
-    renderDetail(payload.submission);
-    setStatus("Saved");
+    try {
+      const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+      const index = submissions.findIndex((item) => item.id === activeId);
+      if (index >= 0) submissions[index] = payload.submission;
+      renderList();
+      renderDetail(payload.submission);
+      setStatus("Saved");
+    } catch (error) {
+      setStatus(error.message || "Changes could not be saved");
+      if (saveButton.isConnected) saveButton.disabled = false;
+    }
   });
 
   detailEl.addEventListener("submit", async (event) => {
