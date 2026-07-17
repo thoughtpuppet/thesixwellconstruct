@@ -365,6 +365,44 @@ function identityStatement(database, personId, kind, value, options = {}) {
   );
 }
 
+function emailClaimStatement(database, personId, email, now, {
+  ignoreConflict = false,
+} = {}) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  return database.prepare(`
+    INSERT ${ignoreConflict ? "OR IGNORE " : ""}INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      import_batch_id,active,created_at,updated_at
+    ) VALUES(
+      ?,?,'other',?,?,'crm_email_claim',?,'',0,0,0,
+      'system','email_claim',NULL,NULL,0,?,?
+    )
+  `).bind(
+    id("crm-identity"),
+    personId,
+    normalized,
+    normalized,
+    normalized,
+    now,
+    now,
+  );
+}
+
+async function emailClaimPersonId(database, email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+  const row = await database.prepare(`
+    SELECT COALESCE(p.merged_into_id,p.id) person_id
+    FROM crm_identities i
+    JOIN crm_people p ON p.id=i.person_id
+    WHERE i.provider='crm_email_claim' AND i.external_id=?
+    LIMIT 1
+  `).bind(normalized).first();
+  return row?.person_id || null;
+}
+
 function tagStatements(database, personId, tags, options = {}) {
   const statements = [];
   const now = options.now || nowIso();
@@ -643,6 +681,8 @@ async function handleCreatePerson(request, database) {
       now,
     ),
   ];
+  const emailClaim = emailClaimStatement(database, personId, email, now);
+  if (emailClaim) statements.push(emailClaim);
   for (const [kind, value] of [["email", email], ["phone", body.phone], ["instagram", instagram]]) {
     const statement = identityStatement(database, personId, kind, value, {
       primary: true,
@@ -667,7 +707,20 @@ async function handleCreatePerson(request, database) {
     resourceId: personId,
     after: { displayName, email, phone: phone ? "provided" : "", tier: tierResult.value },
   }));
-  await database.batch(statements);
+  try {
+    await database.batch(statements);
+  } catch (error) {
+    if (email && /UNIQUE constraint/i.test(error.message || "")) {
+      const claimedPersonId = await emailClaimPersonId(database, email);
+      if (claimedPersonId) {
+        return failure("That email is already connected to a CRM person.", 409, {
+          code: "EMAIL_ALREADY_CONNECTED",
+          personIds: [claimedPersonId],
+        });
+      }
+    }
+    throw error;
+  }
   const created = await database.prepare(personSelectSql("p.id=?")).bind(personId).first();
   return json({ person: personView(created) }, { status: 201 });
 }
@@ -2407,7 +2460,7 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
   }
   const personId = id("crm-person");
   const now = nowIso();
-  await database.prepare(`
+  const personInsert = database.prepare(`
     INSERT INTO crm_people(
       id,display_name,preferred_name,organization,pronouns,instagram,
       relationship_status,preferred_contact_method,import_batch_id,created_at,updated_at
@@ -2423,7 +2476,19 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
     batch.id,
     now,
     now,
-  ).run();
+  );
+  const claim = emailClaimStatement(database, personId, normalized.email, now);
+  try {
+    await database.batch([personInsert, ...(claim ? [claim] : [])]);
+  } catch (error) {
+    if (claim && /UNIQUE constraint/i.test(error.message || "")) {
+      const claimedPersonId = await emailClaimPersonId(database, normalized.email);
+      if (claimedPersonId) {
+        return { personId: claimedPersonId, created: false, concurrentClaim: true };
+      }
+    }
+    throw error;
+  }
   return { personId, created: true };
 }
 
@@ -2961,8 +3026,7 @@ async function findOrCreateLocalPerson(database, {
   const now = nowIso();
   if (!personId) {
     personId = id("crm-person");
-    created = true;
-    await database.prepare(`
+    const personInsert = database.prepare(`
       INSERT INTO crm_people(
         id,display_name,organization,pronouns,instagram,relationship_status,
         preferred_contact_method,created_at,updated_at
@@ -2976,7 +3040,24 @@ async function findOrCreateLocalPerson(database, {
       email ? "email" : phone ? "phone" : instagram ? "instagram" : "",
       occurredAt || now,
       now,
-    ).run();
+    );
+    const claim = emailClaimStatement(database, personId, email, now);
+    try {
+      await database.batch([personInsert, ...(claim ? [claim] : [])]);
+      created = true;
+    } catch (error) {
+      if (claim && /UNIQUE constraint/i.test(error.message || "")) {
+        const claimedPersonId = await emailClaimPersonId(database, email);
+        if (claimedPersonId) {
+          personId = claimedPersonId;
+          created = false;
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
   }
   const statements = [];
   for (const [kind, value] of [
@@ -3474,11 +3555,14 @@ async function handleNeedsAttention(database) {
     consentConflicts,
   ] = await Promise.all([
     database.prepare(`
-      SELECT i.normalized_value,COUNT(DISTINCT COALESCE(p.merged_into_id,p.id)) person_count,
+      SELECT i.kind,i.normalized_value,
+        COUNT(DISTINCT COALESCE(p.merged_into_id,p.id)) person_count,
         GROUP_CONCAT(DISTINCT COALESCE(p.merged_into_id,p.id)) person_ids
       FROM crm_identities i JOIN crm_people p ON p.id=i.person_id
-      WHERE i.kind='email' AND i.active=1 AND p.anonymized_at IS NULL
-      GROUP BY i.normalized_value HAVING COUNT(DISTINCT COALESCE(p.merged_into_id,p.id))>1
+      WHERE i.kind IN ('email','phone','instagram')
+        AND i.active=1 AND p.anonymized_at IS NULL
+      GROUP BY i.kind,i.normalized_value
+      HAVING COUNT(DISTINCT COALESCE(p.merged_into_id,p.id))>1
       ORDER BY person_count DESC LIMIT 100
     `).all(),
     database.prepare(`
@@ -3535,13 +3619,20 @@ async function handleNeedsAttention(database) {
     `).all(),
   ]);
   const duplicates = (duplicateResult.results || []).map((row) => ({
-    normalizedEmail: row.normalized_value,
+    identityKind: row.kind,
+    normalizedValue: row.normalized_value,
+    normalizedEmail: row.kind === "email" ? row.normalized_value : null,
     personCount: Number(row.person_count),
     personIds: asString(row.person_ids, 5000).split(",").filter(Boolean),
   }));
   const imports = (importRows.results || []).map(importPreviewRow);
   const items = [
-    ...duplicates.map((item) => ({ type: "possible_duplicate", ...item })),
+    ...duplicates.map((item) => ({
+      type: "possible_duplicate",
+      title: `Shared ${item.identityKind} needs review`,
+      message: `This ${item.identityKind} is connected to ${item.personCount} people. Keep it shared or merge only after confirming they are the same person.`,
+      ...item,
+    })),
     ...(unmatchedInteractions.results || []).map((item) => ({ type: "unmatched_interaction", record: item })),
     ...(unmatchedTransactions.results || []).map((item) => ({ type: "unmatched_transaction", record: item })),
     ...(overdueFollowups.results || []).map((item) => ({ type: "overdue_followup", record: item })),

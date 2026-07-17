@@ -3629,7 +3629,7 @@ ${meetingLines}
       <div class="booking-actions" style="margin-top:16px;">
         ${isProtected
           ? `<button class="button" id="archiveSubmissionBtn" type="button">Archive Entry</button>
-             <button class="button danger-button" id="deleteSubmissionBtn" type="button" data-force-delete="1" title="Permanent deletion requires entering the exact submission reference">Delete Permanently</button>`
+             <button class="button danger-button" id="deleteSubmissionBtn" type="button" data-force-delete="1">Delete Permanently</button>`
           : `<button class="button danger-button" id="deleteSubmissionBtn" type="button">Delete Entry</button>`
         }
       </div>
@@ -5277,21 +5277,15 @@ ${meetingLines}
         || hasAppointment
         || hasStoredFiles;
       const label = submission?.contactName || submission?.contactEmail || "this entry";
-      if (force) {
-        const confirmation = window.prompt(
-          `Permanently delete ${label}?\n\nThis removes the submission and private links. Appointment and payment history will be retained without this submission link. Stored files will be deleted. This cannot be undone.\n\nType the submission reference to continue:\n${activeId}`,
-        );
-        if (confirmation !== activeId) {
-          if (confirmation !== null) setStatus("Permanent deletion cancelled: submission reference did not match");
-          return;
-        }
-      } else if (!window.confirm(`Delete ${label}? This permanently removes the submission record and any booking tokens. This cannot be undone.`)) {
+      const confirmationMessage = force
+        ? `Permanently delete ${label}? This removes the submission, private links, and stored files. Appointment and payment history will be retained without this submission link. This cannot be undone.`
+        : `Delete ${label}? This permanently removes the submission record and any booking tokens. This cannot be undone.`;
+      if (!window.confirm(confirmationMessage)) {
         return;
       }
       setStatus("Deleting entry");
       const result = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}${force ? "?force=1" : ""}`, {
         method: "DELETE",
-        headers: force ? { "x-confirm-submission-id": activeId } : {},
       });
       submissions = submissions.filter((item) => item.id !== activeId);
       activeId = "";

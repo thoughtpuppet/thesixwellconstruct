@@ -805,7 +805,6 @@ test("Studio can permanently delete a protected submission while retaining detac
       method: "DELETE",
       headers: {
         authorization: `Bearer ${adminToken}`,
-        "x-confirm-submission-id": "submission-force-delete",
       },
     }),
     env,

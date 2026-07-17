@@ -1734,11 +1734,12 @@ test("manual contact writes stay idempotent within one person", async () => {
       method: "POST",
       body: {
         kind: "phone",
-        value: "+1 (404) 555-0199",
+        value: "(404) 555-0199",
       },
     },
   ));
   assert.equal(result.response.status, 201);
+  assert.equal(result.payload.identity.normalized_value, "+14045550199");
 
   result = await responseJson(await api(
     database,
@@ -1774,6 +1775,44 @@ test("manual contact writes stay idempotent within one person", async () => {
   `).get());
 });
 
+test("concurrent manual people with one new email create exactly one person", async () => {
+  const database = migratedDatabase();
+  const sharedEnvironment = env(database);
+  const attempts = await Promise.all(
+    ["First Concurrent Person", "Second Concurrent Person"].map(async (displayName) => (
+      responseJson(await handleAdminCrmApi(request("/api/admin/crm/people", {
+        method: "POST",
+        admin: true,
+        body: {
+          displayName,
+          email: "manual-concurrent@example.test",
+        },
+      }), sharedEnvironment))
+    )),
+  );
+  assert.deepEqual(
+    attempts.map(({ response }) => response.status).sort((a, b) => a - b),
+    [201, 409],
+  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people
+    WHERE display_name IN ('First Concurrent Person','Second Concurrent Person')
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE kind='email' AND normalized_value='manual-concurrent@example.test'
+      AND active=1
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='crm_email_claim'
+      AND external_id='manual-concurrent@example.test'
+  `).get().count, 1);
+  const conflict = attempts.find(({ response }) => response.status === 409);
+  assert.equal(conflict.payload.details.code, "EMAIL_ALREADY_CONNECTED");
+  assert.equal(conflict.payload.details.personIds.length, 1);
+});
+
 test("the contact uniqueness guard never merges two people who share an email", async () => {
   const database = migratedDatabase();
   const first = await createPerson(database, {
@@ -1803,6 +1842,21 @@ test("the contact uniqueness guard never merges two people who share an email", 
     FROM crm_identities
     WHERE kind='email' AND normalized_value='household@example.test' AND active=1
   `).get().count, 2);
+  for (const person of [first, second]) {
+    const result = await responseJson(await api(
+      database,
+      `/api/admin/crm/people/${person.id}/identities`,
+      {
+        method: "POST",
+        body: {
+          kind: "phone",
+          value: "(404) 555-0177",
+          shared: true,
+        },
+      },
+    ));
+    assert.equal(result.response.status, 201);
+  }
   const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
   assert.equal(attention.response.status, 200);
   const duplicate = attention.payload.duplicates.find(
@@ -1810,6 +1864,12 @@ test("the contact uniqueness guard never merges two people who share an email", 
   );
   assert.ok(duplicate);
   assert.equal(duplicate.personCount, 2);
+  const sharedPhone = attention.payload.duplicates.find(
+    (item) => item.identityKind === "phone"
+      && item.normalizedValue === "+14045550177"
+  );
+  assert.ok(sharedPhone);
+  assert.equal(sharedPhone.personCount, 2);
 });
 
 test("the contact dedupe migration preserves one preferred row and deactivates older copies", () => {
@@ -1943,6 +2003,140 @@ test("the contact dedupe migration preserves one preferred row and deactivates o
       now,
     );
   }, /UNIQUE constraint/i);
+});
+
+test("phone normalization consolidates country-code formatting without losing source rows", () => {
+  const database = migratedDatabase("0051_crm_contact_identity_dedupe.sql");
+  const now = "2026-07-17T12:00:00.000Z";
+  database.exec(`
+    INSERT INTO crm_people(
+      id,display_name,relationship_status,preferred_contact_method,created_at,updated_at
+    ) VALUES
+      ('phone-format-person','Phone Format Person','active','phone','${now}','${now}'),
+      ('single-phone-person','Single Phone Person','active','phone','${now}','${now}');
+
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES
+      (
+        'phone-format-local','phone-format-person','phone','(404) 555-0199',
+        '4045550199','local','',0,0,0,'local','appointment',
+        'appointment:phone-format:phone',1,
+        '2026-07-15T12:00:00.000Z','${now}'
+      ),
+      (
+        'phone-format-square','phone-format-person','phone','+1 404 555 0199',
+        '+14045550199','square','',1,0,0,'square','customer_profile',
+        'square:phone-format:phone',1,
+        '2026-07-16T12:00:00.000Z','${now}'
+      ),
+      (
+        'phone-format-single','single-phone-person','phone','404-555-0188',
+        '4045550188','local','',1,0,0,'local','submission',
+        'submission:single-phone:phone',1,
+        '2026-07-16T12:00:00.000Z','${now}'
+      );
+  `);
+
+  database.exec(readFileSync(
+    join(ROOT, "migrations", "0052_crm_phone_normalization.sql"),
+    "utf8",
+  ));
+
+  assert.deepEqual(
+    database.prepare(`
+      SELECT id,normalized_value,source_type,source_id,active,is_primary
+      FROM crm_identities
+      WHERE person_id='phone-format-person'
+      ORDER BY id
+    `).all().map((row) => ({ ...row })),
+    [
+      {
+        id: "phone-format-local",
+        normalized_value: "4045550199",
+        source_type: "appointment",
+        source_id: "appointment:phone-format:phone",
+        active: 0,
+        is_primary: 0,
+      },
+      {
+        id: "phone-format-square",
+        normalized_value: "+14045550199",
+        source_type: "customer_profile",
+        source_id: "square:phone-format:phone",
+        active: 1,
+        is_primary: 1,
+      },
+    ],
+  );
+  assert.equal(database.prepare(`
+    SELECT normalized_value FROM crm_identities
+    WHERE id='phone-format-single' AND active=1
+  `).get().normalized_value, "+14045550188");
+  const audit = database.prepare(`
+    SELECT action,resource_id,after_json
+    FROM crm_audit_events
+    WHERE actor='migration:0052'
+  `).get();
+  assert.equal(audit.action, "duplicate_phone_formats_consolidated");
+  assert.equal(audit.resource_id, "phone-format-square");
+  assert.equal(JSON.parse(audit.after_json).deactivatedRows, 1);
+});
+
+test("email claim backfill reserves only unique non-shared email owners", () => {
+  const database = migratedDatabase("0052_crm_phone_normalization.sql");
+  const now = "2026-07-17T12:00:00.000Z";
+  database.exec(`
+    INSERT INTO crm_people(
+      id,display_name,relationship_status,preferred_contact_method,created_at,updated_at
+    ) VALUES
+      ('unique-email-person','Unique Email','active','email','${now}','${now}'),
+      ('shared-email-one','Shared Email One','active','email','${now}','${now}'),
+      ('shared-email-two','Shared Email Two','active','email','${now}','${now}');
+
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES
+      (
+        'unique-email-identity','unique-email-person','email',
+        'unique-claim@example.test','unique-claim@example.test','manual','',
+        1,0,0,'manual','person_create','unique-email:email',1,'${now}','${now}'
+      ),
+      (
+        'shared-email-identity-one','shared-email-one','email',
+        'shared-claim@example.test','shared-claim@example.test','manual','',
+        1,0,1,'manual','person_create','shared-email-one:email',1,'${now}','${now}'
+      ),
+      (
+        'shared-email-identity-two','shared-email-two','email',
+        'shared-claim@example.test','shared-claim@example.test','manual','',
+        1,0,1,'manual','person_create','shared-email-two:email',1,'${now}','${now}'
+      );
+  `);
+  const migration = readFileSync(
+    join(ROOT, "migrations", "0053_crm_email_claim_backfill.sql"),
+    "utf8",
+  );
+  database.exec(migration);
+  database.exec(migration);
+
+  assert.deepEqual(
+    database.prepare(`
+      SELECT person_id,external_id,active
+      FROM crm_identities
+      WHERE provider='crm_email_claim'
+      ORDER BY external_id
+    `).all().map((row) => ({ ...row })),
+    [{
+      person_id: "unique-email-person",
+      external_id: "unique-claim@example.test",
+      active: 0,
+    }],
+  );
 });
 
 test("Personal Context stays profile-only, client-shared, editable, scrub-removable, and tier-neutral", async () => {
@@ -4354,17 +4548,6 @@ test("Square sync creates a new provider person and attention for an ambiguous s
     SET is_shared=1,updated_at=?
     WHERE person_id=? AND kind='email'
   `).run(now, first.id);
-  database.prepare(`
-    INSERT INTO crm_identities(
-      id,person_id,kind,value,normalized_value,provider,external_id,label,
-      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
-      active,created_at,updated_at
-    ) VALUES(
-      'legacy-shared-email-claim',?,'other','shared-sync@example.test',
-      'shared-sync@example.test','crm_email_claim','shared-sync@example.test',
-      '',0,0,0,'system','email_claim',NULL,0,?,?
-    )
-  `).run(first.id, now, now);
   installSquareApiMock(t, {
     payments: [{
       id: "square-payment-shared-email",
@@ -4567,16 +4750,19 @@ test("a stale hidden email claim cannot override the current unique email owner"
   });
   const now = "2026-07-11T16:00:00.000Z";
   database.prepare(`
-    INSERT INTO crm_identities(
-      id,person_id,kind,value,normalized_value,provider,external_id,label,
-      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
-      active,created_at,updated_at
-    ) VALUES(
-      'stale-unique-email-claim',?,'other','current-owner@example.test',
-      'current-owner@example.test','crm_email_claim','current-owner@example.test',
-      '',0,0,0,'system','email_claim',NULL,0,?,?
-    )
-  `).run(staleClaimOwner.id, now, now);
+    DELETE FROM crm_identities
+    WHERE person_id=? AND provider='crm_email_claim'
+      AND external_id='current-owner@example.test'
+  `).run(currentEmailOwner.id);
+  database.prepare(`
+    UPDATE crm_identities
+    SET
+      value='current-owner@example.test',
+      normalized_value='current-owner@example.test',
+      external_id='current-owner@example.test',
+      updated_at=?
+    WHERE person_id=? AND provider='crm_email_claim'
+  `).run(now, staleClaimOwner.id);
   installSquareApiMock(t, {
     payments: [{
       id: "square-payment-stale-claim",

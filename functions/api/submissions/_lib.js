@@ -1469,9 +1469,6 @@ export async function handleDeleteSubmission(request, env, id) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
   const force = new URL(request.url).searchParams.get("force") === "1";
-  if (force && request.headers.get("x-confirm-submission-id") !== id) {
-    return errorResponse("Permanent deletion requires the exact submission reference.", 400);
-  }
 
   try {
     const db = requireSubmissionDb(env);
