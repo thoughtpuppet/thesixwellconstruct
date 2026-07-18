@@ -1,0 +1,65 @@
+.studio-console {
+  --console-title-color:var(--accent);
+}
+
+.studio-console:has(.tab[data-tab="tattoo"].is-active) {
+  --console-title-color:var(--color-tattooing,#6E0404);
+}
+
+.studio-console:has(.tab[data-tab="art"].is-active) {
+  --console-title-color:var(--color-art,#0039BD);
+}
+
+.studio-console:has(.tab[data-tab="merch"].is-active) {
+  --console-title-color:var(--color-merch,#F08000);
+}
+
+.studio-console:has(.tab[data-tab="events"].is-active) {
+  --console-title-color:var(--color-events,#005D25);
+}
+
+.studio-console:has(.tab[data-tab="archive"].is-active) {
+  --console-title-color:var(--color-archive,#6D3D15);
+}
+
+.studio-console :is(h1,h2,h3,h4),
+.studio-console :is(
+  .name,
+  .appt-name,
+  .people-person-name,
+  .people-record-title,
+  .people-integration-name,
+  .portfolio-card-title strong,
+  .portfolio-option-head strong,
+  .cm-connection-entity strong,
+  .cm-type-list strong
+) {
+  color:var(--console-title-color);
+  font-family:var(--sans);
+  font-weight:900;
+}
+
+.studio-console :is(
+  .review-card-header,
+  .appt-day-label,
+  .schedule-group-title,
+  .schedule-group-toggle,
+  .section-toggle,
+  .detail-section-toggle,
+  .day-name,
+  .admin-native-section > summary
+) {
+  color:var(--console-title-color);
+  font-family:var(--sans);
+  font-weight:900;
+}
+
+.studio-console .availability-manager .detail-head h2 {
+  color:var(--console-title-color);
+  font-weight:900;
+}
+
+.studio-console .tab.is-active {
+  color:var(--console-title-color);
+  border-bottom-color:var(--console-title-color);
+}

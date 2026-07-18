@@ -245,6 +245,28 @@ test("People UI gives canonical Construct nodes their source colors", () => {
   assert.doesNotMatch(source, /A rationale is required/);
 });
 
+test("Studio console titles follow the active Construct node at hero weight", () => {
+  const styles = readFileSync(join(ROOT, "studio", "console-titles.css"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const expectedTabs = [
+    ["tattoo", "--color-tattooing", "#6E0404"],
+    ["art", "--color-art", "#0039BD"],
+    ["merch", "--color-merch", "#F08000"],
+    ["events", "--color-events", "#005D25"],
+    ["archive", "--color-archive", "#6D3D15"],
+  ];
+
+  assert.match(studio, /console-titles\.css\?v=1/);
+  assert.match(studio, /<body class="studio-console">/);
+  assert.match(styles, /--console-title-color:var\(--accent\)/);
+  assert.match(styles, /font-weight:900/);
+  assert.match(styles, /\.studio-console \.tab\.is-active/);
+  for (const [tab, token, fallback] of expectedTabs) {
+    assert.ok(styles.includes(`.tab[data-tab="${tab}"].is-active`));
+    assert.ok(styles.includes(`var(${token},${fallback})`));
+  }
+});
+
 test("People UI separates contacts, system links, activities, and money", () => {
   const source = readFileSync(join(ROOT, "studio", "people-manager.js"), "utf8");
   const addContactSource = source.slice(
