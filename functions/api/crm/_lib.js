@@ -211,6 +211,11 @@ function personView(row) {
     summary: row.summary || "",
     archivePersonId: row.archive_person_id || null,
     mergedIntoId: row.merged_into_id || null,
+    eligibilityAt: row.eligibility_at || null,
+    eligibilityReason: row.eligibility_reason || "",
+    eligibilitySourceProvider: row.eligibility_source_provider || "",
+    eligibilitySourceType: row.eligibility_source_type || "",
+    eligibilitySourceId: row.eligibility_source_id || "",
     archivedAt: row.archived_at || null,
     anonymizedAt: row.anonymized_at || null,
     createdAt: row.created_at,
@@ -582,7 +587,11 @@ async function uniqueEmailMatch(database, email) {
 
 async function handleListPeople(request, database) {
   const url = new URL(request.url);
-  const filters = ["p.merged_into_id IS NULL", "p.relationship_status!='merged'"];
+  const filters = [
+    "p.merged_into_id IS NULL",
+    "p.relationship_status!='merged'",
+    "p.eligibility_at IS NOT NULL",
+  ];
   const values = [];
   const q = asString(url.searchParams.get("q"), 200).toLowerCase();
   if (url.searchParams.get("includeArchived") !== "1") filters.push("p.archived_at IS NULL");
@@ -821,8 +830,10 @@ async function handleCreatePerson(request, database) {
       INSERT INTO crm_people(
         id,display_name,preferred_name,organization,pronouns,instagram,
         relationship_status,tier,tier_rationale,tier_reviewed_at,
-        preferred_contact_method,summary,archive_person_id,created_at,updated_at
-      ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?)
+        preferred_contact_method,summary,archive_person_id,
+        eligibility_at,eligibility_reason,eligibility_source_provider,
+        eligibility_source_type,eligibility_source_id,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).bind(
       personId,
       displayName || email || phone || `@${instagram}`,
@@ -838,6 +849,11 @@ async function handleCreatePerson(request, database) {
         : "",
       asString(body.summary, 5000),
       asNullableString(body.archivePersonId, 120),
+      now,
+      "studio_manual_entry",
+      "manual",
+      "person_create",
+      personId,
       now,
       now,
     ),
@@ -2710,8 +2726,10 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
   const personInsert = database.prepare(`
     INSERT INTO crm_people(
       id,display_name,preferred_name,organization,pronouns,instagram,
-      relationship_status,preferred_contact_method,import_batch_id,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,'active',?,?,?,?)
+      relationship_status,preferred_contact_method,import_batch_id,
+      eligibility_at,eligibility_reason,eligibility_source_provider,
+      eligibility_source_type,eligibility_source_id,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?)
   `).bind(
     personId,
     normalized.name || normalized.email || normalized.phoneDisplay || `@${normalized.instagram}` || "Legacy contact",
@@ -2721,6 +2739,11 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
     normalized.instagram || "",
     normalized.email ? "email" : normalized.phone ? "phone" : normalized.instagram ? "instagram" : "",
     batch.id,
+    now,
+    "studio_csv_import",
+    "legacy_import",
+    "legacy_row",
+    row.row_fingerprint,
     now,
     now,
   );
@@ -3312,6 +3335,7 @@ async function findOrCreateLocalPerson(database, {
   organization = "",
   pronouns = "",
   occurredAt,
+  eligibilityReason,
 }) {
   const existing = await database.prepare(`
     SELECT person_id FROM crm_interactions
@@ -3336,8 +3360,10 @@ async function findOrCreateLocalPerson(database, {
     const personInsert = database.prepare(`
       INSERT INTO crm_people(
         id,display_name,organization,pronouns,instagram,relationship_status,
-        preferred_contact_method,created_at,updated_at
-      ) VALUES(?,?,?,?,?,'active',?,?,?)
+        preferred_contact_method,eligibility_at,eligibility_reason,
+        eligibility_source_provider,eligibility_source_type,
+        eligibility_source_id,created_at,updated_at
+      ) VALUES(?,?,?,?,?,'active',?,?,?,?,?,?,?,?)
     `).bind(
       personId,
       asString(name, 200) || normalizeEmail(email) || asString(phone, 80) || "Construct contact",
@@ -3345,6 +3371,11 @@ async function findOrCreateLocalPerson(database, {
       asString(pronouns, 100),
       normalizeInstagram(instagram),
       email ? "email" : phone ? "phone" : instagram ? "instagram" : "",
+      occurredAt || now,
+      eligibilityReason,
+      "local",
+      sourceType,
+      sourceId,
       occurredAt || now,
       now,
     );
@@ -3394,6 +3425,23 @@ async function findOrCreateLocalPerson(database, {
       }
     }
   }
+  await database.prepare(`
+    UPDATE crm_people
+    SET eligibility_at=COALESCE(eligibility_at,?),
+        eligibility_reason=CASE WHEN eligibility_at IS NULL THEN ? ELSE eligibility_reason END,
+        eligibility_source_provider=CASE WHEN eligibility_at IS NULL THEN 'local' ELSE eligibility_source_provider END,
+        eligibility_source_type=CASE WHEN eligibility_at IS NULL THEN ? ELSE eligibility_source_type END,
+        eligibility_source_id=CASE WHEN eligibility_at IS NULL THEN ? ELSE eligibility_source_id END,
+        updated_at=?
+    WHERE id=?
+  `).bind(
+    occurredAt || now,
+    eligibilityReason,
+    sourceType,
+    sourceId,
+    now,
+    personId,
+  ).run();
   const statements = [];
   const sourceReservation = reservationStatement(
     database,
@@ -3604,11 +3652,6 @@ async function insertLocalTransaction(database, personId, {
 
 async function localBackfillSources(database, limit, offsets) {
   const sourceQueries = {
-    submissions: {
-      sql: `SELECT * FROM submissions WHERE type!='event_rsvp'
-        ORDER BY created_at,id LIMIT ? OFFSET ?`,
-      count: "SELECT COUNT(*) count FROM submissions WHERE type!='event_rsvp'",
-    },
     appointments: {
       sql: "SELECT * FROM appointments ORDER BY created_at,id LIMIT ? OFFSET ?",
       count: "SELECT COUNT(*) count FROM appointments",
@@ -3617,26 +3660,20 @@ async function localBackfillSources(database, limit, offsets) {
       sql: `SELECT d.*,a.client_name,a.client_email,a.client_phone,a.purpose,
           a.booking_type_id,a.submission_id
         FROM deposit_payments d JOIN appointments a ON a.id=d.appointment_id
+        WHERE lower(d.status) IN ('paid','completed','settled','payment_attention')
         ORDER BY d.created_at,d.id LIMIT ? OFFSET ?`,
-      count: "SELECT COUNT(*) count FROM deposit_payments",
+      count: `SELECT COUNT(*) count FROM deposit_payments
+        WHERE lower(status) IN ('paid','completed','settled','payment_attention')`,
     },
     eventTickets: {
       sql: `SELECT t.*,e.title event_title,e.slug event_slug
         FROM event_tickets t JOIN events e ON e.id=t.event_id
+        WHERE t.status='paid' OR t.paid_at IS NOT NULL
+          OR t.square_payment_id IS NOT NULL OR t.refund_id IS NOT NULL
         ORDER BY t.created_at,t.id LIMIT ? OFFSET ?`,
-      count: "SELECT COUNT(*) count FROM event_tickets",
-    },
-    eventWaitlist: {
-      sql: `SELECT w.*,e.title event_title,e.slug event_slug
-        FROM event_waitlist w JOIN events e ON e.id=w.event_id
-        ORDER BY w.created_at,w.id LIMIT ? OFFSET ?`,
-      count: "SELECT COUNT(*) count FROM event_waitlist",
-    },
-    openMic: {
-      sql: `SELECT s.*,e.title event_title,e.slug event_slug
-        FROM event_open_mic_signups s JOIN events e ON e.id=s.event_id
-        ORDER BY s.created_at,s.id LIMIT ? OFFSET ?`,
-      count: "SELECT COUNT(*) count FROM event_open_mic_signups",
+      count: `SELECT COUNT(*) count FROM event_tickets
+        WHERE status='paid' OR paid_at IS NOT NULL
+          OR square_payment_id IS NOT NULL OR refund_id IS NOT NULL`,
     },
   };
   const data = {};
@@ -3678,29 +3715,6 @@ async function handleBackfill(request, database) {
     return resolved.personId;
   };
 
-  for (const row of data.submissions) {
-    const contact = parseJson(row.contact_json, {});
-    const personId = await processPerson({
-      sourceType: "submission",
-      sourceId: row.id,
-      name: row.contact_name || contact.name,
-      email: row.contact_email || contact.email,
-      phone: row.contact_phone || contact.phone,
-      instagram: contact.instagram,
-      pronouns: contact.pronouns,
-      occurredAt: row.created_at,
-    });
-    await insertLocalInteraction(database, personId, {
-      sourceType: "submission",
-      sourceId: row.id,
-      nodeId: nodeForSubmissionType(row.type),
-      interactionType: row.type,
-      label: row.subject || row.type,
-      status: row.status,
-      occurredAt: row.created_at,
-      metadata: { sourcePath: row.source_path || "", submissionId: row.id },
-    });
-  }
   for (const row of data.appointments) {
     const personId = await processPerson({
       sourceType: "appointment",
@@ -3709,6 +3723,7 @@ async function handleBackfill(request, database) {
       email: row.client_email,
       phone: row.client_phone,
       occurredAt: row.start_at || row.created_at,
+      eligibilityReason: "website_booking",
     });
     await insertLocalInteraction(database, personId, {
       sourceType: "appointment",
@@ -3733,6 +3748,7 @@ async function handleBackfill(request, database) {
       email: row.client_email,
       phone: row.client_phone,
       occurredAt: row.updated_at || row.created_at,
+      eligibilityReason: "settled_booking_payment",
     });
     const settled = ["paid", "completed", "settled", "payment_attention"].includes(
       String(row.status || "").toLowerCase()
@@ -3768,6 +3784,7 @@ async function handleBackfill(request, database) {
       email: row.contact_email,
       phone: row.contact_phone,
       occurredAt: row.paid_at || row.created_at,
+      eligibilityReason: "paid_event_ticket",
     });
     await insertLocalInteraction(database, personId, {
       sourceType: "event_ticket",
@@ -3829,47 +3846,6 @@ async function handleBackfill(request, database) {
         },
       });
     }
-  }
-  for (const row of data.eventWaitlist) {
-    const personId = await processPerson({
-      sourceType: "event_waitlist",
-      sourceId: row.id,
-      name: row.contact_name,
-      email: row.contact_email,
-      phone: row.contact_phone,
-      occurredAt: row.created_at,
-    });
-    await insertLocalInteraction(database, personId, {
-      sourceType: "event_waitlist",
-      sourceId: row.id,
-      nodeId: "node-events",
-      interactionType: "event_waitlist",
-      label: row.event_title,
-      status: row.status,
-      quantity: row.seats_requested,
-      occurredAt: row.created_at,
-      metadata: { eventId: row.event_id, eventSlug: row.event_slug },
-    });
-  }
-  for (const row of data.openMic) {
-    const personId = await processPerson({
-      sourceType: "event_open_mic",
-      sourceId: row.id,
-      name: row.performer_name,
-      email: row.performer_email,
-      phone: row.performer_phone,
-      occurredAt: row.created_at,
-    });
-    await insertLocalInteraction(database, personId, {
-      sourceType: "event_open_mic",
-      sourceId: row.id,
-      nodeId: "node-events",
-      interactionType: "performance",
-      label: row.piece_title || row.act_type || row.event_title,
-      status: row.status,
-      occurredAt: row.created_at,
-      metadata: { eventId: row.event_id, eventSlug: row.event_slug, actType: row.act_type || "" },
-    });
   }
   const now = nowIso();
   await auditStatement(database, {
@@ -4032,6 +4008,7 @@ async function handlePeopleExport(database) {
     database.prepare(`${personSelectSql(`
       p.merged_into_id IS NULL
       AND p.relationship_status!='merged'
+      AND p.eligibility_at IS NOT NULL
       AND p.archived_at IS NULL
     `)}
       ORDER BY p.display_name COLLATE NOCASE
@@ -4052,6 +4029,7 @@ async function handlePeopleExport(database) {
         END effective_consent
       FROM crm_people p
       WHERE p.merged_into_id IS NULL AND p.relationship_status!='merged'
+        AND p.eligibility_at IS NOT NULL
         AND p.archived_at IS NULL
     `).all(),
   ]);

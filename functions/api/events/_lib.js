@@ -2525,6 +2525,9 @@ async function cancelEventTicketLifecycle(database, env, ticketId, shouldRefund,
   const initial = await selectAdminEventTicket(database, ticketId);
   if (!initial) return { missing: true };
   const alreadyCancelled = initial.status === "cancelled";
+  if (eventTicketHasSettledPayment(initial)) {
+    await mirrorEventTicketToCrm(database, initial, null);
+  }
   const reconciliation = await reconcileEventTicketForCancellation(
     database,
     env,
@@ -2538,6 +2541,9 @@ async function cancelEventTicketLifecycle(database, env, ticketId, shouldRefund,
 
   let current = reconciliation.ticket;
   let wasPaid = reconciliation.paid;
+  if (wasPaid) {
+    await mirrorEventTicketToCrm(database, current, null);
+  }
   let refund = { ok: false, skipped: true };
   if (wasPaid && shouldRefund) {
     refund = await refundEventSquarePayment(env, current);

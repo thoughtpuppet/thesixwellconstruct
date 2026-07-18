@@ -473,7 +473,7 @@ test("0039 upgrades only the untouched early Tattoo Settings seed", () => {
   );
 });
 
-test("Build submissions require intent, snapshot stable published symbol IDs, and are idempotent", async () => {
+test("Build submissions require intent, snapshot stable published symbol IDs, stay out of People, and are idempotent", async () => {
   const database = migratedDatabase();
   const env = { SUBMISSIONS_DB: new LocalD1(database) };
   const payload = {
@@ -499,29 +499,13 @@ test("Build submissions require intent, snapshot stable published symbol IDs, an
   assert.equal(secondBody.submissionId, firstBody.submissionId);
   assert.equal(secondBody.idempotent, true);
   assert.equal(database.prepare("SELECT count(*) AS count FROM submissions WHERE idempotency_key = ?").get("build-contract-test").count, 1);
-  const crmPerson = database.prepare(
-    `SELECT p.id,p.display_name
-     FROM crm_people p
-     JOIN crm_identities i ON i.person_id=p.id
-     WHERE i.kind='email' AND i.normalized_value='build@example.test' AND i.active=1`
-  ).get();
-  assert.equal(crmPerson.display_name, "Build Client");
-  assert.deepEqual(
-    { ...database.prepare(
-      `SELECT person_id,interaction_type,status
-       FROM crm_interactions
-       WHERE source_provider='local' AND source_type='submission' AND source_id=?`
-    ).get(firstBody.submissionId) },
-    {
-      person_id: crmPerson.id,
-      interaction_type: "build_brief",
-      status: "new",
-    },
-  );
+  assert.equal(database.prepare(
+    `SELECT COUNT(*) count FROM crm_people`
+  ).get().count, 0);
   assert.equal(database.prepare(
     `SELECT COUNT(*) count FROM crm_interactions
      WHERE source_provider='local' AND source_type='submission' AND source_id=?`
-  ).get(firstBody.submissionId).count, 1);
+  ).get(firstBody.submissionId).count, 0);
 
   const row = database.prepare("SELECT status, tattoo_stage, payload_json FROM submissions WHERE id = ?").get(firstBody.submissionId);
   const saved = JSON.parse(row.payload_json);

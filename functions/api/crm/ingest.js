@@ -281,7 +281,110 @@ async function providerTransactionOverlap(database, transactionValue) {
   };
 }
 
-function personInsert(database, personId, contact, now) {
+function eligibilityFromRecord(record) {
+  const interaction = safeObject(record.interaction);
+  const transaction = safeObject(record.transaction);
+  const interactionTuple = record.interaction
+    ? sourceTuple(record.interaction, "interaction")
+    : null;
+  const transactionTuple = record.transaction
+    ? sourceTuple(record.transaction, "transaction")
+    : null;
+  if (
+    interactionTuple?.sourceProvider === "local"
+    && interactionTuple.sourceType === "appointment"
+  ) {
+    return {
+      reason: "website_booking",
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: interactionTuple.sourceId,
+      at: valueString(interaction.occurredAt, 80),
+    };
+  }
+  if (
+    transactionTuple?.sourceProvider === "local"
+    && transactionTuple.sourceType === "deposit_payment"
+    && transaction.status === "settled"
+  ) {
+    return {
+      reason: "settled_booking_payment",
+      sourceProvider: "local",
+      sourceType: "deposit_payment",
+      sourceId: transactionTuple.sourceId,
+      at: valueString(transaction.occurredAt, 80),
+    };
+  }
+  const paidTicket = (
+    interactionTuple?.sourceProvider === "local"
+    && interactionTuple.sourceType === "event_ticket"
+    && valueString(interaction.status, 80).toLowerCase() === "paid"
+  ) || (
+    transactionTuple?.sourceProvider === "local"
+    && transactionTuple.sourceType === "event_ticket_payment"
+    && transaction.status === "settled"
+  );
+  if (paidTicket) {
+    const tuple = interactionTuple?.sourceType === "event_ticket"
+      ? interactionTuple
+      : transactionTuple;
+    return {
+      reason: "paid_event_ticket",
+      sourceProvider: tuple.sourceProvider,
+      sourceType: tuple.sourceType,
+      sourceId: tuple.sourceId,
+      at: valueString(
+        interaction.occurredAt || transaction.occurredAt,
+        80,
+      ),
+    };
+  }
+  return null;
+}
+
+async function personIsEligible(database, personId) {
+  if (!personId) return false;
+  const row = await database.prepare(
+    "SELECT eligibility_at FROM crm_people WHERE id=? LIMIT 1"
+  ).bind(personId).first();
+  return Boolean(row?.eligibility_at);
+}
+
+function personEligibilityStatement(database, personId, eligibility, now) {
+  if (!personId || !eligibility) return null;
+  return database.prepare(
+    `UPDATE crm_people
+     SET eligibility_at=COALESCE(eligibility_at,?),
+         eligibility_reason=CASE
+           WHEN eligibility_at IS NULL THEN ?
+           ELSE eligibility_reason
+         END,
+         eligibility_source_provider=CASE
+           WHEN eligibility_at IS NULL THEN ?
+           ELSE eligibility_source_provider
+         END,
+         eligibility_source_type=CASE
+           WHEN eligibility_at IS NULL THEN ?
+           ELSE eligibility_source_type
+         END,
+         eligibility_source_id=CASE
+           WHEN eligibility_at IS NULL THEN ?
+           ELSE eligibility_source_id
+         END,
+         updated_at=?
+     WHERE id=?`
+  ).bind(
+    eligibility.at || now,
+    eligibility.reason,
+    eligibility.sourceProvider,
+    eligibility.sourceType,
+    eligibility.sourceId,
+    now,
+    personId,
+  );
+}
+
+function personInsert(database, personId, contact, eligibility, now) {
   const displayName = valueString(
     contact.displayName || contact.name || contact.email || contact.phone || contact.instagram,
     200,
@@ -296,8 +399,10 @@ function personInsert(database, personId, contact, now) {
   return database.prepare(
     `INSERT INTO crm_people(
       id,display_name,organization,pronouns,instagram,relationship_status,
-      preferred_contact_method,created_at,updated_at
-    ) VALUES(?,?,?,?,?,'active',?,?,?)`
+      preferred_contact_method,eligibility_at,eligibility_reason,
+      eligibility_source_provider,eligibility_source_type,
+      eligibility_source_id,created_at,updated_at
+    ) VALUES(?,?,?,?,?,'active',?,?,?,?,?,?,?,?)`
   ).bind(
     personId,
     displayName,
@@ -305,6 +410,11 @@ function personInsert(database, personId, contact, now) {
     valueString(contact.pronouns, 100),
     normalizeInstagram(contact.instagram),
     preferredContactMethod,
+    eligibility.at || now,
+    eligibility.reason,
+    eligibility.sourceProvider,
+    eligibility.sourceType,
+    eligibility.sourceId,
     now,
     now,
   );
@@ -692,6 +802,7 @@ export async function ingestCrmSourceRecord(database, record = {}) {
     ? sourceTuple(record.transaction, "transaction")
     : null;
   const tuples = [interactionTuple, transactionTuple].filter(Boolean);
+  const eligibility = eligibilityFromRecord(record);
   if (!tuples.length) {
     return {
       status: "skipped",
@@ -749,11 +860,29 @@ export async function ingestCrmSourceRecord(database, record = {}) {
     warnings.push("provider_transaction_person_conflict");
   }
 
+  if (personId && !eligibility && !(await personIsEligible(database, personId))) {
+    personId = "";
+    match = "none";
+  }
+
   let createdPerson = false;
-  if (!personId && !needsReview) {
+  if (!personId && !needsReview && eligibility) {
     personId = recordId("crm-person");
     match = "new";
     createdPerson = true;
+  }
+  if (!personId && !eligibility) {
+    return {
+      status: "skipped",
+      reason: "not_directory_eligible",
+      personId: null,
+      match: "none",
+      createdPerson: false,
+      interactionCreated: false,
+      transactionCreated: false,
+      transactionOverlap: false,
+      warnings: [],
+    };
   }
 
   const now = new Date().toISOString();
@@ -765,8 +894,18 @@ export async function ingestCrmSourceRecord(database, record = {}) {
     transactionTuple,
     now,
   ));
-  if (createdPerson) statements.push(personInsert(database, personId, contact, now));
-  else if (personId) statements.push(personEnrichmentStatement(database, personId, contact, now));
+  if (createdPerson) {
+    statements.push(personInsert(database, personId, contact, eligibility, now));
+  } else if (personId) {
+    statements.push(personEnrichmentStatement(database, personId, contact, now));
+    const eligibilityStatement = personEligibilityStatement(
+      database,
+      personId,
+      eligibility,
+      now,
+    );
+    if (eligibilityStatement) statements.push(eligibilityStatement);
+  }
 
   if (personId) {
     const identityTuple = tuples[0];

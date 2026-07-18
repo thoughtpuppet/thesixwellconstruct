@@ -156,7 +156,7 @@ async function emailPersonMatch(database, email) {
     FROM crm_identities i
     JOIN crm_people p ON p.id=i.person_id
     WHERE i.kind='email' AND i.normalized_value=? AND i.active=1
-      AND p.anonymized_at IS NULL
+      AND p.anonymized_at IS NULL AND p.eligibility_at IS NOT NULL
   `).bind(normalized).all();
   const ids = [...new Set((result.results || []).map((row) => row.person_id).filter(Boolean))];
   const shared = (result.results || []).some((row) => Boolean(row.is_shared));
@@ -175,6 +175,7 @@ async function providerIdentityPerson(database, provider, externalId) {
     FROM crm_identities i
     JOIN crm_people p ON p.id=i.person_id
     WHERE i.provider=? AND i.external_id=? AND i.active=1
+      AND p.eligibility_at IS NOT NULL
     LIMIT 1
   `).bind(provider, externalId).first();
   return row?.person_id || null;
@@ -493,6 +494,10 @@ async function ensureProviderPerson(database, {
   preferredPersonId = null,
   conflictSourceType = "provider_contact",
   conflictSourceId = null,
+  allowCreate = false,
+  eligibilityReason = "",
+  eligibilitySourceType = "",
+  eligibilitySourceId = "",
 }) {
   const normalizedExternalId = text(externalId, 300);
   const normalizedAdditionalExternalIds = [...new Set(
@@ -511,7 +516,13 @@ async function ensureProviderPerson(database, {
       .filter((value) => value && value !== normalizedEmail)
   )].slice(0, 5);
   const normalizedPhone = normalizePhone(phone);
-  const preferred = await canonicalPersonId(database, preferredPersonId);
+  let preferred = await canonicalPersonId(database, preferredPersonId);
+  if (preferred) {
+    const eligible = await database.prepare(
+      "SELECT 1 eligible FROM crm_people WHERE id=? AND eligibility_at IS NOT NULL"
+    ).bind(preferred).first();
+    if (!eligible) preferred = null;
+  }
   const providerIdentityMatches = [];
   for (const value of providerExternalIds) {
     providerIdentityMatches.push({
@@ -596,7 +607,7 @@ async function ensureProviderPerson(database, {
     return preferred || providerPersonId || null;
   }
   if (!personId && emailMatch.ambiguous && providerExternalIds.length === 0) return null;
-  if (!personId && phoneOnlyNeedsReview) return null;
+  if (!personId && phoneOnlyNeedsReview && !allowCreate) return null;
   if (
     !personId &&
     providerExternalIds.length === 0 &&
@@ -605,6 +616,7 @@ async function ensureProviderPerson(database, {
   ) {
     return null;
   }
+  if (!personId && !allowCreate) return null;
 
   const now = nowIso();
   let created = false;
@@ -614,13 +626,19 @@ async function ensureProviderPerson(database, {
     await database.prepare(`
       INSERT INTO crm_people(
         id,display_name,organization,relationship_status,preferred_contact_method,
-        created_at,updated_at
-      ) VALUES(?,?,?,'active',?,?,?)
+        eligibility_at,eligibility_reason,eligibility_source_provider,
+        eligibility_source_type,eligibility_source_id,created_at,updated_at
+      ) VALUES(?,?,?,'active',?,?,?,?,?,?,?,?)
     `).bind(
       personId,
       text(displayName, 200) || normalizedEmail || normalizedPhone || `${provider} contact`,
       text(organization, 200),
       "",
+      occurredAt || now,
+      eligibilityReason,
+      provider,
+      eligibilitySourceType,
+      eligibilitySourceId,
       occurredAt || now,
       now,
     ).run();
@@ -1057,7 +1075,12 @@ async function persistSquare(database, records, counts) {
       preferredPersonId: mirrored?.person_id || null,
       conflictSourceType: "payment",
       conflictSourceId: payment.externalId,
+      allowCreate: false,
     });
+    if (!personId) {
+      counts.unmatched += 1;
+      continue;
+    }
     if (personId && payerDisplayName) {
       if (!directoryDisplayName) {
         await addPayerNameHint(database, personId, {
@@ -1207,6 +1230,10 @@ async function persistSquare(database, records, counts) {
       personIds: refundPersonIds,
     });
     const personId = payment?.person_id || mirroredRefund?.person_id || null;
+    if (!personId) {
+      counts.unmatched += 1;
+      continue;
+    }
     if (mirroredRefund) {
       await database.prepare(`
         UPDATE crm_transactions
@@ -1302,13 +1329,22 @@ async function persistShopify(database, records, counts) {
       tags: customer.tags,
       conflictSourceType: "customer",
       conflictSourceId: customer.externalId,
+      allowCreate: false,
     });
-    await persistShopifyMarketing(database, personId, customer);
+    if (personId) await persistShopifyMarketing(database, personId, customer);
     if (!personId) counts.unmatched += 1;
   }
 
   for (const order of records.orders || []) {
     const contact = order.contact || {};
+    const payments = order.settledPaymentTransactions || [];
+    const existingOrderPerson = await database.prepare(`
+      SELECT person_id
+      FROM crm_interactions
+      WHERE source_provider='shopify' AND source_type='order'
+        AND source_id=? AND active=1 AND person_id IS NOT NULL
+      LIMIT 1
+    `).bind(order.externalId).first();
     const personId = await ensureProviderPerson(database, {
       provider: "shopify",
       externalId: contact.externalId,
@@ -1320,7 +1356,16 @@ async function persistShopify(database, records, counts) {
       tags: order.tags,
       conflictSourceType: "order",
       conflictSourceId: order.externalId,
+      allowCreate: payments.length > 0,
+      eligibilityReason: "paid_shopify_order",
+      eligibilitySourceType: "order",
+      eligibilitySourceId: order.externalId,
+      preferredPersonId: existingOrderPerson?.person_id || null,
     });
+    if (!personId) {
+      counts.unmatched += 1;
+      continue;
+    }
     await persistShopifyMarketing(database, personId, contact);
     await upsertInteraction(database, {
       personId,
@@ -1348,7 +1393,6 @@ async function persistShopify(database, records, counts) {
     });
     counts.interactions += 1;
 
-    const payments = order.settledPaymentTransactions || [];
     for (let index = 0; index < payments.length; index += 1) {
       const payment = payments[index];
       const inserted = await upsertTransaction(database, {
@@ -1405,7 +1449,12 @@ async function persistBeehiiv(database, records, counts) {
       occurredAt: subscription.subscribedAt,
       conflictSourceType: "subscription",
       conflictSourceId: subscription.externalId,
+      allowCreate: false,
     });
+    if (!personId) {
+      counts.unmatched += 1;
+      continue;
+    }
     await upsertSubscription(database, {
       personId,
       provider: "beehiiv",
@@ -1465,7 +1514,8 @@ async function latestJobs(database) {
 async function localCounts(database) {
   const row = await database.prepare(`
     SELECT
-      (SELECT COUNT(*) FROM crm_people WHERE merged_into_id IS NULL) people_count,
+      (SELECT COUNT(*) FROM crm_people
+        WHERE merged_into_id IS NULL AND eligibility_at IS NOT NULL) people_count,
       (SELECT COUNT(*) FROM crm_interactions WHERE active=1) interaction_count,
       (SELECT COUNT(*) FROM crm_transactions WHERE active=1) transaction_count,
       (SELECT COUNT(*) FROM crm_import_batches) import_count,

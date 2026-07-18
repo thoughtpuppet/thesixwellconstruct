@@ -946,6 +946,18 @@
     })[String(category || "")] || "Relationship note";
   }
 
+  function eligibilityLabel(person) {
+    return ({
+      website_booking: "Website booking",
+      settled_booking_payment: "Settled booking payment",
+      paid_shopify_order: "Paid Shopify order",
+      paid_event_ticket: "Paid event ticket",
+      studio_manual_entry: "Studio manual entry",
+      studio_csv_import: "Studio CSV import",
+    })[String(first(person, "eligibilityReason", "eligibility_reason") || "")]
+      || "Eligible site customer";
+  }
+
   function personalContextRecords(records) {
     if (!records.length) return '<div class="people-empty">No private context notes yet.</div>';
     return `<div class="people-record-list">${records.map((note) => {
@@ -1306,6 +1318,7 @@
           <div class="people-stat"><span>Gross paid</span><strong>${esc(formatMoney(totals.gross, first(person, "currency") || "USD"))}</strong></div>
           <div class="people-stat"><span>Tips</span><strong>${esc(formatMoney(totals.tips, first(person, "currency") || "USD"))}</strong></div>
           <div class="people-stat"><span>Last interaction</span><strong>${esc(formatDate(lastInteraction))}</strong></div>
+          <div class="people-stat"><span>Counted by</span><strong>${esc(eligibilityLabel(person))}</strong></div>
         </div>
       </div>
 
@@ -1924,7 +1937,7 @@
 
       <section data-admin-section-title="Construct backfill">
         <h3>Construct backfill</h3>
-        <p class="people-section-copy">Preview or import existing submissions, appointments, settled deposits, event tickets, waitlists, and open-mic records. Event submission mirrors are excluded.</p>
+        <p class="people-section-copy">Preview or import website appointments, settled booking payments, and paid event tickets. Inquiries, waitlists, open-mic requests, and unpaid tickets do not create People.</p>
         <div class="people-actions">
           <button class="button" type="button" data-backfill="preview">Preview backfill</button>
           <button class="button" type="button" data-backfill="apply">Run backfill</button>

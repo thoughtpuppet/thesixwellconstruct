@@ -171,6 +171,28 @@ async function createPerson(database, values = {}) {
   return result.payload.person;
 }
 
+function addSquareCustomerIdentity(database, personId, externalId) {
+  const now = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,
+      source_provider,source_type,source_id,created_at,updated_at
+    ) VALUES(
+      ?,?,'square_customer',?,?,'square',?,
+      'square','provider_contact',?,?,?
+    )
+  `).run(
+    `test-square-identity-${externalId}`,
+    personId,
+    externalId,
+    externalId,
+    externalId,
+    `square:${externalId}`,
+    now,
+    now,
+  );
+}
+
 test("People directory SQL avoids D1-incompatible correlated sort expressions", () => {
   const source = readFileSync(join(ROOT, "functions", "api", "crm", "_lib.js"), "utf8");
   assert.doesNotMatch(source, /ORDER BY\s+\(i\.person_id\s*=\s*p\.id\)/);
@@ -206,7 +228,7 @@ test("People UI gives canonical Construct nodes their source colors", () => {
   }
   assert.match(styles, /\.people-record\[data-people-node\]/);
   assert.match(studio, /people-manager\.css\?v=2/);
-  assert.match(studio, /people-manager\.js\?v=2/);
+  assert.match(studio, /people-manager\.js\?v=3/);
 });
 
 function installSquareApiMock(testContext, {
@@ -502,7 +524,96 @@ test("live source ingestion skips cleanly before the CRM schema exists", async (
   assert.equal(result.reason, "schema_unavailable");
 });
 
-test("concurrent live sources with one email converge without orphan people", async () => {
+test("noncustomer sources cannot create People but may enrich an eligible customer", async () => {
+  const database = migratedDatabase();
+  const d1 = new LocalD1(database);
+  const excluded = [
+    ["submission", "tattoo_inquiry", "new"],
+    ["event_waitlist", "event_waitlist", "waiting"],
+    ["event_open_mic", "open_mic_request", "pending"],
+    ["newsletter", "newsletter_signup", "subscribed"],
+    ["event_ticket", "event_ticket", "pending"],
+    ["square_payment", "payment", "settled"],
+  ];
+  for (const [sourceType, interactionType, status] of excluded) {
+    const result = await ingestCrmSourceRecord(d1, {
+      contact: {
+        displayName: `Excluded ${sourceType}`,
+        email: `${sourceType}@example.test`,
+      },
+      interaction: {
+        sourceProvider: sourceType === "square_payment" ? "square" : "local",
+        sourceType,
+        sourceId: `excluded-${sourceType}`,
+        interactionType,
+        status,
+      },
+    });
+    assert.deepEqual(
+      { status: result.status, reason: result.reason },
+      { status: "skipped", reason: "not_directory_eligible" },
+    );
+  }
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 0);
+
+  const booking = await ingestCrmSourceRecord(d1, {
+    contact: {
+      displayName: "Eligible Site Client",
+      email: "eligible-site-client@example.test",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: "eligible-site-appointment",
+      interactionType: "appointment",
+      status: "cancelled",
+    },
+  });
+  assert.equal(booking.status, "applied");
+  const newsletter = await ingestCrmSourceRecord(d1, {
+    contact: {
+      displayName: "Eligible Site Client",
+      email: "eligible-site-client@example.test",
+      phone: "(404) 555-0198",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "newsletter",
+      sourceId: "eligible-client-newsletter",
+      interactionType: "newsletter_signup",
+      status: "subscribed",
+    },
+  });
+  assert.equal(newsletter.status, "applied");
+  assert.equal(newsletter.personId, booking.personId);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT eligibility_reason,eligibility_source_type
+      FROM crm_people WHERE id=?
+    `).get(booking.personId) },
+    {
+      eligibility_reason: "website_booking",
+      eligibility_source_type: "appointment",
+    },
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_interactions WHERE person_id=?"
+  ).get(booking.personId).count, 2);
+
+  const manual = await createPerson(database, {
+    displayName: "Studio Exception",
+    email: "studio-exception@example.test",
+  });
+  const manualProfile = await responseJson(
+    await api(database, `/api/admin/crm/people/${manual.id}`),
+  );
+  assert.equal(manualProfile.payload.person.eligibilityReason, "studio_manual_entry");
+  assert.equal(manualProfile.payload.person.eligibilitySourceProvider, "manual");
+});
+
+test("concurrent qualifying bookings with one email converge without orphan people", async () => {
   const database = migratedDatabase();
   const d1 = new LocalD1(database);
   const results = await Promise.all(
@@ -513,10 +624,10 @@ test("concurrent live sources with one email converge without orphan people", as
       },
       interaction: {
         sourceProvider: "local",
-        sourceType: "submission",
-        sourceId: `concurrent-submission-${index}`,
+        sourceType: "appointment",
+        sourceId: `concurrent-appointment-${index}`,
         nodeId: "node-tattoos",
-        interactionType: "tattoo_inquiry",
+        interactionType: "appointment",
         status: "new",
       },
     })),
@@ -534,34 +645,25 @@ test("concurrent live sources with one email converge without orphan people", as
   ).get().count, 1);
   const interactionPeople = database.prepare(
     `SELECT DISTINCT person_id FROM crm_interactions
-     WHERE source_provider='local' AND source_type='submission'
-       AND source_id LIKE 'concurrent-submission-%'`
+     WHERE source_provider='local' AND source_type='appointment'
+       AND source_id LIKE 'concurrent-appointment-%'`
   ).all();
   assert.equal(interactionPeople.length, 1);
   assert.ok(interactionPeople[0].person_id);
   assert.equal(database.prepare(
     `SELECT COUNT(*) count FROM crm_interactions
-     WHERE source_provider='local' AND source_type='submission'
-       AND source_id LIKE 'concurrent-submission-%'`
+     WHERE source_provider='local' AND source_type='appointment'
+       AND source_id LIKE 'concurrent-appointment-%'`
   ).get().count, 8);
 });
 
 test("a real booking enriches only blank or placeholder person fields", async () => {
   const database = migratedDatabase();
   const d1 = new LocalD1(database);
-  const initial = await ingestCrmSourceRecord(d1, {
-    contact: { email: "enrich@example.test" },
-    interaction: {
-      sourceProvider: "local",
-      sourceType: "newsletter",
-      sourceId: "enrich-newsletter",
-      interactionType: "newsletter_signup",
-    },
+  const initialPerson = await createPerson(database, {
+    displayName: "square contact",
+    email: "enrich@example.test",
   });
-  assert.equal(initial.status, "applied");
-  database.prepare(
-    "UPDATE crm_people SET display_name='square contact' WHERE id=?"
-  ).run(initial.personId);
 
   await ingestCrmSourceRecord(d1, {
     contact: {
@@ -583,7 +685,7 @@ test("a real booking enriches only blank or placeholder person fields", async ()
     { ...database.prepare(
       `SELECT display_name,organization,pronouns,instagram
        FROM crm_people WHERE id=?`
-    ).get(initial.personId) },
+    ).get(initialPerson.id) },
     {
       display_name: "Actual Client Name",
       organization: "Client Organization",
@@ -596,7 +698,7 @@ test("a real booking enriches only blank or placeholder person fields", async ()
     `UPDATE crm_people
      SET display_name='Studio Chosen Name',organization='Studio Organization'
      WHERE id=?`
-  ).run(initial.personId);
+  ).run(initialPerson.id);
   await ingestCrmSourceRecord(d1, {
     contact: {
       displayName: "Should Not Replace",
@@ -613,7 +715,7 @@ test("a real booking enriches only blank or placeholder person fields", async ()
   assert.deepEqual(
     { ...database.prepare(
       "SELECT display_name,organization FROM crm_people WHERE id=?"
-    ).get(initial.personId) },
+    ).get(initialPerson.id) },
     {
       display_name: "Studio Chosen Name",
       organization: "Studio Organization",
@@ -2846,6 +2948,7 @@ test("legacy list imports analyze, review, resume, apply idempotently, export sa
     SELECT * FROM crm_people WHERE import_batch_id=?
   `).all(importId);
   assert.equal(importedPeople.length, 1);
+  assert.equal(importedPeople[0].eligibility_reason, "studio_csv_import");
   const newPersonId = importedPeople[0].id;
 
   result = await responseJson(await api(database, `/api/admin/crm/people/${existing.id}`));
@@ -3021,7 +3124,7 @@ test("local historical backfill ignores mirrored event submissions and is repeat
   }));
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(result.payload.createdPeople, 1);
-  assert.equal(result.payload.processed.submissions, 0);
+  assert.equal("submissions" in result.payload.processed, false);
   assert.equal(result.payload.processed.eventTickets, 1);
 
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
@@ -3055,18 +3158,18 @@ test("local historical backfill ignores mirrored event submissions and is repeat
   assert.equal(result.payload.person.interactionCount, 1);
 });
 
-test("concurrent phone-only backfills reserve one source owner", async () => {
+test("concurrent phone-only appointment backfills reserve one source owner", async () => {
   const database = migratedDatabase();
   const now = "2026-07-17T18:30:00.000Z";
   database.prepare(`
-    INSERT INTO submissions(
-      id,type,status,source_path,subject,contact_name,contact_email,contact_phone,
-      contact_json,payload_json,request_meta_json,files_json,internal_notes,
-      booking_url,created_at,updated_at
+    INSERT INTO appointments(
+      id,booking_type_id,status,purpose,client_name,client_email,client_phone,
+      start_at,end_at,deposit_cents,currency,created_at,updated_at
     ) VALUES(
-      'submission-phone-only-race','tattoo_inquiry','new','/tattoos/',
-      'Phone-only inquiry','Phone Only Person','','4045550123',
-      '{}','{}','{}','[]','','',?,?
+      'appointment-phone-only-race','tattoo_half','confirmed','tattoo',
+      'Phone Only Person','','4045550123',
+      '2026-08-01T12:00:00.000Z','2026-08-01T15:00:00.000Z',
+      0,'USD',?,?
     )
   `).run(now, now);
 
@@ -3089,17 +3192,17 @@ test("concurrent phone-only backfills reserve one source owner", async () => {
   `).get().count, 1);
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_interactions
-    WHERE source_provider='local' AND source_type='submission'
-      AND source_id='submission-phone-only-race' AND active=1
+    WHERE source_provider='local' AND source_type='appointment'
+      AND source_id='appointment-phone-only-race' AND active=1
   `).get().count, 1);
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_identities
     WHERE provider='crm_local_source_claim'
-      AND external_id='submission:submission-phone-only-race'
+      AND external_id='appointment:appointment-phone-only-race'
   `).get().count, 1);
 });
 
-test("historical backfill preserves cancelled booking deposits as void", async () => {
+test("historical backfill keeps cancelled appointments eligible without importing unpaid deposits", async () => {
   const database = migratedDatabase();
   const createdAt = "2026-07-01T12:00:00.000Z";
   database.prepare(`
@@ -3128,15 +3231,16 @@ test("historical backfill preserves cancelled booking deposits as void", async (
     body: { limit: 100 },
   }));
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
-  assert.deepEqual(
-    { ...database.prepare(`
-      SELECT transaction_type,status,amount_cents
-      FROM crm_transactions
-      WHERE source_provider='local' AND source_type='deposit_payment'
-        AND source_id='cancelled-deposit-payment'
-    `).get() },
-    { transaction_type: "charge", status: "void", amount_cents: 10_000 },
-  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count
+    FROM crm_transactions
+    WHERE source_provider='local' AND source_type='deposit_payment'
+      AND source_id='cancelled-deposit-payment'
+  `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people
+    WHERE eligibility_reason='website_booking'
+  `).get().count, 1);
 });
 
 test("historical backfill does not duplicate a Square transaction imported first", async () => {
@@ -3209,15 +3313,15 @@ test("historical backfill repairs a cancelled ticket after paid and refunded evi
     body: { limit: 100 },
   }));
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
-  assert.deepEqual(
-    { ...database.prepare(`
-      SELECT transaction_type,status,amount_cents
-      FROM crm_transactions
-      WHERE source_provider='local' AND source_type='event_ticket_payment'
-        AND source_id='ticket-lifecycle-backfill'
-    `).get() },
-    { transaction_type: "charge", status: "void", amount_cents: 5000 },
-  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people
+  `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count
+    FROM crm_transactions
+    WHERE source_provider='local' AND source_type='event_ticket_payment'
+      AND source_id='ticket-lifecycle-backfill'
+  `).get().count, 0);
 
   database.prepare(`
     UPDATE event_tickets
@@ -3323,7 +3427,61 @@ test("CRM provider status reports integration readiness without exposing credent
   assert.equal(serialized.includes("beehiiv-test-key"), false);
 });
 
-test("phone-only Shopify guest orders stay unmatched without creating replay orphans", async () => {
+test("Shopify customer profiles alone cannot create People records", async () => {
+  const database = migratedDatabase();
+  const shopifyEnv = {
+    SHOPIFY_STORE_DOMAIN: "construct-test.myshopify.com",
+    SHOPIFY_ADMIN_ACCESS_TOKEN: "shopify-test-token",
+  };
+  const result = await withMockFetch(async (input, options = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    assert.equal(url.hostname, "construct-test.myshopify.com");
+    const body = JSON.parse(options.body);
+    if (body.query.includes("CrmOrders")) {
+      return Response.json({
+        data: {
+          orders: {
+            nodes: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      });
+    }
+    if (body.query.includes("CrmCustomers")) {
+      return Response.json({
+        data: {
+          customers: {
+            nodes: [{
+              id: "gid://shopify/Customer/profile-only",
+              displayName: "Profile Only",
+              email: "profile-only@example.test",
+              phone: "+14045550111",
+              createdAt: "2026-07-01T12:00:00.000Z",
+              updatedAt: "2026-07-01T12:00:00.000Z",
+              tags: [],
+              emailMarketingConsent: null,
+              smsMarketingConsent: null,
+            }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      });
+    }
+    throw new Error(`Unexpected Shopify query at ${url}`);
+  }, async () => responseJson(await api(database, "/api/admin/crm/sync/shopify", {
+    method: "POST",
+    body: { mode: "full", maxPages: 4 },
+    env: shopifyEnv,
+  })));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  assert.equal(result.payload.status, "complete");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_identities").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
+});
+
+test("phone-only paid Shopify orders create one eligible replay-safe person", async () => {
   const database = migratedDatabase();
   const shopifyEnv = {
     SHOPIFY_STORE_DOMAIN: "construct-test.myshopify.com",
@@ -3412,26 +3570,33 @@ test("phone-only Shopify guest orders stay unmatched without creating replay orp
     assert.equal(result.response.status, 200, JSON.stringify(result.payload));
     assert.equal(result.payload.status, "complete");
   }
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.deepEqual(
+    { ...database.prepare(`
+      SELECT eligibility_reason,eligibility_source_provider,eligibility_source_type
+      FROM crm_people
+    `).get() },
+    {
+      eligibility_reason: "paid_shopify_order",
+      eligibility_source_provider: "shopify",
+      eligibility_source_type: "order",
+    },
+  );
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_transactions
-    WHERE source_provider='shopify' AND person_id IS NULL
+    WHERE source_provider='shopify' AND person_id IS NOT NULL
   `).get().count, 1);
-  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
-  const conflict = attention.payload.unmatchedInteractions.find(
-    (item) => item.source_type === "crm_sync_conflict"
-      && item.source_id
-        === "crm-sync-conflict:shopify:order:gid://shopify/Order/phone-only"
-  );
-  assert.ok(conflict);
-  assert.deepEqual(
-    JSON.parse(conflict.metadata_json).conflicts,
-    ["phone_only_identity"],
-  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_interactions
+    WHERE source_provider='shopify' AND source_type='order'
+  `).get().count, 1);
 });
 
 test("Square sync persists normalized CRM records and repeats idempotently", async (t) => {
   const database = migratedDatabase();
+  await createPerson(database, {
+    displayName: "square.friend@example.com",
+    email: "square.friend@example.com",
+  });
   const calls = installSquareApiMock(t, {
     payments: [{
       id: "square-payment-new",
@@ -3486,7 +3651,7 @@ test("Square sync persists normalized CRM records and repeats idempotently", asy
         kind: "email",
         value: "square.friend@example.com",
         normalized_value: "square.friend@example.com",
-        provider: "square",
+        provider: "manual",
         external_id: null,
       },
       {
@@ -3588,9 +3753,17 @@ test("Square sync enriches linked payments from customer profiles", async (t) =>
   database.prepare(`
     INSERT INTO crm_people(
       id,display_name,relationship_status,preferred_contact_method,
-      created_at,updated_at
-    ) VALUES(?,'square contact','active','',?,?)
-  `).run(placeholderPersonId, placeholderCreatedAt, placeholderCreatedAt);
+      eligibility_at,eligibility_reason,eligibility_source_provider,
+      eligibility_source_type,eligibility_source_id,created_at,updated_at
+    ) VALUES(?,'square contact','active','',?,'studio_manual_entry','studio',
+      'manual_entry',?, ?,?)
+  `).run(
+    placeholderPersonId,
+    placeholderCreatedAt,
+    placeholderPersonId,
+    placeholderCreatedAt,
+    placeholderCreatedAt,
+  );
   database.prepare(`
     INSERT INTO crm_identities(
       id,person_id,kind,value,normalized_value,provider,external_id,
@@ -3705,6 +3878,10 @@ test("Square customer contact changes are retained on a later full sync", async 
     created_at: "2025-02-01T12:00:00.000Z",
     updated_at: "2026-07-12T12:00:00.000Z",
   };
+  await createPerson(database, {
+    displayName: "Jordan Lee",
+    email: customer.email_address,
+  });
   installSquareApiMock(t, {
     payments: [{
       id: "square-payment-contact-change",
@@ -3746,8 +3923,7 @@ test("Square customer contact changes are retained on a later full sync", async 
   assert.deepEqual(
     database.prepare(`
       SELECT kind,normalized_value FROM crm_identities
-      WHERE person_id=? AND provider='square'
-        AND kind IN ('email','phone') AND active=1
+      WHERE person_id=? AND kind IN ('email','phone') AND active=1
       ORDER BY kind,normalized_value
     `).all(person.person_id).map((row) => ({ ...row })),
     [
@@ -3761,6 +3937,22 @@ test("Square customer contact changes are retained on a later full sync", async 
 
 test("Square payments still import when customer profile lookup is unavailable", async (t) => {
   const database = migratedDatabase();
+  const eligible = await createPerson(database, {
+    displayName: "Known Square Client",
+    email: "known-square-client@example.test",
+  });
+  const linkedAt = "2026-07-01T12:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,
+      source_provider,source_type,source_id,created_at,updated_at
+    ) VALUES(
+      'square-profile-unavailable-identity',?,'square_customer',
+      'square-customer-profile-unavailable','square-customer-profile-unavailable',
+      'square','square-customer-profile-unavailable','square','provider_contact',
+      'square:square-customer-profile-unavailable',?,?
+    )
+  `).run(eligible.id, linkedAt, linkedAt);
   installSquareApiMock(t, {
     payments: [{
       id: "square-payment-profile-unavailable",
@@ -3927,6 +4119,10 @@ test("retryable per-customer Square errors keep the payment page resumable", asy
 
 test("Square sync accepts Square's canonical customer id after a profile merge", async (t) => {
   const database = migratedDatabase();
+  await createPerson(database, {
+    displayName: "square contact",
+    email: "morgan-merged@example.test",
+  });
   installSquareApiMock(t, {
     payments: [{
       id: "square-payment-merged-profile",
@@ -4108,7 +4304,7 @@ test("a merged Square customer id conflict remains separated for owner review", 
   );
 });
 
-test("an empty Square customer profile remains a warned placeholder without payment hints", async (t) => {
+test("an empty Square customer profile cannot create a People record", async (t) => {
   const database = migratedDatabase();
   installSquareApiMock(t, {
     payments: [{
@@ -4140,9 +4336,8 @@ test("an empty Square customer profile remains a warned placeholder without paym
   assert.equal(sync.payload.stats.customerProfilesUnavailable, 0);
   assert.equal(sync.payload.stats.paymentNameHintsReceived, 0);
   assert.ok(sync.payload.warnings.some((warning) => /no public name/i.test(warning)));
-  assert.equal(database.prepare(
-    "SELECT display_name FROM crm_people"
-  ).get().display_name, "square contact");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
 });
 
 test("Square payment name hints label exact customers without matching people by name", async (t) => {
@@ -4208,60 +4403,15 @@ test("Square payment name hints label exact customers without matching people by
   assert.equal(sync.response.status, 200, JSON.stringify(sync.payload));
   assert.equal(sync.payload.stats.paymentNameHintsReceived, 2);
   assert.equal(sync.payload.stats.customerProfilesEmpty, 2);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 3);
-
-  const billingPerson = database.prepare(`
-    SELECT p.id,p.display_name
-    FROM crm_people p
-    JOIN crm_identities i ON i.person_id=p.id
-    WHERE i.kind='square_customer' AND i.external_id='square-customer-billing-name'
-  `).get();
-  assert.equal(billingPerson.display_name, "Alex Billing");
-  assert.notEqual(billingPerson.id, existing.id);
-  const cardholderPerson = database.prepare(`
-    SELECT p.id,p.display_name
-    FROM crm_people p
-    JOIN crm_identities i ON i.person_id=p.id
-    WHERE i.kind='square_customer' AND i.external_id='square-customer-cardholder-name'
-  `).get();
-  assert.equal(cardholderPerson.display_name, "Taylor Cardholder");
-  assert.deepEqual(
-    database.prepare(`
-      SELECT person_id,value,label,is_verified,source_type
-      FROM crm_identities
-      WHERE provider='square_payer_label'
-      ORDER BY value
-    `).all().map((row) => ({ ...row })),
-    [
-      {
-        person_id: billingPerson.id,
-        value: "Alex Billing",
-        label: "Unverified Square payer name (billing address)",
-        is_verified: 0,
-        source_type: "payment_name_hint",
-      },
-      {
-        person_id: cardholderPerson.id,
-        value: "Taylor Cardholder",
-        label: "Unverified Square payer name (cardholder name)",
-        is_verified: 0,
-        source_type: "payment_name_hint",
-      },
-    ],
-  );
-
-  const paymentMetadata = database.prepare(`
-    SELECT source_id,metadata_json FROM crm_transactions
-    WHERE source_provider='square' AND source_type='payment'
-    ORDER BY source_id
-  `).all().map((row) => [
-    row.source_id,
-    JSON.parse(row.metadata_json).payerDisplayNameSource,
-  ]);
-  assert.deepEqual(paymentMetadata, [
-    ["square-payment-billing-name", "billing_address"],
-    ["square-payment-cardholder-name", "cardholder_name"],
-  ]);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE kind='square_customer' OR provider='square_payer_label'
+  `).get().count, 0);
+  assert.equal(database.prepare(
+    "SELECT display_name FROM crm_people WHERE id=?"
+  ).get(existing.id).display_name, "Alex Billing");
 });
 
 test("a later Square customer profile replaces an unverified payer label", async (t) => {
@@ -4270,6 +4420,10 @@ test("a later Square customer profile replaces an unverified payer label", async
     id: "square-customer-later-profile",
     email_address: "later-profile@example.test",
   };
+  await createPerson(database, {
+    displayName: "square contact",
+    email: customer.email_address,
+  });
   installSquareApiMock(t, {
     payments: [{
       id: "square-payment-later-profile",
@@ -4333,6 +4487,15 @@ test("a later Square customer profile replaces an unverified payer label", async
 
 test("conflicting Square payer labels stay on one exact customer and require review", async (t) => {
   const database = migratedDatabase();
+  const existing = await createPerson(database, {
+    displayName: "square contact",
+    email: "payer-hints@example.test",
+  });
+  addSquareCustomerIdentity(
+    database,
+    existing.id,
+    "square-customer-conflicting-payer-hints",
+  );
   installSquareApiMock(t, {
     payments: [
       {
@@ -4421,6 +4584,11 @@ test("a changed payer label on the same Square payment preserves both hints for 
     created_at: "2026-07-13T16:56:00.000Z",
     updated_at: "2026-07-13T16:57:00.000Z",
   };
+  const existing = await createPerson(database, {
+    displayName: "square contact",
+    email: "changing-payer-hint@example.test",
+  });
+  addSquareCustomerIdentity(database, existing.id, payment.customer_id);
   installSquareApiMock(t, {
     payments: [payment],
     customers: [{ id: payment.customer_id }],
@@ -4508,19 +4676,8 @@ test("a Square payment name hint alone stays unmatched", async (t) => {
   assert.equal(sync.payload.stats.paymentNameHintsReceived, 1);
   assert.equal(sync.payload.stats.persistence.unmatched, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
-  const transaction = database.prepare(`
-    SELECT person_id,metadata_json FROM crm_transactions
-    WHERE source_provider='square' AND source_id='square-payment-name-only'
-  `).get();
-  assert.equal(transaction.person_id, null);
-  assert.equal(
-    JSON.parse(transaction.metadata_json).payerDisplayNameSource,
-    "cardholder_name",
-  );
-  assert.equal(
-    JSON.parse(transaction.metadata_json).payerDisplayName,
-    "Name Without Exact Anchor",
-  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 0);
   assert.equal(database.prepare(`
     SELECT external_id FROM crm_identities
     WHERE kind='square_customer'
@@ -4595,7 +4752,7 @@ test("sparse Square profile data does not overwrite richer site client data", as
   `).get(existing.id).normalized_value, existingPhone);
 });
 
-test("anonymous Square payments remain visible in Needs Attention", async (t) => {
+test("anonymous direct Square payments do not create CRM records", async (t) => {
   const database = migratedDatabase();
   const calls = installSquareApiMock(t, {
     payments: [{
@@ -4621,28 +4778,21 @@ test("anonymous Square payments remain visible in Needs Attention", async (t) =>
   assert.equal(sync.payload.status, "complete");
   assert.equal(sync.payload.stats.persistence.unmatched, 1);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
-  assert.equal(database.prepare(`
-    SELECT person_id FROM crm_transactions
-    WHERE source_provider='square' AND source_id='square-payment-anonymous'
-  `).get().person_id, null);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_interactions").get().count, 0);
   assert.equal(
     calls.some((call) => call.url.pathname === "/v2/customers/bulk-retrieve"),
     false,
   );
 
-  const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
-  assert.equal(attention.response.status, 200);
-  const anonymousPayment = attention.payload.unmatchedInteractions.find(
-    (item) => item.source_provider === "square"
-      && item.source_type === "payment"
-      && item.source_id === "square-payment-anonymous"
-  );
-  assert.ok(anonymousPayment);
-  assert.equal(anonymousPayment.person_id, null);
 });
 
 test("a fresh Square sync lease blocks a concurrent provider run", async () => {
   const database = migratedDatabase();
+  await createPerson(database, {
+    displayName: "Square Concurrent Client",
+    email: "square-concurrent@example.test",
+  });
   const occurredAt = "2026-07-11T16:00:00.000Z";
   const payments = [
     {
@@ -5043,7 +5193,7 @@ test("Square payment sync never promotes a refund row that carries the same paym
   );
 });
 
-test("Square sync creates a new provider person and attention for an ambiguous shared email", async (t) => {
+test("Square sync flags an ambiguous shared email without creating a provider person", async (t) => {
   const database = migratedDatabase();
   const first = await createPerson(database, {
     displayName: "First Shared Email Owner",
@@ -5093,14 +5243,9 @@ test("Square sync creates a new provider person and attention for an ambiguous s
     SELECT person_id FROM crm_identities
     WHERE provider='square' AND external_id='square-customer-shared-email'
   `).get();
-  assert.ok(providerIdentity?.person_id);
-  assert.notEqual(providerIdentity.person_id, first.id);
-  assert.notEqual(providerIdentity.person_id, second.id);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 3);
-  assert.equal(database.prepare(`
-    SELECT COUNT(*) count FROM crm_identities
-    WHERE person_id=? AND kind='email' AND active=1
-  `).get(providerIdentity.person_id).count, 0);
+  assert.equal(providerIdentity, undefined);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 2);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_transactions").get().count, 0);
 
   const attention = await responseJson(await api(database, "/api/admin/crm/needs-attention"));
   assert.equal(attention.response.status, 200);
@@ -5163,7 +5308,7 @@ test("differing Square profile and buyer emails require review instead of guessi
     SELECT person_id FROM crm_transactions
     WHERE source_provider='square'
       AND source_id='square-payment-email-disagreement'
-  `).get().person_id, null);
+  `).get(), undefined);
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_identities
     WHERE provider='square'
@@ -5232,7 +5377,7 @@ test("a buyer-email owner cannot absorb a different unclaimed Square profile", a
     SELECT person_id FROM crm_transactions
     WHERE source_provider='square'
       AND source_id='square-payment-one-owned-email'
-  `).get().person_id, null);
+  `).get(), undefined);
   assert.equal(database.prepare(`
     SELECT COUNT(*) count FROM crm_identities
     WHERE provider='square'
