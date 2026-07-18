@@ -521,8 +521,8 @@
     art: ["art_acquisition", "art_inquiry"],
     events: ["event_rsvp"],
   };
-  // Per-tab availability scopes. The schedule engine + appointments calendar are
-  // shown inside each booking tab, filtered to that tab's categories/booking types.
+  // Per-tab availability scopes. Schedule and appointment views are filtered to
+  // each booking tab's categories and booking types.
   const AVAILABILITY_CONFIGS = {
     tattoo: {
       groups: [
@@ -1297,6 +1297,7 @@
       html = [["directory","Directory"],["attention","Needs Attention"],["outreach","Outreach"],["integrations","Integrations & Imports"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "tattoo") {
       html = `
+        <button class="subnav-btn ${subView === "appointments" ? "is-active" : ""}" type="button" data-subview="appointments">Appointments</button>
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
         <button class="subnav-btn ${subView === "direct-invite" ? "is-active" : ""}" type="button" data-subview="direct-invite">Direct Invite</button>
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>
@@ -2287,7 +2288,7 @@
     await loadTattooSettings();
     const settings = tattooSettings.settings || {};
     detailEl.innerHTML = `<section class="tattoo-settings" id="tattooSettings">
-      <div class="portfolio-head"><div><h2>Tattoo Settings</h2><p class="contact">Public rates, walk-in guidance, review timing, lead time, and Special Project availability. Public hours are derived from the active tattoo schedule.</p></div><button class="button" type="button" data-refresh-tattoo-settings>Refresh</button></div>
+      <div class="portfolio-head"><div><h2>Tattoo Settings</h2><p class="contact">Public rates, walk-in guidance, review timing, lead time, and Special Project availability. Public studio hours are derived from the active studio schedule.</p></div><button class="button" type="button" data-refresh-tattoo-settings>Refresh</button></div>
       <form class="tattoo-settings" data-tattoo-settings-form>
         <div class="tattoo-settings-grid">
           <section class="tattoo-settings-card">
@@ -2296,7 +2297,7 @@
             <label>Minimum project lead time (days)<input name="leadTimeDays" type="number" min="0" max="365" value="${escapeHtml(settingValue(settings, "leadTimeDays", "lead_time_days", 14))}"></label>
             <label>Support email<input name="supportEmail" type="email" value="${escapeHtml(settingValue(settings, "supportEmail", "support_email"))}"></label>
             <label>Walk-in guidance<textarea name="walkInGuidance" maxlength="1200">${escapeHtml(settingValue(settings, "walkInGuidance", "walk_in_guidance"))}</textarea></label>
-            <div class="field"><label>Published tattoo hours</label><div class="value">${escapeHtml(tattooSettings.displayedHours || "By appointment—see live availability.")}</div></div>
+            <div class="field"><label>Published studio hours</label><div class="value">${escapeHtml(tattooSettings.displayedHours || "By appointment—see live availability.")}</div></div>
           </section>
           <section class="tattoo-settings-card">
             <h3>Rate cards</h3>
@@ -2506,6 +2507,15 @@
       return;
     }
 
+    if (activeTab === "tattoo" && subView === "appointments") {
+      layoutEl.classList.add("single");
+      listPane.classList.add("hidden");
+      toolbarEl.innerHTML = "";
+      selectedCalendarDay = "";
+      renderAppointmentsManager().catch((error) => setStatus(error.message));
+      return;
+    }
+
     if (activeTab === "tattoo" && subView === "direct-invite") {
       renderDirectInviteManager().catch((error) => setStatus(error.message));
       return;
@@ -2567,12 +2577,22 @@
   }
 
   function setActiveTab(tab) {
-    if (tab === activeTab) return;
+    if (tab === activeTab) {
+      if (tab !== "tattoo" || subView === "appointments") return;
+      subView = "appointments";
+      activeId = "";
+      activeAppointmentId = "";
+      statusValue = "";
+      typeValue = "";
+      selectedCalendarDay = "";
+      renderActiveTab();
+      return;
+    }
     activeTab = tab;
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
-    subView = tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
+    subView = tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
@@ -4288,6 +4308,48 @@ ${meetingLines}
     renderDayAppointments(selectedCalendarDay);
   }
 
+  function appointmentCalendarMarkup() {
+    return `
+      <div class="availability-overview">
+        <div class="mini-calendar">
+          <div class="calendar-tools">
+            <button class="button icon-button" id="previewPrevMonth" type="button" aria-label="Previous month">&lt;</button>
+            <select id="previewMonthSelect" aria-label="Preview month"></select>
+            <button class="button icon-button" id="previewNextMonth" type="button" aria-label="Next month">&gt;</button>
+          </div>
+          <div id="bookedCalendar"></div>
+          <div class="calendar-legend" aria-label="Booked day legend">
+            <span class="legend-item"><span class="legend-dot bright"></span>0–2h booked</span>
+            <span class="legend-item"><span class="legend-dot medium"></span>2–5h booked</span>
+            <span class="legend-item"><span class="legend-dot dark"></span>5h+ booked</span>
+          </div>
+        </div>
+        <div class="appt-day-panel">
+          <div class="appt-day-header">
+            <span class="appt-day-label" id="apptDayLabel">All Appointments</span>
+            <span class="appt-day-count" id="apptDayCount"></span>
+          </div>
+          <div id="apptDayList" class="appt-day-list"><p class="empty" style="font-family:var(--sans);font-size:11px;">Loading appointments.</p></div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function renderAppointmentsManager() {
+    detailEl.innerHTML = `
+      <div class="availability-manager">
+        <div class="detail-head">
+          <span class="pill">Tattoo Booking / Appointments</span>
+          <h2>Tattoo Appointments</h2>
+          <p class="contact">Tattoo sessions, consultations, and in-person build sessions appear here. Select a day to focus its appointments.</p>
+        </div>
+        ${appointmentCalendarMarkup()}
+      </div>
+    `;
+    enhanceControls(detailEl);
+    await loadAvailabilityPreview();
+  }
+
   async function renderAvailabilityManager() {
     const config = availabilityConfig();
     const scopeLabel = activeTab === "studio" ? "Studio" : "Tattoo & Consultation";
@@ -4300,6 +4362,13 @@ ${meetingLines}
             </div>
           </div>`).join("");
     const sessionTypeOptionsHtml = renderSessionTypeOptions("", { includeBlank: config.allowUnscopedExceptions !== false });
+    const appointmentCalendarSection = activeTab === "studio" ? `
+      <section class="schedule-section" data-collapse-section>
+        <button class="section-toggle" type="button">Appointments</button>
+        <div class="section-body">
+          ${appointmentCalendarMarkup()}
+        </div>
+      </section>` : "";
     detailEl.innerHTML = `
       <div class="availability-manager">
         <div class="detail-head">
@@ -4396,33 +4465,7 @@ ${meetingLines}
           <div id="walkInList" class="availability-list"><p class="empty">Loading walk-in windows.</p></div>
         </div>
       </section>`}
-      <section class="schedule-section" data-collapse-section>
-        <button class="section-toggle" type="button">Appointments</button>
-        <div class="section-body">
-        <div class="availability-overview">
-          <div class="mini-calendar">
-            <div class="calendar-tools">
-              <button class="button icon-button" id="previewPrevMonth" type="button" aria-label="Previous month">&lt;</button>
-              <select id="previewMonthSelect" aria-label="Preview month"></select>
-              <button class="button icon-button" id="previewNextMonth" type="button" aria-label="Next month">&gt;</button>
-            </div>
-            <div id="bookedCalendar"></div>
-            <div class="calendar-legend" aria-label="Booked day legend">
-              <span class="legend-item"><span class="legend-dot bright"></span>0–2h booked</span>
-              <span class="legend-item"><span class="legend-dot medium"></span>2–5h booked</span>
-              <span class="legend-item"><span class="legend-dot dark"></span>5h+ booked</span>
-            </div>
-          </div>
-          <div class="appt-day-panel">
-            <div class="appt-day-header">
-              <span class="appt-day-label" id="apptDayLabel">All Appointments</span>
-              <span class="appt-day-count" id="apptDayCount"></span>
-            </div>
-            <div id="apptDayList" class="appt-day-list"><p class="empty" style="font-family:var(--sans);font-size:11px;">Loading appointments.</p></div>
-          </div>
-        </div>
-        </div>
-      </section>
+      ${appointmentCalendarSection}
       <section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Exceptions</button>
         <div class="section-body">
@@ -4474,7 +4517,7 @@ ${meetingLines}
     await loadBookingTypes();
     await loadSchedule();
     await loadWalkIns();
-    await loadAvailabilityPreview();
+    if (activeTab === "studio") await loadAvailabilityPreview();
     await loadAvailability();
   }
 
@@ -5881,6 +5924,6 @@ ${meetingLines}
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=multi-styles-legend-variants"></script>
-<script src="/studio/people-manager.js?v=9"></script>
+<script src="/studio/people-manager.js?v=11"></script>
 </body>
 </html>

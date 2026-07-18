@@ -261,6 +261,49 @@
       : { dateStyle: "medium" }).format(date);
   }
 
+  function interactionDateValue(record) {
+    const value = first(record, "occurredAt", "occurred_at", "createdAt", "created_at");
+    const time = new Date(value).getTime();
+    return Number.isFinite(time) ? { value, time } : null;
+  }
+
+  function isTerminalUpcomingInteraction(record) {
+    return new Set([
+      "cancelled",
+      "canceled",
+      "completed",
+      "no_show",
+      "void",
+      "failed",
+      "refunded",
+      "expired",
+    ]).has(normalizedState(first(record, "status")));
+  }
+
+  function profileInteractionDates(person, interactions) {
+    const now = Date.now();
+    const dated = interactions
+      .map((record) => ({ record, date: interactionDateValue(record) }))
+      .filter((entry) => entry.date);
+    const apiLast = interactionDateValue({
+      occurredAt: first(person, "lastInteractionAt", "last_interaction_at"),
+    });
+    const apiNext = interactionDateValue({
+      occurredAt: first(person, "nextInteractionAt", "next_interaction_at"),
+    });
+    const last = apiLast?.time <= now
+      ? apiLast.value
+      : dated
+        .filter((entry) => entry.date.time <= now)
+        .sort((a, b) => b.date.time - a.date.time)[0]?.date.value || "";
+    const next = apiNext?.time > now
+      ? apiNext.value
+      : dated
+        .filter((entry) => entry.date.time > now && !isTerminalUpcomingInteraction(entry.record))
+        .sort((a, b) => a.date.time - b.date.time)[0]?.date.value || "";
+    return { last, next };
+  }
+
   function dateTimeLocalValue(value = new Date()) {
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return "";
@@ -686,7 +729,8 @@
       const email = first(person, "primaryEmail", "primary_email", "email");
       const phone = first(person, "primaryPhone", "primary_phone", "phone");
       const net = centsValue(person, "netSpendCents", "net_spend_cents", "lifetimeSpendCents", "lifetime_spend_cents");
-      const last = first(person, "lastInteractionAt", "last_interaction_at", "updatedAt", "updated_at");
+      const last = first(person, "lastInteractionAt", "last_interaction_at");
+      const next = first(person, "nextInteractionAt", "next_interaction_at");
       const nodes = listFrom(person, "nodes", "nodeIds", "node_ids");
       return `
         <button class="people-person-row ${id === state.selectedPersonId ? "is-active" : ""}" type="button" data-person-id="${attr(id)}" aria-pressed="${id === state.selectedPersonId ? "true" : "false"}">
@@ -695,7 +739,8 @@
             <span class="people-tier" data-tier="${attr(tier)}">${esc(tierLabel(tier))}</span>
           </span>
           <span class="people-person-meta">${esc([email, phone].filter(Boolean).join(" · ") || "No contact identity")}</span>
-          <span class="people-person-meta">${esc(formatMoney(net, first(person, "currency") || "USD"))} net · ${esc(formatDate(last))}</span>
+          <span class="people-person-meta">${esc(formatMoney(net, first(person, "currency") || "USD"))} net</span>
+          <span class="people-person-meta">Last ${esc(formatDate(last))} · Next ${esc(next ? formatDate(next) : "NONE")}</span>
           ${nodes.length ? `<span class="people-chip-list">${nodeChips(nodes, { limit: 3 })}</span>` : ""}
         </button>`;
     }).join("");
@@ -1701,8 +1746,7 @@
     const email = contactValue(identities, "email", person);
     const phone = contactValue(identities, "phone", person);
     const tier = tierValue(person);
-    const lastInteraction = first(person, "lastInteractionAt", "last_interaction_at")
-      || first(interactions[0], "occurredAt", "occurred_at", "createdAt", "created_at");
+    const interactionDates = profileInteractionDates(person, interactions);
 
     detail.innerHTML = `
       <div class="people-profile-head">
@@ -1722,10 +1766,11 @@
           ${nodeChips(totals.nodes)}
         </div>
         <div class="people-stats">
+          <div class="people-stat"><span>Last interaction</span><strong>${esc(formatDate(interactionDates.last))}</strong></div>
+          <div class="people-stat"><span>Next interaction</span><strong>${esc(interactionDates.next ? formatDate(interactionDates.next) : "NONE")}</strong></div>
           <div class="people-stat"><span>Net spend</span><strong>${esc(formatMoney(totals.net, first(person, "currency") || "USD"))}</strong></div>
           <div class="people-stat"><span>Gross paid</span><strong>${esc(formatMoney(totals.gross, first(person, "currency") || "USD"))}</strong></div>
           <div class="people-stat"><span>Tips</span><strong>${esc(formatMoney(totals.tips, first(person, "currency") || "USD"))}</strong></div>
-          <div class="people-stat"><span>Last interaction</span><strong>${esc(formatDate(lastInteraction))}</strong></div>
           <div class="people-stat"><span>Counted by</span><strong>${esc(eligibilityLabel(person))}</strong></div>
         </div>
       </div>

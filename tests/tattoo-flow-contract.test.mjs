@@ -27,6 +27,7 @@ import {
   handlePublicConsultationContext,
   handlePublicSessionCheckout,
   handlePublicSessionContext,
+  handlePublicTattooSettings,
   handleReleasePendingBookingHold,
   handleRescheduleAppointment,
   handleRescheduleContext,
@@ -471,6 +472,42 @@ test("0039 upgrades only the untouched early Tattoo Settings seed", () => {
     edited.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days,
     2,
   );
+});
+
+test("public tattoo settings publish active studio hours rather than tattoo booking hours", async () => {
+  const database = migratedDatabase();
+  database.prepare(
+    "UPDATE availability_rules SET active = 0 WHERE venture = 'tattooing'"
+  ).run();
+  database.prepare(
+    "UPDATE availability_rules SET start_time = '11:00', end_time = '17:00', active = 1 WHERE id = 'tattoo_monday'"
+  ).run();
+  database.prepare(
+    "UPDATE availability_rules SET start_time = '09:00', end_time = '15:00', active = 1 WHERE id = 'studio_tuesday'"
+  ).run();
+
+  class SelectBatchD1 extends LocalD1 {
+    async batch(statements) {
+      return Promise.all(statements.map((statement) => statement.all()));
+    }
+  }
+
+  const response = await handlePublicTattooSettings(
+    new Request("https://example.test/api/tattoo/settings"),
+    { SUBMISSIONS_DB: new SelectBatchD1(database) },
+  );
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.deepEqual(payload.displayedHours, [{
+    dayOfWeek: 2,
+    day: "Tuesday",
+    dayLabel: "Tuesday",
+    startTime: "09:00",
+    endTime: "15:00",
+    hoursText: "09:00 - 15:00",
+    note: "",
+    closed: false,
+  }]);
 });
 
 test("Build submissions require intent, snapshot stable published symbol IDs, stay out of People, and are idempotent", async () => {
@@ -2004,6 +2041,10 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /data-resolve-historic-lifecycle/);
   assert.match(submissionsStudio, /resolveHistorical/);
   assert.match(submissionsStudio, /data-direct-invite-form/);
+  assert.match(submissionsStudio, /data-subview="appointments">Appointments/);
+  assert.match(submissionsStudio, /activeTab === "tattoo" && subView === "appointments"/);
+  assert.match(submissionsStudio, /tab === "tattoo" \? "appointments"/);
+  assert.match(submissionsStudio, /function renderAppointmentsManager\(\)/);
   assert.match(submissionsStudio, /data-cancel-appointment/);
   assert.match(submissionsStudio, /data-force-delete="1"/);
   assert.match(submissionsStudio, /if \(nextStatus !== submission\.status\) changes\.status = nextStatus/);

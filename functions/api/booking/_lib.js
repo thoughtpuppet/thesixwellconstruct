@@ -5917,7 +5917,7 @@ async function tattooSettingsPayload(db, includeInactive = false) {
     db.prepare("SELECT * FROM special_project_calls ORDER BY sort_order ASC, title ASC"),
     db.prepare(
       `SELECT day_of_week, start_time, end_time, note FROM availability_rules
-       WHERE venture = 'tattooing' AND category = 'tattooing' AND active = 1
+       WHERE venture = 'tattooing' AND category = 'studio' AND active = 1
        ORDER BY day_of_week ASC`
     ),
   ]);

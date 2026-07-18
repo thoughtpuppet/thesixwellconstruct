@@ -272,10 +272,17 @@ test("People UI gives canonical Construct nodes their source colors", () => {
   }
   assert.match(styles, /\.people-record\[data-people-node\]/);
   assert.match(studio, /people-manager\.css\?v=4/);
-  assert.match(studio, /people-manager\.js\?v=9/);
+  assert.match(studio, /people-manager\.js\?v=11/);
   assert.match(source, /data-delete-person/);
   assert.match(source, /method:\s*"DELETE"/);
   assert.doesNotMatch(source, /A rationale is required/);
+  assert.match(source, /<span>Next interaction<\/span><strong>\$\{esc\(interactionDates\.next \? formatDate\(interactionDates\.next\) : "NONE"\)\}<\/strong>/);
+  const directoryRenderer = source.slice(
+    source.indexOf("function renderPeopleList"),
+    source.indexOf("async function selectPerson"),
+  );
+  assert.doesNotMatch(directoryRenderer, /updatedAt|updated_at/);
+  assert.match(directoryRenderer, /Last \$\{esc\(formatDate\(last\)\)\} · Next \$\{esc\(next \? formatDate\(next\) : "NONE"\)\}/);
 });
 
 test("Studio console titles follow the active Construct node at hero weight", () => {
@@ -2493,6 +2500,72 @@ test("people profiles allow tier changes without explanations and calculate rela
   }));
   assert.equal(result.response.status, 409);
   assert.equal(result.payload.details.code, "EMAIL_ALREADY_CONNECTED");
+});
+
+test("People separates past last interaction from the next active interaction", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Interaction Timeline",
+    email: "interaction-timeline@example.test",
+  });
+  const now = Date.now();
+  const past = new Date(now - (2 * 24 * 60 * 60 * 1000)).toISOString();
+  const cancelledFuture = new Date(now + (12 * 60 * 60 * 1000)).toISOString();
+  const completedFuture = new Date(now + (24 * 60 * 60 * 1000)).toISOString();
+  const activeFuture = new Date(now + (2 * 24 * 60 * 60 * 1000)).toISOString();
+  const createdAt = new Date(now).toISOString();
+  const insertInteraction = database.prepare(`
+    INSERT INTO crm_interactions(
+      id,person_id,node_id,channel,interaction_type,label,status,quantity,
+      occurred_at,source_provider,source_type,source_id,metadata_json,
+      active,created_at,updated_at
+    ) VALUES(?,?,'node-tattoos','studio','appointment',?,?,1,?,'test','timeline',?,'{}',1,?,?)
+  `);
+  for (const [id, label, status, occurredAt] of [
+    ["timeline-past", "Past appointment", "completed", past],
+    ["timeline-cancelled", "Cancelled appointment", "cancelled", cancelledFuture],
+    ["timeline-completed", "Future completed record", "completed", completedFuture],
+    ["timeline-next", "Next appointment", "confirmed", activeFuture],
+  ]) {
+    insertInteraction.run(
+      id,
+      person.id,
+      label,
+      status,
+      occurredAt,
+      id,
+      createdAt,
+      createdAt,
+    );
+  }
+
+  let result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.person.lastInteractionAt, past);
+  assert.equal(result.payload.person.nextInteractionAt, activeFuture);
+
+  result = await responseJson(await api(database, "/api/admin/crm/people?q=interaction%20timeline"));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.people[0].lastInteractionAt, past);
+  assert.equal(result.payload.people[0].nextInteractionAt, activeFuture);
+
+  const futureOnly = await createPerson(database, {
+    displayName: "Future Only Timeline",
+    email: "future-only-timeline@example.test",
+  });
+  insertInteraction.run(
+    "timeline-future-only",
+    futureOnly.id,
+    "First appointment",
+    "confirmed",
+    activeFuture,
+    "timeline-future-only",
+    createdAt,
+    createdAt,
+  );
+  result = await responseJson(await api(database, `/api/admin/crm/people/${futureOnly.id}`));
+  assert.equal(result.payload.person.lastInteractionAt, null);
+  assert.equal(result.payload.person.nextInteractionAt, activeFuture);
 });
 
 test("People directory nodes include transaction and attendance-only involvement", async () => {

@@ -224,6 +224,7 @@ function personView(row) {
     primaryEmail: row.primary_email || "",
     primaryPhone: row.primary_phone || "",
     lastInteractionAt: row.last_interaction_at || null,
+    nextInteractionAt: row.next_interaction_at || null,
     interactionCount: Number(row.interaction_count || 0),
     settledGrossCents: Number(row.settled_gross_cents || 0),
     refundCents: Number(row.refund_cents || 0),
@@ -295,7 +296,14 @@ function personSelectSql(where = "1=1") {
          ORDER BY i.is_primary DESC,i.created_at LIMIT 1)
       ) primary_phone,
       (SELECT MAX(x.occurred_at) FROM crm_interactions x
-       WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1) last_interaction_at,
+       WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1
+         AND julianday(x.occurred_at)<=julianday('now')) last_interaction_at,
+      (SELECT MIN(x.occurred_at) FROM crm_interactions x
+       WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1
+         AND julianday(x.occurred_at)>julianday('now')
+         AND LOWER(REPLACE(REPLACE(TRIM(x.status),'-','_'),' ','_')) NOT IN (
+           'cancelled','canceled','completed','no_show','void','failed','refunded','expired'
+         )) next_interaction_at,
       (SELECT COUNT(*) FROM crm_interactions x
        WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1) interaction_count,
       (SELECT COALESCE(SUM(CASE WHEN t.transaction_type='charge' AND t.status='settled'
@@ -4151,7 +4159,7 @@ async function handlePeopleExport(database) {
     "person_id", "display_name", "preferred_name", "organization", "pronouns",
     "relationship_status", "tier", "tier_rationale", "primary_email",
     "primary_phone", "preferred_contact_method", "referral_source", "effective_consent", "tags",
-    "nodes", "interaction_count", "last_interaction_at", "settled_gross_cents",
+    "nodes", "interaction_count", "last_interaction_at", "next_interaction_at", "settled_gross_cents",
     "refund_cents", "net_spend_cents", "tip_cents", "pending_cents",
     "next_followup_at", "relationship_summary",
   ];
@@ -4176,6 +4184,7 @@ async function handlePeopleExport(database) {
       person.nodes.join(", "),
       person.interactionCount,
       person.lastInteractionAt || "",
+      person.nextInteractionAt || "",
       person.settledGrossCents,
       person.refundCents,
       person.netSpendCents,
