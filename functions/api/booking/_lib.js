@@ -1459,7 +1459,7 @@ function finalTattooSessionPlanIsAppropriate(row) {
 
 function tattooSubmissionRequiresPrerequisiteConsultation(row) {
   const payload = parseJsonField(row?.payload_json, {});
-  return payload.project_type === "large_cover_up" || payload.consult_required === "yes";
+  return payload.consult_required === "yes";
 }
 
 async function insertPendingAppointment(db, values, eventType = "hold_created") {
@@ -1917,7 +1917,7 @@ function validatePublicConsultation(body, allowedTypeIds = PUBLIC_CONSULTATION_B
 
 function submissionRequiresConsultation(submission) {
   const payload = parseJsonField(submission.payload_json, {});
-  return payload.project_type === "large_cover_up" || payload.consult_required === "yes";
+  return payload.consult_required === "yes";
 }
 
 async function createPublicConsultationSubmission(db, body, client, bookingType) {

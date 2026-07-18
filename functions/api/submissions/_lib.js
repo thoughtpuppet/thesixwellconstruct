@@ -220,7 +220,7 @@ function submissionNeedsPrerequisiteConsultation(rowOrPayload) {
   const payload = rowOrPayload?.payload_json
     ? parseJsonField(rowOrPayload.payload_json, {})
     : rowOrPayload || {};
-  return payload.project_type === "large_cover_up" || payload.consult_required === "yes";
+  return payload.consult_required === "yes";
 }
 
 function canTransitionTattooStage(from, to) {
@@ -643,6 +643,24 @@ function validateSubmissionFiles(type, files, env) {
   return null;
 }
 
+function validateLargeCoverUpPhotos(type, payload, files) {
+  if (type !== "tattoo_inquiry" || payload?.project_type !== "large_cover_up") return null;
+  const photos = files.filter((file) => file.fieldName === "cover_up_photos");
+  if (photos.length < 3) {
+    return {
+      error: "Large cover-up inquiries require at least 3 photographs from 3 different angles.",
+      status: 400,
+    };
+  }
+  if (photos.some((file) => !["image/png", "image/jpeg", "image/webp"].includes(String(file.contentType || "").toLowerCase()))) {
+    return {
+      error: "Large cover-up photographs must be PNG, JPG, or WEBP images.",
+      status: 415,
+    };
+  }
+  return null;
+}
+
 function parseStableSymbolIds(payload) {
   const raw = payload.symbol_ids ?? payload.selected_symbol_ids ?? [];
   const ids = (Array.isArray(raw) ? raw : String(raw).split(","))
@@ -798,6 +816,10 @@ export async function handleCreateSubmission(request, env) {
 
   const fileValidation = validateSubmissionFiles(submission.type, body.files, env);
   if (fileValidation) return errorResponse(fileValidation.error, fileValidation.status);
+  const coverUpPhotoValidation = validateLargeCoverUpPhotos(submission.type, body.payload, body.files);
+  if (coverUpPhotoValidation) {
+    return errorResponse(coverUpPhotoValidation.error, coverUpPhotoValidation.status);
+  }
 
   const idempotency = normalizeIdempotencyKey(request, body.payload);
   if (idempotency.error) return errorResponse(idempotency.error, 400);
@@ -1311,7 +1333,7 @@ export async function handleUpdateSubmission(request, env, id) {
       nextTattooStage === "ready_to_book" &&
       !["consultation_complete", "ready_to_book"].includes(current.tattoo_stage)
     ) {
-      return errorResponse("Large cover-up projects require a completed prerequisite consultation before tattoo booking.", 409);
+      return errorResponse("This project requires a completed prerequisite consultation before tattoo booking.", 409);
     }
 
     const hasOwn = (key) => Object.prototype.hasOwnProperty.call(body, key);

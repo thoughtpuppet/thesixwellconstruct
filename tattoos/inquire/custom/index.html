@@ -55,6 +55,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
+  .field[hidden] { display:none; }
   label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
   input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
   input[type="file"] { padding:11px 12px; color:var(--text-mute); }
@@ -152,11 +153,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <option value="">Select a project type</option>
                 <option value="new_work">New work</option>
                 <option value="cover_up">Cover-up</option>
-                <option value="large_cover_up">Large cover-up - consultation follows review</option>
+                <option value="large_cover_up">Large cover-up</option>
                 <option value="rework">Rework / recolor</option>
                 <option value="space_filler">Space filler</option>
               </select>
-              <p class="field-note" id="largeCoverUpNote">For a large cover-up, submit this form first. If it moves forward, the studio will link this project to the required paid in-person consultation after review; do not book it separately unless directed.</p>
+              <p class="field-note" id="largeCoverUpNote">Large cover-up requests require at least 3 clear photographs of the existing tattoo from 3 different angles so the studio can understand the full area and work involved. You may upload additional photographs.</p>
             </div>
             <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
             <div class="field"><label for="size">Approx. size <span class="required-mark">*</span></label><input id="size" name="size" placeholder="Example: 4-6 in" required></div>
@@ -186,6 +187,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline"></div>
             <div class="field"><label for="requested_date">Requested date</label><input id="requested_date" name="requested_date" type="date"></div>
             <div class="field full"><label for="reference_links">Reference links (optional)</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
+            <div class="field full" id="largeCoverUpPhotosField" hidden>
+              <label for="cover_up_photos">Large cover-up photographs <span class="required-mark">*</span></label>
+              <input id="cover_up_photos" name="cover_up_photos" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="largeCoverUpPhotosNote" multiple>
+              <p class="file-note" id="largeCoverUpPhotosNote">Upload at least 3 clear photographs of the existing tattoo from 3 different angles. Additional photographs are welcome. PNG, JPG, or WEBP.</p>
+            </div>
             <div class="field full"><label for="placement_photo">Placement photo</label><input id="placement_photo" name="placement_photo" type="file" accept="image/png,image/jpeg,image/webp"><p class="file-note">Strongly recommended. A photo of the area where you want the tattoo helps with placement and scale; circle the desired location if possible.</p></div>
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
             <div class="field full"><label for="message">Project notes <span class="required-mark">*</span></label><textarea id="message" name="message" required></textarea></div>
@@ -248,6 +254,36 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     (function(){
       var form = document.getElementById("inquiryForm");
       if (!form) return;
+      var projectType = document.getElementById("project_type");
+      var coverUpPhotosField = document.getElementById("largeCoverUpPhotosField");
+      var coverUpPhotos = document.getElementById("cover_up_photos");
+      var coverUpPhotoMessage = "Upload at least 3 photographs of the existing tattoo from 3 different angles.";
+
+      function validateLargeCoverUpPhotos() {
+        if (!projectType || !coverUpPhotos || projectType.value !== "large_cover_up") {
+          if (coverUpPhotos) coverUpPhotos.setCustomValidity("");
+          return true;
+        }
+        var valid = coverUpPhotos.files && coverUpPhotos.files.length >= 3;
+        coverUpPhotos.setCustomValidity(valid ? "" : coverUpPhotoMessage);
+        return valid;
+      }
+
+      function syncLargeCoverUpPhotos() {
+        if (!projectType || !coverUpPhotosField || !coverUpPhotos) return;
+        var required = projectType.value === "large_cover_up";
+        coverUpPhotosField.hidden = !required;
+        coverUpPhotos.required = required;
+        if (!required) coverUpPhotos.value = "";
+        validateLargeCoverUpPhotos();
+      }
+
+      if (projectType && coverUpPhotos) {
+        projectType.addEventListener("change", syncLargeCoverUpPhotos);
+        coverUpPhotos.addEventListener("change", validateLargeCoverUpPhotos);
+        form.addEventListener("submit", validateLargeCoverUpPhotos, true);
+        syncLargeCoverUpPhotos();
+      }
 
       fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
         .then(function(response){ if (!response.ok) throw new Error(); return response.json(); })

@@ -579,7 +579,7 @@ const SUBMISSION_RECEIPTS = {
     label: "custom tattoo project",
     subject: "Custom tattoo project received",
     expectation: "The studio will review the concept, placement, scale, references, budget, and timing before deciding the next step.",
-    next: "If the project is a fit, you will receive either a private tattoo-booking link or, for a large cover-up, a private prerequisite-consultation link first.",
+    next: "If the project is a fit, you will receive the appropriate next step or a private tattoo-booking link.",
   },
   flash_claim: {
     label: "flash claim",

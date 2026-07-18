@@ -82,6 +82,33 @@ h6,
   line-height: 0.9 !important;
 }
 
+/* Canonical hero descriptor treatment.
+   Merch and Tattoo established this role: a small Georgia serif paragraph,
+   uppercase with open tracking and compact leading. Legacy selectors remain
+   here so current public pages inherit the same role without page-by-page
+   typography overrides. Medium-specific color and hero layout stay local. */
+:is(
+  .hero-descriptor,
+  .hero-desc,
+  .intro-desc,
+  .intro > #introDesc,
+  .venture-hero .hero-copy > .hero-lede,
+  .venture-hero .hero-copy > .hero-note,
+  .tattoos-page .hero-copy > .hero-lead,
+  .tattoos-page .hero-copy > .hero-note,
+  .hero .hero-copy > .lede,
+  p.hero-copy,
+  .section-head > .section-intro
+) {
+  font-family: var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.22em !important;
+  line-height: 1.6 !important;
+  text-transform: uppercase !important;
+  font-variant-caps: normal !important;
+}
+
 /* Hero titles carry the same heavy Inter weight established by the Tattoo and
    Merch landing pages, regardless of which page shell renders them. */
 .hero-title,

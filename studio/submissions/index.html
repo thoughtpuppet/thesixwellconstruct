@@ -929,7 +929,7 @@
 
   function requiresInPersonConsult(submission) {
     const p = submission.payload || {};
-    return p.project_type === "large_cover_up" || p.consult_required === "yes";
+    return p.consult_required === "yes";
   }
 
   function statusOptionsFor(submission) {

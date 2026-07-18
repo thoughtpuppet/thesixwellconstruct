@@ -108,6 +108,25 @@ class LocalD1 {
   }
 }
 
+class MemoryBucket {
+  constructor() {
+    this.objects = new Map();
+  }
+
+  async put(key, value, options = {}) {
+    const body = value instanceof ReadableStream
+      ? await new Response(value).arrayBuffer()
+      : value instanceof ArrayBuffer
+        ? value
+        : await new Response(value).arrayBuffer();
+    this.objects.set(key, { body, options });
+  }
+
+  async delete(key) {
+    this.objects.delete(key);
+  }
+}
+
 function migratedDatabase({ before = "" } = {}) {
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys = ON");
@@ -125,6 +144,24 @@ function jsonRequest(path, payload, headers = {}) {
     method: "POST",
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(payload),
+  });
+}
+
+function multipartRequest(path, payload, files = []) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(payload)) {
+    if (value !== undefined && value !== null) form.append(key, String(value));
+  }
+  for (const file of files) {
+    form.append(
+      file.fieldName,
+      new Blob([file.body || file.fileName], { type: file.contentType || "image/jpeg" }),
+      file.fileName,
+    );
+  }
+  return new Request(`https://example.test${path}`, {
+    method: "POST",
+    body: form,
   });
 }
 
@@ -869,7 +906,76 @@ test("Studio direct invites can route a client into prerequisite consultation", 
   );
 });
 
-test("large cover-ups move through prerequisite consultation completion before tattoo access", async () => {
+test("large cover-ups require at least three angle photographs without automatically requiring consultation", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    SUBMISSION_FILES: new MemoryBucket(),
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+
+  const missing = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    project_type: "large_cover_up",
+  })), env);
+  assert.equal(missing.status, 400);
+  assert.match((await missing.json()).error, /at least 3 photographs/i);
+
+  const twoPhotos = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustom({ project_type: "large_cover_up" }),
+    [
+      { fieldName: "cover_up_photos", fileName: "angle-1.jpg" },
+      { fieldName: "cover_up_photos", fileName: "angle-2.jpg" },
+    ],
+  ), env);
+  assert.equal(twoPhotos.status, 400);
+  assert.match((await twoPhotos.json()).error, /at least 3 photographs/i);
+
+  const created = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustom({ project_type: "large_cover_up" }),
+    [
+      { fieldName: "cover_up_photos", fileName: "angle-1.jpg" },
+      { fieldName: "cover_up_photos", fileName: "angle-2.jpg" },
+      { fieldName: "cover_up_photos", fileName: "angle-3.jpg" },
+    ],
+  ), env);
+  assert.equal(created.status, 200);
+  const submissionId = (await created.json()).submissionId;
+  const storedFiles = JSON.parse(
+    database.prepare("SELECT files_json FROM submissions WHERE id = ?").get(submissionId).files_json,
+  );
+  assert.equal(storedFiles.filter((file) => file.fieldName === "cover_up_photos").length, 3);
+
+  const additionalPhotos = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustom({
+      project_type: "large_cover_up",
+      email: "additional-photos@example.test",
+    }),
+    [
+      { fieldName: "cover_up_photos", fileName: "angle-1.jpg" },
+      { fieldName: "cover_up_photos", fileName: "angle-2.jpg" },
+      { fieldName: "cover_up_photos", fileName: "angle-3.jpg" },
+      { fieldName: "cover_up_photos", fileName: "detail-4.jpg" },
+    ],
+  ), env);
+  assert.equal(additionalPhotos.status, 200);
+
+  const approved = await handleUpdateSubmission(
+    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
+    env,
+    submissionId,
+  );
+  assert.equal(approved.status, 200);
+  const approvedRow = database.prepare("SELECT status, tattoo_stage FROM submissions WHERE id = ?").get(submissionId);
+  assert.equal(approvedRow.status, "approved");
+  assert.equal(approvedRow.tattoo_stage, "review");
+});
+
+test("explicit consultation requirements move through completion before tattoo access", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
   const env = {
@@ -879,7 +985,7 @@ test("large cover-ups move through prerequisite consultation completion before t
   };
 
   const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
-    project_type: "large_cover_up",
+    consult_required: "yes",
   })), env);
   assert.equal(created.status, 200);
   const submissionId = (await created.json()).submissionId;
@@ -995,7 +1101,7 @@ test("private booking holds enforce the token and parent lifecycle inside the at
     PUBLIC_SITE_URL: "https://example.test",
   };
   const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
-    project_type: "large_cover_up",
+    consult_required: "yes",
   })), env);
   const submissionId = (await created.json()).submissionId;
   const approved = await handleUpdateSubmission(
@@ -2069,7 +2175,7 @@ test("flagged prerequisite consultations resolve from confirmed and completed hi
       PUBLIC_SITE_URL: "https://example.test",
     };
     const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
-      project_type: "large_cover_up",
+      consult_required: "yes",
       email: `${appointmentStatus}-historic@example.test`,
     })), env);
     const submissionId = (await created.json()).submissionId;

@@ -811,7 +811,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     &lt;nav class="construct-breadcrumb" aria-label="Breadcrumb"&gt;...&lt;/nav&gt;
     &lt;section class="venture-hero" aria-labelledby="page-title"&gt;
       &lt;div&gt;&lt;span class="venture-kicker"&gt;Medium context&lt;/span&gt;&lt;h1 id="page-title"&gt;Page title.&lt;/h1&gt;&lt;/div&gt;
-      &lt;div class="hero-copy"&gt;...&lt;/div&gt;
+      &lt;div class="hero-copy"&gt;&lt;p class="hero-descriptor"&gt;One concise description of the page or medium.&lt;/p&gt;&lt;/div&gt;
     &lt;/section&gt;
     <span class="c">&lt;!-- page-specific content keeps the same shell width and section rhythm --&gt;</span>
   &lt;/main&gt;
@@ -827,6 +827,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <ul class="checklist">
       <li><strong>Solid page canvas:</strong> <code>html</code>, <code>body</code>, and the root shell resolve to opaque <code>var(--color-bg)</code>. Keep gradients, texture, and imagery inside bounded components.</li>
       <li><strong>Shared page anatomy:</strong> align the closest sibling page's header/navigation, breadcrumb, hero, shell width and rhythm, footer, and shared script order before adding page-specific styling.</li>
+      <li><strong>Hero descriptor:</strong> use <code>.hero-descriptor</code> for the copy paired with the hero title. The shared typography layer supplies the Merch/Tattoo treatment: Georgia serif, 12px, uppercase, <code>0.22em</code> tracking, and <code>1.6</code> leading. Keep medium-specific color and layout local.</li>
       <li><strong>Root-relative paths only</strong> (<code>/css/…</code>, <code>/art/</code>) — the site deploys at the domain root on Cloudflare Workers. No build step; static files + <code>_worker.js</code>.</li>
       <li><strong><code>data-venture</code> set correctly</strong> on <code>&lt;body&gt;</code> — it drives dot nav highlight, breadcrumb labels, and footer links.</li>
       <li><strong><code>--venture-color</code> set</strong> to this medium's token — never global amber on a medium page.</li>

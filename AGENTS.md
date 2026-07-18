@@ -17,6 +17,12 @@ are 5px. Use no line when separation is unnecessary; do not introduce 1px
 hairlines. Record and card grids use a modest 12–16px gutter so each framed
 item reads independently.
 
+Hero descriptors are a shared typography role. Pair hero titles with a
+`.hero-descriptor` paragraph using the Merch and Tattoo index treatment:
+Georgia serif, 12px, uppercase, 0.22em letter spacing, and 1.6 line-height.
+Keep medium-specific color and placement in the page shell, but do not invent a
+different descriptor type treatment for new pages.
+
 Use `http://localhost:4173/tools/ui-guide.html` as the canonical working UI
 Guide and its Page Anatomy section as the implementation reference. Do not use
 the direct `file://` rendering as an authoritative preview. The source file is
