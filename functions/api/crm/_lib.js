@@ -266,12 +266,28 @@ const PERSON_SCOPE_SQL = `
 function personSelectSql(where = "1=1") {
   return `
     SELECT p.*,
-      (SELECT i.value FROM crm_identities i
-       WHERE i.person_id IN (${PERSON_SCOPE_SQL}) AND i.kind='email' AND i.active=1
-       ORDER BY (i.person_id=p.id) DESC,i.is_primary DESC,i.created_at LIMIT 1) primary_email,
-      (SELECT i.value FROM crm_identities i
-       WHERE i.person_id IN (${PERSON_SCOPE_SQL}) AND i.kind='phone' AND i.active=1
-       ORDER BY (i.person_id=p.id) DESC,i.is_primary DESC,i.created_at LIMIT 1) primary_phone,
+      COALESCE(
+        (SELECT i.value FROM crm_identities i
+         WHERE i.person_id=p.id AND i.kind='email' AND i.active=1
+         ORDER BY i.is_primary DESC,i.created_at LIMIT 1),
+        (SELECT i.value FROM crm_identities i
+         WHERE i.person_id IN (
+           SELECT alias_person.id FROM crm_people alias_person
+           WHERE alias_person.merged_into_id=p.id
+         ) AND i.kind='email' AND i.active=1
+         ORDER BY i.is_primary DESC,i.created_at LIMIT 1)
+      ) primary_email,
+      COALESCE(
+        (SELECT i.value FROM crm_identities i
+         WHERE i.person_id=p.id AND i.kind='phone' AND i.active=1
+         ORDER BY i.is_primary DESC,i.created_at LIMIT 1),
+        (SELECT i.value FROM crm_identities i
+         WHERE i.person_id IN (
+           SELECT alias_person.id FROM crm_people alias_person
+           WHERE alias_person.merged_into_id=p.id
+         ) AND i.kind='phone' AND i.active=1
+         ORDER BY i.is_primary DESC,i.created_at LIMIT 1)
+      ) primary_phone,
       (SELECT MAX(x.occurred_at) FROM crm_interactions x
        WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1) last_interaction_at,
       (SELECT COUNT(*) FROM crm_interactions x

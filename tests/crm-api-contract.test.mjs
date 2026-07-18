@@ -171,6 +171,12 @@ async function createPerson(database, values = {}) {
   return result.payload.person;
 }
 
+test("People directory SQL avoids D1-incompatible correlated sort expressions", () => {
+  const source = readFileSync(join(ROOT, "functions", "api", "crm", "_lib.js"), "utf8");
+  assert.doesNotMatch(source, /ORDER BY\s+\(i\.person_id\s*=\s*p\.id\)/);
+  assert.match(source, /COALESCE\(\s*\(SELECT i\.value FROM crm_identities i/);
+});
+
 function installSquareApiMock(testContext, {
   payments = [],
   refunds = [],
