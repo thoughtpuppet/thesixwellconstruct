@@ -28,6 +28,7 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
   .layout { display:grid; grid-template-columns:minmax(0,0.86fr) minmax(380px,600px); gap:72px; align-items:start; }
   .gate-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--accent); text-transform:uppercase; margin-bottom:36px; }
   .gate-body { font-size:17px; line-height:1.8; color:var(--text); max-width:640px; }
+  .gate-title + .gate-body { max-width:380px; padding-bottom:var(--s4); font-family:var(--serif); font-size:12px; font-weight:400; letter-spacing:0.22em; line-height:1.6; text-align:left; text-transform:uppercase; }
   .gate-body + .gate-body { margin-top:20px; }
   .review-panel { margin-top:48px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:24px 0; max-width:620px; }
   .review-label { font-size:10px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); opacity:0.72; margin-bottom:18px; }

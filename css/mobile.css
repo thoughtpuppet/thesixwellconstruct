@@ -273,11 +273,11 @@ select option:checked {
   .intro .intro-desc,
   .intro-desc {
     text-align: left !important;
-    padding-bottom: 0 !important;
-    max-width: 100% !important;
-    line-height: 1.55 !important;
-    font-size: 11px !important;
-    letter-spacing: 0.18em !important;
+    padding-bottom: 16px !important;
+    max-width: min(100%, 380px) !important;
+    line-height: 1.6 !important;
+    font-size: 12px !important;
+    letter-spacing: 0.22em !important;
   }
   .intro-above {
     margin-bottom: 4px !important;
@@ -316,7 +316,7 @@ select option:checked {
   body[data-venture="tattooing"] .hero-desc,
   body[data-venture="tattooing"] .hero-note,
   body[data-venture="tattooing"] .hero-label {
-    text-align: center !important;
+    text-align: left !important;
   }
 
   /* ── Filter rows — let them flex-wrap with comfortable touch targets ── */

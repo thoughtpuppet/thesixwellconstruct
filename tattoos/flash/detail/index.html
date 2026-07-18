@@ -16,11 +16,11 @@
     .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
     header{position:sticky;top:0;z-index:10;min-height:72px;padding:24px 40px;display:flex;justify-content:flex-end}.back-link{font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--focus)}
     main{position:relative;z-index:2;width:min(1180px,calc(100% - 80px));margin:0 auto;padding:72px 0 90px}.state{min-height:50vh;display:grid;align-content:center;gap:16px;color:var(--muted)}.state h1{margin:0;font-family:var(--sans);font-size:clamp(40px,7vw,82px);line-height:.92;color:var(--display)}
-    .detail{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,.82fr);gap:64px;align-items:start}.media{position:sticky;top:96px;border:5px solid var(--line);background:rgba(110,4,4,.06);min-height:360px;display:grid;place-items:center}.media img{display:block;width:100%;height:auto;max-height:76vh;object-fit:contain}.copy{padding-top:12px}.kicker,.meta-label{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:var(--focus)}h1{margin:14px 0 22px;font-family:var(--sans);font-size:clamp(52px,7vw,104px);line-height:.86;letter-spacing:-.045em;color:var(--display)}.description{margin:0 0 30px;color:var(--muted);font-size:16px;line-height:1.75}.meta{margin:0 0 28px;border-top:5px solid var(--line)}.meta-row{display:grid;grid-template-columns:130px 1fr;gap:16px;padding:14px 0;border-bottom:1px solid rgba(110,4,4,.28)}.meta-value{color:var(--muted);line-height:1.5}.availability{margin:0 0 24px;padding:18px;border-left:5px solid var(--ornament);background:rgba(110,4,4,.1);color:var(--muted);line-height:1.65}.availability strong{display:block;margin-bottom:5px;font-family:var(--sans);color:var(--focus)}
+    .detail{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,.82fr);gap:64px;align-items:start}.media-column{position:sticky;top:96px;min-width:0}.media{margin:0;border:5px solid var(--line);background:rgba(110,4,4,.06);min-height:360px;display:grid;place-items:center}.media img{display:block;width:100%;height:auto;max-height:76vh;object-fit:contain}.media-caption{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.media-gallery{display:flex;gap:12px;margin-top:12px;padding:0 0 8px;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity}.media-thumb{flex:0 0 94px;width:94px;height:94px;padding:0;border:5px solid var(--line);background:#090909;cursor:pointer;scroll-snap-align:start}.media-thumb[aria-pressed="true"]{border-color:var(--focus)}.media-thumb img{display:block;width:100%;height:100%;object-fit:cover}.copy{padding-top:12px}.kicker,.meta-label{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:var(--focus)}h1{margin:14px 0 22px;font-family:var(--sans);font-size:clamp(52px,7vw,104px);line-height:.86;letter-spacing:-.045em;color:var(--display)}.description{margin:0 0 30px;max-width:380px;padding-bottom:16px;color:var(--muted);font-family:var(--serif);font-size:12px;font-weight:400;letter-spacing:.22em;line-height:1.6;text-align:left;text-transform:uppercase}.meta{margin:0 0 28px;border-top:5px solid var(--line)}.meta-row{display:grid;grid-template-columns:130px 1fr;gap:16px;padding:14px 0;border-bottom:1px solid rgba(110,4,4,.28)}.meta-value{color:var(--muted);line-height:1.5}.availability{margin:0 0 24px;padding:18px;border-left:5px solid var(--ornament);background:rgba(110,4,4,.1);color:var(--muted);line-height:1.65}.availability strong{display:block;margin-bottom:5px;font-family:var(--sans);color:var(--focus)}
     .acknowledgement{display:grid;grid-template-columns:20px 1fr;gap:12px;align-items:start;margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.6}.acknowledgement input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--ornament)}.claim-link{min-height:52px;padding:0 24px;display:inline-flex;align-items:center;justify-content:center;border:5px solid var(--ornament);background:var(--ornament);font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--text)}.claim-link[aria-disabled="true"]{opacity:.42;pointer-events:none}.claim-link:hover{background:var(--display);border-color:var(--display)}:where(a,button,input):focus-visible{outline:2px solid var(--focus);outline-offset:4px}
     footer{position:relative;z-index:2;width:min(1180px,calc(100% - 80px));margin:0 auto;padding:40px 0 56px;border-top:5px solid var(--line);display:flex;justify-content:space-between;gap:20px;color:var(--dim);font-size:10px;letter-spacing:.18em;text-transform:uppercase}
     [hidden]{display:none!important}
-    @media(max-width:820px){header{padding:18px 24px;min-height:60px}main,footer{width:min(100% - 40px,1180px)}main{padding-top:42px}.detail{grid-template-columns:1fr;gap:36px}.media{position:static;min-height:260px}.meta-row{grid-template-columns:1fr;gap:5px}}
+    @media(max-width:820px){header{padding:18px 24px;min-height:60px}main,footer{width:min(100% - 40px,1180px)}main{padding-top:42px}.detail{grid-template-columns:1fr;gap:36px}.media-column{position:static}.media{min-height:260px}.meta-row{grid-template-columns:1fr;gap:5px}}
     @media(max-width:640px){.acknowledgement,.claim-link{font-size:16px}.claim-link{width:100%}}
     @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
   </style>
@@ -33,7 +33,11 @@
   <main>
     <section class="state" id="loadingState" role="status" aria-live="polite"><p class="kicker">Flash record</p><h1>Loading design.</h1></section>
     <section class="detail" id="detail" hidden>
-      <figure class="media"><img id="flashImage" src="" alt=""></figure>
+      <div class="media-column">
+        <figure class="media"><img id="flashImage" src="" alt=""></figure>
+        <p class="media-caption" id="flashMediaCaption" hidden></p>
+        <div class="media-gallery" id="flashMediaGallery" role="group" aria-label="Flash design gallery" hidden></div>
+      </div>
       <div class="copy">
         <p class="kicker" id="flashKicker">Art.Pill flash</p>
         <h1 id="flashTitle"></h1>
@@ -56,6 +60,8 @@
     const claimControls = document.getElementById('claimControls');
     const claimLink = document.getElementById('claimLink');
     const acknowledgement = document.getElementById('claimAcknowledgement');
+    const mediaGallery = document.getElementById('flashMediaGallery');
+    const mediaCaption = document.getElementById('flashMediaCaption');
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const normalizePath = (value) => {
@@ -123,6 +129,57 @@
       return [titleCase(category), estimate].filter(Boolean).join(' - ');
     }
 
+    function renderMedia(record) {
+      const media = (Array.isArray(record.media) ? record.media : []).filter((item) => item && item.url);
+      const image = document.getElementById('flashImage');
+      const figure = image.closest('figure');
+      mediaGallery.replaceChildren();
+      mediaGallery.hidden = media.length <= 1;
+      mediaCaption.hidden = true;
+      mediaCaption.textContent = '';
+      if (!media.length) {
+        image.removeAttribute('src');
+        image.alt = '';
+        figure.hidden = true;
+        return;
+      }
+      figure.hidden = false;
+      const selectMedia = (index, focus = false) => {
+        const selected = media[index] || media[0];
+        image.src = selected.url;
+        image.alt = selected.alt || record.title || 'Art.Pill flash design';
+        mediaCaption.textContent = selected.caption || '';
+        mediaCaption.hidden = !selected.caption;
+        [...mediaGallery.children].forEach((button, buttonIndex) => button.setAttribute('aria-pressed', String(buttonIndex === index)));
+        const active = mediaGallery.children[index];
+        if (active) {
+          active.scrollIntoView({ block:'nearest', inline:'nearest' });
+          if (focus) active.focus();
+        }
+      };
+      media.forEach((item, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'media-thumb';
+        button.setAttribute('aria-label', `View image ${index + 1} of ${media.length}${item.caption ? `: ${item.caption}` : ''}`);
+        button.setAttribute('aria-pressed', String(index === 0));
+        const thumb = document.createElement('img');
+        thumb.src = item.url;
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+        button.appendChild(thumb);
+        button.addEventListener('click', () => selectMedia(index));
+        button.addEventListener('keydown', (event) => {
+          if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? media.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + media.length) % media.length;
+          selectMedia(next, true);
+        });
+        mediaGallery.appendChild(button);
+      });
+      selectMedia(0);
+    }
+
     function render(record, authoritative = false) {
       let canonicalPath = `/tattoos/flash/${encodeURIComponent(record.slug || record.id)}/`;
       try {
@@ -132,11 +189,7 @@
       canonical.href = new URL(canonicalPath, location.origin).href;
       if (normalizePath(location.pathname) !== normalizePath(canonicalPath)) history.replaceState(history.state, '', canonicalPath);
       document.title = `${record.title || 'Flash'} - Art.Pill Tattoo House`;
-      const media = Array.isArray(record.media) ? record.media[0] : null;
-      const image = document.getElementById('flashImage');
-      image.src = media?.url || '';
-      image.alt = media?.alt || record.title || 'Art.Pill flash design';
-      image.closest('figure').hidden = !image.src;
+      renderMedia(record);
       document.getElementById('flashKicker').textContent = record.series_id ? `${titleCase(record.series_id)} series` : 'Art.Pill flash';
       document.getElementById('flashTitle').textContent = record.title || 'Untitled flash';
       document.getElementById('flashDescription').textContent = record.description || 'A managed Art.Pill flash record.';

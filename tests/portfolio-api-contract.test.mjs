@@ -670,6 +670,131 @@ test("Flash API hydrates and updates the shared tattoo style classifications", a
   assert.deepEqual((await response.json()).record.styles, ["unclassified"]);
 });
 
+test("Flash drafts upload ordered galleries and cannot publish or lose their primary artwork", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const environment = env(database, bucket);
+  let response = await handleConstructApi(request("/api/admin/flash", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "flash-upload-contract",
+      slug: "flash-upload-contract",
+      title: "Flash Upload Contract",
+      state: "available",
+      item_type: "individual",
+      process_category: "standard",
+      session_category: "artist_review",
+      split_policy: "artist_review",
+    },
+  }), environment);
+  assert.equal(response.status, 409);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM flash_items WHERE id='flash-upload-contract'").get().count, 0);
+
+  response = await handleConstructApi(request("/api/admin/flash", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "flash-upload-contract",
+      slug: "flash-upload-contract",
+      title: "Flash Upload Contract",
+      state: "draft",
+      item_type: "individual",
+      process_category: "standard",
+      claimable: 0,
+      session_category: "artist_review",
+      split_policy: "artist_review",
+    },
+  }), environment);
+  assert.equal(response.status, 201);
+
+  response = await handleConstructApi(request("/api/admin/flash/flash-upload-contract", {
+    method: "PATCH", admin: true, body: { state: "available" },
+  }), environment);
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /primary/i);
+  response = await handleConstructApi(request("/api/flash/flash-upload-contract"), environment);
+  assert.equal(response.status, 404);
+
+  async function upload(filename, bytes) {
+    const form = new FormData();
+    form.set("file", new File([new Uint8Array(bytes)], filename, { type: "image/png" }));
+    form.set("alt_text", filename.replace(".png", ""));
+    form.set("privacy", "public");
+    form.set("consent_status", "not-required");
+    form.set("public_presentation", "inline");
+    const uploaded = await handleConstructApi(new Request("https://example.test/api/admin/media", {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN}` },
+      body: form,
+    }), environment);
+    assert.equal(uploaded.status, 201);
+    return (await uploaded.json()).record.id;
+  }
+
+  const primaryId = await upload("primary.png", [1, 2, 3]);
+  const galleryId = await upload("gallery.png", [4, 5, 6]);
+  response = await handleConstructApi(request("/api/admin/entities/flash-upload-contract/media", {
+    method: "POST", admin: true, body: {
+      media_id: primaryId, role: "primary", sort_order: 1, public_visible: true, alt_text_override: "Primary design",
+    },
+  }), environment);
+  assert.equal(response.status, 201);
+  response = await handleConstructApi(request("/api/admin/entities/flash-upload-contract/media", {
+    method: "POST", admin: true, body: {
+      media_id: galleryId, role: "gallery", sort_order: 2, public_visible: true, alt_text_override: "Gallery detail",
+    },
+  }), environment);
+  assert.equal(response.status, 201);
+
+  response = await handleConstructApi(request("/api/admin/flash", { admin: true }), environment);
+  assert.equal(response.status, 200);
+  let record = (await response.json()).records.find((item) => item.id === "flash-upload-contract");
+  assert.deepEqual(record.media.map((item) => [item.id, item.role]), [[primaryId, "primary"], [galleryId, "gallery"]]);
+  assert.match(record.media[0].adminUrl, /\/api\/admin\/media\/.+\/file/);
+
+  response = await handleConstructApi(request("/api/admin/flash/flash-upload-contract", {
+    method: "PATCH", admin: true, body: { state: "available" },
+  }), environment);
+  assert.equal(response.status, 200);
+  response = await handleConstructApi(request("/api/flash/flash-upload-contract"), environment);
+  assert.equal(response.status, 200);
+  record = (await response.json()).record;
+  assert.deepEqual(record.media.map((item) => [item.id, item.role]), [[primaryId, "primary"], [galleryId, "gallery"]]);
+
+  response = await handleConstructApi(request(`/api/admin/entities/flash-upload-contract/media/${encodeURIComponent(galleryId)}`, {
+    method: "PATCH", admin: true, body: {
+      role: "primary", sort_order: 1, alt_text_override: "New primary", caption_override: "Second view",
+    },
+  }), environment);
+  assert.equal(response.status, 200);
+  response = await handleConstructApi(request("/api/flash/flash-upload-contract"), environment);
+  record = (await response.json()).record;
+  assert.deepEqual(record.media.map((item) => [item.id, item.role]), [[galleryId, "primary"], [primaryId, "gallery"]]);
+  assert.equal(record.media[0].alt, "New primary");
+  assert.equal(record.media[0].caption, "Second view");
+
+  response = await handleConstructApi(request(`/api/admin/entities/flash-upload-contract/media/${encodeURIComponent(galleryId)}`, {
+    method: "DELETE", admin: true,
+  }), environment);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).promoted_media_id, primaryId);
+  assert.equal(database.prepare("SELECT role FROM entity_media WHERE entity_id='flash-upload-contract' AND media_id=?").get(primaryId).role, "primary");
+
+  response = await handleConstructApi(request(`/api/admin/entities/flash-upload-contract/media/${encodeURIComponent(primaryId)}`, {
+    method: "DELETE", admin: true,
+  }), environment);
+  assert.equal(response.status, 409);
+  response = await handleConstructApi(request("/api/admin/flash/flash-upload-contract", {
+    method: "PATCH", admin: true, body: { state: "draft" },
+  }), environment);
+  assert.equal(response.status, 200);
+  response = await handleConstructApi(request(`/api/admin/entities/flash-upload-contract/media/${encodeURIComponent(primaryId)}`, {
+    method: "DELETE", admin: true,
+  }), environment);
+  assert.equal(response.status, 200);
+});
+
 test("new Portfolio uploads begin with the shared Unclassified style assignment", async () => {
   const database = migratedDatabase();
   const bucket = new MemoryBucket();

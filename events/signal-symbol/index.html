@@ -46,10 +46,16 @@
   .signal-subtitle {
     display: inline-block;
     margin-top: 14px;
+    max-width: 380px;
+    padding-bottom: 16px;
     color: var(--text-muted);
     font-family: var(--font-serif);
-    font-size: 22px;
-    line-height: 1.4;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.22em;
+    line-height: 1.6;
+    text-align: left;
+    text-transform: uppercase;
   }
   .signal-grid {
     display: grid;
@@ -277,7 +283,7 @@
     .session-steps li { grid-template-columns: 1fr; gap: 6px; }
     .signal-hero::after { bottom: 4px; }
     .signal-hero .venture-title { font-size: clamp(30px, 9.2vw, 42px); }
-    .signal-subtitle { font-size: 18px; }
+    .signal-subtitle { font-size: 12px; }
     .signal-panel h2,
     .booking-card h2 { font-size: 26px; }
   }

@@ -18,8 +18,9 @@
     media:"/api/admin/media",
     mediaItem:mediaId=>`/api/admin/media/${encodeURIComponent(mediaId)}`
   };
+  const adminPreviewUrls=new Set(),flashBulkJobs=new Map();
   const configs={
-    flash:{endpoint:"flash",title:"Flash",description:"Availability, claims, shared tattoo style classifications, experimental process, session structure, series placement, metadata, and ordering.",fields:["title","slug","description","state","series_id","size_bucket","price_label","item_type","process_category","claimable","sheet_code","design_code","session_category","split_policy","estimated_sessions_min","estimated_sessions_max","estimated_total_minutes_min","estimated_total_minutes_max","session_plan_note","legacy_path","sort_order"]},
+    flash:{endpoint:"flash",title:"Flash",description:"Upload individual designs or batches as safe drafts, then manage artwork, galleries, availability, claims, styles, session structure, metadata, and ordering.",flashEditor:true,fields:["title","slug","description","state","series_id","size_bucket","price_label","item_type","process_category","claimable","sheet_code","design_code","session_category","split_policy","estimated_sessions_min","estimated_sessions_max","estimated_total_minutes_min","estimated_total_minutes_max","session_plan_note","legacy_path","sort_order"]},
     symbols:{endpoint:"legend",title:"Legend Symbols",description:"One canonical identity with inherited, lived, and reoriented meanings; visual translations; documented appearances; and relationships that supply other Construct systems.",symbolEditor:true,fields:["name","slug","meaning","category_id","state","themes_json","context_json","applications_json","variants_json","examples_json","svg_markup","sort_order"]},
     categories:{endpoint:"legend/categories",title:"Legend Categories",description:"Ordered groupings that organize symbols without limiting where they may be used.",fields:["name","slug","description","state","sort_order"]},
     works:{endpoint:"art",title:"Art Works",description:"Upload artwork, manage its metadata, and control public acquisition eligibility.",mediaUpload:"artwork",fields:["title","slug","statement","year","medium","dimensions","availability","acquisition_eligible","state","legacy_path","sort_order"]},
@@ -36,8 +37,20 @@
   function status(message){const el=document.getElementById("status");if(el)el.textContent=message}
   function esc(value){return String(value??"").replace(/[&<>'"]/g,character=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[character]))}
   async function api(path,options={}){const headers=new Headers(options.headers||{});headers.set("authorization",`Bearer ${localStorage.getItem(tokenKey)||""}`);const response=await fetch(path,{...options,headers});let payload={};try{payload=await response.json()}catch{}if(!response.ok)throw new Error(payload.error||`Request failed (${response.status})`);return payload}
+  function clearAdminPreviewUrls(){adminPreviewUrls.forEach(url=>URL.revokeObjectURL(url));adminPreviewUrls.clear()}
+  async function hydrateAdminMediaPreviews(scope=root()){
+    const images=[...scope.querySelectorAll("[data-admin-media-preview]")];
+    await Promise.all(images.map(async image=>{
+      if(image.dataset.previewLoading==="true")return;image.dataset.previewLoading="true";
+      try{
+        const response=await fetch(`/api/admin/media/${encodeURIComponent(image.dataset.adminMediaPreview)}/file`,{headers:{authorization:`Bearer ${localStorage.getItem(tokenKey)||""}`},cache:"no-store"});
+        if(!response.ok)throw new Error("Preview unavailable");
+        const objectUrl=URL.createObjectURL(await response.blob());adminPreviewUrls.add(objectUrl);image.src=objectUrl;
+      }catch{image.hidden=true}finally{delete image.dataset.previewLoading}
+    }))
+  }
   function notice(message,kind="info"){return `<div class="cm-notice" data-kind="${kind}" role="${kind==="error"?"alert":"status"}">${esc(message)}</div>`}
-  function image(record){const media=record.media?.[0],url=media?.url||record.image_url,alt=media?.alt||record.alt_text||record.title||record.name||"";return url?`<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" onerror="this.hidden=true">`:""}
+  function image(record){const media=record.media?.[0],url=media?.url||record.image_url,alt=media?.alt||record.alt_text||record.title||record.name||"";if(media?.adminUrl||media?.id)return `<img data-admin-media-preview="${esc(media.id)}" alt="${esc(alt)}" loading="lazy">`;return url?`<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" onerror="this.hidden=true">`:""}
   function state(record){return record.state||record.privacy||record.availability||"record"}
   function parseList(value){if(Array.isArray(value))return value;try{const parsed=JSON.parse(value||"[]");return Array.isArray(parsed)?parsed:[]}catch{return[]}}
   function parseObject(value){if(value&&typeof value==="object"&&!Array.isArray(value))return value;try{const parsed=JSON.parse(value||"{}");return parsed&&typeof parsed==="object"&&!Array.isArray(parsed)?parsed:{}}catch{return{}}}
@@ -166,6 +179,43 @@
     return `<label class="${long?"wide":""}">${label}${long?`<textarea name="${name}">${esc(value)}</textarea>`:`<input name="${name}" ${numeric?'type="number" min="0" step="1" inputmode="numeric"':''} value="${esc(value)}">`}</label>`
   }
 
+  function flashField(name,value,isNew){
+    if(name==="state"){
+      if(isNew)return `<label>Publishing state<input value="Draft" disabled><input type="hidden" name="state" value="draft"><span class="cm-field-note">New Flash always begins as a private draft. Reopen it after the artwork is attached to publish.</span></label>`;
+      return `<label>Publishing state<select name="state">${["draft","available","reserved","placed","retired","archived"].map(stateValue=>`<option value="${stateValue}" ${String(value||"draft")===stateValue?"selected":""}>${stateValue}</option>`).join("")}</select></label>`
+    }
+    if(name==="item_type")return `<label>Item type<select name="item_type">${[["individual","Individual"],["sheet","Sheet"]].map(([option,label])=>`<option value="${option}" ${String(value||"individual")===option?"selected":""}>${label}</option>`).join("")}</select></label>`;
+    return field(name,value)
+  }
+
+  function flashMediaItem(media,index,total){
+    const primary=media.role==="primary",alt=media.alt||media.alt_text_override||"",caption=media.caption||media.caption_override||"";
+    return `<figure class="cm-flash-media-item" data-flash-media="${esc(media.id)}">
+      <div class="cm-flash-media-preview"><img data-admin-media-preview="${esc(media.id)}" alt="${esc(alt)}"></div>
+      <figcaption><span class="cm-pill">${primary?"Primary":"Gallery"}</span><span>${esc(media.originalFilename||media.id)}</span></figcaption>
+      <label>Alt text<input data-flash-media-alt value="${esc(alt)}" placeholder="Describe the Flash artwork"></label>
+      <label>Caption<textarea data-flash-media-caption placeholder="Optional public gallery caption">${esc(caption)}</textarea></label>
+      <div class="cm-flash-media-actions">
+        <button class="button" type="button" data-flash-media-action="save">Save text</button>
+        ${primary?"":`<button class="button" type="button" data-flash-media-action="primary">Make primary</button>`}
+        ${primary?"":`<button class="button" type="button" data-flash-media-action="up" ${index<=1?"disabled":""}>Up</button><button class="button" type="button" data-flash-media-action="down" ${index>=total-1?"disabled":""}>Down</button>`}
+        <button class="button danger-button" type="button" data-flash-media-action="remove">Remove</button>
+      </div>
+    </figure>`
+  }
+
+  function flashMediaPanel(record={}){
+    const media=Array.isArray(record.media)?record.media:[],existing=media.map((item,index)=>flashMediaItem(item,index,media.length)).join("");
+    return `<section class="cm-flash-media wide">
+      <div class="cm-flash-media-head"><div><strong>Flash artwork</strong><p>The first image becomes the primary catalog image. Additional files become the ordered detail gallery.</p></div><span class="cm-pill">${media.length} image${media.length===1?"":"s"}</span></div>
+      ${existing?`<div class="cm-flash-media-grid" data-flash-media-list>${existing}</div>`:`<p class="cm-flash-media-empty">No artwork attached yet. This draft cannot be published until it has a primary image.</p>`}
+      <label class="cm-flash-upload">Add JPEG, PNG, WebP, or GIF files<input type="file" name="flash_files" accept="image/jpeg,image/png,image/webp,image/gif" multiple></label>
+      <label>Default alt text for new images<input name="flash_alt" value="${esc(record.title||"")}" placeholder="Describe the Flash artwork"></label>
+      <div class="cm-flash-pending" data-flash-pending hidden></div>
+      <span class="cm-upload-status" data-flash-upload-status aria-live="polite"></span>
+    </section>`
+  }
+
   function applicationRow(entry={}){
     let preview="";try{preview=entry.svg_markup?safeSvgMarkup(entry.svg_markup):""}catch{}
     return `<article class="cm-layer-row" data-layer-row="application"><div class="cm-layer-preview" data-svg-preview aria-hidden="true">${preview}</div><div class="cm-layer-fields"><label>Application name<input data-field="title" value="${esc(entry.title)}" placeholder="Mirrored, paired, enclosed…"></label><label>Meaning in this form<textarea data-field="meaning" placeholder="How this application changes or sharpens the reading">${esc(entry.meaning)}</textarea></label><label>Context note<textarea data-field="note" placeholder="Placement, direction, neighboring symbols, or other conditions">${esc(entry.note)}</textarea></label><label>Optional application diagram<input type="file" accept=".svg,image/svg+xml" data-svg-file="application" data-recolor="true"></label><textarea class="cm-visually-hidden" data-field="svg_markup" tabindex="-1" aria-hidden="true">${esc(entry.svg_markup)}</textarea></div><button class="button danger-button cm-remove-layer" type="button" data-remove-layer>Remove</button></article>`
@@ -202,7 +252,18 @@
     const existingMedia=(record.media||[]).map(media=>`<figure><img src="${esc(media.url)}" alt="${esc(media.alt||record.title||"")}"><figcaption>${esc(media.alt||"Attached artwork image")}</figcaption></figure>`).join("");
     const mediaFields=config.mediaUpload?`<div class="cm-artwork-media wide"><strong>Artwork images</strong>${existingMedia?`<div class="cm-artwork-previews">${existingMedia}</div>`:"<p>No images attached yet.</p>"}<label>Upload JPEG, PNG, or WebP<input type="file" name="artwork_files" accept="image/jpeg,image/png,image/webp" multiple></label><label>Image alt text<input name="artwork_alt" value="${esc(record.title||"")}" placeholder="Describe the artwork for screen readers"></label><span class="cm-upload-status" data-artwork-upload-status aria-live="polite"></span></div>`:"";
     const styleFields=config===configs.flash?styleSelector(record,styleOptions):"";
-    return `<section class="cm-editor" aria-label="${record.id?"Edit":"Create"} record"><div class="cm-row"><h3>${record.id?"Edit":"New"} ${esc(config.title)}</h3><button class="button" type="button" data-cancel>Close</button></div><form class="cm-form" data-editor data-id="${esc(record.id||"")}" data-media-count="${record.media?.length||0}"><div class="cm-form-grid">${config.fields.map(name=>field(name,record[name]??(name==="state"?"draft":""))).join("")}${styleFields}${mediaFields}</div><div class="cm-actions"><button class="button" type="submit">${config.mediaUpload?"Save artwork":"Save draft"}</button></div></form></section>`
+    const fields=config.fields.map(name=>config.flashEditor?flashField(name,record[name]??(name==="state"?"draft":""),!record.id):field(name,record[name]??(name==="state"?"draft":""))).join("");
+    const flashMedia=config.flashEditor?flashMediaPanel(record):"";
+    return `<section class="cm-editor ${config.flashEditor?"cm-flash-editor":""}" aria-label="${record.id?"Edit":"Create"} record"><div class="cm-row"><h3>${record.id?"Edit":"New"} ${esc(config.title)}</h3><button class="button" type="button" data-cancel>Close</button></div><form class="cm-form" data-editor data-id="${esc(record.id||"")}" data-media-count="${record.media?.length||0}" data-has-primary="${record.media?.some(media=>media.role==="primary")?"true":"false"}"><div class="cm-form-grid">${fields}${styleFields}${flashMedia}${mediaFields}</div><div class="cm-actions"><button class="button" type="submit">${config.flashEditor?"Save Flash draft and artwork":config.mediaUpload?"Save artwork":"Save draft"}</button></div></form></section>`
+  }
+
+  function bindFlashEditor(form){
+    form.addEventListener("change",event=>{
+      const input=event.target.closest('[name="flash_files"]');if(!input)return;
+      const output=form.querySelector("[data-flash-pending]"),files=[...input.files||[]];if(!output)return;
+      output.innerHTML="";output.hidden=!files.length;
+      files.forEach((file,index)=>{const url=URL.createObjectURL(file);adminPreviewUrls.add(url);output.insertAdjacentHTML("beforeend",`<figure><img src="${esc(url)}" alt=""><figcaption>${index===0&&!form.querySelector("[data-flash-media]")?"Primary":"Gallery"} · ${esc(file.name)}</figcaption></figure>`)});
+    })
   }
 
   function bindSymbolEditor(form){
@@ -269,13 +330,81 @@
     return values;
   }
 
+  function resourceHeader(config){
+    const flash=config.flashEditor;
+    return `<div class="cm-head"><div><h2>${esc(config.title)}</h2><p class="cm-summary">${esc(config.description)}</p></div><div class="cm-head-actions"><button class="button" data-new>${flash?"New Flash":"New record"}</button>${flash?'<button class="button" type="button" data-bulk-toggle>Bulk Upload Drafts</button>':""}</div></div>`
+  }
+
+  function flashBulkPanel(){
+    return `<form class="cm-flash-bulk" data-flash-bulk hidden>
+      <div><strong>Bulk upload Flash drafts</strong><p>Each raster file becomes one private draft with an Unclassified style. Finish metadata and publishing in the normal editor.</p></div>
+      <label>Choose JPEG, PNG, WebP, or GIF files<input type="file" name="bulk_flash_files" accept="image/jpeg,image/png,image/webp,image/gif" multiple required></label>
+      <div class="cm-actions"><button class="button" type="submit">Create draft records</button><button class="button" type="button" data-bulk-refresh>Refresh Flash list</button></div>
+      <div class="cm-flash-bulk-status" data-flash-bulk-status aria-live="polite"></div>
+    </form>`
+  }
+
+  function humanizeFlashFilename(filename){
+    const base=String(filename||"Flash design").replace(/\.[^.]+$/,"").replace(/[_-]+/g," ").replace(/\s+/g," ").trim();
+    return (base||"Flash design").replace(/\b\w/g,letter=>letter.toUpperCase())
+  }
+
+  function flashSlug(value){
+    return String(value||"flash-design").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"")||"flash-design"
+  }
+
+  function uniqueFlashSlug(base,used){
+    let candidate=base,index=2;while(used.has(candidate)){candidate=`${base}-${index}`;index++}used.add(candidate);return candidate
+  }
+
+  function validateFlashImages(files){
+    const allowed=new Set(["image/jpeg","image/png","image/webp","image/gif"]);
+    for(const file of files){if(!allowed.has(file.type))throw new Error(`${file.name}: use JPEG, PNG, WebP, or GIF`);if(file.size>15*1024*1024)throw new Error(`${file.name}: exceeds 15 MB`)}
+  }
+
+  async function uploadFlashImages(entityId,files,altText,existingCount=0,hasPrimary=false,output){
+    validateFlashImages(files);
+    for(let index=0;index<files.length;index++){
+      const file=files[index],role=!hasPrimary&&index===0?"primary":"gallery",sortOrder=existingCount+index+1;
+      if(output)output.textContent=`Uploading ${index+1} of ${files.length}: ${file.name}`;
+      const upload=new FormData();upload.append("file",file);upload.append("alt_text",altText);upload.append("privacy","public");upload.append("consent_status","not-required");upload.append("public_presentation","inline");
+      const uploaded=await api("/api/admin/media",{method:"POST",body:upload}),mediaId=uploaded.record?.id;
+      if(!mediaId)throw new Error(`${file.name} uploaded without a media ID.`);
+      try{
+        await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:mediaId,role,sort_order:sortOrder,public_visible:true,alt_text_override:altText})});
+      }catch(error){
+        try{await api(`/api/admin/media/${encodeURIComponent(mediaId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({state:"archived"})})}catch{}
+        throw error
+      }
+    }
+    if(output)output.textContent=`${files.length} Flash image${files.length===1?"":"s"} uploaded and attached.`
+  }
+
+  async function processFlashBulkJob(job,row){
+    const message=row.querySelector("[data-bulk-message]"),retry=row.querySelector("[data-bulk-retry]");retry.hidden=true;row.dataset.state="working";
+    try{
+      validateFlashImages([job.file]);
+      if(!job.entityId){
+        message.textContent=`Creating draft for ${job.file.name}…`;
+        const created=await api("/api/admin/flash",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({title:job.title,slug:job.slug,state:"draft",series_id:"",item_type:"individual",process_category:"standard",claimable:0,session_category:"artist_review",split_policy:"artist_review",styles:["unclassified"]})});
+        job.entityId=created.record?.id;if(!job.entityId)throw new Error("Draft created without an entity ID.")
+      }
+      message.textContent=`Uploading ${job.file.name} to ${job.entityId}…`;
+      await uploadFlashImages(job.entityId,[job.file],job.title,0,false);
+      job.complete=true;row.dataset.state="success";message.textContent=`Draft ready: ${job.title} (${job.entityId})`
+    }catch(error){
+      row.dataset.state="error";message.textContent=`${job.entityId?`Draft ${job.entityId} kept. `:""}${error.message}`;retry.hidden=false
+    }
+  }
+
   async function renderResource(view,filter){
-    const config=configs[view];root().innerHTML=`<section class="construct-manager"><div class="cm-head"><div><h2>${esc(config.title)}</h2><p class="cm-summary">${esc(config.description)}</p></div><button class="button" data-new>New record</button></div>${notice("Loading…")}</section>`;
+    const config=configs[view];clearAdminPreviewUrls();root().innerHTML=`<section class="construct-manager">${resourceHeader(config)}${notice("Loading…")}</section>`;
     try{
       const [payload,categoryPayload,stylePayload]=await Promise.all([api(`/api/admin/${config.endpoint}`),config.symbolEditor?api("/api/admin/legend/categories"):Promise.resolve({records:[]}),view==="flash"?api("/api/admin/portfolio/settings"):Promise.resolve({options:{styles:[]}})]);
       const allRecords=payload.records||[],records=filter?allRecords.filter(filter):allRecords,categories=categoryPayload.records||[],styleOptions=Array.isArray(stylePayload.options?.styles)?stylePayload.options.styles:[],sortable=config.fields.includes("sort_order"),shell=root().querySelector(".construct-manager");
-      shell.innerHTML=`<div class="cm-head"><div><h2>${esc(config.title)}</h2><p class="cm-summary">${esc(config.description)}</p></div><button class="button" data-new>New record</button></div><div id="cm-editor"></div><div class="cm-grid">${records.length?records.map((record,index)=>card(record,index,records.length,sortable,styleOptions)).join(""):"<div class='cm-empty'>No matching records.</div>"}</div>`;
+      shell.innerHTML=`${resourceHeader(config)}<div id="cm-editor"></div>${config.flashEditor?flashBulkPanel():""}<div class="cm-grid">${records.length?records.map((record,index)=>card(record,index,records.length,sortable,styleOptions)).join(""):"<div class='cm-empty'>No matching records.</div>"}</div>`;
       bindResource(shell,config,records,allRecords,categories,styleOptions);
+      hydrateAdminMediaPreviews(shell);
     }catch(error){root().querySelector(".construct-manager").innerHTML=notice(error.message,"error")}
   }
 
@@ -299,18 +428,48 @@
     if(output)output.textContent=`${pending.length} variant image${pending.length===1?"":"s"} uploaded and attached.`;
   }
 
+  async function handleFlashMediaAction(button,record){
+    const item=button.closest("[data-flash-media]"),mediaId=item?.dataset.flashMedia,action=button.dataset.flashMediaAction;
+    if(!mediaId||!record?.id)return false;
+    const endpoint=`/api/admin/entities/${encodeURIComponent(record.id)}/media/${encodeURIComponent(mediaId)}`;
+    if(action==="save"){
+      await api(endpoint,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({alt_text_override:item.querySelector("[data-flash-media-alt]")?.value||"",caption_override:item.querySelector("[data-flash-media-caption]")?.value||""})})
+    }else if(action==="primary"){
+      await api(endpoint,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({role:"primary",sort_order:1,public_visible:true})})
+    }else if(action==="remove"){
+      if(!confirm("Remove this image from the Flash record? The stored media remains recoverable."))return false;
+      await api(endpoint,{method:"DELETE"})
+    }else if(action==="up"||action==="down"){
+      const gallery=(record.media||[]).filter(media=>media.role!=="primary"),from=gallery.findIndex(media=>media.id===mediaId),to=action==="up"?from-1:from+1;
+      if(from<0||to<0||to>=gallery.length)return false;
+      [gallery[from],gallery[to]]=[gallery[to],gallery[from]];
+      for(const [index,media] of gallery.entries())await api(`/api/admin/entities/${encodeURIComponent(record.id)}/media/${encodeURIComponent(media.id)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({sort_order:index+2})})
+    }else return false;
+    return true
+  }
+
   function bindResource(shell,config,records,allRecords=records,categories=[],styleOptions=[]){
     const mount=shell.querySelector("#cm-editor");
     shell.addEventListener("click",async event=>{
+      const bulkToggle=event.target.closest("[data-bulk-toggle]");if(bulkToggle){const panel=shell.querySelector("[data-flash-bulk]");if(panel){panel.hidden=!panel.hidden;if(!panel.hidden)panel.querySelector('input[type="file"]')?.focus()}return}
+      if(event.target.closest("[data-bulk-refresh]"))return renderResource("flash");
+      const bulkRetry=event.target.closest("[data-bulk-retry]");if(bulkRetry){const row=bulkRetry.closest("[data-bulk-job]"),job=flashBulkJobs.get(row?.dataset.bulkJob);if(job)await processFlashBulkJob(job,row);return}
+      const mediaAction=event.target.closest("[data-flash-media-action]");
+      if(mediaAction&&config.flashEditor){
+        const form=mediaAction.closest("[data-editor]"),record=records.find(item=>item.id===form?.dataset.id);
+        try{if(await handleFlashMediaAction(mediaAction,record)){status("Flash media updated");return renderResource("flash")}}catch(error){status(error.message);const output=form?.querySelector("[data-flash-upload-status]");if(output)output.textContent=error.message}
+        return
+      }
       const edit=event.target.closest("[data-edit]"),fresh=event.target.closest("[data-new]");
       if(edit||fresh){
         const selected=edit?records.find(record=>record.id===edit.dataset.edit):{};
         mount.innerHTML=editor(config,selected,categories,styleOptions);
-        const form=mount.querySelector("[data-editor]");if(config.symbolEditor&&form)bindSymbolEditor(form);if(config===configs.flash&&form)bindStyleSelector(form);
+        const form=mount.querySelector("[data-editor]");if(config.symbolEditor&&form)bindSymbolEditor(form);if(config===configs.flash&&form){bindStyleSelector(form);bindFlashEditor(form)}
         if(selected?.id){
         if(config.symbolEditor)mount.insertAdjacentHTML("beforeend",'<section class="cm-connections-intro"><span class="cm-section-index">06 · System</span><h3>Connected work</h3><p>Use a public <strong>Uses symbol</strong> relationship for works already managed in Studio. Those connections update the Legend and the related work without duplicating their titles or routes.</p></section>');
           const connections=document.createElement("div");connections.className="cm-entity-connections";mount.appendChild(connections);window.ConnectionsManager?.mount(connections,{entityId:selected.id});
         }
+        hydrateAdminMediaPreviews(mount);
         mount.querySelector("input,textarea")?.focus();return;
       }
       if(event.target.closest("[data-cancel]")){mount.innerHTML="";return}
@@ -318,15 +477,35 @@
       const move=event.target.closest("[data-move]");if(move){const visibleIds=records.map(record=>record.id),from=visibleIds.indexOf(move.dataset.id),to=move.dataset.move==="up"?from-1:from+1;if(to<0||to>=visibleIds.length)return;const ids=allRecords.map(record=>record.id),first=ids.indexOf(visibleIds[from]),second=ids.indexOf(visibleIds[to]);[ids[first],ids[second]]=[ids[second],ids[first]];await api(`/api/admin/${config.endpoint}/reorder`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ids,expected_updated_at:allRecords.reduce((value,record)=>record.updated_at>value?record.updated_at:value,"")})});status("Order published");return renderResource(Object.keys(configs).find(key=>configs[key]===config))}
     });
     shell.addEventListener("submit",async event=>{
+      const bulkForm=event.target.closest("[data-flash-bulk]");
+      if(bulkForm){
+        event.preventDefault();const files=[...bulkForm.elements.bulk_flash_files.files||[]],output=bulkForm.querySelector("[data-flash-bulk-status]");
+        if(!files.length){output.textContent="Choose at least one Flash image.";return}
+        const used=new Set(allRecords.map(record=>record.slug).filter(Boolean));output.innerHTML="";
+        for(const file of files){
+          const title=humanizeFlashFilename(file.name),slugValue=uniqueFlashSlug(flashSlug(title),used),key=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`,job={file,title,slug:slugValue,entityId:"",complete:false};
+          flashBulkJobs.set(key,job);output.insertAdjacentHTML("beforeend",`<article class="cm-flash-bulk-row" data-bulk-job="${esc(key)}" data-state="queued"><span data-bulk-message>Queued: ${esc(file.name)}</span><button class="button" type="button" data-bulk-retry hidden>Retry upload</button></article>`);
+          await processFlashBulkJob(job,output.lastElementChild)
+        }
+        status("Bulk Flash draft pass complete");return
+      }
       const form=event.target.closest("[data-editor]");if(!form)return;event.preventDefault();
-      const formData=new FormData(form),files=[...(form.querySelector('[name="artwork_files"]')?.files||[])],altText=String(formData.get("artwork_alt")||formData.get("title")||"").trim();formData.delete("artwork_files");formData.delete("artwork_alt");
+      const formData=new FormData(form),files=[...(form.querySelector('[name="artwork_files"]')?.files||[])],flashFiles=[...(form.querySelector('[name="flash_files"]')?.files||[])],altText=String(formData.get("artwork_alt")||formData.get("flash_alt")||formData.get("title")||"").trim();formData.delete("artwork_files");formData.delete("artwork_alt");formData.delete("flash_files");formData.delete("flash_alt");
       const pendingVariantUploads=config.symbolEditor?pendingLegendVariantImages(form):[];
       let values;try{pendingVariantUploads.forEach(item=>validateLegendVariantImage(item.file));values=config.symbolEditor?serializeSymbol(form,{allowPendingVariantImages:true}):Object.fromEntries(formData);if(config===configs.flash)values.styles=selectedStyles(form)}catch(error){const output=form.querySelector("[data-symbol-status]");if(output)output.textContent=error.message;status(error.message);return}
       if("state" in values&&!values.state)values.state="draft";for(const key of ["sort_order","claimable","acquisition_eligible","homepage_enabled"])if(key in values)values[key]=Number(values[key])||0;
-      const recordId=form.dataset.id,submit=form.querySelector('[type="submit"]'),output=form.querySelector("[data-artwork-upload-status]")||form.querySelector("[data-symbol-status]");submit.disabled=true;
+      const recordId=form.dataset.id,submit=form.querySelector('[type="submit"]'),output=form.querySelector("[data-flash-upload-status]")||form.querySelector("[data-artwork-upload-status]")||form.querySelector("[data-symbol-status]");submit.disabled=true;
       try{
-        validateArtworkImages(files);
+        validateArtworkImages(files);validateFlashImages(flashFiles);
         let entityId=recordId;
+        if(config.flashEditor){
+          const desiredState=values.state||"draft",needsStaging=Boolean(entityId&&flashFiles.length&&form.dataset.hasPrimary!=="true"&&desiredState!=="draft");
+          const saved=await api(`/api/admin/flash${entityId?`/${encodeURIComponent(entityId)}`:""}`,{method:entityId?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...values,state:entityId?(needsStaging?"draft":desiredState):"draft"})});
+          entityId=entityId||saved.record?.id;if(!entityId)throw new Error("Flash draft was created without an entity ID.");form.dataset.id=entityId;
+          if(flashFiles.length)await uploadFlashImages(entityId,flashFiles,altText||values.title||"Flash artwork",Number(form.dataset.mediaCount)||0,form.dataset.hasPrimary==="true",output);
+          if(needsStaging)await api(`/api/admin/flash/${encodeURIComponent(entityId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(values)});
+          status(flashFiles.length?"Flash draft and artwork saved":recordId?"Flash record saved":"Flash draft created");return renderResource("flash")
+        }
         if(config.symbolEditor&&pendingVariantUploads.length&&!entityId){
           if(output)output.textContent="Creating a draft before uploading variant images…";
           const created=await api(`/api/admin/${config.endpoint}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...values,state:"draft"})});entityId=created.record?.id;

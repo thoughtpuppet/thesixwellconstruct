@@ -179,11 +179,23 @@ body.archive-public {
 
 .archive-hero-copy {
   display: grid;
-  gap: 1.35rem;
-  max-width: 35rem;
+  gap: 1rem;
+  max-width: min(100%, 380px);
 }
 
-.archive-hero-copy p,
+.archive-hero-copy > p {
+  margin: 0;
+  padding-bottom: 16px;
+  color: var(--archive-muted);
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  line-height: 1.6;
+  text-align: left;
+  text-transform: uppercase;
+}
+
 .archive-record-intro,
 .archive-timeline-intro {
   margin: 0;

@@ -712,13 +712,80 @@ function entityVisibilityStatement(database, resource, row) {
   return database.prepare("UPDATE content_entities SET visibility=?,search_visibility=?,archived_at=?,public_at=CASE WHEN ?=1 THEN COALESCE(public_at,datetime('now')) ELSE public_at END,updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(visible ? "public" : "internal", visible ? 1 : 0, row.state === "archived" ? new Date().toISOString() : null, visible ? 1 : 0, row.id);
 }
 
+const PUBLIC_FLASH_STATES = new Set(["available","reserved","placed","retired"]);
+
+function eligibleFlashMedia(row) {
+  return row?.media_state === "active"
+    && row.media_privacy === "public"
+    && ["not-required","granted"].includes(row.media_consent_status)
+    && row.media_presentation === "inline"
+    && Number(row.public_visible) === 1;
+}
+
+async function flashMediaRows(database, entityId) {
+  const result = await database.prepare(`SELECT em.*,
+      m.state media_state,m.privacy media_privacy,m.consent_status media_consent_status,
+      m.public_presentation media_presentation,m.original_filename,m.source_url,m.storage_key,m.mime_type,
+      COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) resolved_alt_text,
+      COALESCE(NULLIF(em.caption_override,''),m.caption) resolved_caption
+    FROM entity_media em
+    JOIN media_assets m ON m.id=em.media_id
+    WHERE em.entity_id=?
+    ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order,em.created_at`).bind(entityId).all();
+  return result.results || [];
+}
+
+async function flashHasEligiblePrimary(database, entityId) {
+  const row = await database.prepare(`SELECT 1 ok
+    FROM entity_media em
+    JOIN media_assets m ON m.id=em.media_id
+    WHERE em.entity_id=? AND em.role='primary' AND em.public_visible=1
+      AND m.state='active' AND m.privacy='public'
+      AND m.consent_status IN ('not-required','granted')
+      AND m.public_presentation='inline'
+    LIMIT 1`).bind(entityId).first();
+  return Boolean(row);
+}
+
+async function adminEntityMedia(database, entityIds) {
+  if (!entityIds.length) return new Map();
+  const placeholders = entityIds.map(() => "?").join(",");
+  const result = await database.prepare(`SELECT em.entity_id,em.role,em.sort_order,em.public_visible,
+      COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) alt_text,
+      COALESCE(NULLIF(em.caption_override,''),m.caption) caption,
+      em.alt_text_override,em.caption_override,m.id,m.original_filename,m.source_url,m.storage_key,m.mime_type
+    FROM entity_media em
+    JOIN media_assets m ON m.id=em.media_id
+    WHERE m.state='active' AND em.entity_id IN (${placeholders})
+    ORDER BY em.entity_id,CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order,em.created_at`).bind(...entityIds).all();
+  const map = new Map();
+  for (const row of result.results || []) {
+    if (!map.has(row.entity_id)) map.set(row.entity_id, []);
+    map.get(row.entity_id).push({
+      id: row.id,
+      role: row.role,
+      sort_order: Number(row.sort_order) || 0,
+      public_visible: Number(row.public_visible) === 1,
+      url: row.source_url || `/api/construct/entity-media/${row.id}`,
+      adminUrl: `/api/admin/media/${encodeURIComponent(row.id)}/file`,
+      alt: row.alt_text,
+      caption: row.caption,
+      alt_text_override: row.alt_text_override,
+      caption_override: row.caption_override,
+      mimeType: row.mime_type,
+      originalFilename: row.original_filename,
+    });
+  }
+  return map;
+}
+
 async function adminList(env, resource) {
   const config = RESOURCE_CONFIG[resource]; if (!config) return failure("Unknown resource.", 404);
   const database = db(env);
   const rows = (await database.prepare(`SELECT * FROM ${config.table} ORDER BY sort_order,id`).all()).results || [];
   const entityIds = rows.map((row) => row.id);
   const [media, tattooStyles] = await Promise.all([
-    entityMedia(database, entityIds),
+    resource === "flash" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
     resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
   ]);
   return json({
@@ -736,6 +803,8 @@ async function adminCreate(request, env, resource) {
   const database = db(env); const recordId = text(body.id, 160) || id(config.entityType); const values = normalizeRecord(config, body);
   let styleSelection = [];
   if (resource === "flash") {
+    if ((values.state || "draft") !== "draft") return failure("New Flash records must begin as drafts. Attach the design artwork before publishing.", 409);
+    values.state = "draft";
     try {
       styleSelection = await resolveTattooStyleSelection(
         database,
@@ -797,6 +866,9 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   const values = normalizeRecord(config,body,beforeRow); const keys = Object.keys(values); if (!keys.length && !hasStyleUpdate) return failure("No editable fields supplied.");
   const projectedRow = { ...beforeRow, ...values, id: recordId };
   const projected = resource === "flash" ? { ...projectedRow, ...tattooStylePayload(nextStyleSelection) } : projectedRow;
+  if (resource === "flash" && PUBLIC_FLASH_STATES.has(projected.state) && !await flashHasEligiblePrimary(database, recordId)) {
+    return failure("Attach an eligible primary Flash image before publishing this design.", 409);
+  }
   const updateStatements=[];
   if (keys.length) updateStatements.push(
     database.prepare(`UPDATE ${config.table} SET ${keys.map(k=>`${k}=?`).join(",")},updated_at=datetime('now') WHERE id=?`).bind(...keys.map(k=>values[k]),recordId)
@@ -1096,7 +1168,77 @@ async function legendCategoryApi(request,env,categoryId=""){
 
 function canonicalResource(resource){return resource==="legend"?"visual-language":resource;}
 
-async function entityMediaApi(request,env,entityId){const database=db(env);if(request.method==="GET"){const rows=(await database.prepare("SELECT em.*,m.original_filename,m.source_url,m.storage_key,m.mime_type FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? ORDER BY em.sort_order").bind(entityId).all()).results||[];return json({records:rows,count:rows.length});}const b=await readJson(request);if(!b?.media_id)return failure("media_id is required.");const role=text(b.role,60)||"gallery",publicVisible=b.public_visible?1:0;const cover=role==="gallery"&&!publicVisible?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,b.media_id).first():null;if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);try{await database.prepare("INSERT OR REPLACE INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at) VALUES(?,?,?,?,?,?,?,datetime('now'))").bind(entityId,b.media_id,role,Number(b.sort_order)||0,publicVisible,text(b.alt_text_override,1000),text(b.caption_override,3000)).run();}catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);throw error;}return json({ok:true},{status:201});}
+async function entityMediaApi(request,env,entityId,mediaId=""){
+  const database=db(env);
+  const entity=await database.prepare("SELECT ce.entity_type,fi.state flash_state FROM content_entities ce LEFT JOIN flash_items fi ON fi.id=ce.id AND ce.entity_type='flash_item' WHERE ce.id=?").bind(entityId).first();
+  if(!entity)return failure("Entity not found.",404);
+  const isFlash=entity.entity_type==="flash_item";
+  if(request.method==="GET"&&!mediaId){
+    const rows=(await database.prepare(`SELECT em.*,m.original_filename,m.source_url,m.storage_key,m.mime_type,m.state media_state,
+      COALESCE(NULLIF(em.alt_text_override,''),m.alt_text) alt_text,
+      COALESCE(NULLIF(em.caption_override,''),m.caption) caption
+      FROM entity_media em JOIN media_assets m ON m.id=em.media_id
+      WHERE em.entity_id=? ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order,em.created_at`).bind(entityId).all()).results||[];
+    return json({records:rows,count:rows.length});
+  }
+  if(request.method==="POST"&&!mediaId){
+    const b=await readJson(request);if(!b?.media_id)return failure("media_id is required.");
+    const role=text(b.role,60)||"gallery",publicVisible=b.public_visible?1:0;
+    if(isFlash&&!["primary","gallery"].includes(role))return failure("Flash media must be primary or gallery artwork.");
+    const mediaAsset=await database.prepare("SELECT state media_state,privacy media_privacy,consent_status media_consent_status,public_presentation media_presentation FROM media_assets WHERE id=?").bind(b.media_id).first();
+    if(!mediaAsset)return failure("Media not found.",404);
+    if(isFlash&&role==="primary"&&PUBLIC_FLASH_STATES.has(entity.flash_state)&&!eligibleFlashMedia({...mediaAsset,public_visible:publicVisible}))return failure("A published Flash design needs an eligible public primary image.",409);
+    const cover=role==="gallery"&&!publicVisible?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,b.media_id).first():null;
+    if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);
+    const statements=[];
+    if(isFlash&&role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,b.media_id));
+    statements.push(database.prepare("INSERT OR REPLACE INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at) VALUES(?,?,?,?,?,?,?,datetime('now'))").bind(entityId,b.media_id,role,Number(b.sort_order)||0,publicVisible,text(b.alt_text_override,1000),text(b.caption_override,3000)));
+    try{await database.batch(statements);}catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);throw error;}
+    return json({ok:true},{status:201});
+  }
+  const attachment=mediaId?await database.prepare(`SELECT em.*,m.state media_state,m.privacy media_privacy,m.consent_status media_consent_status,m.public_presentation media_presentation
+    FROM entity_media em JOIN media_assets m ON m.id=em.media_id WHERE em.entity_id=? AND em.media_id=?`).bind(entityId,mediaId).first():null;
+  if(!attachment)return failure("Media attachment not found.",404);
+  if(request.method==="PATCH"){
+    const b=await readJson(request);if(!b)return failure("Send a JSON object.");
+    const next={
+      ...attachment,
+      role:Object.prototype.hasOwnProperty.call(b,"role")?text(b.role,60):attachment.role,
+      sort_order:Object.prototype.hasOwnProperty.call(b,"sort_order")?Number(b.sort_order)||0:Number(attachment.sort_order)||0,
+      public_visible:Object.prototype.hasOwnProperty.call(b,"public_visible")?(b.public_visible?1:0):Number(attachment.public_visible),
+      alt_text_override:Object.prototype.hasOwnProperty.call(b,"alt_text_override")?text(b.alt_text_override,1000):attachment.alt_text_override,
+      caption_override:Object.prototype.hasOwnProperty.call(b,"caption_override")?text(b.caption_override,3000):attachment.caption_override,
+    };
+    if(isFlash&&!["primary","gallery"].includes(next.role))return failure("Flash media must be primary or gallery artwork.");
+    const cover=next.role==="gallery"&&!next.public_visible?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,mediaId).first():null;
+    if(cover)return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);
+    if(isFlash&&PUBLIC_FLASH_STATES.has(entity.flash_state)){
+      const projected=(await flashMediaRows(database,entityId)).map(row=>row.media_id===mediaId?next:(next.role==="primary"&&row.role==="primary"?{...row,role:"gallery"}:row));
+      if(!projected.some(row=>row.role==="primary"&&eligibleFlashMedia(row)))return failure("A published Flash design must keep an eligible primary image.",409);
+    }
+    const statements=[];
+    if(isFlash&&next.role==="primary")statements.push(database.prepare("UPDATE entity_media SET role='gallery' WHERE entity_id=? AND role='primary' AND media_id<>?").bind(entityId,mediaId));
+    statements.push(database.prepare("UPDATE entity_media SET role=?,sort_order=?,public_visible=?,alt_text_override=?,caption_override=? WHERE entity_id=? AND media_id=?")
+      .bind(next.role,next.sort_order,next.public_visible,next.alt_text_override,next.caption_override,entityId,mediaId));
+    try{await database.batch(statements);}catch(error){if(isPortfolioCoverGuardError(error))return failure("Unpublish this tattoo or choose another permitted result image as its cover before hiding this attachment.",409);throw error;}
+    return json({record:await database.prepare("SELECT * FROM entity_media WHERE entity_id=? AND media_id=?").bind(entityId,mediaId).first()});
+  }
+  if(request.method==="DELETE"){
+    const portfolioCover=attachment.role==="gallery"?await database.prepare("SELECT id FROM portfolio_items WHERE id=? AND state='published' AND cover_image_ref=?").bind(entityId,mediaId).first():null;
+    if(portfolioCover)return failure("Unpublish this tattoo or choose another permitted result image before removing its cover.",409);
+    let promoted=null;
+    if(isFlash&&attachment.role==="primary"){
+      const rows=await flashMediaRows(database,entityId);
+      promoted=rows.find(row=>row.media_id!==mediaId&&row.role==="gallery"&&(!PUBLIC_FLASH_STATES.has(entity.flash_state)||eligibleFlashMedia(row)))||null;
+    }
+    if(isFlash&&PUBLIC_FLASH_STATES.has(entity.flash_state)&&attachment.role==="primary"&&!promoted)return failure("A published Flash design must keep an eligible primary image.",409);
+    const statements=[database.prepare("DELETE FROM entity_media WHERE entity_id=? AND media_id=?").bind(entityId,mediaId)];
+    if(promoted)statements.push(database.prepare("UPDATE entity_media SET role='primary',sort_order=1 WHERE entity_id=? AND media_id=?").bind(entityId,promoted.media_id));
+    await database.batch(statements);
+    return json({ok:true,promoted_media_id:promoted?.media_id||null});
+  }
+  return failure("Method not allowed.",405);
+}
 
 function archiveRecordType(entityType){return {art_work:"artwork",merch_item:"merchandise",portfolio_item:"tattoo",flash_item:"flash",event:"event",visual_symbol:"symbol"}[entityType]||String(entityType||"").replace(/_/g,"-");}
 function archivePreferredSlug(entityType,row){return slug(row?.archive_slug||row?.slug||row?.shopify_handle||row?.id)||String(row?.id||"");}
@@ -1252,6 +1394,7 @@ export async function handleConstructApi(request,env){
   const relationshipTypeMatch=path.match(/^\/api\/admin\/relationship-types(?:\/([^/]+))?$/);if(relationshipTypeMatch)return relationshipTypesApi(request,env,relationshipTypeMatch[1]?decodeURIComponent(relationshipTypeMatch[1]):"");
   const relationshipMatch=path.match(/^\/api\/admin\/relationships(?:\/([^/]+))?$/);if(relationshipMatch)return relationshipApi(request,env,relationshipMatch[1]?decodeURIComponent(relationshipMatch[1]):"");
   if(path==="/api/admin/taxonomy")return taxonomyApi(request,env);
+  const entityMediaItemMatch=path.match(/^\/api\/admin\/entities\/([^/]+)\/media\/([^/]+)$/);if(entityMediaItemMatch)return entityMediaApi(request,env,decodeURIComponent(entityMediaItemMatch[1]),decodeURIComponent(entityMediaItemMatch[2]));
   const entityMediaMatch=path.match(/^\/api\/admin\/entities\/([^/]+)\/media$/);if(entityMediaMatch)return entityMediaApi(request,env,decodeURIComponent(entityMediaMatch[1]));
   if(path==="/api/admin/revisions"&&request.method==="GET"){const rows=(await db(env).prepare("SELECT * FROM entity_revisions ORDER BY created_at DESC LIMIT 250").all()).results||[];return json({records:rows,count:rows.length});}
   if(path==="/api/admin/search/status"&&request.method==="GET"){const counts=await db(env).prepare("SELECT COUNT(*) documents FROM search_documents").first();const failures=await db(env).prepare("SELECT COUNT(*) failures FROM search_index_failures WHERE resolved_at IS NULL").first();return json({...counts,...failures});}

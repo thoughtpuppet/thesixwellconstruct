@@ -84,23 +84,29 @@
 
 .hero-copy {
   display: grid;
-  gap: 22px;
+  gap: 16px;
   align-content: end;
-  padding-bottom: 12px;
+}
+
+.hero-lede,
+.hero-note {
+  max-width: min(100%, 380px);
+  padding-bottom: 16px;
+  text-align: left;
+  font-family: var(--font-serif);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  line-height: 1.6;
+  text-transform: uppercase;
 }
 
 .hero-lede {
   color: var(--text);
-  font-family: var(--font-serif);
-  font-size: clamp(20px, 2.2vw, 32px);
-  line-height: 1.35;
 }
 
 .hero-note {
   color: var(--text-muted);
-  font-family: var(--font-serif);
-  font-size: 14px;
-  line-height: 1.75;
 }
 
 .hero-actions,

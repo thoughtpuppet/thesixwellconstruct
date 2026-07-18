@@ -63,7 +63,7 @@ export async function entityMedia(database, entityIds) {
       AND m.consent_status IN ('not-required','granted')
       AND m.public_presentation='inline'
       AND em.entity_id IN (${placeholders})
-    ORDER BY em.entity_id,em.sort_order`).bind(...entityIds).all();
+    ORDER BY em.entity_id,CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order,em.created_at`).bind(...entityIds).all();
   const map = new Map();
   for (const row of result.results || []) {
     if (!map.has(row.entity_id)) map.set(row.entity_id, []);
