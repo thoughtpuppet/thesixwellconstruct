@@ -2288,7 +2288,7 @@
     await loadTattooSettings();
     const settings = tattooSettings.settings || {};
     detailEl.innerHTML = `<section class="tattoo-settings" id="tattooSettings">
-      <div class="portfolio-head"><div><h2>Tattoo Settings</h2><p class="contact">Public rates, walk-in guidance, review timing, lead time, and Special Project availability. Public studio hours are derived from the active studio schedule.</p></div><button class="button" type="button" data-refresh-tattoo-settings>Refresh</button></div>
+      <div class="portfolio-head"><div><h2>Tattoo Settings</h2><p class="contact">Public rates, walk-in guidance, review timing, lead time, and Special Project availability. Public hours are derived from the active tattoo schedule.</p></div><button class="button" type="button" data-refresh-tattoo-settings>Refresh</button></div>
       <form class="tattoo-settings" data-tattoo-settings-form>
         <div class="tattoo-settings-grid">
           <section class="tattoo-settings-card">
@@ -2297,7 +2297,7 @@
             <label>Minimum project lead time (days)<input name="leadTimeDays" type="number" min="0" max="365" value="${escapeHtml(settingValue(settings, "leadTimeDays", "lead_time_days", 14))}"></label>
             <label>Support email<input name="supportEmail" type="email" value="${escapeHtml(settingValue(settings, "supportEmail", "support_email"))}"></label>
             <label>Walk-in guidance<textarea name="walkInGuidance" maxlength="1200">${escapeHtml(settingValue(settings, "walkInGuidance", "walk_in_guidance"))}</textarea></label>
-            <div class="field"><label>Published studio hours</label><div class="value">${escapeHtml(tattooSettings.displayedHours || "By appointment—see live availability.")}</div></div>
+            <div class="field"><label>Published tattoo hours</label><div class="value">${escapeHtml(tattooSettings.displayedHours || "By appointment—see live availability.")}</div></div>
           </section>
           <section class="tattoo-settings-card">
             <h3>Rate cards</h3>

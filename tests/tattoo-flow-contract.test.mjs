@@ -474,13 +474,13 @@ test("0039 upgrades only the untouched early Tattoo Settings seed", () => {
   );
 });
 
-test("public tattoo settings publish active studio hours rather than tattoo booking hours", async () => {
+test("public tattoo settings publish active tattoo booking hours", async () => {
   const database = migratedDatabase();
   database.prepare(
     "UPDATE availability_rules SET active = 0 WHERE venture = 'tattooing'"
   ).run();
   database.prepare(
-    "UPDATE availability_rules SET start_time = '11:00', end_time = '17:00', active = 1 WHERE id = 'tattoo_monday'"
+    "UPDATE availability_rules SET start_time = '11:00', end_time = '17:00', active = 1 WHERE id = 'tattooing_monday'"
   ).run();
   database.prepare(
     "UPDATE availability_rules SET start_time = '09:00', end_time = '15:00', active = 1 WHERE id = 'studio_tuesday'"
@@ -499,12 +499,12 @@ test("public tattoo settings publish active studio hours rather than tattoo book
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.deepEqual(payload.displayedHours, [{
-    dayOfWeek: 2,
-    day: "Tuesday",
-    dayLabel: "Tuesday",
-    startTime: "09:00",
-    endTime: "15:00",
-    hoursText: "09:00 - 15:00",
+    dayOfWeek: 1,
+    day: "Monday",
+    dayLabel: "Monday",
+    startTime: "11:00",
+    endTime: "17:00",
+    hoursText: "11:00 - 17:00",
     note: "",
     closed: false,
   }]);
