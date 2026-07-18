@@ -5,7 +5,7 @@
   const API_ROOT = "/api/admin/crm";
   const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
   const DIRECTORY_LIMIT = 50;
-  const MANAGED_VIEWS = new Set(["directory", "attention", "integrations"]);
+  const MANAGED_VIEWS = new Set(["directory", "attention", "outreach", "integrations"]);
   const NODE_OPTIONS = [
     ["node-tattoos", "Tattooing"],
     ["node-art", "Art"],
@@ -61,10 +61,12 @@
     ["contribution", "Contribution"],
     ["manual", "Other / manual"],
   ];
+  const CONTACT_IDENTITY_KINDS = new Set(["email", "phone", "instagram"]);
   const IMPORT_TARGETS = [
     ["", "Do not import"],
     ["name", "Full / display name"],
     ["preferred_name", "Preferred name"],
+    ["referral_source", "How they heard about me"],
     ["first_name", "First name"],
     ["last_name", "Last name"],
     ["email", "Email"],
@@ -105,8 +107,10 @@
     personLoadSequence: 0,
     attentionLoadSequence: 0,
     integrationsLoadSequence: 0,
+    outreachLoadSequence: 0,
     importFlow: null,
     integrationsPayload: null,
+    outreachPayload: null,
     imports: [],
   };
 
@@ -472,6 +476,7 @@
     try {
       if (subView === "directory") await renderDirectory();
       else if (subView === "attention") await renderAttention();
+      else if (subView === "outreach") await renderOutreach();
       else await renderIntegrations();
       if (renderSequence !== state.renderSequence || state.view !== subView) return true;
       if (elements().status?.textContent === "Loading People") setTopStatus("People ready");
@@ -723,6 +728,11 @@
           <div class="people-form-grid">
             <label>Display name<input name="displayName" required autocomplete="name"></label>
             <label>Preferred name<input name="preferredName" autocomplete="nickname"></label>
+            <label>How they heard about me
+              <select name="referralSource">
+                ${optionMarkup([["", "Not set"], ["friend_family", "Friend / family"], ["instagram", "Instagram"], ["tiktok", "TikTok"], ["youtube", "YouTube"], ["google_search", "Google / search"], ["event_in_person", "Event / in person"], ["returning_client", "Returning client"], ["other", "Other"]], "")}
+              </select>
+            </label>
             <label>Email<input name="email" type="email" autocomplete="email"></label>
             <label>Phone<input name="phone" type="tel" autocomplete="tel"></label>
             <label>Instagram<input name="instagram" autocomplete="off" placeholder="@handle"></label>
@@ -758,6 +768,7 @@
       const payload = {
         displayName: String(values.get("displayName") || "").trim(),
         preferredName: String(values.get("preferredName") || "").trim(),
+        referralSource: String(values.get("referralSource") || "").trim(),
         email: String(values.get("email") || "").trim(),
         phone: String(values.get("phone") || "").trim(),
         instagram: String(values.get("instagram") || "").trim(),
@@ -850,19 +861,24 @@
     return "";
   }
 
+  function identityKind(identity) {
+    return normalizedState(first(identity, "kind", "type", "identityType", "identity_type") || "other");
+  }
+
   function identityRecords(identities) {
-    if (!identities.length) return '<div class="people-empty">No contact identities recorded.</div>';
+    if (!identities.length) return '<div class="people-empty">No contact information recorded.</div>';
     return `<div class="people-record-list">${identities.map((identity) => {
-      const kind = first(identity, "kind", "type", "identityType", "identity_type") || "identity";
+      const kind = identityKind(identity);
       const label = first(identity, "label");
       const value = first(identity, "displayValue", "display_value", "value", "normalizedValue", "normalized_value");
       const provider = first(identity, "provider", "sourceProvider", "source_provider");
       const providerLabel = provider === "square_payer_label" ? "Square payment" : provider;
       const primary = truthy(first(identity, "primary", "isPrimary", "is_primary"));
       const verified = truthy(first(identity, "verified", "isVerified", "is_verified"));
+      const kindLabel = ({ email: "Email", phone: "Phone", instagram: "Instagram" })[kind] || "Contact";
       return `<article class="people-record">
         <div class="people-record-head">
-          <strong class="people-record-title">${esc(label || kind)}</strong>
+          <strong class="people-record-title">${esc(label || kindLabel)}</strong>
           ${primary ? statusChip("active", "Primary") : ""}
         </div>
         <div class="people-record-body">${esc(value || "Value unavailable")}</div>
@@ -871,10 +887,48 @@
     }).join("")}</div>`;
   }
 
-  function activityRecords(interactions, transactions, attendance) {
+  function systemLinkLabel(identity) {
+    const kind = identityKind(identity);
+    const sourceType = normalizedState(first(identity, "sourceType", "source_type"));
+    const provider = normalizedState(first(identity, "provider", "sourceProvider", "source_provider"));
+    const known = {
+      appointment: "Appointment",
+      submission: "Submission",
+      deposit_payment: "Deposit payment",
+      event_ticket: "Event ticket",
+      event_ticket_payment: "Event ticket payment",
+      event_ticket_refund: "Event ticket refund",
+      shopify_order: "Shopify order",
+      shopify_customer: "Shopify customer",
+      square_customer: "Square customer",
+      square_payment: "Square payment",
+      beehiiv_subscription: "beehiiv subscription",
+      substack_subscriber: "Substack subscriber",
+    };
+    const key = known[kind] ? kind : known[sourceType] ? sourceType : known[provider] ? provider : "";
+    if (key) return known[key];
+    return String(sourceType || kind || provider || "System link")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function systemLinkRecords(identities) {
+    if (!identities.length) return '<div class="people-empty">No system links recorded.</div>';
+    return `<div class="people-record-list">${identities.map((identity) => {
+      const provider = first(identity, "sourceProvider", "source_provider", "provider") || "system";
+      const createdAt = first(identity, "createdAt", "created_at", "updatedAt", "updated_at");
+      const reference = first(identity, "externalId", "external_id", "value", "sourceId", "source_id");
+      return `<article class="people-record">
+        <strong class="people-record-title">${esc(systemLinkLabel(identity))}</strong>
+        <div class="people-record-meta">${esc([provider, formatDate(createdAt, true)].filter(Boolean).join(" · "))}</div>
+        <div class="people-source">${esc(reference || "Reference unavailable")}</div>
+      </article>`;
+    }).join("")}</div>`;
+  }
+
+  function activityRecords(interactions, attendance) {
     const records = [
       ...interactions.map((item) => ({ ...item, _recordKind: "interaction" })),
-      ...transactions.map((item) => ({ ...item, _recordKind: "transaction" })),
       ...attendance.map((item) => ({ ...item, _recordKind: "attendance" })),
     ].sort((a, b) => {
       const aDate = new Date(first(a, "occurredAt", "occurred_at", "checkedInAt", "checked_in_at", "createdAt", "created_at") || 0).getTime();
@@ -883,11 +937,9 @@
     });
     if (!records.length) return '<div class="people-empty">No interactions yet.</div>';
     return `<div class="people-record-list">${records.map((record) => {
-      const kind = record._recordKind === "transaction"
-        ? first(record, "kind", "type", "transactionType", "transaction_type") || "transaction"
-        : record._recordKind === "attendance"
-          ? "attendance"
-          : first(record, "kind", "type", "interactionType", "interaction_type") || "interaction";
+      const kind = record._recordKind === "attendance"
+        ? "attendance"
+        : first(record, "kind", "type", "interactionType", "interaction_type") || "interaction";
       const metadata = metadataFrom(record);
       const label = first(record, "label", "title", "description", "note", "eventTitle", "event_title")
         || first(metadata, "label", "title", "eventTitle", "event_title")
@@ -899,16 +951,12 @@
         || (record._recordKind === "attendance" ? "node-events" : "");
       const channel = first(record, "channel");
       const source = first(record, "sourceProvider", "source_provider", "provider", "source") || "manual";
-      const amount = record._recordKind === "transaction"
-        ? `<span class="people-record-amount">${esc(formatMoney(transactionSignedCents(record), first(record, "currency") || "USD"))}</span>`
-        : "";
       return `<article class="people-record"${nodeDataAttribute(node)}>
         <div class="people-record-head">
           <div>
             <strong class="people-record-title">${esc(label)}</strong>
             <div class="people-record-meta">${esc(String(kind).replace(/_/g, " "))}</div>
           </div>
-          ${amount}
         </div>
         <div class="people-chip-list">
           ${nodeChip(node)}
@@ -916,6 +964,43 @@
           ${statusChip(first(record, "status", "state") || "recorded")}
         </div>
         ${detailText ? `<div class="people-record-body">${esc(detailText)}</div>` : ""}
+        <div class="people-source">${esc(formatDate(when, true))} · ${esc(source)}</div>
+      </article>`;
+    }).join("")}</div>`;
+  }
+
+  function moneyRecords(transactions) {
+    const records = [...transactions].sort((a, b) => {
+      const aDate = new Date(first(a, "occurredAt", "occurred_at", "createdAt", "created_at") || 0).getTime();
+      const bDate = new Date(first(b, "occurredAt", "occurred_at", "createdAt", "created_at") || 0).getTime();
+      return bDate - aDate;
+    });
+    if (!records.length) return '<div class="people-empty">No transactions yet.</div>';
+    return `<div class="people-record-list">${records.map((record) => {
+      const kind = first(record, "kind", "type", "transactionType", "transaction_type") || "transaction";
+      const metadata = metadataFrom(record);
+      const label = first(record, "label", "title", "description", "note")
+        || first(metadata, "label", "title")
+        || String(kind).replace(/_/g, " ");
+      const when = first(record, "occurredAt", "occurred_at", "createdAt", "created_at");
+      const node = first(record, "nodeName", "node_name", "nodeId", "node_id", "node")
+        || first(metadata, "nodeName", "node_name", "nodeId", "node_id", "node");
+      const source = first(record, "sourceProvider", "source_provider", "provider", "source") || "manual";
+      const currency = first(record, "currency") || "USD";
+      const tipCents = centsValue(record, "tipCents", "tip_cents");
+      return `<article class="people-record"${nodeDataAttribute(node)}>
+        <div class="people-record-head">
+          <div>
+            <strong class="people-record-title">${esc(label)}</strong>
+            <div class="people-record-meta">${esc(String(kind).replace(/_/g, " "))}</div>
+          </div>
+          <span class="people-record-amount">${esc(formatMoney(transactionSignedCents(record), currency))}</span>
+        </div>
+        <div class="people-chip-list">
+          ${nodeChip(node)}
+          ${statusChip(first(record, "status", "state") || "recorded")}
+          ${tipCents ? `<span class="people-chip">Tip ${esc(formatMoney(tipCents, currency))}</span>` : ""}
+        </div>
         <div class="people-source">${esc(formatDate(when, true))} · ${esc(source)}</div>
       </article>`;
     }).join("")}</div>`;
@@ -1096,6 +1181,11 @@
           <label>Organization<input name="organization" value="${attr(first(person, "organization"))}"></label>
           <label>Pronouns<input name="pronouns" value="${attr(first(person, "pronouns"))}"></label>
           <label>Instagram<input name="instagram" value="${attr(first(person, "instagram"))}" placeholder="@handle"></label>
+          <label>How they heard about me
+            <select name="referralSource">
+              ${optionMarkup([["", "Not set"], ["friend_family", "Friend / family"], ["instagram", "Instagram"], ["tiktok", "TikTok"], ["youtube", "YouTube"], ["google_search", "Google / search"], ["event_in_person", "Event / in person"], ["returning_client", "Returning client"], ["other", "Other"]], first(person, "referralSource", "referral_source"))}
+            </select>
+          </label>
           <label>Tags<input name="tags" value="${attr(tagValues.join(", "))}" placeholder="collector, collaborator"></label>
           <label class="people-wide">Relationship summary<textarea name="summary">${esc(first(person, "summary", "relationshipSummary", "relationship_summary"))}</textarea></label>
         </div>
@@ -1109,15 +1199,12 @@
   function tierForm(person) {
     const tier = tierValue(person);
     return `
-      <form class="people-form" data-tier-form data-current-tier="${attr(tier)}">
+      <form class="people-form" data-tier-form>
         <div class="people-form-grid">
           <label>Relationship tier
             <select name="tier">
               ${optionMarkup([["", "Unrated"], ["III", "Tier III · Connected"], ["II", "Tier II · Returning"], ["I", "Tier I · Core"]], tier)}
             </select>
-          </label>
-          <label class="people-wide">Rationale
-            <textarea name="tierRationale" placeholder="Why this relationship tier is useful and fair.">${esc(first(person, "tierRationale", "tier_rationale"))}</textarea>
           </label>
         </div>
         <p class="people-helper">Tier is manual relationship context only. It does not change prices, access, or priority.</p>
@@ -1131,12 +1218,12 @@
   function addIdentityForm() {
     return `
       <details>
-        <summary>Add contact identity</summary>
+        <summary>Add contact</summary>
         <form class="people-form" data-identity-form>
           <div class="people-form-grid">
-            <label>Identity type
+            <label>Contact type
               <select name="kind">
-                ${optionMarkup([["email", "Email"], ["phone", "Phone"], ["instagram", "Instagram"], ["shopify_customer", "Shopify customer"], ["square_customer", "Square customer"], ["beehiiv_subscription", "beehiiv subscription"], ["substack_subscriber", "Substack subscriber"]], "email")}
+                ${optionMarkup([["email", "Email"], ["phone", "Phone"], ["instagram", "Instagram"]], "email")}
               </select>
             </label>
             <label>Value<input name="value" required></label>
@@ -1273,11 +1360,97 @@
       </form>`;
   }
 
+  function consentEventRecords(records) {
+    if (!records.length) return emptyState("No marketing consent evidence is recorded.");
+    return `<div class="people-record-list">${records.map((record) => {
+      const channel = String(first(record, "channel") || "").toUpperCase();
+      const status = normalizedState(first(record, "status")) || "unknown";
+      return `<article class="people-record">
+        <div class="people-record-head"><strong>${esc(channel)} · ${esc(status)}</strong><span>${esc(formatDate(first(record, "occurred_at", "occurredAt"), true))}</span></div>
+        <div class="people-record-meta">${esc(first(record, "normalized_value", "normalizedValue"))} · ${esc(String(first(record, "source") || "unknown").replace(/_/g, " "))}</div>
+      </article>`;
+    }).join("")}</div>`;
+  }
+
+  function communicationRecords(records) {
+    if (!records.length) return emptyState("No outreach has been sent or scheduled.");
+    return `<div class="people-record-list">${records.map((record) => `
+      <article class="people-record">
+        <div class="people-record-head"><strong>${esc(String(first(record, "channel") || "").toUpperCase())} · ${esc(first(record, "status") || "draft")}</strong><span>${esc(formatDate(first(record, "created_at", "createdAt"), true))}</span></div>
+        <div class="people-record-meta">${esc(first(record, "provider") || "")} · ${esc(first(record, "normalized_destination", "normalizedDestination") || "")}</div>
+        ${first(record, "subject") ? `<div>${esc(first(record, "subject"))}</div>` : ""}
+        <p>${esc(first(record, "body_text", "bodyText") || "")}</p>
+        ${first(record, "error") ? `<p class="people-error">${esc(first(record, "error"))}</p>` : ""}
+      </article>`).join("")}</div>`;
+  }
+
+  function addConsentForm(email, phone) {
+    return `
+      <form class="people-form" data-consent-form>
+        <div class="people-form-grid">
+          <label>Channel
+            <select name="channel" required>
+              <option value="email">Email newsletter</option>
+              <option value="sms">SMS marketing</option>
+            </select>
+          </label>
+          <label>Consent source
+            <select name="sourceMethod" required>
+              <option value="in_person">In person</option>
+              <option value="phone">Phone</option>
+              <option value="paper">Paper</option>
+              <option value="provider">Provider record</option>
+            </select>
+          </label>
+          <label class="people-wide">Contact
+            <input name="value" required value="${attr(email || phone || "")}" data-email="${attr(email)}" data-phone="${attr(phone)}">
+          </label>
+          <label>Consent date<input name="consentAt" type="datetime-local" required value="${attr(dateTimeLocalValue())}"></label>
+          <label class="people-check"><input name="confirmed" type="checkbox" required><span>I confirm this customer explicitly agreed to this channel.</span></label>
+        </div>
+        <div class="people-actions">
+          <button class="button" type="submit">Record consent</button>
+          <span class="people-helper" data-form-status role="status" aria-live="polite"></span>
+        </div>
+      </form>`;
+  }
+
+  function followupComposer(followups) {
+    const open = followups.filter((item) => normalizedState(first(item, "status")) === "open");
+    return `
+      <form class="people-form" data-outreach-followup-form>
+        <div class="people-form-grid">
+          <label>Channel
+            <select name="channel" required>
+              <option value="email">Email</option>
+              <option value="sms">Text message</option>
+            </select>
+          </label>
+          <label>Complete follow-up after accepted send
+            <select name="followupId">
+              <option value="">Do not link a task</option>
+              ${open.map((item) => `<option value="${attr(first(item, "id"))}">${esc(first(item, "title") || "Follow-up")}</option>`).join("")}
+            </select>
+          </label>
+          <label class="people-wide" data-email-subject>Subject<input name="subject" maxlength="300"></label>
+          <label class="people-wide">Message<textarea name="bodyText" required maxlength="10000"></textarea></label>
+          <label>Schedule (optional)<input name="scheduledAt" type="datetime-local"></label>
+        </div>
+        <div class="people-actions">
+          <button class="button" type="submit">Preview recipient</button>
+          <button class="button" type="button" data-send-followup hidden>Send follow-up</button>
+          <span class="people-helper" data-form-status role="status" aria-live="polite"></span>
+        </div>
+      </form>`;
+  }
+
   function renderPersonDetail(payload) {
     const detail = elements().detail;
     if (!detail) return;
     const person = objectFrom(payload, "person", "record");
     const identities = listFrom(payload, "identities");
+    const contactIdentities = identities.filter((identity) => CONTACT_IDENTITY_KINDS.has(identityKind(identity)));
+    const systemLinks = identities.filter((identity) => !CONTACT_IDENTITY_KINDS.has(identityKind(identity)));
     const tags = listFrom(payload, "tags");
     const interactions = listFrom(payload, "interactions");
     const transactions = listFrom(payload, "transactions");
@@ -1289,6 +1462,8 @@
     const attendance = listFrom(payload, "attendance");
     const tierHistory = listFrom(payload, "tierHistory", "tier_history");
     const audit = listFrom(payload, "audit", "auditEvents", "audit_events");
+    const consentEvents = listFrom(payload, "consentEvents", "consent_events");
+    const communications = listFrom(payload, "communications");
     const totals = profileTotals(person, transactions, interactions, attendance);
     const email = contactValue(identities, "email", person);
     const phone = contactValue(identities, "phone", person);
@@ -1332,22 +1507,22 @@
         ${tierForm(person)}
       </section>
 
-      <section data-admin-section-title="Contact identities">
-        <h3>Contact identities</h3>
-        ${identityRecords(identities)}
+      <section data-admin-section-title="Contact">
+        <h3>Contact</h3>
+        ${identityRecords(contactIdentities)}
         ${addIdentityForm()}
       </section>
 
       <section data-admin-section-title="Construct activity">
         <h3>Construct activity</h3>
-        ${activityRecords(interactions, transactions, attendance)}
+        ${activityRecords(interactions, attendance)}
         ${addInteractionForm()}
       </section>
 
       <section data-admin-section-title="Money">
         <h3>Money</h3>
         <p class="people-section-copy">Settled charges add to spend. Successful refunds subtract from it. Tips stay visible separately.</p>
-        ${transactions.length ? activityRecords([], transactions, []) : '<div class="people-empty">No transactions yet.</div>'}
+        ${moneyRecords(transactions)}
         ${addTransactionForm()}
       </section>
 
@@ -1371,10 +1546,19 @@
       </section>
 
       <section data-admin-section-title="Newsletter consent">
-        <h3>Newsletter consent</h3>
-        <p class="people-section-copy">Consent is tracked by provider and publication. An email address alone is not consent.</p>
+        <h3>Communication consent</h3>
+        <p class="people-section-copy">Email newsletter and SMS marketing consent are separate. Preferred contact and an address or number never count as permission.</p>
         ${suppressionRecords(suppressions)}
         ${subscriptionRecords(subscriptions)}
+        ${consentEventRecords(consentEvents)}
+        ${addConsentForm(email, phone)}
+      </section>
+
+      <section data-admin-section-title="Outreach">
+        <h3>Outreach</h3>
+        <p class="people-section-copy">Preview the exact recipient before every reviewed one-to-one follow-up. Promotional email campaigns are prepared for Beehiiv instead.</p>
+        ${followupComposer(followups)}
+        ${communicationRecords(communications)}
       </section>
 
       <section data-admin-section-title="History and provenance" data-admin-default="closed">
@@ -1382,15 +1566,16 @@
         ${auditRecords(audit, tierHistory)}
       </section>
 
+      <section data-admin-section-title="System links" data-admin-default="closed">
+        <h3>System links</h3>
+        <p class="people-section-copy">Internal source references used for safe matching, replay protection, and reconciliation.</p>
+        ${systemLinkRecords(systemLinks)}
+      </section>
+
       <section data-admin-section-title="Delete person" data-admin-default="closed">
         <h3>Delete person</h3>
-        <p class="people-section-copy">Permanently removes this People profile and its CRM-only notes, contact identities, activity copies, tags, and follow-ups. Original appointments, payments, orders, tickets, and submissions stay in their source records.</p>
+        <p class="people-section-copy">Permanently removes this People profile and its CRM-only notes, contacts, system links, activity copies, tags, and follow-ups. Original appointments, payments, orders, tickets, and submissions stay in their source records.</p>
         <form class="people-form" data-delete-person data-person-name="${attr(personName(person))}">
-          <div class="people-form-grid">
-            <label class="people-wide">Type <strong>${esc(personName(person))}</strong> to confirm
-              <input name="confirmDisplayName" autocomplete="off" required>
-            </label>
-          </div>
           <p class="people-helper">Replaying an old source record will not recreate this person. A genuinely new qualifying booking, paid order, or paid ticket can create them again later.</p>
           <div class="people-actions">
             <button class="button danger-button" type="submit">Delete person permanently</button>
@@ -1462,6 +1647,7 @@
         organization: formValue(form, "organization"),
         pronouns: formValue(form, "pronouns"),
         instagram: formValue(form, "instagram"),
+        referralSource: formValue(form, "referralSource"),
         summary: formValue(form, "summary"),
         tags: formValue(form, "tags").split(",").map((value) => value.trim()).filter(Boolean),
       };
@@ -1481,16 +1667,10 @@
       event.preventDefault();
       const form = event.currentTarget;
       const tier = formValue(form, "tier");
-      const rationale = formValue(form, "tierRationale");
-      const tierChanged = tier !== String(form.dataset.currentTier || "");
-      if (tierChanged && !rationale) {
-        setFormStatus(form, "A rationale is required whenever the tier changes, including clearing it.", "error");
-        return;
-      }
       try {
         disableForm(form, true);
         setFormStatus(form, "Updating tier…");
-        await api(`/people/${encodedId}`, { method: "PATCH", body: { tier: tier ? ({ I: 1, II: 2, III: 3 })[tier] : null, tierRationale: rationale } });
+        await api(`/people/${encodedId}`, { method: "PATCH", body: { tier: tier ? ({ I: 1, II: 2, III: 3 })[tier] : null } });
         await Promise.all([loadPerson(id), refreshSelectedPersonRow()]);
       } catch (error) {
         setFormStatus(form, error.message || "Could not update tier.", "error");
@@ -1668,21 +1848,109 @@
       });
     });
 
+    const consentForm = detail.querySelector("[data-consent-form]");
+    if (consentForm) {
+      const syncConsentContact = () => {
+        const field = consentForm.elements.value;
+        field.value = consentForm.elements.channel.value === "sms"
+          ? field.dataset.phone || ""
+          : field.dataset.email || "";
+      };
+      consentForm.elements.channel.addEventListener("change", syncConsentContact);
+      consentForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        let consentAt;
+        try {
+          consentAt = localDateTimeToIso(formValue(consentForm, "consentAt"));
+        } catch (error) {
+          setFormStatus(consentForm, error.message, "error");
+          return;
+        }
+        await submitPersonForm(consentForm, `/outreach/people/${encodedId}/consents`, {
+          channel: formValue(consentForm, "channel"),
+          sourceMethod: formValue(consentForm, "sourceMethod"),
+          value: formValue(consentForm, "value"),
+          consentAt,
+          confirmed: consentForm.elements.confirmed.checked,
+          requestId: newRequestId(),
+        }, "Consent evidence recorded.");
+      });
+    }
+
+    const outreachForm = detail.querySelector("[data-outreach-followup-form]");
+    if (outreachForm) {
+      const sendButton = outreachForm.querySelector("[data-send-followup]");
+      const syncFollowupChannel = () => {
+        outreachForm.querySelector("[data-email-subject]").hidden = outreachForm.elements.channel.value !== "email";
+        sendButton.hidden = true;
+      };
+      outreachForm.elements.channel.addEventListener("change", syncFollowupChannel);
+      outreachForm.querySelectorAll("input,textarea,select").forEach((control) => {
+        if (control === outreachForm.elements.channel) return;
+        control.addEventListener("input", () => { sendButton.hidden = true; });
+      });
+      syncFollowupChannel();
+      outreachForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        try {
+          disableForm(outreachForm, true);
+          setFormStatus(outreachForm, "Checking recipient…");
+          const preview = await api("/outreach/followups/preview", {
+            method: "POST",
+            body: { personId: id, channel: formValue(outreachForm, "channel") },
+          });
+          if (!preview.eligible) throw new Error(`Cannot send: ${String(preview.reason || "recipient is not eligible").replace(/_/g, " ")}.`);
+          setFormStatus(outreachForm, `Preview: ${preview.channel.toUpperCase()} to ${preview.destination}. Review the message, then use the explicit send button.`, "success");
+          sendButton.textContent = formValue(outreachForm, "scheduledAt") ? "Schedule follow-up" : "Send follow-up";
+          sendButton.hidden = false;
+        } catch (error) {
+          setFormStatus(outreachForm, error.message || "Could not preview this recipient.", "error");
+          sendButton.hidden = true;
+        } finally {
+          disableForm(outreachForm, false);
+        }
+      });
+      sendButton.addEventListener("click", async () => {
+        const requestId = outreachForm.dataset.requestId || newRequestId();
+        outreachForm.dataset.requestId = requestId;
+        try {
+          disableForm(outreachForm, true);
+          setFormStatus(outreachForm, "Submitting reviewed follow-up…");
+          const scheduledLocal = formValue(outreachForm, "scheduledAt");
+          const result = await api("/outreach/followups/send", {
+            method: "POST",
+            body: {
+              personId: id,
+              channel: formValue(outreachForm, "channel"),
+              followupId: formValue(outreachForm, "followupId") || null,
+              subject: formValue(outreachForm, "subject"),
+              bodyText: formValue(outreachForm, "bodyText"),
+              scheduledAt: scheduledLocal ? localDateTimeToIso(scheduledLocal) : null,
+              requestId,
+            },
+          });
+          delete outreachForm.dataset.requestId;
+          setFormStatus(outreachForm, result.scheduled ? "Follow-up scheduled." : "Provider accepted the follow-up.", "success");
+          await loadPerson(id);
+        } catch (error) {
+          setFormStatus(outreachForm, error.message || "The follow-up was not accepted.", "error");
+        } finally {
+          if (outreachForm.isConnected) disableForm(outreachForm, false);
+        }
+      });
+    }
+
     detail.querySelector("[data-delete-person]")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       const expectedName = form.dataset.personName || "";
-      const confirmedName = formValue(form, "confirmDisplayName");
-      if (confirmedName !== expectedName) {
-        setFormStatus(form, "Type the exact display name shown above.", "error");
-        return;
-      }
+      if (!confirm(`Delete ${expectedName}? The operational source records will stay intact.`)) return;
       try {
         disableForm(form, true);
         setFormStatus(form, "Deleting person…");
         await api(`/people/${encodedId}`, {
           method: "DELETE",
-          body: { confirmDisplayName: confirmedName },
+          body: { confirmDisplayName: expectedName },
         });
         state.selectedPersonId = "";
         setTopStatus("Person deleted");
@@ -1802,6 +2070,190 @@
       else render("people", "directory");
     }, { signal: state.controller.signal });
     await load();
+  }
+
+  function outreachFeatureCard(label, enabled, detail) {
+    return `<article class="people-integration-card">
+      <div class="people-integration-head"><h3>${esc(label)}</h3>${statusChip(enabled ? "ready" : "disabled", enabled ? "Enabled" : "Disabled")}</div>
+      <p>${esc(detail)}</p>
+    </article>`;
+  }
+
+  function campaignCard(campaign) {
+    const status = first(campaign, "status") || "draft";
+    const version = first(campaign, "audienceVersion") || "";
+    const channel = first(campaign, "channel");
+    return `<article class="people-integration-card" data-campaign-id="${attr(first(campaign, "id"))}">
+      <div class="people-integration-head">
+        <div><h3>${esc(first(campaign, "name"))}</h3><div class="people-record-meta">${esc(String(channel).toUpperCase())} · ${esc(first(campaign, "provider"))}</div></div>
+        ${statusChip(status)}
+      </div>
+      ${first(campaign, "subject") ? `<strong>${esc(first(campaign, "subject"))}</strong>` : ""}
+      <p>${esc(first(campaign, "bodyText"))}</p>
+      <div class="people-integration-metrics">
+        <div><strong>${Number(first(campaign, "recipientCount") || 0)}</strong><span>Eligible</span></div>
+        <div><strong>${Number(first(campaign, "excludedCount") || 0)}</strong><span>Excluded</span></div>
+      </div>
+      ${first(campaign, "providerReference") ? `<div class="people-helper">Provider reference: ${esc(first(campaign, "providerReference"))}</div>` : ""}
+      ${first(campaign, "error") ? `<div class="people-helper people-error">${esc(first(campaign, "error"))}</div>` : ""}
+      <div class="people-actions">
+        ${["draft", "reviewed"].includes(status) ? `<button class="button" type="button" data-review-campaign>Preview final audience</button>` : ""}
+        ${status === "reviewed" && channel === "email" ? `<button class="button" type="button" data-prepare-campaign data-audience-version="${attr(version)}">Prepare in Beehiiv</button>` : ""}
+        ${status === "reviewed" && channel === "sms" ? `<input type="datetime-local" data-campaign-schedule aria-label="SMS schedule"><button class="button" type="button" data-schedule-campaign data-audience-version="${attr(version)}">Schedule SMS</button>` : ""}
+      </div>
+      <div class="people-helper" data-campaign-result role="status" aria-live="polite"></div>
+    </article>`;
+  }
+
+  function outreachShell(statusPayload, campaigns) {
+    const features = objectFrom(statusPayload, "features");
+    const providers = objectFrom(statusPayload, "providers");
+    const counts = objectFrom(statusPayload, "counts");
+    const beehiiv = objectFrom(providers, "beehiiv");
+    const twilio = objectFrom(providers, "twilio");
+    return `
+      <div class="people-page-head">
+        <div class="people-section-head">
+          <div>
+            <h2>Outreach</h2>
+            <p>Reviewed customer follow-ups and consent-filtered campaigns. Suppressions always win, and every campaign requires a fresh audience preview.</p>
+          </div>
+          <button class="button" type="button" data-refresh-outreach>Refresh</button>
+        </div>
+      </div>
+
+      <section data-admin-section-title="Rollout status">
+        <h3>Rollout status</h3>
+        <div class="people-integration-grid">
+          ${outreachFeatureCard("Beehiiv newsletter", truthy(first(features, "emailCampaigns")) && truthy(first(beehiiv, "configured")), `Double opt-in · ${first(beehiiv, "publicationId") || "publication not configured"}`)}
+          ${outreachFeatureCard("Individual email", truthy(first(features, "individualEmail")), "Relationship follow-ups only; promotional email stays in Beehiiv.")}
+          ${outreachFeatureCard("Individual SMS", truthy(first(features, "individualSms")) && truthy(first(twilio, "configured")), "Dedicated Twilio Messaging Service with consent recheck.")}
+          ${outreachFeatureCard("SMS campaigns", truthy(first(features, "smsCampaigns")) && truthy(first(twilio, "configured")), "Scheduled batches run through the Worker cron.")}
+        </div>
+        <p class="people-helper">${Number(first(counts, "consentEvents") || 0)} consent events · ${Number(first(counts, "communications") || 0)} communications · ${Number(first(counts, "queuedMessages") || 0)} queued</p>
+      </section>
+
+      <section data-admin-section-title="New campaign">
+        <h3>New campaign</h3>
+        <form class="people-form" data-campaign-form>
+          <div class="people-form-grid">
+            <label>Name<input name="name" required maxlength="200" placeholder="July collectors update"></label>
+            <label>Channel<select name="channel"><option value="email">Beehiiv email</option><option value="sms">Twilio SMS</option></select></label>
+            <label class="people-wide" data-campaign-subject>Subject<input name="subject" maxlength="300"></label>
+            <label class="people-wide">Message<textarea name="bodyText" required maxlength="5000"></textarea></label>
+            <label>Tier<select name="tier"><option value="">All tiers</option><option value="1">Tier I</option><option value="2">Tier II</option><option value="3">Tier III</option></select></label>
+            <label>Tag<input name="tag" placeholder="collector"></label>
+            <label>Construct node<select name="nodeId">${optionMarkup(NODE_OPTIONS, "", "All nodes")}</select></label>
+            <label>Activity<select name="interactionType">${optionMarkup(INTERACTION_OPTIONS, "", "All activity")}</select></label>
+            <label>Event ID<input name="eventId"></label>
+            <label>Minimum spend<input name="minSpend" inputmode="decimal" placeholder="0.00"></label>
+          </div>
+          <div class="people-actions">
+            <button class="button" type="submit">Save campaign draft</button>
+            <span class="people-helper" data-form-status role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+
+      <section data-admin-section-title="Campaign drafts and delivery">
+        <h3>Campaign drafts and delivery</h3>
+        <div data-campaign-list>${campaigns.length ? `<div class="people-integration-grid">${campaigns.map(campaignCard).join("")}</div>` : emptyState("No campaigns yet.")}</div>
+      </section>`;
+  }
+
+  async function renderOutreach() {
+    const ui = prepareView("single");
+    const loadSequence = ++state.outreachLoadSequence;
+    ui.detail.innerHTML = notice("Loading outreach…");
+    const [statusPayload, campaignsPayload] = await Promise.all([
+      api("/outreach/status"),
+      api("/outreach/campaigns"),
+    ]);
+    if (state.view !== "outreach" || loadSequence !== state.outreachLoadSequence) return;
+    const campaigns = listFrom(campaignsPayload, "campaigns");
+    state.outreachPayload = { statusPayload, campaigns };
+    ui.detail.innerHTML = outreachShell(statusPayload, campaigns);
+    enhanceStudioControls(ui.detail);
+
+    ui.detail.querySelector("[data-refresh-outreach]")?.addEventListener("click", () => renderOutreach());
+    const campaignForm = ui.detail.querySelector("[data-campaign-form]");
+    const syncCampaignChannel = () => {
+      campaignForm.querySelector("[data-campaign-subject]").hidden = campaignForm.elements.channel.value !== "email";
+    };
+    campaignForm.elements.channel.addEventListener("change", syncCampaignChannel);
+    syncCampaignChannel();
+    campaignForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        disableForm(campaignForm, true);
+        setFormStatus(campaignForm, "Saving draft…");
+        const minimumSpend = formValue(campaignForm, "minSpend");
+        await api("/outreach/campaigns", {
+          method: "POST",
+          body: {
+            name: formValue(campaignForm, "name"),
+            channel: formValue(campaignForm, "channel"),
+            subject: formValue(campaignForm, "subject"),
+            bodyText: formValue(campaignForm, "bodyText"),
+            filters: {
+              tier: formValue(campaignForm, "tier"),
+              tag: formValue(campaignForm, "tag"),
+              nodeId: formValue(campaignForm, "nodeId"),
+              interactionType: formValue(campaignForm, "interactionType"),
+              eventId: formValue(campaignForm, "eventId"),
+              minSpendCents: minimumSpend ? dollarsToCents(minimumSpend, "Minimum spend") : 0,
+            },
+          },
+        });
+        await renderOutreach();
+      } catch (error) {
+        setFormStatus(campaignForm, error.message || "Could not save campaign.", "error");
+      } finally {
+        if (campaignForm.isConnected) disableForm(campaignForm, false);
+      }
+    });
+
+    ui.detail.addEventListener("click", async (event) => {
+      const card = event.target.closest("[data-campaign-id]");
+      if (!card) return;
+      const campaignId = card.dataset.campaignId;
+      const output = card.querySelector("[data-campaign-result]");
+      const review = event.target.closest("[data-review-campaign]");
+      const prepare = event.target.closest("[data-prepare-campaign]");
+      const schedule = event.target.closest("[data-schedule-campaign]");
+      if (!review && !prepare && !schedule) return;
+      event.target.disabled = true;
+      output.textContent = review ? "Re-evaluating consent and exclusions…" : "Submitting reviewed audience…";
+      try {
+        if (review) {
+          const payload = await api(`/outreach/campaigns/${encodeURIComponent(campaignId)}/review`, { method: "POST", body: {} });
+          const exclusions = objectFrom(payload.audience, "exclusions");
+          output.textContent = `${payload.audience.eligibleCount} eligible · ${payload.audience.excludedCount} excluded${Object.keys(exclusions).length ? ` · ${Object.entries(exclusions).map(([reason, count]) => `${String(reason).replace(/_/g, " ")}: ${count}`).join(" · ")}` : ""}`;
+          await renderOutreach();
+        } else if (prepare) {
+          const payload = await api(`/outreach/campaigns/${encodeURIComponent(campaignId)}/prepare`, {
+            method: "POST",
+            body: { audienceVersion: prepare.dataset.audienceVersion },
+          });
+          output.textContent = `Prepared Beehiiv segment ${payload.beehiiv.segmentId}. Compose and send inside Beehiiv.`;
+          await renderOutreach();
+        } else {
+          const local = card.querySelector("[data-campaign-schedule]").value;
+          const payload = await api(`/outreach/campaigns/${encodeURIComponent(campaignId)}/schedule`, {
+            method: "POST",
+            body: {
+              audienceVersion: schedule.dataset.audienceVersion,
+              scheduledAt: local ? localDateTimeToIso(local) : new Date().toISOString(),
+            },
+          });
+          output.textContent = `SMS campaign ${payload.campaign.status}.`;
+          await renderOutreach();
+        }
+      } catch (error) {
+        output.textContent = error.message || "Campaign action failed.";
+        event.target.disabled = false;
+      }
+    }, { signal: state.controller.signal });
   }
 
   function importSteps(active) {
@@ -2277,6 +2729,7 @@
       ["first_name", /^(first|first_name|firstname)$/],
       ["last_name", /^(last|last_name|lastname|surname)$/],
       ["preferred_name", /^(preferred_name|preferred|nickname)$/],
+      ["referral_source", /(referral|heard|how.*find|source)/],
       ["email", /(email|e_mail)/],
       ["phone", /(phone|mobile|cell|telephone)/],
       ["instagram", /(instagram|ig_handle|insta)/],

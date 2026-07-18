@@ -7,6 +7,7 @@ import {
   notifyBookingLinkCreated,
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
+import { captureMarketingConsent } from "../outreach/_lib.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -556,8 +557,26 @@ async function mirrorAppointmentToCrm(database, appointmentValue, { includePayme
     : appointmentValue;
   const nodeId = crmNodeForAppointment(appointment);
   let transaction = null;
+  let profile = {};
 
   try {
+    if (appointment.submissionId) {
+      const submission = await database.prepare(
+        "SELECT contact_json,payload_json FROM submissions WHERE id=?"
+      ).bind(appointment.submissionId).first();
+      const contact = parseJsonField(submission?.contact_json, {});
+      const payload = parseJsonField(submission?.payload_json, {});
+      profile = {
+        preferredName: contact.preferredName || contact.preferred_name
+          || payload.preferredName || payload.preferred_name,
+        pronouns: contact.pronouns || payload.pronouns,
+        instagram: contact.instagram || payload.instagram,
+        preferredContactMethod: contact.preferredContactMethod || contact.preferred_contact_method
+          || payload.preferredContactMethod || payload.preferred_contact_method,
+        referralSource: contact.referralSource || contact.referral_source
+          || payload.referralSource || payload.referral_source,
+      };
+    }
     if (includePayment) {
       const payment = await database.prepare(
         `SELECT * FROM deposit_payments
@@ -599,6 +618,7 @@ async function mirrorAppointmentToCrm(database, appointmentValue, { includePayme
         displayName: appointment.clientName,
         email: appointment.clientEmail,
         phone: appointment.clientPhone,
+        ...profile,
       },
       interaction: {
         sourceProvider: "local",
@@ -1860,6 +1880,13 @@ function publicClientFromBody(body) {
     name,
     email: asString(body.email).toLowerCase(),
     phone: asOptionalString(body.phone),
+    preferredName: asOptionalString(body.preferredName || body.preferred_name),
+    pronouns: asOptionalString(body.pronouns),
+    instagram: asOptionalString(body.instagram),
+    preferredContactMethod: asOptionalString(
+      body.preferredContactMethod || body.preferred_contact_method
+    ),
+    referralSource: asOptionalString(body.referralSource || body.referral_source),
     direction: asOptionalString(body.direction),
     understand: asString(body.understand),
     ageConfirmed: asString(body.age_confirmed),
@@ -1932,6 +1959,11 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
     name: client.name,
     email: client.email,
     phone: client.phone || "",
+    preferred_name: client.preferredName || "",
+    pronouns: client.pronouns || "",
+    instagram: client.instagram || "",
+    preferred_contact_method: client.preferredContactMethod || "",
+    referral_source: client.referralSource || "",
     direction: client.direction || "",
     preferred_slots: asString(body.preferred_slots || body.preferredSlots),
     availability_window_id: asString(body.availabilityWindowId),
@@ -1945,6 +1977,11 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
     name: client.name,
     email: client.email,
     phone: client.phone || "",
+    preferredName: client.preferredName || "",
+    pronouns: client.pronouns || "",
+    instagram: client.instagram || "",
+    preferredContactMethod: client.preferredContactMethod || "",
+    referralSource: client.referralSource || "",
   };
 
   return {
@@ -2139,6 +2176,18 @@ async function handlePublicSessionCheckoutForTypes(request, env, allowedTypeIds,
       ...(result.appointment ? { appointment: result.appointment } : {}),
     });
     await mirrorAppointmentToCrm(db, result.appointment);
+    await captureMarketingConsent(env, {
+      email: result.appointment.clientEmail,
+      phone: result.appointment.clientPhone,
+      emailOptIn: body.newsletter_consent,
+      smsOptIn: body.sms_marketing_consent,
+      source: "website_booking",
+      sourceId: result.appointment.id,
+      formPath: new URL(request.url).pathname,
+      requestId: request.headers.get("cf-ray") || "",
+    }).catch((error) => {
+      console.error("Unable to record optional booking marketing consent.", error);
+    });
     if (result.existing && result.appointment.squareCheckoutUrl) {
       return json({
         ok: true,
@@ -2222,6 +2271,13 @@ function studioClientFromBody(body) {
     name,
     email: asString(body.email).toLowerCase(),
     phone: asOptionalString(body.phone),
+    preferredName: asOptionalString(body.preferredName || body.preferred_name),
+    pronouns: asOptionalString(body.pronouns),
+    instagram: asOptionalString(body.instagram),
+    preferredContactMethod: asOptionalString(
+      body.preferredContactMethod || body.preferred_contact_method
+    ),
+    referralSource: asOptionalString(body.referralSource || body.referral_source),
     organization: asOptionalString(body.organization),
     details: asOptionalString(body.details || body.message),
     understand: asString(body.understand),
@@ -2303,6 +2359,11 @@ async function createPublicStudioSubmission(db, body, client, bookingType) {
     name: client.name,
     email: client.email,
     phone: client.phone || "",
+    preferred_name: client.preferredName || "",
+    pronouns: client.pronouns || "",
+    instagram: client.instagram || "",
+    preferred_contact_method: client.preferredContactMethod || "",
+    referral_source: client.referralSource || "",
     organization: client.organization || "",
     details: client.details || "",
     availability_window_id: asString(body.availabilityWindowId),
@@ -2315,6 +2376,11 @@ async function createPublicStudioSubmission(db, body, client, bookingType) {
     name: client.name,
     email: client.email,
     phone: client.phone || "",
+    preferredName: client.preferredName || "",
+    pronouns: client.pronouns || "",
+    instagram: client.instagram || "",
+    preferredContactMethod: client.preferredContactMethod || "",
+    referralSource: client.referralSource || "",
   };
 
   return {
@@ -2501,6 +2567,18 @@ export async function handlePublicStudioCheckout(request, env) {
       ...(result.appointment ? { appointment: result.appointment } : {}),
     });
     await mirrorAppointmentToCrm(db, result.appointment);
+    await captureMarketingConsent(env, {
+      email: result.appointment.clientEmail,
+      phone: result.appointment.clientPhone,
+      emailOptIn: body.newsletter_consent,
+      smsOptIn: body.sms_marketing_consent,
+      source: "website_booking",
+      sourceId: result.appointment.id,
+      formPath: new URL(request.url).pathname,
+      requestId: request.headers.get("cf-ray") || "",
+    }).catch((error) => {
+      console.error("Unable to record optional studio-booking marketing consent.", error);
+    });
     if (result.existing && result.appointment.squareCheckoutUrl) {
       return json({
         ok: true,

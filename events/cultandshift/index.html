@@ -86,6 +86,13 @@
                 <label for="performerPhone">Phone</label>
                 <input id="performerPhone" name="performerPhone" type="tel" autocomplete="tel">
               </div>
+              <div class="field"><label for="micPreferredName">Preferred name (optional)</label><input id="micPreferredName" name="preferred_name" autocomplete="nickname"></div>
+              <div class="field"><label for="micPronouns">Pronouns (optional)</label><input id="micPronouns" name="pronouns"></div>
+              <div class="field"><label for="micInstagram">Instagram (optional)</label><input id="micInstagram" name="instagram" placeholder="@"></div>
+              <div class="field"><label for="micPreferredContact">Preferred contact (optional)</label><select id="micPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
+              <div class="field"><label for="micReferralSource">How did you hear about me? (optional)</label><select id="micReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
+              <label class="field"><span><input type="checkbox" name="newsletter_consent" value="yes"> Send me The Six.Well newsletter by email (optional).</span></label>
+              <label class="field"><span><input type="checkbox" name="sms_marketing_consent" value="yes"> Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
               <div class="field">
                 <label for="actType">Act type</label>
                 <input id="actType" name="actType" placeholder="poem, song, monologue, movement, reading">
@@ -125,6 +132,13 @@
               <label for="phone">Phone</label>
               <input id="phone" name="phone" type="tel" autocomplete="tel">
             </div>
+            <div class="field"><label for="ticketPreferredName">Preferred name (optional)</label><input id="ticketPreferredName" name="preferred_name" autocomplete="nickname"></div>
+            <div class="field"><label for="ticketPronouns">Pronouns (optional)</label><input id="ticketPronouns" name="pronouns"></div>
+            <div class="field"><label for="ticketInstagram">Instagram (optional)</label><input id="ticketInstagram" name="instagram" placeholder="@"></div>
+            <div class="field"><label for="ticketPreferredContact">Preferred contact (optional)</label><select id="ticketPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
+            <div class="field"><label for="ticketReferralSource">How did you hear about me? (optional)</label><select id="ticketReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
+            <label class="field"><span><input type="checkbox" name="newsletter_consent" value="yes"> Send me The Six.Well newsletter by email (optional).</span></label>
+            <label class="field"><span><input type="checkbox" name="sms_marketing_consent" value="yes"> Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
             <div class="field">
               <label for="seats">Seats</label>
               <select id="seats" name="seats"></select>
@@ -152,6 +166,18 @@
   (function () {
     var SLUG = "cultandshift";
     var params = new URLSearchParams(window.location.search);
+    function profileAnswers(form) {
+      var values = new FormData(form);
+      return {
+        preferred_name: String(values.get("preferred_name") || "").trim(),
+        pronouns: String(values.get("pronouns") || "").trim(),
+        instagram: String(values.get("instagram") || "").trim(),
+        preferred_contact_method: String(values.get("preferred_contact_method") || "").trim(),
+        referral_source: String(values.get("referral_source") || "").trim(),
+        newsletter_consent: String(values.get("newsletter_consent") || ""),
+        sms_marketing_consent: String(values.get("sms_marketing_consent") || "")
+      };
+    }
     var previewMode = params.get("preview") === "1";
     var priceCents = 0, currency = "USD", isFree = false;
     var ticketOpen = false;
@@ -312,7 +338,7 @@
       fetch("/api/events/" + SLUG + "/checkout", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ name:name, email:email, phone:phone, seats:seats, _gotcha:gotcha }),
+        body:JSON.stringify(Object.assign({ name:name, email:email, phone:phone, seats:seats, _gotcha:gotcha }, profileAnswers(els.ticketForm))),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
         .then(function (res) {
@@ -347,7 +373,7 @@
       fetch("/api/events/" + SLUG + "/open-mic", {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({
+        body:JSON.stringify(Object.assign({
           performerName: performerName,
           performerEmail: performerEmail,
           performerPhone: document.getElementById("performerPhone").value.trim(),
@@ -356,7 +382,7 @@
           requestedSlot: document.getElementById("requestedSlot").value.trim(),
           notes: document.getElementById("notes").value.trim(),
           _gotcha: els.micForm.querySelector("[name='_gotcha']").value,
-        }),
+        }, profileAnswers(els.micForm))),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok:r.ok, d:d }; }); })
         .then(function (res) {

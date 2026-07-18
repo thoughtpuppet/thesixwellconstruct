@@ -22,6 +22,7 @@ import {
   notifyEventOpenMicSlotAssigned,
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
+import { captureMarketingConsent } from "../outreach/_lib.js";
 
 const SQUARE_VERSION = "2026-05-20";
 
@@ -830,6 +831,12 @@ async function mirrorEventTicketToCrm(database, ticketValue, eventValue = null) 
         displayName: ticketValue.contact_name || ticketValue.contactName,
         email: ticketValue.contact_email || ticketValue.contactEmail,
         phone: ticketValue.contact_phone || ticketValue.contactPhone,
+        preferredName: ticketValue.preferred_name || ticketValue.preferredName,
+        pronouns: ticketValue.pronouns,
+        instagram: ticketValue.instagram,
+        preferredContactMethod: ticketValue.preferred_contact_method
+          || ticketValue.preferredContactMethod,
+        referralSource: ticketValue.referral_source || ticketValue.referralSource,
       },
       interaction: {
         sourceProvider: "local",
@@ -904,6 +911,12 @@ async function mirrorEventTicketRefundToCrm(database, ticketValue, refundValue) 
         displayName: ticketValue.contact_name || ticketValue.contactName,
         email: ticketValue.contact_email || ticketValue.contactEmail,
         phone: ticketValue.contact_phone || ticketValue.contactPhone,
+        preferredName: ticketValue.preferred_name || ticketValue.preferredName,
+        pronouns: ticketValue.pronouns,
+        instagram: ticketValue.instagram,
+        preferredContactMethod: ticketValue.preferred_contact_method
+          || ticketValue.preferredContactMethod,
+        referralSource: ticketValue.referral_source || ticketValue.referralSource,
       },
       transaction: {
         sourceProvider: "local",
@@ -1044,6 +1057,11 @@ async function mirrorEventWaitlistToCrm(database, row, event) {
         displayName: row.contactName,
         email: row.contactEmail,
         phone: row.contactPhone,
+        preferredName: row.preferredName,
+        pronouns: row.pronouns,
+        instagram: row.instagram,
+        preferredContactMethod: row.preferredContactMethod,
+        referralSource: row.referralSource,
       },
       interaction: {
         sourceProvider: "local",
@@ -1075,6 +1093,11 @@ async function mirrorEventOpenMicToCrm(database, row, event) {
         displayName: row.performerName,
         email: row.performerEmail,
         phone: row.performerPhone,
+        preferredName: row.preferredName,
+        pronouns: row.pronouns,
+        instagram: row.instagram,
+        preferredContactMethod: row.preferredContactMethod,
+        referralSource: row.referralSource,
       },
       interaction: {
         sourceProvider: "local",
@@ -1292,6 +1315,15 @@ export async function handleEventCheckout(request, env, slug) {
   const name = asString(body.name || body.fullName);
   const email = normalizeEmail(body.email);
   const phone = asString(body.phone) || null;
+  const profile = {
+    preferredName: asString(body.preferredName || body.preferred_name),
+    pronouns: asString(body.pronouns),
+    instagram: asString(body.instagram),
+    preferredContactMethod: asString(
+      body.preferredContactMethod || body.preferred_contact_method
+    ),
+    referralSource: asString(body.referralSource || body.referral_source),
+  };
   const seats = Math.floor(Number(body.seats) || 1);
 
   if (!name) return errorResponse("Name is required.", 400);
@@ -1348,6 +1380,7 @@ export async function handleEventCheckout(request, env, slug) {
       seats,
       amountCents,
       currency: event.currency,
+      ...profile,
     };
 
     // Free events skip Square entirely: register the seat, mark it paid, and
@@ -1357,21 +1390,36 @@ export async function handleEventCheckout(request, env, slug) {
         .prepare(
           `INSERT INTO event_tickets (
             id, event_id, contact_name, contact_email, contact_phone, seats,
-            amount_cents, currency, status, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+            amount_cents, currency, status, preferred_name, pronouns, instagram,
+            preferred_contact_method, referral_source, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`
         )
-        .bind(ticketId, event.id, name, email, phone, seats, amountCents, event.currency, now, now)
+        .bind(
+          ticketId, event.id, name, email, phone, seats, amountCents, event.currency,
+          profile.preferredName, profile.pronouns, profile.instagram,
+          profile.preferredContactMethod, profile.referralSource, now, now
+        )
         .run();
 
       // Mirror into the studio submissions console before marking paid so the
       // mirror gets moved to booked.
-      await recordEventSubmission(db, env, request, { event, ticket, name, email, phone });
+      await recordEventSubmission(db, env, request, { event, ticket, name, email, phone, profile });
 
       const ticketRow = await db
         .prepare("SELECT * FROM event_tickets WHERE id = ?")
         .bind(ticketId)
         .first();
       await markTicketPaid(db, env, request, ticketRow, { free: true }, null);
+      await captureMarketingConsent(env, {
+        email,
+        phone,
+        emailOptIn: body.newsletter_consent,
+        smsOptIn: body.sms_marketing_consent,
+        source: "event_ticket",
+        sourceId: ticketId,
+        formPath: new URL(request.url).pathname,
+        occurredAt: now,
+      }).catch((error) => console.error("Unable to record optional ticket consent.", error));
 
       return json({ ok: true, ticketId, registered: true, checkoutUrl: null });
     }
@@ -1387,11 +1435,12 @@ export async function handleEventCheckout(request, env, slug) {
 
     await db
       .prepare(
-        `INSERT INTO event_tickets (
-          id, event_id, contact_name, contact_email, contact_phone, seats,
-          amount_cents, currency, status, square_order_id,
-          square_payment_link_id, square_checkout_url, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
+          `INSERT INTO event_tickets (
+            id, event_id, contact_name, contact_email, contact_phone, seats,
+            amount_cents, currency, status, square_order_id,
+            square_payment_link_id, square_checkout_url, preferred_name, pronouns,
+            instagram, preferred_contact_method, referral_source, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         ticketId,
@@ -1405,17 +1454,32 @@ export async function handleEventCheckout(request, env, slug) {
         paymentLink.order_id || null,
         paymentLink.id || null,
         paymentLink.url || null,
+        profile.preferredName,
+        profile.pronouns,
+        profile.instagram,
+        profile.preferredContactMethod,
+        profile.referralSource,
         now,
         now
       )
       .run();
 
     // Mirror into the studio submissions console for visibility.
-    await recordEventSubmission(db, env, request, { event, ticket, name, email, phone });
+    await recordEventSubmission(db, env, request, { event, ticket, name, email, phone, profile });
     const pendingTicket = await db.prepare(
       "SELECT * FROM event_tickets WHERE id=?"
     ).bind(ticketId).first();
     await mirrorEventTicketToCrm(db, pendingTicket, event);
+    await captureMarketingConsent(env, {
+      email,
+      phone,
+      emailOptIn: body.newsletter_consent,
+      smsOptIn: body.sms_marketing_consent,
+      source: "event_ticket",
+      sourceId: ticketId,
+      formPath: new URL(request.url).pathname,
+      occurredAt: now,
+    }).catch((error) => console.error("Unable to record optional ticket consent.", error));
 
     return json({
       ok: true,
@@ -1440,6 +1504,15 @@ export async function handleEventWaitlist(request, env, slug) {
   const phone = asString(body.phone) || null;
   const seats = Math.max(1, Math.floor(Number(body.seats) || 1));
   const note = asString(body.note);
+  const profile = {
+    preferredName: asString(body.preferredName || body.preferred_name),
+    pronouns: asString(body.pronouns),
+    instagram: asString(body.instagram),
+    preferredContactMethod: asString(
+      body.preferredContactMethod || body.preferred_contact_method
+    ),
+    referralSource: asString(body.referralSource || body.referral_source),
+  };
 
   if (!name) return errorResponse("Name is required.", 400);
   if (!email || !isLikelyEmail(email)) {
@@ -1476,7 +1549,18 @@ export async function handleEventWaitlist(request, env, slug) {
       seats,
       status: "new",
       createdAt: now,
+      ...profile,
     }, event);
+    await captureMarketingConsent(env, {
+      email,
+      phone,
+      emailOptIn: body.newsletter_consent,
+      smsOptIn: body.sms_marketing_consent,
+      source: "event_waitlist",
+      sourceId: id,
+      formPath: new URL(request.url).pathname,
+      occurredAt: now,
+    }).catch((error) => console.error("Unable to record optional waitlist consent.", error));
 
     await notifyAdminEventWaitlistReceived(
       env,
@@ -1529,6 +1613,15 @@ export async function handleEventOpenMicSignup(request, env, slug) {
   const pieceTitle = asString(body.pieceTitle);
   const notes = asString(body.notes);
   const requestedSlot = asString(body.requestedSlot) || null;
+  const profile = {
+    preferredName: asString(body.preferredName || body.preferred_name),
+    pronouns: asString(body.pronouns),
+    instagram: asString(body.instagram),
+    preferredContactMethod: asString(
+      body.preferredContactMethod || body.preferred_contact_method
+    ),
+    referralSource: asString(body.referralSource || body.referral_source),
+  };
 
   if (!performerName) return errorResponse("Name is required.", 400);
   if (!performerEmail || !isLikelyEmail(performerEmail)) {
@@ -1576,7 +1669,18 @@ export async function handleEventOpenMicSignup(request, env, slug) {
       pieceTitle,
       status: "requested",
       createdAt: now,
+      ...profile,
     }, event);
+    await captureMarketingConsent(env, {
+      email: performerEmail,
+      phone: performerPhone,
+      emailOptIn: body.newsletter_consent,
+      smsOptIn: body.sms_marketing_consent,
+      source: "event_open_mic",
+      sourceId: id,
+      formPath: new URL(request.url).pathname,
+      occurredAt: now,
+    }).catch((error) => console.error("Unable to record optional open-mic consent.", error));
 
     await notifyAdminEventOpenMicReceived(
       env,
@@ -1600,11 +1704,22 @@ export async function handleEventOpenMicSignup(request, env, slug) {
   }
 }
 
-async function recordEventSubmission(db, env, request, { event, ticket, name, email, phone }) {
+async function recordEventSubmission(db, env, request, {
+  event, ticket, name, email, phone, profile = {},
+}) {
   try {
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
-    const contact = { name, email, phone: phone || undefined };
+    const contact = {
+      name,
+      email,
+      phone: phone || undefined,
+      preferredName: profile.preferredName || undefined,
+      pronouns: profile.pronouns || undefined,
+      instagram: profile.instagram || undefined,
+      preferredContactMethod: profile.preferredContactMethod || undefined,
+      referralSource: profile.referralSource || undefined,
+    };
     const payload = {
       type: "event_rsvp",
       event_slug: event.slug,
@@ -1613,6 +1728,11 @@ async function recordEventSubmission(db, env, request, { event, ticket, name, em
       amount_cents: ticket.amountCents,
       currency: ticket.currency,
       ticket_id: ticket.id,
+      preferred_name: profile.preferredName || "",
+      pronouns: profile.pronouns || "",
+      instagram: profile.instagram || "",
+      preferred_contact_method: profile.preferredContactMethod || "",
+      referral_source: profile.referralSource || "",
     };
     await db
       .prepare(

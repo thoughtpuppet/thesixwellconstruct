@@ -71,6 +71,13 @@
 .rebook-banner-dismiss{background:none;border:none;color:var(--text-dim);font-size:18px;line-height:1;cursor:pointer;padding:2px 4px;flex-shrink:0;transition:color var(--t-fast);}
 .rebook-banner-dismiss:hover{color:var(--accent);}
 
+/* Optional outreach consent remains separate from booking and preferred contact. */
+.marketing-consent-options{display:grid;gap:12px;padding:20px 0;}
+.marketing-consent-heading{margin:0;font-family:var(--sans);font-size:10px;font-weight:900;line-height:1.4;letter-spacing:.16em;text-transform:uppercase;color:var(--text-dim);}
+.marketing-consent-choice{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;align-items:start;margin:0;font-family:var(--serif);font-size:13px;font-weight:400;line-height:1.65;letter-spacing:normal;text-transform:none;color:var(--text-mute);cursor:pointer;}
+.marketing-consent-choice input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent);}
+.marketing-consent-manage{font-family:var(--sans);font-size:10px;font-weight:700;line-height:1.5;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);}
+
 @media (max-width: 768px) {
   .cal-day,.cal-nav,.time-option,.time-trigger,.time-add-btn,.cal-next-btn{font-size:16px;min-height:44px;}
   .cal-day.today{font-size:12px;}

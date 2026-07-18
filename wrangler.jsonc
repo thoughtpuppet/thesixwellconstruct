@@ -52,7 +52,13 @@
     "STUDIO_CONTACT_PHONE": "(770) 820-5800",
     "SHOPIFY_STORE_DOMAIN": "six-well-2.myshopify.com",
     "SHOPIFY_STOREFRONT_API_VERSION": "2025-07",
-    "SHOPIFY_MERCH_QUERY": "tag:construct-merch"
+    "SHOPIFY_MERCH_QUERY": "tag:construct-merch",
+    "OUTREACH_CONSENT_SYNC_ENABLED": "false",
+    "OUTREACH_PREFERENCES_ENABLED": "false",
+    "OUTREACH_INDIVIDUAL_EMAIL_ENABLED": "false",
+    "OUTREACH_INDIVIDUAL_SMS_ENABLED": "false",
+    "OUTREACH_EMAIL_CAMPAIGNS_ENABLED": "false",
+    "OUTREACH_SMS_CAMPAIGNS_ENABLED": "false"
   },
   "compatibility_flags": [
     "nodejs_compat"

@@ -3,6 +3,7 @@ import {
   notifySubmissionReceived,
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
+import { captureMarketingConsent } from "../outreach/_lib.js";
 
 const VALID_STATUSES = new Set([
   "new",
@@ -373,6 +374,11 @@ function normalizeSubmission(payload, request) {
       phone,
       instagram: asOptionalString(payload.instagram),
       pronouns: asOptionalString(payload.pronouns),
+      preferredName: asOptionalString(payload.preferredName || payload.preferred_name),
+      preferredContactMethod: asOptionalString(
+        payload.preferredContactMethod || payload.preferred_contact_method
+      ),
+      referralSource: asOptionalString(payload.referralSource || payload.referral_source),
     }),
     payload,
     requestMeta: compactObject({
@@ -582,6 +588,12 @@ async function mirrorSubmissionToCrm(database, row) {
         instagram: contact.instagram,
         organization: contact.organization || payload.organization,
         pronouns: contact.pronouns,
+        preferredName: contact.preferredName || contact.preferred_name
+          || payload.preferredName || payload.preferred_name,
+        preferredContactMethod: contact.preferredContactMethod || contact.preferred_contact_method
+          || payload.preferredContactMethod || payload.preferred_contact_method,
+        referralSource: contact.referralSource || contact.referral_source
+          || payload.referralSource || payload.referral_source,
       },
       interaction: {
         sourceProvider: "local",
@@ -991,6 +1003,20 @@ export async function handleCreateSubmission(request, env) {
       contact: submission.contact,
       payload: submission.payload,
       createdAt: now,
+    });
+
+    await captureMarketingConsent(env, {
+      email: submission.contact.email,
+      phone: submission.contact.phone,
+      emailOptIn: body.payload.newsletter_consent,
+      smsOptIn: body.payload.sms_marketing_consent,
+      source: "submission_form",
+      sourceId: id,
+      formPath: submission.sourcePath || request.url,
+      occurredAt: now,
+      requestId: request.headers.get("cf-ray") || "",
+    }).catch((error) => {
+      console.error("Unable to record optional submission marketing consent.", error);
     });
 
     const clientNotification = await notifySubmissionReceived(env, {

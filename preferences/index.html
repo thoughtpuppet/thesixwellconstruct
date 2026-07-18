@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,follow">
+<title>communication preferences - the six.well construct</title>
+<link rel="stylesheet" href="/css/transitions.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
+<link rel="stylesheet" href="/about/section-page.css">
+<link rel="stylesheet" href="/css/site-typography.css">
+<style>
+  html,body{background:var(--color-bg,#0e0e0e);}
+  .preference-shell{width:min(760px,100%);display:grid;gap:28px;}
+  .preference-card{border-top:5px solid var(--line,rgba(255,231,202,.28));border-bottom:5px solid var(--line-soft,rgba(255,231,202,.12));padding:28px 0;display:grid;gap:18px;}
+  .preference-card h2{margin:0;font-size:clamp(28px,5vw,46px);}
+  .preference-card p{margin:0;line-height:1.7;}
+  .preference-form{display:grid;gap:16px;}
+  .preference-form label{display:grid;gap:8px;font-family:var(--sans,Inter,sans-serif);font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;}
+  .preference-form input[type="email"],.preference-form input[type="tel"]{min-height:54px;border:5px solid var(--line,rgba(255,231,202,.28));border-radius:0;background:transparent;color:inherit;padding:10px 14px;font:500 16px/1.4 var(--sans,Inter,sans-serif);text-transform:none;letter-spacing:normal;}
+  .preference-choice{grid-template-columns:24px minmax(0,1fr)!important;align-items:start;gap:12px!important;font-family:inherit!important;font-size:14px!important;font-weight:400!important;line-height:1.7!important;letter-spacing:normal!important;text-transform:none!important;}
+  .preference-choice input{width:22px;height:22px;margin:2px 0 0;accent-color:var(--accent,#fcb867);}
+  .preference-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .preference-button{min-height:50px;border:5px solid var(--accent,#fcb867);background:var(--accent,#fcb867);color:#0e0e0e;padding:0 20px;font-family:var(--sans,Inter,sans-serif);font-size:10px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;}
+  .preference-button.secondary{background:transparent;color:var(--accent,#fcb867);}
+  .preference-button:disabled{opacity:.45;cursor:not-allowed;}
+  .preference-status{min-height:22px;color:var(--text-muted,currentColor);font-size:13px;line-height:1.6;}
+  .preference-status.error{color:#ec5e26;}
+  .preference-status.success{color:#55ba5a;}
+  .preference-disclosure{font-size:12px!important;color:var(--text-muted,currentColor);}
+  [hidden]{display:none!important;}
+</style>
+</head>
+<body data-venture="about">
+<main class="about-section-page entrance-fade">
+  <header class="section-head">
+    <span class="section-kicker">privacy / communication preferences</span>
+    <h1 class="section-title">Your channels. Your choice.</h1>
+    <p class="section-intro">Newsletter email and marketing text permission are tracked separately. Booking confirmations, receipts, and other service messages are not changed here.</p>
+  </header>
+
+  <section class="content-bands" aria-label="communication preferences">
+    <div class="preference-shell">
+      <article class="preference-card" id="requestCard">
+        <h2>Send a secure link</h2>
+        <p>Enter the email address or mobile number you want to manage. The secure link expires after 30 minutes and does not expose a People profile.</p>
+        <form class="preference-form" id="requestForm" novalidate>
+          <label>Email address
+            <input name="email" type="email" autocomplete="email" placeholder="you@example.com">
+          </label>
+          <label>Mobile number
+            <input name="phone" type="tel" autocomplete="tel" placeholder="+1 404 555 0123">
+          </label>
+          <div class="preference-actions">
+            <button class="preference-button" type="submit">Send secure link</button>
+          </div>
+          <p class="preference-status" data-request-status role="status" aria-live="polite"></p>
+        </form>
+      </article>
+
+      <article class="preference-card" id="manageCard" hidden>
+        <h2>Manage <span data-masked-contact></span></h2>
+        <p data-current-state></p>
+        <form class="preference-form" id="manageForm">
+          <label class="preference-choice">
+            <input name="optedIn" type="checkbox">
+            <span data-disclosure></span>
+          </label>
+          <div class="preference-actions">
+            <button class="preference-button" type="submit">Save preference</button>
+          </div>
+          <p class="preference-status" data-manage-status role="status" aria-live="polite"></p>
+        </form>
+      </article>
+    </div>
+  </section>
+
+  <footer class="footer-links">
+    <a href="/about/contact-press/">contact</a>
+    <a href="/home/">return to construct</a>
+    <a href="/tattoos/inquire/">tattoo inquiry</a>
+  </footer>
+</main>
+<script>
+(function () {
+  "use strict";
+  var params = new URLSearchParams(location.search);
+  var token = params.get("token") || "";
+  var requestCard = document.getElementById("requestCard");
+  var manageCard = document.getElementById("manageCard");
+  var requestForm = document.getElementById("requestForm");
+  var manageForm = document.getElementById("manageForm");
+  var state = null;
+
+  function status(element, message, type) {
+    element.textContent = message || "";
+    element.className = "preference-status" + (type ? " " + type : "");
+  }
+
+  async function jsonRequest(url, options) {
+    var response = await fetch(url, options);
+    var payload = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(payload.error || "Unable to update communication preferences.");
+    return payload;
+  }
+
+  function renderState(next) {
+    state = next;
+    requestCard.hidden = true;
+    manageCard.hidden = false;
+    manageCard.querySelector("[data-masked-contact]").textContent = next.maskedContact || "";
+    manageCard.querySelector("[data-current-state]").textContent =
+      next.status === "granted" ? "This channel is currently opted in."
+      : next.status === "pending" ? "Confirmation is still pending."
+      : next.status === "revoked" ? "This channel is opted out."
+      : "No active permission is recorded for this channel.";
+    manageCard.querySelector("[data-disclosure]").textContent = next.disclosure && next.disclosure.text || "";
+    manageForm.elements.optedIn.checked = next.status === "granted" || next.status === "pending";
+  }
+
+  requestForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var email = requestForm.elements.email.value.trim();
+    var phone = requestForm.elements.phone.value.trim();
+    var output = requestForm.querySelector("[data-request-status]");
+    if ((email ? 1 : 0) + (phone ? 1 : 0) !== 1) {
+      status(output, "Enter one email address or one mobile number.", "error");
+      return;
+    }
+    var button = requestForm.querySelector("button");
+    button.disabled = true;
+    status(output, "Sending your secure link…");
+    try {
+      var payload = await jsonRequest("/api/outreach/preferences/request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email, phone: phone }),
+      });
+      status(output, payload.message || "Secure link sent.", "success");
+    } catch (error) {
+      status(output, error.message, "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  manageForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var output = manageForm.querySelector("[data-manage-status]");
+    var optedIn = manageForm.elements.optedIn.checked;
+    var button = manageForm.querySelector("button");
+    button.disabled = true;
+    status(output, "Saving…");
+    try {
+      var payload = await jsonRequest("/api/outreach/preferences", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token: token, optedIn: optedIn, confirmed: optedIn }),
+      });
+      renderState(payload.state);
+      status(output, optedIn && payload.state.channel === "email"
+        ? "Saved. Check your email to confirm the newsletter subscription."
+        : "Your preference is saved.", "success");
+    } catch (error) {
+      status(output, error.message, "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  if (token) {
+    jsonRequest("/api/outreach/preferences?token=" + encodeURIComponent(token))
+      .then(function (payload) {
+        renderState(payload);
+        history.replaceState(null, "", location.pathname);
+      })
+      .catch(function (error) {
+        requestCard.hidden = true;
+        manageCard.hidden = false;
+        manageCard.querySelector("h2").textContent = "Link unavailable";
+        manageForm.hidden = true;
+        manageCard.querySelector("[data-current-state]").textContent = error.message;
+      });
+  }
+})();
+</script>
+<script src="/js/transition.js"></script>
+<script src="/js/construct-corner.js"></script>
+<script src="/js/construct-nav.js"></script>
+</body>
+</html>

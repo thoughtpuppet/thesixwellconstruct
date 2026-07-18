@@ -392,6 +392,13 @@
               <label for="phone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
               <input type="tel" id="phone" name="phone" autocomplete="tel">
             </div>
+            <div class="field"><label for="ticketPreferredName">Preferred name (optional)</label><input id="ticketPreferredName" name="preferred_name" autocomplete="nickname"></div>
+            <div class="field"><label for="ticketPronouns">Pronouns (optional)</label><input id="ticketPronouns" name="pronouns"></div>
+            <div class="field"><label for="ticketInstagram">Instagram (optional)</label><input id="ticketInstagram" name="instagram" placeholder="@"></div>
+            <div class="field"><label for="ticketPreferredContact">Preferred contact (optional)</label><select id="ticketPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
+            <div class="field"><label for="ticketReferralSource">How did you hear about me? (optional)</label><select id="ticketReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
+            <label class="field"><span><input type="checkbox" name="newsletter_consent" value="yes"> Send me The Six.Well newsletter by email (optional).</span></label>
+            <label class="field"><span><input type="checkbox" name="sms_marketing_consent" value="yes"> Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
             <div class="field">
               <label for="seats">Seats</label>
               <select id="seats" name="seats"></select>
@@ -420,6 +427,13 @@
                 <label for="waitPhone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
                 <input type="tel" id="waitPhone" name="phone" autocomplete="tel">
               </div>
+              <div class="field"><label for="waitPreferredName">Preferred name (optional)</label><input id="waitPreferredName" name="preferred_name" autocomplete="nickname"></div>
+              <div class="field"><label for="waitPronouns">Pronouns (optional)</label><input id="waitPronouns" name="pronouns"></div>
+              <div class="field"><label for="waitInstagram">Instagram (optional)</label><input id="waitInstagram" name="instagram" placeholder="@"></div>
+              <div class="field"><label for="waitPreferredContact">Preferred contact (optional)</label><select id="waitPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
+              <div class="field"><label for="waitReferralSource">How did you hear about me? (optional)</label><select id="waitReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
+              <label class="field"><span><input type="checkbox" name="newsletter_consent" value="yes"> Send me The Six.Well newsletter by email (optional).</span></label>
+              <label class="field"><span><input type="checkbox" name="sms_marketing_consent" value="yes"> Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
               <div class="field">
                 <label for="waitSeats">Seats wanted</label>
                 <select id="waitSeats" name="seats">
@@ -459,6 +473,18 @@
     var API_CHECKOUT_PATH = "/api/events/signal-symbol/checkout";
     var API_WAITLIST_PATH = "/api/events/signal-symbol/waitlist";
     var params = new URLSearchParams(window.location.search);
+    function profileAnswers(form) {
+      var values = new FormData(form);
+      return {
+        preferred_name: String(values.get("preferred_name") || "").trim(),
+        pronouns: String(values.get("pronouns") || "").trim(),
+        instagram: String(values.get("instagram") || "").trim(),
+        preferred_contact_method: String(values.get("preferred_contact_method") || "").trim(),
+        referral_source: String(values.get("referral_source") || "").trim(),
+        newsletter_consent: String(values.get("newsletter_consent") || ""),
+        sms_marketing_consent: String(values.get("sms_marketing_consent") || "")
+      };
+    }
     var previewMode = params.get("preview") === "1";
     var priceCents = 0, currency = "USD", isFree = false;
     var els = {
@@ -634,7 +660,7 @@
       fetch(API_CHECKOUT_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name, email: email, phone: phone, seats: seats, _gotcha: gotcha }),
+        body: JSON.stringify(Object.assign({ name: name, email: email, phone: phone, seats: seats, _gotcha: gotcha }, profileAnswers(els.form))),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {
@@ -676,7 +702,7 @@
       fetch(API_WAITLIST_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name, email: email, phone: phone, seats: seats, note: note, _gotcha: gotcha }),
+        body: JSON.stringify(Object.assign({ name: name, email: email, phone: phone, seats: seats, note: note, _gotcha: gotcha }, profileAnswers(els.waitlistForm))),
       })
         .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
         .then(function (res) {

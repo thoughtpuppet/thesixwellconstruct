@@ -10,6 +10,21 @@ SHOPIFY_ADMIN_API_VERSION=2026-07
 SHOPIFY_WEBHOOK_SECRET=replace-with-your-shopify-webhook-secret
 BEEHIIV_API_KEY=replace-with-your-beehiiv-api-key
 BEEHIIV_PUBLICATION_IDS=replace-with-one-or-more-comma-separated-publication-ids
+# Outreach uses one Beehiiv publication and an optional newsletter list.
+BEEHIIV_OUTREACH_PUBLICATION_ID=replace-with-your-outreach-publication-id
+BEEHIIV_OUTREACH_LIST_ID=replace-with-your-outreach-list-id
+BEEHIIV_WEBHOOK_TOKEN=replace-with-a-long-random-webhook-token
+TWILIO_ACCOUNT_SID=replace-with-your-twilio-account-sid
+TWILIO_AUTH_TOKEN=replace-with-your-twilio-auth-token
+TWILIO_MESSAGING_SERVICE_SID=replace-with-your-dedicated-messaging-service-sid
+TWILIO_WEBHOOK_BASE_URL=https://thesixwellconstruct.com
+# Keep all delivery flags false through schema rollout and owner-only testing.
+OUTREACH_CONSENT_SYNC_ENABLED=false
+OUTREACH_PREFERENCES_ENABLED=false
+OUTREACH_INDIVIDUAL_EMAIL_ENABLED=false
+OUTREACH_INDIVIDUAL_SMS_ENABLED=false
+OUTREACH_EMAIL_CAMPAIGNS_ENABLED=false
+OUTREACH_SMS_CAMPAIGNS_ENABLED=false
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
 SQUARE_ACCESS_TOKEN=replace-with-your-square-access-token
 SQUARE_LOCATION_ID=replace-with-your-square-location-id

@@ -8,6 +8,10 @@ import { fileURLToPath } from "node:url";
 import { handleAdminCrmApi } from "../functions/api/crm/_lib.js";
 import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
 import {
+  captureMarketingConsent,
+  handleAdminOutreachApi,
+} from "../functions/api/outreach/_lib.js";
+import {
   handleAdminEventTicketCancel,
   handleEventCheckout,
   handleEventOpenMicSignup,
@@ -125,6 +129,13 @@ async function api(database, path, options = {}) {
   );
 }
 
+async function outreachApi(database, path, options = {}) {
+  return handleAdminOutreachApi(
+    request(path, { ...options, admin: options.admin ?? true }),
+    env(database, options.env),
+  );
+}
+
 async function responseJson(response) {
   const payload = await response.json();
   return { response, payload };
@@ -228,9 +239,327 @@ test("People UI gives canonical Construct nodes their source colors", () => {
   }
   assert.match(styles, /\.people-record\[data-people-node\]/);
   assert.match(studio, /people-manager\.css\?v=2/);
-  assert.match(studio, /people-manager\.js\?v=4/);
+  assert.match(studio, /people-manager\.js\?v=7/);
   assert.match(source, /data-delete-person/);
   assert.match(source, /method:\s*"DELETE"/);
+  assert.doesNotMatch(source, /A rationale is required/);
+});
+
+test("People UI separates contacts, system links, activities, and money", () => {
+  const source = readFileSync(join(ROOT, "studio", "people-manager.js"), "utf8");
+  const addContactSource = source.slice(
+    source.indexOf("function addIdentityForm"),
+    source.indexOf("function addInteractionForm"),
+  );
+
+  assert.match(source, /CONTACT_IDENTITY_KINDS = new Set\(\["email", "phone", "instagram"\]\)/);
+  assert.match(source, /identityRecords\(contactIdentities\)/);
+  assert.match(source, /systemLinkRecords\(systemLinks\)/);
+  assert.match(source, /data-admin-section-title="System links" data-admin-default="closed"/);
+  assert.match(source, /activityRecords\(interactions, attendance\)/);
+  assert.doesNotMatch(source, /activityRecords\(interactions, transactions, attendance\)/);
+  assert.match(source, /moneyRecords\(transactions\)/);
+  assert.match(addContactSource, /\["email", "Email"\]/);
+  assert.match(addContactSource, /\["phone", "Phone"\]/);
+  assert.match(addContactSource, /\["instagram", "Instagram"\]/);
+  assert.doesNotMatch(addContactSource, /shopify_customer|square_customer|beehiiv_subscription|substack_subscriber/);
+});
+
+test("outreach consent capture is separate, channel-specific, and replay-safe", async () => {
+  const database = migratedDatabase();
+  const runtime = env(database);
+  const firstCapture = await captureMarketingConsent(runtime, {
+    email: "updates@example.test",
+    phone: "(404) 555-0123",
+    emailOptIn: "yes",
+    smsOptIn: "yes",
+    source: "submission_form",
+    sourceId: "submission-consent-1",
+    formPath: "/tattoos/inquire/custom/",
+    occurredAt: "2026-07-18T14:00:00.000Z",
+  });
+  assert.equal(firstCapture.email.recorded, true);
+  assert.equal(firstCapture.sms.recorded, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.deepEqual(
+    database.prepare("SELECT channel,status FROM crm_consent_events ORDER BY channel").all()
+      .map((row) => ({ channel: row.channel, status: row.status })),
+    [
+      { channel: "email", status: "pending" },
+      { channel: "sms", status: "granted" },
+    ],
+  );
+
+  const replay = await captureMarketingConsent(runtime, {
+    email: "updates@example.test",
+    phone: "+1 404 555 0123",
+    emailOptIn: true,
+    smsOptIn: true,
+    source: "submission_form",
+    sourceId: "submission-consent-1",
+    formPath: "/tattoos/inquire/custom/",
+  });
+  assert.equal(replay.email.replayed, true);
+  assert.equal(replay.sms.replayed, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_consent_events").get().count, 2);
+});
+
+test("audience preview requires consent, provider confirmation, valid contact, and no suppression", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Outreach Customer",
+    email: "outreach@example.test",
+    phone: "404-555-0199",
+  });
+  let result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}/interactions`, {
+    method: "POST",
+    body: {
+      interactionType: "appointment",
+      nodeId: "node-tattoos",
+      channel: "website",
+      label: "Booked session",
+      status: "completed",
+      occurredAt: "2026-07-18T15:00:00.000Z",
+    },
+  }));
+  assert.equal(result.response.status, 201);
+
+  result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/people/${person.id}/consents`, {
+    method: "POST",
+    body: {
+      channel: "sms",
+      sourceMethod: "in_person",
+      value: "404-555-0199",
+      consentAt: "2026-07-18T15:05:00.000Z",
+      confirmed: true,
+      requestId: "manual-sms-consent-1",
+    },
+  }));
+  assert.equal(result.response.status, 201, JSON.stringify(result.payload));
+
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/audience/preview", {
+    method: "POST",
+    body: { channel: "sms" },
+  }));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.eligibleCount, 1);
+
+  result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/people/${person.id}/consents`, {
+    method: "POST",
+    body: {
+      channel: "email",
+      sourceMethod: "paper",
+      value: "outreach@example.test",
+      consentAt: "2026-07-18T15:06:00.000Z",
+      confirmed: true,
+      requestId: "manual-email-consent-1",
+    },
+  }));
+  assert.equal(result.response.status, 201);
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/audience/preview", {
+    method: "POST",
+    body: { channel: "email" },
+  }));
+  assert.equal(result.payload.eligibleCount, 0);
+  assert.equal(result.payload.exclusions.pending_confirmation, 1);
+
+  const now = "2026-07-18T15:10:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_marketing_subscriptions(
+      id,person_id,provider,publication_id,external_id,email,status,
+      subscribed_at,last_synced_at,created_at,updated_at
+    ) VALUES('sub-confirmed',?,'beehiiv','pub_test','bee-sub-1',?,'subscribed',?,?,?,?)
+  `).run(person.id, "outreach@example.test", now, now, now, now);
+  database.prepare(`
+    INSERT INTO crm_consent_events(
+      id,person_id,channel,purpose,status,normalized_value,source,provider,
+      provider_reference,occurred_at,created_at
+    ) VALUES('email-confirmed',?,'email','newsletter','granted',?,'beehiiv_confirmation',
+      'beehiiv','bee-confirmed-1',?,?)
+  `).run(person.id, "outreach@example.test", now, now);
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/audience/preview", {
+    method: "POST",
+    body: { channel: "email" },
+  }));
+  assert.equal(result.payload.eligibleCount, 1);
+
+  database.prepare(`
+    INSERT INTO crm_suppressions(
+      id,person_id,identity_kind,normalized_value,reason,provider,active,created_at,updated_at
+    ) VALUES('email-suppression',?,'email',?,'unsubscribe','beehiiv',1,?,?)
+  `).run(person.id, "outreach@example.test", now, now);
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/audience/preview", {
+    method: "POST",
+    body: { channel: "email" },
+  }));
+  assert.equal(result.payload.eligibleCount, 0);
+  assert.equal(result.payload.exclusions.suppressed, 1);
+});
+
+test("reviewed campaigns stop when consent changes and person deletion preserves opt-out evidence", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Deletion Outreach Customer",
+    email: "deletion-outreach@example.test",
+    phone: "404-555-0177",
+  });
+  let result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/people/${person.id}/consents`, {
+    method: "POST",
+    body: {
+      channel: "sms",
+      sourceMethod: "phone",
+      value: "404-555-0177",
+      consentAt: "2026-07-18T16:00:00.000Z",
+      confirmed: true,
+      requestId: "delete-sms-consent",
+    },
+  }));
+  assert.equal(result.response.status, 201);
+
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/campaigns", {
+    method: "POST",
+    body: { name: "Consent drift", channel: "sms", bodyText: "A reviewed update." },
+  }));
+  assert.equal(result.response.status, 201);
+  const campaignId = result.payload.campaign.id;
+  result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/campaigns/${campaignId}/review`, {
+    method: "POST",
+    body: {},
+  }));
+  assert.equal(result.payload.audience.eligibleCount, 1);
+  const audienceVersion = result.payload.campaign.audienceVersion;
+
+  const now = "2026-07-18T16:05:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_suppressions(
+      id,person_id,identity_kind,normalized_value,reason,provider,active,created_at,updated_at
+    ) VALUES('sms-suppression',?,'phone',?,'STOP','twilio',1,?,?)
+  `).run(person.id, "+14045550177", now, now);
+  result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/campaigns/${campaignId}/schedule`, {
+    method: "POST",
+    body: { audienceVersion },
+    env: {
+      OUTREACH_SMS_CAMPAIGNS_ENABLED: "true",
+      TWILIO_ACCOUNT_SID: "AC_test",
+      TWILIO_AUTH_TOKEN: "secret",
+      TWILIO_MESSAGING_SERVICE_SID: "MG_test",
+    },
+  }));
+  assert.equal(result.response.status, 409);
+  assert.match(result.payload.error, /audience changed/i);
+
+  result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`, {
+    method: "DELETE",
+    body: { confirmDisplayName: "Deletion Outreach Customer" },
+  }));
+  assert.equal(result.response.status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+  assert.equal(database.prepare("SELECT person_id FROM crm_consent_events LIMIT 1").get().person_id, null);
+  assert.equal(database.prepare("SELECT person_id FROM crm_suppressions LIMIT 1").get().person_id, null);
+  assert.equal(database.prepare("SELECT active FROM crm_suppressions LIMIT 1").get().active, 1);
+});
+
+test("individual follow-up email completes its task only after provider acceptance and replays idempotently", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Follow-up Customer",
+    email: "followup@example.test",
+  });
+  let result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}/interactions`, {
+    method: "POST",
+    body: {
+      interactionType: "appointment",
+      nodeId: "node-tattoos",
+      channel: "website",
+      label: "Completed appointment",
+      status: "completed",
+      occurredAt: "2026-07-18T17:00:00.000Z",
+    },
+  }));
+  assert.equal(result.response.status, 201);
+  result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}/followups`, {
+    method: "POST",
+    body: {
+      action: "Check healed work",
+      dueAt: "2026-07-19T17:00:00.000Z",
+      priority: "normal",
+    },
+  }));
+  assert.equal(result.response.status, 201);
+  const followupId = result.payload.followup.id;
+
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/followups/preview", {
+    method: "POST",
+    body: { personId: person.id, channel: "email" },
+  }));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.eligible, true);
+  assert.equal(result.payload.destination, "followup@example.test");
+
+  let sends = 0;
+  const outreachEnv = {
+    OUTREACH_INDIVIDUAL_EMAIL_ENABLED: "true",
+    EMAIL: {
+      async send(message) {
+        sends += 1;
+        assert.equal(message.to, "followup@example.test");
+        return { messageId: "email-message-1" };
+      },
+    },
+  };
+  const sendBody = {
+    personId: person.id,
+    channel: "email",
+    followupId,
+    subject: "How is everything healing?",
+    bodyText: "Reply if you would like me to look at anything.",
+    requestId: "followup-request-1",
+  };
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/followups/send", {
+    method: "POST",
+    body: sendBody,
+    env: outreachEnv,
+  }));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  assert.equal(result.payload.communication.status, "accepted");
+  assert.equal(database.prepare("SELECT status FROM crm_followups WHERE id=?").get(followupId).status, "done");
+  assert.equal(sends, 1);
+
+  result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/followups/send", {
+    method: "POST",
+    body: sendBody,
+    env: outreachEnv,
+  }));
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.replayed, true);
+  assert.equal(sends, 1);
+});
+
+test("public customer forms collect the optional People profile answers", () => {
+  const formFiles = [
+    ["tattoos", "inquire", "custom", "index.html"],
+    ["tattoos", "flash", "claim", "index.html"],
+    ["tattoos", "special-projects", "apply", "index.html"],
+    ["tattoos", "inquire", "consultation", "index.html"],
+    ["tattoos", "build", "in-person", "index.html"],
+    ["booking", "studio", "index.html"],
+    ["booking", "studio-visit", "index.html"],
+    ["art", "acquisitioninquiry.html"],
+    ["events", "cultandshift", "index.html"],
+    ["events", "signal-symbol", "index.html"],
+  ];
+  for (const parts of formFiles) {
+    const source = readFileSync(join(ROOT, ...parts), "utf8");
+    for (const field of [
+      "preferred_name",
+      "pronouns",
+      "instagram",
+      "preferred_contact_method",
+      "referral_source",
+    ]) {
+      assert.match(source, new RegExp(`name=[\"']${field}[\"']`), `${parts.join("/")} is missing ${field}`);
+    }
+  }
 });
 
 function installSquareApiMock(testContext, {
@@ -800,9 +1129,12 @@ test("a real booking enriches only blank or placeholder person fields", async ()
     contact: {
       displayName: "Actual Client Name",
       email: "enrich@example.test",
+      preferredName: "Actual",
       organization: "Client Organization",
       pronouns: "they/them",
       instagram: "@actualclient",
+      preferredContactMethod: "instagram",
+      referralSource: "youtube",
     },
     interaction: {
       sourceProvider: "local",
@@ -814,14 +1146,18 @@ test("a real booking enriches only blank or placeholder person fields", async ()
   });
   assert.deepEqual(
     { ...database.prepare(
-      `SELECT display_name,organization,pronouns,instagram
+      `SELECT display_name,preferred_name,organization,pronouns,instagram,
+              preferred_contact_method,referral_source
        FROM crm_people WHERE id=?`
     ).get(initialPerson.id) },
     {
       display_name: "Actual Client Name",
+      preferred_name: "Actual",
       organization: "Client Organization",
       pronouns: "they/them",
       instagram: "actualclient",
+      preferred_contact_method: "instagram",
+      referral_source: "youtube",
     },
   );
 
@@ -871,6 +1207,11 @@ test("event tickets, waitlists, and open-mic signups register the same person li
         name: "Event Person",
         email: "event-person@example.test",
         phone: "404-555-0195",
+        preferred_name: "Event",
+        pronouns: "she/they",
+        instagram: "@eventperson",
+        preferred_contact_method: "instagram",
+        referral_source: "friend_family",
         seats: 2,
       },
     },
@@ -911,6 +1252,19 @@ test("event tickets, waitlists, and open-mic signups register the same person li
      WHERE i.kind='email' AND i.normalized_value='event-person@example.test'`
   ).get();
   assert.ok(person?.id);
+  assert.deepEqual(
+    { ...database.prepare(
+      `SELECT preferred_name,pronouns,instagram,preferred_contact_method,referral_source
+       FROM crm_people WHERE id=?`
+    ).get(person.id) },
+    {
+      preferred_name: "Event",
+      pronouns: "she/they",
+      instagram: "eventperson",
+      preferred_contact_method: "instagram",
+      referral_source: "friend_family",
+    },
+  );
   assert.deepEqual(
     database.prepare(
       `SELECT interaction_type,status
@@ -1811,19 +2165,20 @@ test("the stale event ticket reaper preserves partial tenders for review", async
   );
 });
 
-test("people profiles preserve manual tier judgment and calculate relationship activity and spend", async () => {
+test("people profiles allow tier changes without explanations and calculate relationship activity and spend", async () => {
   const database = migratedDatabase();
 
   let result = await responseJson(await api(database, "/api/admin/crm/people", {
     method: "POST",
     body: {
-      displayName: "Rationale Required",
+      displayName: "Tier Without Explanation",
       email: "rationale@example.com",
       tier: 1,
     },
   }));
-  assert.equal(result.response.status, 400);
-  assert.match(result.payload.error, /rationale/i);
+  assert.equal(result.response.status, 201, JSON.stringify(result.payload));
+  assert.equal(result.payload.person.tier, 1);
+  assert.equal(result.payload.person.tierRationale, "");
 
   const person = await createPerson(database, {
     preferredName: "Alex",
@@ -1833,22 +2188,11 @@ test("people profiles preserve manual tier judgment and calculate relationship a
 
   result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`, {
     method: "PATCH",
-    body: { tier: 2 },
+    body: { tier: 2, preferredContactMethod: "email" },
   }));
-  assert.equal(result.response.status, 400);
-  assert.match(result.payload.error, /rationale/i);
-
-  result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`, {
-    method: "PATCH",
-    body: {
-      tier: 2,
-      tierRationale: "Returns consistently and is generous with trust.",
-      preferredContactMethod: "email",
-    },
-  }));
-  assert.equal(result.response.status, 200);
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(result.payload.person.tier, 2);
-  assert.equal(result.payload.person.tierRationale, "Returns consistently and is generous with trust.");
+  assert.equal(result.payload.person.tierRationale, "");
 
   result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}/identities`, {
     method: "POST",

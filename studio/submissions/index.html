@@ -1293,7 +1293,7 @@
   function buildSubnav() {
     let html = "";
     if (activeTab === "people") {
-      html = [["directory","Directory"],["attention","Needs Attention"],["integrations","Integrations & Imports"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["directory","Directory"],["attention","Needs Attention"],["outreach","Outreach"],["integrations","Integrations & Imports"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "tattoo") {
       html = `
         <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
@@ -5880,6 +5880,6 @@ ${meetingLines}
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=multi-styles-legend-variants"></script>
-<script src="/studio/people-manager.js?v=4"></script>
+<script src="/studio/people-manager.js?v=7"></script>
 </body>
 </html>

@@ -407,23 +407,30 @@ function personInsert(database, personId, contact, eligibility, now) {
     contact.displayName || contact.name || contact.email || contact.phone || contact.instagram,
     200,
   ) || "Construct contact";
-  const preferredContactMethod = contact.email
-    ? "email"
-    : contact.phone
-      ? "phone"
-      : contact.instagram
-        ? "instagram"
-        : "";
+  const requestedContactMethod = valueString(
+    contact.preferredContactMethod || contact.preferred_contact_method,
+    20,
+  );
+  const preferredContactMethod = ["email", "phone", "instagram", "none"].includes(requestedContactMethod)
+    ? requestedContactMethod
+    : contact.email
+      ? "email"
+      : contact.phone
+        ? "phone"
+        : contact.instagram
+          ? "instagram"
+          : "";
   return database.prepare(
     `INSERT INTO crm_people(
-      id,display_name,organization,pronouns,instagram,relationship_status,
+      id,display_name,preferred_name,organization,pronouns,instagram,relationship_status,
       preferred_contact_method,eligibility_at,eligibility_reason,
       eligibility_source_provider,eligibility_source_type,
-      eligibility_source_id,created_at,updated_at
-    ) VALUES(?,?,?,?,?,'active',?,?,?,?,?,?,?,?)`
+      eligibility_source_id,referral_source,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?)`
   ).bind(
     personId,
     displayName,
+    valueString(contact.preferredName || contact.preferred_name, 200),
     valueString(contact.organization, 200),
     valueString(contact.pronouns, 100),
     normalizeInstagram(contact.instagram),
@@ -433,6 +440,7 @@ function personInsert(database, personId, contact, eligibility, now) {
     eligibility.sourceProvider,
     eligibility.sourceType,
     eligibility.sourceId,
+    valueString(contact.referralSource || contact.referral_source, 120),
     now,
     now,
   );
@@ -528,15 +536,23 @@ function personEnrichmentStatement(database, personId, contact, now) {
   const email = normalizeEmail(contact.email);
   const phone = valueString(contact.phone, 80);
   const organization = valueString(contact.organization, 200);
+  const preferredName = valueString(contact.preferredName || contact.preferred_name, 200);
   const pronouns = valueString(contact.pronouns, 100);
   const instagram = normalizeInstagram(contact.instagram);
-  const preferredContactMethod = email
-    ? "email"
-    : phone
-      ? "phone"
-      : instagram
-        ? "instagram"
-        : "";
+  const requestedContactMethod = valueString(
+    contact.preferredContactMethod || contact.preferred_contact_method,
+    20,
+  );
+  const preferredContactMethod = ["email", "phone", "instagram", "none"].includes(requestedContactMethod)
+    ? requestedContactMethod
+    : email
+      ? "email"
+      : phone
+        ? "phone"
+        : instagram
+          ? "instagram"
+          : "";
+  const referralSource = valueString(contact.referralSource || contact.referral_source, 120);
   return database.prepare(
     `UPDATE crm_people
      SET display_name=CASE
@@ -554,6 +570,7 @@ function personEnrichmentStatement(database, personId, contact, now) {
            ) THEN ?
            ELSE display_name
          END,
+         preferred_name=CASE WHEN preferred_name='' AND ?!='' THEN ? ELSE preferred_name END,
          organization=CASE WHEN organization='' AND ?!='' THEN ? ELSE organization END,
          pronouns=CASE WHEN pronouns='' AND ?!='' THEN ? ELSE pronouns END,
          instagram=CASE WHEN instagram='' AND ?!='' THEN ? ELSE instagram END,
@@ -561,6 +578,7 @@ function personEnrichmentStatement(database, personId, contact, now) {
            WHEN preferred_contact_method='' AND ?!='' THEN ?
            ELSE preferred_contact_method
          END,
+         referral_source=CASE WHEN referral_source='' AND ?!='' THEN ? ELSE referral_source END,
          updated_at=?
      WHERE id=?`
   ).bind(
@@ -568,6 +586,8 @@ function personEnrichmentStatement(database, personId, contact, now) {
     email,
     phone,
     displayName,
+    preferredName,
+    preferredName,
     organization,
     organization,
     pronouns,
@@ -576,6 +596,8 @@ function personEnrichmentStatement(database, personId, contact, now) {
     instagram,
     preferredContactMethod,
     preferredContactMethod,
+    referralSource,
+    referralSource,
     now,
     personId,
   );

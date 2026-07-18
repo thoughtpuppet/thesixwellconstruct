@@ -47,7 +47,7 @@ const IMPORT_CLASSIFICATIONS = new Set([
 const IMPORT_DECISIONS = new Set(["create", "link", "skip", "review"]);
 const IMPORT_FIELDS = new Set([
   "name", "first_name", "last_name", "email", "phone", "instagram",
-  "organization", "pronouns", "date", "node", "interaction", "amount",
+  "organization", "pronouns", "referral_source", "date", "node", "interaction", "amount",
   "tip", "currency", "payment_reference", "tags", "notes", "tier",
   "consent", "provider_id", "display_name", "preferred_name", "occurred_at",
   "interaction_type", "node_id", "external_id",
@@ -208,6 +208,7 @@ function personView(row) {
     tierRationale: row.tier_rationale || "",
     tierReviewedAt: row.tier_reviewed_at || null,
     preferredContactMethod: row.preferred_contact_method || "",
+    referralSource: row.referral_source || "",
     summary: row.summary || "",
     archivePersonId: row.archive_person_id || null,
     mergedIntoId: row.merged_into_id || null,
@@ -738,6 +739,8 @@ async function handleGetPerson(database, requestedId) {
     tierHistoryResult,
     auditResult,
     aliasesResult,
+    consentEventsResult,
+    communicationsResult,
   ] = await Promise.all([
     bindScope(`SELECT * FROM crm_identities WHERE ${scope} AND active=1
       ORDER BY kind,is_primary DESC,created_at`),
@@ -764,6 +767,10 @@ async function handleGetPerson(database, requestedId) {
     bindScope(`SELECT * FROM crm_tier_history WHERE ${scope} ORDER BY created_at DESC LIMIT 100`),
     bindScope(`SELECT * FROM crm_audit_events WHERE ${scope} ORDER BY created_at DESC LIMIT 250`),
     database.prepare("SELECT id,display_name,merged_into_id,updated_at FROM crm_people WHERE merged_into_id=? ORDER BY display_name").bind(canonicalId).all(),
+    bindScope(`SELECT * FROM crm_consent_events WHERE ${scope}
+      ORDER BY occurred_at DESC,created_at DESC LIMIT 250`),
+    bindScope(`SELECT * FROM crm_communications WHERE ${scope}
+      ORDER BY created_at DESC LIMIT 250`),
   ]);
   return json({
     person: personView(row),
@@ -793,6 +800,11 @@ async function handleGetPerson(database, requestedId) {
     })),
     tierHistory: tierHistoryResult.results || [],
     audit: auditResult.results || [],
+    consentEvents: (consentEventsResult.results || []).map((item) => ({
+      ...item,
+      evidence: parseJson(item.evidence_json, {}),
+    })),
+    communications: communicationsResult.results || [],
   });
 }
 
@@ -820,9 +832,6 @@ async function handleCreatePerson(request, database) {
   const tierResult = normalizeTier(body.tier);
   if (tierResult.error) return failure(tierResult.error, 400);
   const rationale = asString(body.tierRationale, 2000);
-  if (tierResult.value !== null && !rationale) {
-    return failure("A tier rationale is required.", 400);
-  }
   const personId = id("crm-person");
   const now = nowIso();
   const statements = [
@@ -830,10 +839,10 @@ async function handleCreatePerson(request, database) {
       INSERT INTO crm_people(
         id,display_name,preferred_name,organization,pronouns,instagram,
         relationship_status,tier,tier_rationale,tier_reviewed_at,
-        preferred_contact_method,summary,archive_person_id,
+        preferred_contact_method,referral_source,summary,archive_person_id,
         eligibility_at,eligibility_reason,eligibility_source_provider,
         eligibility_source_type,eligibility_source_id,created_at,updated_at
-      ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).bind(
       personId,
       displayName || email || phone || `@${instagram}`,
@@ -847,6 +856,7 @@ async function handleCreatePerson(request, database) {
       CONTACT_METHODS.has(asString(body.preferredContactMethod, 20))
         ? asString(body.preferredContactMethod, 20)
         : "",
+      asString(body.referralSource, 120),
       asString(body.summary, 5000),
       asNullableString(body.archivePersonId, 120),
       now,
@@ -924,6 +934,7 @@ async function handleUpdatePerson(request, database, requestedId) {
   if (hasOwn(body, "organization")) set("organization", asString(body.organization, 200));
   if (hasOwn(body, "pronouns")) set("pronouns", asString(body.pronouns, 100));
   if (hasOwn(body, "instagram")) set("instagram", normalizeInstagram(body.instagram));
+  if (hasOwn(body, "referralSource")) set("referral_source", asString(body.referralSource, 120));
   if (hasOwn(body, "summary")) set("summary", asString(body.summary, 5000));
   if (hasOwn(body, "archivePersonId")) set("archive_person_id", asNullableString(body.archivePersonId, 120));
   if (hasOwn(body, "preferredContactMethod")) {
@@ -952,7 +963,6 @@ async function handleUpdatePerson(request, database, requestedId) {
     const currentTier = current.tier === null || current.tier === undefined ? null : Number(current.tier);
     if (normalized.value !== currentTier) {
       const rationale = asString(body.tierRationale, 2000);
-      if (!rationale) return failure("A rationale is required whenever the tier changes.", 400);
       set("tier", normalized.value);
       set("tier_rationale", rationale);
       set("tier_reviewed_at", nowIso());
@@ -1077,6 +1087,16 @@ async function handleDeletePerson(request, database, requestedId) {
     `, 1, [now]));
   }
   statements.push(
+    bindScope(`UPDATE crm_consent_events SET person_id=NULL
+      WHERE person_id IN (${placeholders})`),
+    bindScope(`UPDATE crm_outreach_recipients SET person_id=NULL
+      WHERE person_id IN (${placeholders})`),
+    bindScope(`UPDATE crm_communications SET person_id=NULL
+      WHERE person_id IN (${placeholders})`),
+    bindScope(`UPDATE crm_marketing_subscriptions SET person_id=NULL
+      WHERE person_id IN (${placeholders})`),
+    bindScope(`UPDATE crm_suppressions SET person_id=NULL
+      WHERE person_id IN (${placeholders})`),
     bindScope(`DELETE FROM crm_import_rows
       WHERE matched_person_id IN (${placeholders})
          OR target_person_id IN (${placeholders})
@@ -1089,8 +1109,6 @@ async function handleDeletePerson(request, database, requestedId) {
          OR (resource_type='person' AND resource_id IN (${placeholders}))`, 2),
     bindScope(`DELETE FROM crm_tier_history WHERE person_id IN (${placeholders})`),
     bindScope(`DELETE FROM crm_person_tags WHERE person_id IN (${placeholders})`),
-    bindScope(`DELETE FROM crm_suppressions WHERE person_id IN (${placeholders})`),
-    bindScope(`DELETE FROM crm_marketing_subscriptions WHERE person_id IN (${placeholders})`),
     bindScope(`DELETE FROM crm_attendance WHERE person_id IN (${placeholders})`),
     bindScope(`DELETE FROM crm_followups WHERE person_id IN (${placeholders})`),
     bindScope(`DELETE FROM crm_notes WHERE person_id IN (${placeholders})`),
@@ -1967,6 +1985,7 @@ function suggestMapping(headers) {
     ["instagram", /instagram|insta|ig handle|social handle/],
     ["organization", /organization|organisation|company|business/],
     ["pronouns", /pronouns?/],
+    ["referral_source", /referral|heard|how.*find|source/],
     ["date", /^date$|created|booking date|appointment date|purchase date|joined/],
     ["node", /^node$|venture|construct node/],
     ["interaction", /interaction|engagement|service|booking type|client type/],
@@ -2151,6 +2170,7 @@ function normalizedImportRow(rowObject, mapping, config) {
     instagram,
     organization: asString(mappedCell(rowObject, mapping, "organization"), 200),
     pronouns: asString(mappedCell(rowObject, mapping, "pronouns"), 100),
+    referralSource: asString(mappedCell(rowObject, mapping, "referral_source"), 120),
     occurredAt: date.value || config.sourcePeriodEnd || config.sourcePeriodStart || null,
     approximateDate: Boolean(date.approximate || (!date.value && (config.sourcePeriodStart || config.sourcePeriodEnd))),
     nodeId: asString(mappedCell(rowObject, mapping, "node"), 120) || config.defaultNodeId,
@@ -2814,10 +2834,10 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
   const personInsert = database.prepare(`
     INSERT INTO crm_people(
       id,display_name,preferred_name,organization,pronouns,instagram,
-      relationship_status,preferred_contact_method,import_batch_id,
+      relationship_status,preferred_contact_method,referral_source,import_batch_id,
       eligibility_at,eligibility_reason,eligibility_source_provider,
       eligibility_source_type,eligibility_source_id,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?)
+    ) VALUES(?,?,?,?,?,?,'active',?,?,?,?,?,?,?,?,?,?)
   `).bind(
     personId,
     normalized.name || normalized.email || normalized.phoneDisplay || `@${normalized.instagram}` || "Legacy contact",
@@ -2826,6 +2846,7 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
     normalized.pronouns || "",
     normalized.instagram || "",
     normalized.email ? "email" : normalized.phone ? "phone" : normalized.instagram ? "instagram" : "",
+    normalized.referralSource || "",
     batch.id,
     now,
     "studio_csv_import",
@@ -2899,6 +2920,7 @@ async function applyImportRow(database, batch, row) {
         pronouns=CASE WHEN pronouns='' THEN ? ELSE pronouns END,
         instagram=CASE WHEN instagram='' THEN ? ELSE instagram END,
         preferred_name=CASE WHEN preferred_name='' THEN ? ELSE preferred_name END,
+        referral_source=CASE WHEN referral_source='' THEN ? ELSE referral_source END,
         updated_at=?
       WHERE id=?
     `).bind(
@@ -2906,6 +2928,7 @@ async function applyImportRow(database, batch, row) {
       normalized.pronouns || "",
       normalized.instagram || "",
       normalized.preferredName || "",
+      normalized.referralSource || "",
       now,
       resolved.personId,
     ),
@@ -4127,7 +4150,7 @@ async function handlePeopleExport(database) {
   const headers = [
     "person_id", "display_name", "preferred_name", "organization", "pronouns",
     "relationship_status", "tier", "tier_rationale", "primary_email",
-    "primary_phone", "preferred_contact_method", "effective_consent", "tags",
+    "primary_phone", "preferred_contact_method", "referral_source", "effective_consent", "tags",
     "nodes", "interaction_count", "last_interaction_at", "settled_gross_cents",
     "refund_cents", "net_spend_cents", "tip_cents", "pending_cents",
     "next_followup_at", "relationship_summary",
@@ -4147,6 +4170,7 @@ async function handlePeopleExport(database) {
       person.primaryEmail,
       person.primaryPhone,
       person.preferredContactMethod,
+      person.referralSource,
       consent.get(person.id) || "unknown",
       person.tags.join(", "),
       person.nodes.join(", "),

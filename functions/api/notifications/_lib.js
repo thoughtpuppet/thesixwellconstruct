@@ -427,6 +427,49 @@ async function sendTransactionalEmail(env, message) {
   }
 }
 
+export async function sendCrmFollowupEmail(env, message = {}) {
+  const to = asString(message.to);
+  const subject = asString(message.subject);
+  const body = asString(message.text);
+  if (!to || !subject || !body) {
+    return { ok: false, skipped: true, error: "Recipient, subject, and message are required." };
+  }
+  return sendTransactionalEmail(env, {
+    to,
+    subject,
+    text: body,
+    templateKey: "crm_relationship_followup",
+    relatedType: "crm_person",
+    relatedId: asString(message.personId) || null,
+    idempotencyKey: asString(message.idempotencyKey)
+      || `crm_relationship_followup:${asString(message.communicationId) || crypto.randomUUID()}`,
+  });
+}
+
+export async function sendCommunicationPreferencesLink(env, message = {}) {
+  const to = asString(message.to);
+  const url = asString(message.url);
+  if (!to || !url) {
+    return { ok: false, skipped: true, error: "Recipient and preferences URL are required." };
+  }
+  return sendTransactionalEmail(env, {
+    to,
+    subject: "Manage your Six.Well communication preferences",
+    text: [
+      "Use this secure link to review or change your Six.Well email preferences:",
+      "",
+      url,
+      "",
+      "This link expires in 30 minutes. If you did not request it, you can ignore this email.",
+    ].join("\n"),
+    templateKey: "crm_communication_preferences",
+    relatedType: "communication_preferences",
+    relatedId: asString(message.tokenId) || null,
+    idempotencyKey: asString(message.idempotencyKey)
+      || `crm_communication_preferences:${asString(message.tokenId) || crypto.randomUUID()}`,
+  });
+}
+
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     headers: {

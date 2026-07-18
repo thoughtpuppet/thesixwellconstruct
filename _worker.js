@@ -86,6 +86,11 @@ import {
 import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
 import { handleConstructApi } from "./functions/api/construct/_lib.js";
 import { handleAdminCrmApi } from "./functions/api/crm/_lib.js";
+import {
+  handleAdminOutreachApi,
+  handlePublicOutreachApi,
+  processDueOutreach,
+} from "./functions/api/outreach/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -786,8 +791,19 @@ export default {
       return handleConstructApi(request, env);
     }
 
+    if (
+      url.pathname === "/api/admin/crm/outreach"
+      || url.pathname.startsWith("/api/admin/crm/outreach/")
+    ) {
+      return handleAdminOutreachApi(request, env);
+    }
+
     if (url.pathname === "/api/admin/crm" || url.pathname.startsWith("/api/admin/crm/")) {
       return handleAdminCrmApi(request, env);
+    }
+
+    if (url.pathname === "/api/outreach" || url.pathname.startsWith("/api/outreach/")) {
+      return handlePublicOutreachApi(request, env);
     }
 
     if (url.pathname.startsWith("/api/shop/")) {
@@ -897,5 +913,6 @@ export default {
     ctx.waitUntil(sendDueEventTicketReminders(env));
     ctx.waitUntil(reapStalePendingTickets(env));
     ctx.waitUntil(reapExpiredBookingHolds(env));
+    ctx.waitUntil(processDueOutreach(env));
   },
 };

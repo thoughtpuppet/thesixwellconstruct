@@ -53,6 +53,22 @@
     label.insertAdjacentElement("afterend", note);
   }
 
+  function ensureMarketingConsent(form) {
+    if (!form || form.querySelector("[data-marketing-consent]")) return;
+    if (!form.querySelector('[name="email"]')) return;
+    const wrap = document.createElement("div");
+    wrap.className = "marketing-consent-options";
+    wrap.dataset.marketingConsent = "1";
+    wrap.innerHTML = `
+      <p class="marketing-consent-heading">Optional updates</p>
+      <label class="marketing-consent-choice"><input type="checkbox" name="newsletter_consent" value="yes"><span>Yes, send me The Six.Well newsletter by email. This is optional and I can unsubscribe at any time.</span></label>
+      ${form.querySelector('[name="phone"]') ? '<label class="marketing-consent-choice"><input type="checkbox" name="sms_marketing_consent" value="yes"><span>Yes, send me occasional Six.Well marketing texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</span></label>' : ""}
+      <a class="marketing-consent-manage" href="/preferences/">Manage communication preferences</a>
+    `;
+    const submit = form.querySelector('[type="submit"]');
+    form.insertBefore(wrap, submit?.closest(".submit-row,.form-actions,.actions") || submit || null);
+  }
+
   function initBookingCalendar(options) {
     const {
       filterBookingTypes,
@@ -123,6 +139,7 @@
     }
 
     const form = document.getElementById("consultForm");
+    ensureMarketingConsent(form);
     const submitBtn = document.getElementById("submitBtn");
     const formError = document.getElementById("formError");
     const calGrid = document.getElementById("calGrid");
