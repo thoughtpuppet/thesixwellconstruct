@@ -314,9 +314,17 @@ function personSelectSql(where = "1=1") {
         THEN -t.amount_cents WHEN t.status='pending' THEN t.amount_cents ELSE 0 END),0)
        FROM crm_transactions t
        WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1) pending_cents,
-      (SELECT GROUP_CONCAT(DISTINCT x.node_id) FROM crm_interactions x
-       WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1
-         AND x.node_id IS NOT NULL) nodes,
+      (SELECT GROUP_CONCAT(DISTINCT node_id) FROM (
+        SELECT x.node_id node_id FROM crm_interactions x
+        WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1
+        UNION ALL
+        SELECT t.node_id node_id FROM crm_transactions t
+        WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1
+        UNION ALL
+        SELECT 'node-events' node_id FROM crm_attendance a
+        WHERE a.person_id IN (${PERSON_SCOPE_SQL}) AND a.active=1
+       ) scoped_nodes
+       WHERE node_id IS NOT NULL AND node_id!='') nodes,
       (SELECT GROUP_CONCAT(DISTINCT tg.name) FROM crm_person_tags pt
        JOIN crm_tags tg ON tg.id=pt.tag_id
        WHERE pt.person_id IN (${PERSON_SCOPE_SQL})) tags,
@@ -603,9 +611,15 @@ async function handleListPeople(request, database) {
   }
   const node = asString(url.searchParams.get("nodeId") || url.searchParams.get("node"), 120);
   if (node) {
-    filters.push(`EXISTS(SELECT 1 FROM crm_interactions x
-      WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1 AND x.node_id=?)`);
-    values.push(node);
+    filters.push(`(
+      EXISTS(SELECT 1 FROM crm_interactions x
+        WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1 AND x.node_id=?)
+      OR EXISTS(SELECT 1 FROM crm_transactions t
+        WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1 AND t.node_id=?)
+      OR (?='node-events' AND EXISTS(SELECT 1 FROM crm_attendance a
+        WHERE a.person_id IN (${PERSON_SCOPE_SQL}) AND a.active=1))
+    )`);
+    values.push(node, node, node);
   }
   const interaction = asString(
     url.searchParams.get("interactionType") || url.searchParams.get("interaction"),

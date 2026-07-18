@@ -177,6 +177,38 @@ test("People directory SQL avoids D1-incompatible correlated sort expressions", 
   assert.match(source, /COALESCE\(\s*\(SELECT i\.value FROM crm_identities i/);
 });
 
+test("People UI gives canonical Construct nodes their source colors", () => {
+  const source = readFileSync(join(ROOT, "studio", "people-manager.js"), "utf8");
+  const styles = readFileSync(join(ROOT, "studio", "people-manager.css"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const expectedNodes = [
+    ["node-tattoos", "--color-tattooing", "#6E0404"],
+    ["node-art", "--color-art", "#0039BD"],
+    ["node-merch", "--color-merch", "#F08000"],
+    ["node-about", "--color-about", "#FCB467"],
+    ["node-events", "--color-events", "#005D25"],
+    ["node-music", "--color-music", "#A22F8D"],
+    ["node-writings", "--color-writings", "#FFE7CA"],
+    ["node-archive", "--color-archive", "#6D3D15"],
+    ["node-film", "--color-film", "#00857A"],
+    ["node-legend", "--color-about", "#FCB467"],
+  ];
+
+  assert.match(source, /function canonicalNodeId/);
+  assert.match(source, /function nodeChip/);
+  assert.match(source, /nodeChips\(nodes, \{ limit: 3 \}\)/);
+  assert.match(source, /nodeChips\(totals\.nodes\)/);
+  assert.match(source, /record\._recordKind === "attendance" \? "node-events"/);
+  for (const [nodeId, token, fallback] of expectedNodes) {
+    assert.ok(source.includes(`["${nodeId}", "${nodeId}"]`));
+    assert.ok(styles.includes(`[data-people-node="${nodeId}"]`));
+    assert.ok(styles.includes(`var(${token},${fallback})`));
+  }
+  assert.match(styles, /\.people-record\[data-people-node\]/);
+  assert.match(studio, /people-manager\.css\?v=2/);
+  assert.match(studio, /people-manager\.js\?v=2/);
+});
+
 function installSquareApiMock(testContext, {
   payments = [],
   refunds = [],
@@ -1697,6 +1729,57 @@ test("people profiles preserve manual tier judgment and calculate relationship a
   }));
   assert.equal(result.response.status, 409);
   assert.equal(result.payload.details.code, "EMAIL_ALREADY_CONNECTED");
+});
+
+test("People directory nodes include transaction and attendance-only involvement", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Cross Node Client",
+    email: "cross-node@example.test",
+  });
+  const occurredAt = "2026-07-10T18:00:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_transactions(
+      id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,
+      currency,occurred_at,source_provider,source_type,source_id,note,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'cross-node-merch',?,'node-merch','charge','settled',8500,0,
+      'USD',?,'test','node_contract','cross-node-merch','Merch purchase',
+      '{}',1,?,?
+    )
+  `).run(person.id, occurredAt, occurredAt, occurredAt);
+  database.prepare(`
+    INSERT INTO crm_attendance(
+      id,person_id,status,checked_in_at,source_provider,source_type,source_id,
+      metadata_json,active,created_at,updated_at
+    ) VALUES(
+      'cross-node-attendance',?,'checked_in',?,'test','node_contract',
+      'cross-node-attendance','{}',1,?,?
+    )
+  `).run(person.id, occurredAt, occurredAt, occurredAt);
+
+  let result = await responseJson(await api(
+    database,
+    "/api/admin/crm/people?q=cross%20node",
+  ));
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(
+    [...result.payload.people[0].nodes].sort(),
+    ["node-events", "node-merch"],
+  );
+
+  result = await responseJson(await api(
+    database,
+    "/api/admin/crm/people?nodeId=node-merch",
+  ));
+  assert.deepEqual(result.payload.people.map((entry) => entry.id), [person.id]);
+
+  result = await responseJson(await api(
+    database,
+    "/api/admin/crm/people?nodeId=node-events",
+  ));
+  assert.deepEqual(result.payload.people.map((entry) => entry.id), [person.id]);
 });
 
 test("manual transactions use request ids without treating human references as duplicates", async () => {

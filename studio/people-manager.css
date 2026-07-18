@@ -235,6 +235,62 @@
   overflow-wrap:anywhere;
 }
 
+[data-people-node="node-tattoos"] {
+  --people-node-color:var(--color-tattooing,#6E0404);
+  --people-node-ink:var(--text);
+}
+
+[data-people-node="node-art"] {
+  --people-node-color:var(--color-art,#0039BD);
+  --people-node-ink:var(--text);
+}
+
+[data-people-node="node-merch"] {
+  --people-node-color:var(--color-merch,#F08000);
+  --people-node-ink:var(--bg);
+}
+
+[data-people-node="node-events"] {
+  --people-node-color:var(--color-events,#005D25);
+  --people-node-ink:var(--text);
+}
+
+[data-people-node="node-music"] {
+  --people-node-color:var(--color-music,#A22F8D);
+  --people-node-ink:var(--text);
+}
+
+[data-people-node="node-writings"] {
+  --people-node-color:var(--color-writings,#FFE7CA);
+  --people-node-ink:var(--bg);
+}
+
+[data-people-node="node-archive"] {
+  --people-node-color:var(--color-archive,#6D3D15);
+  --people-node-ink:var(--text);
+}
+
+[data-people-node="node-film"] {
+  --people-node-color:var(--color-film,#00857A);
+  --people-node-ink:#fff;
+}
+
+[data-people-node="node-about"] {
+  --people-node-color:var(--color-about,#FCB467);
+  --people-node-ink:var(--bg);
+}
+
+[data-people-node="node-legend"] {
+  --people-node-color:var(--color-about,#FCB467);
+  --people-node-ink:var(--bg);
+}
+
+.people-node-chip[data-people-node] {
+  border-color:var(--people-node-color);
+  background:var(--people-node-color);
+  color:var(--people-node-ink);
+}
+
 .people-tier[data-tier="I"] {
   border-color:var(--accent);
   color:var(--accent);
@@ -452,6 +508,10 @@
   gap:9px;
   padding:12px;
   min-width:0;
+}
+
+.people-record[data-people-node] {
+  border-left-color:var(--people-node-color);
 }
 
 .people-record[data-kind="attention"] {

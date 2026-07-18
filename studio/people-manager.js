@@ -16,7 +16,37 @@
     ["node-archive", "Archive"],
     ["node-film", "Film"],
     ["node-about", "About"],
+    ["node-legend", "Legend"],
   ];
+  const NODE_LABELS = new Map(NODE_OPTIONS);
+  const NODE_ALIASES = new Map([
+    ["node-tattoos", "node-tattoos"],
+    ["tattoos", "node-tattoos"],
+    ["tattoo", "node-tattoos"],
+    ["tattooing", "node-tattoos"],
+    ["node-art", "node-art"],
+    ["art", "node-art"],
+    ["art-making", "node-art"],
+    ["node-merch", "node-merch"],
+    ["merch", "node-merch"],
+    ["merchandise", "node-merch"],
+    ["node-events", "node-events"],
+    ["event", "node-events"],
+    ["events", "node-events"],
+    ["node-music", "node-music"],
+    ["music", "node-music"],
+    ["node-writings", "node-writings"],
+    ["writing", "node-writings"],
+    ["writings", "node-writings"],
+    ["node-archive", "node-archive"],
+    ["archive", "node-archive"],
+    ["node-film", "node-film"],
+    ["film", "node-film"],
+    ["node-about", "node-about"],
+    ["about", "node-about"],
+    ["node-legend", "node-legend"],
+    ["legend", "node-legend"],
+  ]);
   const INTERACTION_OPTIONS = [
     ["inquiry", "Inquiry"],
     ["booking", "Booking"],
@@ -152,6 +182,12 @@
     }
   }
 
+  function metadataFrom(record) {
+    const direct = first(record, "metadata");
+    if (direct && typeof direct === "object" && !Array.isArray(direct)) return direct;
+    return jsonObject(first(record, "metadataJson", "metadata_json"));
+  }
+
   function truthy(value) {
     return value === true || value === 1 || value === "1" || value === "true";
   }
@@ -234,6 +270,58 @@
     return empty + options.map(([value, label]) => (
       `<option value="${attr(value)}" ${String(selected) === String(value) ? "selected" : ""}>${esc(label)}</option>`
     )).join("");
+  }
+
+  function nodeRawValue(value) {
+    return typeof value === "object" && value !== null
+      ? first(value, "nodeId", "node_id", "id", "slug", "name", "label")
+      : value;
+  }
+
+  function canonicalNodeId(value) {
+    const key = String(nodeRawValue(value) || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return NODE_ALIASES.get(key) || "";
+  }
+
+  function nodeLabel(value) {
+    const canonicalId = canonicalNodeId(value);
+    if (canonicalId) return NODE_LABELS.get(canonicalId) || canonicalId;
+    const raw = String(nodeRawValue(value) || "").trim();
+    if (!raw) return "";
+    return raw
+      .replace(/^node[-_\s]+/i, "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+
+  function nodeDataAttribute(value) {
+    const canonicalId = canonicalNodeId(value);
+    return canonicalId ? ` data-people-node="${attr(canonicalId)}"` : "";
+  }
+
+  function nodeChip(value) {
+    const label = nodeLabel(value);
+    return label
+      ? `<span class="people-node-chip"${nodeDataAttribute(value)}>${esc(label)}</span>`
+      : "";
+  }
+
+  function nodeChips(values, { limit = Number.POSITIVE_INFINITY } = {}) {
+    const seen = new Set();
+    const unique = [];
+    for (const value of values || []) {
+      const label = nodeLabel(value);
+      const key = canonicalNodeId(value) || label.toLowerCase();
+      if (!label || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(value);
+      if (unique.length >= limit) break;
+    }
+    return unique.map(nodeChip).join("");
   }
 
   function chips(values, className = "people-chip") {
@@ -584,7 +672,7 @@
       const phone = first(person, "primaryPhone", "primary_phone", "phone");
       const net = centsValue(person, "netSpendCents", "net_spend_cents", "lifetimeSpendCents", "lifetime_spend_cents");
       const last = first(person, "lastInteractionAt", "last_interaction_at", "updatedAt", "updated_at");
-      const nodes = listFrom(person, "nodes", "nodeIds", "node_ids").slice(0, 3);
+      const nodes = listFrom(person, "nodes", "nodeIds", "node_ids");
       return `
         <button class="people-person-row ${id === state.selectedPersonId ? "is-active" : ""}" type="button" data-person-id="${attr(id)}" aria-pressed="${id === state.selectedPersonId ? "true" : "false"}">
           <span class="people-person-row-top">
@@ -593,7 +681,7 @@
           </span>
           <span class="people-person-meta">${esc([email, phone].filter(Boolean).join(" · ") || "No contact identity")}</span>
           <span class="people-person-meta">${esc(formatMoney(net, first(person, "currency") || "USD"))} net · ${esc(formatDate(last))}</span>
-          ${nodes.length ? `<span class="people-chip-list">${chips(nodes, "people-node-chip")}</span>` : ""}
+          ${nodes.length ? `<span class="people-chip-list">${nodeChips(nodes, { limit: 3 })}</span>` : ""}
         </button>`;
     }).join("");
     const pageStart = state.directoryCount ? state.directoryOffset + 1 : 0;
@@ -720,7 +808,7 @@
     return ["refund", "credit", "reversal"].includes(kind) ? -amount : amount;
   }
 
-  function profileTotals(person, transactions, interactions) {
+  function profileTotals(person, transactions, interactions, attendance = []) {
     const settledTransactions = transactions.filter((transaction) => {
       const status = normalizedState(first(transaction, "status", "state") || "settled");
       return ["settled", "completed", "paid", "succeeded", "manual"].includes(status);
@@ -744,10 +832,13 @@
     const tips = directTips.found ? directTips.value : nestedTips.found ? nestedTips.value : calculatedTips;
     const nodeValues = new Set();
     listFrom(person, "nodes", "nodeIds", "node_ids").forEach((node) => node && nodeValues.add(String(node)));
-    [...interactions, ...transactions].forEach((record) => {
-      const node = first(record, "nodeName", "node_name", "nodeId", "node_id", "node");
+    [...interactions, ...transactions, ...attendance].forEach((record) => {
+      const metadata = metadataFrom(record);
+      const node = first(record, "nodeName", "node_name", "nodeId", "node_id", "node")
+        || first(metadata, "nodeName", "node_name", "nodeId", "node_id", "node");
       if (node) nodeValues.add(String(node));
     });
+    if (attendance.length) nodeValues.add("node-events");
     return { net, gross, tips, nodes: [...nodeValues] };
   }
 
@@ -786,8 +877,8 @@
       ...transactions.map((item) => ({ ...item, _recordKind: "transaction" })),
       ...attendance.map((item) => ({ ...item, _recordKind: "attendance" })),
     ].sort((a, b) => {
-      const aDate = new Date(first(a, "occurredAt", "occurred_at", "createdAt", "created_at", "checkedInAt", "checked_in_at") || 0).getTime();
-      const bDate = new Date(first(b, "occurredAt", "occurred_at", "createdAt", "created_at", "checkedInAt", "checked_in_at") || 0).getTime();
+      const aDate = new Date(first(a, "occurredAt", "occurred_at", "checkedInAt", "checked_in_at", "createdAt", "created_at") || 0).getTime();
+      const bDate = new Date(first(b, "occurredAt", "occurred_at", "checkedInAt", "checked_in_at", "createdAt", "created_at") || 0).getTime();
       return bDate - aDate;
     });
     if (!records.length) return '<div class="people-empty">No interactions yet.</div>';
@@ -797,17 +888,21 @@
         : record._recordKind === "attendance"
           ? "attendance"
           : first(record, "kind", "type", "interactionType", "interaction_type") || "interaction";
-      const metadata = objectFrom(record, "metadata");
-      const label = first(record, "label", "title", "description", "note", "eventTitle", "event_title") || String(kind).replace(/_/g, " ");
+      const metadata = metadataFrom(record);
+      const label = first(record, "label", "title", "description", "note", "eventTitle", "event_title")
+        || first(metadata, "label", "title", "eventTitle", "event_title")
+        || String(kind).replace(/_/g, " ");
       const detailText = first(record, "details", "body") || first(metadata, "details", "note");
-      const when = first(record, "occurredAt", "occurred_at", "createdAt", "created_at", "checkedInAt", "checked_in_at");
-      const node = first(record, "nodeName", "node_name", "nodeId", "node_id", "node");
+      const when = first(record, "occurredAt", "occurred_at", "checkedInAt", "checked_in_at", "createdAt", "created_at");
+      const node = first(record, "nodeName", "node_name", "nodeId", "node_id", "node")
+        || first(metadata, "nodeName", "node_name", "nodeId", "node_id", "node")
+        || (record._recordKind === "attendance" ? "node-events" : "");
       const channel = first(record, "channel");
       const source = first(record, "sourceProvider", "source_provider", "provider", "source") || "manual";
       const amount = record._recordKind === "transaction"
         ? `<span class="people-record-amount">${esc(formatMoney(transactionSignedCents(record), first(record, "currency") || "USD"))}</span>`
         : "";
-      return `<article class="people-record">
+      return `<article class="people-record"${nodeDataAttribute(node)}>
         <div class="people-record-head">
           <div>
             <strong class="people-record-title">${esc(label)}</strong>
@@ -816,7 +911,7 @@
           ${amount}
         </div>
         <div class="people-chip-list">
-          ${node ? `<span class="people-node-chip">${esc(node)}</span>` : ""}
+          ${nodeChip(node)}
           ${channel ? `<span class="people-chip">${esc(channel)}</span>` : ""}
           ${statusChip(first(record, "status", "state") || "recorded")}
         </div>
@@ -1182,7 +1277,7 @@
     const attendance = listFrom(payload, "attendance");
     const tierHistory = listFrom(payload, "tierHistory", "tier_history");
     const audit = listFrom(payload, "audit", "auditEvents", "audit_events");
-    const totals = profileTotals(person, transactions, interactions);
+    const totals = profileTotals(person, transactions, interactions, attendance);
     const email = contactValue(identities, "email", person);
     const phone = contactValue(identities, "phone", person);
     const tier = tierValue(person);
@@ -1204,7 +1299,7 @@
         </div>
         <div class="people-chip-list">
           ${chips(tags)}
-          ${totals.nodes.map((node) => `<span class="people-node-chip">${esc(node)}</span>`).join("")}
+          ${nodeChips(totals.nodes)}
         </div>
         <div class="people-stats">
           <div class="people-stat"><span>Net spend</span><strong>${esc(formatMoney(totals.net, first(person, "currency") || "USD"))}</strong></div>
