@@ -229,6 +229,7 @@ test("People UI gives canonical Construct nodes their source colors", () => {
 
   assert.match(source, /function canonicalNodeId/);
   assert.match(source, /function nodeChip/);
+  assert.match(source, /function emptyState/);
   assert.match(source, /nodeChips\(nodes, \{ limit: 3 \}\)/);
   assert.match(source, /nodeChips\(totals\.nodes\)/);
   assert.match(source, /record\._recordKind === "attendance" \? "node-events"/);
@@ -239,7 +240,7 @@ test("People UI gives canonical Construct nodes their source colors", () => {
   }
   assert.match(styles, /\.people-record\[data-people-node\]/);
   assert.match(studio, /people-manager\.css\?v=2/);
-  assert.match(studio, /people-manager\.js\?v=7/);
+  assert.match(studio, /people-manager\.js\?v=8/);
   assert.match(source, /data-delete-person/);
   assert.match(source, /method:\s*"DELETE"/);
   assert.doesNotMatch(source, /A rationale is required/);

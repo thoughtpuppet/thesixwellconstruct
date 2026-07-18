@@ -343,6 +343,10 @@
     return `<div class="people-notice" data-kind="${attr(kind)}" role="${kind === "error" ? "alert" : "status"}">${esc(message)}</div>`;
   }
 
+  function emptyState(message) {
+    return `<div class="people-empty">${esc(message)}</div>`;
+  }
+
   function setTopStatus(message) {
     const status = elements().status;
     if (status) status.textContent = message;
