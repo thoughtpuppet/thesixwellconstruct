@@ -163,6 +163,7 @@ async function emailPersonMatch(database, email) {
   return {
     personId: ids.length === 1 && !shared ? ids[0] : null,
     ambiguous: shared || ids.length > 1,
+    shared,
     personIds: ids,
   };
 }
@@ -201,7 +202,14 @@ async function emailClaimOwner(database, normalizedEmail) {
     WHERE provider='crm_email_claim' AND external_id=?
     LIMIT 1
   `).bind(normalizedEmail).first();
-  return row?.person_id ? canonicalPersonId(database, row.person_id) : null;
+  const claimedPersonId = row?.person_id
+    ? await canonicalPersonId(database, row.person_id)
+    : null;
+  if (!claimedPersonId) return null;
+  const match = await emailPersonMatch(database, normalizedEmail);
+  return !match.shared && match.personIds.includes(claimedPersonId)
+    ? claimedPersonId
+    : null;
 }
 
 async function addEmailClaim(database, personId, normalizedEmail, now) {
@@ -276,28 +284,37 @@ async function addIdentity(database, personId, {
     }
     return;
   }
-  await database.prepare(`
-    INSERT OR IGNORE INTO crm_identities(
-      id,person_id,kind,value,normalized_value,provider,external_id,label,
-      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
-      active,created_at,updated_at
-    ) VALUES(?,?,?,?,?,?,?,'',?,?,0,?,?,?,1,?,?)
-  `).bind(
-    recordId("crm-identity"),
-    personId,
-    kind,
-    raw,
-    normalized,
-    provider,
-    externalId,
-    primary ? 1 : 0,
-    verified ? 1 : 0,
-    provider,
-    sourceType,
-    sourceId,
-    now,
-    now,
-  ).run();
+  const insertIdentity = (isPrimary) => database.prepare(`
+      INSERT OR IGNORE INTO crm_identities(
+        id,person_id,kind,value,normalized_value,provider,external_id,label,
+        is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+        active,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,'',?,?,0,?,?,?,1,?,?)
+    `).bind(
+      recordId("crm-identity"),
+      personId,
+      kind,
+      raw,
+      normalized,
+      provider,
+      externalId,
+      isPrimary ? 1 : 0,
+      verified ? 1 : 0,
+      provider,
+      sourceType,
+      sourceId,
+      now,
+      now,
+    );
+  const inserted = await insertIdentity(primary).run();
+  if (primary && Number(inserted?.meta?.changes || 0) === 0) {
+    const racedIdentity = await database.prepare(`
+      SELECT id FROM crm_identities
+      WHERE person_id=? AND kind=? AND normalized_value=? AND active=1
+      LIMIT 1
+    `).bind(personId, kind, normalized).first();
+    if (!racedIdentity) await insertIdentity(false).run();
+  }
 }
 
 async function addPayerNameHint(database, personId, {

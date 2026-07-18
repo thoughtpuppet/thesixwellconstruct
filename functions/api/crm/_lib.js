@@ -231,45 +231,82 @@ function personView(row) {
   };
 }
 
+function logicalIdentityRows(rows, canonicalId) {
+  const byValue = new Map();
+  for (const row of rows || []) {
+    const key = `${row.kind}\u0000${row.normalized_value}`;
+    const current = byValue.get(key);
+    if (!current) {
+      byValue.set(key, { ...row });
+      continue;
+    }
+    const rowScore = (row.person_id === canonicalId ? 8 : 0)
+      + (row.is_primary ? 4 : 0)
+      + (row.is_verified ? 2 : 0)
+      + (row.external_id ? 1 : 0);
+    const currentScore = (current.person_id === canonicalId ? 8 : 0)
+      + (current.is_primary ? 4 : 0)
+      + (current.is_verified ? 2 : 0)
+      + (current.external_id ? 1 : 0);
+    const retained = rowScore > currentScore ? { ...row } : current;
+    retained.is_primary = Math.max(Number(current.is_primary), Number(row.is_primary));
+    retained.is_verified = Math.max(Number(current.is_verified), Number(row.is_verified));
+    retained.is_shared = Math.max(Number(current.is_shared), Number(row.is_shared));
+    byValue.set(key, retained);
+  }
+  return [...byValue.values()];
+}
+
+const PERSON_SCOPE_SQL = `
+  SELECT scoped_person.id
+  FROM crm_people scoped_person
+  WHERE scoped_person.id=p.id OR scoped_person.merged_into_id=p.id
+`;
+
 function personSelectSql(where = "1=1") {
   return `
     SELECT p.*,
       (SELECT i.value FROM crm_identities i
-       WHERE i.person_id=p.id AND i.kind='email' AND i.active=1
-       ORDER BY i.is_primary DESC,i.created_at LIMIT 1) primary_email,
+       WHERE i.person_id IN (${PERSON_SCOPE_SQL}) AND i.kind='email' AND i.active=1
+       ORDER BY (i.person_id=p.id) DESC,i.is_primary DESC,i.created_at LIMIT 1) primary_email,
       (SELECT i.value FROM crm_identities i
-       WHERE i.person_id=p.id AND i.kind='phone' AND i.active=1
-       ORDER BY i.is_primary DESC,i.created_at LIMIT 1) primary_phone,
+       WHERE i.person_id IN (${PERSON_SCOPE_SQL}) AND i.kind='phone' AND i.active=1
+       ORDER BY (i.person_id=p.id) DESC,i.is_primary DESC,i.created_at LIMIT 1) primary_phone,
       (SELECT MAX(x.occurred_at) FROM crm_interactions x
-       WHERE x.person_id=p.id AND x.active=1) last_interaction_at,
+       WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1) last_interaction_at,
       (SELECT COUNT(*) FROM crm_interactions x
-       WHERE x.person_id=p.id AND x.active=1) interaction_count,
+       WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1) interaction_count,
       (SELECT COALESCE(SUM(CASE WHEN t.transaction_type='charge' AND t.status='settled'
         THEN t.amount_cents ELSE 0 END),0) FROM crm_transactions t
-       WHERE t.person_id=p.id AND t.active=1) settled_gross_cents,
+       WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1) settled_gross_cents,
       (SELECT COALESCE(SUM(CASE WHEN t.transaction_type='refund' AND t.status='settled'
         THEN t.amount_cents ELSE 0 END),0) FROM crm_transactions t
-       WHERE t.person_id=p.id AND t.active=1) refund_cents,
+       WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1) refund_cents,
       (SELECT COALESCE(SUM(CASE WHEN t.transaction_type='adjustment' AND t.status='settled'
         THEN t.amount_cents ELSE 0 END),0) FROM crm_transactions t
-       WHERE t.person_id=p.id AND t.active=1) adjustment_cents,
+       WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1) adjustment_cents,
       (SELECT COALESCE(SUM(CASE
         WHEN t.transaction_type='charge' AND t.status='settled' THEN t.amount_cents
         WHEN t.transaction_type='refund' AND t.status='settled' THEN -t.amount_cents
         WHEN t.transaction_type='adjustment' AND t.status='settled' THEN t.amount_cents
         ELSE 0 END),0) FROM crm_transactions t
-       WHERE t.person_id=p.id AND t.active=1) net_spend_cents,
+       WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1) net_spend_cents,
       (SELECT COALESCE(SUM(CASE WHEN t.status='settled' THEN t.tip_cents ELSE 0 END),0)
-       FROM crm_transactions t WHERE t.person_id=p.id AND t.active=1) tip_cents,
+       FROM crm_transactions t
+       WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1) tip_cents,
       (SELECT COALESCE(SUM(CASE WHEN t.status='pending' AND t.transaction_type='refund'
         THEN -t.amount_cents WHEN t.status='pending' THEN t.amount_cents ELSE 0 END),0)
-       FROM crm_transactions t WHERE t.person_id=p.id AND t.active=1) pending_cents,
+       FROM crm_transactions t
+       WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1) pending_cents,
       (SELECT GROUP_CONCAT(DISTINCT x.node_id) FROM crm_interactions x
-       WHERE x.person_id=p.id AND x.active=1 AND x.node_id IS NOT NULL) nodes,
+       WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1
+         AND x.node_id IS NOT NULL) nodes,
       (SELECT GROUP_CONCAT(DISTINCT tg.name) FROM crm_person_tags pt
-       JOIN crm_tags tg ON tg.id=pt.tag_id WHERE pt.person_id=p.id) tags,
+       JOIN crm_tags tg ON tg.id=pt.tag_id
+       WHERE pt.person_id IN (${PERSON_SCOPE_SQL})) tags,
       (SELECT MIN(f.due_at) FROM crm_followups f
-       WHERE f.person_id=p.id AND f.status='open' AND f.due_at IS NOT NULL) next_followup_at
+       WHERE f.person_id IN (${PERSON_SCOPE_SQL})
+         AND f.status='open' AND f.due_at IS NOT NULL) next_followup_at
     FROM crm_people p
     WHERE ${where}`;
 }
@@ -365,8 +402,29 @@ function identityStatement(database, personId, kind, value, options = {}) {
   );
 }
 
+function ensurePrimaryIdentityStatement(database, personId, kind, now = nowIso()) {
+  return database.prepare(`
+    UPDATE crm_identities
+    SET is_primary=1,updated_at=?
+    WHERE id=(
+      SELECT candidate.id
+      FROM crm_identities candidate
+      WHERE candidate.person_id=? AND candidate.kind=? AND candidate.active=1
+      ORDER BY candidate.is_primary DESC,candidate.is_verified DESC,
+        candidate.created_at,candidate.id
+      LIMIT 1
+    )
+    AND NOT EXISTS(
+      SELECT 1 FROM crm_identities current_primary
+      WHERE current_primary.person_id=? AND current_primary.kind=?
+        AND current_primary.active=1 AND current_primary.is_primary=1
+    )
+  `).bind(now, personId, kind, personId, kind);
+}
+
 function emailClaimStatement(database, personId, email, now, {
   ignoreConflict = false,
+  importBatchId = null,
 } = {}) {
   const normalized = normalizeEmail(email);
   if (!normalized) return null;
@@ -377,7 +435,7 @@ function emailClaimStatement(database, personId, email, now, {
       import_batch_id,active,created_at,updated_at
     ) VALUES(
       ?,?,'other',?,?,'crm_email_claim',?,'',0,0,0,
-      'system','email_claim',NULL,NULL,0,?,?
+      'system','email_claim',NULL,?,0,?,?
     )
   `).bind(
     id("crm-identity"),
@@ -385,9 +443,53 @@ function emailClaimStatement(database, personId, email, now, {
     normalized,
     normalized,
     normalized,
+    importBatchId,
     now,
     now,
   );
+}
+
+function reservationStatement(database, personId, provider, externalId, now, {
+  ignoreConflict = false,
+  importBatchId = null,
+} = {}) {
+  const normalizedProvider = asString(provider, 80);
+  const normalizedExternalId = asString(externalId, 500);
+  if (!normalizedProvider || !normalizedExternalId) return null;
+  return database.prepare(`
+    INSERT ${ignoreConflict ? "OR IGNORE " : ""}INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      import_batch_id,active,created_at,updated_at
+    ) VALUES(
+      ?,?,'other',?,?,?,?,'',0,0,0,
+      'system','record_claim',NULL,?,0,?,?
+    )
+  `).bind(
+    id("crm-identity"),
+    personId,
+    normalizedExternalId,
+    normalizedExternalId,
+    normalizedProvider,
+    normalizedExternalId,
+    importBatchId,
+    now,
+    now,
+  );
+}
+
+async function reservationPersonId(database, provider, externalId) {
+  const normalizedProvider = asString(provider, 80);
+  const normalizedExternalId = asString(externalId, 500);
+  if (!normalizedProvider || !normalizedExternalId) return null;
+  const row = await database.prepare(`
+    SELECT COALESCE(p.merged_into_id,p.id) person_id
+    FROM crm_identities i
+    JOIN crm_people p ON p.id=i.person_id
+    WHERE i.provider=? AND i.external_id=? AND p.anonymized_at IS NULL
+    LIMIT 1
+  `).bind(normalizedProvider, normalizedExternalId).first();
+  return row?.person_id || null;
 }
 
 async function emailClaimPersonId(database, email) {
@@ -400,7 +502,9 @@ async function emailClaimPersonId(database, email) {
     WHERE i.provider='crm_email_claim' AND i.external_id=?
     LIMIT 1
   `).bind(normalized).first();
-  return row?.person_id || null;
+  if (!row?.person_id) return null;
+  const match = await uniqueEmailMatch(database, normalized);
+  return match.personId === row.person_id ? row.person_id : null;
 }
 
 function tagStatements(database, personId, tags, options = {}) {
@@ -425,16 +529,31 @@ function tagStatements(database, personId, tags, options = {}) {
 
 async function uniqueEmailMatch(database, email) {
   const normalized = normalizeEmail(email);
-  if (!normalized) return { personId: null, count: 0 };
+  if (!normalized) {
+    return {
+      personId: null,
+      count: 0,
+      candidates: [],
+      ambiguous: false,
+      shared: false,
+    };
+  }
   const result = await database.prepare(`
-    SELECT DISTINCT COALESCE(p.merged_into_id,p.id) person_id
+    SELECT COALESCE(p.merged_into_id,p.id) person_id,i.is_shared
     FROM crm_identities i
     JOIN crm_people p ON p.id=i.person_id
-    WHERE i.kind='email' AND i.normalized_value=? AND i.active=1 AND i.is_shared=0
+    WHERE i.kind='email' AND i.normalized_value=? AND i.active=1
       AND p.anonymized_at IS NULL
   `).bind(normalized).all();
   const ids = [...new Set((result.results || []).map((row) => row.person_id).filter(Boolean))];
-  return { personId: ids.length === 1 ? ids[0] : null, count: ids.length, candidates: ids };
+  const shared = (result.results || []).some((row) => Boolean(row.is_shared));
+  return {
+    personId: ids.length === 1 && !shared ? ids[0] : null,
+    count: ids.length,
+    candidates: ids,
+    ambiguous: shared || ids.length > 1,
+    shared,
+  };
 }
 
 async function handleListPeople(request, database) {
@@ -446,10 +565,11 @@ async function handleListPeople(request, database) {
   if (q) {
     filters.push(`(
       LOWER(p.display_name) LIKE ? OR LOWER(p.preferred_name) LIKE ?
-      OR EXISTS(SELECT 1 FROM crm_identities i WHERE i.person_id=p.id AND i.active=1
+      OR EXISTS(SELECT 1 FROM crm_identities i
+        WHERE i.person_id IN (${PERSON_SCOPE_SQL}) AND i.active=1
         AND (LOWER(i.value) LIKE ? OR i.normalized_value LIKE ?))
       OR EXISTS(SELECT 1 FROM crm_person_tags pt JOIN crm_tags tg ON tg.id=pt.tag_id
-        WHERE pt.person_id=p.id AND LOWER(tg.name) LIKE ?)
+        WHERE pt.person_id IN (${PERSON_SCOPE_SQL}) AND LOWER(tg.name) LIKE ?)
     )`);
     const like = `%${q}%`;
     values.push(like, like, like, like, like);
@@ -467,7 +587,8 @@ async function handleListPeople(request, database) {
   }
   const node = asString(url.searchParams.get("nodeId") || url.searchParams.get("node"), 120);
   if (node) {
-    filters.push("EXISTS(SELECT 1 FROM crm_interactions x WHERE x.person_id=p.id AND x.active=1 AND x.node_id=?)");
+    filters.push(`EXISTS(SELECT 1 FROM crm_interactions x
+      WHERE x.person_id IN (${PERSON_SCOPE_SQL}) AND x.active=1 AND x.node_id=?)`);
     values.push(node);
   }
   const interaction = asString(
@@ -475,40 +596,48 @@ async function handleListPeople(request, database) {
     120,
   );
   if (interaction) {
-    filters.push("EXISTS(SELECT 1 FROM crm_interactions x WHERE x.person_id=p.id AND x.active=1 AND x.interaction_type=?)");
+    filters.push(`EXISTS(SELECT 1 FROM crm_interactions x
+      WHERE x.person_id IN (${PERSON_SCOPE_SQL})
+        AND x.active=1 AND x.interaction_type=?)`);
     values.push(interaction);
   }
   const tag = asString(url.searchParams.get("tag"), 80).toLowerCase();
   if (tag) {
     filters.push(`EXISTS(SELECT 1 FROM crm_person_tags pt JOIN crm_tags tg ON tg.id=pt.tag_id
-      WHERE pt.person_id=p.id AND (tg.slug=? OR LOWER(tg.name)=?))`);
+      WHERE pt.person_id IN (${PERSON_SCOPE_SQL})
+        AND (tg.slug=? OR LOWER(tg.name)=?))`);
     values.push(tagSlug(tag), tag);
   }
   const consent = asString(url.searchParams.get("consent"), 40);
   if (consent === "subscribed") {
     filters.push(`EXISTS(
       SELECT 1 FROM crm_marketing_subscriptions s
-      WHERE s.person_id=p.id AND s.active=1 AND s.status='subscribed'
+      WHERE s.person_id IN (${PERSON_SCOPE_SQL}) AND s.active=1 AND s.status='subscribed'
     ) AND NOT EXISTS(
       SELECT 1 FROM crm_suppressions sp
-      WHERE sp.person_id=p.id AND sp.active=1
+      WHERE sp.person_id IN (${PERSON_SCOPE_SQL}) AND sp.active=1
     )`);
   } else if (consent === "unsubscribed") {
     filters.push(`(
       EXISTS(SELECT 1 FROM crm_marketing_subscriptions s
-        WHERE s.person_id=p.id AND s.active=1 AND s.status='unsubscribed')
+        WHERE s.person_id IN (${PERSON_SCOPE_SQL})
+          AND s.active=1 AND s.status='unsubscribed')
       OR EXISTS(SELECT 1 FROM crm_suppressions sp
-        WHERE sp.person_id=p.id AND sp.active=1)
+        WHERE sp.person_id IN (${PERSON_SCOPE_SQL}) AND sp.active=1)
     )`);
   } else if (SUBSCRIPTION_STATUSES.has(consent)) {
-    filters.push("EXISTS(SELECT 1 FROM crm_marketing_subscriptions s WHERE s.person_id=p.id AND s.active=1 AND s.status=?)");
+    filters.push(`EXISTS(SELECT 1 FROM crm_marketing_subscriptions s
+      WHERE s.person_id IN (${PERSON_SCOPE_SQL}) AND s.active=1 AND s.status=?)`);
     values.push(consent);
   }
   const followup = asString(url.searchParams.get("followup"), 40);
   if (followup === "overdue") {
-    filters.push("EXISTS(SELECT 1 FROM crm_followups f WHERE f.person_id=p.id AND f.status='open' AND f.due_at<datetime('now'))");
+    filters.push(`EXISTS(SELECT 1 FROM crm_followups f
+      WHERE f.person_id IN (${PERSON_SCOPE_SQL})
+        AND f.status='open' AND f.due_at<datetime('now'))`);
   } else if (followup === "open") {
-    filters.push("EXISTS(SELECT 1 FROM crm_followups f WHERE f.person_id=p.id AND f.status='open')");
+    filters.push(`EXISTS(SELECT 1 FROM crm_followups f
+      WHERE f.person_id IN (${PERSON_SCOPE_SQL}) AND f.status='open')`);
   }
   const minSpendParam = url.searchParams.get("minSpendCents");
   const minSpend = minSpendParam === null || minSpendParam.trim() === "" ? NaN : Number(minSpendParam);
@@ -517,7 +646,8 @@ async function handleListPeople(request, database) {
       WHEN t.transaction_type='charge' AND t.status='settled' THEN t.amount_cents
       WHEN t.transaction_type='refund' AND t.status='settled' THEN -t.amount_cents
       WHEN t.transaction_type='adjustment' AND t.status='settled' THEN t.amount_cents ELSE 0 END),0)
-      FROM crm_transactions t WHERE t.person_id=p.id AND t.active=1)>=?`);
+      FROM crm_transactions t
+      WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1)>=?`);
     values.push(Math.floor(minSpend));
   }
   const maxSpendParam = url.searchParams.get("maxSpendCents");
@@ -527,7 +657,8 @@ async function handleListPeople(request, database) {
       WHEN t.transaction_type='charge' AND t.status='settled' THEN t.amount_cents
       WHEN t.transaction_type='refund' AND t.status='settled' THEN -t.amount_cents
       WHEN t.transaction_type='adjustment' AND t.status='settled' THEN t.amount_cents ELSE 0 END),0)
-      FROM crm_transactions t WHERE t.person_id=p.id AND t.active=1)<=?`);
+      FROM crm_transactions t
+      WHERE t.person_id IN (${PERSON_SCOPE_SQL}) AND t.active=1)<=?`);
     values.push(Math.floor(maxSpend));
   }
   const limit = clampInteger(url.searchParams.get("limit"), 1, MAX_PAGE_SIZE, 50);
@@ -571,7 +702,7 @@ async function handleGetPerson(database, requestedId) {
   ] = await Promise.all([
     bindScope(`SELECT * FROM crm_identities WHERE ${scope} AND active=1
       ORDER BY kind,is_primary DESC,created_at`),
-    bindScope(`SELECT tg.* FROM crm_person_tags pt JOIN crm_tags tg ON tg.id=pt.tag_id
+    bindScope(`SELECT DISTINCT tg.* FROM crm_person_tags pt JOIN crm_tags tg ON tg.id=pt.tag_id
       WHERE ${scope.replace("person_id", "pt.person_id")} ORDER BY tg.name COLLATE NOCASE`),
     bindScope(`SELECT * FROM crm_interactions WHERE ${scope} AND active=1
       ORDER BY occurred_at DESC,created_at DESC LIMIT 500`),
@@ -599,7 +730,7 @@ async function handleGetPerson(database, requestedId) {
     person: personView(row),
     requestedPersonId: requestedId,
     aliases: aliasesResult.results || [],
-    identities: identitiesResult.results || [],
+    identities: logicalIdentityRows(identitiesResult.results || [], canonicalId),
     tags: tagsResult.results || [],
     interactions: (interactionsResult.results || []).map((item) => ({
       ...item,
@@ -1075,6 +1206,7 @@ async function handleCreateIdentity(request, database, requestedId) {
       now,
       existing.id,
     ));
+    statements.push(ensurePrimaryIdentityStatement(database, person.id, kind, now));
     statements.push(auditStatement(database, {
       personId: person.id,
       action: "duplicate_identity_ignored",
@@ -1119,6 +1251,7 @@ async function handleCreateIdentity(request, database, requestedId) {
     now,
     now,
   ));
+  statements.push(ensurePrimaryIdentityStatement(database, person.id, kind, now));
   statements.push(auditStatement(database, {
     personId: person.id,
     action: "identity_created",
@@ -1300,43 +1433,100 @@ async function handleCreateTransaction(request, database, requestedId) {
   if (transactionType !== "adjustment" && amountCents < 0) {
     return failure("Charges and refunds use a non-negative amount.", 400);
   }
+  const requestId = asString(
+    request.headers.get("Idempotency-Key") || body.requestId || body.idempotencyKey,
+    200,
+  );
+  if (!requestId) {
+    return failure("A transaction request id is required.", 400, {
+      code: "IDEMPOTENCY_KEY_REQUIRED",
+    });
+  }
   const transactionId = id("crm-transaction");
   const now = nowIso();
-  await database.batch([
-    database.prepare(`
-      INSERT INTO crm_transactions(
-        id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,currency,
-        occurred_at,source_provider,source_type,source_id,note,metadata_json,
-        active,created_at,updated_at
-      ) VALUES(?,?,?,?,?,?,?,?,?,'manual','transaction',?,?,?,1,?,?)
-    `).bind(
-      transactionId,
-      person.id,
-      asNullableString(body.nodeId || body.node_id, 120),
-      transactionType,
-      status,
-      amountCents,
-      tipCents,
-      normalizeCurrency(body.currency),
-      asNullableString(body.occurredAt || body.occurred_at, 80) || now,
-      asNullableString(body.sourceId, 200),
-      asString(body.note || body.label || body.reference, 2000),
-      JSON.stringify({
-        ...parseJsonObject(body.metadata),
-        ...(body.label ? { label: asString(body.label, 500) } : {}),
-        ...(body.reference ? { reference: asString(body.reference, 500) } : {}),
+  const sourceId = `studio:${requestId}`;
+  const nodeId = asNullableString(body.nodeId || body.node_id, 120);
+  const currency = normalizeCurrency(body.currency);
+  const requestedOccurredAt = asNullableString(body.occurredAt || body.occurred_at, 80);
+  const occurredAt = requestedOccurredAt || now;
+  const note = asString(body.note || body.label || body.reference, 2000);
+  const metadataJson = JSON.stringify({
+    ...parseJsonObject(body.metadata),
+    ...(body.label ? { label: asString(body.label, 500) } : {}),
+    ...(body.reference ? { reference: asString(body.reference, 500) } : {}),
+  });
+  const replayResponse = async () => {
+    const existing = await database.prepare(`
+      SELECT * FROM crm_transactions
+      WHERE source_provider='manual' AND source_type='transaction' AND source_id=?
+      LIMIT 1
+    `).bind(sourceId).first();
+    if (!existing) return null;
+    const existingPersonId = existing.person_id
+      ? await canonicalPersonId(database, existing.person_id)
+      : null;
+    const sameRequest = existingPersonId === person.id
+      && existing.transaction_type === transactionType
+      && existing.status === status
+      && Number(existing.amount_cents) === amountCents
+      && Number(existing.tip_cents) === tipCents
+      && existing.currency === currency
+      && (existing.node_id || null) === nodeId
+      && (!requestedOccurredAt || existing.occurred_at === occurredAt)
+      && existing.note === note
+      && existing.metadata_json === metadataJson;
+    if (!sameRequest) {
+      return failure("That transaction request id was already used for different data.", 409, {
+        code: "IDEMPOTENCY_KEY_REUSED",
+        transactionId: existing.id,
+      });
+    }
+    return json({
+      transaction: { ...existing, metadata: parseJson(existing.metadata_json, {}) },
+      idempotent: true,
+    });
+  };
+  const replay = await replayResponse();
+  if (replay) return replay;
+  try {
+    await database.batch([
+      database.prepare(`
+        INSERT INTO crm_transactions(
+          id,person_id,node_id,transaction_type,status,amount_cents,tip_cents,currency,
+          occurred_at,source_provider,source_type,source_id,note,metadata_json,
+          active,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,'manual','transaction',?,?,?,1,?,?)
+      `).bind(
+        transactionId,
+        person.id,
+        nodeId,
+        transactionType,
+        status,
+        amountCents,
+        tipCents,
+        currency,
+        occurredAt,
+        sourceId,
+        note,
+        metadataJson,
+        now,
+        now,
+      ),
+      auditStatement(database, {
+        personId: person.id,
+        action: "transaction_created",
+        resourceType: "transaction",
+        resourceId: transactionId,
+        after: { transactionType, status, amountCents, currency },
       }),
-      now,
-      now,
-    ),
-    auditStatement(database, {
-      personId: person.id,
-      action: "transaction_created",
-      resourceType: "transaction",
-      resourceId: transactionId,
-      after: { transactionType, status, amountCents, currency: normalizeCurrency(body.currency) },
-    }),
-  ]);
+    ]);
+  } catch (error) {
+    if (/UNIQUE constraint/i.test(error.message || "")) {
+      const concurrentReplay = await replayResponse();
+      if (concurrentReplay) return concurrentReplay;
+    }
+    throw error;
+  }
   const created = await database.prepare("SELECT * FROM crm_transactions WHERE id=?").bind(transactionId).first();
   return json({ transaction: { ...created, metadata: parseJson(created.metadata_json, {}) } }, { status: 201 });
 }
@@ -1352,6 +1542,16 @@ async function handleMergePeople(request, database) {
   const duplicate = await database.prepare("SELECT * FROM crm_people WHERE id=?").bind(duplicateId).first();
   if (duplicate.merged_into_id) return failure("The duplicate is already merged.", 409);
   const reason = asString(body.reason, 2000);
+  if (!reason) return failure("A merge reason is required.", 400);
+  const dependentAlias = await database.prepare(`
+    SELECT id FROM crm_people WHERE merged_into_id=? LIMIT 1
+  `).bind(duplicateId).first();
+  if (dependentAlias) {
+    return failure("Unmerge this person's aliases before merging it into another person.", 409, {
+      code: "MERGE_CHAIN_NOT_ALLOWED",
+      aliasPersonId: dependentAlias.id,
+    });
+  }
   const mergeId = id("crm-merge");
   const now = nowIso();
   await database.batch([
@@ -1849,15 +2049,18 @@ async function loadIdentityMatches(database, kind, values) {
   for (const group of chunks(unique, 50)) {
     const placeholders = group.map(() => "?").join(",");
     const result = await database.prepare(`
-      SELECT i.normalized_value,COALESCE(p.merged_into_id,p.id) person_id
+      SELECT i.normalized_value,COALESCE(p.merged_into_id,p.id) person_id,i.is_shared
       FROM crm_identities i JOIN crm_people p ON p.id=i.person_id
       WHERE i.kind=? AND i.active=1 AND p.anonymized_at IS NULL
         AND i.normalized_value IN (${placeholders})
-        ${kind === "email" ? "AND i.is_shared=0" : ""}
     `).bind(kind, ...group).all();
     for (const row of result.results || []) {
-      if (!map.has(row.normalized_value)) map.set(row.normalized_value, new Set());
-      map.get(row.normalized_value).add(row.person_id);
+      if (!map.has(row.normalized_value)) {
+        map.set(row.normalized_value, { personIds: new Set(), anyShared: false });
+      }
+      const entry = map.get(row.normalized_value);
+      entry.personIds.add(row.person_id);
+      entry.anyShared ||= Boolean(row.is_shared);
     }
   }
   return map;
@@ -1935,15 +2138,18 @@ async function classifyImportRows(database, normalizedRows, fingerprints, config
   const nameMap = await loadNameMatches(database, normalizedRows.map((row) => row.name));
   const imported = await loadImportedFingerprints(database, fingerprints);
   const exactIds = normalizedRows.map((row) => {
-    const matches = [...(emailMap.get(row.email) || [])];
-    return matches.length === 1 ? matches[0] : null;
+    const entry = emailMap.get(row.email);
+    const matches = [...(entry?.personIds || [])];
+    return matches.length === 1 && !entry?.anyShared ? matches[0] : null;
   });
   const spend = await loadPersonSpend(database, exactIds);
   const seen = new Set();
   return normalizedRows.map((row, index) => {
     const fingerprint = fingerprints[index];
-    const emailCandidates = [...(emailMap.get(row.email) || [])];
-    const phoneCandidates = [...(phoneMap.get(row.phone) || [])];
+    const emailEntry = emailMap.get(row.email);
+    const phoneEntry = phoneMap.get(row.phone);
+    const emailCandidates = [...(emailEntry?.personIds || [])];
+    const phoneCandidates = [...(phoneEntry?.personIds || [])];
     const nameCandidates = [...(nameMap.get((row.name || "").toLowerCase()) || [])];
     const possibleCandidates = [...new Set([...phoneCandidates, ...nameCandidates])];
     let classification = "new_person";
@@ -1958,7 +2164,7 @@ async function classifyImportRows(database, normalizedRows, fingerprints, config
     } else if (row.errors.length) {
       classification = "invalid";
       decision = "skip";
-    } else if (emailCandidates.length === 1) {
+    } else if (emailCandidates.length === 1 && !emailEntry?.anyShared) {
       matchedPersonId = emailCandidates[0];
       if (
         config.moneyMode === "aggregate"
@@ -1972,7 +2178,7 @@ async function classifyImportRows(database, normalizedRows, fingerprints, config
         classification = "exact_match";
         decision = "link";
       }
-    } else if (emailCandidates.length > 1 || possibleCandidates.length) {
+    } else if (emailCandidates.length || emailEntry?.anyShared || possibleCandidates.length) {
       classification = "possible_match";
       decision = "review";
     }
@@ -1982,6 +2188,7 @@ async function classifyImportRows(database, normalizedRows, fingerprints, config
       matchedPersonId,
       matchDetail: {
         emailCandidates,
+        emailShared: Boolean(emailEntry?.anyShared),
         phoneCandidates,
         nameCandidates,
       },
@@ -2453,10 +2660,20 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
     return { personId: await canonicalPersonId(database, requested), created: false };
   }
   if (row.decision !== "create") return { personId: null, created: false };
+  const reservedPersonId = await reservationPersonId(
+    database,
+    "crm_import_row_claim",
+    row.row_fingerprint,
+  );
+  if (reservedPersonId) {
+    return { personId: reservedPersonId, created: false, concurrentClaim: true };
+  }
   if (normalized.email) {
     const exact = await uniqueEmailMatch(database, normalized.email);
-    if (exact.count === 1) return { personId: exact.personId, created: false };
-    if (exact.count > 1) throw new Error("Email became ambiguous after review.");
+    if (exact.personId) return { personId: exact.personId, created: false };
+    if (exact.ambiguous || exact.count) {
+      throw new Error("Email became ambiguous after review.");
+    }
   }
   const personId = id("crm-person");
   const now = nowIso();
@@ -2477,11 +2694,43 @@ async function createOrResolveImportPerson(database, batch, row, normalized) {
     now,
     now,
   );
-  const claim = emailClaimStatement(database, personId, normalized.email, now);
+  const claim = emailClaimStatement(database, personId, normalized.email, now, {
+    importBatchId: batch.id,
+  });
+  const rowClaim = reservationStatement(
+    database,
+    personId,
+    "crm_import_row_claim",
+    row.row_fingerprint,
+    now,
+    { importBatchId: batch.id },
+  );
+  const initialEmail = identityStatement(database, personId, "email", normalized.email, {
+    primary: true,
+    provider: "legacy_import",
+    sourceProvider: "legacy_import",
+    sourceType: "legacy_row_identity",
+    sourceId: `${row.row_fingerprint}:email`,
+    importBatchId: batch.id,
+    now,
+  });
   try {
-    await database.batch([personInsert, ...(claim ? [claim] : [])]);
+    await database.batch([
+      personInsert,
+      ...(rowClaim ? [rowClaim] : []),
+      ...(claim ? [claim] : []),
+      ...(initialEmail ? [initialEmail] : []),
+    ]);
   } catch (error) {
-    if (claim && /UNIQUE constraint/i.test(error.message || "")) {
+    if (/UNIQUE constraint/i.test(error.message || "")) {
+      const rowClaimPersonId = await reservationPersonId(
+        database,
+        "crm_import_row_claim",
+        row.row_fingerprint,
+      );
+      if (rowClaimPersonId) {
+        return { personId: rowClaimPersonId, created: false, concurrentClaim: true };
+      }
       const claimedPersonId = await emailClaimPersonId(database, normalized.email);
       if (claimedPersonId) {
         return { personId: claimedPersonId, created: false, concurrentClaim: true };
@@ -2525,11 +2774,8 @@ async function applyImportRow(database, batch, row) {
     ["phone", normalized.phoneDisplay || normalized.phone],
     ["instagram", normalized.instagram],
   ]) {
-    const primary = resolved.created || Number((await database.prepare(`
-      SELECT COUNT(*) count FROM crm_identities WHERE person_id=? AND kind=? AND active=1
-    `).bind(resolved.personId, kind).first())?.count || 0) === 0;
     const statement = identityStatement(database, resolved.personId, kind, value, {
-      primary,
+      primary: resolved.created,
       provider: "legacy_import",
       sourceProvider: "legacy_import",
       sourceType: "legacy_row_identity",
@@ -2537,7 +2783,15 @@ async function applyImportRow(database, batch, row) {
       importBatchId: batch.id,
       now,
     });
-    if (statement) statements.push(statement);
+    if (statement) {
+      statements.push(statement);
+      statements.push(ensurePrimaryIdentityStatement(
+        database,
+        resolved.personId,
+        kind,
+        now,
+      ));
+    }
   }
   statements.push(database.prepare(`
     INSERT OR IGNORE INTO crm_interactions(
@@ -2895,6 +3149,26 @@ async function handleRollbackImport(database, importId) {
     database.prepare("UPDATE crm_marketing_subscriptions SET active=0,updated_at=? WHERE import_batch_id=?").bind(now, importId),
     database.prepare("UPDATE crm_suppressions SET active=0,updated_at=? WHERE import_batch_id=?").bind(now, importId),
     database.prepare("UPDATE crm_identities SET active=0,updated_at=? WHERE import_batch_id=?").bind(now, importId),
+    database.prepare(`
+      DELETE FROM crm_identities
+      WHERE provider='crm_email_claim'
+        AND person_id IN (SELECT id FROM crm_people WHERE import_batch_id=?)
+        AND NOT EXISTS (
+          SELECT 1
+          FROM crm_identities email_identity
+          JOIN crm_people email_person ON email_person.id=email_identity.person_id
+          JOIN crm_people claim_person ON claim_person.id=crm_identities.person_id
+          WHERE email_identity.kind='email'
+            AND email_identity.active=1
+            AND email_identity.normalized_value=crm_identities.external_id
+            AND COALESCE(email_person.merged_into_id,email_person.id)
+              =COALESCE(claim_person.merged_into_id,claim_person.id)
+        )
+    `).bind(importId),
+    database.prepare(`
+      DELETE FROM crm_identities
+      WHERE provider='crm_import_row_claim' AND import_batch_id=?
+    `).bind(importId),
     database.prepare("DELETE FROM crm_person_tags WHERE import_batch_id=?").bind(importId),
     database.prepare(`
       UPDATE crm_people SET tier=NULL,tier_rationale='',tier_reviewed_at=NULL,updated_at=?
@@ -3016,11 +3290,14 @@ async function findOrCreateLocalPerson(database, {
   if (existing?.person_id) {
     return { personId: await canonicalPersonId(database, existing.person_id), created: false };
   }
-  let personId = null;
-  if (email) {
+  const sourceClaimKey = `${asString(sourceType, 120)}:${asString(sourceId, 300)}`;
+  let personId = await reservationPersonId(database, "crm_local_source_claim", sourceClaimKey);
+  if (!personId && email) {
     const match = await uniqueEmailMatch(database, email);
-    if (match.count === 1) personId = match.personId;
-    if (match.count > 1) return { personId: null, created: false, ambiguous: true };
+    if (match.personId) personId = match.personId;
+    if (!match.personId && (match.ambiguous || match.count)) {
+      return { personId: null, created: false, ambiguous: true };
+    }
   }
   let created = false;
   const now = nowIso();
@@ -3042,14 +3319,42 @@ async function findOrCreateLocalPerson(database, {
       now,
     );
     const claim = emailClaimStatement(database, personId, email, now);
+    const sourceClaim = reservationStatement(
+      database,
+      personId,
+      "crm_local_source_claim",
+      sourceClaimKey,
+      now,
+    );
+    const initialEmail = identityStatement(database, personId, "email", email, {
+      primary: true,
+      provider: "local",
+      sourceProvider: "local",
+      sourceType,
+      sourceId: `${sourceType}:${sourceId}:email`,
+      now,
+    });
     try {
-      await database.batch([personInsert, ...(claim ? [claim] : [])]);
+      await database.batch([
+        personInsert,
+        ...(sourceClaim ? [sourceClaim] : []),
+        ...(claim ? [claim] : []),
+        ...(initialEmail ? [initialEmail] : []),
+      ]);
       created = true;
     } catch (error) {
-      if (claim && /UNIQUE constraint/i.test(error.message || "")) {
+      if (/UNIQUE constraint/i.test(error.message || "")) {
+        const sourceClaimPersonId = await reservationPersonId(
+          database,
+          "crm_local_source_claim",
+          sourceClaimKey,
+        );
         const claimedPersonId = await emailClaimPersonId(database, email);
-        if (claimedPersonId) {
-          personId = claimedPersonId;
+        if (sourceClaimPersonId && claimedPersonId && sourceClaimPersonId !== claimedPersonId) {
+          return { personId: null, created: false, ambiguous: true };
+        }
+        if (sourceClaimPersonId || claimedPersonId) {
+          personId = sourceClaimPersonId || claimedPersonId;
           created = false;
         } else {
           throw error;
@@ -3060,6 +3365,15 @@ async function findOrCreateLocalPerson(database, {
     }
   }
   const statements = [];
+  const sourceReservation = reservationStatement(
+    database,
+    personId,
+    "crm_local_source_claim",
+    sourceClaimKey,
+    now,
+    { ignoreConflict: true },
+  );
+  if (sourceReservation) statements.push(sourceReservation);
   for (const [kind, value] of [
     ["email", email],
     ["phone", phone],
@@ -3073,7 +3387,10 @@ async function findOrCreateLocalPerson(database, {
       sourceId: `${sourceType}:${sourceId}:${kind}`,
       now,
     });
-    if (identity) statements.push(identity);
+    if (identity) {
+      statements.push(identity);
+      statements.push(ensurePrimaryIdentityStatement(database, personId, kind, now));
+    }
   }
   const sourceIdentity = identityStatement(database, personId, "other", `${sourceType}:${sourceId}`, {
     provider: "local",

@@ -1631,7 +1631,7 @@ test("people profiles preserve manual tier judgment and calculate relationship a
   assert.equal(result.response.status, 201);
   assert.equal(result.payload.interaction.metadata.details, "Second session on the sleeve.");
 
-  for (const transaction of [
+  for (const [index, transaction] of [
     {
       transactionType: "charge",
       status: "settled",
@@ -1654,10 +1654,10 @@ test("people profiles preserve manual tier judgment and calculate relationship a
       amountCents: 1_500,
       nodeId: "node-tattoos",
     },
-  ]) {
+  ].entries()) {
     result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}/transactions`, {
       method: "POST",
-      body: transaction,
+      body: { ...transaction, requestId: `profile-payment-${index}` },
     }));
     assert.equal(result.response.status, 201, JSON.stringify(result.payload));
   }
@@ -1691,6 +1691,90 @@ test("people profiles preserve manual tier judgment and calculate relationship a
   }));
   assert.equal(result.response.status, 409);
   assert.equal(result.payload.details.code, "EMAIL_ALREADY_CONNECTED");
+});
+
+test("manual transactions use request ids without treating human references as duplicates", async () => {
+  const database = migratedDatabase();
+  const person = await createPerson(database, {
+    displayName: "Idempotent Payments",
+    email: "idempotent-payments@example.test",
+  });
+  const path = `/api/admin/crm/people/${person.id}/transactions`;
+  const body = {
+    requestId: "same-payment-request",
+    transactionType: "charge",
+    status: "settled",
+    amountCents: 5_000,
+    tipCents: 500,
+    currency: "USD",
+    occurredAt: "2026-07-17T18:00:00.000Z",
+    reference: "cash",
+    label: "Touch-up tip",
+    note: "Touch-up tip · cash",
+  };
+
+  let result = await responseJson(await api(database, path, {
+    method: "POST",
+    body: { ...body, requestId: "" },
+  }));
+  assert.equal(result.response.status, 400);
+  assert.equal(result.payload.details.code, "IDEMPOTENCY_KEY_REQUIRED");
+
+  const sharedEnvironment = env(database);
+  const attempts = await Promise.all([0, 1].map(async () => responseJson(
+    await handleAdminCrmApi(request(path, {
+      method: "POST",
+      admin: true,
+      body,
+    }), sharedEnvironment),
+  )));
+  assert.deepEqual(
+    attempts.map(({ response }) => response.status).sort((a, b) => a - b),
+    [200, 201],
+  );
+  assert.equal(
+    new Set(attempts.map(({ payload }) => payload.transaction.id)).size,
+    1,
+  );
+  assert.equal(attempts.filter(({ payload }) => payload.idempotent).length, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_provider='manual' AND source_type='transaction'
+      AND source_id='studio:same-payment-request'
+  `).get().count, 1);
+
+  result = await responseJson(await api(database, path, {
+    method: "POST",
+    body: { ...body, amountCents: 6_000 },
+  }));
+  assert.equal(result.response.status, 409);
+  assert.equal(result.payload.details.code, "IDEMPOTENCY_KEY_REUSED");
+
+  for (const requestId of ["cash-payment-two", "cash-payment-three"]) {
+    result = await responseJson(await api(database, path, {
+      method: "POST",
+      body: {
+        ...body,
+        requestId,
+        amountCents: 2_500,
+        tipCents: 0,
+        reference: "cash",
+        label: "",
+        note: "cash",
+      },
+    }));
+    assert.equal(result.response.status, 201, JSON.stringify(result.payload));
+  }
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_transactions
+    WHERE source_provider='manual' AND source_type='transaction'
+      AND json_extract(metadata_json,'$.reference')='cash'
+  `).get().count, 3);
+  const firstTransactionId = attempts[0].payload.transaction.id;
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_audit_events
+    WHERE action='transaction_created' AND resource_id=?
+  `).get(firstTransactionId).count, 1);
 });
 
 test("manual contact writes stay idempotent within one person", async () => {
@@ -1773,6 +1857,130 @@ test("manual contact writes stay idempotent within one person", async () => {
     SELECT name FROM sqlite_master
     WHERE type='index' AND name='idx_crm_identities_active_contact_value'
   `).get());
+});
+
+test("merges preserve alias spend, activity, contacts, tags, filters, and unmerge", async () => {
+  const database = migratedDatabase();
+  const survivor = await createPerson(database, {
+    displayName: "Merge Survivor",
+    email: "merge-survivor@example.test",
+    tags: ["collector"],
+  });
+  const duplicate = await createPerson(database, {
+    displayName: "Merge Duplicate",
+    email: "merge-duplicate@example.test",
+    tags: ["collector"],
+  });
+  const third = await createPerson(database, {
+    displayName: "Merge Third",
+    email: "merge-third@example.test",
+  });
+
+  for (const person of [survivor, duplicate]) {
+    const contact = await responseJson(await api(
+      database,
+      `/api/admin/crm/people/${person.id}/identities`,
+      {
+        method: "POST",
+        body: {
+          kind: "phone",
+          value: "(404) 555-0144",
+          shared: true,
+        },
+      },
+    ));
+    assert.equal(contact.response.status, 201);
+  }
+  for (const [person, amountCents, requestId] of [
+    [survivor, 4_000, "merge-survivor-payment"],
+    [duplicate, 3_000, "merge-duplicate-payment"],
+  ]) {
+    const payment = await responseJson(await api(
+      database,
+      `/api/admin/crm/people/${person.id}/transactions`,
+      {
+        method: "POST",
+        body: {
+          requestId,
+          transactionType: "charge",
+          status: "settled",
+          amountCents,
+          currency: "USD",
+          occurredAt: "2026-07-17T19:00:00.000Z",
+        },
+      },
+    ));
+    assert.equal(payment.response.status, 201, JSON.stringify(payment.payload));
+  }
+  let result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${duplicate.id}/interactions`,
+    {
+      method: "POST",
+      body: {
+        interactionType: "tattoo_appointment",
+        nodeId: "node-tattoos",
+        occurredAt: "2026-07-17T19:30:00.000Z",
+      },
+    },
+  ));
+  assert.equal(result.response.status, 201);
+
+  result = await responseJson(await api(database, "/api/admin/crm/people/merge", {
+    method: "POST",
+    body: {
+      survivorPersonId: survivor.id,
+      duplicatePersonId: duplicate.id,
+      reason: "Confirmed duplicate client records.",
+    },
+  }));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+
+  result = await responseJson(await api(database, `/api/admin/crm/people/${survivor.id}`));
+  assert.equal(result.payload.person.netSpendCents, 7_000);
+  assert.equal(result.payload.person.interactionCount, 1);
+  assert.equal(result.payload.transactions.length, 2);
+  assert.equal(result.payload.interactions.length, 1);
+  assert.equal(
+    result.payload.identities.filter(
+      (identity) => identity.kind === "phone"
+        && identity.normalized_value === "+14045550144"
+    ).length,
+    1,
+  );
+  assert.equal(result.payload.tags.filter((tag) => tag.slug === "collector").length, 1);
+  assert.deepEqual(result.payload.aliases.map((person) => person.id), [duplicate.id]);
+
+  result = await responseJson(await api(
+    database,
+    "/api/admin/crm/people?minSpendCents=7000&nodeId=node-tattoos&tag=collector",
+  ));
+  assert.deepEqual(result.payload.people.map((person) => person.id), [survivor.id]);
+
+  result = await responseJson(await api(database, "/api/admin/crm/people/merge", {
+    method: "POST",
+    body: {
+      survivorPersonId: third.id,
+      duplicatePersonId: survivor.id,
+      reason: "This must be blocked because it would create a merge chain.",
+    },
+  }));
+  assert.equal(result.response.status, 409);
+  assert.equal(result.payload.details.code, "MERGE_CHAIN_NOT_ALLOWED");
+
+  result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${duplicate.id}/unmerge`,
+    { method: "POST", body: {} },
+  ));
+  assert.equal(result.response.status, 200);
+  const [survivorAfter, duplicateAfter] = await Promise.all([
+    responseJson(await api(database, `/api/admin/crm/people/${survivor.id}`)),
+    responseJson(await api(database, `/api/admin/crm/people/${duplicate.id}`)),
+  ]);
+  assert.equal(survivorAfter.payload.person.netSpendCents, 4_000);
+  assert.equal(duplicateAfter.payload.person.netSpendCents, 3_000);
+  assert.equal(duplicateAfter.payload.person.interactionCount, 1);
 });
 
 test("concurrent manual people with one new email create exactly one person", async () => {
@@ -1870,6 +2078,30 @@ test("the contact uniqueness guard never merges two people who share an email", 
   );
   assert.ok(sharedPhone);
   assert.equal(sharedPhone.personCount, 2);
+
+  const importResult = await responseJson(await api(database, "/api/admin/crm/imports/analyze", {
+    method: "POST",
+    body: {
+      filename: "shared-household.csv",
+      content: "Name,Email\r\nHousehold Import,household@example.test",
+      config: {
+        sourceLabel: "Shared household check",
+        defaultInteractionType: "legacy_contact",
+        dateFormat: "ymd",
+        currency: "USD",
+        moneyMode: "none",
+      },
+    },
+  }));
+  assert.equal(importResult.response.status, 201, JSON.stringify(importResult.payload));
+  assert.equal(importResult.payload.summary.exactMatch, 0);
+  assert.equal(importResult.payload.summary.possibleMatch, 1);
+  const importRows = await responseJson(await api(
+    database,
+    `/api/admin/crm/imports/${importResult.payload.importBatch.id}/rows?limit=10`,
+  ));
+  assert.equal(importRows.payload.rows[0].decision, "review");
+  assert.equal(importRows.payload.rows[0].matchDetail.emailShared, true);
 });
 
 test("the contact dedupe migration preserves one preferred row and deactivates older copies", () => {
@@ -2094,7 +2326,9 @@ test("email claim backfill reserves only unique non-shared email owners", () => 
     ) VALUES
       ('unique-email-person','Unique Email','active','email','${now}','${now}'),
       ('shared-email-one','Shared Email One','active','email','${now}','${now}'),
-      ('shared-email-two','Shared Email Two','active','email','${now}','${now}');
+      ('shared-email-two','Shared Email Two','active','email','${now}','${now}'),
+      ('stale-claim-person','Stale Claim Person','active','','${now}','${now}'),
+      ('orphan-claim-person','Orphan Claim Person','active','','${now}','${now}');
 
     INSERT INTO crm_identities(
       id,person_id,kind,value,normalized_value,provider,label,
@@ -2115,6 +2349,30 @@ test("email claim backfill reserves only unique non-shared email owners", () => 
         'shared-email-identity-two','shared-email-two','email',
         'shared-claim@example.test','shared-claim@example.test','manual','',
         1,0,1,'manual','person_create','shared-email-two:email',1,'${now}','${now}'
+      );
+
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,external_id,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES
+      (
+        'stale-unique-claim','stale-claim-person','other',
+        'unique-claim@example.test','unique-claim@example.test',
+        'crm_email_claim','unique-claim@example.test','',
+        0,0,0,'system','email_claim',NULL,0,'${now}','${now}'
+      ),
+      (
+        'stale-shared-claim','shared-email-one','other',
+        'shared-claim@example.test','shared-claim@example.test',
+        'crm_email_claim','shared-claim@example.test','',
+        0,0,0,'system','email_claim',NULL,0,'${now}','${now}'
+      ),
+      (
+        'orphan-email-claim','orphan-claim-person','other',
+        'orphan-claim@example.test','orphan-claim@example.test',
+        'crm_email_claim','orphan-claim@example.test','',
+        0,0,0,'system','email_claim',NULL,0,'${now}','${now}'
       );
   `);
   const migration = readFileSync(
@@ -2137,6 +2395,65 @@ test("email claim backfill reserves only unique non-shared email owners", () => 
       active: 0,
     }],
   );
+});
+
+test("single-primary migration preserves alternate identities and blocks primary races", () => {
+  const database = migratedDatabase("0053_crm_email_claim_backfill.sql");
+  const now = "2026-07-17T20:00:00.000Z";
+  database.exec(`
+    INSERT INTO crm_people(
+      id,display_name,relationship_status,preferred_contact_method,created_at,updated_at
+    ) VALUES('primary-person','Primary Person','active','email','${now}','${now}');
+
+    INSERT INTO crm_identities(
+      id,person_id,kind,value,normalized_value,provider,label,
+      is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+      active,created_at,updated_at
+    ) VALUES
+      (
+        'primary-unverified','primary-person','email','first@example.test',
+        'first@example.test','manual','',1,0,0,'manual','identity',
+        'primary:first',1,'2026-07-16T20:00:00.000Z','${now}'
+      ),
+      (
+        'primary-verified','primary-person','email','second@example.test',
+        'second@example.test','square','',1,1,0,'square','customer_profile',
+        'primary:second',1,'2026-07-17T20:00:00.000Z','${now}'
+      );
+  `);
+  database.exec(readFileSync(
+    join(ROOT, "migrations", "0054_crm_single_primary_identity.sql"),
+    "utf8",
+  ));
+
+  assert.deepEqual(
+    database.prepare(`
+      SELECT id,is_primary FROM crm_identities
+      WHERE person_id='primary-person' AND kind='email'
+      ORDER BY id
+    `).all().map((row) => ({ ...row })),
+    [
+      { id: "primary-unverified", is_primary: 0 },
+      { id: "primary-verified", is_primary: 1 },
+    ],
+  );
+  assert.equal(database.prepare(`
+    SELECT action FROM crm_audit_events
+    WHERE actor='migration:0054' AND person_id='primary-person'
+  `).get().action, "multiple_primary_identities_repaired");
+  assert.throws(() => {
+    database.prepare(`
+      INSERT INTO crm_identities(
+        id,person_id,kind,value,normalized_value,provider,label,
+        is_primary,is_verified,is_shared,source_provider,source_type,source_id,
+        active,created_at,updated_at
+      ) VALUES(
+        'blocked-primary','primary-person','email','third@example.test',
+        'third@example.test','manual','',1,0,0,'manual','identity',
+        'primary:third',1,?,?
+      )
+    `).run(now, now);
+  }, /UNIQUE constraint/i);
 });
 
 test("Personal Context stays profile-only, client-shared, editable, scrub-removable, and tier-neutral", async () => {
@@ -2505,6 +2822,23 @@ test("legacy list imports analyze, review, resume, apply idempotently, export sa
   assert.equal(database.prepare(`
     SELECT relationship_status FROM crm_people WHERE id=?
   `).get(existing.id).relationship_status, "active");
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='crm_email_claim' AND external_id='new@example.com'
+  `).get().count, 0);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='crm_import_row_claim' AND import_batch_id=?
+  `).get(importId).count, 0);
+
+  result = await responseJson(await api(database, "/api/admin/crm/people", {
+    method: "POST",
+    body: {
+      displayName: "Reused After Rollback",
+      email: "new@example.com",
+    },
+  }));
+  assert.equal(result.response.status, 201, JSON.stringify(result.payload));
 
   result = await responseJson(await api(database, `/api/admin/crm/imports/${importId}/rollback`, {
     method: "POST",
@@ -2512,6 +2846,57 @@ test("legacy list imports analyze, review, resume, apply idempotently, export sa
   }));
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.idempotent, true);
+});
+
+test("concurrent phone-only import apply calls create one person", async () => {
+  const database = migratedDatabase();
+  let result = await responseJson(await api(database, "/api/admin/crm/imports/analyze", {
+    method: "POST",
+    body: {
+      filename: "phone-only-race.csv",
+      content: "Name,Phone\r\nImport Race Person,4045550166",
+      config: {
+        sourceLabel: "Phone-only race",
+        defaultInteractionType: "legacy_contact",
+        defaultNodeId: "node-tattoos",
+        dateFormat: "ymd",
+        currency: "USD",
+        moneyMode: "none",
+      },
+    },
+  }));
+  assert.equal(result.response.status, 201, JSON.stringify(result.payload));
+  assert.equal(result.payload.summary.newPerson, 1);
+  const importId = result.payload.importBatch.id;
+  const path = `/api/admin/crm/imports/${importId}/apply`;
+  const sharedEnvironment = env(database);
+  const attempts = await Promise.all([0, 1].map(async () => responseJson(
+    await handleAdminCrmApi(request(path, {
+      method: "POST",
+      admin: true,
+      body: { limit: 100 },
+    }), sharedEnvironment),
+  )));
+  assert.ok(attempts.every(({ response }) => response.status === 200));
+  assert.equal(
+    attempts.reduce(
+      (sum, { payload }) => sum + Number(payload.createdPersonIds?.length || 0),
+      0,
+    ),
+    1,
+  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people
+    WHERE display_name='Import Race Person'
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_interactions
+    WHERE source_provider='legacy_import' AND source_type='legacy_row' AND active=1
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='crm_import_row_claim' AND import_batch_id=?
+  `).get(importId).count, 1);
 });
 
 test("local historical backfill ignores mirrored event submissions and is repeat-safe", async () => {
@@ -2579,6 +2964,50 @@ test("local historical backfill ignores mirrored event submissions and is repeat
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.person.netSpendCents, 4_500);
   assert.equal(result.payload.person.interactionCount, 1);
+});
+
+test("concurrent phone-only backfills reserve one source owner", async () => {
+  const database = migratedDatabase();
+  const now = "2026-07-17T18:30:00.000Z";
+  database.prepare(`
+    INSERT INTO submissions(
+      id,type,status,source_path,subject,contact_name,contact_email,contact_phone,
+      contact_json,payload_json,request_meta_json,files_json,internal_notes,
+      booking_url,created_at,updated_at
+    ) VALUES(
+      'submission-phone-only-race','tattoo_inquiry','new','/tattoos/',
+      'Phone-only inquiry','Phone Only Person','','4045550123',
+      '{}','{}','{}','[]','','',?,?
+    )
+  `).run(now, now);
+
+  const sharedEnvironment = env(database);
+  const attempts = await Promise.all([0, 1].map(async () => responseJson(
+    await handleAdminCrmApi(request("/api/admin/crm/backfill", {
+      method: "POST",
+      admin: true,
+      body: { limit: 100 },
+    }), sharedEnvironment),
+  )));
+  assert.ok(attempts.every(({ response }) => response.status === 200));
+  assert.equal(
+    attempts.reduce((sum, { payload }) => sum + Number(payload.createdPeople || 0), 0),
+    1,
+  );
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_people
+    WHERE display_name='Phone Only Person'
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_interactions
+    WHERE source_provider='local' AND source_type='submission'
+      AND source_id='submission-phone-only-race' AND active=1
+  `).get().count, 1);
+  assert.equal(database.prepare(`
+    SELECT COUNT(*) count FROM crm_identities
+    WHERE provider='crm_local_source_claim'
+      AND external_id='submission:submission-phone-only-race'
+  `).get().count, 1);
 });
 
 test("historical backfill preserves cancelled booking deposits as void", async () => {
@@ -4800,11 +5229,7 @@ test("a stale hidden email claim cannot override the current unique email owner"
       && item.source_id
         === "crm-sync-conflict:square:payment:square-payment-stale-claim"
   );
-  assert.ok(conflict);
-  assert.deepEqual(
-    JSON.parse(conflict.metadata_json).conflicts,
-    ["exact_identity_anchor_disagreement"],
-  );
+  assert.equal(conflict, undefined);
 });
 
 test("Square sync surfaces exact person-anchor disagreements for owner review", async (t) => {

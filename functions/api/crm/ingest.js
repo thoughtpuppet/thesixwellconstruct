@@ -461,7 +461,14 @@ async function emailClaimOwner(database, email) {
      WHERE provider='crm_email_claim' AND external_id=?
      LIMIT 1`
   ).bind(normalized).first();
-  return row?.person_id ? canonicalPersonId(database, row.person_id) : "";
+  const claimedPersonId = row?.person_id
+    ? await canonicalPersonId(database, row.person_id)
+    : "";
+  if (!claimedPersonId) return "";
+  const owners = await emailOwners(database, normalized);
+  return !owners.shared && owners.ids.includes(claimedPersonId)
+    ? claimedPersonId
+    : "";
 }
 
 async function convergeCreatedPerson(database, losingPersonId, winningPersonId, tuples) {

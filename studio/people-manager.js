@@ -1289,6 +1289,11 @@
     return Math.round(number * 100);
   }
 
+  function newRequestId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `request-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
   async function submitPersonForm(form, path, body, successMessage) {
     try {
       disableForm(form, true);
@@ -1296,8 +1301,10 @@
       await api(path, { method: "POST", body });
       setFormStatus(form, successMessage, "success");
       await Promise.all([loadPerson(state.selectedPersonId), refreshSelectedPersonRow()]);
+      return true;
     } catch (error) {
       setFormStatus(form, error.message || "Could not save.", "error");
+      return false;
     } finally {
       if (form.isConnected) disableForm(form, false);
     }
@@ -1402,7 +1409,7 @@
       }, "Interaction added.");
     });
 
-    detail.querySelector("[data-transaction-form]")?.addEventListener("submit", (event) => {
+    detail.querySelector("[data-transaction-form]")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
       let amountCents;
@@ -1416,7 +1423,9 @@
         setFormStatus(form, error.message, "error");
         return;
       }
-      submitPersonForm(form, `/people/${encodedId}/transactions`, {
+      const requestId = form.dataset.transactionRequestId || newRequestId();
+      form.dataset.transactionRequestId = requestId;
+      const saved = await submitPersonForm(form, `/people/${encodedId}/transactions`, {
         kind: formValue(form, "kind"),
         transactionType: formValue(form, "kind"),
         status: formValue(form, "status"),
@@ -1426,11 +1435,12 @@
         nodeId: formValue(form, "nodeId") || null,
         occurredAt,
         reference: formValue(form, "reference"),
-        sourceId: formValue(form, "reference") || null,
+        requestId,
         label: formValue(form, "label"),
         note: [formValue(form, "label"), formValue(form, "reference")].filter(Boolean).join(" · "),
         sourceProvider: "manual",
       }, "Transaction added.");
+      if (saved) delete form.dataset.transactionRequestId;
     });
 
     detail.querySelector("[data-note-form]")?.addEventListener("submit", (event) => {
