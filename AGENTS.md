@@ -21,9 +21,9 @@ Hero descriptors are a shared typography role. Pair hero titles with a
 `.hero-descriptor` paragraph using the Merch and Tattoo index treatment:
 Georgia serif, 12px, uppercase, 0.22em letter spacing, and 1.6 line-height.
 Descriptors stay left-aligned with a 380px maximum measure and 16px bottom
-padding. Keep only medium-specific color in the page shell; do not override the
-shared descriptor typography, alignment, measure, or spacing on individual
-pages.
+padding. Color is part of the treatment: when a page is assigned an existing
+descriptor reference, copy that reference color too. Do not override the shared
+descriptor typography, alignment, measure, or spacing on individual pages.
 
 Use `http://localhost:4173/tools/ui-guide.html` as the canonical working UI
 Guide and its Page Anatomy section as the implementation reference. Do not use

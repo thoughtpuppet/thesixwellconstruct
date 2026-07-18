@@ -86,8 +86,8 @@ h6,
    Merch and Tattoo established this role: a small Georgia serif paragraph,
    uppercase with open tracking and compact leading. Legacy selectors remain
    here so current public pages inherit the same role without page-by-page
-   overrides. Medium-specific color stays local; the descriptor's alignment,
-   measure, and spacing are part of the shared treatment. */
+   overrides. Color remains an explicit part of whichever reference treatment
+   a page is assigned; alignment, measure, and spacing are shared here. */
 :is(
   .hero-descriptor,
   .hero-desc,
