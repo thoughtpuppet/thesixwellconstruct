@@ -228,7 +228,9 @@ test("People UI gives canonical Construct nodes their source colors", () => {
   }
   assert.match(styles, /\.people-record\[data-people-node\]/);
   assert.match(studio, /people-manager\.css\?v=2/);
-  assert.match(studio, /people-manager\.js\?v=3/);
+  assert.match(studio, /people-manager\.js\?v=4/);
+  assert.match(source, /data-delete-person/);
+  assert.match(source, /method:\s*"DELETE"/);
 });
 
 function installSquareApiMock(testContext, {
@@ -390,6 +392,135 @@ test("live source ingestion is idempotent and advances pending activity to settl
       tip_cents: 5000,
     },
   );
+});
+
+test("Studio can permanently delete a person without old source replays recreating them", async () => {
+  const database = migratedDatabase();
+  const d1 = new LocalD1(database);
+  const source = {
+    contact: {
+      displayName: "Delete Me",
+      email: "delete-me@example.test",
+      phone: "(404) 555-0177",
+    },
+    interaction: {
+      sourceProvider: "local",
+      sourceType: "appointment",
+      sourceId: "delete-appointment-1",
+      nodeId: "node-tattoos",
+      interactionType: "appointment",
+      label: "Website appointment",
+      status: "confirmed",
+      occurredAt: "2026-08-01T15:00:00.000Z",
+    },
+    transaction: {
+      sourceProvider: "local",
+      sourceType: "deposit_payment",
+      sourceId: "delete-payment-1",
+      nodeId: "node-tattoos",
+      transactionType: "charge",
+      status: "settled",
+      amountCents: 15000,
+      currency: "USD",
+      occurredAt: "2026-07-17T15:00:00.000Z",
+    },
+  };
+  const created = await ingestCrmSourceRecord(d1, source);
+  assert.equal(created.status, "applied");
+  assert.equal(created.createdPerson, true);
+
+  let result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${created.personId}`,
+    {
+      method: "PATCH",
+      body: { tags: ["deletion-test"], summary: "CRM-only context" },
+    },
+  ));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${created.personId}/notes`,
+    {
+      method: "POST",
+      body: { body: "Remove this note.", category: "relationship" },
+    },
+  ));
+  assert.equal(result.response.status, 201, JSON.stringify(result.payload));
+
+  result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${created.personId}`,
+    {
+      method: "DELETE",
+      body: { confirmDisplayName: "Wrong name" },
+    },
+  ));
+  assert.equal(result.response.status, 400);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_people WHERE id=?"
+  ).get(created.personId).count, 1);
+
+  result = await responseJson(await api(
+    database,
+    `/api/admin/crm/people/${created.personId}`,
+    {
+      method: "DELETE",
+      body: { confirmDisplayName: "Delete Me" },
+    },
+  ));
+  assert.equal(result.response.status, 200, JSON.stringify(result.payload));
+  assert.equal(result.payload.deleted, true);
+  for (const table of [
+    "crm_people",
+    "crm_identities",
+    "crm_interactions",
+    "crm_transactions",
+    "crm_notes",
+    "crm_person_tags",
+    "crm_audit_events",
+  ]) {
+    assert.equal(
+      database.prepare(`SELECT COUNT(*) count FROM ${table}`).get().count,
+      0,
+      `${table} should be empty after deletion`,
+    );
+  }
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM crm_tags"
+  ).get().count, 0);
+  assert.deepEqual(
+    database.prepare(`
+      SELECT source_type,source_id
+      FROM crm_deleted_person_sources
+      ORDER BY source_type,source_id
+    `).all().map((row) => [row.source_type, row.source_id]),
+    [
+      ["appointment", "delete-appointment-1"],
+      ["deposit_payment", "delete-payment-1"],
+    ],
+  );
+
+  const replay = await ingestCrmSourceRecord(d1, source);
+  assert.deepEqual(
+    { status: replay.status, reason: replay.reason, personId: replay.personId },
+    { status: "skipped", reason: "person_deleted", personId: null },
+  );
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
+
+  const newBooking = await ingestCrmSourceRecord(d1, {
+    ...source,
+    interaction: {
+      ...source.interaction,
+      sourceId: "delete-appointment-2",
+      occurredAt: "2026-09-01T15:00:00.000Z",
+    },
+    transaction: undefined,
+  });
+  assert.equal(newBooking.status, "applied");
+  assert.equal(newBooking.createdPerson, true);
+  assert.notEqual(newBooking.personId, created.personId);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 1);
 });
 
 test("live identity conflicts remain visible in Needs Attention until a clean replay", async () => {

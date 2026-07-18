@@ -1380,6 +1380,23 @@
       <section data-admin-section-title="History and provenance" data-admin-default="closed">
         <h3>History and provenance</h3>
         ${auditRecords(audit, tierHistory)}
+      </section>
+
+      <section data-admin-section-title="Delete person" data-admin-default="closed">
+        <h3>Delete person</h3>
+        <p class="people-section-copy">Permanently removes this People profile and its CRM-only notes, contact identities, activity copies, tags, and follow-ups. Original appointments, payments, orders, tickets, and submissions stay in their source records.</p>
+        <form class="people-form" data-delete-person data-person-name="${attr(personName(person))}">
+          <div class="people-form-grid">
+            <label class="people-wide">Type <strong>${esc(personName(person))}</strong> to confirm
+              <input name="confirmDisplayName" autocomplete="off" required>
+            </label>
+          </div>
+          <p class="people-helper">Replaying an old source record will not recreate this person. A genuinely new qualifying booking, paid order, or paid ticket can create them again later.</p>
+          <div class="people-actions">
+            <button class="button danger-button" type="submit">Delete person permanently</button>
+            <span class="people-helper" data-form-status role="status" aria-live="polite"></span>
+          </div>
+        </form>
       </section>`;
     bindPersonForms(detail, personId(person));
     enhanceStudioControls(detail);
@@ -1649,6 +1666,35 @@
           alert(error.message || "The follow-up could not be updated.");
         }
       });
+    });
+
+    detail.querySelector("[data-delete-person]")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const expectedName = form.dataset.personName || "";
+      const confirmedName = formValue(form, "confirmDisplayName");
+      if (confirmedName !== expectedName) {
+        setFormStatus(form, "Type the exact display name shown above.", "error");
+        return;
+      }
+      try {
+        disableForm(form, true);
+        setFormStatus(form, "Deleting person…");
+        await api(`/people/${encodedId}`, {
+          method: "DELETE",
+          body: { confirmDisplayName: confirmedName },
+        });
+        state.selectedPersonId = "";
+        setTopStatus("Person deleted");
+        await loadPeople({ chooseFirst: true });
+        if (!state.people.length && state.directoryOffset > 0) {
+          state.directoryOffset = Math.max(0, state.directoryOffset - DIRECTORY_LIMIT);
+          await loadPeople({ chooseFirst: true });
+        }
+      } catch (error) {
+        setFormStatus(form, error.message || "The person could not be deleted.", "error");
+        if (form.isConnected) disableForm(form, false);
+      }
     });
   }
 

@@ -47,6 +47,24 @@ function sourceTuple(value, fallbackType) {
   return { sourceProvider, sourceType, sourceId };
 }
 
+async function deletedSourceMatch(database, tuples) {
+  for (const tuple of tuples) {
+    try {
+      const row = await database.prepare(
+        `SELECT 1 deleted
+         FROM crm_deleted_person_sources
+         WHERE source_provider=? AND source_type=? AND source_id=?
+         LIMIT 1`
+      ).bind(tuple.sourceProvider, tuple.sourceType, tuple.sourceId).first();
+      if (row?.deleted) return true;
+    } catch (error) {
+      if (/no such table/i.test(error?.message || "")) return false;
+      throw error;
+    }
+  }
+  return false;
+}
+
 function recordId(prefix) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
@@ -810,6 +828,19 @@ export async function ingestCrmSourceRecord(database, record = {}) {
       personId: null,
       match: "none",
       createdPerson: false,
+    };
+  }
+  if (await deletedSourceMatch(database, tuples)) {
+    return {
+      status: "skipped",
+      reason: "person_deleted",
+      personId: null,
+      match: "none",
+      createdPerson: false,
+      interactionCreated: false,
+      transactionCreated: false,
+      transactionOverlap: false,
+      warnings: [],
     };
   }
 

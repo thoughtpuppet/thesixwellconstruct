@@ -1024,6 +1024,94 @@ async function handleUpdatePerson(request, database, requestedId) {
   return json({ person: personView(updated) });
 }
 
+async function handleDeletePerson(request, database, requestedId) {
+  const parsed = await readObject(request);
+  if (parsed.error) return parsed.error;
+  const current = await ensurePerson(database, requestedId);
+  if (!current) return failure("Person not found.", 404);
+  const confirmedName = asString(parsed.body.confirmDisplayName, 200);
+  if (!confirmedName || confirmedName !== current.display_name) {
+    return failure("Type the person's exact display name to confirm deletion.", 400);
+  }
+
+  const personId = current.id;
+  const scopeResult = await database.prepare(`
+    SELECT id FROM crm_people WHERE id=? OR merged_into_id=?
+  `).bind(personId, personId).all();
+  const personIds = (scopeResult.results || []).map((row) => row.id).filter(Boolean);
+  if (!personIds.length) return failure("Person not found.", 404);
+  const placeholders = personIds.map(() => "?").join(",");
+  const bindScope = (sql, repetitions = 1, prefix = []) => database
+    .prepare(sql)
+    .bind(
+      ...prefix,
+      ...Array.from({ length: repetitions }, () => personIds).flat(),
+    );
+  const now = nowIso();
+  const statements = [
+    bindScope(`
+      INSERT OR IGNORE INTO crm_deleted_person_sources(
+        source_provider,source_type,source_id,deleted_at
+      )
+      SELECT eligibility_source_provider,eligibility_source_type,
+        eligibility_source_id,?
+      FROM crm_people
+      WHERE id IN (${placeholders})
+        AND eligibility_source_provider!=''
+        AND eligibility_source_type!=''
+        AND eligibility_source_id!=''
+    `, 1, [now]),
+  ];
+  for (const table of ["crm_interactions", "crm_transactions", "crm_attendance"]) {
+    statements.push(bindScope(`
+      INSERT OR IGNORE INTO crm_deleted_person_sources(
+        source_provider,source_type,source_id,deleted_at
+      )
+      SELECT source_provider,source_type,source_id,?
+      FROM ${table}
+      WHERE person_id IN (${placeholders})
+        AND source_provider!=''
+        AND source_type!=''
+        AND source_id IS NOT NULL
+        AND source_id!=''
+    `, 1, [now]));
+  }
+  statements.push(
+    bindScope(`DELETE FROM crm_import_rows
+      WHERE matched_person_id IN (${placeholders})
+         OR target_person_id IN (${placeholders})
+         OR applied_person_id IN (${placeholders})`, 3),
+    bindScope(`DELETE FROM crm_merges
+      WHERE survivor_person_id IN (${placeholders})
+         OR duplicate_person_id IN (${placeholders})`, 2),
+    bindScope(`DELETE FROM crm_audit_events
+      WHERE person_id IN (${placeholders})
+         OR (resource_type='person' AND resource_id IN (${placeholders}))`, 2),
+    bindScope(`DELETE FROM crm_tier_history WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_person_tags WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_suppressions WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_marketing_subscriptions WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_attendance WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_followups WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_notes WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_transactions WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_interactions WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_identities WHERE person_id IN (${placeholders})`),
+    bindScope(`DELETE FROM crm_people WHERE id IN (${placeholders})`),
+    database.prepare(`DELETE FROM crm_tags
+      WHERE NOT EXISTS(
+        SELECT 1 FROM crm_person_tags pt WHERE pt.tag_id=crm_tags.id
+      )`),
+  );
+
+  await database.batch(statements);
+  return json({
+    ok: true,
+    deleted: true,
+    personId,
+  });
+}
+
 async function handleCreateNote(request, database, requestedId) {
   const parsed = await readObject(request);
   if (parsed.error) return parsed.error;
@@ -4113,7 +4201,8 @@ export async function handleAdminCrmApi(request, env) {
       if (!action) {
         if (method === "GET") return handleGetPerson(database, personId);
         if (method === "PATCH") return handleUpdatePerson(request, database, personId);
-        return response405("GET", "PATCH");
+        if (method === "DELETE") return handleDeletePerson(request, database, personId);
+        return response405("GET", "PATCH", "DELETE");
       }
       if (action === "identities") {
         if (method !== "POST") return response405("POST");

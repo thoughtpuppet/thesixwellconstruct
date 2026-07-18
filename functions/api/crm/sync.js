@@ -148,6 +148,22 @@ async function readObject(request) {
   }
 }
 
+async function deletedSourceExists(database, provider, sourceType, sourceId) {
+  if (!provider || !sourceType || !sourceId) return false;
+  try {
+    const row = await database.prepare(`
+      SELECT 1 deleted
+      FROM crm_deleted_person_sources
+      WHERE source_provider=? AND source_type=? AND source_id=?
+      LIMIT 1
+    `).bind(provider, sourceType, sourceId).first();
+    return Boolean(row?.deleted);
+  } catch (error) {
+    if (/no such table/i.test(error?.message || "")) return false;
+    throw error;
+  }
+}
+
 async function emailPersonMatch(database, email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return { personId: null, ambiguous: false, personIds: [] };
@@ -577,6 +593,14 @@ async function ensureProviderPerson(database, {
     conflictSourceId || normalizedExternalId || normalizedAdditionalExternalIds[0],
     300
   );
+  if (await deletedSourceExists(
+    database,
+    provider,
+    conflictSourceType,
+    conflictRecordId,
+  )) {
+    return null;
+  }
   if (conflictRecordId) {
     await setSyncConflict(database, {
       provider,
