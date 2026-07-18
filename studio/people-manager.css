@@ -514,6 +514,121 @@
   border-left-color:var(--people-node-color);
 }
 
+.people-activity-grid {
+  --people-node-color:var(--accent);
+  display:grid;
+  gap:14px;
+}
+
+.people-activity-card {
+  display:grid;
+  gap:16px;
+  padding:16px;
+  border:5px solid var(--ring-faint);
+  border-left-color:var(--people-node-color);
+  background:var(--bg);
+}
+
+.people-activity-card[data-people-activity-node="studio"] {
+  --people-node-color:var(--accent);
+}
+
+.people-activity-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.people-activity-node-name {
+  color:var(--people-node-color);
+  font-family:var(--sans);
+  font-size:15px;
+  font-weight:900;
+  letter-spacing:.08em;
+  line-height:1.25;
+  text-transform:uppercase;
+}
+
+.people-activity-current {
+  width:max-content;
+  max-width:100%;
+  padding:5px 9px;
+  border:5px solid var(--people-node-color);
+  color:var(--people-node-color);
+  font-family:var(--sans);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.1em;
+  line-height:1.2;
+  text-transform:uppercase;
+}
+
+.people-activity-timeline {
+  display:grid;
+  gap:14px;
+  margin:0;
+  padding:0;
+  list-style:none;
+}
+
+.people-activity-milestone {
+  position:relative;
+  display:grid;
+  grid-template-columns:18px minmax(0,1fr) auto;
+  gap:10px;
+  align-items:start;
+  min-width:0;
+}
+
+.people-activity-milestone:not(:last-child)::before {
+  content:"";
+  position:absolute;
+  top:15px;
+  bottom:-19px;
+  left:5px;
+  width:5px;
+  background:var(--ring-faint);
+}
+
+.people-activity-marker {
+  position:relative;
+  z-index:1;
+  width:15px;
+  height:15px;
+  border:5px solid var(--people-node-color);
+  background:var(--bg);
+}
+
+.people-activity-copy {
+  display:grid;
+  gap:3px;
+  min-width:0;
+}
+
+.people-activity-copy strong {
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.08em;
+  line-height:1.35;
+  text-transform:uppercase;
+}
+
+.people-activity-copy span,
+.people-activity-milestone time {
+  color:var(--muted);
+  font-family:var(--sans);
+  font-size:10px;
+  line-height:1.5;
+}
+
+.people-activity-milestone time {
+  max-width:180px;
+  text-align:right;
+}
+
 .people-record[data-kind="attention"] {
   border-color:var(--people-warn);
 }
@@ -882,6 +997,21 @@
   .people-tier,
   .people-status-chip {
     width:max-content;
+  }
+
+  .people-activity-head {
+    align-items:stretch;
+    flex-direction:column;
+  }
+
+  .people-activity-milestone {
+    grid-template-columns:18px minmax(0,1fr);
+  }
+
+  .people-activity-milestone time {
+    grid-column:2;
+    max-width:none;
+    text-align:left;
   }
 }
 

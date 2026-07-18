@@ -19,6 +19,12 @@
     ["node-legend", "Legend"],
   ];
   const NODE_LABELS = new Map(NODE_OPTIONS);
+  const ACTIVITY_NODE_LABELS = new Map([
+    ["node-tattoos", "Tattoo"],
+    ["node-art", "Art"],
+    ["node-merch", "Merch"],
+    ["node-events", "Events"],
+  ]);
   const NODE_ALIASES = new Map([
     ["node-tattoos", "node-tattoos"],
     ["tattoos", "node-tattoos"],
@@ -930,45 +936,268 @@
     }).join("")}</div>`;
   }
 
+  function activityRecordDate(record) {
+    return first(
+      record,
+      "occurredAt",
+      "occurred_at",
+      "checkedInAt",
+      "checked_in_at",
+      "createdAt",
+      "created_at",
+    );
+  }
+
+  function activityRecordTime(record) {
+    const parsed = new Date(activityRecordDate(record) || 0).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function activityRecordType(record) {
+    return normalizedState(record._recordKind === "attendance"
+      ? "attendance"
+      : first(record, "kind", "type", "interactionType", "interaction_type") || "interaction");
+  }
+
+  function activitySourceType(record) {
+    return normalizedState(first(record, "sourceType", "source_type"));
+  }
+
+  function isConstructActivity(record) {
+    if (record._recordKind === "attendance") return true;
+    const searchable = `${activityRecordType(record)} ${activitySourceType(record)}`;
+    return !/(newsletter|marketing|consent|subscription|suppression|payment|refund|deposit|transaction)/.test(searchable);
+  }
+
+  function activityNodeId(record) {
+    const metadata = metadataFrom(record);
+    const rawNode = first(record, "nodeName", "node_name", "nodeId", "node_id", "node")
+      || first(metadata, "nodeName", "node_name", "nodeId", "node_id", "node")
+      || (record._recordKind === "attendance" ? "node-events" : "");
+    return canonicalNodeId(rawNode) || "studio";
+  }
+
+  function activityStatus(record) {
+    return normalizedState(first(record, "status", "state") || "recorded");
+  }
+
+  function activityMilestoneState(record, nodeId) {
+    const kind = activityRecordType(record);
+    const sourceType = activitySourceType(record);
+    const status = activityStatus(record);
+    const metadata = metadataFrom(record);
+
+    if (record._recordKind === "attendance") {
+      return ({
+        invited: "Invited",
+        registered: "Registered",
+        checked_in: "Attended",
+        attended: "Attended",
+        no_show: "No-show",
+        cancelled: "Cancelled",
+        canceled: "Cancelled",
+      })[status] || "Event activity";
+    }
+
+    if (kind === "appointment" || sourceType === "appointment") {
+      if (Number(first(metadata, "rescheduleCount", "reschedule_count") || 0) > 0 || status === "rescheduled") {
+        return "Rescheduled";
+      }
+      return ({
+        confirmed: "Booked",
+        booked: "Booked",
+        paid: "Booked",
+        scheduled: "Booked",
+        completed: "Completed",
+        complete: "Completed",
+        cancelled: "Cancelled",
+        canceled: "Cancelled",
+        void: "Cancelled",
+        expired: "Cancelled",
+        no_show: "No-show",
+        deposit_pending: "Booking started",
+        payment_pending: "Booking started",
+        pending: "Booking started",
+        requested: "Requested",
+        new: "Requested",
+      })[status] || "Appointment";
+    }
+
+    if (sourceType === "submission") {
+      return /(inquiry|consultation)/.test(kind) ? "Inquired" : "Requested";
+    }
+
+    if (nodeId === "node-merch" && (kind === "merch_order" || sourceType === "order")) {
+      return ["cancelled", "canceled", "void"].includes(status) ? "Cancelled" : "Ordered";
+    }
+
+    if (nodeId === "node-events") {
+      if (kind === "event_ticket_purchase" || sourceType === "event_ticket") {
+        if (["cancelled", "canceled", "void"].includes(status)) return "Cancelled";
+        if (["pending", "new"].includes(status)) return "Registration started";
+        return "Ticketed";
+      }
+      if (/waitlist/.test(kind) || /waitlist/.test(sourceType)) return "Joined waitlist";
+      if (kind === "performance" || /open_mic/.test(sourceType)) {
+        return ["approved", "accepted", "scheduled", "confirmed"].includes(status)
+          ? "Performance scheduled"
+          : "Performance requested";
+      }
+      if (/rsvp|registration/.test(kind)) return "Registered";
+    }
+
+    const statusLabel = ({
+      confirmed: "Confirmed",
+      booked: "Booked",
+      scheduled: "Scheduled",
+      completed: "Completed",
+      complete: "Completed",
+      cancelled: "Cancelled",
+      canceled: "Cancelled",
+      no_show: "No-show",
+      requested: "Requested",
+      pending: "Pending",
+      approved: "Approved",
+      accepted: "Accepted",
+      registered: "Registered",
+      checked_in: "Attended",
+    })[status];
+    if (statusLabel) return statusLabel;
+    return String(kind || "Activity")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function activitySubject(record, relatedSubjects) {
+    const metadata = metadataFrom(record);
+    const submissionId = String(
+      first(record, "submissionId", "submission_id")
+      || first(metadata, "submissionId", "submission_id")
+      || "",
+    );
+    const eventId = String(
+      first(record, "eventId", "event_id")
+      || first(metadata, "eventId", "event_id")
+      || "",
+    );
+    const ticketId = String(
+      first(record, "eventTicketId", "event_ticket_id")
+      || first(metadata, "ticketId", "ticket_id")
+      || "",
+    );
+    return first(record, "label", "title", "description", "eventTitle", "event_title")
+      || first(metadata, "label", "title", "eventTitle", "event_title")
+      || relatedSubjects.get(`submission:${submissionId}`)
+      || relatedSubjects.get(`event:${eventId}`)
+      || relatedSubjects.get(`ticket:${ticketId}`)
+      || "";
+  }
+
+  function activityRecordKey(record, stateLabel, subject) {
+    const sourceId = first(record, "sourceId", "source_id", "id");
+    const sourceType = activitySourceType(record) || record._recordKind;
+    if (sourceId) return `${record._recordKind}:${sourceType}:${sourceId}`;
+    return [
+      record._recordKind,
+      activityNodeId(record),
+      stateLabel,
+      subject,
+      activityRecordDate(record),
+    ].join(":");
+  }
+
   function activityRecords(interactions, attendance) {
     const records = [
       ...interactions.map((item) => ({ ...item, _recordKind: "interaction" })),
       ...attendance.map((item) => ({ ...item, _recordKind: "attendance" })),
-    ].sort((a, b) => {
-      const aDate = new Date(first(a, "occurredAt", "occurred_at", "checkedInAt", "checked_in_at", "createdAt", "created_at") || 0).getTime();
-      const bDate = new Date(first(b, "occurredAt", "occurred_at", "checkedInAt", "checked_in_at", "createdAt", "created_at") || 0).getTime();
-      return bDate - aDate;
-    });
-    if (!records.length) return '<div class="people-empty">No interactions yet.</div>';
-    return `<div class="people-record-list">${records.map((record) => {
-      const kind = record._recordKind === "attendance"
-        ? "attendance"
-        : first(record, "kind", "type", "interactionType", "interaction_type") || "interaction";
+    ].filter(isConstructActivity);
+    if (!records.length) return emptyState("No Construct activity yet.");
+
+    const relatedSubjects = new Map();
+    for (const record of records) {
       const metadata = metadataFrom(record);
-      const label = first(record, "label", "title", "description", "note", "eventTitle", "event_title")
-        || first(metadata, "label", "title", "eventTitle", "event_title")
-        || String(kind).replace(/_/g, " ");
-      const detailText = first(record, "details", "body") || first(metadata, "details", "note");
-      const when = first(record, "occurredAt", "occurred_at", "checkedInAt", "checked_in_at", "createdAt", "created_at");
-      const node = first(record, "nodeName", "node_name", "nodeId", "node_id", "node")
-        || first(metadata, "nodeName", "node_name", "nodeId", "node_id", "node")
-        || (record._recordKind === "attendance" ? "node-events" : "");
-      const channel = first(record, "channel");
-      const source = first(record, "sourceProvider", "source_provider", "provider", "source") || "manual";
-      return `<article class="people-record"${nodeDataAttribute(node)}>
-        <div class="people-record-head">
-          <div>
-            <strong class="people-record-title">${esc(label)}</strong>
-            <div class="people-record-meta">${esc(String(kind).replace(/_/g, " "))}</div>
-          </div>
+      const subject = first(record, "label", "title", "eventTitle", "event_title")
+        || first(metadata, "label", "title", "eventTitle", "event_title");
+      const submissionId = first(record, "submissionId", "submission_id")
+        || first(metadata, "submissionId", "submission_id")
+        || (activitySourceType(record) === "submission"
+          ? first(record, "sourceId", "source_id", "id")
+          : "");
+      const eventId = first(record, "eventId", "event_id")
+        || first(metadata, "eventId", "event_id");
+      const ticketId = first(record, "eventTicketId", "event_ticket_id")
+        || first(metadata, "ticketId", "ticket_id");
+      if (subject && submissionId) relatedSubjects.set(`submission:${submissionId}`, subject);
+      if (subject && eventId) relatedSubjects.set(`event:${eventId}`, subject);
+      if (subject && ticketId) relatedSubjects.set(`ticket:${ticketId}`, subject);
+    }
+
+    const groups = new Map();
+    const seen = new Set();
+    for (const record of records) {
+      const nodeId = activityNodeId(record);
+      const stateLabel = activityMilestoneState(record, nodeId);
+      const subject = activitySubject(record, relatedSubjects);
+      const key = activityRecordKey(record, stateLabel, subject);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const quantity = Math.max(1, Math.trunc(Number(first(record, "quantity") || 1)));
+      const quantityLabel = quantity > 1
+        ? nodeId === "node-events"
+          ? `${quantity} tickets`
+          : `${quantity} items`
+        : "";
+      const milestone = {
+        stateLabel,
+        stateKey: normalizedState(stateLabel),
+        subject,
+        quantityLabel,
+        when: activityRecordDate(record),
+        time: activityRecordTime(record),
+      };
+      if (!groups.has(nodeId)) groups.set(nodeId, []);
+      groups.get(nodeId).push(milestone);
+    }
+
+    const orderedGroups = [...groups.entries()]
+      .map(([nodeId, milestones]) => ({
+        nodeId,
+        milestones: milestones.sort((a, b) => a.time - b.time),
+      }))
+      .sort((a, b) => {
+        const aLatest = a.milestones[a.milestones.length - 1]?.time || 0;
+        const bLatest = b.milestones[b.milestones.length - 1]?.time || 0;
+        return bLatest - aLatest;
+      });
+
+    return `<div class="people-activity-grid">${orderedGroups.map(({ nodeId, milestones }) => {
+      const latest = milestones[milestones.length - 1];
+      const nodeName = nodeId === "studio"
+        ? "Studio"
+        : ACTIVITY_NODE_LABELS.get(nodeId) || nodeLabel(nodeId) || "Construct";
+      const nodeAttribute = nodeId === "studio"
+        ? ' data-people-activity-node="studio"'
+        : nodeDataAttribute(nodeId);
+      return `<article class="people-activity-card"${nodeAttribute}>
+        <div class="people-activity-head">
+          <strong class="people-activity-node-name">${esc(nodeName)}</strong>
+          <span class="people-activity-current" data-state="${attr(latest.stateKey)}">${esc(latest.stateLabel)}</span>
         </div>
-        <div class="people-chip-list">
-          ${nodeChip(node)}
-          ${channel ? `<span class="people-chip">${esc(channel)}</span>` : ""}
-          ${statusChip(first(record, "status", "state") || "recorded")}
-        </div>
-        ${detailText ? `<div class="people-record-body">${esc(detailText)}</div>` : ""}
-        <div class="people-source">${esc(formatDate(when, true))} · ${esc(source)}</div>
+        <ol class="people-activity-timeline">
+          ${milestones.map((milestone) => {
+            const subject = String(milestone.subject || "").trim();
+            const showSubject = subject && normalizedState(subject) !== normalizedState(milestone.stateLabel);
+            return `<li class="people-activity-milestone">
+              <span class="people-activity-marker" aria-hidden="true"></span>
+              <span class="people-activity-copy">
+                <strong>${esc(milestone.stateLabel)}</strong>
+                ${showSubject ? `<span>${esc(subject)}</span>` : ""}
+                ${milestone.quantityLabel ? `<span>${esc(milestone.quantityLabel)}</span>` : ""}
+              </span>
+              <time>${esc(formatDate(milestone.when, true))}</time>
+            </li>`;
+          }).join("")}
+        </ol>
       </article>`;
     }).join("")}</div>`;
   }

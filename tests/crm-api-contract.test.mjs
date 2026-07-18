@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 import { handleAdminCrmApi } from "../functions/api/crm/_lib.js";
 import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
@@ -22,6 +23,37 @@ import {
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "crm-contract-token";
+
+function peopleActivityRenderer() {
+  const source = readFileSync(join(ROOT, "studio", "people-manager.js"), "utf8")
+    .replace(
+      "  window.PeopleManager = {",
+      "  window.__activityRecords = activityRecords;\n  window.PeopleManager = {",
+    );
+  const window = {};
+  const document = { getElementById: () => null };
+  runInNewContext(source, {
+    window,
+    document,
+    console,
+    setTimeout,
+    clearTimeout,
+    Intl,
+    Date,
+    Map,
+    Set,
+    URL,
+    Blob,
+    FormData,
+    Headers,
+    AbortController,
+    fetch: async () => new Response(),
+    localStorage: { getItem: () => "" },
+    confirm: () => false,
+    alert: () => {},
+  });
+  return window.__activityRecords;
+}
 
 class D1Statement {
   constructor(database, sql, values = []) {
@@ -232,15 +264,15 @@ test("People UI gives canonical Construct nodes their source colors", () => {
   assert.match(source, /function emptyState/);
   assert.match(source, /nodeChips\(nodes, \{ limit: 3 \}\)/);
   assert.match(source, /nodeChips\(totals\.nodes\)/);
-  assert.match(source, /record\._recordKind === "attendance" \? "node-events"/);
+  assert.match(source, /function activityNodeId/);
   for (const [nodeId, token, fallback] of expectedNodes) {
     assert.ok(source.includes(`["${nodeId}", "${nodeId}"]`));
     assert.ok(styles.includes(`[data-people-node="${nodeId}"]`));
     assert.ok(styles.includes(`var(${token},${fallback})`));
   }
   assert.match(styles, /\.people-record\[data-people-node\]/);
-  assert.match(studio, /people-manager\.css\?v=2/);
-  assert.match(studio, /people-manager\.js\?v=8/);
+  assert.match(studio, /people-manager\.css\?v=4/);
+  assert.match(studio, /people-manager\.js\?v=9/);
   assert.match(source, /data-delete-person/);
   assert.match(source, /method:\s*"DELETE"/);
   assert.doesNotMatch(source, /A rationale is required/);
@@ -286,6 +318,138 @@ test("People UI separates contacts, system links, activities, and money", () => 
   assert.match(addContactSource, /\["phone", "Phone"\]/);
   assert.match(addContactSource, /\["instagram", "Instagram"\]/);
   assert.doesNotMatch(addContactSource, /shopify_customer|square_customer|beehiiv_subscription|substack_subscriber/);
+});
+
+test("People UI groups customer-facing Construct milestones by node", () => {
+  const renderActivity = peopleActivityRenderer();
+  const appointment = {
+    source_provider: "local",
+    source_type: "appointment",
+    source_id: "appointment-1",
+    interaction_type: "appointment",
+    node_id: "node-tattoos",
+    label: "Half Session",
+    status: "confirmed",
+    occurred_at: "2026-08-01T15:00:00.000Z",
+    metadata: { submissionId: "submission-1" },
+  };
+  const html = renderActivity([
+    {
+      source_provider: "local",
+      source_type: "submission",
+      source_id: "submission-1",
+      interaction_type: "tattoo_inquiry",
+      node_id: "node-tattoos",
+      label: "<Dragon inquiry>",
+      status: "new",
+      occurred_at: "2026-07-01T15:00:00.000Z",
+    },
+    appointment,
+    { ...appointment },
+    {
+      source_provider: "shopify",
+      source_type: "order",
+      source_id: "order-1",
+      interaction_type: "merch_order",
+      node_id: "node-merch",
+      label: "#1001",
+      status: "paid",
+      quantity: 2,
+      occurred_at: "2026-07-10T15:00:00.000Z",
+    },
+    {
+      source_provider: "local",
+      source_type: "event_ticket",
+      source_id: "ticket-1",
+      interaction_type: "event_ticket_purchase",
+      node_id: "node-events",
+      label: "Cult & Shift",
+      status: "paid",
+      quantity: 2,
+      occurred_at: "2026-07-12T15:00:00.000Z",
+      metadata: { eventId: "event-1", ticketId: "ticket-1" },
+    },
+    {
+      source_provider: "beehiiv",
+      source_type: "newsletter",
+      source_id: "newsletter-1",
+      interaction_type: "newsletter_signup",
+      label: "Newsletter",
+      status: "subscribed",
+      occurred_at: "2026-07-13T15:00:00.000Z",
+    },
+    {
+      source_provider: "square",
+      source_type: "deposit_payment",
+      source_id: "payment-1",
+      interaction_type: "payment",
+      node_id: "node-tattoos",
+      label: "Deposit payment",
+      status: "settled",
+      occurred_at: "2026-07-14T15:00:00.000Z",
+    },
+    {
+      source_provider: "manual",
+      source_type: "interaction",
+      source_id: "manual-1",
+      interaction_type: "collaboration",
+      label: "Studio planning call",
+      status: "completed",
+      occurred_at: "2026-07-15T15:00:00.000Z",
+    },
+  ], [{
+    id: "attendance-1",
+    event_id: "event-1",
+    event_ticket_id: "ticket-1",
+    status: "checked_in",
+    checked_in_at: "2026-07-20T15:00:00.000Z",
+  }]);
+
+  assert.equal((html.match(/class="people-activity-card"/g) || []).length, 4);
+  assert.equal((html.match(/class="people-activity-milestone"/g) || []).length, 6);
+  assert.match(html, /data-people-node="node-tattoos"[\s\S]*Inquired[\s\S]*Booked/);
+  assert.match(html, /&lt;Dragon inquiry&gt;/);
+  assert.match(html, /data-people-node="node-merch"[\s\S]*Ordered[\s\S]*#1001[\s\S]*2 items/);
+  assert.match(html, /data-people-node="node-events"[\s\S]*Ticketed[\s\S]*Cult &amp; Shift[\s\S]*2 tickets[\s\S]*Attended/);
+  assert.match(html, /data-people-activity-node="studio"[\s\S]*Studio planning call/);
+  assert.doesNotMatch(html, /Newsletter|Deposit payment|shopify|square|beehiiv/i);
+  assert.doesNotMatch(html, /\bpaid\b/i);
+});
+
+test("People UI normalizes appointment lifecycle states and keeps empty activity quiet", () => {
+  const renderActivity = peopleActivityRenderer();
+  const appointment = (id, status, occurredAt, metadata = {}) => ({
+    source_type: "appointment",
+    source_id: id,
+    interaction_type: "appointment",
+    node_id: "node-tattoos",
+    label: `${id} appointment`,
+    status,
+    occurred_at: occurredAt,
+    metadata,
+  });
+  const html = renderActivity([
+    appointment("pending", "deposit_pending", "2026-07-01T15:00:00.000Z"),
+    appointment("booked", "confirmed", "2026-07-02T15:00:00.000Z"),
+    appointment("completed", "completed", "2026-07-03T15:00:00.000Z"),
+    appointment("cancelled", "cancelled", "2026-07-04T15:00:00.000Z"),
+    appointment("rescheduled", "confirmed", "2026-07-05T15:00:00.000Z", { rescheduleCount: 1 }),
+    appointment("no-show", "no_show", "2026-07-06T15:00:00.000Z"),
+  ], []);
+
+  for (const label of ["Booking started", "Booked", "Completed", "Cancelled", "Rescheduled", "No-show"]) {
+    assert.match(html, new RegExp(label));
+  }
+  assert.equal((html.match(/class="people-activity-card"/g) || []).length, 1);
+
+  const empty = renderActivity([{
+    source_type: "newsletter",
+    source_id: "newsletter-only",
+    interaction_type: "newsletter_signup",
+    status: "subscribed",
+  }], []);
+  assert.match(empty, /No Construct activity yet/);
+  assert.doesNotMatch(empty, /people-activity-card/);
 });
 
 test("outreach consent capture is separate, channel-specific, and replay-safe", async () => {
