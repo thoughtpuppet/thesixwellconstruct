@@ -795,6 +795,158 @@ test("Flash drafts upload ordered galleries and cannot publish or lose their pri
   assert.equal(response.status, 200);
 });
 
+test("managed Flash sheets generate stable A-Z children and derive public claimability", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const environment = env(database, bucket);
+  let response = await handleConstructApi(request("/api/admin/flash", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "managed-sheet-contract",
+      slug: "managed-sheet-contract",
+      title: "Managed Sheet Contract",
+      state: "draft",
+      item_type: "sheet",
+      process_category: "standard",
+      session_category: "artist_review",
+      split_policy: "artist_review",
+    },
+  }), environment);
+  assert.equal(response.status, 201);
+
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: { count: 2, designs: [{ label: "Moth" }, { label: "Key" }] },
+  }), environment);
+  assert.equal(response.status, 200);
+  const firstChildren = (await response.json()).sheetDesigns;
+  assert.deepEqual(firstChildren.map((design) => [design.code, design.label, design.state]), [
+    ["A", "Moth", "draft"],
+    ["B", "Key", "draft"],
+  ]);
+
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: { count: 3, designs: [{ label: "Moth" }, { label: "Key" }, { label: "Candle" }] },
+  }), environment);
+  assert.equal(response.status, 200);
+  const expanded = (await response.json()).sheetDesigns;
+  assert.deepEqual(expanded.slice(0, 2).map((design) => design.id), firstChildren.map((design) => design.id));
+  assert.deepEqual(expanded.map((design) => design.code), ["A", "B", "C"]);
+
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: {
+      count: 26,
+      designs: Array.from({ length: 26 }, (_, index) => ({
+        code: String.fromCharCode(65 + index),
+        label: `Design ${String.fromCharCode(65 + index)}`,
+      })),
+    },
+  }), environment);
+  assert.equal(response.status, 200);
+  const alphabet = (await response.json()).sheetDesigns;
+  assert.equal(alphabet.at(-1).code, "Z");
+  assert.deepEqual(alphabet.slice(0, 3).map((design) => design.id), expanded.map((design) => design.id));
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: { count: 3, designs: [{ label: "Moth" }, { label: "Key" }, { label: "Candle" }] },
+  }), environment);
+  assert.equal(response.status, 200);
+
+  database.prepare(
+    "UPDATE flash_sheet_designs SET state='reserved' WHERE flash_item_id='managed-sheet-contract' AND code='C'",
+  ).run();
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: { count: 2, designs: [{ label: "Moth" }, { label: "Key" }] },
+  }), environment);
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /C/);
+  database.prepare(
+    "UPDATE flash_sheet_designs SET state='draft',reserved_submission_id=NULL WHERE flash_item_id='managed-sheet-contract' AND code='C'",
+  ).run();
+
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: { count: 27, designs: [] },
+  }), environment);
+  assert.equal(response.status, 400);
+
+  const form = new FormData();
+  form.set("file", new File([new Uint8Array([1, 2, 3])], "sheet.png", { type: "image/png" }));
+  form.set("alt_text", "Managed sheet artwork");
+  form.set("privacy", "public");
+  form.set("consent_status", "not-required");
+  form.set("public_presentation", "inline");
+  response = await handleConstructApi(new Request("https://example.test/api/admin/media", {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}` },
+    body: form,
+  }), environment);
+  assert.equal(response.status, 201);
+  const mediaId = (await response.json()).record.id;
+  response = await handleConstructApi(request("/api/admin/entities/managed-sheet-contract/media", {
+    method: "POST",
+    admin: true,
+    body: { media_id: mediaId, role: "primary", sort_order: 1, public_visible: true },
+  }), environment);
+  assert.equal(response.status, 201);
+
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: { count: 3, designs: [{ label: "Moth" }, { label: "" }, { label: "Candle" }] },
+  }), environment);
+  assert.equal(response.status, 200);
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract", {
+    method: "PATCH",
+    admin: true,
+    body: { state: "available" },
+  }), environment);
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /label/i);
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract/sheet-designs", {
+    method: "PUT",
+    admin: true,
+    body: { count: 3, designs: [{ label: "Moth" }, { label: "Key" }, { label: "Candle" }] },
+  }), environment);
+  assert.equal(response.status, 200);
+
+  response = await handleConstructApi(request("/api/admin/flash/managed-sheet-contract", {
+    method: "PATCH",
+    admin: true,
+    body: { state: "available" },
+  }), environment);
+  assert.equal(response.status, 200);
+  response = await handleConstructApi(request("/api/flash/managed-sheet-contract"), environment);
+  assert.equal(response.status, 200);
+  let record = (await response.json()).record;
+  assert.equal(record.claimableNow, true);
+  assert.deepEqual(record.sheetDesigns.map((design) => [design.code, design.state, design.claimableNow]), [
+    ["A", "available", true],
+    ["B", "available", true],
+    ["C", "available", true],
+  ]);
+  assert.equal("reservedSubmissionId" in record.sheetDesigns[0], false);
+
+  database.prepare(
+    "UPDATE flash_sheet_designs SET state='placed',reserved_submission_id=NULL WHERE flash_item_id='managed-sheet-contract'",
+  ).run();
+  response = await handleConstructApi(request("/api/flash/managed-sheet-contract"), environment);
+  assert.equal(response.status, 200);
+  record = (await response.json()).record;
+  assert.equal(record.claimableNow, false);
+  assert.equal(record.state, "available", "sold-out sheets remain visible in the public archive");
+});
+
 test("new Portfolio uploads begin with the shared Unclassified style assignment", async () => {
   const database = migratedDatabase();
   const bucket = new MemoryBucket();

@@ -68,6 +68,21 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; padding:0; }
   .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .form-fieldset { border:0; margin:0; padding:0; min-width:0; }
+  .sheet-picker { grid-column:1 / -1; margin-bottom:18px; }
+  .sheet-picker.is-hidden { display:none; }
+  .sheet-picker-title { font-family:var(--sans); font-size:15px; font-weight:900; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  .sheet-picker-note { color:var(--text-mute); font-size:13px; line-height:1.6; margin-bottom:14px; }
+  .sheet-picker-list,.sheet-selection-details { display:grid; gap:12px; }
+  .sheet-option { display:grid; grid-template-columns:20px 34px minmax(0,1fr) auto; gap:10px; align-items:center; padding:13px; border:5px solid var(--ring-faint); color:var(--text-mute); }
+  .sheet-option:has(input:checked) { border-color:var(--accent); color:var(--text); }
+  .sheet-option input { width:18px; height:18px; margin:0; padding:0; accent-color:var(--signal); }
+  .sheet-option-code { font-family:var(--sans); font-weight:900; color:var(--accent); }
+  .sheet-option-state { font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); }
+  .sheet-option.is-unavailable { opacity:.55; }
+  .sheet-selection-details { margin-top:16px; }
+  .sheet-selection-card { padding:16px; border-left:5px solid var(--signal); background:rgba(110,4,4,.08); }
+  .sheet-selection-card h3 { font-family:var(--sans); font-size:14px; text-transform:uppercase; color:var(--accent); margin-bottom:14px; }
+  .sheet-selection-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .form-legend { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
   .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
@@ -84,6 +99,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     .page-title { font-size:clamp(54px,18vw,88px); }
     .form-panel { padding:30px 0; }
     .field-grid,.selected-card { grid-template-columns:1fr; }
+    .sheet-option { grid-template-columns:20px 30px minmax(0,1fr); }
+    .sheet-option-state { grid-column:3; }
+    .sheet-selection-fields { grid-template-columns:1fr; }
     .selected-card img { width:100%; height:220px; }
     input:not([type="checkbox"]),textarea,select,.cta-primary { font-size:16px; }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
@@ -162,6 +180,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           <input type="hidden" name="flash_estimated_sessions" id="flash_estimated_sessions">
           <input type="hidden" name="flash_estimated_total_time" id="flash_estimated_total_time">
           <input type="hidden" name="flash_session_plan_note" id="flash_session_plan_note">
+          <input type="hidden" name="sheet_design_selections_json" id="sheet_design_selections_json">
           <input type="hidden" name="subject" id="subject" value="New Art.Pill flash claim">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <fieldset class="form-fieldset">
@@ -182,8 +201,14 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field"><label for="pronouns">Pronouns (optional)</label><input id="pronouns" name="pronouns"></div>
             <div class="field"><label for="preferred_contact_method">Preferred contact (optional)</label><select id="preferred_contact_method" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
             <div class="field full"><label for="referral_source">How did you hear about me? (optional)</label><select id="referral_source" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
-            <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="Example: left forearm" required></div>
-            <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
+            <section class="sheet-picker is-hidden" id="sheetDesignPicker" aria-labelledby="sheetDesignPickerTitle">
+              <h3 class="sheet-picker-title" id="sheetDesignPickerTitle">Choose designs from this sheet</h3>
+              <p class="sheet-picker-note">Select one or several available designs. Add a placement for each; scale is optional. Your budget below is shared across the full request.</p>
+              <div class="sheet-picker-list" id="sheetDesignOptions"></div>
+              <div class="sheet-selection-details" id="sheetSelectionDetails"></div>
+            </section>
+            <div class="field" id="placementField"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="Example: left forearm" required></div>
+            <div class="field" id="scaleField"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
             <div class="field"><label for="claim_bid">Budget range</label><input id="claim_bid" name="claim_bid" placeholder="Example: $300-$450" required></div>
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="Example: no rush, June, weekend preferred"></div>
             <div class="field full is-hidden" id="sheetCodeField" aria-hidden="true"><label for="sheet_code">Specific design code on sheet</label><input id="sheet_code" name="sheet_code" placeholder="Example: A, B3, AP-01-C"><p class="file-note">Use this when the selected flash is a sheet and you want one exact item from it.</p></div>
@@ -224,6 +249,14 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       sessionPlanCopy: document.getElementById("sessionPlanCopy"),
       sessionAcknowledgement: document.getElementById("sessionAcknowledgement"),
       sessionPlanAcknowledged: document.getElementById("sessionPlanAcknowledged"),
+      sheetDesignPicker: document.getElementById("sheetDesignPicker"),
+      sheetDesignOptions: document.getElementById("sheetDesignOptions"),
+      sheetSelectionDetails: document.getElementById("sheetSelectionDetails"),
+      sheetDesignSelectionsJson: document.getElementById("sheet_design_selections_json"),
+      placementField: document.getElementById("placementField"),
+      placementInput: document.getElementById("placement"),
+      scaleField: document.getElementById("scaleField"),
+      scaleInput: document.getElementById("scale"),
       hidden: {
         id: document.getElementById("flash_id"),
         title: document.getElementById("flash_title"),
@@ -239,6 +272,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       }
     };
     let availableFlash = [];
+    let selectedSheetDesignIds = new Set();
 
     function escapeHtml(value) {
       return String(value || "")
@@ -325,6 +359,74 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       return params.get("design") || params.get("flash") || params.get("id") || "";
     }
 
+    function requestedSheetDesignIds() {
+      return new URLSearchParams(window.location.search).getAll("sheetDesign");
+    }
+
+    function syncSheetSelectionJson(item) {
+      const selections = [...selectedSheetDesignIds].map((id) => {
+        const card = els.sheetSelectionDetails.querySelector(`[data-sheet-selection="${CSS.escape(id)}"]`);
+        return {
+          id,
+          placement: card?.querySelector("[data-sheet-placement]")?.value.trim() || "",
+          scale: card?.querySelector("[data-sheet-scale]")?.value.trim() || "",
+        };
+      });
+      els.sheetDesignSelectionsJson.value = selections.length ? JSON.stringify(selections) : "";
+      const firstAvailable = els.sheetDesignOptions.querySelector("input:not(:disabled)");
+      if (firstAvailable) firstAvailable.required = selections.length === 0;
+    }
+
+    function renderSheetSelectionDetails(item) {
+      const designs = item.sheetDesigns || [];
+      els.sheetSelectionDetails.innerHTML = [...selectedSheetDesignIds].map((id) => {
+        const design = designs.find((entry) => entry.id === id);
+        if (!design) return "";
+        return `<article class="sheet-selection-card" data-sheet-selection="${escapeHtml(design.id)}">
+          <h3>${escapeHtml(design.code)} is ${escapeHtml(design.label)}</h3>
+          <div class="sheet-selection-fields">
+            <div class="field"><label>Placement for ${escapeHtml(design.code)}</label><input data-sheet-placement required placeholder="Example: left forearm"></div>
+            <div class="field"><label>Approx. scale for ${escapeHtml(design.code)} (optional)</label><input data-sheet-scale placeholder="Example: palm-size, 5 in"></div>
+          </div>
+        </article>`;
+      }).join("");
+      els.sheetSelectionDetails.querySelectorAll("input").forEach((input) => input.addEventListener("input", () => syncSheetSelectionJson(item)));
+      syncSheetSelectionJson(item);
+    }
+
+    function renderSheetPicker(item) {
+      const designs = item?.sheetDesigns || [];
+      const managed = designs.length > 0;
+      els.sheetDesignPicker.classList.toggle("is-hidden", !managed);
+      els.placementField.classList.toggle("is-hidden", managed);
+      els.scaleField.classList.toggle("is-hidden", managed);
+      els.placementInput.required = !managed;
+      if (managed) {
+        els.placementInput.value = "";
+        els.scaleInput.value = "";
+      }
+      selectedSheetDesignIds = new Set(
+        managed
+          ? requestedSheetDesignIds().filter((id) => designs.some((design) => design.id === id && design.claimable))
+          : []
+      );
+      els.sheetDesignOptions.innerHTML = designs.map((design) => {
+        const checked = selectedSheetDesignIds.has(design.id);
+        return `<label class="sheet-option${design.claimable ? "" : " is-unavailable"}">
+          <input type="checkbox" value="${escapeHtml(design.id)}" ${checked ? "checked" : ""} ${design.claimable ? "" : "disabled"}>
+          <span class="sheet-option-code">${escapeHtml(design.code)}</span>
+          <span>${escapeHtml(design.label)}</span>
+          <span class="sheet-option-state">${design.claimable ? "Available" : escapeHtml(titleCase(design.state))}</span>
+        </label>`;
+      }).join("");
+      els.sheetDesignOptions.querySelectorAll("input").forEach((input) => input.addEventListener("change", () => {
+        if (input.checked) selectedSheetDesignIds.add(input.value);
+        else selectedSheetDesignIds.delete(input.value);
+        renderSheetSelectionDetails(item);
+      }));
+      renderSheetSelectionDetails(item || { sheetDesigns: [] });
+    }
+
     function normalizedPath(value) {
       try { return new URL(String(value || ""), window.location.origin).pathname.replace(/\/+$/, ""); }
       catch { return String(value || "").replace(/\/+$/, ""); }
@@ -356,6 +458,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         Object.values(els.hidden).forEach((input) => input.value = "");
         els.subject.value = "New Art.Pill flash claim";
         renderSessionPlan(null);
+        renderSheetPicker(null);
         return;
       }
       const code = codeFor(item);
@@ -379,7 +482,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       els.hidden.estimatedTotalTime.value = timeLabel(item);
       els.hidden.sessionPlanNote.value = item.sessionPlanNote || "";
       els.subject.value = `New Art.Pill flash claim - ${item.title}`;
-      revealSheetCode(item.type === "Sheet");
+      revealSheetCode(item.type === "Sheet" && !item.sheetDesigns.length);
+      renderSheetPicker(item);
       renderSessionPlan(item);
     }
 
@@ -419,6 +523,14 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         estimatedTotalMinutesMin: record.estimated_total_minutes_min ?? fallback.estimatedTotalMinutesMin ?? null,
         estimatedTotalMinutesMax: record.estimated_total_minutes_max ?? fallback.estimatedTotalMinutesMax ?? null,
         sessionPlanNote: record.session_plan_note || fallback.sessionPlanNote || "",
+        sheetDesigns: (record.sheetDesigns || record.sheet_designs || []).map((design) => ({
+          id: design.id,
+          code: design.code,
+          label: design.label,
+          state: design.state,
+          order: design.order ?? design.sortOrder ?? design.sort_order ?? 0,
+          claimable: design.claimableNow === true || design.claimable_now === true,
+        })).sort((a, b) => a.order - b.order),
       };
     }
 

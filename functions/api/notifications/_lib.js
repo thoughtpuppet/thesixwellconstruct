@@ -663,6 +663,20 @@ function compactLine(label, value) {
   return summary ? `${label}: ${summary}` : "";
 }
 
+function flashSheetDesignLines(payload, key, heading) {
+  const designs = Array.isArray(payload?.[key]) ? payload[key] : [];
+  if (!designs.length) return [];
+  return [
+    heading,
+    ...designs.map((design) => {
+      const identity = `${asString(design.code)} is ${asString(design.label)}`.trim();
+      const placement = compactLine("placement", design.placement);
+      const scale = compactLine("scale", design.scale);
+      return `- ${[identity, placement, scale].filter(Boolean).join(" · ")}`;
+    }),
+  ];
+}
+
 function submissionDetailLines(submission) {
   const payload = submission.payload || {};
   const fieldsByType = {
@@ -712,9 +726,16 @@ function submissionDetailLines(submission) {
     studio_booking: ["booking_type", "preferred_dates", "party_size", "message"],
   };
   const preferredFields = fieldsByType[submission.type] || Object.keys(payload);
-  return preferredFields
+  const lines = preferredFields
     .map((key) => compactLine(labelFromKey(key), payload[key]))
     .filter(Boolean);
+  if (submission.type === "flash_claim") {
+    lines.push(
+      ...flashSheetDesignLines(payload, "sheet_design_selections", "Requested sheet designs"),
+      ...flashSheetDesignLines(payload, "approved_sheet_designs", "Approved sheet designs"),
+    );
+  }
+  return lines;
 }
 
 async function sendAdminNotification(env, request, message) {
@@ -748,12 +769,16 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   const reviewLine = ["consultation", "build_session"].includes(type)
     ? "Complete checkout from the Square link you opened to keep the selected time."
     : settings.reviewTimeMessage;
+  const requestedSheetDesigns = type === "flash_claim"
+    ? flashSheetDesignLines(normalized.payload, "sheet_design_selections", "Requested sheet designs:")
+    : [];
 
   const text = [
     `Hi ${normalized.contactName || "there"},`,
     "",
     `Your art.pill TATTOO HOUSE ${profile.label} has been received.`,
     `Submission reference: ${normalized.id}`,
+    ...requestedSheetDesigns,
     "",
     profile.expectation,
     profile.next,
@@ -821,12 +846,18 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
   const purpose = asString(token.purpose || token.bookingPurpose || token.booking_purpose) || "tattoo";
   const isConsultationPurpose = purpose === "consultation";
   const expiresAt = token.expiresAt || token.expires_at || "";
+  const approvedSheetDesigns = flashSheetDesignLines(
+    normalized.payload,
+    "approved_sheet_designs",
+    "Approved sheet designs:",
+  );
   const text = [
     `Hi ${normalized.contactName || "there"},`,
     "",
     isConsultationPurpose
       ? "Your project review is ready for the required in-person planning consultation. This consultation happens before tattoo scheduling."
       : "Your tattoo project and final session plan are ready for tattoo booking.",
+    ...approvedSheetDesigns,
     "",
     isConsultationPurpose ? "Available consultation option:" : "Approved tattoo session options:",
     "",

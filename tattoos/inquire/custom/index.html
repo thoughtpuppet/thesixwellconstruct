@@ -29,7 +29,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--signal); margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
-  .qualifier-note { margin-top:22px; padding:18px 0; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); font-size:13px; line-height:1.7; color:var(--text-mute); max-width:620px; }
   .guide-stack { grid-column:1 / -1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:0; max-width:none; }
   .guide-stack details { border:5px solid var(--ring-faint); background:rgba(14,14,14,0.35); }
   .guide-stack summary { cursor:pointer; list-style:none; position:relative; padding:17px 54px 17px 18px; font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.14em; line-height:1.4; text-transform:uppercase; color:var(--accent); }
@@ -113,9 +112,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <div class="layout">
       <section>
         <h1 class="page-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
-        <p class="intro-body" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash. Build Your Own and open Special Project calls use their dedicated forms. Submitting starts review; it does not reserve an appointment.</p>
-        <p class="qualifier-note">A clear concept, placement, approximate size, budget, and visual direction are enough to begin. References can describe subject matter or atmosphere, but another artist's tattoo will not be copied.</p>
-
+        <p class="intro-body" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash.&nbsp; Submitting starts review; it does not reserve an appointment.</p>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>
@@ -197,7 +194,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field full"><label for="message">Project notes <span class="required-mark">*</span></label><textarea id="message" name="message" required></textarea></div>
           </div>
           <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older. <span class="required-mark">*</span></span></label>
-          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this submission begins review before an appointment is confirmed. <span class="required-mark">*</span></span></label>
+          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this is an inquiry and does not guarantee an appointment.</span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
             <p class="form-status" id="formStatus">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>

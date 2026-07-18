@@ -1691,6 +1691,24 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
     assert.equal(sent.at(-1).subject, `art.pill Tattoo House ${name}`);
   }
 
+  const managedSheetPayload = {
+    sheet_design_selections: [
+      { id: "sheet-a", code: "A", label: "Moth", placement: "Forearm", scale: "4 in" },
+      { id: "sheet-b", code: "B", label: "Key", placement: "Ankle", scale: "" },
+    ],
+    approved_sheet_designs: [
+      { id: "sheet-a", code: "A", label: "Moth", placement: "Forearm", scale: "4 in" },
+    ],
+  };
+  await notifyAdminSubmissionReceived(env, {
+    id: "managed-sheet-notification",
+    type: "flash_claim",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: managedSheetPayload,
+  });
+  assert.match(sent.at(-1).text, /Requested sheet designs[\s\S]*A is Moth[\s\S]*B is Key/);
+  assert.match(sent.at(-1).text, /Approved sheet designs[\s\S]*A is Moth/);
+
   await notifySubmissionReceived(env, {
     id: "client-subject-unchanged",
     type: "tattoo_inquiry",
@@ -1698,6 +1716,14 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
     payload: {},
   });
   assert.equal(sent.at(-1).subject, "art.pill TATTOO HOUSE — Custom tattoo project received");
+
+  await notifySubmissionReceived(env, {
+    id: "managed-sheet-client-receipt",
+    type: "flash_claim",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: managedSheetPayload,
+  });
+  assert.match(sent.at(-1).text, /Requested sheet designs:[\s\S]*A is Moth[\s\S]*B is Key/);
 
   const appointmentFixtures = [
     ["tattoo_full", "tattoo", "art.pill Tattoo House Tattoo Booking Confirmed"],
@@ -2088,6 +2114,230 @@ test("the first Flash approval reserves the managed design and a competing appro
   const conflict = await competingApproval.json();
   assert.equal(conflict.code, "FLASH_RESERVATION_CONFLICT");
   assert.equal(database.prepare("SELECT reserved_submission_id FROM flash_items WHERE id = ?").get(flash.id).reserved_submission_id, firstId);
+});
+
+test("managed sheet claims approve subsets atomically and place only approved designs", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+  };
+  const flash = database.prepare(
+    "SELECT id FROM flash_items WHERE state='available' AND claimable=1 ORDER BY id LIMIT 1",
+  ).get();
+  assert.ok(flash?.id);
+  database.prepare("UPDATE flash_items SET item_type='sheet' WHERE id=?").run(flash.id);
+  const now = new Date().toISOString();
+  const designs = [
+    { id: "sheet-design-a", code: "A", label: "Moth" },
+    { id: "sheet-design-b", code: "B", label: "Key" },
+    { id: "sheet-design-c", code: "C", label: "Candle" },
+  ];
+  for (const [index, design] of designs.entries()) {
+    database.prepare(
+      `INSERT INTO flash_sheet_designs
+       (id,flash_item_id,code,label,state,sort_order,created_at,updated_at)
+       VALUES (?,?,?,?, 'available', ?, ?, ?)`,
+    ).run(design.id, flash.id, design.code, design.label, index + 1, now, now);
+  }
+
+  const claim = (name, email, selections) => ({
+    type: "flash_claim",
+    name,
+    email,
+    age_confirmed: "yes",
+    selected_flash: flash.id,
+    sheet_design_selections_json: selections,
+    claim_bid: "$600-$900 total",
+    review_consent: "yes",
+    flash_claim_acknowledged: "yes",
+    session_plan_acknowledged: "yes",
+  });
+  const missingSelection = await handleCreateSubmission(jsonRequest("/api/submissions", claim(
+    "Missing Selection",
+    "missing@example.test",
+    undefined,
+  )), env);
+  assert.equal(missingSelection.status, 400);
+  const otherFlash = database.prepare(
+    "SELECT id FROM flash_items WHERE id<>? ORDER BY id LIMIT 1",
+  ).get(flash.id);
+  assert.ok(otherFlash?.id);
+  database.prepare(
+    `INSERT INTO flash_sheet_designs
+     (id,flash_item_id,code,label,state,sort_order,created_at,updated_at)
+     VALUES ('other-sheet-design',?,'A','Other sheet design','available',1,?,?)`,
+  ).run(otherFlash.id, now, now);
+  const crossSheet = await handleCreateSubmission(jsonRequest("/api/submissions", claim(
+    "Cross Sheet",
+    "cross@example.test",
+    [
+      { id: designs[0].id, placement: "Forearm", scale: "" },
+      { id: "other-sheet-design", placement: "Ankle", scale: "" },
+    ],
+  )), env);
+  assert.equal(crossSheet.status, 409);
+  database.prepare("UPDATE flash_sheet_designs SET state='retired' WHERE id=?").run(designs[2].id);
+  const unavailableSelection = await handleCreateSubmission(jsonRequest("/api/submissions", claim(
+    "Unavailable Design",
+    "unavailable@example.test",
+    [{ id: designs[2].id, placement: "Calf", scale: "" }],
+  )), env);
+  assert.equal(unavailableSelection.status, 409);
+  database.prepare("UPDATE flash_sheet_designs SET state='available' WHERE id=?").run(designs[2].id);
+  const invalidDuplicate = await handleCreateSubmission(jsonRequest("/api/submissions", claim(
+    "Duplicate Claim",
+    "duplicate@example.test",
+    [
+      { id: designs[0].id, placement: "Left forearm", scale: "4 in" },
+      { id: designs[0].id, placement: "Right forearm", scale: "5 in" },
+    ],
+  )), env);
+  assert.equal(invalidDuplicate.status, 400);
+
+  const firstClaimPayload = claim(
+    "Subset Claim",
+    "subset@example.test",
+    [
+      { id: designs[0].id, placement: "Left forearm", scale: "4 in" },
+      { id: designs[1].id, placement: "Right ankle", scale: "" },
+    ],
+  );
+  const firstCreate = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    firstClaimPayload,
+    { "idempotency-key": "managed-sheet-subset-claim" },
+  ), env);
+  const secondCreate = await handleCreateSubmission(jsonRequest("/api/submissions", claim(
+    "Grouped Claim",
+    "grouped@example.test",
+    [
+      { id: designs[1].id, placement: "Left calf", scale: "5 in" },
+      { id: designs[2].id, placement: "Right calf", scale: "5 in" },
+    ],
+  )), env);
+  const conflictCreate = await handleCreateSubmission(jsonRequest("/api/submissions", claim(
+    "Atomic Conflict",
+    "conflict@example.test",
+    [
+      { id: designs[0].id, placement: "Upper arm", scale: "" },
+      { id: designs[2].id, placement: "Shoulder", scale: "" },
+    ],
+  )), env);
+  assert.equal(firstCreate.status, 200);
+  assert.equal(secondCreate.status, 200);
+  assert.equal(conflictCreate.status, 200);
+  const firstId = (await firstCreate.json()).submissionId;
+  const secondId = (await secondCreate.json()).submissionId;
+  const conflictId = (await conflictCreate.json()).submissionId;
+  const firstRetry = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    firstClaimPayload,
+    { "idempotency-key": "managed-sheet-subset-claim" },
+  ), env);
+  const firstRetryPayload = await firstRetry.json();
+  assert.equal(firstRetry.status, 200);
+  assert.equal(firstRetryPayload.submissionId, firstId);
+  assert.equal(firstRetryPayload.idempotent, true);
+  assert.equal(
+    database.prepare("SELECT COUNT(*) count FROM submission_flash_designs WHERE submission_id=?").get(firstId).count,
+    2,
+  );
+  assert.deepEqual(
+    database.prepare(
+      "SELECT code_snapshot,label_snapshot,placement,scale FROM submission_flash_designs WHERE submission_id=? ORDER BY requested_order",
+    ).all(firstId).map((row) => [row.code_snapshot, row.label_snapshot, row.placement, row.scale]),
+    [
+      ["A", "Moth", "Left forearm", "4 in"],
+      ["B", "Key", "Right ankle", ""],
+    ],
+  );
+
+  let response = await handleUpdateSubmission(
+    jsonPatchRequest(`/api/admin/submissions/${firstId}`, {
+      status: "approved",
+      approved_sheet_design_ids: [designs[0].id],
+    }, adminToken),
+    env,
+    firstId,
+  );
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.deepEqual(
+    database.prepare("SELECT code,state,reserved_submission_id FROM flash_sheet_designs WHERE flash_item_id=? ORDER BY sort_order").all(flash.id)
+      .map((row) => [row.code, row.state, row.reserved_submission_id]),
+    [
+      ["A", "reserved", firstId],
+      ["B", "available", null],
+      ["C", "available", null],
+    ],
+  );
+  assert.deepEqual(
+    database.prepare("SELECT outcome FROM submission_flash_designs WHERE submission_id=? ORDER BY requested_order").all(firstId).map((row) => row.outcome),
+    ["approved", "not_approved"],
+  );
+  const approvedPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(firstId).payload_json);
+  assert.deepEqual(approvedPayload.approved_sheet_designs.map((design) => design.code), ["A"]);
+
+  response = await handleUpdateSubmission(
+    jsonPatchRequest(`/api/admin/submissions/${firstId}`, { status: "declined" }, adminToken),
+    env,
+    firstId,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(database.prepare("SELECT state FROM flash_sheet_designs WHERE id=?").get(designs[0].id).state, "available");
+
+  response = await handleUpdateSubmission(
+    jsonPatchRequest(`/api/admin/submissions/${secondId}`, {
+      status: "approved",
+      approved_sheet_design_ids: [designs[1].id, designs[2].id],
+    }, adminToken),
+    env,
+    secondId,
+  );
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+
+  response = await handleUpdateSubmission(
+    jsonPatchRequest(`/api/admin/submissions/${conflictId}`, {
+      status: "approved",
+      approved_sheet_design_ids: [designs[0].id, designs[2].id],
+    }, adminToken),
+    env,
+    conflictId,
+  );
+  assert.equal(response.status, 409);
+  assert.equal(database.prepare("SELECT state FROM flash_sheet_designs WHERE id=?").get(designs[0].id).state, "available", "atomic conflict must not reserve the otherwise-free subset");
+
+  database.prepare("UPDATE submissions SET tattoo_stage='tattoo_scheduled' WHERE id=?").run(secondId);
+  const startAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const endAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: "managed-sheet-tattoo",
+    submissionId: secondId,
+    bookingTypeId: "tattoo_half",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+  });
+  response = await handleAdminCompleteAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments/managed-sheet-tattoo/complete",
+    { note: "Grouped sheet tattoo completed." },
+    adminToken,
+  ), env, "managed-sheet-tattoo");
+  assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+  assert.deepEqual(
+    database.prepare("SELECT code,state FROM flash_sheet_designs WHERE flash_item_id=? ORDER BY sort_order").all(flash.id)
+      .map((row) => [row.code, row.state]),
+    [
+      ["A", "available"],
+      ["B", "placed"],
+      ["C", "placed"],
+    ],
+  );
+  assert.deepEqual(
+    database.prepare("SELECT outcome FROM submission_flash_designs WHERE submission_id=? ORDER BY requested_order").all(secondId).map((row) => row.outcome),
+    ["placed", "placed"],
+  );
 });
 
 test("Flash claim acknowledgement and browser retry keys are enforced end to end", async () => {

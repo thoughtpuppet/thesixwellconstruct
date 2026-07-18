@@ -6923,8 +6923,30 @@ export async function handleAdminCompleteAppointment(request, env, appointmentId
                WHERE a.id = ? AND a.status = 'completed'
                  AND a.updated_at = ?
                  AND a.submission_id = flash_items.reserved_submission_id
+           )`
+        ).bind(now, row.submission_id, appointmentId, now),
+        db.prepare(
+          `UPDATE flash_sheet_designs
+           SET state='placed',updated_at=?
+           WHERE reserved_submission_id=? AND state='reserved'
+             AND EXISTS (
+               SELECT 1 FROM appointments a
+               WHERE a.id=? AND a.status='completed'
+                 AND a.updated_at=?
+                 AND a.submission_id=flash_sheet_designs.reserved_submission_id
              )`
         ).bind(now, row.submission_id, appointmentId, now),
+        db.prepare(
+          `UPDATE submission_flash_designs
+           SET outcome='placed',updated_at=?
+           WHERE submission_id=? AND outcome='approved'
+             AND EXISTS (
+               SELECT 1 FROM flash_sheet_designs fsd
+               WHERE fsd.id=submission_flash_designs.sheet_design_id
+                 AND fsd.reserved_submission_id=?
+                 AND fsd.state='placed'
+             )`
+        ).bind(now, row.submission_id, row.submission_id),
         db.prepare(
           `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
            SELECT ?, id, 'tattoo_completed', 'admin', ?, ? FROM submissions

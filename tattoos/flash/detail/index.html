@@ -18,10 +18,11 @@
     main{position:relative;z-index:2;width:min(1180px,calc(100% - 80px));margin:0 auto;padding:72px 0 90px}.state{min-height:50vh;display:grid;align-content:center;gap:16px;color:var(--muted)}.state h1{margin:0;font-family:var(--sans);font-size:clamp(40px,7vw,82px);line-height:.92;color:var(--display)}
     .detail{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,.82fr);gap:64px;align-items:start}.media-column{position:sticky;top:96px;min-width:0}.media{margin:0;border:5px solid var(--line);background:rgba(110,4,4,.06);min-height:360px;display:grid;place-items:center}.media img{display:block;width:100%;height:auto;max-height:76vh;object-fit:contain}.media-caption{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.media-gallery{display:flex;gap:12px;margin-top:12px;padding:0 0 8px;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity}.media-thumb{flex:0 0 94px;width:94px;height:94px;padding:0;border:5px solid var(--line);background:#090909;cursor:pointer;scroll-snap-align:start}.media-thumb[aria-pressed="true"]{border-color:var(--focus)}.media-thumb img{display:block;width:100%;height:100%;object-fit:cover}.copy{padding-top:12px}.kicker,.meta-label{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:var(--focus)}h1{margin:14px 0 22px;font-family:var(--sans);font-size:clamp(52px,7vw,104px);line-height:.86;letter-spacing:-.045em;color:var(--display)}.description{margin:0 0 30px;max-width:380px;padding-bottom:16px;color:var(--muted);font-family:var(--serif);font-size:12px;font-weight:400;letter-spacing:.22em;line-height:1.6;text-align:left;text-transform:uppercase}.meta{margin:0 0 28px;border-top:5px solid var(--line)}.meta-row{display:grid;grid-template-columns:130px 1fr;gap:16px;padding:14px 0;border-bottom:1px solid rgba(110,4,4,.28)}.meta-value{color:var(--muted);line-height:1.5}.availability{margin:0 0 24px;padding:18px;border-left:5px solid var(--ornament);background:rgba(110,4,4,.1);color:var(--muted);line-height:1.65}.availability strong{display:block;margin-bottom:5px;font-family:var(--sans);color:var(--focus)}
     .acknowledgement{display:grid;grid-template-columns:20px 1fr;gap:12px;align-items:start;margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.6}.acknowledgement input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--ornament)}.claim-link{min-height:52px;padding:0 24px;display:inline-flex;align-items:center;justify-content:center;border:5px solid var(--ornament);background:var(--ornament);font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--text)}.claim-link[aria-disabled="true"]{opacity:.42;pointer-events:none}.claim-link:hover{background:var(--display);border-color:var(--display)}:where(a,button,input):focus-visible{outline:2px solid var(--focus);outline-offset:4px}
+    .sheet-designs{margin:0 0 28px}.sheet-designs h2{margin:0 0 8px;font-family:var(--sans);font-size:18px;line-height:1;text-transform:uppercase;color:var(--focus)}.sheet-designs>p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.6}.sheet-design-list{display:grid;gap:12px}.sheet-design-row{display:grid;grid-template-columns:22px 36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:13px;border:5px solid var(--line);color:var(--muted)}.sheet-design-row:has(input:checked){border-color:var(--focus);color:var(--text)}.sheet-design-row input{width:20px;height:20px;margin:0;accent-color:var(--ornament)}.sheet-design-code{font-family:var(--sans);font-weight:900;color:var(--focus)}.sheet-design-state{font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}.sheet-design-row.is-unavailable{opacity:.58}
     footer{position:relative;z-index:2;width:min(1180px,calc(100% - 80px));margin:0 auto;padding:40px 0 56px;border-top:5px solid var(--line);display:flex;justify-content:space-between;gap:20px;color:var(--dim);font-size:10px;letter-spacing:.18em;text-transform:uppercase}
     [hidden]{display:none!important}
     @media(max-width:820px){header{padding:18px 24px;min-height:60px}main,footer{width:min(100% - 40px,1180px)}main{padding-top:42px}.detail{grid-template-columns:1fr;gap:36px}.media-column{position:static}.media{min-height:260px}.meta-row{grid-template-columns:1fr;gap:5px}}
-    @media(max-width:640px){.acknowledgement,.claim-link{font-size:16px}.claim-link{width:100%}}
+    @media(max-width:640px){.acknowledgement,.claim-link{font-size:16px}.claim-link{width:100%}.sheet-design-row{grid-template-columns:22px 30px minmax(0,1fr)}.sheet-design-state{grid-column:3}}
     @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
   </style>
   <link rel="stylesheet" href="/css/site-typography.css">
@@ -43,6 +44,11 @@
         <h1 id="flashTitle"></h1>
         <p class="description" id="flashDescription"></p>
         <div class="meta" id="flashMeta"></div>
+        <section class="sheet-designs" id="sheetDesigns" aria-labelledby="sheetDesignHeading" hidden>
+          <h2 id="sheetDesignHeading">Choose sheet designs</h2>
+          <p>Select one or several available designs. Placement and optional scale are entered for each on the next page.</p>
+          <div class="sheet-design-list" id="sheetDesignList"></div>
+        </section>
         <p class="availability" id="availability" role="status"></p>
         <div id="claimControls" hidden>
           <label class="acknowledgement"><input id="claimAcknowledgement" type="checkbox"><span>I understand that a claim begins studio review. The design is not reserved or booked until the studio confirms availability and sends the next step.</span></label>
@@ -62,6 +68,10 @@
     const acknowledgement = document.getElementById('claimAcknowledgement');
     const mediaGallery = document.getElementById('flashMediaGallery');
     const mediaCaption = document.getElementById('flashMediaCaption');
+    const sheetDesigns = document.getElementById('sheetDesigns');
+    const sheetDesignList = document.getElementById('sheetDesignList');
+    let currentRecord = null;
+    const selectedSheetDesigns = new Set();
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const normalizePath = (value) => {
@@ -180,7 +190,50 @@
       selectMedia(0);
     }
 
+    function syncClaimLink() {
+      const managed = Boolean(currentRecord && (currentRecord.sheetDesigns || currentRecord.sheet_designs || []).length);
+      const selectable = !managed || selectedSheetDesigns.size > 0;
+      const enabled = acknowledgement.checked && selectable;
+      claimLink.setAttribute('aria-disabled', String(!enabled));
+      claimLink.tabIndex = enabled ? 0 : -1;
+      if (!currentRecord) return;
+      const url = new URL('/tattoos/flash/claim/', location.origin);
+      url.searchParams.set('design', currentRecord.id);
+      selectedSheetDesigns.forEach((id) => url.searchParams.append('sheetDesign', id));
+      claimLink.href = `${url.pathname}${url.search}`;
+    }
+
+    function renderSheetDesigns(record) {
+      const designs = record.sheetDesigns || record.sheet_designs || [];
+      selectedSheetDesigns.clear();
+      sheetDesignList.replaceChildren();
+      sheetDesigns.hidden = !designs.length;
+      designs.forEach((design) => {
+        const available = design.claimableNow === true || design.claimable_now === true;
+        const label = document.createElement('label');
+        label.className = `sheet-design-row${available ? '' : ' is-unavailable'}`;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = design.id;
+        input.disabled = !available;
+        input.setAttribute('aria-label', `${design.code}: ${design.label}`);
+        input.addEventListener('change', () => {
+          if (input.checked) selectedSheetDesigns.add(design.id);
+          else selectedSheetDesigns.delete(design.id);
+          syncClaimLink();
+        });
+        label.append(
+          input,
+          Object.assign(document.createElement('span'), { className:'sheet-design-code', textContent:design.code }),
+          Object.assign(document.createElement('span'), { textContent:design.label }),
+          Object.assign(document.createElement('span'), { className:'sheet-design-state', textContent:available ? 'Available' : titleCase(design.state) })
+        );
+        sheetDesignList.appendChild(label);
+      });
+    }
+
     function render(record, authoritative = false) {
+      currentRecord = record;
       let canonicalPath = `/tattoos/flash/${encodeURIComponent(record.slug || record.id)}/`;
       try {
         const managedCanonical = new URL(record.canonicalRoute || record.canonical_route || '', location.origin);
@@ -193,6 +246,7 @@
       document.getElementById('flashKicker').textContent = record.series_id ? `${titleCase(record.series_id)} series` : 'Art.Pill flash';
       document.getElementById('flashTitle').textContent = record.title || 'Untitled flash';
       document.getElementById('flashDescription').textContent = record.description || 'A managed Art.Pill flash record.';
+      renderSheetDesigns(record);
       document.getElementById('flashMeta').innerHTML = [
         row('Code', record.design_code || record.sheet_code || record.id),
         row('Size', record.size_bucket),
@@ -212,15 +266,13 @@
       else if (String(record.state).toLowerCase() === 'reserved') availability.innerHTML = '<strong>Reserved</strong>This design is currently held and cannot accept another claim.';
       else availability.innerHTML = '<strong>Past work / unavailable</strong>This record remains visible as part of the flash archive, but it cannot be claimed.';
       claimControls.hidden = !available;
-      if (available) claimLink.href = `/tattoos/flash/claim/?design=${encodeURIComponent(record.id)}`;
+      syncClaimLink();
       loading.hidden = true;
       detail.hidden = false;
     }
 
     acknowledgement.addEventListener('change', () => {
-      claimLink.setAttribute('aria-disabled', String(!acknowledgement.checked));
-      if (acknowledgement.checked) claimLink.removeAttribute('tabindex');
-      else claimLink.tabIndex = -1;
+      syncClaimLink();
     });
     claimLink.tabIndex = -1;
 

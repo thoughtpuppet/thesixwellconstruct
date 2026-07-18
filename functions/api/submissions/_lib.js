@@ -85,7 +85,6 @@ const REQUIRED_FIELDS_BY_TYPE = {
   ],
   flash_claim: [
     ["selected_flash", "Available flash selection is required."],
-    ["placement", "Placement is required."],
     ["claim_bid", "Budget range is required."],
     ["flash_claim_acknowledged", "Flash claim acknowledgement is required.", "yes"],
     ["review_consent", "Review consent is required.", "yes"],
@@ -771,7 +770,8 @@ async function resolveFlashReference(db, payload) {
   );
   if (!reference && !path) return null;
   return db.prepare(
-    `SELECT id, slug, title, state, claimable, legacy_path, reserved_submission_id,
+    `SELECT id, slug, title, state, claimable, item_type, sheet_code, design_code,
+            legacy_path, reserved_submission_id,
             price_label, session_category, split_policy, estimated_sessions_min,
             estimated_sessions_max, estimated_total_minutes_min,
             estimated_total_minutes_max, session_plan_note, process_category
@@ -780,6 +780,28 @@ async function resolveFlashReference(db, payload) {
      ORDER BY CASE WHEN id = ? THEN 0 WHEN slug = ? THEN 1 ELSE 2 END
      LIMIT 1`
   ).bind(reference, reference, reference, path, reference, reference).first();
+}
+
+function parseSheetDesignSelections(payload) {
+  let selections = payload?.sheet_design_selections_json ?? payload?.sheetDesignSelections;
+  if (typeof selections === "string") {
+    try { selections = JSON.parse(selections); } catch { return { error: "Sheet design selections must be valid JSON." }; }
+  }
+  if (!Array.isArray(selections)) return { error: "Choose at least one design from this Flash sheet." };
+  if (!selections.length || selections.length > 26) return { error: "Choose between one and 26 designs from this Flash sheet." };
+  const normalized = [];
+  const ids = new Set();
+  for (const entry of selections) {
+    const designId = asString(entry?.id);
+    const placement = asString(entry?.placement).slice(0, 300);
+    const scale = asString(entry?.scale).slice(0, 160);
+    if (!designId) return { error: "Every selected sheet design needs a stable design ID." };
+    if (ids.has(designId)) return { error: "The same sheet design cannot be selected twice." };
+    if (!placement) return { error: "Enter a placement for every selected sheet design." };
+    ids.add(designId);
+    normalized.push({ id: designId, placement, scale });
+  }
+  return { selections: normalized };
 }
 
 export async function handleCreateSubmission(request, env) {
@@ -831,6 +853,7 @@ export async function handleCreateSubmission(request, env) {
   }
 
   let savedFiles = [];
+  let managedSheetSelections = [];
 
   try {
     const db = requireSubmissionDb(env);
@@ -926,14 +949,72 @@ export async function handleCreateSubmission(request, env) {
 
     if (submission.type === "flash_claim") {
       const flash = await resolveFlashReference(db, body.payload);
-      if (!flash || flash.state !== "available" || Number(flash.claimable) !== 1) {
+      if (!flash || flash.state !== "available") {
         return errorResponse("That flash is no longer available. Refresh the flash catalog and choose another design.", 409, { code: "FLASH_UNAVAILABLE" });
+      }
+      const managedSheetCount = flash.item_type === "sheet"
+        ? await db.prepare("SELECT COUNT(*) count FROM flash_sheet_designs WHERE flash_item_id=?").bind(flash.id).first()
+        : null;
+      const managedSheet = Number(managedSheetCount?.count || 0) > 0;
+      if (managedSheet) {
+        const parsedSelections = parseSheetDesignSelections(body.payload);
+        if (parsedSelections.error) return errorResponse(parsedSelections.error, 400, { code: "INVALID_SHEET_DESIGN_SELECTION" });
+        const placeholders = parsedSelections.selections.map(() => "?").join(",");
+        const rows = (await db.prepare(
+          `SELECT id,flash_item_id,code,label,state,reserved_submission_id,sort_order
+           FROM flash_sheet_designs
+           WHERE flash_item_id=? AND id IN (${placeholders})
+           ORDER BY sort_order,code`
+        ).bind(flash.id, ...parsedSelections.selections.map((entry) => entry.id)).all()).results || [];
+        const byId = new Map(rows.map((row) => [row.id, row]));
+        if (rows.length !== parsedSelections.selections.length) {
+          return errorResponse("Every selected design must belong to the same Flash sheet.", 409, { code: "SHEET_DESIGN_MISMATCH" });
+        }
+        const unavailable = parsedSelections.selections
+          .map((selection) => byId.get(selection.id))
+          .find((design) => !design || design.state !== "available" || design.reserved_submission_id);
+        if (unavailable !== undefined) {
+          return errorResponse(`${unavailable?.code || "A selected design"} is no longer available.`, 409, {
+            code: "SHEET_DESIGN_UNAVAILABLE",
+          });
+        }
+        managedSheetSelections = parsedSelections.selections.map((selection, index) => {
+          const design = byId.get(selection.id);
+          return {
+            ...selection,
+            flashItemId: flash.id,
+            code: design.code,
+            label: design.label,
+            requestedOrder: index + 1,
+          };
+        });
+        body.payload.sheet_design_selections = managedSheetSelections.map((entry) => ({
+          id: entry.id,
+          code: entry.code,
+          label: entry.label,
+          placement: entry.placement,
+          scale: entry.scale,
+        }));
+        body.payload.placement = managedSheetSelections
+          .map((entry) => `${entry.code}: ${entry.placement}${entry.scale ? ` (${entry.scale})` : ""}`)
+          .join("; ");
+      } else {
+        if (Number(flash.claimable) !== 1 || flash.reserved_submission_id) {
+          return errorResponse("That flash is no longer available. Refresh the flash catalog and choose another design.", 409, { code: "FLASH_UNAVAILABLE" });
+        }
+        if (!asString(body.payload.placement)) {
+          return errorResponse("Placement is required.", 400, { code: "PLACEMENT_REQUIRED" });
+        }
       }
       body.payload.flash_snapshot = {
         id: flash.id,
         slug: flash.slug,
         legacyPath: flash.legacy_path || "",
         title: flash.title,
+        itemType: flash.item_type || "individual",
+        managedSheet,
+        sheetCode: flash.sheet_code || "",
+        designCode: flash.design_code || "",
         state: flash.state,
         claimable: true,
         priceLabel: flash.price_label || "",
@@ -1014,6 +1095,24 @@ export async function handleCreateSubmission(request, env) {
           id, submission_id, event_type, actor, note, created_at
         ) VALUES (?, ?, ?, ?, ?, ?)`
       ).bind(crypto.randomUUID(), id, "created", "system", null, now),
+      ...managedSheetSelections.map((selection) =>
+        db.prepare(
+          `INSERT INTO submission_flash_designs
+           (submission_id,sheet_design_id,flash_item_id,code_snapshot,label_snapshot,placement,scale,requested_order,outcome,created_at,updated_at)
+           VALUES(?,?,?,?,?,?,?,?, 'requested',?,?)`
+        ).bind(
+          id,
+          selection.id,
+          selection.flashItemId,
+          selection.code,
+          selection.label,
+          selection.placement,
+          selection.scale,
+          selection.requestedOrder,
+          now,
+          now,
+        )
+      ),
     ]);
 
     await mirrorSubmissionToCrm(db, {
@@ -1143,7 +1242,48 @@ export async function handleListSubmissions(request, env) {
       .bind(...bindings, limit)
       .all();
 
-    return json({ submissions: (result.results || []).map(normalizeRow) });
+    const rows = result.results || [];
+    const sheetDesignsBySubmission = new Map();
+    if (rows.length) {
+      const placeholders = rows.map(() => "?").join(",");
+      const sheetRows = (await db.prepare(
+        `SELECT sfd.submission_id,sfd.sheet_design_id,sfd.flash_item_id,
+                sfd.code_snapshot,sfd.label_snapshot,sfd.placement,sfd.scale,
+                sfd.requested_order,sfd.outcome,fsd.state current_state,
+                fsd.reserved_submission_id
+         FROM submission_flash_designs sfd
+         JOIN flash_sheet_designs fsd ON fsd.id=sfd.sheet_design_id
+         WHERE sfd.submission_id IN (${placeholders})
+         ORDER BY sfd.submission_id,sfd.requested_order,fsd.sort_order`
+      ).bind(...rows.map((row) => row.id)).all()).results || [];
+      for (const row of sheetRows) {
+        if (!sheetDesignsBySubmission.has(row.submission_id)) sheetDesignsBySubmission.set(row.submission_id, []);
+        sheetDesignsBySubmission.get(row.submission_id).push({
+          id: row.sheet_design_id,
+          flashItemId: row.flash_item_id,
+          code: row.code_snapshot,
+          label: row.label_snapshot,
+          placement: row.placement,
+          scale: row.scale,
+          requestedOrder: Number(row.requested_order) || 0,
+          outcome: row.outcome,
+          state: row.current_state,
+          reservedSubmissionId: row.reserved_submission_id || "",
+          ownedBySubmission: row.reserved_submission_id === row.submission_id,
+        });
+      }
+    }
+    return json({
+      submissions: rows.map((row) => {
+        const normalized = normalizeRow(row);
+        const sheetDesignSelections = sheetDesignsBySubmission.get(row.id) || [];
+        return {
+          ...normalized,
+          sheetDesignSelections,
+          sheet_design_selections: sheetDesignSelections,
+        };
+      }),
+    });
   } catch (error) {
     return errorResponse("Unable to load submissions.", 500, {
       detail: error.message,
@@ -1188,22 +1328,58 @@ export async function handleGetSubmission(request, env, id) {
        ORDER BY ae.created_at ASC`
     ).bind(id).all();
 
+    const sheetDesignRows = (await db.prepare(
+      `SELECT sfd.sheet_design_id,sfd.flash_item_id,sfd.code_snapshot,sfd.label_snapshot,
+              sfd.placement,sfd.scale,sfd.requested_order,sfd.outcome,
+              fsd.state current_state,fsd.reserved_submission_id
+       FROM submission_flash_designs sfd
+       JOIN flash_sheet_designs fsd ON fsd.id=sfd.sheet_design_id
+       WHERE sfd.submission_id=?
+       ORDER BY sfd.requested_order,fsd.sort_order`
+    ).bind(id).all()).results || [];
+    const sheetDesignSelections = sheetDesignRows.map((row) => ({
+      id: row.sheet_design_id,
+      flashItemId: row.flash_item_id,
+      code: row.code_snapshot,
+      label: row.label_snapshot,
+      placement: row.placement,
+      scale: row.scale,
+      requestedOrder: Number(row.requested_order) || 0,
+      outcome: row.outcome,
+      state: row.current_state,
+      reservedSubmissionId: row.reserved_submission_id || "",
+      ownedBySubmission: row.reserved_submission_id === id,
+      conflictSubmissionId: row.reserved_submission_id && row.reserved_submission_id !== id
+        ? row.reserved_submission_id
+        : "",
+    }));
     let flashReservation = null;
     if (row.type === "flash_claim") {
       const flash = await resolveFlashReference(db, parseJsonField(row.payload_json, {}));
       if (flash) {
-        flashReservation = {
-          flashId: flash.id,
-          slug: flash.slug,
-          title: flash.title,
-          state: flash.state,
-          claimable: Boolean(flash.claimable),
-          reservedSubmissionId: flash.reserved_submission_id || "",
-          ownedBySubmission: flash.reserved_submission_id === id,
-          conflictSubmissionId: flash.reserved_submission_id && flash.reserved_submission_id !== id
-            ? flash.reserved_submission_id
-            : "",
-        };
+        flashReservation = sheetDesignSelections.length
+          ? {
+              flashId: flash.id,
+              slug: flash.slug,
+              title: flash.title,
+              state: flash.state,
+              managedSheet: true,
+              designs: sheetDesignSelections,
+              ownedBySubmission: sheetDesignSelections.some((design) => design.ownedBySubmission),
+              conflictSubmissionId: sheetDesignSelections.find((design) => design.conflictSubmissionId)?.conflictSubmissionId || "",
+            }
+          : {
+              flashId: flash.id,
+              slug: flash.slug,
+              title: flash.title,
+              state: flash.state,
+              claimable: Boolean(flash.claimable),
+              reservedSubmissionId: flash.reserved_submission_id || "",
+              ownedBySubmission: flash.reserved_submission_id === id,
+              conflictSubmissionId: flash.reserved_submission_id && flash.reserved_submission_id !== id
+                ? flash.reserved_submission_id
+                : "",
+            };
       }
     }
 
@@ -1215,6 +1391,8 @@ export async function handleGetSubmission(request, env, id) {
       submission: {
         ...normalized,
         flashReservation,
+        sheetDesignSelections,
+        sheet_design_selections: sheetDesignSelections,
         flashConflict,
         flash_conflict: flashConflict,
       },
@@ -1410,19 +1588,187 @@ export async function handleUpdateSubmission(request, env, id) {
           code: "FLASH_NOT_FOUND",
         });
       }
-      const reserveStatement = db.prepare(
-        `UPDATE flash_items
-         SET state = 'reserved', claimable = 0, reserved_submission_id = ?, updated_at = ?
-         WHERE id = ? AND (
-           (state = 'available' AND claimable = 1 AND reserved_submission_id IS NULL)
-           OR reserved_submission_id = ?
-         ) AND EXISTS (
-           SELECT 1 FROM submissions s
-           WHERE s.id = ? AND s.updated_at = ? AND s.status = ?
-             AND COALESCE(s.tattoo_stage, '') = COALESCE(?, '')
+      const requestedSheetDesigns = (await db.prepare(
+        `SELECT sfd.sheet_design_id,sfd.outcome,fsd.code,fsd.state,fsd.reserved_submission_id
+         FROM submission_flash_designs sfd
+         JOIN flash_sheet_designs fsd ON fsd.id=sfd.sheet_design_id
+         WHERE sfd.submission_id=?
+         ORDER BY sfd.requested_order`
+      ).bind(id).all()).results || [];
+      if (requestedSheetDesigns.length) {
+        const approvedRaw = body.approved_sheet_design_ids ?? body.approvedSheetDesignIds;
+        if (!Array.isArray(approvedRaw)) {
+          return errorResponse("Choose the requested sheet designs to approve.", 400, {
+            code: "SHEET_APPROVAL_SELECTION_REQUIRED",
+          });
+        }
+        const approvedIds = [...new Set(approvedRaw.map(asString).filter(Boolean))];
+        if (!approvedIds.length) {
+          return errorResponse("Approve at least one requested sheet design.", 400, {
+            code: "SHEET_APPROVAL_SELECTION_REQUIRED",
+          });
+        }
+        const requestedById = new Map(requestedSheetDesigns.map((row) => [row.sheet_design_id, row]));
+        if (approvedIds.some((designId) => !requestedById.has(designId))) {
+          return errorResponse("Approved sheet designs must be a subset of the client's request.", 400, {
+            code: "INVALID_SHEET_APPROVAL_SELECTION",
+          });
+        }
+        const unavailable = approvedIds
+          .map((designId) => requestedById.get(designId))
+          .find((design) => design.state !== "available" && design.reserved_submission_id !== id);
+        if (unavailable) {
+          return errorResponse(`Design ${unavailable.code} was reserved by another approved claim.`, 409, {
+            code: "FLASH_RESERVATION_CONFLICT",
+          });
+        }
+        const placeholders = approvedIds.map(() => "?").join(",");
+        const approvalPayload = parseJsonField(current.payload_json, {});
+        const requestedSnapshots = Array.isArray(approvalPayload.sheet_design_selections)
+          ? approvalPayload.sheet_design_selections
+          : [];
+        approvalPayload.approved_sheet_designs = approvedIds.map((designId) => {
+          const snapshot = requestedSnapshots.find((entry) => entry.id === designId) || {};
+          const currentDesign = requestedById.get(designId);
+          return {
+            id: designId,
+            code: snapshot.code || currentDesign?.code || "",
+            label: snapshot.label || "",
+            placement: snapshot.placement || "",
+            scale: snapshot.scale || "",
+          };
+        });
+        const reserveStatement = db.prepare(
+          `UPDATE flash_sheet_designs
+           SET state='reserved',reserved_submission_id=?,updated_at=?
+           WHERE id IN (${placeholders})
+             AND ((state='available' AND reserved_submission_id IS NULL) OR reserved_submission_id=?)
+             AND (
+               SELECT COUNT(*) FROM flash_sheet_designs
+               WHERE id IN (${placeholders})
+                 AND ((state='available' AND reserved_submission_id IS NULL) OR reserved_submission_id=?)
+             )=?
+             AND EXISTS (
+               SELECT 1 FROM submissions s
+               WHERE s.id=? AND s.updated_at=? AND s.status=?
+                 AND COALESCE(s.tattoo_stage,'')=COALESCE(?,'')
+                 AND NOT EXISTS (
+                   SELECT 1 FROM appointments active_appointment
+                   WHERE active_appointment.submission_id=s.id
+                     AND (
+                       active_appointment.status='confirmed'
+                       OR (
+                         active_appointment.status IN ('pending_deposit','deposit_pending')
+                         AND active_appointment.hold_state IN ('active','expiry_attention')
+                       )
+                     )
+                 )
+             )`
+        ).bind(
+          id,
+          now,
+          ...approvedIds,
+          id,
+          ...approvedIds,
+          id,
+          approvedIds.length,
+          id,
+          current.updated_at,
+          current.status,
+          current.tattoo_stage,
+        );
+        const outcomeStatement = db.prepare(
+          `UPDATE submission_flash_designs
+           SET outcome=CASE WHEN sheet_design_id IN (${placeholders}) THEN 'approved' ELSE 'not_approved' END,
+               updated_at=?
+           WHERE submission_id=? AND outcome='requested'
+             AND (
+               SELECT COUNT(*) FROM flash_sheet_designs
+               WHERE id IN (${placeholders}) AND reserved_submission_id=? AND state='reserved'
+             )=?`
+        ).bind(
+          ...approvedIds,
+          now,
+          id,
+          ...approvedIds,
+          id,
+          approvedIds.length,
+        );
+        const guardedUpdate = db.prepare(
+          `UPDATE submissions
+           SET status=?,tattoo_stage=?,internal_notes=?,booking_url=?,payload_json=?,
+               lifecycle_review_required=?,lifecycle_review_note=?,updated_at=?
+           WHERE id=? AND updated_at=? AND status=?
+             AND COALESCE(tattoo_stage,'')=COALESCE(?,'')
+             AND (
+               SELECT COUNT(*) FROM flash_sheet_designs
+               WHERE id IN (${placeholders}) AND reserved_submission_id=? AND state='reserved'
+             )=?
              AND NOT EXISTS (
                SELECT 1 FROM appointments active_appointment
-               WHERE active_appointment.submission_id = s.id
+               WHERE active_appointment.submission_id=submissions.id
+                 AND (
+                   active_appointment.status='confirmed'
+                   OR (
+                     active_appointment.status IN ('pending_deposit','deposit_pending')
+                     AND active_appointment.hold_state IN ('active','expiry_attention')
+                   )
+                 )
+             )`
+        ).bind(
+          nextStatus,
+          nextTattooStage,
+          internalNotes,
+          bookingUrl,
+          JSON.stringify(approvalPayload),
+          lifecycleReviewRequired,
+          lifecycleReviewNote,
+          now,
+          id,
+          current.updated_at,
+          current.status,
+          current.tattoo_stage,
+          ...approvedIds,
+          id,
+          approvedIds.length,
+        );
+        statements = [reserveStatement, outcomeStatement, guardedUpdate, eventStatement];
+        updateIndex = 2;
+      } else {
+        const reserveStatement = db.prepare(
+          `UPDATE flash_items
+           SET state = 'reserved', claimable = 0, reserved_submission_id = ?, updated_at = ?
+           WHERE id = ? AND (
+             (state = 'available' AND claimable = 1 AND reserved_submission_id IS NULL)
+             OR reserved_submission_id = ?
+           ) AND EXISTS (
+             SELECT 1 FROM submissions s
+             WHERE s.id = ? AND s.updated_at = ? AND s.status = ?
+               AND COALESCE(s.tattoo_stage, '') = COALESCE(?, '')
+               AND NOT EXISTS (
+                 SELECT 1 FROM appointments active_appointment
+                 WHERE active_appointment.submission_id = s.id
+                   AND (
+                     active_appointment.status = 'confirmed'
+                     OR (
+                       active_appointment.status IN ('pending_deposit','deposit_pending')
+                       AND active_appointment.hold_state IN ('active','expiry_attention')
+                     )
+                   )
+               )
+           )`
+        ).bind(id,now,flash.id,id,id,current.updated_at,current.status,current.tattoo_stage);
+        const guardedUpdate = db.prepare(
+          `UPDATE submissions
+           SET status = ?, tattoo_stage = ?, internal_notes = ?, booking_url = ?,
+               lifecycle_review_required = ?, lifecycle_review_note = ?, updated_at = ?
+           WHERE id = ? AND EXISTS (
+             SELECT 1 FROM flash_items f WHERE f.id = ? AND f.reserved_submission_id = ?
+           ) AND updated_at = ? AND status = ?
+             AND COALESCE(tattoo_stage, '') = COALESCE(?, '')
+             AND NOT EXISTS (
+               SELECT 1 FROM appointments active_appointment
+               WHERE active_appointment.submission_id = submissions.id
                  AND (
                    active_appointment.status = 'confirmed'
                    OR (
@@ -1430,67 +1776,46 @@ export async function handleUpdateSubmission(request, env, id) {
                      AND active_appointment.hold_state IN ('active','expiry_attention')
                    )
                  )
-             )
-         )`
-      ).bind(
-        id,
-        now,
-        flash.id,
-        id,
-        id,
-        current.updated_at,
-        current.status,
-        current.tattoo_stage,
-      );
-      const guardedUpdate = db.prepare(
-        `UPDATE submissions
-         SET status = ?, tattoo_stage = ?, internal_notes = ?, booking_url = ?,
-             lifecycle_review_required = ?, lifecycle_review_note = ?, updated_at = ?
-         WHERE id = ? AND EXISTS (
-           SELECT 1 FROM flash_items f WHERE f.id = ? AND f.reserved_submission_id = ?
-         ) AND updated_at = ? AND status = ?
-           AND COALESCE(tattoo_stage, '') = COALESCE(?, '')
-           AND NOT EXISTS (
-             SELECT 1 FROM appointments active_appointment
-             WHERE active_appointment.submission_id = submissions.id
-               AND (
-                 active_appointment.status = 'confirmed'
-                 OR (
-                   active_appointment.status IN ('pending_deposit','deposit_pending')
-                   AND active_appointment.hold_state IN ('active','expiry_attention')
-                 )
-               )
-           )`
-      ).bind(
-        nextStatus,
-        nextTattooStage,
-        internalNotes,
-        bookingUrl,
-        lifecycleReviewRequired,
-        lifecycleReviewNote,
-        now,
-        id,
-        flash.id,
-        id,
-        current.updated_at,
-        current.status,
-        current.tattoo_stage,
-      );
-      statements = [reserveStatement, guardedUpdate, eventStatement];
-      updateIndex = 1;
+             )`
+        ).bind(nextStatus,nextTattooStage,internalNotes,bookingUrl,lifecycleReviewRequired,lifecycleReviewNote,now,id,flash.id,id,current.updated_at,current.status,current.tattoo_stage);
+        statements = [reserveStatement, guardedUpdate, eventStatement];
+        updateIndex = 1;
+      }
     }
 
     if (current.type === "flash_claim" && ["declined", "cancelled", "archived"].includes(nextStatus)) {
-      statements.push(db.prepare(
-        `UPDATE flash_items
-         SET state = 'available', claimable = 1, reserved_submission_id = NULL, updated_at = ?
-         WHERE reserved_submission_id = ? AND state = 'reserved'
-           AND EXISTS (
-             SELECT 1 FROM submissions s
-             WHERE s.id = ? AND s.updated_at = ? AND s.status = ?
-               AND COALESCE(s.tattoo_stage, '') = COALESCE(?, '')
-           )`
-      ).bind(now, id, id, now, nextStatus, nextTattooStage));
+      statements.push(
+        db.prepare(
+          `UPDATE flash_items
+           SET state='available',claimable=1,reserved_submission_id=NULL,updated_at=?
+           WHERE reserved_submission_id=? AND state='reserved'
+             AND EXISTS (
+               SELECT 1 FROM submissions s
+               WHERE s.id=? AND s.updated_at=? AND s.status=?
+                 AND COALESCE(s.tattoo_stage,'')=COALESCE(?,'')
+             )`
+        ).bind(now,id,id,now,nextStatus,nextTattooStage),
+        db.prepare(
+          `UPDATE flash_sheet_designs
+           SET state='available',reserved_submission_id=NULL,updated_at=?
+           WHERE reserved_submission_id=? AND state='reserved'
+             AND EXISTS (
+               SELECT 1 FROM submissions s
+               WHERE s.id=? AND s.updated_at=? AND s.status=?
+                 AND COALESCE(s.tattoo_stage,'')=COALESCE(?,'')
+             )`
+        ).bind(now,id,id,now,nextStatus,nextTattooStage),
+        db.prepare(
+          `UPDATE submission_flash_designs
+           SET outcome='released',updated_at=?
+           WHERE submission_id=? AND outcome='approved'
+             AND EXISTS (
+               SELECT 1 FROM submissions s
+               WHERE s.id=? AND s.updated_at=? AND s.status=?
+                 AND COALESCE(s.tattoo_stage,'')=COALESCE(?,'')
+             )`
+        ).bind(now,id,id,now,nextStatus,nextTattooStage),
+      );
     }
 
     const results = await db.batch(statements);
@@ -1536,8 +1861,13 @@ export async function handleDeleteSubmission(request, env, id) {
     }
 
     const reservation = await db
-      .prepare("SELECT id FROM flash_items WHERE reserved_submission_id = ? LIMIT 1")
-      .bind(id)
+      .prepare(
+        `SELECT id FROM flash_items WHERE reserved_submission_id=?
+         UNION ALL
+         SELECT id FROM flash_sheet_designs WHERE reserved_submission_id=?
+         LIMIT 1`
+      )
+      .bind(id, id)
       .first();
     if (!force && reservation) {
       return errorResponse("Submission owns a Flash reservation. Archive or decline it through the lifecycle workflow instead.", 409);
@@ -1558,6 +1888,16 @@ export async function handleDeleteSubmission(request, env, id) {
           `UPDATE flash_items
            SET state = 'available', claimable = 1, reserved_submission_id = NULL, updated_at = ?
            WHERE reserved_submission_id = ? AND state = 'reserved'`
+        ).bind(new Date().toISOString(), id),
+        db.prepare(
+          `UPDATE flash_sheet_designs
+           SET state='available',reserved_submission_id=NULL,updated_at=?
+           WHERE reserved_submission_id=? AND state='reserved'`
+        ).bind(new Date().toISOString(), id),
+        db.prepare(
+          `UPDATE submission_flash_designs
+           SET outcome='released',updated_at=?
+           WHERE submission_id=? AND outcome='approved'`
         ).bind(new Date().toISOString(), id),
         db.prepare(
           `UPDATE appointments

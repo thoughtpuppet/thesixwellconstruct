@@ -446,6 +446,13 @@
     .availability-manager .day-row { grid-template-columns:1fr; }
     .availability-manager .wide-field { grid-column:auto; }
   }
+  .sheet-request-list { display:grid; gap:12px; margin-top:16px; }
+  .sheet-request-row { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:12px; align-items:start; padding:14px; border:5px solid rgba(252,184,103,.22); }
+  .sheet-request-row input { width:20px; height:20px; margin:2px 0 0; accent-color:#FCB867; }
+  .sheet-request-code { display:block; margin-bottom:4px; font-family:var(--sans); font-weight:900; color:#FCB867; }
+  .sheet-request-meta { display:block; color:var(--dim); font-family:var(--sans); font-size:11px; line-height:1.55; }
+  .sheet-request-state { font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); }
+  @media (max-width:640px) { .sheet-request-row { grid-template-columns:22px minmax(0,1fr); } .sheet-request-state { grid-column:2; } }
 </style>
 <link rel="stylesheet" href="/studio/console-titles.css?v=1">
 </head>
@@ -953,6 +960,27 @@
       </div>`;
 
     if (t === "flash_claim") {
+      const sheetDesigns = submission.sheetDesignSelections || submission.sheet_design_selections || [];
+      const sheetDesignBlock = sheetDesigns.length ? `
+        <div class="field" style="margin-top:16px;">
+          <label>Requested Sheet Designs</label>
+          <p class="contact">Choose the subset to approve. At least one requested design is required when approving this claim.</p>
+          <div class="sheet-request-list" id="sheetDesignApprovalList">
+            ${sheetDesigns.map((design) => {
+              const checked = ["approved", "placed"].includes(design.outcome)
+                || (design.outcome === "requested" && submission.status !== "approved");
+              const locked = submission.status === "approved" || ["placed", "released"].includes(design.outcome);
+              return `<label class="sheet-request-row">
+                <input type="checkbox" data-approved-sheet-design value="${escapeHtml(design.id)}" ${checked ? "checked" : ""} ${locked ? "disabled" : ""}>
+                <span>
+                  <span class="sheet-request-code">${escapeHtml(design.code)} is ${escapeHtml(design.label)}</span>
+                  <span class="sheet-request-meta">Placement: ${escapeHtml(design.placement)}${design.scale ? ` · Scale: ${escapeHtml(design.scale)}` : ""}</span>
+                </span>
+                <span class="sheet-request-state">${escapeHtml(titleize(design.outcome || design.state || "requested"))}</span>
+              </label>`;
+            }).join("")}
+          </div>
+        </div>` : "";
       return card("Flash Claim", `
         <div class="grid">
           ${field("Flash ID", p("flash_id"))}
@@ -974,6 +1002,7 @@
         ${p("flash_session_plan_note") ? `<div class="field" style="margin-top:16px;"><label>Managed Session Note</label><div class="value full">${escapeHtml(p("flash_session_plan_note"))}</div></div>` : ""}
         ${(submission.flashConflict || submission.flash_conflict) ? `<div class="field" style="margin-top:16px;"><label>Flash Conflict</label><div class="value full">${escapeHtml(submission.flashConflict || submission.flash_conflict)}</div></div>` : ""}
         ${p("sheet_code") ? `<div class="field"><label>Specific Sheet Code</label><div class="value">${escapeHtml(p("sheet_code"))}</div></div>` : ""}
+        ${sheetDesignBlock}
         <div class="field" style="margin-top:16px;"><label>Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
       `);
     }
@@ -4308,6 +4337,14 @@ ${meetingLines}
     renderDayAppointments(selectedCalendarDay);
   }
 
+  function approvedSheetDesignIds(submission, nextStatus) {
+    const designs = submission?.sheetDesignSelections || submission?.sheet_design_selections || [];
+    if (!designs.length || nextStatus !== "approved" || submission.status === "approved") return null;
+    const ids = [...document.querySelectorAll("[data-approved-sheet-design]:checked")].map((input) => input.value);
+    if (!ids.length) throw new Error("Choose at least one requested sheet design to approve.");
+    return ids;
+  }
+
   function appointmentCalendarMarkup() {
     return `
       <div class="availability-overview">
@@ -4783,7 +4820,7 @@ ${meetingLines}
     }
   });
 
-  listEl.addEventListener("click", (event) => {
+  listEl.addEventListener("click", async (event) => {
     const studioAppointmentRow = event.target.closest("[data-studio-appointment-id]");
     if (studioAppointmentRow) {
       activeAppointmentId = studioAppointmentRow.dataset.studioAppointmentId;
@@ -4811,6 +4848,15 @@ ${meetingLines}
     if (submission) {
       renderList();
       renderDetail(submission);
+      try {
+        const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`);
+        if (activeId !== button.dataset.id || !payload.submission) return;
+        const index = submissions.findIndex((item) => item.id === activeId);
+        if (index >= 0) submissions[index] = payload.submission;
+        renderDetail(payload.submission);
+      } catch (error) {
+        setStatus(error.message || "Submission details could not be loaded");
+      }
     }
   });
 
@@ -5190,6 +5236,13 @@ ${meetingLines}
       }
       if (submission?.status !== "approved") {
         setStatus("Saving as approved");
+        let approvedIds;
+        try {
+          approvedIds = approvedSheetDesignIds(submission, "approved");
+        } catch (error) {
+          setStatus(error.message);
+          return;
+        }
         const saved = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
@@ -5197,10 +5250,11 @@ ${meetingLines}
             status: "approved",
             bookingUrl: document.getElementById("bookingUrl")?.value || submission?.bookingUrl || "",
             internalNotes: document.getElementById("internalNotes")?.value || submission?.internalNotes || "",
+            ...(approvedIds ? { approved_sheet_design_ids: approvedIds } : {}),
           }),
         });
         const index = submissions.findIndex((s) => s.id === activeId);
-        if (index >= 0) submissions[index] = saved.submission;
+        if (index >= 0) submissions[index] = { ...saved.submission, sheetDesignSelections: submission.sheetDesignSelections || submission.sheet_design_selections || [] };
       }
       setStatus("Generating link");
       let tokenBody;
@@ -5448,6 +5502,13 @@ ${meetingLines}
       internalNotes: document.getElementById("internalNotes").value,
     };
     if (nextStatus !== submission.status) changes.status = nextStatus;
+    try {
+      const approvedIds = approvedSheetDesignIds(submission, nextStatus);
+      if (approvedIds) changes.approved_sheet_design_ids = approvedIds;
+    } catch (error) {
+      setStatus(error.message);
+      return;
+    }
     saveButton.disabled = true;
     setStatus("Saving");
     try {
@@ -5456,10 +5517,16 @@ ${meetingLines}
         headers: { "content-type": "application/json" },
         body: JSON.stringify(changes),
       });
+      let savedSubmission = payload.submission;
+      try {
+        const detailPayload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`);
+        if (detailPayload.submission) savedSubmission = detailPayload.submission;
+      } catch {}
       const index = submissions.findIndex((item) => item.id === activeId);
-      if (index >= 0) submissions[index] = payload.submission;
+      const enriched = savedSubmission;
+      if (index >= 0) submissions[index] = enriched;
       renderList();
-      renderDetail(payload.submission);
+      renderDetail(enriched);
       setStatus("Saved");
     } catch (error) {
       setStatus(error.message || "Changes could not be saved");
@@ -5923,7 +5990,7 @@ ${meetingLines}
 })();
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
-<script src="/studio/construct-manager.js?v=flash-media-gallery"></script>
+<script src="/studio/construct-manager.js?v=managed-flash-sheets"></script>
 <script src="/studio/people-manager.js?v=11"></script>
 </body>
 </html>

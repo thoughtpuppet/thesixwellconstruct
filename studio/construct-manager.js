@@ -179,13 +179,38 @@
     return `<label class="${long?"wide":""}">${label}${long?`<textarea name="${name}">${esc(value)}</textarea>`:`<input name="${name}" ${numeric?'type="number" min="0" step="1" inputmode="numeric"':''} value="${esc(value)}">`}</label>`
   }
 
-  function flashField(name,value,isNew){
+  function flashField(name,value,isNew,record={}){
     if(name==="state"){
       if(isNew)return `<label>Publishing state<input value="Draft" disabled><input type="hidden" name="state" value="draft"><span class="cm-field-note">New Flash always begins as a private draft. Reopen it after the artwork is attached to publish.</span></label>`;
       return `<label>Publishing state<select name="state">${["draft","available","reserved","placed","retired","archived"].map(stateValue=>`<option value="${stateValue}" ${String(value||"draft")===stateValue?"selected":""}>${stateValue}</option>`).join("")}</select></label>`
     }
-    if(name==="item_type")return `<label>Item type<select name="item_type">${[["individual","Individual"],["sheet","Sheet"]].map(([option,label])=>`<option value="${option}" ${String(value||"individual")===option?"selected":""}>${label}</option>`).join("")}</select></label>`;
+    if(name==="item_type"){
+      const locked=record.sheetDesigns?.length>0;
+      return `<label>Item type<select name="item_type" data-flash-item-type ${locked?"disabled":""}>${[["individual","Individual"],["sheet","Sheet"]].map(([option,label])=>`<option value="${option}" ${String(value||"individual")===option?"selected":""}>${label}</option>`).join("")}</select>${locked?'<input type="hidden" name="item_type" value="sheet"><span class="cm-field-note">A managed sheet keeps its sheet identity so letter assignments remain stable.</span>':""}</label>`
+    }
+    if(name==="claimable")return `<label data-flash-claimable-field ${record.item_type==="sheet"?"hidden":""}>claimable<input name="claimable" type="number" min="0" max="1" step="1" inputmode="numeric" value="${esc(value)}"></label>`;
     return field(name,value)
+  }
+
+  function flashSheetDesignRow(entry={},index=0){
+    const code=entry.code||String.fromCharCode(65+index),state=entry.state||"draft",locked=["reserved","placed"].includes(state);
+    return `<div class="cm-sheet-design-row" data-sheet-design-row data-code="${esc(code)}" data-id="${esc(entry.id||"")}">
+      <strong>${esc(code)} is</strong>
+      <label><span class="cm-visually-hidden">Design ${esc(code)} label</span><input data-sheet-design-label value="${esc(entry.label||"")}" placeholder="Name or describe design ${esc(code)}"></label>
+      <label>State<select data-sheet-design-state ${locked?"disabled":""}>${["draft","available","retired"].map(value=>`<option value="${value}" ${state===value?"selected":""}>${value}</option>`).join("")}${locked?`<option value="${esc(state)}" selected>${esc(state)}</option>`:""}</select></label>
+      ${locked?`<input type="hidden" data-sheet-design-locked-state value="${esc(state)}">`:""}
+      ${entry.reservedSubmissionId?`<span class="cm-field-note">Submission ${esc(entry.reservedSubmissionId)}</span>`:""}
+    </div>`
+  }
+
+  function flashSheetPanel(record={}){
+    const designs=Array.isArray(record.sheetDesigns)?record.sheetDesigns:[],count=designs.length||1,isSheet=record.item_type==="sheet";
+    return `<section class="cm-flash-sheet wide" data-flash-sheet-panel ${isSheet?"":"hidden"}>
+      <div class="cm-flash-media-head"><div><strong>Sheet designs</strong><p>Choose 1–26 designs. Studio assigns A–Z permanently; each label becomes a client-selectable one-time design.</p></div><span class="cm-pill" data-sheet-design-count-label>${count} design${count===1?"":"s"}</span></div>
+      <label>Design count<input type="number" min="1" max="26" step="1" inputmode="numeric" value="${count}" data-sheet-design-count></label>
+      <div class="cm-sheet-design-list" data-sheet-design-list>${designs.length?designs.map(flashSheetDesignRow).join(""):flashSheetDesignRow({},0)}</div>
+      <span class="cm-field-note">Draft sheets may keep blank labels. Every letter needs a label before the sheet can be published.</span>
+    </section>`
   }
 
   function flashMediaItem(media,index,total){
@@ -252,13 +277,31 @@
     const existingMedia=(record.media||[]).map(media=>`<figure><img src="${esc(media.url)}" alt="${esc(media.alt||record.title||"")}"><figcaption>${esc(media.alt||"Attached artwork image")}</figcaption></figure>`).join("");
     const mediaFields=config.mediaUpload?`<div class="cm-artwork-media wide"><strong>Artwork images</strong>${existingMedia?`<div class="cm-artwork-previews">${existingMedia}</div>`:"<p>No images attached yet.</p>"}<label>Upload JPEG, PNG, or WebP<input type="file" name="artwork_files" accept="image/jpeg,image/png,image/webp" multiple></label><label>Image alt text<input name="artwork_alt" value="${esc(record.title||"")}" placeholder="Describe the artwork for screen readers"></label><span class="cm-upload-status" data-artwork-upload-status aria-live="polite"></span></div>`:"";
     const styleFields=config===configs.flash?styleSelector(record,styleOptions):"";
-    const fields=config.fields.map(name=>config.flashEditor?flashField(name,record[name]??(name==="state"?"draft":""),!record.id):field(name,record[name]??(name==="state"?"draft":""))).join("");
+    const fields=config.fields.map(name=>config.flashEditor?flashField(name,record[name]??(name==="state"?"draft":""),!record.id,record):field(name,record[name]??(name==="state"?"draft":""))).join("");
+    const flashSheet=config.flashEditor?flashSheetPanel(record):"";
     const flashMedia=config.flashEditor?flashMediaPanel(record):"";
-    return `<section class="cm-editor ${config.flashEditor?"cm-flash-editor":""}" aria-label="${record.id?"Edit":"Create"} record"><div class="cm-row"><h3>${record.id?"Edit":"New"} ${esc(config.title)}</h3><button class="button" type="button" data-cancel>Close</button></div><form class="cm-form" data-editor data-id="${esc(record.id||"")}" data-media-count="${record.media?.length||0}" data-has-primary="${record.media?.some(media=>media.role==="primary")?"true":"false"}"><div class="cm-form-grid">${fields}${styleFields}${flashMedia}${mediaFields}</div><div class="cm-actions"><button class="button" type="submit">${config.flashEditor?"Save Flash draft and artwork":config.mediaUpload?"Save artwork":"Save draft"}</button></div></form></section>`
+    return `<section class="cm-editor ${config.flashEditor?"cm-flash-editor":""}" aria-label="${record.id?"Edit":"Create"} record"><div class="cm-row"><h3>${record.id?"Edit":"New"} ${esc(config.title)}</h3><button class="button" type="button" data-cancel>Close</button></div><form class="cm-form" data-editor data-id="${esc(record.id||"")}" data-original-state="${esc(record.state||"draft")}" data-original-item-type="${esc(record.item_type||"individual")}" data-media-count="${record.media?.length||0}" data-has-primary="${record.media?.some(media=>media.role==="primary")?"true":"false"}"><div class="cm-form-grid">${fields}${styleFields}${flashSheet}${flashMedia}${mediaFields}</div><div class="cm-actions"><button class="button" type="submit">${config.flashEditor?"Save Flash draft and artwork":config.mediaUpload?"Save artwork":"Save draft"}</button></div></form></section>`
+  }
+
+  function renderFlashSheetRows(form){
+    const countInput=form.querySelector("[data-sheet-design-count]"),list=form.querySelector("[data-sheet-design-list]"),label=form.querySelector("[data-sheet-design-count-label]");
+    if(!countInput||!list)return;
+    const existing=new Map([...list.querySelectorAll("[data-sheet-design-row]")].map(row=>[row.dataset.code,{id:row.dataset.id,code:row.dataset.code,label:row.querySelector("[data-sheet-design-label]")?.value||"",state:row.querySelector("[data-sheet-design-locked-state]")?.value||row.querySelector("[data-sheet-design-state]")?.value||"draft",reservedSubmissionId:row.querySelector(".cm-field-note")?.textContent.replace(/^Submission\s+/,"")||""}]));
+    const count=Math.max(1,Math.min(26,Number(countInput.value)||1));countInput.value=count;
+    list.innerHTML=Array.from({length:count},(_,index)=>{const code=String.fromCharCode(65+index);return flashSheetDesignRow(existing.get(code)||{code},index)}).join("");
+    if(label)label.textContent=`${count} design${count===1?"":"s"}`
+  }
+
+  function sheetDesignPayload(form){
+    const rows=[...form.querySelectorAll("[data-sheet-design-row]")];
+    if(!rows.length||rows.length>26)throw new Error("Choose between one and 26 sheet designs.");
+    return {count:rows.length,designs:rows.map(row=>({id:row.dataset.id||undefined,code:row.dataset.code,label:String(row.querySelector("[data-sheet-design-label]")?.value||"").trim(),state:row.querySelector("[data-sheet-design-locked-state]")?.value||row.querySelector("[data-sheet-design-state]")?.value||"draft"}))}
   }
 
   function bindFlashEditor(form){
     form.addEventListener("change",event=>{
+      const itemType=event.target.closest("[data-flash-item-type]");if(itemType){const sheet=itemType.value==="sheet",panel=form.querySelector("[data-flash-sheet-panel]"),claimable=form.querySelector("[data-flash-claimable-field]");if(panel)panel.hidden=!sheet;if(claimable)claimable.hidden=sheet;return}
+      const count=event.target.closest("[data-sheet-design-count]");if(count){renderFlashSheetRows(form);return}
       const input=event.target.closest('[name="flash_files"]');if(!input)return;
       const output=form.querySelector("[data-flash-pending]"),files=[...input.files||[]];if(!output)return;
       output.innerHTML="";output.hidden=!files.length;
@@ -492,17 +535,18 @@
       const form=event.target.closest("[data-editor]");if(!form)return;event.preventDefault();
       const formData=new FormData(form),files=[...(form.querySelector('[name="artwork_files"]')?.files||[])],flashFiles=[...(form.querySelector('[name="flash_files"]')?.files||[])],altText=String(formData.get("artwork_alt")||formData.get("flash_alt")||formData.get("title")||"").trim();formData.delete("artwork_files");formData.delete("artwork_alt");formData.delete("flash_files");formData.delete("flash_alt");
       const pendingVariantUploads=config.symbolEditor?pendingLegendVariantImages(form):[];
-      let values;try{pendingVariantUploads.forEach(item=>validateLegendVariantImage(item.file));values=config.symbolEditor?serializeSymbol(form,{allowPendingVariantImages:true}):Object.fromEntries(formData);if(config===configs.flash)values.styles=selectedStyles(form)}catch(error){const output=form.querySelector("[data-symbol-status]");if(output)output.textContent=error.message;status(error.message);return}
+      let values,sheetPayload=null;try{pendingVariantUploads.forEach(item=>validateLegendVariantImage(item.file));values=config.symbolEditor?serializeSymbol(form,{allowPendingVariantImages:true}):Object.fromEntries(formData);if(config===configs.flash){values.styles=selectedStyles(form);if(values.item_type==="sheet"){sheetPayload=sheetDesignPayload(form);if((values.state||"draft")!=="draft"&&sheetPayload.designs.some(design=>!design.label))throw new Error("Every sheet design needs a label before publishing.")}}}catch(error){const output=form.querySelector("[data-symbol-status]")||form.querySelector("[data-flash-upload-status]");if(output)output.textContent=error.message;status(error.message);return}
       if("state" in values&&!values.state)values.state="draft";for(const key of ["sort_order","claimable","acquisition_eligible","homepage_enabled"])if(key in values)values[key]=Number(values[key])||0;
       const recordId=form.dataset.id,submit=form.querySelector('[type="submit"]'),output=form.querySelector("[data-flash-upload-status]")||form.querySelector("[data-artwork-upload-status]")||form.querySelector("[data-symbol-status]");submit.disabled=true;
       try{
         validateArtworkImages(files);validateFlashImages(flashFiles);
         let entityId=recordId;
         if(config.flashEditor){
-          const desiredState=values.state||"draft",needsStaging=Boolean(entityId&&flashFiles.length&&form.dataset.hasPrimary!=="true"&&desiredState!=="draft");
+          const desiredState=values.state||"draft",needsStaging=Boolean(entityId&&desiredState!=="draft"&&((flashFiles.length&&form.dataset.hasPrimary!=="true")||(sheetPayload&&(form.dataset.originalState==="draft"||form.dataset.originalItemType!=="sheet"))));
           const saved=await api(`/api/admin/flash${entityId?`/${encodeURIComponent(entityId)}`:""}`,{method:entityId?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...values,state:entityId?(needsStaging?"draft":desiredState):"draft"})});
           entityId=entityId||saved.record?.id;if(!entityId)throw new Error("Flash draft was created without an entity ID.");form.dataset.id=entityId;
           if(flashFiles.length)await uploadFlashImages(entityId,flashFiles,altText||values.title||"Flash artwork",Number(form.dataset.mediaCount)||0,form.dataset.hasPrimary==="true",output);
+          if(sheetPayload)await api(`/api/admin/flash/${encodeURIComponent(entityId)}/sheet-designs`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(sheetPayload)});
           if(needsStaging)await api(`/api/admin/flash/${encodeURIComponent(entityId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(values)});
           status(flashFiles.length?"Flash draft and artwork saved":recordId?"Flash record saved":"Flash draft created");return renderResource("flash")
         }

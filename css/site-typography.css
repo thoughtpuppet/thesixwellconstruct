@@ -86,8 +86,8 @@ h6,
    Merch and Tattoo established this role: a small Georgia serif paragraph,
    uppercase with open tracking and compact leading. Legacy selectors remain
    here so current public pages inherit the same role without page-by-page
-   overrides. Color remains an explicit part of whichever reference treatment
-   a page is assigned; alignment, measure, and spacing are shared here. */
+   overrides. Color, alignment, measure, and spacing all belong to this shared
+   treatment. */
 :is(
   .hero-descriptor,
   .hero-desc,
@@ -119,6 +119,7 @@ h6,
   line-height: 1.6 !important;
   text-transform: uppercase !important;
   font-variant-caps: normal !important;
+  color: rgba(252, 184, 103, 0.55) !important;
   max-width: min(100%, 380px) !important;
   text-align: left !important;
   padding-bottom: var(--s4, 16px) !important;
@@ -157,6 +158,7 @@ h6,
   line-height: inherit !important;
   text-transform: inherit !important;
   font-variant-caps: inherit !important;
+  color: inherit !important;
 }
 
 /* Hero titles carry the same heavy Inter weight established by the Tattoo and

@@ -180,6 +180,35 @@ function publicState(resource) {
   return "state='published'";
 }
 
+async function loadFlashSheetDesigns(database, flashItemIds, { admin = false } = {}) {
+  if (!flashItemIds.length) return new Map();
+  const placeholders = flashItemIds.map(() => "?").join(",");
+  const visibility = admin ? "" : "AND state <> 'draft'";
+  const rows = (await database.prepare(
+    `SELECT id,flash_item_id,code,label,state,reserved_submission_id,sort_order,created_at,updated_at
+     FROM flash_sheet_designs
+     WHERE flash_item_id IN (${placeholders}) ${visibility}
+     ORDER BY flash_item_id,sort_order,code`
+  ).bind(...flashItemIds).all()).results || [];
+  const map = new Map();
+  for (const row of rows) {
+    if (!map.has(row.flash_item_id)) map.set(row.flash_item_id, []);
+    const design = {
+      id: row.id,
+      code: row.code,
+      label: row.label,
+      state: row.state,
+      sortOrder: Number(row.sort_order) || 0,
+      sort_order: Number(row.sort_order) || 0,
+      claimableNow: row.state === "available" && !row.reserved_submission_id,
+      claimable_now: row.state === "available" && !row.reserved_submission_id,
+    };
+    if (admin) design.reservedSubmissionId = row.reserved_submission_id || "";
+    map.get(row.flash_item_id).push(design);
+  }
+  return map;
+}
+
 async function publicCatalog(request, env, resource, recordSlug = "") {
   const config = RESOURCE_CONFIG[resource];
   if (!config) return failure("Unknown catalog.", 404);
@@ -201,9 +230,10 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
       : await statement.all();
   const rows = result.results || [];
   const entityIds = rows.map((row) => row.id);
-  const [media, tattooStyles] = await Promise.all([
+  const [media, tattooStyles, flashSheetDesigns] = await Promise.all([
     entityMedia(database, entityIds),
     resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
+    resource === "flash" ? loadFlashSheetDesigns(database, entityIds) : Promise.resolve(new Map()),
   ]);
   const records = rows.map((row) => {
     const { reserved_submission_id: _reservationOwner, ...publicRow } = row;
@@ -222,10 +252,23 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
     };
     if (resource !== "flash") return record;
     const canonicalRoute = `/tattoos/flash/${encodeURIComponent(row.slug || row.id)}/`;
-    const claimableNow = row.state === "available" && Number(row.claimable) === 1 && !row.reserved_submission_id;
+    const sheetDesigns = flashSheetDesigns.get(row.id) || [];
+    const publicSheetDesigns = sheetDesigns.map((design) => ({
+      ...design,
+      claimableNow: row.state === "available" && design.claimableNow,
+      claimable_now: row.state === "available" && design.claimableNow,
+    }));
+    const managedSheet = row.item_type === "sheet" && publicSheetDesigns.length > 0;
+    const claimableNow = managedSheet
+      ? publicSheetDesigns.some((design) => design.claimableNow)
+      : row.state === "available" && Number(row.claimable) === 1 && !row.reserved_submission_id;
     return {
       ...record,
       claimable: claimableNow ? 1 : 0,
+      sheetDesigns: publicSheetDesigns,
+      sheet_designs: publicSheetDesigns,
+      managedSheet,
+      managed_sheet: managedSheet,
       canonicalRoute,
       canonical_route: canonicalRoute,
       claimableNow,
@@ -784,14 +827,16 @@ async function adminList(env, resource) {
   const database = db(env);
   const rows = (await database.prepare(`SELECT * FROM ${config.table} ORDER BY sort_order,id`).all()).results || [];
   const entityIds = rows.map((row) => row.id);
-  const [media, tattooStyles] = await Promise.all([
+  const [media, tattooStyles, flashSheetDesigns] = await Promise.all([
     resource === "flash" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
     resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
+    resource === "flash" ? loadFlashSheetDesigns(database, entityIds, { admin: true }) : Promise.resolve(new Map()),
   ]);
   return json({
     records: rows.map((row) => ({
       ...row,
       ...(resource === "flash" ? tattooStylePayload(tattooStyles.get(row.id), { fallbackValue: "unclassified", fallbackLabel: "Unclassified" }) : {}),
+      ...(resource === "flash" ? { sheetDesigns: flashSheetDesigns.get(row.id) || [] } : {}),
       media: media.get(row.id) || [],
     })),
     count: rows.length,
@@ -869,12 +914,45 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   if (resource === "flash" && PUBLIC_FLASH_STATES.has(projected.state) && !await flashHasEligiblePrimary(database, recordId)) {
     return failure("Attach an eligible primary Flash image before publishing this design.", 409);
   }
+  let managedSheetDesigns = [];
+  if (resource === "flash") {
+    managedSheetDesigns = (await loadFlashSheetDesigns(database, [recordId], { admin: true })).get(recordId) || [];
+    if (
+      beforeRow.item_type !== "sheet"
+      && projected.item_type === "sheet"
+      && ["reserved","placed"].includes(beforeRow.state)
+    ) {
+      return failure("Reserved or placed Flash records cannot be converted into managed sheets.", 409);
+    }
+    if (managedSheetDesigns.length && projected.item_type !== "sheet") {
+      return failure("A managed Flash sheet cannot be converted back to an individual design.", 409);
+    }
+  }
+  if (resource === "flash" && projected.item_type === "sheet") {
+    if (managedSheetDesigns.length && PUBLIC_FLASH_STATES.has(projected.state)) {
+      if (managedSheetDesigns.length > 26 || managedSheetDesigns.some((design) => !text(design.label, 300))) {
+        return failure("Every managed Flash sheet design needs a label before publishing.", 409);
+      }
+    }
+  }
   const updateStatements=[];
   if (keys.length) updateStatements.push(
     database.prepare(`UPDATE ${config.table} SET ${keys.map(k=>`${k}=?`).join(",")},updated_at=datetime('now') WHERE id=?`).bind(...keys.map(k=>values[k]),recordId)
   );
   else updateStatements.push(database.prepare(`UPDATE ${config.table} SET updated_at=datetime('now') WHERE id=?`).bind(recordId));
   if (shouldReplaceStyles) updateStatements.push(...replaceTattooStyleAssignmentStatements(database, recordId, nextStyleSelection));
+  if (
+    resource === "flash"
+    && projected.item_type === "sheet"
+    && managedSheetDesigns.length
+    && projected.state === "available"
+  ) {
+    updateStatements.push(
+      database.prepare(
+        "UPDATE flash_sheet_designs SET state='available',updated_at=datetime('now') WHERE flash_item_id=? AND state='draft'"
+      ).bind(recordId)
+    );
+  }
   updateStatements.push(
     entityVisibilityStatement(database, resource, projected),
     searchSyncStatement(database, resource, projected),
@@ -892,6 +970,95 @@ async function reorder(request, env, resource) {
   if(body.expected_updated_at){const latest=await database.prepare(`SELECT MAX(updated_at) v FROM ${config.table}`).first();if(latest?.v&&latest.v!==body.expected_updated_at)return failure("Order changed in another session. Refresh and retry.",409,{latest:latest.v});}
   await database.batch(body.ids.map((recordId,index)=>database.prepare(`UPDATE ${config.table} SET sort_order=?,updated_at=datetime('now') WHERE id=?`).bind(index+1,recordId)));
   return json({ok:true});
+}
+
+async function flashSheetDesignsAdminApi(request, env, flashItemId) {
+  if (request.method !== "PUT") return failure("Method not allowed.", 405);
+  const body = await readJson(request);
+  if (!body) return failure("Send a JSON object.");
+  const database = db(env);
+  const parent = await database.prepare(
+    "SELECT id,item_type,state FROM flash_items WHERE id=?"
+  ).bind(flashItemId).first();
+  if (!parent) return failure("Flash record not found.", 404);
+  if (parent.item_type !== "sheet") return failure("Change the Flash item type to Sheet before adding lettered designs.", 409);
+  if (["reserved","placed"].includes(parent.state)) {
+    return failure("Reserved or placed legacy sheets cannot be converted or reconfigured.", 409);
+  }
+  const count = Number(body.count);
+  if (!Number.isInteger(count) || count < 1 || count > 26) {
+    return failure("Flash sheet design count must be between 1 and 26.");
+  }
+  const supplied = Array.isArray(body.designs) ? body.designs : [];
+  const existing = (await database.prepare(
+    "SELECT * FROM flash_sheet_designs WHERE flash_item_id=? ORDER BY sort_order,code"
+  ).bind(flashItemId).all()).results || [];
+  const existingByCode = new Map(existing.map((row) => [row.code, row]));
+  const targetCodes = Array.from({ length: count }, (_, index) => String.fromCharCode(65 + index));
+  const removed = existing.filter((row) => !targetCodes.includes(row.code));
+  if (removed.length) {
+    const protectedRows = removed.filter((row) => ["reserved","placed"].includes(row.state));
+    if (protectedRows.length) {
+      return failure(`Cannot remove ${protectedRows.map((row) => row.code).join(", ")} because those designs are ${protectedRows[0].state}.`, 409);
+    }
+    const placeholders = removed.map(() => "?").join(",");
+    const referenced = (await database.prepare(
+      `SELECT DISTINCT fsd.code
+       FROM submission_flash_designs sfd
+       JOIN flash_sheet_designs fsd ON fsd.id=sfd.sheet_design_id
+       WHERE sfd.sheet_design_id IN (${placeholders})
+       ORDER BY fsd.sort_order`
+    ).bind(...removed.map((row) => row.id)).all()).results || [];
+    if (referenced.length) {
+      return failure(`Cannot remove ${referenced.map((row) => row.code).join(", ")} because existing submissions reference those designs.`, 409);
+    }
+  }
+  const suppliedByCode = new Map();
+  for (let index = 0; index < supplied.length; index += 1) {
+    const entry = supplied[index] || {};
+    const code = text(entry.code, 4).toUpperCase() || targetCodes[index] || "";
+    if (!targetCodes.includes(code) || suppliedByCode.has(code)) return failure("Sheet design assignments must match the generated A-Z sequence.");
+    suppliedByCode.set(code, entry);
+  }
+  const publicParent = PUBLIC_FLASH_STATES.has(parent.state);
+  const availableParent = parent.state === "available";
+  const statements = removed.map((row) =>
+    database.prepare("DELETE FROM flash_sheet_designs WHERE id=? AND flash_item_id=?").bind(row.id, flashItemId)
+  );
+  for (let index = 0; index < targetCodes.length; index += 1) {
+    const code = targetCodes[index];
+    const before = existingByCode.get(code);
+    const entry = suppliedByCode.get(code) || supplied[index] || {};
+    if (before && entry.id && entry.id !== before.id) return failure(`${code} already has a stable design identity and cannot be replaced.`, 409);
+    if (entry.code && text(entry.code, 4).toUpperCase() !== code) return failure(`${code} cannot be renumbered.`, 409);
+    const label = text(entry.label ?? before?.label, 300);
+    if (publicParent && !label) return failure(`Design ${code} needs a label before this public sheet can be saved.`, 409);
+    let state = text(entry.state ?? before?.state, 30).toLowerCase() || "draft";
+    if (before && ["reserved","placed"].includes(before.state)) state = before.state;
+    else {
+      if (!["draft","available","retired"].includes(state)) return failure(`Design ${code} has an invalid state.`);
+      if (!before) state = availableParent ? "available" : "draft";
+      else if (availableParent && state === "draft") state = "available";
+    }
+    if (before) {
+      statements.push(
+        database.prepare(
+          "UPDATE flash_sheet_designs SET label=?,state=?,sort_order=?,updated_at=datetime('now') WHERE id=? AND flash_item_id=?"
+        ).bind(label, state, index + 1, before.id, flashItemId)
+      );
+    } else {
+      statements.push(
+        database.prepare(
+          `INSERT INTO flash_sheet_designs
+           (id,flash_item_id,code,label,state,sort_order,created_at,updated_at)
+           VALUES(?,?,?,?,?,?,datetime('now'),datetime('now'))`
+        ).bind(id("flash-sheet-design"), flashItemId, code, label, state, index + 1)
+      );
+    }
+  }
+  await database.batch(statements);
+  const sheetDesigns = (await loadFlashSheetDesigns(database, [flashItemId], { admin: true })).get(flashItemId) || [];
+  return json({ sheetDesigns, sheet_designs: sheetDesigns, count: sheetDesigns.length });
 }
 
 function normalizedConsent(value, fallback="unknown") {
@@ -1390,6 +1557,7 @@ export async function handleConstructApi(request,env){
   const timelineChapterMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters\/([^/]+)$/);if(timelineChapterMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChapterMatch[1]),decodeURIComponent(timelineChapterMatch[2]));
   const timelineChaptersMatch=path.match(/^\/api\/admin\/archive-timelines\/([^/]+)\/chapters$/);if(timelineChaptersMatch)return archiveTimelinesAdminApi(request,env,decodeURIComponent(timelineChaptersMatch[1]),"");
   const timelineMatch=path.match(/^\/api\/admin\/archive-timelines(?:\/([^/]+))?$/);if(timelineMatch)return archiveTimelinesAdminApi(request,env,timelineMatch[1]?decodeURIComponent(timelineMatch[1]):"");
+  const flashSheetDesignsMatch=path.match(/^\/api\/admin\/flash\/([^/]+)\/sheet-designs$/);if(flashSheetDesignsMatch)return flashSheetDesignsAdminApi(request,env,decodeURIComponent(flashSheetDesignsMatch[1]));
   if(path==="/api/admin/entities"&&request.method==="GET")return entityDirectory(request,env);
   const relationshipTypeMatch=path.match(/^\/api\/admin\/relationship-types(?:\/([^/]+))?$/);if(relationshipTypeMatch)return relationshipTypesApi(request,env,relationshipTypeMatch[1]?decodeURIComponent(relationshipTypeMatch[1]):"");
   const relationshipMatch=path.match(/^\/api\/admin\/relationships(?:\/([^/]+))?$/);if(relationshipMatch)return relationshipApi(request,env,relationshipMatch[1]?decodeURIComponent(relationshipMatch[1]):"");
