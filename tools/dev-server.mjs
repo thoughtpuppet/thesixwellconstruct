@@ -3,6 +3,10 @@ import { createReadStream } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  clientEmailPreviewCatalog,
+  renderClientEmailPreview,
+} from "../functions/api/notifications/_email-templates.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -352,6 +356,54 @@ function proxyHeaders(req) {
 }
 
 async function handleApiProxy(req, res) {
+  const localUrl = new URL(req.url || "/", `http://${host}:${port}`);
+  if (localUrl.pathname === "/api/admin/notifications/preview") {
+    if (req.method !== "GET") {
+      res.writeHead(405, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Allow": "GET",
+      });
+      res.end(JSON.stringify({ error: "Method not allowed." }));
+      return true;
+    }
+    const catalog = clientEmailPreviewCatalog();
+    const templateKey = String(localUrl.searchParams.get("templateKey") || "").trim();
+    const requestedVariant = String(localUrl.searchParams.get("variant") || "").trim();
+    if (!templateKey) {
+      res.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-SWC-Local-Preview": "1",
+      });
+      res.end(JSON.stringify({ templates: catalog }));
+      return true;
+    }
+    const matches = catalog.filter((entry) => entry.templateKey === templateKey);
+    const selected = requestedVariant
+      ? matches.find((entry) => entry.variant === requestedVariant)
+      : matches[0];
+    const rendered = selected
+      ? renderClientEmailPreview(selected.templateKey, selected.variant)
+      : null;
+    if (!selected || !rendered) {
+      res.writeHead(404, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-SWC-Local-Preview": "1",
+      });
+      res.end(JSON.stringify({ error: "Unsupported client email preview." }));
+      return true;
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-SWC-Local-Preview": "1",
+    });
+    res.end(JSON.stringify({ ...selected, ...rendered }));
+    return true;
+  }
+
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const body = chunks.length ? Buffer.concat(chunks) : undefined;

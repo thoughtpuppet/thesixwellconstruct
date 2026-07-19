@@ -1,3 +1,19 @@
+import {
+  buildAppointmentCancelledEmail,
+  buildAppointmentConfirmedEmail,
+  buildAppointmentReminderEmail,
+  buildAppointmentRescheduledEmail,
+  buildBookingLinkEmail,
+  buildEventOpenMicSlotEmail,
+  buildEventReminderEmail,
+  buildEventTicketCancelledEmail,
+  buildEventTicketPaidEmail,
+  buildSubmissionReceivedEmail,
+  buildTattooDraftResumeEmail,
+  clientEmailPreviewCatalog,
+  renderClientEmailPreview,
+} from "./_email-templates.js";
+
 const DEFAULT_FROM_ADDRESS = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_FROM_NAME = "art.pill TATTOO HOUSE";
 const DEFAULT_REPLY_TO = "saisolehman@artpilltattoohouse.com";
@@ -493,23 +509,15 @@ export async function notifyTattooBuildDraftResume(env, request, draft, rawToken
         year: "numeric",
       }).format(new Date(draft.expires_at))
     : "";
-  const text = [
-    `Your art.pill TATTOO HOUSE ${label} is saved.`,
-    "",
-    "Use this private link to continue editing:",
+  const message = buildTattooDraftResumeEmail({
+    subject: `Continue your art.pill ${label}`,
+    label,
     resumeUrl,
-    "",
-    "The link remains active for 30 days after your last online save.",
-    expiration ? `Current expiration: ${expiration}.` : "",
-    "Reference uploads are not stored with drafts and must be attached again before final submission.",
-    "",
-    "This is only a saved draft. Nothing has been submitted to the Studio for review.",
-    "If you did not request this email, you can ignore it.",
-  ].filter(Boolean).join("\n");
+    expiration,
+  });
   return sendTransactionalEmail(env, {
     to: draft.owner_email || draft.email,
-    subject: `Continue your art.pill ${label}`,
-    text,
+    ...message,
     templateKey: "tattoo_build_draft_resume",
     relatedType: "tattoo_build_draft",
     relatedId: draft.id,
@@ -844,28 +852,21 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   const requestedSheetDesigns = type === "flash_claim"
     ? flashSheetDesignLines(normalized.payload, "sheet_design_selections", "Requested sheet designs:")
     : [];
-
-  const text = [
-    `Hi ${normalized.contactName || "there"},`,
-    "",
-    `Your art.pill TATTOO HOUSE ${profile.label} has been received.`,
-    `Submission reference: ${normalized.id}`,
-    ...requestedSheetDesigns,
-    "",
-    profile.expectation,
-    profile.next,
-    "",
+  const message = buildSubmissionReceivedEmail({
+    subject: `art.pill TATTOO HOUSE — ${profile.subject}`,
+    clientName: normalized.contactName,
+    label: profile.label,
+    submissionId: normalized.id,
+    requestedSheetDesigns: requestedSheetDesigns.slice(1),
+    expectation: profile.expectation,
+    next: profile.next,
     reviewLine,
-    `Questions or corrections? Email ${settings.supportEmail} and include your submission reference.`,
-    "",
-    "Thank you,",
-    "art.pill TATTOO HOUSE",
-  ].join("\n");
+    supportEmail: settings.supportEmail,
+  });
 
   return sendTransactionalEmail(env, {
     to: normalized.contactEmail,
-    subject: `art.pill TATTOO HOUSE — ${profile.subject}`,
-    text,
+    ...message,
     templateKey: "submission_received",
     relatedType: "submission",
     relatedId: normalized.id,
@@ -924,53 +925,26 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
     "approved_sheet_designs",
     "Approved sheet designs:",
   );
-  const text = [
-    `Hi ${normalized.contactName || "there"},`,
-    "",
-    isConsultationPurpose
-      ? "Your project review is ready for the required in-person planning consultation. This consultation happens before tattoo scheduling."
-      : "Your tattoo project and final session plan are ready for tattoo booking.",
-    ...approvedSheetDesigns,
-    "",
-    isConsultationPurpose ? "Available consultation option:" : "Approved tattoo session options:",
-    "",
-    sessionOptionsText(bookingTypes),
-    "",
-    approvedBudget ? `Approved project budget: ${approvedBudget}` : "",
-    approvedBudget
-      ? "Review and agree to this project-total range in the private booking link before choosing an appointment. The tattoo deposit is applied to the final tattoo cost."
-      : "",
-    `${isConsultationPurpose ? "Consultation reservation fee" : "Tattoo deposit due to book"}: ${depositAmountText(bookingTypes)}`,
-    "",
-    "Before booking, please review:",
-    "",
-    `- Terms & Conditions: ${resources.bookingTermsUrl}`,
-    isConsultationPurpose
-      ? `- Location & parking: ${resources.locationParkingUrl}`
-      : `- Tattoo preparation & location details: ${resources.dayOfInstructionsUrl}`,
-    "",
-    isConsultationPurpose
-      ? "Use the private link below to choose the consultation time and pay its reservation fee:"
-      : "Use the private link below to review the final session estimate, select an appointment, and pay the tattoo deposit:",
-    "",
-    bookingUrl,
-    "",
-    expiresAt ? `Private link expires: ${formatDate(expiresAt)}` : "",
-    isConsultationPurpose
-      ? "The consultation fee is non-refundable and is not a tattoo deposit. Paying schedules only the prerequisite consultation; the tattoo remains unbooked until consultation completion, a final session plan, and a separate tattoo booking link."
-      : "This link is private to your project. Tattoo deposits are non-refundable and go toward the final cost of the scheduled tattoo. Personalized aftercare instructions are provided at the appointment.",
-    "If the available times do not work, reply to this email and the studio can help.",
-    "",
-    "Thank you,",
-    "art.pill TATTOO HOUSE",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
-
-  return sendTransactionalEmail(env, {
-    to: normalized.contactEmail,
+  const message = buildBookingLinkEmail({
     subject: isConsultationPurpose
       ? "Your private prerequisite consultation link"
       : "Your private art.pill TATTOO HOUSE tattoo booking link",
-    text,
+    consultation: isConsultationPurpose,
+    clientName: normalized.contactName,
+    approvedSheetDesigns: approvedSheetDesigns.slice(1),
+    sessionOptions: sessionOptionsText(bookingTypes),
+    approvedBudget,
+    depositText: depositAmountText(bookingTypes),
+    bookingUrl,
+    expiresAt: expiresAt ? formatDate(expiresAt) : "",
+    bookingTermsUrl: resources.bookingTermsUrl,
+    dayOfInstructionsUrl: resources.dayOfInstructionsUrl,
+    locationParkingUrl: resources.locationParkingUrl,
+  });
+
+  return sendTransactionalEmail(env, {
+    to: normalized.contactEmail,
+    ...message,
     templateKey: "booking_link_created",
     relatedType: "submission",
     relatedId: normalized.id,
@@ -980,34 +954,26 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
 
 async function sendTattooAppointmentConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    "Your art.pill TATTOO HOUSE appointment is confirmed.",
-    "",
-    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Session: ${appointment.bookingTypeLabel}`,
-    `Deposit: ${formatMoney(appointment.depositCents, appointment.currency)} received`,
-    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
-    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
-    "",
-    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
-    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
-    `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
-    `Location & parking: ${resources.locationParkingUrl}`,
-    "Personalized aftercare instructions will be provided at your appointment.",
-    "",
-    "I may follow up directly with prep notes or adjustments before your appointment, if needed.",
-    "",
-    "Thank you,",
-    "Saiel Solehman",
-    "[art.pill TATTOO HOUSE]",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const message = buildAppointmentConfirmedEmail({
+    kind: "tattoo",
+    subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
+    clientName: appointment.clientName,
+    when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
+    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received`,
+    tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
+    totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
+    confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
+    calendarUrl: appointmentCalendarUrl(env, request, appointment),
+    resources: [
+      { label: "Day-of instructions", href: resources.dayOfInstructionsUrl },
+      { label: "Location & parking", href: resources.locationParkingUrl },
+    ],
+  });
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
-    text,
+    ...message,
     templateKey: "appointment_confirmed",
     relatedType: "appointment",
     relatedId: appointment.id,
@@ -1017,32 +983,25 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
 
 async function sendInPersonConsultationConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    "Your in-person consultation at art.pill TATTOO HOUSE is confirmed.",
-    "",
-    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Session: ${appointment.bookingTypeLabel}`,
-    `Reservation fee: ${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
-    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
-    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
-    "",
-    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
-    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
-    `Location & parking: ${resources.locationParkingUrl}`,
-    "",
-    "We'll talk through your project, placement, scale, and timeline in person. No prep is required ahead of time - just bring any reference images or ideas you'd like to share.",
-    "",
-    "Thank you,",
-    "Saiel Solehman",
-    "[art.pill TATTOO HOUSE]",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const message = buildAppointmentConfirmedEmail({
+    kind: "consultation_in_person",
+    subject: "Your consultation at art.pill TATTOO HOUSE has been confirmed",
+    clientName: appointment.clientName,
+    when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
+    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
+    tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
+    totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
+    confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
+    calendarUrl: appointmentCalendarUrl(env, request, appointment),
+    resources: [
+      { label: "Location & parking", href: resources.locationParkingUrl },
+    ],
+  });
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: "Your consultation at art.pill TATTOO HOUSE has been confirmed",
-    text,
+    ...message,
     templateKey: "consultation_confirmed_in_person",
     relatedType: "appointment",
     relatedId: appointment.id,
@@ -1051,32 +1010,24 @@ async function sendInPersonConsultationConfirmed(env, request, appointment, opti
 }
 
 async function sendVirtualConsultationConfirmed(env, request, appointment, options = {}) {
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    "Your virtual consultation with art.pill TATTOO HOUSE is confirmed.",
-    "",
-    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Session: ${appointment.bookingTypeLabel}`,
-    `Reservation fee: ${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
-    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
-    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
-    appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "",
-    "",
-    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
-    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
-    "",
-    "We'll talk through your project, placement, scale, and timeline over video. No prep is required ahead of time - just bring any reference images or ideas you'd like to share, and a quiet spot with a stable connection.",
-    "",
-    "Thank you,",
-    "Saiel Solehman",
-    "[art.pill TATTOO HOUSE]",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const message = buildAppointmentConfirmedEmail({
+    kind: "consultation_virtual",
+    subject: "Your virtual consultation with art.pill TATTOO HOUSE has been confirmed",
+    clientName: appointment.clientName,
+    when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
+    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for your consultation, not a deposit toward future work.`,
+    tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
+    totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
+    zoomUrl: appointment.meeting?.joinUrl || "",
+    confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
+    calendarUrl: appointmentCalendarUrl(env, request, appointment),
+    resources: [],
+  });
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: "Your virtual consultation with art.pill TATTOO HOUSE has been confirmed",
-    text,
+    ...message,
     templateKey: "consultation_confirmed_virtual",
     relatedType: "appointment",
     relatedId: appointment.id,
@@ -1086,32 +1037,25 @@ async function sendVirtualConsultationConfirmed(env, request, appointment, optio
 
 async function sendBuildSessionConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    "Your in-person build session at art.pill TATTOO HOUSE is confirmed.",
-    "",
-    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Session: ${appointment.bookingTypeLabel}`,
-    `Reservation fee: ${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for the build session, not a deposit toward a future tattoo.`,
-    appointment.tipCents ? `Optional tip: ${formatMoney(appointment.tipCents, appointment.currency)}` : "",
-    appointment.tipCents ? `Total paid today: ${formatMoney(appointment.totalDueCents, appointment.currency)}` : "",
-    "",
-    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
-    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
-    `Location & parking: ${resources.locationParkingUrl}`,
-    "",
-    "This session is dedicated to building out your design together - placement, scale, and final artwork. Bring any reference images, sizing notes, or ideas you'd like to work from.",
-    "",
-    "Thank you,",
-    "Saiel Solehman",
-    "[art.pill TATTOO HOUSE]",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const message = buildAppointmentConfirmedEmail({
+    kind: "build_session",
+    subject: "Your build session at art.pill TATTOO HOUSE has been confirmed",
+    clientName: appointment.clientName,
+    when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
+    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this is the full price for the build session, not a deposit toward a future tattoo.`,
+    tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
+    totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
+    confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
+    calendarUrl: appointmentCalendarUrl(env, request, appointment),
+    resources: [
+      { label: "Location & parking", href: resources.locationParkingUrl },
+    ],
+  });
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: "Your build session at art.pill TATTOO HOUSE has been confirmed",
-    text,
+    ...message,
     templateKey: "build_session_confirmed",
     relatedType: "appointment",
     relatedId: appointment.id,
@@ -1121,31 +1065,24 @@ async function sendBuildSessionConfirmed(env, request, appointment, options = {}
 
 async function sendStudioBookingConfirmed(env, request, appointment, options = {}) {
   const identity = eventsEmailIdentity(env);
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    "Your studio booking at the six.well construct is confirmed.",
-    "",
-    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Booking: ${appointment.bookingTypeLabel}`,
-    `Deposit: ${formatMoney(appointment.depositCents, appointment.currency)} received - this holds your date; any balance is settled with the studio.`,
-    "",
-    `Confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
-    `Add to calendar: ${appointmentCalendarUrl(env, request, appointment)}`,
-    "",
-    "We'll reach out with anything you need ahead of your time in the space. Reply to this email with questions.",
-    "",
-    "Thank you,",
-    "the six.well construct",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const message = buildAppointmentConfirmedEmail({
+    kind: "studio",
+    subject: "Your studio booking at the six.well construct is confirmed",
+    clientName: appointment.clientName,
+    when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
+    feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this holds your date; any balance is settled with the studio.`,
+    confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
+    calendarUrl: appointmentCalendarUrl(env, request, appointment),
+    resources: [],
+  });
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
     fromEmail: identity.fromEmail,
     fromName: identity.fromName,
     replyTo: identity.replyTo,
-    subject: "Your studio booking at the six.well construct is confirmed",
-    text,
+    ...message,
     templateKey: "studio_booking_confirmed",
     relatedType: "appointment",
     relatedId: appointment.id,
@@ -1233,35 +1170,29 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
   const resources = clientResourceUrls(env, request);
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
-  const resourceLines = profile.virtual
-    ? [appointment.meeting?.joinUrl ? `Updated Zoom link: ${appointment.meeting.joinUrl}` : "Zoom details will be sent separately if the link is not ready yet."]
-    : profile.studio
-      ? []
-      : [`Location & parking: ${resources.locationParkingUrl}`];
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    `Your ${profile.label} has been rescheduled.`,
-    "",
-    previousStartAt ? `Previous time: ${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}` : "",
-    `New time: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Session: ${appointment.bookingTypeLabel}`,
-    "Your existing payment remains attached to this booking. No new payment was charged for this move.",
-    "",
-    `Updated confirmation page: ${appointmentConfirmationUrl(env, request, appointment)}`,
-    `Updated calendar event: ${appointmentCalendarUrl(env, request, appointment)}`,
-    ...resourceLines,
-    "",
-    "This booking has now used its one online reschedule. Contact the Studio if anything else changes.",
-    "",
-    profile.studio ? "the six.well construct" : "art.pill TATTOO HOUSE",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const message = buildAppointmentRescheduledEmail({
+    kind: profile.studio ? "studio" : "tattoo",
+    subject: `Your ${profile.label} has been rescheduled`,
+    label: profile.label,
+    clientName: appointment.clientName,
+    previousTime: previousStartAt
+      ? `${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}`
+      : "",
+    newTime: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
+    zoomUrl: profile.virtual ? appointment.meeting?.joinUrl || "" : "",
+    zoomStatus: profile.virtual && !appointment.meeting?.joinUrl
+      ? "Zoom details will be sent separately if the link is not ready yet."
+      : "",
+    confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
+    calendarUrl: appointmentCalendarUrl(env, request, appointment),
+    locationUrl: profile.studio || profile.virtual ? "" : resources.locationParkingUrl,
+  });
   const identity = profile.studio ? eventsEmailIdentity(env) : {};
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
     ...identity,
-    subject: `Your ${profile.label} has been rescheduled`,
-    text,
+    ...message,
     templateKey: "appointment_rescheduled",
     relatedType: "appointment",
     relatedId: appointment.id,
@@ -1438,6 +1369,42 @@ async function deliveryById(db, notificationId) {
     )
     .bind(notificationId)
     .first();
+}
+
+export function handleAdminPreviewNotification(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  if (request.method !== "GET") {
+    return errorResponse("Method not allowed.", 405);
+  }
+
+  const url = new URL(request.url);
+  const templateKey = asString(url.searchParams.get("templateKey"));
+  const requestedVariant = asString(url.searchParams.get("variant"));
+  const catalog = clientEmailPreviewCatalog();
+  if (!templateKey) {
+    return json({ templates: catalog });
+  }
+
+  const matches = catalog.filter((entry) => entry.templateKey === templateKey);
+  if (!matches.length) {
+    return errorResponse("Unsupported client email preview template.", 404);
+  }
+  const selected = requestedVariant
+    ? matches.find((entry) => entry.variant === requestedVariant)
+    : matches[0];
+  if (!selected) {
+    return errorResponse("Unsupported client email preview variant.", 404);
+  }
+
+  const rendered = renderClientEmailPreview(selected.templateKey, selected.variant);
+  if (!rendered) {
+    return errorResponse("Unable to render client email preview.", 500);
+  }
+  return json({
+    ...selected,
+    ...rendered,
+  });
 }
 
 export async function handleAdminResendNotification(request, env) {
@@ -1632,11 +1599,12 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
   const appointment = normalizeAppointment(appointmentRow);
   if (!appointment.clientEmail) return { ok: false, skipped: true };
 
+  const isStudio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
   const isBuild = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session";
   const isPrerequisiteConsultation = appointment.purpose === "prerequisite_consultation";
   const isConsultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
     || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
-  const occasion = isBuild ? "Build session" : isPrerequisiteConsultation ? "project consultation" : isConsultation ? "consultation" : "appointment";
+  const occasion = isStudio ? "studio booking" : isBuild ? "Build session" : isPrerequisiteConsultation ? "project consultation" : isConsultation ? "consultation" : "appointment";
   const rebookUrl = isBuild
     ? `${publicBaseUrl(env, request)}/tattoos/build/in-person/?rebook=1`
     : isConsultation && !isPrerequisiteConsultation
@@ -1645,32 +1613,31 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
   const policyText = isConsultation || isBuild
     ? "Per studio policy, reservation fees are non-refundable. One reschedule is allowed with at least 48 hours notice; a new reservation fee is required for reschedules made within 48 hours."
     : "Per studio policy, deposits and payments are non-refundable. Cancellation is separate from the one-time reschedule option.";
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    `Your art.pill TATTOO HOUSE ${occasion} has been cancelled.`,
-    "",
-    `Was scheduled: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Session: ${appointment.bookingTypeLabel}`,
-    "",
+  const nextText = isStudio
+    ? "Reply to this email if you would like help planning another date."
+    : isPrerequisiteConsultation
+      ? "This consultation belongs to your reviewed tattoo project. Contact the studio to continue that project; do not start a separate public consultation."
+      : "A cancelled tattoo appointment does not convert into a consultation. Contact the studio if you want to discuss a future project or appointment.";
+  const message = buildAppointmentCancelledEmail({
+    kind: isStudio ? "studio" : "tattoo",
+    subject: `Your ${occasion.toLowerCase()} has been cancelled`,
+    clientName: appointment.clientName,
+    occasion,
+    scheduled: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
     policyText,
-    "",
-    rebookUrl
-      ? `Start a new reservation: ${rebookUrl}`
-      : isPrerequisiteConsultation
-        ? "This consultation belongs to your reviewed tattoo project. Contact the studio to continue that project; do not start a separate public consultation."
-        : "A cancelled tattoo appointment does not convert into a consultation. Contact the studio if you want to discuss a future project or appointment.",
-    "",
-    `Questions? Email ${env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO}.`,
-    "",
-    "Thank you,",
-    "art.pill TATTOO HOUSE",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+    rebookUrl,
+    nextText,
+    supportEmail: isStudio
+      ? eventsEmailIdentity(env).replyTo
+      : env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO,
+  });
+  const identity = isStudio ? eventsEmailIdentity(env) : {};
 
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
-    subject: `Your ${occasion.toLowerCase()} has been cancelled`,
-    text,
+    ...identity,
+    ...message,
     templateKey: "appointment_cancelled",
     relatedType: "appointment",
     relatedId: appointment.id,
@@ -1705,32 +1672,21 @@ export async function notifyEventTicketPaid(env, request, ticketRow, options = {
     request,
     `/api/events/tickets/${encodeURIComponent(ticketRow.id)}/calendar`
   );
-
-  const text = [
-    `Hi ${ticketRow.contact_name || "there"},`,
-    "",
-    `You're booked for ${title}.`,
-    "",
-    `Seats reserved: ${seats}`,
-    whenLine,
-    whereLine,
-    "",
-    `Your ticket: ${confirmationUrl}`,
-    event?.starts_at ? `Add to calendar: ${calendarUrl}` : null,
-    "",
-    "Your spot is confirmed and paid. Reply to this email if anything changes or you have questions before the night.",
-    "",
-    "See you there,",
-    "the six.well construct",
-  ]
-    .filter((line) => line !== null)
-    .join("\n");
+  const message = buildEventTicketPaidEmail({
+    subject: `You're booked — ${title}`,
+    title,
+    clientName: ticketRow.contact_name,
+    seats: String(seats),
+    when: whenLine ? whenLine.replace(/^When:\s*/, "") : "",
+    where: whereLine ? whereLine.replace(/^Where:\s*/, "") : "",
+    ticketUrl: confirmationUrl,
+    calendarUrl: event?.starts_at ? calendarUrl : "",
+  });
 
   return sendTransactionalEmail(env, {
     to: email,
     ...eventsEmailIdentity(env),
-    subject: `You're booked — ${title}`,
-    text,
+    ...message,
     templateKey: "event_ticket_paid",
     relatedType: "event_ticket",
     relatedId: ticketRow.id,
@@ -1757,28 +1713,18 @@ export async function notifyEventTicketCancelled(env, request, ticketRow, option
   const refundLine = options.refunded
     ? "A full refund has been issued to your original payment method. It may take a few business days to appear."
     : "If you were charged, a refund will be handled separately — reply to this email if you have any questions.";
-
-  const text = [
-    `Hi ${ticketRow.contact_name || "there"},`,
-    "",
-    `Your ticket for ${title} has been cancelled.`,
-    "",
-    whenLine,
-    "",
-    refundLine,
-    "",
-    "Sorry to miss you this time — reply to this email if you'd like help getting into a future gathering.",
-    "",
-    "the six.well construct",
-  ]
-    .filter((line) => line !== null)
-    .join("\n");
+  const message = buildEventTicketCancelledEmail({
+    subject: `Your ticket for ${title} was cancelled`,
+    title,
+    clientName: ticketRow.contact_name,
+    when: whenLine ? whenLine.replace(/^Was scheduled:\s*/, "") : "",
+    refundText: refundLine,
+  });
 
   return sendTransactionalEmail(env, {
     to: email,
     ...eventsEmailIdentity(env),
-    subject: `Your ticket for ${title} was cancelled`,
-    text,
+    ...message,
     templateKey: "event_ticket_cancelled",
     relatedType: "event_ticket",
     relatedId: ticketRow.id,
@@ -1798,30 +1744,21 @@ export async function notifyEventOpenMicSlotAssigned(env, request, signupRow, ev
   const duration = Number(signupRow.slot_duration_minutes || signupRow.slotDurationMinutes || 5);
   const performerName = signupRow.performer_name || signupRow.performerName || "there";
   const showUrl = publicUrl(env, request, `/events/${encodeURIComponent(event.slug || "cultandshift")}/`);
-
-  const text = [
-    `Hi ${performerName},`,
-    "",
-    `Your open-mic slot for ${title} is scheduled.`,
-    "",
-    eventWhen ? `Event: ${formatDate(eventWhen)}` : null,
-    assignedSlot ? `Your slot: ${formatDate(assignedSlot)}` : "Your slot: assigned by the host",
-    duration ? `Planned slot length: ${duration} minutes` : null,
-    eventLocation ? `Where: ${eventLocation}` : null,
-    "",
-    "Please arrive early enough to check in before your slot. Bring anything you need for your piece, and reply to this email if your setup changes.",
-    "",
-    `Event page: ${showUrl}`,
-    "",
-    "See you there,",
-    "the six.well construct",
-  ].filter((line) => line !== null).join("\n");
+  const message = buildEventOpenMicSlotEmail({
+    subject: `${title} open mic slot`,
+    title,
+    performerName,
+    eventWhen: eventWhen ? formatDate(eventWhen) : "",
+    slot: assignedSlot ? formatDate(assignedSlot) : "",
+    duration,
+    where: eventLocation,
+    eventUrl: showUrl,
+  });
 
   return sendTransactionalEmail(env, {
     to: email,
     ...eventsEmailIdentity(env),
-    subject: `${title} open mic slot`,
-    text,
+    ...message,
     templateKey: "event_open_mic_slot",
     relatedType: "event_open_mic_signup",
     relatedId: signupRow.id,
@@ -1866,28 +1803,19 @@ export async function sendDueEventTicketReminders(env) {
         null,
         `/api/events/tickets/${encodeURIComponent(row.id)}/calendar`
       );
-      const text = [
-        `Hi ${row.contact_name || "there"},`,
-        "",
-        `Reminder: ${title} is tomorrow.`,
-        "",
-        `When: ${formatDate(row.event_starts_at)}`,
-        row.event_location ? `Where: ${row.event_location}` : null,
-        `Seats reserved: ${seats}`,
-        "",
-        `Add to calendar: ${calendarUrl}`,
-        "",
-        "Looking forward to seeing you. Reply to this email if anything has changed.",
-        "",
-        "the six.well construct",
-      ]
-        .filter((line) => line !== null)
-        .join("\n");
+      const message = buildEventReminderEmail({
+        subject: `Reminder: ${title} is tomorrow`,
+        title,
+        clientName: row.contact_name,
+        when: formatDate(row.event_starts_at),
+        where: row.event_location || "",
+        seats: String(seats),
+        calendarUrl,
+      });
       const delivery = await sendTransactionalEmail(env, {
         to: row.contact_email,
         ...eventsEmailIdentity(env),
-        subject: `Reminder: ${title} is tomorrow`,
-        text,
+        ...message,
         templateKey: "event_ticket_reminder_24h",
         relatedType: "event_ticket",
         relatedId: row.id,
@@ -1921,38 +1849,37 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
   const isStudio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
   const occasion = isStudio ? "studio booking" : isBuild ? "Build session" : isConsultation ? "consultation" : "tattoo appointment";
   const brand = isStudio ? "the six.well construct" : "art.pill TATTOO HOUSE";
-  const resourceLines = isVirtual
-    ? [appointment.meeting?.joinUrl ? `Zoom link: ${appointment.meeting.joinUrl}` : "Zoom details: contact the studio if your link has not arrived."]
+  const resourceActions = isVirtual || isStudio
+    ? []
     : isConsultation || isBuild
-      ? [`Location & parking: ${resources.locationParkingUrl}`]
-      : isStudio
-        ? []
-        : [
-            `Day-of instructions: ${resources.dayOfInstructionsUrl}`,
-            `Location & parking: ${resources.locationParkingUrl}`,
-            "Personalized aftercare instructions will be provided at your appointment.",
-          ];
-  const text = [
-    `Hi ${appointment.clientName || "there"},`,
-    "",
-    `Reminder: Your ${occasion} with ${brand} is tomorrow.`,
-    "",
-    `When: ${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    `Session: ${appointment.bookingTypeLabel}`,
-    `Add to calendar: ${appointmentCalendarUrl(env, null, appointment)}`,
-    ...resourceLines,
-    "",
-    "Reply to this thread if you have any questions or concerns before your session.",
-    "",
-    isStudio ? "the six.well construct" : "-Saiel Solehman",
-    isStudio ? "" : "[art.pill TATTOO HOUSE]",
-  ].filter((line) => line !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+      ? [{ label: "Location & parking", href: resources.locationParkingUrl }]
+      : [
+          { label: "Day-of instructions", href: resources.dayOfInstructionsUrl },
+          { label: "Location & parking", href: resources.locationParkingUrl },
+        ];
+  const message = buildAppointmentReminderEmail({
+    kind: isStudio ? "studio" : isVirtual ? "consultation_virtual" : "tattoo",
+    subject: `Reminder: Your ${occasion} with ${brand} is tomorrow`,
+    occasion,
+    brand,
+    clientName: appointment.clientName,
+    when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
+    session: appointment.bookingTypeLabel,
+    zoomUrl: isVirtual ? appointment.meeting?.joinUrl || "" : "",
+    zoomStatus: isVirtual && !appointment.meeting?.joinUrl
+      ? "Contact the studio if your link has not arrived."
+      : "",
+    calendarUrl: appointmentCalendarUrl(env, null, appointment),
+    resources: resourceActions,
+    notice: !isStudio && !isVirtual && !isConsultation && !isBuild
+      ? "Personalized aftercare instructions will be provided at your appointment."
+      : "",
+  });
   const identity = isStudio ? eventsEmailIdentity(env) : {};
   return sendTransactionalEmail(env, {
     to: appointment.clientEmail,
     ...identity,
-    subject: `Reminder: Your ${occasion} with ${brand} is tomorrow`,
-    text,
+    ...message,
     templateKey: "appointment_reminder_24h",
     relatedType: "appointment",
     relatedId: appointment.id,

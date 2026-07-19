@@ -63,6 +63,7 @@
     header { padding:20px; }
   }
 </style>
+<link rel="stylesheet" href="/studio/email-preview.css">
 </head>
 <body>
 <header>
@@ -72,10 +73,10 @@
     with <code>?preview=1</code> open with dummy data - nothing is read from
     or written to the live database, and checkout/calendar actions are
     simulated. Links labelled "Open Live Page" go to the real public pages and
-    read live event data from the API. Email bodies show the current copy with
-    sample values filled in. Source of truth for emails is
-    <code>functions/api/notifications/_lib.js</code>; the events API lives in
-    <code>functions/api/events/_lib.js</code>.
+    read live event data from the API. Email previews use approved sample data
+    with the same template registry and renderer used for production sends:
+    <code>functions/api/notifications/_email-templates.js</code> and
+    <code>functions/api/notifications/_email-renderer.js</code>.
   </p>
   <div class="state-links" style="margin-top:14px;">
     <a href="#" id="baseLocalBtn">Open Links Locally</a>
@@ -205,11 +206,11 @@
   <section>
     <h2>Email Templates</h2>
     <p class="section-note">
-      Rendered with sample values. Actual sends go through
-      <code>functions/api/notifications/_lib.js</code> - this view exists so
-      changes can be reviewed without booking a real ticket.
+      Exact production renderer output with approved sample values, loaded from
+      the protected notification preview endpoint. No client record is read and
+      no email is sent.
     </p>
-    <div class="email-list" id="emailList"></div>
+    <div class="email-preview-app" data-email-preview data-brands="events"></div>
   </section>
 </main>
 <script>
@@ -370,26 +371,8 @@
     applyBase(baseChoice);
   });
 
-  const list = document.getElementById("emailList");
-  list.innerHTML = templates.map((tpl) => `
-    <details class="email-card">
-      <summary>
-        <span>${escapeHtml(tpl.subject)}</span>
-        <span class="key">${escapeHtml(tpl.key)}</span>
-      </summary>
-      <div class="email-body">
-        <div class="email-field">
-          <label>Subject</label>
-          <div class="value">${escapeHtml(tpl.subject)}</div>
-        </div>
-        <div class="email-field">
-          <label>Body</label>
-          <pre>${escapeHtml(tpl.body.join("\n"))}</pre>
-        </div>
-      </div>
-    </details>
-  `).join("");
 })();
 </script>
+<script src="/studio/email-preview.js"></script>
 </body>
 </html>

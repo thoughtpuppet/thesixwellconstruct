@@ -48,6 +48,7 @@ import {
 } from "../functions/api/booking/_lib.js";
 import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
 import {
+  handleAdminPreviewNotification,
   handleAdminResendNotification,
   notifyAdminAppointmentConfirmed,
   notifyAdminAppointmentRescheduled,
@@ -55,7 +56,15 @@ import {
   notifyAppointmentCancelled,
   notifySubmissionReceived,
   retryPendingAdminAppointmentNotifications,
+  sendDueAppointmentReminders,
 } from "../functions/api/notifications/_lib.js";
+import {
+  buildBookingLinkEmail,
+  buildSubmissionReceivedEmail,
+  clientEmailPreviewCatalog,
+  renderClientEmailPreview,
+} from "../functions/api/notifications/_email-templates.js";
+import { escapeEmailHtml } from "../functions/api/notifications/_email-renderer.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TATTOO_BUDGET_RANGES = [
@@ -2756,6 +2765,186 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
     });
     assert.equal(sent.at(-1).subject, expectedSubject.replace("Confirmed", "Rescheduled"));
   }
+});
+
+test("client transactional email catalog renders exact HTML and plain-text variants", () => {
+  const catalog = clientEmailPreviewCatalog();
+  const required = new Set([
+    "tattoo_build_draft_resume",
+    "submission_received",
+    "booking_link_created",
+    "appointment_confirmed",
+    "consultation_confirmed_in_person",
+    "consultation_confirmed_virtual",
+    "build_session_confirmed",
+    "studio_booking_confirmed",
+    "appointment_rescheduled",
+    "appointment_cancelled",
+    "appointment_reminder_24h",
+    "event_ticket_paid",
+    "event_ticket_cancelled",
+    "event_ticket_reminder_24h",
+    "event_open_mic_slot",
+  ]);
+  assert.ok(catalog.length >= 25);
+  catalog.forEach((entry) => {
+    required.delete(entry.templateKey);
+    const rendered = renderClientEmailPreview(entry.templateKey, entry.variant);
+    assert.ok(rendered, `${entry.templateKey}:${entry.variant} should render`);
+    assert.ok(rendered.subject);
+    assert.ok(rendered.preheader);
+    assert.ok(rendered.text);
+    assert.match(rendered.html, /<!doctype html>/i);
+    assert.match(rendered.html, /role="presentation"/);
+    assert.match(rendered.html, /background:#0E0E0E/);
+    assert.match(
+      rendered.html,
+      new RegExp(escapeEmailHtml(rendered.preheader).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    );
+    assert.doesNotMatch(rendered.html, /href="javascript:/i);
+    assert.doesNotMatch(rendered.html, />undefined<|>null</i);
+    assert.doesNotMatch(rendered.text, /\bundefined\b|\bnull\b/);
+  });
+  assert.deepEqual([...required], []);
+});
+
+test("client email renderer escapes dynamic HTML and rejects unsafe action URLs", () => {
+  const receipt = buildSubmissionReceivedEmail({
+    subject: "Project <receipt>",
+    clientName: "<img src=x onerror=alert(1)>",
+    label: "custom <project>",
+    submissionId: "ref-<014>",
+    requestedSheetDesigns: ["<script>alert(1)</script>"],
+    expectation: "Review <carefully>.",
+    next: "Wait for the studio.",
+    reviewLine: "Reviewed soon.",
+    supportEmail: "studio@example.test",
+  });
+  assert.match(receipt.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(receipt.html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(receipt.html, /<script>alert\(1\)<\/script>/);
+
+  const booking = buildBookingLinkEmail({
+    subject: "Private link",
+    clientName: "Collector",
+    consultation: false,
+    sessionOptions: "Half Day Session",
+    depositText: "$100",
+    bookingUrl: "javascript:alert(1)",
+    bookingTermsUrl: "https://example.test/terms",
+    dayOfInstructionsUrl: "https://example.test/day-of",
+  });
+  assert.doesNotMatch(booking.html, /javascript:alert/i);
+  assert.doesNotMatch(booking.text, /javascript:alert/i);
+});
+
+test("protected client email preview exposes only approved canned variants", async () => {
+  const token = "preview-admin-token";
+  const unauthorized = handleAdminPreviewNotification(
+    new Request("https://example.test/api/admin/notifications/preview"),
+    { SUBMISSIONS_ADMIN_TOKEN: token },
+  );
+  assert.equal(unauthorized.status, 401);
+
+  const headers = { Authorization: `Bearer ${token}` };
+  const catalogResponse = handleAdminPreviewNotification(
+    new Request("https://example.test/api/admin/notifications/preview", { headers }),
+    { SUBMISSIONS_ADMIN_TOKEN: token },
+  );
+  assert.equal(catalogResponse.status, 200);
+  const catalogPayload = await catalogResponse.json();
+  assert.ok(catalogPayload.templates.length >= 25);
+  assert.equal(JSON.stringify(catalogPayload).includes("client@example"), false);
+
+  const previewResponse = handleAdminPreviewNotification(
+    new Request(
+      "https://example.test/api/admin/notifications/preview?templateKey=appointment_confirmed&variant=tip",
+      { headers },
+    ),
+    { SUBMISSIONS_ADMIN_TOKEN: token },
+  );
+  assert.equal(previewResponse.status, 200);
+  const previewPayload = await previewResponse.json();
+  const exact = renderClientEmailPreview("appointment_confirmed", "tip");
+  assert.equal(previewPayload.html, exact.html);
+  assert.equal(previewPayload.text, exact.text);
+
+  const unsupported = handleAdminPreviewNotification(
+    new Request(
+      "https://example.test/api/admin/notifications/preview?templateKey=appointment_confirmed&variant=client-controlled",
+      { headers },
+    ),
+    { SUBMISSIONS_ADMIN_TOKEN: token },
+  );
+  assert.equal(unsupported.status, 404);
+});
+
+test("studio cancellations and due reminders keep the six.well identity", async () => {
+  const cancellationSends = [];
+  const cancellation = await notifyAppointmentCancelled(
+    {
+      PUBLIC_SITE_URL: "https://example.test",
+      EVENTS_FROM_EMAIL: "events@example.test",
+      EVENTS_FROM_NAME: "the six.well construct",
+      EVENTS_REPLY_TO: "events@example.test",
+      EMAIL: {
+        async send(message) {
+          cancellationSends.push(message);
+          return { messageId: "studio-cancelled" };
+        },
+      },
+    },
+    new Request("https://example.test/api/booking/cancel"),
+    {
+      id: "studio-cancelled",
+      booking_type_id: "studio_visit",
+      booking_type_label: "Open Studio Visit",
+      purpose: "studio",
+      client_name: "Studio Guest",
+      client_email: "guest@example.test",
+      start_at: "2026-08-08T16:00:00.000Z",
+      end_at: "2026-08-08T17:00:00.000Z",
+    },
+  );
+  assert.equal(cancellation.ok, true);
+  assert.equal(cancellationSends[0].from.name, "the six.well construct");
+  assert.match(cancellationSends[0].subject, /studio booking/i);
+  assert.match(cancellationSends[0].html, /STUDIO RESERVATION CANCELLED/);
+  assert.doesNotMatch(cancellationSends[0].html, /art\.pill/i);
+  assert.doesNotMatch(cancellationSends[0].text, /art\.pill/i);
+
+  const database = migratedDatabase();
+  const startAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: "studio-reminder",
+    bookingTypeId: "studio_visit",
+    purpose: "studio",
+    name: "Studio Guest",
+    email: "guest@example.test",
+    startAt,
+    endAt,
+    depositCents: 5000,
+  });
+  const reminderSends = [];
+  const reminderResult = await sendDueAppointmentReminders({
+    SUBMISSIONS_DB: new LocalD1(database),
+    PUBLIC_SITE_URL: "https://example.test",
+    EVENTS_FROM_EMAIL: "events@example.test",
+    EVENTS_FROM_NAME: "the six.well construct",
+    EVENTS_REPLY_TO: "events@example.test",
+    EMAIL: {
+      async send(message) {
+        reminderSends.push(message);
+        return { messageId: "studio-reminder" };
+      },
+    },
+  });
+  assert.equal(reminderResult.sent, 1);
+  assert.equal(reminderSends[0].from.name, "the six.well construct");
+  assert.match(reminderSends[0].html, /STUDIO REMINDER/);
+  assert.doesNotMatch(reminderSends[0].html, /art\.pill/i);
+  assert.doesNotMatch(reminderSends[0].text, /art\.pill/i);
 });
 
 test("expired replacement holds never expose a stale Square checkout URL", async () => {
