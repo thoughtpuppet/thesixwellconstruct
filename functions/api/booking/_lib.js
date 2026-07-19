@@ -960,6 +960,11 @@ function normalizeTattooSessionPlan(row) {
     estimatedTotalMinutesMin: row.estimated_total_minutes_min ?? null,
     estimatedTotalMinutesMax: row.estimated_total_minutes_max ?? null,
     artistNote: row.artist_note || "",
+    approvedBudgetMinCents: row.approved_budget_min_cents ?? null,
+    approvedBudgetMaxCents: row.approved_budget_max_cents ?? null,
+    approvedBudgetCurrency: row.approved_budget_currency || "USD",
+    budgetAcknowledged: Boolean(row.budget_acknowledged),
+    budgetAcknowledgedAt: row.budget_acknowledged_at || "",
     clientPreference: row.client_preference || "",
     clientAcknowledged: Boolean(row.client_acknowledged),
     clientInformedAt: row.client_informed_at || "",
@@ -974,19 +979,36 @@ async function loadTattooSessionPlan(db, submissionId) {
   return db.prepare("SELECT * FROM tattoo_session_plans WHERE submission_id = ?").bind(submissionId).first();
 }
 
+function reviewedBudgetIsComplete(plan) {
+  const minimum = Number(plan?.approved_budget_min_cents || 0);
+  const maximum = Number(plan?.approved_budget_max_cents || 0);
+  return Number.isSafeInteger(minimum)
+    && Number.isSafeInteger(maximum)
+    && minimum > 0
+    && maximum >= minimum
+    && (plan?.approved_budget_currency || "USD") === "USD";
+}
+
 function sessionPlanRequiresClientResponse(plan) {
   return Boolean(plan && ["required", "client_choice", "not_available"].includes(plan.split_policy));
 }
 
 function sessionPlanResponseComplete(plan) {
-  if (!sessionPlanRequiresClientResponse(plan)) return true;
-  return Boolean(Number(plan.client_acknowledged) === 1 && plan.client_preference && plan.client_selected_at);
+  const sessionComplete = !sessionPlanRequiresClientResponse(plan)
+    || Boolean(Number(plan.client_acknowledged) === 1 && plan.client_preference && plan.client_selected_at);
+  const budgetComplete = !reviewedBudgetIsComplete(plan)
+    || Boolean(Number(plan.budget_acknowledged) === 1 && plan.budget_acknowledged_at);
+  return sessionComplete && budgetComplete;
 }
 
 async function ensureSessionPlanResponse(db, tokenContext) {
   const plan = await loadTattooSessionPlan(db, tokenContext?.token?.submission_id);
   if (plan && !sessionPlanResponseComplete(plan)) {
-    return { error: "Review and confirm the studio's session plan before choosing an appointment." };
+    return {
+      error: reviewedBudgetIsComplete(plan) && !Number(plan.budget_acknowledged)
+        ? "Review and agree to the approved project budget before choosing an appointment."
+        : "Review and confirm the studio's session plan before choosing an appointment.",
+    };
   }
   return { plan };
 }
@@ -1260,6 +1282,12 @@ export async function handleSaveBookingSessionPlan(request, env) {
     const plan = await loadTattooSessionPlan(db, context.token.submission_id);
     if (!plan) return errorResponse("No session plan is attached to this project.", 404);
     if (body.acknowledged !== true) return errorResponse("Acknowledge the session estimate before continuing.", 400);
+    const requiresBudgetAcknowledgement = reviewedBudgetIsComplete(plan);
+    if (requiresBudgetAcknowledgement && body.budgetAcknowledged !== true) {
+      return errorResponse("Agree to the approved project budget before continuing.", 400, {
+        code: "APPROVED_BUDGET_ACKNOWLEDGEMENT_REQUIRED",
+      });
+    }
     const preference = asString(body.preference);
     if (!CLIENT_SESSION_PREFERENCES.has(preference)) return errorResponse("Choose a valid session preference.", 400);
     if (["required", "not_available"].includes(plan.split_policy) && preference !== "studio_plan") {
@@ -1269,8 +1297,37 @@ export async function handleSaveBookingSessionPlan(request, env) {
       return errorResponse("The artist must finish reviewing this session structure.", 409);
     }
     const now = new Date().toISOString();
-    await db.prepare(`UPDATE tattoo_session_plans SET client_preference = ?, client_acknowledged = 1, client_informed_at = COALESCE(client_informed_at, ?), client_selected_at = ?, updated_at = ? WHERE submission_id = ?`)
-      .bind(preference, now, now, now, context.token.submission_id).run();
+    const firstBudgetAcknowledgement = requiresBudgetAcknowledgement && Number(plan.budget_acknowledged || 0) !== 1;
+    const statements = [
+      db.prepare(
+        `UPDATE tattoo_session_plans
+         SET client_preference = ?, client_acknowledged = 1,
+             client_informed_at = COALESCE(client_informed_at, ?), client_selected_at = ?,
+             budget_acknowledged = CASE WHEN approved_budget_min_cents IS NULL THEN budget_acknowledged ELSE 1 END,
+             budget_acknowledged_at = CASE
+               WHEN approved_budget_min_cents IS NULL THEN budget_acknowledged_at
+               ELSE COALESCE(budget_acknowledged_at, ?)
+             END,
+             updated_at = ?
+         WHERE submission_id = ?`
+      ).bind(preference, now, now, now, now, context.token.submission_id),
+    ];
+    if (firstBudgetAcknowledgement) {
+      statements.push(
+        db.prepare(
+          `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
+           VALUES (?, ?, 'approved_budget_acknowledged', 'client', ?, ?)`
+        ).bind(
+          crypto.randomUUID(),
+          context.token.submission_id,
+          plan.approved_budget_min_cents === plan.approved_budget_max_cents
+            ? formatMoney(plan.approved_budget_min_cents, plan.approved_budget_currency || "USD")
+            : `${formatMoney(plan.approved_budget_min_cents, plan.approved_budget_currency || "USD")}–${formatMoney(plan.approved_budget_max_cents, plan.approved_budget_currency || "USD")}`,
+          now,
+        ),
+      );
+    }
+    await db.batch(statements);
     return json({ ok: true, sessionPlan: normalizeTattooSessionPlan(await loadTattooSessionPlan(db, context.token.submission_id)) });
   } catch (error) {
     return errorResponse("Unable to save the session preference.", 500, { detail: error.message });
@@ -5049,6 +5106,7 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
     if (splitPolicy === "required" && sessionCategory !== "multiple_sessions") return errorResponse("Required splitting must use the multiple-sessions category.", 400);
     if (splitPolicy === "not_available" && sessionCategory !== "one_session") return errorResponse("Splitting unavailable must use the one-session category.", 400);
     const integer = (value) => value === "" || value === null || value === undefined ? null : Math.round(Number(value));
+    const existing = await loadTattooSessionPlan(db, submissionId);
     let sessionsMin = integer(body.estimatedSessionsMin);
     let sessionsMax = integer(body.estimatedSessionsMax);
     const minutesMin = integer(body.estimatedTotalMinutesMin);
@@ -5058,16 +5116,50 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
     if (sessionCategory !== "artist_review" && (!sessionsMax || sessionsMax < sessionsMin)) return errorResponse("Enter a valid maximum session count.", 400);
     if ([sessionsMin,sessionsMax,minutesMin,minutesMax].some((value) => value !== null && (!Number.isFinite(value) || value < 0))) return errorResponse("Session estimates must be non-negative whole numbers.", 400);
     if (minutesMin !== null && minutesMax !== null && minutesMin > minutesMax) return errorResponse("Minimum total time cannot exceed maximum total time.", 400);
-    const existing = await loadTattooSessionPlan(db, submissionId);
+    const hasOwn = (key) => Object.prototype.hasOwnProperty.call(body, key);
+    const budgetMinCents = hasOwn("approvedBudgetMinCents")
+      ? integer(body.approvedBudgetMinCents)
+      : (existing?.approved_budget_min_cents ?? null);
+    const budgetMaxCents = hasOwn("approvedBudgetMaxCents")
+      ? integer(body.approvedBudgetMaxCents)
+      : (existing?.approved_budget_max_cents ?? null);
+    const budgetCurrency = asString(body.approvedBudgetCurrency || existing?.approved_budget_currency || "USD").toUpperCase();
+    if (budgetCurrency !== "USD") return errorResponse("Approved project budgets must use USD.", 400);
+    if ((budgetMinCents === null) !== (budgetMaxCents === null)) {
+      return errorResponse("Enter both the minimum and maximum approved project budget.", 400, {
+        code: "APPROVED_BUDGET_RANGE_REQUIRED",
+      });
+    }
+    if (
+      budgetMinCents !== null
+      && (
+        !Number.isSafeInteger(budgetMinCents)
+        || !Number.isSafeInteger(budgetMaxCents)
+        || budgetMinCents <= 0
+        || budgetMaxCents <= 0
+        || budgetMaxCents < budgetMinCents
+      )
+    ) {
+      return errorResponse("Enter a valid approved project budget with a maximum greater than or equal to the minimum.", 400, {
+        code: "INVALID_APPROVED_BUDGET",
+      });
+    }
+    const budgetChanged = budgetMinCents !== (existing?.approved_budget_min_cents ?? null)
+      || budgetMaxCents !== (existing?.approved_budget_max_cents ?? null)
+      || budgetCurrency !== (existing?.approved_budget_currency || "USD");
     const now = new Date().toISOString();
+    const budgetAcknowledged = budgetChanged ? 0 : Number(existing?.budget_acknowledged || 0);
+    const budgetAcknowledgedAt = budgetChanged ? null : (existing?.budget_acknowledged_at || null);
     const planResult = await db.prepare(
       `INSERT INTO tattoo_session_plans (
         id,submission_id,estimated_sessions_min,estimated_sessions_max,
         estimated_total_minutes_min,estimated_total_minutes_max,split_policy,
-        artist_note,session_category,client_preference,client_acknowledged,
+        artist_note,session_category,approved_budget_min_cents,
+        approved_budget_max_cents,approved_budget_currency,budget_acknowledged,
+        budget_acknowledged_at,client_preference,client_acknowledged,
         client_informed_at,client_selected_at,created_at,updated_at
       )
-      SELECT ?,s.id,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
+      SELECT ?,s.id,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
       FROM submissions s
       WHERE s.id = ? AND COALESCE(s.tattoo_stage, 'review') NOT IN ('tattoo_scheduled','closed')
         AND NOT EXISTS (
@@ -5092,7 +5184,13 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
         estimated_total_minutes_min=excluded.estimated_total_minutes_min,
         estimated_total_minutes_max=excluded.estimated_total_minutes_max,
         split_policy=excluded.split_policy,artist_note=excluded.artist_note,
-        session_category=excluded.session_category,client_preference=NULL,
+        session_category=excluded.session_category,
+        approved_budget_min_cents=excluded.approved_budget_min_cents,
+        approved_budget_max_cents=excluded.approved_budget_max_cents,
+        approved_budget_currency=excluded.approved_budget_currency,
+        budget_acknowledged=excluded.budget_acknowledged,
+        budget_acknowledged_at=excluded.budget_acknowledged_at,
+        client_preference=NULL,
         client_acknowledged=0,client_informed_at=NULL,client_selected_at=NULL,
         updated_at=excluded.updated_at`
     ).bind(
@@ -5104,6 +5202,11 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       splitPolicy,
       asString(body.artistNote).slice(0,5000),
       sessionCategory,
+      budgetMinCents,
+      budgetMaxCents,
+      budgetCurrency,
+      budgetAcknowledged,
+      budgetAcknowledgedAt,
       existing?.created_at || now,
       now,
       submissionId,
@@ -5112,6 +5215,22 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       return errorResponse("Session plans cannot change while tattoo booking access or an active tattoo appointment exists.", 409, {
         code: "ACTIVE_BOOKING_BLOCKS_SESSION_PLAN_EDIT",
       });
+    }
+    if (budgetChanged && budgetMinCents !== null && budgetMaxCents !== null) {
+      const budgetLabel = budgetMinCents === budgetMaxCents
+        ? formatMoney(budgetMinCents, budgetCurrency)
+        : `${formatMoney(budgetMinCents, budgetCurrency)}–${formatMoney(budgetMaxCents, budgetCurrency)}`;
+      const hadReviewedBudget = reviewedBudgetIsComplete(existing);
+      await db.prepare(
+        `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
+         VALUES (?, ?, ?, 'admin', ?, ?)`
+      ).bind(
+        crypto.randomUUID(),
+        submissionId,
+        hadReviewedBudget ? "approved_budget_revised" : "approved_budget_set",
+        budgetLabel,
+        now,
+      ).run();
     }
     if (submission.status === "approved" && ["review", "consultation_complete"].includes(submission.tattoo_stage)) {
       await db.batch([
@@ -5347,10 +5466,19 @@ export async function handleAdminCreateBookingToken(request, env) {
     if (purpose === "tattoo" && submission.tattoo_stage !== "ready_to_book") {
       return errorResponse("Tattoo booking access requires the ready-to-book stage.", 409);
     }
+    let reviewedSessionPlan = null;
     if (purpose === "tattoo") {
-      const sessionPlan = await loadTattooSessionPlan(db, submissionId);
-      if (!sessionPlan || sessionPlan.session_category === "artist_review" || sessionPlan.split_policy === "artist_review") {
+      reviewedSessionPlan = await loadTattooSessionPlan(db, submissionId);
+      if (!reviewedSessionPlan || reviewedSessionPlan.session_category === "artist_review" || reviewedSessionPlan.split_policy === "artist_review") {
         return errorResponse("Finish and save the client's session estimate before generating booking access.", 409);
+      }
+      if (
+        submission.source_path !== "/studio/direct-booking-invite"
+        && !reviewedBudgetIsComplete(reviewedSessionPlan)
+      ) {
+        return errorResponse("Set the approved project budget before generating tattoo booking access.", 409, {
+          code: "APPROVED_BUDGET_REQUIRED",
+        });
       }
     }
 
@@ -5531,6 +5659,13 @@ export async function handleAdminCreateBookingToken(request, env) {
           expiresAt,
           allowedBookingTypes: allowed,
           purpose,
+          approvedBudget: reviewedBudgetIsComplete(reviewedSessionPlan)
+            ? {
+                minimumCents: reviewedSessionPlan.approved_budget_min_cents,
+                maximumCents: reviewedSessionPlan.approved_budget_max_cents,
+                currency: reviewedSessionPlan.approved_budget_currency || "USD",
+              }
+            : null,
         });
 
     return json({
@@ -5542,6 +5677,13 @@ export async function handleAdminCreateBookingToken(request, env) {
         expiresAt,
         allowedBookingTypes: allowed,
         purpose,
+        approvedBudget: reviewedBudgetIsComplete(reviewedSessionPlan)
+          ? {
+              minimumCents: reviewedSessionPlan.approved_budget_min_cents,
+              maximumCents: reviewedSessionPlan.approved_budget_max_cents,
+              currency: reviewedSessionPlan.approved_budget_currency || "USD",
+            }
+          : null,
       },
       delivery,
     });

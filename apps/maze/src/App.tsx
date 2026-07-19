@@ -31,6 +31,7 @@ type MazeFormDraft = {
   phone: string;
   placement: string;
   scale: string;
+  budgetRange: string;
   mazeExplanation: string;
 };
 
@@ -40,6 +41,7 @@ type MazeDraftPayload = MazeState & {
   contact: Pick<MazeFormDraft, "firstName" | "lastName" | "email" | "phone">;
   placement: string;
   scale: string;
+  budgetRange: string;
   mazeExplanation: string;
   updatedAt: string;
 };
@@ -71,6 +73,7 @@ function emptyForm(): MazeFormDraft {
     phone: "",
     placement: "",
     scale: "",
+    budgetRange: "",
     mazeExplanation: ""
   };
 }
@@ -153,6 +156,7 @@ function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: stri
     },
     placement: form.placement,
     scale: form.scale,
+    budgetRange: form.budgetRange,
     mazeExplanation: form.mazeExplanation,
     updatedAt: new Date().toISOString()
   };
@@ -164,6 +168,7 @@ function payloadToForm(payload: Partial<MazeDraftPayload>): MazeFormDraft {
     ...(payload.contact || {}),
     placement: payload.placement || "",
     scale: payload.scale || "",
+    budgetRange: payload.budgetRange || "",
     mazeExplanation: payload.mazeExplanation || ""
   };
 }
@@ -363,6 +368,20 @@ function SubmitDialog({
             <label>Placement (optional)<input name="placement" placeholder="e.g. forearm, spine" value={formDraft.placement} onChange={(event) => onFormDraftChange({ ...formDraft, placement: event.target.value })} /></label>
             <label>Approx. scale (optional)<input name="scale" placeholder="e.g. palm-size" value={formDraft.scale} onChange={(event) => onFormDraftChange({ ...formDraft, scale: event.target.value })} /></label>
           </div>
+          <label className="maze-submit-full">
+            What total project budget are you comfortable working within?
+            <select name="budget_range" required aria-describedby="maze-budget-help" value={formDraft.budgetRange} onChange={(event) => onFormDraftChange({ ...formDraft, budgetRange: event.target.value })}>
+              <option value="">Select a range</option>
+              <option value="Up to $300">Up to $300</option>
+              <option value="$300–$500">$300–$500</option>
+              <option value="$500–$800">$500–$800</option>
+              <option value="$800–$1,200">$800–$1,200</option>
+              <option value="$1,200–$2,000">$1,200–$2,000</option>
+              <option value="$2,000+">$2,000+</option>
+              <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
+            </select>
+            <span className="maze-submit-help" id="maze-budget-help">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</span>
+          </label>
           <label className="maze-submit-full">
             What does this maze carry?
             <textarea name="maze_explanation" rows={4} required placeholder="Explain the meaning, the path, what it should hold." value={formDraft.mazeExplanation} onChange={(event) => onFormDraftChange({ ...formDraft, mazeExplanation: event.target.value })} />

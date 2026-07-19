@@ -437,6 +437,8 @@
     .direct-invite-form-grid,
     .direct-invite-type-grid { grid-template-columns:1fr; }
     .direct-invite-form .wide { grid-column:auto; }
+    .session-plan-grid { grid-template-columns:1fr; }
+    .session-plan-grid .wide { grid-column:auto; }
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
     .tattoo-settings-row.special { grid-template-columns:1fr; }
@@ -613,6 +615,7 @@
   let portfolioObjectUrls = [];
   let portfolioOptions = { styles: [], collections: [] };
   let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
+  const tattooSessionPlans = new Map();
   const sessionEstimateCopyFields = [
     ["sectionHeading", "Section heading", "input"],
     ["oneSessionLabel", "One-session heading", "input"],
@@ -1026,7 +1029,7 @@
           ${field("Flash Size", p("flash_size"))}
           ${field("Placement", p("placement"))}
           ${field("Scale", p("scale"))}
-          ${field("Budget Range", p("claim_bid"))}
+          ${field("Budget Range", p("budget_range") || p("claim_bid"))}
           ${field("Timeline", p("timeline"))}
           ${field("Managed Price", p("flash_price_note"))}
           ${field("Session Category", p("flash_session_category"))}
@@ -1067,6 +1070,7 @@
         <div class="grid">
           ${field("Placement", p("placement"))}
           ${field("Size / Scale", p("scale"))}
+          ${field("Budget", p("budget_range"))}
           ${field("Timeline", p("timeline"))}
           ${field("Instagram", p("instagram"))}
           ${field("Source", submission.sourcePath || "")}
@@ -1309,6 +1313,16 @@
       currency,
       maximumFractionDigits: amount % 100 === 0 ? 0 : 2,
     }).format(amount / 100);
+  }
+
+  function approvedBudgetLabel(budget) {
+    const minimum = Number(budget?.minimumCents ?? budget?.approvedBudgetMinCents ?? 0);
+    const maximum = Number(budget?.maximumCents ?? budget?.approvedBudgetMaxCents ?? 0);
+    if (!minimum || !maximum || maximum < minimum) return "";
+    const currency = budget?.currency || budget?.approvedBudgetCurrency || "USD";
+    return minimum === maximum
+      ? money(minimum, currency)
+      : `${money(minimum, currency)}–${money(maximum, currency)}`;
   }
 
   function titleize(value) {
@@ -3439,6 +3453,9 @@ ${meetingLines}
       return `Hi ${name}, this is the six.well construct. We saw your RSVP for ${eventTitle}. Your seat is held once Square payment clears — reply here if you need a hand.`;
     }
     const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
+    const budgetLabel = approvedBudgetLabel(
+      submission.approvedBudget || tattooSessionPlans.get(submission.id)
+    );
     const appointment = latestAppointmentFor(submission.id);
     const isStudio = submission.type === "studio_booking" || isStudioAppointment(appointment);
     if (isStudio) {
@@ -3454,7 +3471,7 @@ ${meetingLines}
       if (requiresInPersonConsult(submission)) {
         return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: ${bookingUrl}`;
       }
-      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project has been approved for booking. Review your session estimate, choose your pacing where available, and place the deposit here: ${bookingUrl}`;
+      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project has been approved for booking.${budgetLabel ? ` Your approved project budget is ${budgetLabel}.` : ""} Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: ${bookingUrl}`;
     }
     if (bookingUrl && submission.status === "booked") {
       return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
@@ -3481,9 +3498,21 @@ ${meetingLines}
     return `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`;
   }
 
-  function sessionPlanEditorHtml(plan = {}) {
+  function sessionPlanEditorHtml(plan = {}, submission = null) {
     const preference = plan.clientPreference ? titleize(plan.clientPreference) : "No client response yet";
     const responseTime = plan.clientSelectedAt ? ` · ${formatDate(plan.clientSelectedAt)}` : "";
+    const submittedBudget = submission
+      ? (payloadValue(submission, "budget_range") || payloadValue(submission, "claim_bid"))
+      : "";
+    const approvedMinimumDollars = plan.approvedBudgetMinCents
+      ? Number(plan.approvedBudgetMinCents) / 100
+      : "";
+    const approvedMaximumDollars = plan.approvedBudgetMaxCents
+      ? Number(plan.approvedBudgetMaxCents) / 100
+      : "";
+    const budgetResponse = plan.budgetAcknowledged
+      ? `Agreed${plan.budgetAcknowledgedAt ? ` · ${formatDate(plan.budgetAcknowledgedAt)}` : ""}`
+      : "Awaiting client agreement";
     return `
       <h3>Session Plan &amp; Pacing</h3>
       <p class="contact">Set the structure the client will review before booking. Required plans cannot be overridden by client preference. Saving a revision clears any earlier client response so they must confirm the updated estimate.</p>
@@ -3504,8 +3533,15 @@ ${meetingLines}
         <div class="field"><label for="planMinutesMin">Total minutes minimum</label><input id="planMinutesMin" name="estimatedTotalMinutesMin" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMin ?? "")}"></div>
         <div class="field"><label for="planMinutesMax">Total minutes maximum</label><input id="planMinutesMax" name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMax ?? "")}"></div>
         <div class="field wide"><label for="planArtistNote">Client-facing session note</label><textarea id="planArtistNote" name="artistNote" placeholder="Explain the recommended pacing, breaks, or anything the client should know before scheduling.">${escapeHtml(plan.artistNote || "")}</textarea></div>
+        <div class="field wide">
+          <h3>Approved Project Budget</h3>
+          <p class="contact">Client-submitted comfort range: <strong>${escapeHtml(submittedBudget || "Not available")}</strong>. Enter the reviewed project-total range deliberately; the original inquiry value remains unchanged.</p>
+        </div>
+        <div class="field"><label for="approvedBudgetMinDollars">Approved minimum (USD)</label><input id="approvedBudgetMinDollars" name="approvedBudgetMinDollars" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(approvedMinimumDollars)}" placeholder="e.g. 800"></div>
+        <div class="field"><label for="approvedBudgetMaxDollars">Approved maximum (USD)</label><input id="approvedBudgetMaxDollars" name="approvedBudgetMaxDollars" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(approvedMaximumDollars)}" placeholder="e.g. 1200"></div>
+        <p class="contact wide">Both values are required before a tattoo booking link can be generated. Use the same value twice for an exact total. Consultation links do not require a tattoo budget.</p>
       </form>
-      <p class="session-plan-client-state">Client response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}</p>
+      <p class="session-plan-client-state">Session-plan response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}<br>Budget response: ${escapeHtml(budgetResponse)}</p>
       <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button">Save Session Plan</button></div>
     `;
   }
@@ -3516,27 +3552,55 @@ ${meetingLines}
     mount.innerHTML = `<p class="contact">Loading session plan…</p>`;
     try {
       const payload = await api(`/api/admin/booking/session-plans/${encodeURIComponent(submissionId)}`);
-      mount.innerHTML = sessionPlanEditorHtml(payload.sessionPlan || {});
+      const submission = submissions.find((item) => item.id === submissionId) || null;
+      tattooSessionPlans.set(submissionId, payload.sessionPlan || {});
+      mount.innerHTML = sessionPlanEditorHtml(payload.sessionPlan || {}, submission);
       enhanceControls(mount);
+      const textAssist = document.getElementById("textAssist");
+      if (textAssist && submission) textAssist.value = textReminderCopy(submission);
     } catch (error) {
       mount.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
     }
   }
 
-  async function saveTattooSessionPlan(submissionId) {
+  async function saveTattooSessionPlan(submissionId, options = {}) {
     const form = document.getElementById("tattooSessionPlanForm");
     if (!form) return null;
     const values = Object.fromEntries(new FormData(form));
+    const minimumDollars = values.approvedBudgetMinDollars === "" ? null : Number(values.approvedBudgetMinDollars);
+    const maximumDollars = values.approvedBudgetMaxDollars === "" ? null : Number(values.approvedBudgetMaxDollars);
+    if (
+      (minimumDollars !== null && (!Number.isSafeInteger(minimumDollars) || minimumDollars <= 0))
+      || (maximumDollars !== null && (!Number.isSafeInteger(maximumDollars) || maximumDollars <= 0))
+      || (minimumDollars !== null && maximumDollars !== null && maximumDollars < minimumDollars)
+    ) {
+      throw new Error("Enter a valid whole-dollar approved budget with the maximum greater than or equal to the minimum.");
+    }
+    if ((minimumDollars === null) !== (maximumDollars === null)) {
+      throw new Error("Enter both the minimum and maximum approved project budget.");
+    }
+    if (options.requireReviewedBudget && (minimumDollars === null || maximumDollars === null)) {
+      throw new Error("Set the approved project budget before generating tattoo booking access.");
+    }
+    delete values.approvedBudgetMinDollars;
+    delete values.approvedBudgetMaxDollars;
+    values.approvedBudgetMinCents = minimumDollars === null ? null : minimumDollars * 100;
+    values.approvedBudgetMaxCents = maximumDollars === null ? null : maximumDollars * 100;
+    values.approvedBudgetCurrency = "USD";
     const payload = await api(`/api/admin/booking/session-plans/${encodeURIComponent(submissionId)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(values),
     });
+    const submission = submissions.find((item) => item.id === submissionId) || null;
+    tattooSessionPlans.set(submissionId, payload.sessionPlan || {});
     const mount = document.getElementById("tattooSessionPlanEditor");
     if (mount) {
-      mount.innerHTML = sessionPlanEditorHtml(payload.sessionPlan || {});
+      mount.innerHTML = sessionPlanEditorHtml(payload.sessionPlan || {}, submission);
       enhanceControls(mount);
     }
+    const textAssist = document.getElementById("textAssist");
+    if (textAssist && submission) textAssist.value = textReminderCopy(submission);
     return payload.sessionPlan;
   }
 
@@ -5268,6 +5332,18 @@ ${meetingLines}
 
     if (event.target.id === "generateBookingBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
+      const tokenPurpose = document.getElementById("tokenPurpose")?.value || defaultTokenPurpose(submission);
+      if (tokenPurpose === "tattoo" && TATTOO_PROJECT_TYPES.has(submission?.type)) {
+        setStatus("Saving final session plan and approved budget");
+        try {
+          await saveTattooSessionPlan(activeId, {
+            requireReviewedBudget: submission?.sourcePath !== "/studio/direct-booking-invite",
+          });
+        } catch (error) {
+          setStatus(error.message || "The final session plan and approved budget could not be saved");
+          return;
+        }
+      }
       const currentSelectStatus = document.getElementById("detailStatus")?.value;
       if (submission?.status !== "approved" && currentSelectStatus !== "approved") {
         setStatus("Setting status to approved first");
@@ -5316,6 +5392,7 @@ ${meetingLines}
           ...(submissions.find((s) => s.id === activeId) || submission),
           bookingUrl: tokenPath,
           status: "approved",
+          approvedBudget: payload.token?.approvedBudget || null,
         });
       }
       await navigator.clipboard?.writeText(payload.token.bookingUrl || tokenPath).catch(() => {});

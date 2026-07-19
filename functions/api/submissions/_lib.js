@@ -93,17 +93,19 @@ const REQUIRED_FIELDS_BY_TYPE = {
   ],
   flash_claim: [
     ["selected_flash", "Available flash selection is required."],
-    ["claim_bid", "Budget range is required."],
+    ["budget_range", "Budget range is required."],
     ["flash_claim_acknowledged", "Flash claim acknowledgement is required.", "yes"],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   build_brief: [
     ["placement", "Placement is required."],
+    ["budget_range", "Budget range is required."],
     ["design_intent", "Design intent is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   maze_design: [
     ["maze_explanation", "A short explanation of your maze is required."],
+    ["budget_range", "Budget range is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   special_project: [
@@ -348,6 +350,22 @@ async function readSubmissionBody(request) {
   }
 
   return null;
+}
+
+function normalizeTattooBudgetPayload(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  const rawType = asString(payload.type || payload.form_type || "tattoo_inquiry")
+    .replace(/^standard_/, "")
+    .replace(/^new_/, "");
+  const type = rawType === "tattoo_inquiry_form" ? "tattoo_inquiry" : rawType;
+  if (!TATTOO_SUBMISSION_TYPES.has(type)) return payload;
+  const budget = asString(
+    payload.budget_range
+    || payload.budgetRange
+    || (type === "flash_claim" ? payload.claim_bid : "")
+  );
+  if (budget) payload.budget_range = budget;
+  return payload;
 }
 
 function normalizeSubmission(payload, request) {
@@ -892,6 +910,7 @@ export async function handleCreateSubmission(request, env) {
   const body = await readSubmissionBody(request);
   if (!body) return errorResponse("Expected JSON or form data.", 400);
   if (body.error) return errorResponse(body.error, body.status || 400);
+  normalizeTattooBudgetPayload(body.payload);
 
   const submission = normalizeSubmission(body.payload, request);
   const validation = validateSubmission(submission, body.payload);

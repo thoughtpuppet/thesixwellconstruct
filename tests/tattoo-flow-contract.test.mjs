@@ -28,6 +28,7 @@ import {
   handleAdminCreateDirectBookingInvite,
   handleAdminRescheduleAppointment,
   handleAdminResolveTattooLifecycleReview,
+  handleAdminRevokeSubmissionBookingTokens,
   handleAdminTattooSettings,
   handleAdminTattooSessionPlan,
   handleCancelAppointment,
@@ -57,6 +58,15 @@ import {
 } from "../functions/api/notifications/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+const TATTOO_BUDGET_RANGES = [
+  "Up to $300",
+  "$300–$500",
+  "$500–$800",
+  "$800–$1,200",
+  "$1,200–$2,000",
+  "$2,000+",
+  "I’m flexible / I’d like guidance",
+];
 
 class D1Statement {
   constructor(database, sql, values = []) {
@@ -423,13 +433,92 @@ function validCustom(overrides = {}) {
     previous_client: "no",
     placement: "Forearm",
     size: "4 inches",
-    budget_range: "$500-$1,000",
+    budget_range: "$500–$800",
     color_preference: "black",
     message: "A symbolic composition with clear visual direction.",
     review_consent: "yes",
     ...overrides,
   };
 }
+
+test("Tattoo project forms expose the same required total-budget ranges", () => {
+  const formSources = [
+    ["Custom", join(ROOT, "tattoos", "inquire", "custom", "index.html")],
+    ["Flash", join(ROOT, "tattoos", "flash", "claim", "index.html")],
+    ["Build", join(ROOT, "tattoos", "build", "index.html")],
+    ["Special Projects", join(ROOT, "tattoos", "special-projects", "apply", "index.html")],
+    ["Maze", join(ROOT, "apps", "maze", "src", "App.tsx")],
+  ];
+  for (const [label, path] of formSources) {
+    const source = readFileSync(path, "utf8");
+    assert.match(source, /What total project budget are you comfortable working within\?/i, `${label} budget label`);
+    assert.match(source, /name="budget_range"[^>]*required|required[^>]*name="budget_range"/, `${label} required budget field`);
+    for (const range of TATTOO_BUDGET_RANGES) {
+      assert.ok(source.includes(`value="${range}"`), `${label} includes ${range}`);
+    }
+  }
+});
+
+test("All tattoo project types require budget and canonical ranges remain accepted", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database) };
+  const missingBudgetPayloads = [
+    validCustom({ budget_range: "" }),
+    {
+      type: "flash_claim",
+      name: "Flash Budget",
+      email: "flash-budget@example.test",
+      age_confirmed: "yes",
+      selected_flash: "placeholder-flash",
+      flash_claim_acknowledged: "yes",
+      review_consent: "yes",
+    },
+    {
+      type: "build_brief",
+      name: "Build Budget",
+      email: "build-budget@example.test",
+      age_confirmed: "yes",
+      placement: "Upper arm",
+      design_intent: "A protected route.",
+      symbol_ids: ["maze-path"],
+      review_consent: "yes",
+    },
+    {
+      type: "maze_design",
+      name: "Maze Budget",
+      email: "maze-budget@example.test",
+      age_confirmed: "yes",
+      maze_explanation: "A returning path.",
+      review_consent: "yes",
+    },
+    {
+      type: "special_project",
+      name: "Special Budget",
+      email: "special-budget@example.test",
+      age_confirmed: "yes",
+      project_title: "Mythic Body Studies",
+      placement: "Back",
+      message: "A long-form symbolic study.",
+      review_consent: "yes",
+    },
+  ];
+  for (const payload of missingBudgetPayloads) {
+    const response = await handleCreateSubmission(jsonRequest("/api/submissions", payload), env);
+    assert.equal(response.status, 400, payload.type);
+    assert.equal((await response.json()).error, "Budget range is required.", payload.type);
+  }
+
+  for (const [index, budgetRange] of TATTOO_BUDGET_RANGES.entries()) {
+    const response = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+      email: `budget-range-${index}@example.test`,
+      budget_range: budgetRange,
+    })), env);
+    assert.equal(response.status, 200, budgetRange);
+    const submissionId = (await response.json()).submissionId;
+    const saved = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
+    assert.equal(saved.budget_range, budgetRange);
+  }
+});
 
 test("all migrations apply with the tattoo lifecycle schema and managed defaults", () => {
   const database = migratedDatabase();
@@ -441,6 +530,13 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("submissions").has("idempotency_key"));
   assert.ok(columns("booking_tokens").has("purpose"));
   assert.ok(columns("tattoo_settings").has("session_estimate_copy_json"));
+  for (const name of [
+    "approved_budget_min_cents",
+    "approved_budget_max_cents",
+    "approved_budget_currency",
+    "budget_acknowledged",
+    "budget_acknowledged_at",
+  ]) assert.ok(columns("tattoo_session_plans").has(name), `tattoo_session_plans.${name}`);
   assert.ok(columns("visual_symbols").has("build_guidance_json"));
   for (const name of [
     "purpose",
@@ -722,6 +818,7 @@ test("Build submissions require intent, snapshot stable published symbol IDs, st
     email: "build@example.test",
     age_confirmed: "yes",
     placement: "Upper arm",
+    budget_range: "$500–$800",
     design_intent: "A protective path made from three linked marks.",
     review_consent: "yes",
     symbol_ids: ["maze-path", "maze-room"],
@@ -778,6 +875,7 @@ test("Build submissions reject empty, duplicate, oversized, and unavailable symb
     email: "build-boundary@example.test",
     age_confirmed: "yes",
     placement: "Upper arm",
+    budget_range: "$300–$500",
     design_intent: "A protected route.",
     review_consent: "yes",
   };
@@ -838,6 +936,7 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
     contact: { firstName: "Draft", lastName: "Client", email: "draft@example.test", phone: "" },
     placement: "Upper arm",
     scale: "Palm-size",
+    budgetRange: "$500–$800",
     timeline: "No rush",
     designIntent: "A protected route.",
     message: "",
@@ -858,6 +957,7 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
   const stored = database.prepare("SELECT * FROM tattoo_build_drafts WHERE id=?").get(createdBody.draft.id);
   assert.notEqual(stored.token_hash, createdBody.resumeToken);
   assert.equal(stored.token_hash.length, 64);
+  assert.equal(JSON.parse(stored.payload_json).budgetRange, "$500–$800");
 
   const fetched = await handleGetBuildDraft(draftRequest(
     "/api/build-drafts/current",
@@ -911,6 +1011,7 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
     email: "draft@example.test",
     age_confirmed: "yes",
     placement: "Upper arm",
+    budget_range: "$500–$800",
     design_intent: "A protected route that returns.",
     review_consent: "yes",
     symbol_ids: ["maze-path"],
@@ -1019,6 +1120,7 @@ test("Maze drafts enforce size, revocation, expiration cleanup, and email rate l
     contact: { email: "maze-draft@example.test" },
     placement: "",
     scale: "",
+    budgetRange: "I’m flexible / I’d like guidance",
     mazeExplanation: "",
   };
   const created = await handleCreateBuildDraft(draftRequest(
@@ -1033,6 +1135,10 @@ test("Maze drafts enforce size, revocation, expiration cleanup, and email rate l
   assert.match(database.prepare(
     "SELECT payload_json FROM tattoo_build_drafts WHERE id=?"
   ).get(createdBody.draft.id).payload_json, /wall-1/);
+  assert.equal(
+    JSON.parse(database.prepare("SELECT payload_json FROM tattoo_build_drafts WHERE id=?").get(createdBody.draft.id).payload_json).budgetRange,
+    "I’m flexible / I’d like guidance",
+  );
 
   const revoked = await handleDeleteBuildDraft(draftRequest(
     "/api/build-drafts/current",
@@ -1098,6 +1204,7 @@ test("Maze submissions require generated artifacts and snapshot their wall and s
     name: "Maze Client",
     email: "maze@example.test",
     age_confirmed: "yes",
+    budget_range: "$300–$500",
     maze_explanation: "A route through a protected threshold.",
     review_consent: "yes",
   };
@@ -1142,6 +1249,8 @@ test("Build review UI keeps managed themes, load recovery, readable snapshots, a
   const composition = readFileSync(join(ROOT, "js", "build-composition.js"), "utf8");
   const mazeStyles = readFileSync(join(ROOT, "apps", "maze", "src", "styles.css"), "utf8");
   const mazeBuild = readFileSync(join(ROOT, "apps", "maze", "vite.config.ts"), "utf8");
+  const receipt = readFileSync(join(ROOT, "tattoos", "submission-received", "index.html"), "utf8");
+  const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
 
   assert.match(builder, /const otherThemes = \[\.\.\.availableThemes\]/);
   assert.match(builder, /setBuilderState\("The Legend could not be loaded\./);
@@ -1157,12 +1266,23 @@ test("Build review UI keeps managed themes, load recovery, readable snapshots, a
   assert.match(builder, /card\.addEventListener\("click", \(\) => toggleSymbol\(sym, card\)\)/);
   assert.match(builder, /drawerNoteInput\.disabled = !isSelected/);
   assert.match(builder, /event\.key === "Escape"/);
+  assert.match(builder, /payload\.designIntent \|\| payload\.placement \|\| payload\.budgetRange \|\| payload\.message/);
   assert.match(composition, /MAX_APPLIED_RULES = 3/);
   assert.match(constructManager, /Legend Composition Rules/);
   assert.match(constructManager, /Build Guidance/);
   assert.match(studio, /class="symbol-snapshot-item"/);
   assert.match(studio, /Exact reading shown to client/);
+  assert.match(studio, /p\("budget_range"\) \|\| p\("claim_bid"\)/);
+  assert.match(studio, /\$\{field\("Budget", p\("budget_range"\)\)\}/);
   assert.match(studio, /typeof item === "object" \? JSON\.stringify\(item\)/);
+  assert.match(receipt, /placement, scale, and budget before recommending/);
+  assert.match(receipt, /placement, scale, and budget can translate/);
+  assert.match(studio, /Approved Project Budget/);
+  assert.match(studio, /approvedBudgetMinCents/);
+  assert.match(studio, /Client-submitted comfort range/);
+  assert.match(bookingPage, /Approved project budget/);
+  assert.match(bookingPage, /id="budgetAck"/);
+  assert.match(bookingPage, /budgetAcknowledged:planHasReviewedBudget/);
   assert.match(mazeStyles, /grid-template-columns: minmax\(240px, 280px\) minmax\(500px, 1fr\) minmax\(280px, 330px\)/);
   assert.match(mazeStyles, /background: var\(--color-bg\)/);
   assert.match(mazeBuild, /codeSplitting:/);
@@ -1642,6 +1762,9 @@ test("explicit consultation requirements move through completion before tattoo a
       estimatedTotalMinutesMin: 300,
       estimatedTotalMinutesMax: 480,
       artistNote: "Final plan after the prerequisite consultation.",
+      approvedBudgetMinCents: 120000,
+      approvedBudgetMaxCents: 180000,
+      approvedBudgetCurrency: "USD",
     },
     adminToken,
     "PATCH",
@@ -1666,6 +1789,276 @@ test("explicit consultation requirements move through completion before tattoo a
   const tattooToken = (await tattooTokenResponse.json()).token;
   assert.equal(tattooToken.purpose, "tattoo");
   assert.deepEqual(tattooToken.allowedBookingTypes, ["tattoo_quarter"]);
+});
+
+test("reviewed project budgets gate tattoo booking and require client agreement", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { id: crypto.randomUUID() };
+      },
+    },
+  };
+
+  const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
+    budget_range: "$500â€“$800",
+  })), env);
+  assert.equal(created.status, 200);
+  const submissionId = (await created.json()).submissionId;
+
+  const planWithoutBudget = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "One reviewed tattoo session.",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(planWithoutBudget.status, 200);
+
+  const approved = await handleUpdateSubmission(
+    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
+    env,
+    submissionId,
+  );
+  assert.equal(approved.status, 200);
+  assert.equal(
+    database.prepare("SELECT tattoo_stage FROM submissions WHERE id = ?").get(submissionId).tattoo_stage,
+    "ready_to_book",
+  );
+
+  const missingBudgetToken = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_quarter"],
+      revokeExisting: true,
+    },
+    adminToken,
+  ), env);
+  assert.equal(missingBudgetToken.status, 409);
+  assert.equal((await missingBudgetToken.json()).code, "APPROVED_BUDGET_REQUIRED");
+
+  const reversedBudget = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "One reviewed tattoo session.",
+      approvedBudgetMinCents: 120000,
+      approvedBudgetMaxCents: 80000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(reversedBudget.status, 400);
+  assert.equal((await reversedBudget.json()).code, "INVALID_APPROVED_BUDGET");
+
+  const reviewedBudget = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "One reviewed tattoo session.",
+      approvedBudgetMinCents: 80000,
+      approvedBudgetMaxCents: 120000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(reviewedBudget.status, 200);
+  assert.equal((await reviewedBudget.json()).sessionPlan.budgetAcknowledged, false);
+  assert.equal(
+    JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id = ?").get(submissionId).payload_json).budget_range,
+    "$500â€“$800",
+  );
+
+  sent.length = 0;
+  const firstTokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_quarter"],
+      revokeExisting: true,
+    },
+    adminToken,
+  ), env);
+  assert.equal(firstTokenResponse.status, 200);
+  const firstToken = (await firstTokenResponse.json()).token;
+  assert.deepEqual(firstToken.approvedBudget, {
+    minimumCents: 80000,
+    maximumCents: 120000,
+    currency: "USD",
+  });
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /Approved project budget: \$800.+\$1,200/);
+  const firstRawToken = new URL(firstToken.bookingUrl).searchParams.get("token");
+
+  const firstContextResponse = await handleBookingContext(
+    new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(firstRawToken)}`),
+    env,
+  );
+  const firstContext = await firstContextResponse.json();
+  assert.equal(firstContextResponse.status, 200);
+  assert.equal(firstContext.sessionPlan.approvedBudgetMinCents, 80000);
+  assert.equal(firstContext.sessionPlan.approvedBudgetMaxCents, 120000);
+  assert.equal(firstContext.sessionPlan.budgetAcknowledged, false);
+
+  const missingBudgetAgreement = await handleSaveBookingSessionPlan(jsonRequest(
+    "/api/booking/session-plan",
+    {
+      token: firstRawToken,
+      preference: "studio_plan",
+      acknowledged: true,
+    },
+  ), env);
+  assert.equal(missingBudgetAgreement.status, 400);
+  assert.equal(
+    (await missingBudgetAgreement.json()).code,
+    "APPROVED_BUDGET_ACKNOWLEDGEMENT_REQUIRED",
+  );
+
+  const firstAgreement = await handleSaveBookingSessionPlan(jsonRequest(
+    "/api/booking/session-plan",
+    {
+      token: firstRawToken,
+      preference: "studio_plan",
+      acknowledged: true,
+      budgetAcknowledged: true,
+    },
+  ), env);
+  assert.equal(firstAgreement.status, 200);
+  assert.equal((await firstAgreement.json()).sessionPlan.budgetAcknowledged, true);
+  assert.equal(
+    database.prepare(
+      "SELECT count(*) AS count FROM submission_events WHERE submission_id = ? AND event_type = 'approved_budget_acknowledged'",
+    ).get(submissionId).count,
+    1,
+  );
+
+  const activeTokenRevision = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "One reviewed tattoo session.",
+      approvedBudgetMinCents: 125000,
+      approvedBudgetMaxCents: 125000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(activeTokenRevision.status, 409);
+  assert.equal((await activeTokenRevision.json()).code, "ACTIVE_BOOKING_BLOCKS_SESSION_PLAN_EDIT");
+
+  const revoked = await handleAdminRevokeSubmissionBookingTokens(adminJsonRequest(
+    "/api/admin/booking/tokens/revoke-submission",
+    { submissionId },
+    adminToken,
+  ), env);
+  assert.equal(revoked.status, 200);
+
+  const exactBudget = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "One reviewed tattoo session.",
+      approvedBudgetMinCents: 125000,
+      approvedBudgetMaxCents: 125000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(exactBudget.status, 200);
+  const exactPlan = (await exactBudget.json()).sessionPlan;
+  assert.equal(exactPlan.budgetAcknowledged, false);
+  assert.equal(exactPlan.budgetAcknowledgedAt, "");
+
+  const secondTokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_quarter"],
+      revokeExisting: true,
+    },
+    adminToken,
+  ), env);
+  assert.equal(secondTokenResponse.status, 200);
+  const secondToken = (await secondTokenResponse.json()).token;
+  assert.match(sent.at(-1).text, /Approved project budget: \$1,250/);
+  assert.doesNotMatch(sent.at(-1).text, /\$1,250.+\$1,250/);
+  const secondRawToken = new URL(secondToken.bookingUrl).searchParams.get("token");
+  const startAt = new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(new Date(startAt).getTime() + 90 * 60 * 1000).toISOString();
+  insertAvailabilityWindow(database, {
+    id: "reviewed-budget-window",
+    bookingTypeId: "tattoo_quarter",
+    startAt,
+    endAt,
+  });
+
+  const blockedHold = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: secondRawToken,
+    bookingTypeId: "tattoo_quarter",
+    availabilityWindowId: "reviewed-budget-window",
+  }), env);
+  assert.equal(blockedHold.status, 409);
+  assert.match((await blockedHold.json()).error, /agree to the approved project budget/i);
+
+  const secondAgreement = await handleSaveBookingSessionPlan(jsonRequest(
+    "/api/booking/session-plan",
+    {
+      token: secondRawToken,
+      preference: "studio_plan",
+      acknowledged: true,
+      budgetAcknowledged: true,
+    },
+  ), env);
+  assert.equal(secondAgreement.status, 200);
+
+  const hold = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: secondRawToken,
+    bookingTypeId: "tattoo_quarter",
+    availabilityWindowId: "reviewed-budget-window",
+  }), env);
+  assert.equal(hold.status, 200);
 });
 
 test("private booking holds enforce the token and parent lifecycle inside the atomic insert", async () => {
@@ -2276,11 +2669,13 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
       symbol_ids: ["maze-path"],
       placement: "Upper arm",
       scale: "Palm-size",
+      budget_range: "$500–$800",
       design_intent: "A protected route.",
     },
   });
   assert.match(sent.at(-1).text, /Symbol Ids: maze-path/);
   assert.match(sent.at(-1).text, /Scale: Palm-size/);
+  assert.match(sent.at(-1).text, /Budget Range: \$500–\$800/);
   assert.match(sent.at(-1).text, /Design Intent: A protected route\./);
 
   await notifyAdminSubmissionReceived(env, {
@@ -2290,13 +2685,16 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
     payload: {
       maze_explanation: "A returning path.",
       scale: "Forearm-size",
+      budget_range: "$800–$1,200",
       maze_artifact_snapshot: { wallCount: 4, shapeCount: 2 },
     },
   });
   assert.match(sent.at(-1).text, /Scale: Forearm-size/);
+  assert.match(sent.at(-1).text, /Budget Range: \$800–\$1,200/);
   assert.match(sent.at(-1).text, /Maze Artifact Snapshot: \{"wallCount":4,"shapeCount":2\}/);
 
   const managedSheetPayload = {
+    claim_bid: "$300-$600",
     sheet_design_selections: [
       { id: "sheet-a", code: "A", label: "Moth", placement: "Forearm", scale: "4 in" },
       { id: "sheet-b", code: "B", label: "Key", placement: "Ankle", scale: "" },
@@ -2311,6 +2709,7 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
     contact: { name: "Collector", email: "collector@example.test" },
     payload: managedSheetPayload,
   });
+  assert.match(sent.at(-1).text, /Budget Range: \$300-\$600/);
   assert.match(sent.at(-1).text, /Requested sheet designs[\s\S]*A is Moth[\s\S]*B is Key/);
   assert.match(sent.at(-1).text, /Approved sheet designs[\s\S]*A is Moth/);
 
@@ -2701,6 +3100,10 @@ test("the first Flash approval reserves the managed design and a competing appro
   assert.equal(secondCreate.status, 200);
   const firstId = (await firstCreate.json()).submissionId;
   const secondId = (await secondCreate.json()).submissionId;
+  assert.equal(
+    JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(firstId).payload_json).budget_range,
+    "$300-$600",
+  );
 
   const firstApproval = await handleUpdateSubmission(
     jsonPatchRequest(`/api/admin/submissions/${firstId}`, { status: "approved" }, adminToken),
@@ -2754,7 +3157,7 @@ test("managed sheet claims approve subsets atomically and place only approved de
     age_confirmed: "yes",
     selected_flash: flash.id,
     sheet_design_selections_json: selections,
-    claim_bid: "$600-$900 total",
+    budget_range: "$800–$1,200",
     review_consent: "yes",
     flash_claim_acknowledged: "yes",
     session_plan_acknowledged: "yes",

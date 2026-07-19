@@ -49,6 +49,9 @@
   .session-plan-panel { border:5px solid rgba(110,4,4,.45); padding:20px; display:grid; gap:16px; }
   .session-plan-title { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
   .session-plan-copy { margin:0; color:rgba(255,231,202,.62); font-size:13px; line-height:1.7; }
+  .approved-budget { border:5px solid var(--ring-soft); padding:16px; display:grid; gap:8px; }
+  .approved-budget-label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+  .approved-budget-value { color:#FFE7CA; font-family:var(--sans); font-size:clamp(24px,4vw,36px); font-weight:900; line-height:1; }
   .session-phone-wrap { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .session-phone-trigger { border:0; background:transparent; color:var(--accent); padding:0; font-family:var(--sans); font-size:inherit; font-weight:900; letter-spacing:.02em; text-decoration:underline; text-underline-offset:3px; }
   .session-phone-trigger:hover,.session-phone-trigger:focus-visible { color:#FFE7CA; outline:0; }
@@ -266,6 +269,7 @@
   let selectedTipCents = 0;
   let selectedPlanPreference = "";
   let planAcknowledged = false;
+  let budgetAcknowledged = false;
   const defaultSessionEstimateCopy = {
     sectionHeading: "Your Session Plan",
     oneSessionLabel: "One-session plan",
@@ -318,6 +322,11 @@
         estimatedTotalMinutesMin: 420,
         estimatedTotalMinutesMax: 600,
         artistNote: "The composition is planned across more than one sitting.",
+        approvedBudgetMinCents: 120000,
+        approvedBudgetMaxCents: 180000,
+        approvedBudgetCurrency: "USD",
+        budgetAcknowledged: false,
+        budgetAcknowledgedAt: "",
         clientPreference: "",
         clientAcknowledged: false,
         clientSelectedAt: "",
@@ -589,9 +598,30 @@
     return estimateRange(min, max, (value) => minutesLabel(value));
   }
 
+  function planHasReviewedBudget(plan) {
+    const minimum = Number(plan?.approvedBudgetMinCents || 0);
+    const maximum = Number(plan?.approvedBudgetMaxCents || 0);
+    return Number.isSafeInteger(minimum)
+      && Number.isSafeInteger(maximum)
+      && minimum > 0
+      && maximum >= minimum;
+  }
+
+  function approvedBudgetRange(plan) {
+    if (!planHasReviewedBudget(plan)) return "";
+    const currency = plan.approvedBudgetCurrency || "USD";
+    return plan.approvedBudgetMinCents === plan.approvedBudgetMaxCents
+      ? money(plan.approvedBudgetMinCents, currency)
+      : `${money(plan.approvedBudgetMinCents, currency)}–${money(plan.approvedBudgetMaxCents, currency)}`;
+  }
+
   function planIsReady(plan) {
-    if (!plan || !["required", "client_choice", "not_available"].includes(plan.splitPolicy)) return true;
-    return Boolean(plan.clientAcknowledged && plan.clientPreference && plan.clientSelectedAt);
+    if (!plan) return true;
+    const sessionReady = !["required", "client_choice", "not_available"].includes(plan.splitPolicy)
+      || Boolean(plan.clientAcknowledged && plan.clientPreference && plan.clientSelectedAt);
+    const budgetReady = !planHasReviewedBudget(plan)
+      || Boolean(plan.budgetAcknowledged && plan.budgetAcknowledgedAt);
+    return sessionReady && budgetReady;
   }
 
   function applyPurposeCopy() {
@@ -680,6 +710,7 @@
     const sessions = sessionCountRange(plan.estimatedSessionsMin, plan.estimatedSessionsMax);
     const totalTime = totalTimeRange(plan.estimatedTotalMinutesMin, plan.estimatedTotalMinutesMax);
     const estimate = [sessions, totalTime].filter(Boolean).join(" · ");
+    const budgetLabel = approvedBudgetRange(plan);
     const fixed = ["required", "not_available"].includes(plan.splitPolicy);
     const flexible = plan.splitPolicy === "client_choice";
     const choices = flexible ? [
@@ -702,10 +733,18 @@
       <h2 class="session-plan-title">${escapeHtml(category)}${estimate ? ` · ${escapeHtml(estimate)}` : ""}</h2>
       <p class="session-plan-copy">${sessionCopyHtml(plan.artistNote || copy.fallbackNote)}</p>
       <p class="session-plan-copy">${sessionCopyHtml(policyCopy)}</p>
+      ${budgetLabel ? `
+        <div class="approved-budget">
+          <span class="approved-budget-label">Approved project budget</span>
+          <strong class="approved-budget-value">${escapeHtml(budgetLabel)}</strong>
+          <p class="session-plan-copy">This project-total range applies to the approved scope and session plan. Your tattoo deposit is applied to the final tattoo cost. Changes to placement, scale, detail, or session planning may require a revised range before booking.</p>
+        </div>
+      ` : ""}
       ${planIsReady(plan) ? `<div class="status">${escapeHtml(savedMessage)}</div>` : ""}
       <div class="session-plan-options">${choices.map(([value,title,meta]) => `<button class="choice ${selectedPlanPreference === value ? "active" : ""}" type="button" data-plan-preference="${value}"><span><span class="choice-title">${escapeHtml(title)}</span><span class="choice-meta">${escapeHtml(meta)}</span></span></button>`).join("")}</div>
       <label class="session-plan-ack"><input id="sessionPlanAck" type="checkbox" ${planAcknowledged ? "checked" : ""}><span>${escapeHtml(copy.acknowledgement)}</span></label>
-      <button class="session-plan-confirm" id="confirmSessionPlanBtn" type="button" ${selectedPlanPreference && planAcknowledged ? "" : "disabled"}>${escapeHtml(copy.confirmButtonLabel)}</button>
+      ${budgetLabel ? `<label class="session-plan-ack"><input id="budgetAck" type="checkbox" ${budgetAcknowledged ? "checked" : ""}><span>I have reviewed and agree to the approved project budget of ${escapeHtml(budgetLabel)} for this scope. I understand that scope changes may require a revised budget before booking.</span></label>` : ""}
+      <button class="session-plan-confirm" id="confirmSessionPlanBtn" type="button" ${selectedPlanPreference && planAcknowledged && (!budgetLabel || budgetAcknowledged) ? "" : "disabled"}>${escapeHtml(copy.confirmButtonLabel)}</button>
       <p class="fine" id="sessionPlanStatus"></p>
     `;
     appointmentSelection.classList.toggle("hidden", !planIsReady(plan));
@@ -770,6 +809,7 @@
   function initializePlanSelection() {
     selectedPlanPreference = context?.sessionPlan?.clientPreference || "";
     planAcknowledged = Boolean(context?.sessionPlan?.clientAcknowledged);
+    budgetAcknowledged = Boolean(context?.sessionPlan?.budgetAcknowledged);
     if (["required", "not_available"].includes(context?.sessionPlan?.splitPolicy) && !selectedPlanPreference) selectedPlanPreference = "studio_plan";
   }
 
@@ -831,9 +871,21 @@
     }
     if (event.target.id !== "confirmSessionPlanBtn") return;
     const status = document.getElementById("sessionPlanStatus");
-    if (!selectedPlanPreference || !planAcknowledged) return;
+    if (
+      !selectedPlanPreference
+      || !planAcknowledged
+      || (planHasReviewedBudget(context?.sessionPlan) && !budgetAcknowledged)
+    ) return;
     if (previewMode) {
-      context.sessionPlan = { ...context.sessionPlan, clientPreference:selectedPlanPreference, clientAcknowledged:true, clientSelectedAt:new Date().toISOString() };
+      const selectedAt = new Date().toISOString();
+      context.sessionPlan = {
+        ...context.sessionPlan,
+        clientPreference:selectedPlanPreference,
+        clientAcknowledged:true,
+        clientSelectedAt:selectedAt,
+        budgetAcknowledged:planHasReviewedBudget(context?.sessionPlan),
+        budgetAcknowledgedAt:planHasReviewedBudget(context?.sessionPlan) ? selectedAt : "",
+      };
       render();
       return;
     }
@@ -842,7 +894,12 @@
     const response = await fetch("/api/booking/session-plan", {
       method: "POST",
       headers: { "content-type":"application/json" },
-      body: JSON.stringify({ token, preference:selectedPlanPreference, acknowledged:true }),
+      body: JSON.stringify({
+        token,
+        preference:selectedPlanPreference,
+        acknowledged:true,
+        budgetAcknowledged:planHasReviewedBudget(context?.sessionPlan),
+      }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -856,8 +913,9 @@
   });
 
   sessionPlanSection.addEventListener("change", (event) => {
-    if (event.target.id !== "sessionPlanAck") return;
-    planAcknowledged = event.target.checked;
+    if (event.target.id === "sessionPlanAck") planAcknowledged = event.target.checked;
+    else if (event.target.id === "budgetAck") budgetAcknowledged = event.target.checked;
+    else return;
     renderSessionPlan();
   });
 

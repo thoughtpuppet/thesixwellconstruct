@@ -117,6 +117,7 @@ function normalizeBuildPayload(payload = {}) {
     contact: normalizeContact(payload.contact),
     placement: asString(payload.placement, 300),
     scale: asString(payload.scale, 160),
+    budgetRange: asString(payload.budgetRange || payload.budget_range, 160),
     timeline: asString(payload.timeline, 300),
     designIntent: asString(payload.designIntent, 5000),
     message: asString(payload.message, 5000),
@@ -133,6 +134,7 @@ function normalizeMazePayload(payload = {}) {
     contact: normalizeContact(payload.contact),
     placement: asString(payload.placement, 300),
     scale: asString(payload.scale, 160),
+    budgetRange: asString(payload.budgetRange || payload.budget_range, 160),
     mazeExplanation: asString(payload.mazeExplanation, 5000),
     updatedAt: asString(payload.updatedAt, 80) || new Date().toISOString(),
   };

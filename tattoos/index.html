@@ -462,6 +462,10 @@
     flex-direction:column;
     gap:14px;
   }
+  .rates-intro {
+    max-width:680px;
+    margin:0 0 28px;
+  }
   .rate-list li {
     display:grid;
     grid-template-columns:minmax(110px,0.3fr) minmax(0,1fr);
@@ -782,13 +786,14 @@
       <div class="price-fit">
         <div>
           <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-rates-label"><span style="color: rgb(255, 231, 202)"><span style="font-size: 14px">Rates</span></span></p>
-          <h2 class="section-title" data-copy-id="tattoos-rates-title">Transparent Rates</h2>
+          <h2 class="section-title" data-copy-id="tattoos-rates-title">Rates &amp; Project Scope</h2>
+          <p class="fit-body rates-intro" data-copy-id="tattoos-rates-intro">Rates are based on tattoo time and project type. Your final total is shaped by placement, scale, detail, and the recommended session plan.</p>
           <ul class="rate-list" id="tattooRateList" aria-live="polite">
-            <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Original flash pieces are offered at a lower rate.</span></p></div></li>
-            <li data-rate-service="custom"><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom &amp; Story-Driven &amp; Built Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-custom-body"><span style="color: rgba(252, 184, 103, 0.64)">Custom work, complex symbolic compositions, and narrative pieces. Build your own concept/maze designs are also subjected to this rate.</span></p></div></li>
-            <li data-rate-service="special"><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="fit-body" data-copy-id="tattoos-rate-special-body"><span style="color: rgba(252, 184, 103, 0.64)">communal, collaborative or experimental work. Starting rate is to incentivize participation and also reflects the appreciation of the extended commitment that is required and the possible depth of these sessions.</span></p></div></li>
+            <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Existing flash is billed at the published flash rate. Final scope depends on placement, scale, and tattoo time.</span></p></div></li>
+            <li data-rate-service="custom"><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom, Story-Driven &amp; Build</p><p class="fit-body" data-copy-id="tattoos-rate-custom-body"><span style="color: rgba(252, 184, 103, 0.64)">Original custom work, symbolic compositions, and Build Your Own designs are billed at the custom rate.</span></p></div></li>
+            <li data-rate-service="special"><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="fit-body" data-copy-id="tattoos-rate-special-body"><span style="color: rgba(252, 184, 103, 0.64)">Select open calls may begin at this rate. The specific call, commitment, and project scope determine the confirmed rate.</span></p></div></li>
           </ul>
-          <p class="fine-print" data-copy-id="tattoos-rates-fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
+          <p class="fine-print" data-copy-id="tattoos-rates-fine-print">Your budget helps guide scope and session planning; it does not set the quote. Final pricing is confirmed before booking. A non-refundable deposit is required to reserve an appointment and is applied to the final tattoo cost.</p>
         </div>
       </div>
     </section>
@@ -843,15 +848,15 @@
         var publicRateCopy = {
           flash: {
             label: "Flash Sessions",
-            body: "Original flash pieces are offered at a lower rate."
+            body: "Existing flash is billed at the published flash rate. Final scope depends on placement, scale, and tattoo time."
           },
           custom: {
-            label: "Custom & Story-Driven & Built Sessions",
-            body: "Custom work, complex symbolic compositions, and narrative pieces. Build your own concept/maze designs are also subjected to this rate."
+            label: "Custom, Story-Driven & Build",
+            body: "Original custom work, symbolic compositions, and Build Your Own designs are billed at the custom rate."
           },
           special: {
             label: "Special Projects",
-            body: "communal, collaborative or experimental work. Starting rate is to incentivize participation and also reflects the appreciation of the extended commitment that is required and the possible depth of these sessions."
+            body: "Select open calls may begin at this rate. The specific call, commitment, and project scope determine the confirmed rate."
           }
         };
         var rateCards = (Array.isArray(payload.rateCards) ? payload.rateCards : []).filter(function(card) {

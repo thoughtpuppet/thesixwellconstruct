@@ -200,6 +200,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
       },
       placement: fieldValue("placement"),
       scale: fieldValue("scale"),
+      budgetRange: fieldValue("budgetRange"),
       timeline: fieldValue("timeline"),
       designIntent: fieldValue("designIntent"),
       message: fieldValue("message"),
@@ -209,7 +210,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
 
   function hasDraftContent(payload = currentDraftPayload()) {
     return payload.symbolSelections.length > 0
-      || Boolean(payload.designIntent || payload.placement || payload.message);
+      || Boolean(payload.designIntent || payload.placement || payload.budgetRange || payload.message);
   }
 
   function saveLocal(payload) {
@@ -263,6 +264,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
       phone: payload.contact?.phone,
       placement: payload.placement,
       scale: payload.scale,
+      budgetRange: payload.budgetRange,
       timeline: payload.timeline,
       designIntent: payload.designIntent,
       message: payload.message,

@@ -158,19 +158,19 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             </div>
             <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
             <div class="field"><label for="size">Approx. size <span class="required-mark">*</span></label><input id="size" name="size" placeholder="Example: 4-6 in" required></div>
-            <div class="field">
-              <label for="budget_range">Budget range <span class="required-mark">*</span></label>
-              <select id="budget_range" name="budget_range" required>
+            <div class="field full">
+              <label for="budget_range">What total project budget are you comfortable working within? <span class="required-mark">*</span></label>
+              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" required>
                 <option value="">Select a range</option>
-                <option value="Under $150">Under $150</option>
-                <option value="$150-$300">$150-$300</option>
-                <option value="$300-$450">$300-$450</option>
-                <option value="$450-$600">$450-$600</option>
-                <option value="$600-$750">$600-$750</option>
-                <option value="$750-$900">$750-$900</option>
-                <option value="$1000+">$1000+</option>
-                <option value="Doesn't matter">Doesn't matter</option>
+                <option value="Up to $300">Up to $300</option>
+                <option value="$300–$500">$300–$500</option>
+                <option value="$500–$800">$500–$800</option>
+                <option value="$800–$1,200">$800–$1,200</option>
+                <option value="$1,200–$2,000">$1,200–$2,000</option>
+                <option value="$2,000+">$2,000+</option>
+                <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
               </select>
+              <p class="field-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</p>
             </div>
             <div class="field">
               <label for="color_preference">Color preference <span class="required-mark">*</span></label>

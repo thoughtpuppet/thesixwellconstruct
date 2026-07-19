@@ -137,11 +137,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
     <div class="layout">
       <section>
         <h1 class="page-title">Claim Flash.</h1>
-        <p class="intro-body">Use this path when you already know the flash design you want. The selected title, code, series, size, and pricing note carry into review with your placement, timing, and bid.</p>
+        <p class="intro-body">Use this path when you already know the flash design you want. The selected title, code, series, size, and pricing note carry into review with your placement, timing, and budget range.</p>
         <p class="intro-body">Submitting does not book the appointment yet. It begins review for availability, placement, scale, and fit. Approved claims receive a private token booking link for scheduling and deposit.</p>
         <ul class="path-list">
           <li>Choose the available flash design, or arrive here from an individual design page with it already selected.</li>
-          <li>Add placement, approximate scale, timing, and the amount or budget range you are prepared to commit.</li>
+          <li>Add placement, approximate scale, timing, and the total project budget you are comfortable working within.</li>
           <li>If approved, the studio sends a private token booking link and next steps.</li>
         </ul>
         <aside class="selected-card is-empty" id="selectedCard" aria-live="polite">
@@ -209,7 +209,20 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             </section>
             <div class="field" id="placementField"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="Example: left forearm" required></div>
             <div class="field" id="scaleField"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="Example: palm-size, 5 in"></div>
-            <div class="field"><label for="claim_bid">Budget range</label><input id="claim_bid" name="claim_bid" placeholder="Example: $300-$450" required></div>
+            <div class="field full">
+              <label for="budget_range">What total project budget are you comfortable working within?</label>
+              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" required>
+                <option value="">Select a range</option>
+                <option value="Up to $300">Up to $300</option>
+                <option value="$300–$500">$300–$500</option>
+                <option value="$500–$800">$500–$800</option>
+                <option value="$800–$1,200">$800–$1,200</option>
+                <option value="$1,200–$2,000">$1,200–$2,000</option>
+                <option value="$2,000+">$2,000+</option>
+                <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
+              </select>
+              <p class="file-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</p>
+            </div>
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="Example: no rush, June, weekend preferred"></div>
             <div class="field full is-hidden" id="sheetCodeField" aria-hidden="true"><label for="sheet_code">Specific design code on sheet</label><input id="sheet_code" name="sheet_code" placeholder="Example: A, B3, AP-01-C"><p class="file-note">Use this when the selected flash is a sheet and you want one exact item from it.</p></div>
             <div class="field full"><label for="body_references">Body / placement uploads</label><input id="body_references" name="body_references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Optional. Helpful for placement, scale, or body-area context.</p></div>

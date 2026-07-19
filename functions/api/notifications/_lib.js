@@ -213,6 +213,16 @@ function formatMoney(cents, currency = "USD") {
   }).format(Number(cents || 0) / 100);
 }
 
+function reviewedBudgetLabel(budget) {
+  const minimum = Number(budget?.minimumCents || 0);
+  const maximum = Number(budget?.maximumCents || 0);
+  if (!minimum || !maximum || maximum < minimum) return "";
+  const currency = budget?.currency || "USD";
+  return minimum === maximum
+    ? formatMoney(minimum, currency)
+    : `${formatMoney(minimum, currency)}–${formatMoney(maximum, currency)}`;
+}
+
 function formatDuration(minutes) {
   const total = Number(minutes || 0);
   if (!total) return "";
@@ -715,7 +725,8 @@ function flashSheetDesignLines(payload, key, heading) {
 }
 
 function submissionDetailLines(submission) {
-  const payload = submission.payload || {};
+  const payload = { ...(submission.payload || {}) };
+  if (!payload.budget_range && payload.claim_bid) payload.budget_range = payload.claim_bid;
   const fieldsByType = {
     tattoo_inquiry: [
       "placement",
@@ -728,7 +739,7 @@ function submissionDetailLines(submission) {
     flash_claim: [
       "selected_flash",
       "placement",
-      "claim_bid",
+      "budget_range",
       "size",
       "timeline",
       "message",
@@ -748,6 +759,7 @@ function submissionDetailLines(submission) {
       "placement",
       "size",
       "scale",
+      "budget_range",
       "design_intent",
       "timeline",
       "message",
@@ -758,6 +770,7 @@ function submissionDetailLines(submission) {
       "placement",
       "size",
       "scale",
+      "budget_range",
       "timeline",
       "message",
       "instagram",
@@ -904,6 +917,7 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
     : `${publicBaseUrl(env, request)}${token.bookingUrl}`;
   const purpose = asString(token.purpose || token.bookingPurpose || token.booking_purpose) || "tattoo";
   const isConsultationPurpose = purpose === "consultation";
+  const approvedBudget = isConsultationPurpose ? "" : reviewedBudgetLabel(token.approvedBudget);
   const expiresAt = token.expiresAt || token.expires_at || "";
   const approvedSheetDesigns = flashSheetDesignLines(
     normalized.payload,
@@ -922,6 +936,10 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
     "",
     sessionOptionsText(bookingTypes),
     "",
+    approvedBudget ? `Approved project budget: ${approvedBudget}` : "",
+    approvedBudget
+      ? "Review and agree to this project-total range in the private booking link before choosing an appointment. The tattoo deposit is applied to the final tattoo cost."
+      : "",
     `${isConsultationPurpose ? "Consultation reservation fee" : "Tattoo deposit due to book"}: ${depositAmountText(bookingTypes)}`,
     "",
     "Before booking, please review:",
@@ -1507,6 +1525,12 @@ export async function handleAdminResendNotification(request, env) {
         return errorResponse("This booking link is expired, used, or revoked. Generate a new compatible link instead of resending it.", 409);
       }
       const tokenId = token.id;
+      const sessionPlan = (token.purpose || "tattoo") === "tattoo"
+        ? await db.prepare(
+          `SELECT approved_budget_min_cents, approved_budget_max_cents, approved_budget_currency
+           FROM tattoo_session_plans WHERE submission_id = ?`
+        ).bind(submission.id).first()
+        : null;
       const delivery = await notifyBookingLinkCreated(env, request, submission, {
         id: tokenId,
         bookingUrl: submission.booking_url.startsWith("http")
@@ -1515,6 +1539,13 @@ export async function handleAdminResendNotification(request, env) {
         allowedBookingTypes: parseJsonField(token?.allowed_booking_types_json, []),
         purpose: token.purpose || "tattoo",
         expiresAt: token.expires_at || "",
+        approvedBudget: sessionPlan?.approved_budget_min_cents && sessionPlan?.approved_budget_max_cents
+          ? {
+              minimumCents: sessionPlan.approved_budget_min_cents,
+              maximumCents: sessionPlan.approved_budget_max_cents,
+              currency: sessionPlan.approved_budget_currency || "USD",
+            }
+          : null,
       }, {
         idempotencyKey: resendKey(`booking_link_created:${tokenId}`),
       });

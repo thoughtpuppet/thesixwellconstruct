@@ -121,7 +121,20 @@ main { position:relative; z-index:2; width:100%; max-width:1440px; margin:0 auto
             <div class="field full"><p class="application-state" id="applicationState" aria-live="polite">Checking which Special Project calls are open.</p></div>
             <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" required></div>
             <div class="field"><label for="scale">Scale (optional)</label><input id="scale" name="scale" placeholder="Example: upper arm, back panel"></div>
-            <div class="field"><label for="budget_range">Budget range</label><input id="budget_range" name="budget_range" required></div>
+            <div class="field full">
+              <label for="budget_range">What total project budget are you comfortable working within?</label>
+              <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" required>
+                <option value="">Select a range</option>
+                <option value="Up to $300">Up to $300</option>
+                <option value="$300–$500">$300–$500</option>
+                <option value="$500–$800">$500–$800</option>
+                <option value="$800–$1,200">$800–$1,200</option>
+                <option value="$1,200–$2,000">$1,200–$2,000</option>
+                <option value="$2,000+">$2,000+</option>
+                <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
+              </select>
+              <p class="file-note" id="budgetRangeHelp">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</p>
+            </div>
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline"></div>
             <div class="field full"><label for="reference_links">Reference links (optional)</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
