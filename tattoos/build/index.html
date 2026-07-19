@@ -26,7 +26,6 @@
   button,input,textarea,select{font:inherit;}
   button{background:none;border:none;cursor:pointer;color:inherit;}
 
-  .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");}
 
   /* ── HEADER ── */
   header.top{position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:flex-end;padding:var(--s5) var(--s6);min-height:72px;}
@@ -92,11 +91,18 @@
   .filter-select option{background:var(--bg);color:var(--text);}
 
   .symbol-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s3);}
+  .builder-state{display:flex;align-items:center;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s4);padding:var(--s4);border:5px solid var(--ring-faint);font-family:var(--serif);font-size:13px;line-height:1.6;color:var(--text-mute);}
+  .builder-state[data-state="error"]{border-color:var(--signal);}
+  .builder-state button{flex:0 0 auto;min-height:44px;padding:0 var(--s4);border:5px solid var(--signal);color:var(--signal);font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;}
+  .builder-state button:hover,.builder-state button:focus-visible{background:var(--signal);color:var(--bg);}
 
+  .symbol-card-shell{position:relative;display:grid;}
+  .symbol-card-shell[data-hidden="true"]{display:none;}
   .symbol-card{text-align:left;padding:var(--s4);border:5px solid var(--ring-faint);background:transparent;transition:border-color var(--t-fast),background var(--t-fast);display:flex;flex-direction:column;gap:var(--s2);cursor:pointer;}
   .symbol-card:hover{border-color:var(--ring-soft);background:rgba(110,4,4,0.03);}
   .symbol-card.selected{border-color:var(--signal);background:rgba(110,4,4,0.07);}
-  .symbol-card[data-hidden="true"]{display:none;}
+  .symbol-info-button{position:absolute;z-index:2;top:12px;right:12px;width:36px;height:36px;display:grid;place-items:center;border:5px solid var(--ring-soft);border-radius:50%;background:var(--bg);color:var(--accent);font-family:var(--serif);font-size:18px;font-style:italic;font-weight:700;line-height:1;cursor:pointer;}
+  .symbol-info-button:hover,.symbol-info-button:focus-visible{border-color:var(--accent);outline:2px solid var(--accent);outline-offset:2px;}
 
   /* symbol mark (plain SVG or drawn glyph) */
   .symbol-mark{display:flex;align-items:center;justify-content:flex-start;height:72px;color:var(--text-mute);transition:color var(--t-fast);}
@@ -130,18 +136,61 @@
   .brief-count{font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.08em;color:var(--signal);}
   .brief-empty{font-family:var(--serif);font-size:13px;line-height:1.75;color:var(--text-dim);padding:var(--s5) 0;}
   .brief-items{list-style:none;display:flex;flex-direction:column;gap:var(--s2);}
-  .brief-item{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);padding:var(--s3);border:5px solid var(--ring-faint);}
-  .brief-item-left{display:flex;flex-direction:column;gap:3px;}
+  .brief-item{display:flex;align-items:stretch;justify-content:space-between;flex-wrap:wrap;gap:var(--s3);padding:var(--s3);border:5px solid var(--ring-faint);}
+  .brief-item-left{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px;}
   .brief-item-cat{font-family:var(--sans);font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:var(--signal);opacity:0.65;}
   .brief-item-name{font-family:var(--sans);font-weight:900;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--text);}
   .brief-item-remove{font-size:18px;line-height:1;color:var(--text-dim);padding:2px 6px;transition:color var(--t-fast);flex-shrink:0;}
   .brief-item-remove:hover{color:var(--signal);}
+  .brief-item-note{flex:0 0 100%;display:grid;gap:6px;padding-top:var(--s2);}
+  .brief-item-note label{font-size:8px;}
+  .brief-item-note textarea{min-height:88px;padding:10px;border-width:5px;font-size:13px;line-height:1.45;}
+  .brief-note-meta{display:flex;justify-content:space-between;gap:10px;font-size:10px;color:var(--text-dim);}
+  .brief-item.unavailable{border-color:var(--signal);}
+  .brief-item-unavailable{font-size:11px;line-height:1.5;color:var(--signal);}
   .brief-spacer{flex:1;}
   .brief-limit{font-family:var(--serif);font-size:12px;line-height:1.6;color:var(--text-dim);padding:var(--s3);border:5px solid var(--ring-faint);display:none;}
   .brief-limit.visible{display:block;}
   .brief-begin{display:block;width:100%;text-align:center;padding:var(--s3) var(--s4);font-family:var(--serif);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);border:5px solid var(--signal);background:transparent;transition:background var(--t-fast),color var(--t-fast);}
   .brief-begin:hover:not([disabled]){background:var(--signal);color:var(--bg);}
   .brief-begin[disabled]{color:var(--text-dim);border-color:var(--ring-faint);cursor:default;}
+  .draft-controls{display:grid;gap:var(--s2);padding-top:var(--s3);border-top:5px solid var(--ring-faint);}
+  .draft-status{min-height:20px;font-size:11px;line-height:1.5;color:var(--text-dim);}
+  .draft-status[data-state="error"]{color:var(--signal);}
+  .draft-save,.draft-clear{width:100%;min-height:46px;padding:8px 12px;border:5px solid var(--ring-soft);font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:.13em;text-transform:uppercase;}
+  .draft-save{border-color:var(--signal);color:var(--signal);}
+  .draft-save:hover,.draft-save:focus-visible{background:var(--signal);color:var(--bg);}
+  .draft-clear{color:var(--text-dim);}
+  .draft-clear:hover,.draft-clear:focus-visible{border-color:var(--accent);color:var(--accent);}
+  .legend-link{grid-column:1/-1;justify-self:start;color:var(--accent);font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;text-decoration:underline;text-underline-offset:5px;}
+  .composition-reading{display:grid;gap:10px;padding:var(--s3);border:5px solid var(--ring-faint);}
+  .composition-reading[hidden]{display:none;}
+  .composition-reading h3{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:var(--signal);}
+  .composition-reading p{font-family:var(--serif);font-size:13px;line-height:1.65;color:var(--text-mute);}
+  .composition-relationships{display:grid;gap:8px;list-style:none;}
+  .composition-relationships li{font-size:11px;line-height:1.55;color:var(--text-dim);}
+
+  /* ── LEGEND DETAIL DRAWER ── */
+  .legend-drawer-scrim{position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.78);}
+  .legend-drawer{position:fixed;z-index:320;top:0;right:0;width:min(520px,100vw);height:100vh;overflow:auto;border-left:5px solid var(--signal);background:var(--bg);color:var(--text);padding:var(--s6);box-shadow:-22px 0 58px rgba(0,0,0,.58);}
+  .legend-drawer[hidden],.legend-drawer-scrim[hidden]{display:none;}
+  .legend-drawer-head{display:flex;align-items:start;justify-content:space-between;gap:var(--s4);padding-bottom:var(--s4);border-bottom:5px solid var(--ring-faint);}
+  .legend-drawer-close{width:46px;height:46px;border:5px solid var(--ring-soft);color:var(--text-mute);font-size:28px;line-height:1;}
+  .legend-drawer-mark{height:112px;margin:var(--s5) 0;color:var(--accent);}
+  .legend-drawer-mark svg,.legend-drawer-mark img{width:auto;max-width:112px;height:112px;object-fit:contain;}
+  .legend-drawer-cat{display:block;color:var(--signal);font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;}
+  .legend-drawer-title{font-family:var(--sans);font-size:clamp(30px,6vw,52px);font-weight:900;line-height:.95;text-transform:uppercase;color:var(--accent);}
+  .legend-drawer-body{display:grid;gap:var(--s5);padding:var(--s5) 0;}
+  .legend-detail-section{display:grid;gap:8px;}
+  .legend-detail-section h3{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:var(--signal);}
+  .legend-detail-section p,.legend-detail-section li{font-family:var(--serif);font-size:14px;line-height:1.7;color:var(--text-mute);}
+  .legend-detail-section ul{display:grid;gap:8px;padding-left:20px;}
+  .legend-tone-list,.legend-related-list{display:flex;flex-wrap:wrap;gap:8px;list-style:none!important;padding:0!important;}
+  .legend-tone-list li,.legend-related-list li{border:5px solid var(--ring-faint);padding:6px 10px;font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;}
+  .legend-drawer-actions{display:flex;flex-wrap:wrap;gap:10px;padding-top:var(--s4);border-top:5px solid var(--ring-faint);}
+  .legend-drawer-actions button,.legend-drawer-actions a{min-height:48px;display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border:5px solid var(--ring-soft);font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;}
+  .legend-drawer-actions .primary{border-color:var(--signal);color:var(--signal);}
+  .legend-drawer-note textarea:disabled{opacity:.45;cursor:not-allowed;}
 
   /* ── MAZE DOOR ── */
   .maze-door{border-top:5px solid var(--ring-faint);padding:var(--s7) 0;display:grid;gap:var(--s5);max-width:780px;}
@@ -168,12 +217,13 @@
   .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
   .field.full{grid-column:1 / -1;}
   label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
-  input,textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;text-transform:none;letter-spacing:normal;}
+  input:not([type="checkbox"]),textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;text-transform:none;letter-spacing:normal;}
   textarea{min-height:120px;resize:vertical;}
+  .intent-field textarea{min-height:180px;}
   input:focus,textarea:focus,select:focus{outline:2px solid var(--signal);outline-offset:2px;border-color:var(--signal);}
   .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
-  .check{display:grid;grid-template-columns:18px 1fr;gap:12px;align-items:start;margin:6px 0 28px;}
-  .check input{width:18px;height:18px;accent-color:var(--signal);margin-top:2px;padding:0;}
+  .check{display:grid;grid-template-columns:20px 1fr;gap:12px;align-items:start;margin:6px 0 28px;cursor:pointer;}
+  .check input,.marketing-consent-choice input{appearance:auto;-webkit-appearance:checkbox;width:20px;height:20px;accent-color:var(--signal);margin-top:2px;padding:0;cursor:pointer;}
   .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
   .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
@@ -182,6 +232,17 @@
   .field-help{font-size:12px;line-height:1.6;color:var(--text-dim);}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
   .mobile-selection-tray{display:none;}
+  .draft-dialog{width:min(520px,calc(100vw - 32px));max-width:none;border:5px solid var(--signal);background:var(--bg);color:var(--text);padding:0;}
+  .draft-dialog::backdrop{background:rgba(0,0,0,.78);}
+  .draft-dialog-inner{display:grid;gap:var(--s4);padding:var(--s5);}
+  .draft-dialog-head{display:flex;align-items:start;justify-content:space-between;gap:var(--s4);}
+  .draft-dialog-title{font-family:var(--sans);font-size:22px;font-weight:900;text-transform:uppercase;color:var(--accent);}
+  .draft-dialog-close{font-size:28px;line-height:1;color:var(--text-dim);}
+  .draft-dialog-copy{font-size:13px;line-height:1.7;color:var(--text-mute);}
+  .draft-dialog-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .draft-dialog-actions button{min-height:46px;padding:8px 16px;border:5px solid var(--ring-soft);font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;}
+  .draft-dialog-actions .primary{border-color:var(--signal);color:var(--signal);}
+  .draft-dialog-status{min-height:22px;font-size:12px;line-height:1.5;color:var(--text-dim);}
 
   /* ── FOOTER ── */
   footer.bottom{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:56px var(--s6);border-top:5px solid var(--ring-faint);display:flex;justify-content:space-between;align-items:center;}
@@ -210,12 +271,14 @@
     .mobile-selection-tray.visible{position:fixed;z-index:180;left:12px;right:12px;bottom:12px;display:block;border:5px solid var(--signal);background:rgba(14,14,14,0.98);box-shadow:0 16px 54px rgba(0,0,0,0.65);}
     .mobile-tray-toggle{width:100%;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;color:var(--text);font-family:var(--sans);font-weight:900;text-align:left;}
     .mobile-tray-count{color:var(--signal);font-size:12px;white-space:nowrap;}
-    .mobile-tray-panel{max-height:44vh;overflow:auto;padding:0 14px 14px;border-top:1px solid var(--ring-faint);}
+    .mobile-tray-panel{max-height:66vh;overflow:auto;padding:0 14px 14px;border-top:5px solid var(--ring-faint);}
     .mobile-tray-panel[hidden]{display:none;}
     .mobile-tray-items{list-style:none;display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;}
-    .mobile-tray-items li{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ring-soft);padding:6px 8px;color:var(--text-mute);font-size:12px;}
+    .mobile-tray-items li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;border:5px solid var(--ring-soft);padding:10px;color:var(--text-mute);font-size:12px;}
+    .mobile-tray-items .brief-item-note{width:100%;}
     .mobile-tray-items button{min-width:28px;min-height:28px;color:var(--signal);font-size:20px;line-height:1;}
     .mobile-tray-continue{width:100%;min-height:48px;border:2px solid var(--signal);color:var(--signal);font-family:var(--sans);font-weight:900;text-transform:uppercase;}
+    .legend-drawer{top:auto;bottom:0;left:0;right:0;width:100%;height:min(82vh,760px);border-left:0;border-top:5px solid var(--signal);box-shadow:0 -22px 58px rgba(0,0,0,.58);padding:var(--s5);}
   }
   @media(max-width:640px){
     header.top{padding:var(--s4) var(--s5);}
@@ -241,6 +304,8 @@
   body.kiosk #construct-nav,
   body.kiosk #cnav-mobile-overlay{display:none !important;}
   body.kiosk main{padding-top:var(--s5);}
+  body.kiosk .draft-controls{display:none;}
+  body.kiosk .legend-outbound{display:none!important;}
   body.kiosk .symbol-card,body.kiosk .door-tab,body.kiosk .filter-select{min-height:56px;}
   .kiosk-startover{display:none;position:fixed;right:20px;bottom:20px;z-index:200;font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--bg);background:var(--signal);border:5px solid var(--signal);padding:14px 24px;cursor:pointer;}
   body.kiosk .kiosk-startover{display:inline-flex;align-items:center;gap:8px;}
@@ -260,7 +325,6 @@
   })();
   </script>
 
-  <div class="grain"></div>
 
   <header class="top">
     <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
@@ -281,7 +345,7 @@
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-1-num">I</p>
         <h3 class="step-title" data-copy-id="build-step-browse-title">Enter the language</h3>
-        <p class="step-body" data-copy-id="build-step-browse-body">Read the symbols and what they carry, or step into the maze studio. Each path draws from the same visual system.</p>
+        <p class="step-body" data-copy-id="build-step-browse-body">Read the symbols and what they mean, or step into the maze studio. Each path draws from the same visual system.</p>
       </div>
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-2-num">II</p>
@@ -291,7 +355,7 @@
       <div class="process-step">
         <p class="step-num" data-copy-id="build-step-3-num">III</p>
         <h3 class="step-title" data-copy-id="build-step-submit-title">Submit for review</h3>
-        <p class="step-body" data-copy-id="build-step-submit-body">Your brief goes into review with placement, intent, and timeline. If it fits, a private token booking link follows.</p>
+        <p class="step-body" data-copy-id="build-step-submit-body">Your brief goes into review with placement, intent, and timeline. If its feasible, a private token booking link follows. If not, I'll advise changes and we'll come to an agreement together.</p>
       </div>
     </div>
 
@@ -323,13 +387,18 @@
             <div class="filter-block" aria-label="Filter Legend">
               <div class="filter-group">
                 <label class="filter-label" for="filterRow">Form</label>
-                <select class="filter-select" id="filterRow" aria-label="Filter by form"></select>
+                <select class="filter-select" id="filterRow" aria-label="Filter by form" disabled></select>
               </div>
               <div class="filter-group">
                 <label class="filter-label" for="themeFilterRow">Theme</label>
-                <select class="filter-select" id="themeFilterRow" aria-label="Filter by theme"></select>
+                <select class="filter-select" id="themeFilterRow" aria-label="Filter by theme" disabled></select>
               </div>
+              <a class="legend-link legend-outbound" href="/about/legend/" target="_blank" rel="noopener">Open the Full Legend</a>
             </div>
+            <p class="builder-state" id="builderState" role="status" aria-live="polite">
+              <span id="builderStateText">Loading the Legend.</span>
+              <button type="button" id="legendRetry" hidden>Try again</button>
+            </p>
             <div class="symbol-grid" id="symbolGrid" aria-label="Symbol library" aria-describedby="selectionStatus"></div>
             <p class="sr-only" id="selectionStatus" role="status" aria-live="polite" aria-atomic="true"></p>
           </div>
@@ -342,11 +411,21 @@
             </div>
             <p class="brief-empty" id="briefEmpty" data-copy-id="build-brief-empty">Select symbols from the library to begin building your brief. Each piece you choose carries its meaning into the design.</p>
             <ul class="brief-items" id="briefItems" aria-live="polite"></ul>
+            <section class="composition-reading" id="briefComposition" aria-live="polite" hidden>
+              <h3>Your symbolic composition</h3>
+              <p id="briefCompositionText"></p>
+              <ul class="composition-relationships" id="briefCompositionRules"></ul>
+            </section>
             <p class="brief-limit" id="briefLimit" role="status" aria-live="polite" data-copy-id="build-brief-limit">Twelve elements selected. Remove one to add another, or proceed with this build.</p>
             <div class="brief-spacer"></div>
             <button class="brief-begin" id="briefBegin" disabled aria-controls="build-form">
               Build this brief →
             </button>
+            <div class="draft-controls">
+              <p class="draft-status" id="buildDraftStatus" role="status" aria-live="polite">Changes will save on this device.</p>
+              <button class="draft-save" id="briefEmailSave" type="button" disabled>Save &amp; Email This Build</button>
+              <button class="draft-clear" id="briefClearDraft" type="button" hidden>Clear Saved Draft</button>
+            </div>
           </div>
         </div>
 
@@ -369,6 +448,8 @@
             <input type="hidden" name="project_category" value="build-your-own">
             <input type="hidden" name="selected_elements" id="selectedElements">
             <input type="hidden" name="symbol_ids" id="selectedSymbolIds">
+            <input type="hidden" name="symbol_selections_json" id="symbolSelectionsJson">
+            <input type="hidden" name="composition_snapshot_json" id="compositionSnapshotJson">
             <input type="hidden" name="direction" id="legacyDirection">
             <input type="hidden" name="subject" value="New Art.Pill Build Your Own brief">
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
@@ -389,7 +470,7 @@
                 <div class="field"><label for="placement">Placement</label><input id="placement" name="placement" placeholder="e.g. upper arm, shoulder blade" required></div>
                 <div class="field"><label for="scale">Approx. scale (optional)</label><input id="scale" name="scale" placeholder="e.g. palm-size, sleeve-scale"></div>
                 <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline" placeholder="e.g. no rush, within 3 months"></div>
-                <div class="field"><label for="designIntent">Design intent</label><input id="designIntent" name="design_intent" placeholder="What should the piece carry or mean?" aria-describedby="intentHelp" required><p class="field-help" id="intentHelp">Required. Describe the meaning, direction, or feeling the selected symbols should carry.</p></div>
+                <div class="field full intent-field"><label for="designIntent">Design intent</label><textarea id="designIntent" name="design_intent" rows="7" placeholder="What should the piece carry or mean?" aria-describedby="intentHelp" required></textarea><p class="field-help" id="intentHelp">Required. Describe the meaning, direction, or feeling the selected symbols should carry.</p></div>
                 <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple aria-describedby="referencesHelp"><p class="field-help" id="referencesHelp">Optional. Body reference or placement images only — not mood boards.</p></div>
                 <div class="field full"><label for="message">Anything else to add</label><textarea id="message" name="message"></textarea></div>
               </div>
@@ -437,7 +518,60 @@
     </button>
     <div class="mobile-tray-panel" id="mobileTrayPanel" hidden>
       <ul class="mobile-tray-items" id="mobileTrayItems"></ul>
+      <section class="composition-reading" id="mobileComposition" aria-live="polite" hidden>
+        <h3>Your symbolic composition</h3>
+        <p id="mobileCompositionText"></p>
+        <ul class="composition-relationships" id="mobileCompositionRules"></ul>
+      </section>
       <button class="mobile-tray-continue" id="mobileTrayContinue" type="button">Continue to design intent</button>
+      <div class="draft-controls">
+        <p class="draft-status" id="mobileBuildDraftStatus" role="status" aria-live="polite">Changes will save on this device.</p>
+        <button class="draft-save" id="mobileEmailSave" type="button">Save &amp; Email This Build</button>
+      </div>
+    </div>
+  </aside>
+
+  <dialog class="draft-dialog" id="buildDraftEmailDialog" aria-labelledby="buildDraftEmailTitle">
+    <form class="draft-dialog-inner" id="buildDraftEmailForm">
+      <div class="draft-dialog-head">
+        <h2 class="draft-dialog-title" id="buildDraftEmailTitle">Save this build</h2>
+        <button class="draft-dialog-close" id="buildDraftEmailClose" type="button" aria-label="Close">&times;</button>
+      </div>
+      <p class="draft-dialog-copy">We will email a private link that reopens this build on another device. The link remains active for 30 days after the last online save.</p>
+      <div class="field">
+        <label for="buildDraftEmail">Email</label>
+        <input id="buildDraftEmail" name="draft_email" type="email" autocomplete="email" required>
+      </div>
+      <p class="draft-dialog-copy">Reference uploads are not stored with drafts and must be attached again before final submission.</p>
+      <p class="draft-dialog-status" id="buildDraftEmailStatus" role="status" aria-live="polite"></p>
+      <div class="draft-dialog-actions">
+        <button class="primary" id="buildDraftEmailSubmit" type="submit">Save &amp; Email Link</button>
+        <button id="buildDraftEmailCancel" type="button">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="legend-drawer-scrim" id="legendDrawerScrim" hidden></div>
+  <aside class="legend-drawer" id="legendDrawer" role="dialog" aria-modal="true" aria-labelledby="legendDrawerTitle" hidden>
+    <div class="legend-drawer-head">
+      <div>
+        <span class="legend-drawer-cat" id="legendDrawerCategory"></span>
+        <h2 class="legend-drawer-title" id="legendDrawerTitle"></h2>
+      </div>
+      <button class="legend-drawer-close" id="legendDrawerClose" type="button" aria-label="Close symbol details">&times;</button>
+    </div>
+    <div class="legend-drawer-mark" id="legendDrawerMark" aria-hidden="true"></div>
+    <div class="legend-drawer-body" id="legendDrawerBody"></div>
+    <label class="brief-item-note legend-drawer-note" id="legendDrawerNote">
+      <span>What does this symbol hold for you? (optional)</span>
+      <textarea id="legendDrawerNoteInput" maxlength="300" rows="4" disabled></textarea>
+      <span class="brief-note-meta"><span id="legendDrawerNoteHelp">Add this symbol to enable your description.</span><span id="legendDrawerNoteCount">0 / 300</span></span>
+    </label>
+    <div class="legend-drawer-actions">
+      <button class="primary" id="legendDrawerSelect" type="button"></button>
+      <button id="legendDrawerPrevious" type="button">Previous</button>
+      <button id="legendDrawerNext" type="button">Next</button>
+      <a class="legend-outbound" id="legendDrawerFullRecord" href="/about/legend/" target="_blank" rel="noopener">View Full Legend Record</a>
     </div>
   </aside>
 
@@ -503,7 +637,7 @@
   </script>
 
   <!-- Brief builder -->
-  <script src="/js/build-builder.js"></script>
+  <script type="module" src="/js/build-builder.js"></script>
   <script src="/js/submission-form.js"></script>
 
   <!-- Brief submission handler -->
@@ -516,6 +650,15 @@
       pendingText: "Capturing your brief for review.",
       errorText: "Submission failed. Please try again.",
       redirectTo: "/tattoos/submission-received/?type=build",
+      headers: function() {
+        return window.ArtPillBuildDrafts ? window.ArtPillBuildDrafts.submissionHeaders() : {};
+      },
+      onSuccess: function(payload) {
+        if (window.ArtPillBuildDrafts) window.ArtPillBuildDrafts.complete();
+        var receipt = new URL("/tattoos/submission-received/?type=build", window.location.origin);
+        if (payload.submissionId) receipt.searchParams.set("ref", payload.submissionId);
+        window.location.href = receipt.pathname + receipt.search;
+      },
       beforeSubmit: function(context) {
         var selected = document.getElementById("selectedElements");
         var symbolIds = document.getElementById("selectedSymbolIds");
@@ -529,6 +672,18 @@
           return false;
         }
         symbolIds.value = ids.join(',');
+        var selections = document.getElementById("symbolSelectionsJson");
+        if (selections && window.ArtPillBuildDrafts) {
+          selections.value = JSON.stringify(window.ArtPillBuildDrafts.symbolSelections());
+        }
+        var composition = document.getElementById("compositionSnapshotJson");
+        if (composition && window.ArtPillBuildDrafts) {
+          composition.value = JSON.stringify(window.ArtPillBuildDrafts.compositionSnapshot());
+        }
+        if (window.ArtPillBuildDrafts && window.ArtPillBuildDrafts.hasUnavailableSymbols()) {
+          context.setStatus(context.status, "Remove unavailable symbols before submitting this brief.", "error");
+          return false;
+        }
         var intent = document.getElementById("designIntent");
         if (!intent || !intent.value.trim()) {
           context.setStatus(context.status, "Add the design intent before submitting your brief.", "error");

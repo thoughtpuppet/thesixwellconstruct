@@ -9,7 +9,18 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: "../../tattoos/build/maze",
-    emptyOutDir: true
+    emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+            { name: "konva", test: /node_modules[\\/](konva|react-konva)[\\/]/ },
+            { name: "icons", test: /node_modules[\\/]lucide-react[\\/]/ }
+          ]
+        }
+      }
+    }
   },
   server: {
     port: 5174,

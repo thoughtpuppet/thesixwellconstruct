@@ -199,6 +199,12 @@
   label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; }
   .value { min-height:42px; padding:12px; border:5px solid var(--ring-faint); color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
   .value.full { min-height:96px; }
+  .symbol-snapshot-list { display:grid; gap:12px; }
+  .symbol-snapshot-item { display:grid; gap:8px; padding:12px; border:5px solid var(--ring-faint); }
+  .symbol-snapshot-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .symbol-snapshot-head strong { color:var(--text); font-family:var(--sans); font-size:12px; letter-spacing:.04em; text-transform:uppercase; }
+  .symbol-snapshot-head span,.symbol-snapshot-themes { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  .symbol-snapshot-item p { margin:0; color:var(--muted); line-height:1.6; }
   .actions { display:grid; grid-template-columns:180px minmax(0,1fr) auto; gap:12px; align-items:start; margin-top:22px; }
   .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
   .assist-panel { border:5px solid var(--ring-faint); padding:14px; margin-top:16px; display:grid; gap:10px; }
@@ -958,6 +964,36 @@
         <div class="review-card-header">${escapeHtml(label)}</div>
         ${inner}
       </div>`;
+    const symbolSnapshot = submission.payload?.symbol_snapshot;
+    const symbolSnapshotMarkup = Array.isArray(symbolSnapshot)
+      ? symbolSnapshot.map((symbol, index) => {
+          if (!symbol || typeof symbol !== "object") {
+            return `<article class="symbol-snapshot-item">${escapeHtml(symbol)}</article>`;
+          }
+          const themes = Array.isArray(symbol.themes) ? symbol.themes.filter(Boolean).join(", ") : symbol.themes || "";
+          return `
+            <article class="symbol-snapshot-item">
+              <div class="symbol-snapshot-head">
+                <strong>${escapeHtml(`${Number(symbol.order ?? index) + 1}. ${symbol.name || symbol.id || "Unnamed symbol"}`)}</strong>
+                <span>${escapeHtml(symbol.category || "Unclassified")}</span>
+              </div>
+              ${symbol.meaning ? `<p>${escapeHtml(symbol.meaning)}</p>` : ""}
+              ${symbol.client_note ? `<div class="value full"><strong>Client description</strong><br>${escapeHtml(symbol.client_note)}</div>` : ""}
+              ${themes ? `<span class="symbol-snapshot-themes">Themes: ${escapeHtml(themes)}</span>` : ""}
+              ${symbol.id ? `<span class="symbol-snapshot-themes">ID: ${escapeHtml(symbol.id)}</span>` : ""}
+            </article>`;
+        }).join("")
+      : symbolSnapshot
+        ? `<div class="value full">${escapeHtml(symbolSnapshot)}</div>`
+        : "";
+    const compositionSnapshot = submission.payload?.composition_snapshot;
+    const clientCompositionSnapshot = submission.payload?.client_composition_snapshot;
+    const compositionMarkup = compositionSnapshot && typeof compositionSnapshot === "object"
+      ? `<div class="value full"><strong>Current official reading</strong><br>${escapeHtml(compositionSnapshot.reading || "Open reading")}</div>
+         ${Array.isArray(compositionSnapshot.appliedRules) && compositionSnapshot.appliedRules.length ? `<div class="symbol-snapshot-list">${compositionSnapshot.appliedRules.map(rule=>`<article class="symbol-snapshot-item"><div class="symbol-snapshot-head"><strong>${escapeHtml(rule.type === "tension" ? "Tension" : "Authored relationship")}</strong><span>${rule.exact ? "Exact" : "Subset"}</span></div><p>${escapeHtml(rule.interpretation)}</p></article>`).join("")}</div>` : ""}
+         ${Array.isArray(compositionSnapshot.sharedThemes) && compositionSnapshot.sharedThemes.length ? `<span class="symbol-snapshot-themes">Shared themes: ${escapeHtml(compositionSnapshot.sharedThemes.join(", "))}</span>` : ""}
+         ${clientCompositionSnapshot?.reading ? `<div class="value full" style="margin-top:12px;"><strong>Exact reading shown to client</strong><br>${escapeHtml(clientCompositionSnapshot.reading)}</div>` : ""}`
+      : "";
 
     if (t === "flash_claim") {
       const sheetDesigns = submission.sheetDesignSelections || submission.sheet_design_selections || [];
@@ -1019,7 +1055,8 @@
           ${field("Review Consent", p("review_consent"))}
         </div>
         ${p("selected_symbol_ids") || p("symbol_ids") || p("selected_elements") ? `<div class="field" style="margin-top:16px;"><label>Stable Symbol IDs</label><div class="value full">${escapeHtml(p("selected_symbol_ids") || p("symbol_ids") || p("selected_elements"))}</div></div>` : ""}
-        ${p("symbol_snapshot") ? `<div class="field" style="margin-top:16px;"><label>Immutable Symbol Snapshot</label><div class="value full">${escapeHtml(p("symbol_snapshot"))}</div></div>` : ""}
+        ${symbolSnapshotMarkup ? `<div class="field" style="margin-top:16px;"><label>Immutable Symbol Snapshot</label>${symbolSnapshotMarkup.startsWith('<div class="value') ? symbolSnapshotMarkup : `<div class="symbol-snapshot-list">${symbolSnapshotMarkup}</div>`}</div>` : ""}
+        ${compositionMarkup ? `<div class="field" style="margin-top:16px;"><label>Composition Snapshot</label>${compositionMarkup}</div>` : ""}
         <div class="field" style="margin-top:16px;"><label>Brief / Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
         <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
       `);
@@ -1344,7 +1381,7 @@
     } else if (activeTab === "merch") {
       html = `<button class="subnav-btn ${subView === "products" ? "is-active" : ""}" type="button" data-subview="products">Products</button>`;
     } else if (activeTab === "legend") {
-      html = [["symbols","Symbols"],["categories","Categories"],["themes","Themes"],["examples","Examples"],["usage","Usage and Relationships"],["drafts","Drafts"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["symbols","Symbols"],["categories","Categories"],["composition-rules","Composition Rules"],["themes","Themes"],["examples","Examples"],["usage","Usage and Relationships"],["drafts","Drafts"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "events") {
       html = `<button class="subnav-btn ${subView !== "event-archive" && !selectedEventSlug ? "is-active" : ""}" type="button" data-events-home>Current Events</button><button class="subnav-btn ${subView === "event-archive" ? "is-active" : ""}" type="button" data-subview="event-archive">Event Archive</button>`;
       if (selectedEventSlug) {
@@ -3255,7 +3292,9 @@
 
   function payloadValue(submission, key) {
     const value = submission.payload?.[key];
-    if (Array.isArray(value)) return value.join(", ");
+    if (Array.isArray(value)) {
+      return value.map((item) => item && typeof item === "object" ? JSON.stringify(item) : item).join(", ");
+    }
     if (value && typeof value === "object") return JSON.stringify(value);
     return value || "";
   }

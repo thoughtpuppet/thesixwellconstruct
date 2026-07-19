@@ -154,7 +154,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <option value="rework">Rework / recolor</option>
                 <option value="space_filler">Space filler</option>
               </select>
-              <p class="field-note" id="largeCoverUpNote">Large cover-up requests require at least 3 clear photographs of the existing tattoo from 3 different angles so the studio can understand the full area and work involved. You may upload additional photographs.</p>
+              <p class="field-note" id="largeCoverUpNote">Large cover-up requests require at least 3 clear photographs of the existing tattoo from 3 different angles so the studio can understand the full area and work involved. These replace the separate placement photo. You may upload additional photographs.</p>
             </div>
             <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
             <div class="field"><label for="size">Approx. size <span class="required-mark">*</span></label><input id="size" name="size" placeholder="Example: 4-6 in" required></div>
@@ -189,7 +189,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
               <input id="cover_up_photos" name="cover_up_photos" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="largeCoverUpPhotosNote" multiple>
               <p class="file-note" id="largeCoverUpPhotosNote">Upload at least 3 clear photographs of the existing tattoo from 3 different angles. Additional photographs are welcome. PNG, JPG, or WEBP.</p>
             </div>
-            <div class="field full"><label for="placement_photo">Placement photo</label><input id="placement_photo" name="placement_photo" type="file" accept="image/png,image/jpeg,image/webp"><p class="file-note">Strongly recommended. A photo of the area where you want the tattoo helps with placement and scale; circle the desired location if possible.</p></div>
+            <div class="field full" id="placementPhotoField"><label for="placement_photo">Placement photo</label><input id="placement_photo" name="placement_photo" type="file" accept="image/png,image/jpeg,image/webp"><p class="file-note">Strongly recommended. A photo of the area where you want the tattoo helps with placement and scale; circle the desired location if possible.</p></div>
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
             <div class="field full"><label for="message">Project notes <span class="required-mark">*</span></label><textarea id="message" name="message" required></textarea></div>
           </div>
@@ -254,6 +254,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       var projectType = document.getElementById("project_type");
       var coverUpPhotosField = document.getElementById("largeCoverUpPhotosField");
       var coverUpPhotos = document.getElementById("cover_up_photos");
+      var placementPhotoField = document.getElementById("placementPhotoField");
+      var placementPhoto = document.getElementById("placement_photo");
       var coverUpPhotoMessage = "Upload at least 3 photographs of the existing tattoo from 3 different angles.";
 
       function validateLargeCoverUpPhotos() {
@@ -272,6 +274,11 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         coverUpPhotosField.hidden = !required;
         coverUpPhotos.required = required;
         if (!required) coverUpPhotos.value = "";
+        if (placementPhotoField) placementPhotoField.hidden = required;
+        if (placementPhoto) {
+          placementPhoto.disabled = required;
+          if (required) placementPhoto.value = "";
+        }
         validateLargeCoverUpPhotos();
       }
 

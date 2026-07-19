@@ -9,7 +9,9 @@ import { shapeTouchedByEraser, splitWallByEraser } from "./lib/maze";
 import type { MazeShape, MazeTool, MazeWall, Selection } from "./types";
 import "./maze-submit.css";
 
-const STORAGE_KEY = "art-pill-maze-design";
+const LEGACY_STORAGE_KEY = "art-pill-maze-design";
+const STORAGE_KEY = "art-pill-maze-draft:v1";
+const TOKEN_STORAGE_KEY = "art-pill-maze-resume-token";
 const SUBMISSION_IDEMPOTENCY_KEY = "sixwell:submission-idempotency:/tattoos/build/maze/:maze-form";
 const MAX_UNDO_STEPS = 60;
 const AUTOSAVE_DELAY_MS = 600;
@@ -22,8 +24,55 @@ type MazeState = {
   mazeShapes: MazeShape[];
 };
 
+type MazeFormDraft = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  placement: string;
+  scale: string;
+  mazeExplanation: string;
+};
+
+type MazeDraftPayload = MazeState & {
+  version: 1;
+  clientDraftId: string;
+  contact: Pick<MazeFormDraft, "firstName" | "lastName" | "email" | "phone">;
+  placement: string;
+  scale: string;
+  mazeExplanation: string;
+  updatedAt: string;
+};
+
+type MazeDraftEnvelope = {
+  state: MazeState;
+  form: MazeFormDraft;
+  clientDraftId: string;
+  serverDraftId: string;
+  serverRevision: number;
+};
+
+type ServerDraft = {
+  id: string;
+  revision: number;
+  email: string;
+  payload: MazeDraftPayload;
+};
+
 function emptyState(): MazeState {
   return { mazeWalls: [], mazeShapes: [] };
+}
+
+function emptyForm(): MazeFormDraft {
+  return {
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    placement: "",
+    scale: "",
+    mazeExplanation: ""
+  };
 }
 
 function clone(state: MazeState): MazeState {
@@ -34,18 +83,89 @@ function byZ<T extends { zIndex: number }>(a: T, b: T) {
   return a.zIndex - b.zIndex;
 }
 
-function loadState(): MazeState {
+function loadDraft(): MazeDraftEnvelope {
+  const fallback: MazeDraftEnvelope = {
+    state: emptyState(),
+    form: emptyForm(),
+    clientDraftId: crypto.randomUUID(),
+    serverDraftId: "",
+    serverRevision: 0
+  };
+  if (KIOSK || PREVIEW) return fallback;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyState();
-    const parsed = JSON.parse(raw) as Partial<MazeState>;
+    const current = localStorage.getItem(STORAGE_KEY);
+    if (current) {
+      const parsed = JSON.parse(current) as Partial<MazeDraftEnvelope> & Partial<MazeState>;
+      const storedState = parsed.state || parsed;
+      return {
+        state: {
+          mazeWalls: Array.isArray(storedState.mazeWalls) ? storedState.mazeWalls : [],
+          mazeShapes: Array.isArray(storedState.mazeShapes) ? storedState.mazeShapes : []
+        },
+        form: { ...emptyForm(), ...(parsed.form || {}) },
+        clientDraftId: parsed.clientDraftId || fallback.clientDraftId,
+        serverDraftId: parsed.serverDraftId || "",
+        serverRevision: Number(parsed.serverRevision || 0)
+      };
+    }
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!legacy) return fallback;
+    const parsed = JSON.parse(legacy) as Partial<MazeState>;
     return {
-      mazeWalls: Array.isArray(parsed.mazeWalls) ? parsed.mazeWalls : [],
-      mazeShapes: Array.isArray(parsed.mazeShapes) ? parsed.mazeShapes : []
+      ...fallback,
+      state: {
+        mazeWalls: Array.isArray(parsed.mazeWalls) ? parsed.mazeWalls : [],
+        mazeShapes: Array.isArray(parsed.mazeShapes) ? parsed.mazeShapes : []
+      }
     };
   } catch {
-    return emptyState();
+    return fallback;
   }
+}
+
+function captureResumeToken() {
+  if (KIOSK || PREVIEW) return "";
+  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const linked = fragment.get("resume") || "";
+  if (linked) {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    try { sessionStorage.setItem(TOKEN_STORAGE_KEY, linked); } catch { /* storage can be unavailable */ }
+    return linked;
+  }
+  try { return sessionStorage.getItem(TOKEN_STORAGE_KEY) || ""; } catch { return ""; }
+}
+
+function clearResumeToken() {
+  try { sessionStorage.removeItem(TOKEN_STORAGE_KEY); } catch { /* storage can be unavailable */ }
+}
+
+function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: string): MazeDraftPayload {
+  return {
+    version: 1,
+    clientDraftId,
+    mazeWalls: state.mazeWalls,
+    mazeShapes: state.mazeShapes,
+    contact: {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      email: form.email,
+      phone: form.phone
+    },
+    placement: form.placement,
+    scale: form.scale,
+    mazeExplanation: form.mazeExplanation,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function payloadToForm(payload: Partial<MazeDraftPayload>): MazeFormDraft {
+  return {
+    ...emptyForm(),
+    ...(payload.contact || {}),
+    placement: payload.placement || "",
+    scale: payload.scale || "",
+    mazeExplanation: payload.mazeExplanation || ""
+  };
 }
 
 function nextZIndex(state: MazeState) {
@@ -99,13 +219,23 @@ function SubmitDialog({
   onClose,
   capturePng,
   getJson,
-  isEmpty
+  isEmpty,
+  formDraft,
+  onFormDraftChange,
+  resumeToken,
+  ownerEmail,
+  onSubmitted
 }: {
   open: boolean;
   onClose: () => void;
   capturePng: () => string | null;
   getJson: () => string;
   isEmpty: boolean;
+  formDraft: MazeFormDraft;
+  onFormDraftChange: (next: MazeFormDraft) => void;
+  resumeToken: string;
+  ownerEmail: string;
+  onSubmitted: () => void;
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -188,7 +318,10 @@ function SubmitDialog({
 
       const res = await fetch("/api/submissions", {
         method: "POST",
-        headers: { "idempotency-key": mazeSubmissionIdempotencyKey() },
+        headers: {
+          "idempotency-key": mazeSubmissionIdempotencyKey(),
+          ...(resumeToken ? { "x-build-draft-token": resumeToken } : {})
+        },
         body: fd
       });
       const payload = (await res.json().catch(() => ({}))) as { error?: string; submissionId?: string };
@@ -197,6 +330,7 @@ function SubmitDialog({
       destination.searchParams.set("type", "maze");
       if (payload.submissionId) destination.searchParams.set("ref", payload.submissionId);
       clearMazeSubmissionIdempotencyKey();
+      onSubmitted();
       window.location.href = `${destination.pathname}${destination.search}`;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Submission failed. Please try again.");
@@ -222,16 +356,16 @@ function SubmitDialog({
         ) : null}
         <form onSubmit={handleSubmit}>
           <div className="maze-submit-grid">
-            <label>First name<input name="firstName" autoComplete="given-name" required /></label>
-            <label>Last name<input name="lastName" autoComplete="family-name" required /></label>
-            <label>Email<input name="email" type="email" autoComplete="email" required /></label>
-            <label>Phone (optional)<input name="phone" autoComplete="tel" /></label>
-            <label>Placement (optional)<input name="placement" placeholder="e.g. forearm, spine" /></label>
-            <label>Approx. scale (optional)<input name="scale" placeholder="e.g. palm-size" /></label>
+            <label>First name<input name="firstName" autoComplete="given-name" required value={formDraft.firstName} onChange={(event) => onFormDraftChange({ ...formDraft, firstName: event.target.value })} /></label>
+            <label>Last name<input name="lastName" autoComplete="family-name" required value={formDraft.lastName} onChange={(event) => onFormDraftChange({ ...formDraft, lastName: event.target.value })} /></label>
+            <label>Email<input name="email" type="email" autoComplete="email" required readOnly={Boolean(ownerEmail)} value={formDraft.email} onChange={(event) => onFormDraftChange({ ...formDraft, email: event.target.value })} /></label>
+            <label>Phone (optional)<input name="phone" autoComplete="tel" value={formDraft.phone} onChange={(event) => onFormDraftChange({ ...formDraft, phone: event.target.value })} /></label>
+            <label>Placement (optional)<input name="placement" placeholder="e.g. forearm, spine" value={formDraft.placement} onChange={(event) => onFormDraftChange({ ...formDraft, placement: event.target.value })} /></label>
+            <label>Approx. scale (optional)<input name="scale" placeholder="e.g. palm-size" value={formDraft.scale} onChange={(event) => onFormDraftChange({ ...formDraft, scale: event.target.value })} /></label>
           </div>
           <label className="maze-submit-full">
             What does this maze carry?
-            <textarea name="maze_explanation" rows={4} required placeholder="Explain the meaning, the path, what it should hold." />
+            <textarea name="maze_explanation" rows={4} required placeholder="Explain the meaning, the path, what it should hold." value={formDraft.mazeExplanation} onChange={(event) => onFormDraftChange({ ...formDraft, mazeExplanation: event.target.value })} />
           </label>
           <label className="maze-submit-consent">
             <input type="checkbox" name="age_confirmed" value="yes" required />
@@ -254,8 +388,104 @@ function SubmitDialog({
   );
 }
 
+function SaveEmailDialog({
+  open,
+  email,
+  busy,
+  status,
+  onClose,
+  onSave
+}: {
+  open: boolean;
+  email: string;
+  busy: boolean;
+  status: string;
+  onClose: () => void;
+  onSave: (email: string) => void;
+}) {
+  const [value, setValue] = useState(email);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const emailRef = useRef<HTMLInputElement | null>(null);
+  const busyRef = useRef(busy);
+  const closeRef = useRef(onClose);
+  useEffect(() => { busyRef.current = busy; }, [busy]);
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    if (!open) return;
+    setValue(email);
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    window.setTimeout(() => emailRef.current?.focus(), 0);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busyRef.current) {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panelRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (returnFocus?.isConnected) returnFocus.focus();
+    };
+  }, [open, email]);
+  if (!open) return null;
+  return (
+    <div className="maze-submit-overlay" role="dialog" aria-modal="true" aria-labelledby="maze-save-title" aria-describedby="maze-save-description">
+      <div className="maze-submit-panel" ref={panelRef}>
+        <div className="maze-submit-head">
+          <h2 id="maze-save-title">Save this maze</h2>
+          <button type="button" className="maze-submit-close" onClick={onClose} disabled={busy} aria-label="Close save dialog">&times;</button>
+        </div>
+        <p className="maze-submit-note" id="maze-save-description">
+          We will email a private link that reopens this maze on another device. Nothing is submitted
+          for review until you use the Submit button.
+        </p>
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          if (event.currentTarget.reportValidity()) onSave(value);
+        }}>
+          <label>
+            Email
+            <input ref={emailRef} type="email" autoComplete="email" required value={value} onChange={(event) => setValue(event.target.value)} />
+          </label>
+          <p className="maze-submit-note">The resume link remains active for 30 days after the last online save.</p>
+          <p className="maze-submit-note">Reference uploads are not stored with drafts and must be attached again before final submission.</p>
+          <div className="maze-submit-actions">
+            <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" className="primary" disabled={busy}>{busy ? "Saving…" : "Save & email link"}</button>
+          </div>
+          {status ? <p className="maze-submit-status" role="status" aria-live="polite">{status}</p> : null}
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  const [state, setState] = useState<MazeState>(() => (KIOSK ? emptyState() : loadState()));
+  const initialDraftRef = useRef<MazeDraftEnvelope | null>(null);
+  if (!initialDraftRef.current) initialDraftRef.current = loadDraft();
+  const initialDraft = initialDraftRef.current;
+  const [state, setState] = useState<MazeState>(initialDraft.state);
+  const [formDraft, setFormDraft] = useState<MazeFormDraft>(initialDraft.form);
   const [undoStack, setUndoStack] = useState<MazeState[]>([]);
   const [redoStack, setRedoStack] = useState<MazeState[]>([]);
   const [selected, setSelected] = useState<Selection>(null);
@@ -267,14 +497,41 @@ export default function App() {
   });
   const [stage, setStage] = useState<Konva.Stage | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(
+    KIOSK || PREVIEW
+      ? "Draft saving is unavailable in preview or kiosk mode."
+      : state.mazeWalls.length || state.mazeShapes.length
+        ? "Draft restored from this device."
+        : "Changes will save on this device."
+  );
+  const [resumeToken, setResumeToken] = useState(() => captureResumeToken());
+  const [resumeReady, setResumeReady] = useState(false);
+  const [ownerEmail, setOwnerEmail] = useState("");
 
   const stateRef = useRef(state);
+  const formDraftRef = useRef(formDraft);
+  const clientDraftIdRef = useRef(initialDraft.clientDraftId);
+  const serverDraftRef = useRef<ServerDraft | null>(
+    initialDraft.serverDraftId
+      ? {
+          id: initialDraft.serverDraftId,
+          revision: initialDraft.serverRevision,
+          email: initialDraft.form.email,
+          payload: draftPayload(initialDraft.state, initialDraft.form, initialDraft.clientDraftId)
+        }
+      : null
+  );
   const eraseSnapshotRef = useRef<MazeState | null>(null);
   const eraseRecordedRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+  useEffect(() => {
+    formDraftRef.current = formDraft;
+  }, [formDraft]);
 
   const selectedWall =
     selected?.type === "wall"
@@ -411,8 +668,24 @@ export default function App() {
     else if (selected?.type === "shape") deleteMazeShape(selected.id);
   };
 
+  const persistLocal = (payload = draftPayload(stateRef.current, formDraftRef.current, clientDraftIdRef.current)) => {
+    if (KIOSK || PREVIEW) return;
+    const server = serverDraftRef.current;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      state: { mazeWalls: payload.mazeWalls, mazeShapes: payload.mazeShapes },
+      form: payloadToForm(payload),
+      clientDraftId: payload.clientDraftId,
+      serverDraftId: server?.id || "",
+      serverRevision: server?.revision || 0
+    } satisfies MazeDraftEnvelope));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  };
+
   const resetMaze = () => {
-    localStorage.removeItem(STORAGE_KEY);
+    if (!KIOSK && !PREVIEW) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    }
     commit(() => emptyState());
     setSelected(null);
   };
@@ -432,10 +705,162 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (KIOSK) return; // a studio terminal must not carry one client's maze to the next
-    const timer = window.setTimeout(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(state)), AUTOSAVE_DELAY_MS);
+    if (KIOSK || PREVIEW || (resumeToken && !resumeReady)) return;
+    setSaveStatus("Saving…");
+    const timer = window.setTimeout(async () => {
+      const payload = draftPayload(stateRef.current, formDraftRef.current, clientDraftIdRef.current);
+      try {
+        persistLocal(payload);
+      } catch {
+        setSaveStatus("This browser could not save the maze.");
+        return;
+      }
+      const server = serverDraftRef.current;
+      if (!resumeToken || !server) {
+        setSaveStatus("Saved on this device.");
+        return;
+      }
+      try {
+        const response = await fetch("/api/build-drafts/current", {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${resumeToken}`
+          },
+          body: JSON.stringify({ revision: server.revision, payload })
+        });
+        const result = await response.json().catch(() => ({})) as { error?: string; draft?: ServerDraft };
+        if (!response.ok) {
+          if (response.status === 409 && result.draft) serverDraftRef.current = result.draft;
+          throw new Error(result.error || "Online save failed.");
+        }
+        if (result.draft) serverDraftRef.current = result.draft;
+        persistLocal(payload);
+        setSaveStatus("Saved online.");
+      } catch {
+        setSaveStatus("Saved on this device — online save pending.");
+      }
+    }, AUTOSAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [state]);
+  }, [state, formDraft, resumeToken, resumeReady]);
+
+  useEffect(() => {
+    if (KIOSK || PREVIEW || !resumeToken) {
+      setResumeReady(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/build-drafts/current", {
+          headers: { authorization: `Bearer ${resumeToken}` }
+        });
+        const result = await response.json().catch(() => ({})) as { error?: string; draft?: ServerDraft };
+        if (!response.ok || !result.draft) throw new Error(result.error || "Unable to open this Maze draft.");
+        const remote = result.draft;
+        const local = initialDraftRef.current;
+        const hasLocal = Boolean(local && (local.state.mazeWalls.length || local.state.mazeShapes.length));
+        const unrelated = Boolean(hasLocal && (!local?.serverDraftId || local.serverDraftId !== remote.id));
+        const openRemote = !unrelated || window.confirm(
+          "A different maze is saved on this device. Select OK to open the emailed draft, or Cancel to keep the device draft."
+        );
+        if (cancelled) return;
+        if (!openRemote) {
+          clearResumeToken();
+          setResumeToken("");
+          serverDraftRef.current = null;
+          setSaveStatus("Kept the maze saved on this device.");
+          setResumeReady(true);
+          return;
+        }
+        const payload = remote.payload;
+        const restored = {
+          mazeWalls: Array.isArray(payload.mazeWalls) ? payload.mazeWalls : [],
+          mazeShapes: Array.isArray(payload.mazeShapes) ? payload.mazeShapes : []
+        };
+        stateRef.current = restored;
+        setState(restored);
+        const nextForm = payloadToForm(payload);
+        formDraftRef.current = nextForm;
+        setFormDraft(nextForm);
+        clientDraftIdRef.current = payload.clientDraftId || clientDraftIdRef.current;
+        serverDraftRef.current = remote;
+        setOwnerEmail(remote.email || nextForm.email);
+        setSaveStatus("Emailed draft restored. Saved online.");
+        setResumeReady(true);
+      } catch (error) {
+        if (!cancelled) {
+          setSaveStatus(error instanceof Error ? error.message : "The emailed draft could not be opened.");
+          setResumeReady(true);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [resumeToken]);
+
+  const emailMazeDraft = async (email: string) => {
+    if (!state.mazeWalls.length && !state.mazeShapes.length) {
+      setSaveStatus("Add at least one Maze mark before emailing this draft.");
+      return;
+    }
+    setSaveBusy(true);
+    setSaveStatus("Saving this maze and preparing your link…");
+    try {
+      const nextForm = { ...formDraftRef.current, email };
+      formDraftRef.current = nextForm;
+      setFormDraft(nextForm);
+      const payload = draftPayload(stateRef.current, nextForm, clientDraftIdRef.current);
+      let response: Response;
+      if (resumeToken && serverDraftRef.current) {
+        response = await fetch("/api/build-drafts/current/email", {
+          method: "POST",
+          headers: { authorization: `Bearer ${resumeToken}` }
+        });
+      } else {
+        response = await fetch("/api/build-drafts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "maze_design", email, payload })
+        });
+      }
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        emailSent?: boolean;
+        deliveryError?: string;
+        resumeToken?: string;
+        draft?: ServerDraft;
+      };
+      if (!response.ok) throw new Error(result.error || "The resume email could not be sent.");
+      if (result.resumeToken) {
+        try { sessionStorage.setItem(TOKEN_STORAGE_KEY, result.resumeToken); } catch { /* storage can be unavailable */ }
+        setResumeToken(result.resumeToken);
+      }
+      if (result.draft) serverDraftRef.current = result.draft;
+      setOwnerEmail(email);
+      setResumeReady(true);
+      persistLocal(payload);
+      if (result.emailSent === false) {
+        setSaveStatus(`Saved online, but the email was not sent. ${result.deliveryError || "Try again."}`);
+      } else {
+        setSaveStatus("Saved online. Resume link emailed.");
+        window.setTimeout(() => setSaveDialogOpen(false), 900);
+      }
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? error.message : "The resume email could not be sent.");
+    } finally {
+      setSaveBusy(false);
+    }
+  };
+
+  const completeDraft = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    } catch { /* storage can be unavailable */ }
+    clearResumeToken();
+    serverDraftRef.current = null;
+    setOwnerEmail("");
+  };
 
   // Kiosk: reset to a blank maze after a stretch of inactivity, so the terminal
   // is fresh for the next person.
@@ -450,6 +875,8 @@ export default function App() {
       setUndoStack([]);
       setRedoStack([]);
       setSubmitOpen(false);
+      setSaveDialogOpen(false);
+      setFormDraft(emptyForm());
     };
     const bump = () => {
       window.clearTimeout(idle);
@@ -551,7 +978,13 @@ export default function App() {
           onDuplicate={duplicateSelected}
           onDelete={deleteSelected}
           onReset={resetMaze}
-          onSave={() => localStorage.setItem(STORAGE_KEY, JSON.stringify(state))}
+          onSave={() => {
+            persistLocal();
+            setSaveStatus(resumeToken ? "Saved on this device — online copy will sync automatically." : "Saved on this device.");
+          }}
+          onEmailSave={() => setSaveDialogOpen(true)}
+          saveStatus={saveStatus}
+          emailSaveDisabled={KIOSK || PREVIEW || (!state.mazeWalls.length && !state.mazeShapes.length)}
           onExportJson={exportJson}
           onExportImage={exportImage}
           onExportReading={() => downloadFile("maze-notes.txt", "Maze Studio export uses PNG and project JSON.", "text/plain")}
@@ -564,6 +997,19 @@ export default function App() {
         capturePng={() => (stage ? stage.toDataURL({ pixelRatio: 2 / (stage.scaleX() || 1) }) : null)}
         getJson={() => JSON.stringify(state)}
         isEmpty={state.mazeWalls.length === 0 && state.mazeShapes.length === 0}
+        formDraft={formDraft}
+        onFormDraftChange={setFormDraft}
+        resumeToken={resumeToken}
+        ownerEmail={ownerEmail}
+        onSubmitted={completeDraft}
+      />
+      <SaveEmailDialog
+        open={saveDialogOpen}
+        email={formDraft.email}
+        busy={saveBusy}
+        status={saveStatus}
+        onClose={() => setSaveDialogOpen(false)}
+        onSave={emailMazeDraft}
       />
       {KIOSK ? (
         <button type="button" className="kiosk-start-over" onClick={resetMaze}>

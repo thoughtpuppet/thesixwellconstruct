@@ -1,4 +1,4 @@
-import { Copy, Download, FileText, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Copy, Download, FileText, Mail, RotateCcw, Save, Trash2 } from "lucide-react";
 import { symbolLibrary } from "../data/symbols";
 import type { CanvasItem, InterpretationLine, MazeShape, MazeWall } from "../types";
 
@@ -12,6 +12,9 @@ type InspectorProps = {
   onDelete: () => void;
   onReset: () => void;
   onSave: () => void;
+  onEmailSave: () => void;
+  saveStatus: string;
+  emailSaveDisabled: boolean;
   onExportJson: () => void;
   onExportImage: () => void;
   onExportReading: () => void;
@@ -27,6 +30,9 @@ export function Inspector({
   onDelete,
   onReset,
   onSave,
+  onEmailSave,
+  saveStatus,
+  emailSaveDisabled,
   onExportJson,
   onExportImage,
   onExportReading
@@ -164,6 +170,10 @@ export function Inspector({
           <Save size={18} />
           Save
         </button>
+        <button type="button" onClick={onEmailSave} disabled={emailSaveDisabled}>
+          <Mail size={18} />
+          Save &amp; email
+        </button>
         <button type="button" onClick={onExportImage}>
           <Download size={18} />
           PNG
@@ -181,6 +191,7 @@ export function Inspector({
           Reset
         </button>
       </div>
+      <p className="maze-draft-status" role="status" aria-live="polite">{saveStatus}</p>
     </aside>
   );
 }

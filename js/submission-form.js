@@ -95,9 +95,12 @@
       setStatus(status, options.pendingText || "Submitting.", "");
 
       try {
+        var additionalHeaders = typeof options.headers === "function"
+          ? options.headers({ form: form }) || {}
+          : options.headers || {};
         var response = await fetch(form.action, {
           method: form.method || "POST",
-          headers: { "idempotency-key": idempotencyKey },
+          headers: { "idempotency-key": idempotencyKey, ...additionalHeaders },
           body: new FormData(form),
         });
         var payload = await response.json().catch(function () { return {}; });

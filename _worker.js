@@ -91,6 +91,14 @@ import {
   handlePublicOutreachApi,
   processDueOutreach,
 } from "./functions/api/outreach/_lib.js";
+import {
+  handleCreateBuildDraft,
+  handleDeleteBuildDraft,
+  handleEmailBuildDraft,
+  handleGetBuildDraft,
+  handleUpdateBuildDraft,
+  reapExpiredTattooBuildDrafts,
+} from "./functions/api/build-drafts/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -497,6 +505,26 @@ async function handleSubmissionsApi(request, env) {
   return notFound("Unknown submissions API route.");
 }
 
+async function handleBuildDraftsApi(request, env) {
+  const { pathname } = new URL(request.url);
+  const { method } = request;
+  if (pathname === "/api/build-drafts") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleCreateBuildDraft(request, env);
+  }
+  if (pathname === "/api/build-drafts/current") {
+    if (method === "GET") return handleGetBuildDraft(request, env);
+    if (method === "PATCH") return handleUpdateBuildDraft(request, env);
+    if (method === "DELETE") return handleDeleteBuildDraft(request, env);
+    return methodNotAllowed(method, ["GET", "PATCH", "DELETE"]);
+  }
+  if (pathname === "/api/build-drafts/current/email") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleEmailBuildDraft(request, env);
+  }
+  return notFound("Unknown Build draft API route.");
+}
+
 async function handleBookingApi(request, env) {
   const url = new URL(request.url);
   const { pathname } = url;
@@ -871,6 +899,10 @@ export default {
       return handleSubmissionsApi(request, env);
     }
 
+    if (url.pathname === "/api/build-drafts" || url.pathname.startsWith("/api/build-drafts/")) {
+      return handleBuildDraftsApi(request, env);
+    }
+
     if (url.pathname === "/legend" || url.pathname.startsWith("/legend/")) {
       const redirectUrl = new URL(request.url);
       redirectUrl.pathname = url.pathname === "/legend" ? "/about/legend/" : `/about${url.pathname}`;
@@ -913,6 +945,7 @@ export default {
     ctx.waitUntil(sendDueEventTicketReminders(env));
     ctx.waitUntil(reapStalePendingTickets(env));
     ctx.waitUntil(reapExpiredBookingHolds(env));
+    ctx.waitUntil(reapExpiredTattooBuildDrafts(env));
     ctx.waitUntil(processDueOutreach(env));
   },
 };

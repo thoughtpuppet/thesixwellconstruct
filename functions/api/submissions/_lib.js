@@ -4,6 +4,14 @@ import {
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
+import {
+  finalizeSubmissionBuildDraft,
+  resolveSubmissionBuildDraft,
+} from "../build-drafts/_lib.js";
+import {
+  buildCompositionSnapshot,
+  normalizeCompositionSnapshot,
+} from "../../../js/build-composition.js";
 
 const VALID_STATUSES = new Set([
   "new",
@@ -674,6 +682,68 @@ function parseStableSymbolIds(payload) {
   return { ids };
 }
 
+function parseSymbolSelections(payload, ids) {
+  let raw = payload.symbol_selections ?? payload.symbol_selections_json;
+  if (!raw) return { selections: ids.map((id, order) => ({ id, order, note: "" })) };
+  if (typeof raw === "string") {
+    try { raw = JSON.parse(raw); } catch {
+      return { error: "Symbol descriptions must be valid JSON." };
+    }
+  }
+  if (!Array.isArray(raw) || raw.length !== ids.length) {
+    return { error: "Symbol descriptions must match the selected Legend symbols." };
+  }
+  const selections = raw.map((entry, order) => ({
+    id: asString(entry?.id),
+    order,
+    note: asString(entry?.note),
+  }));
+  if (
+    selections.some((entry, index) => entry.id !== ids[index])
+    || new Set(selections.map((entry) => entry.id)).size !== ids.length
+  ) {
+    return { error: "Symbol description order must match the selected Legend symbols." };
+  }
+  if (selections.some((entry) => entry.note.length > 300)) {
+    return { error: "Personal symbol descriptions must be 300 characters or fewer." };
+  }
+  return { selections };
+}
+
+function parseClientCompositionSnapshot(payload, ids) {
+  const raw = payload.composition_snapshot ?? payload.composition_snapshot_json;
+  if (!raw) return { snapshot: null };
+  const snapshot = normalizeCompositionSnapshot(raw);
+  if (!snapshot) return { error: "The composition reading snapshot must be valid JSON." };
+  if (
+    snapshot.selectedSymbolIds.length !== ids.length
+    || snapshot.selectedSymbolIds.some((id, index) => id !== ids[index])
+  ) {
+    return { error: "The composition reading must match the selected Legend symbols." };
+  }
+  return { snapshot };
+}
+
+async function publishedCompositionRules(database) {
+  const rows = (await database.prepare(
+    `SELECT r.id,r.rule_type,r.interpretation,r.sort_order,
+            m.symbol_id,m.member_order,s.state symbol_state
+     FROM visual_symbol_composition_rules r
+     JOIN visual_symbol_composition_rule_members m ON m.rule_id=r.id
+     JOIN visual_symbols s ON s.id=m.symbol_id
+     WHERE r.state='published'
+     ORDER BY r.sort_order,r.id,m.member_order`
+  ).all()).results || [];
+  const grouped = new Map();
+  for (const row of rows) {
+    if (!grouped.has(row.id)) grouped.set(row.id, { id: row.id, type: row.rule_type, interpretation: row.interpretation, sortOrder: Number(row.sort_order) || 0, symbolIds: [], publishable: true });
+    const rule = grouped.get(row.id);
+    rule.symbolIds.push(row.symbol_id);
+    if (row.symbol_state !== "published") rule.publishable = false;
+  }
+  return [...grouped.values()].filter((rule) => rule.publishable && rule.symbolIds.length >= 2);
+}
+
 function isAtLeastEighteen(dateValue) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asString(dateValue));
   if (!match) return false;
@@ -1036,9 +1106,28 @@ export async function handleCreateSubmission(request, env) {
       }
     }
 
+    let buildDraftContext = null;
+    if (["build_brief", "maze_design"].includes(submission.type)) {
+      buildDraftContext = await resolveSubmissionBuildDraft(
+        request,
+        db,
+        submission.type,
+        submission.contact.email,
+      );
+      if (buildDraftContext?.error) {
+        return errorResponse(buildDraftContext.error, buildDraftContext.status, {
+          code: buildDraftContext.code,
+        });
+      }
+    }
+
     if (submission.type === "build_brief") {
       const symbolSelection = parseStableSymbolIds(body.payload);
       if (symbolSelection.error) return errorResponse(symbolSelection.error, 400);
+      const describedSelection = parseSymbolSelections(body.payload, symbolSelection.ids);
+      if (describedSelection.error) return errorResponse(describedSelection.error, 400);
+      const clientComposition = parseClientCompositionSnapshot(body.payload, symbolSelection.ids);
+      if (clientComposition.error) return errorResponse(clientComposition.error, 400);
       const placeholders = symbolSelection.ids.map(() => "?").join(",");
       const result = await db.prepare(`SELECT v.id,v.name,v.meaning,v.svg_markup,v.themes_json,c.name category FROM visual_symbols v JOIN visual_symbol_categories c ON c.id=v.category_id WHERE v.id IN (${placeholders}) AND v.state='published'`).bind(...symbolSelection.ids).all();
       const symbolsById = new Map((result.results || []).map((symbol) => [symbol.id, symbol]));
@@ -1046,6 +1135,8 @@ export async function handleCreateSubmission(request, env) {
         return errorResponse("One or more selected symbols are unavailable. Refresh and try again.", 409, { code: "SYMBOL_UNAVAILABLE" });
       }
       body.payload.symbol_ids = symbolSelection.ids;
+      body.payload.symbol_selections = describedSelection.selections;
+      delete body.payload.symbol_selections_json;
       body.payload.symbol_snapshot = symbolSelection.ids.map((symbolId, index) => {
         const symbol = symbolsById.get(symbolId);
         return {
@@ -1056,8 +1147,21 @@ export async function handleCreateSubmission(request, env) {
           category: symbol.category,
           themes: parseJsonField(symbol.themes_json, []),
           imagery: symbol.svg_markup,
+          client_note: describedSelection.selections[index].note,
         };
       });
+      const currentRules = await publishedCompositionRules(db);
+      const currentComposition = buildCompositionSnapshot({
+        symbols: body.payload.symbol_snapshot,
+        rules: currentRules,
+        selectedIds: symbolSelection.ids,
+      });
+      body.payload.client_composition_snapshot = clientComposition.snapshot || currentComposition;
+      body.payload.composition_snapshot = currentComposition;
+      body.payload.authored_composition_rules = currentComposition.appliedRules;
+      body.payload.shared_composition_themes = currentComposition.sharedThemes;
+      body.payload.composition_reading = currentComposition.reading;
+      delete body.payload.composition_snapshot_json;
     }
     submission.payload = body.payload;
     const id = createSubmissionId();
@@ -1113,6 +1217,9 @@ export async function handleCreateSubmission(request, env) {
           now,
         )
       ),
+      ...(buildDraftContext?.id
+        ? [finalizeSubmissionBuildDraft(db, buildDraftContext.id, id, now)]
+        : []),
     ]);
 
     await mirrorSubmissionToCrm(db, {

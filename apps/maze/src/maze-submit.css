@@ -23,7 +23,7 @@
   max-height: 92vh;
   overflow-y: auto;
   background: #1c1815;
-  border: 1px solid rgba(217, 162, 27, 0.35);
+  border: 5px solid rgba(217, 162, 27, 0.35);
   border-radius: 8px;
   padding: 24px;
   color: #f1e6d6;
@@ -83,7 +83,7 @@
   letter-spacing: normal;
   color: #f1e6d6;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(217, 162, 27, 0.3);
+  border: 5px solid rgba(217, 162, 27, 0.3);
   border-radius: 4px;
   padding: 10px 12px;
 }
@@ -118,7 +118,7 @@
   padding: 10px 20px;
   border-radius: 4px;
   background: transparent;
-  border: 1px solid rgba(241, 230, 214, 0.3);
+  border: 5px solid rgba(241, 230, 214, 0.3);
   color: rgba(241, 230, 214, 0.8);
 }
 .maze-submit-actions button.primary {

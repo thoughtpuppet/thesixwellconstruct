@@ -129,6 +129,22 @@ function normalizeLegendLayers(out) {
     })).filter((entry) => entry.title && (entry.src || entry.href));
     out.examples_json = JSON.stringify(examples);
   }
+  if ("build_guidance_json" in out) {
+    const value = legendObject(out.build_guidance_json, "Build guidance");
+    const emotionalTones = legendArray(value.emotional_tones ?? value.emotionalTones ?? [], "Emotional tones")
+      .slice(0, 12)
+      .map((tone) => text(tone, 80))
+      .filter(Boolean);
+    const reflectionQuestions = legendArray(value.reflection_questions ?? value.reflectionQuestions ?? [], "Reflection questions")
+      .slice(0, 8)
+      .map((question) => text(question, 500))
+      .filter(Boolean);
+    out.build_guidance_json = JSON.stringify({
+      essence: text(value.essence, 500),
+      emotional_tones: [...new Set(emotionalTones)],
+      reflection_questions: [...new Set(reflectionQuestions)],
+    });
+  }
 }
 
 function normalizeRecord(config, body, existing = {}) {
@@ -248,6 +264,14 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
       applications: parseJson(row.applications_json),
       variants: parseJson(row.variants_json),
       examples: parseJson(row.examples_json),
+      buildGuidance: (() => {
+        const guidance = parseJson(row.build_guidance_json, {});
+        return {
+          essence: text(guidance.essence, 500),
+          emotionalTones: Array.isArray(guidance.emotional_tones) ? guidance.emotional_tones : [],
+          reflectionQuestions: Array.isArray(guidance.reflection_questions) ? guidance.reflection_questions : [],
+        };
+      })(),
       media: media.get(row.id) || [],
     };
     if (resource !== "flash") return record;
@@ -302,6 +326,165 @@ async function publicNavigation(env) {
   const paths = (await database.prepare("SELECT id,node_id,name,route,color,sort_order,updated_at FROM construct_pathways WHERE state='published' AND homepage_enabled=1 ORDER BY node_id,sort_order").all()).results || [];
   for (const node of nodes) node.pathways = paths.filter((p) => p.node_id === node.id);
   return json({ revision: nodes.reduce((v,n) => n.updated_at > v ? n.updated_at : v, ""), nodes });
+}
+
+function compositionRuleRecord(row, members = []) {
+  return {
+    id: row.id,
+    type: row.rule_type,
+    interpretation: row.interpretation,
+    state: row.state,
+    sortOrder: Number(row.sort_order) || 0,
+    symbolIds: members.map((member) => member.symbol_id),
+    symbols: members.map((member) => ({
+      id: member.symbol_id,
+      slug: member.symbol_slug,
+      name: member.symbol_name,
+      meaning: member.symbol_meaning,
+      themes: parseJson(member.symbol_themes_json),
+      state: member.symbol_state,
+    })),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function loadCompositionRules(database, { publicOnly = false } = {}) {
+  const rows = (await database.prepare(
+    `SELECT r.*,m.symbol_id,m.member_order,
+            s.slug symbol_slug,s.name symbol_name,s.meaning symbol_meaning,
+            s.themes_json symbol_themes_json,s.state symbol_state
+     FROM visual_symbol_composition_rules r
+     JOIN visual_symbol_composition_rule_members m ON m.rule_id=r.id
+     JOIN visual_symbols s ON s.id=m.symbol_id
+     ${publicOnly ? "WHERE r.state='published'" : ""}
+     ORDER BY r.sort_order,r.id,m.member_order`
+  ).all()).results || [];
+  const grouped = new Map();
+  for (const row of rows) {
+    if (!grouped.has(row.id)) grouped.set(row.id, { row, members: [] });
+    grouped.get(row.id).members.push(row);
+  }
+  return [...grouped.values()]
+    .map(({ row, members }) => compositionRuleRecord(row, members))
+    .filter((rule) => !publicOnly || (rule.symbolIds.length >= 2 && rule.symbols.every((symbol) => symbol.state === "published")));
+}
+
+async function publicCompositionRules(request, env) {
+  if (request.method !== "GET") return failure("Method not allowed.", 405);
+  const records = await loadCompositionRules(db(env), { publicOnly: true });
+  return json({ records, count: records.length });
+}
+
+async function normalizeCompositionRule(database, body = {}, existing = {}) {
+  const type = text(body.type ?? body.rule_type ?? existing.rule_type, 40).toLowerCase();
+  const interpretation = text(body.interpretation ?? existing.interpretation, 5000);
+  const state = text(body.state ?? existing.state ?? "draft", 40).toLowerCase();
+  const sortOrder = Number(body.sortOrder ?? body.sort_order ?? existing.sort_order) || 0;
+  const requestedIds = body.symbolIds ?? body.symbol_ids;
+  const rawSymbolIds = Array.isArray(requestedIds)
+    ? requestedIds.map((value) => text(value, 200)).filter(Boolean)
+    : null;
+  if (rawSymbolIds && new Set(rawSymbolIds).size !== rawSymbolIds.length) {
+    throw new Error("Composition-rule members must be unique.");
+  }
+  const symbolIds = rawSymbolIds
+    ? rawSymbolIds
+    : Array.isArray(existing.symbolIds)
+      ? existing.symbolIds
+      : [];
+  if (!["reading", "tension"].includes(type)) throw new Error("Choose reading or tension.");
+  if (!["draft", "published", "retired"].includes(state)) throw new Error("Choose draft, published, or retired.");
+  if (!interpretation) throw new Error("Author an approved interpretation.");
+  if (symbolIds.length < 2 || symbolIds.length > 12) throw new Error("Composition rules require between 2 and 12 unique symbols.");
+  const placeholders = symbolIds.map(() => "?").join(",");
+  const symbols = (await database.prepare(
+    `SELECT id,state FROM visual_symbols WHERE id IN (${placeholders})`
+  ).bind(...symbolIds).all()).results || [];
+  if (symbols.length !== symbolIds.length) throw new Error("Every composition-rule member must be a managed Legend symbol.");
+  if (state === "published" && symbols.some((symbol) => symbol.state !== "published")) {
+    throw new Error("Publish every participating symbol before publishing this composition rule.");
+  }
+  return {
+    type,
+    interpretation,
+    state,
+    sortOrder,
+    symbolIds,
+    symbolSetKey: [...symbolIds].sort().join("|"),
+  };
+}
+
+async function adminCompositionRules(request, env, ruleId = "") {
+  const database = db(env);
+  if (request.method === "GET" && !ruleId) {
+    const records = await loadCompositionRules(database);
+    return json({ records, count: records.length });
+  }
+  if (request.method === "POST" && !ruleId) {
+    const body = await readJson(request);
+    if (!body) return failure("Send a JSON object.");
+    try {
+      const rule = await normalizeCompositionRule(database, body);
+      const newId = text(body.id, 200) || id("legend-composition");
+      const now = new Date().toISOString();
+      await database.batch([
+        database.prepare(
+          `INSERT INTO visual_symbol_composition_rules
+           (id,rule_type,interpretation,symbol_set_key,state,sort_order,created_at,updated_at)
+           VALUES(?,?,?,?,?,?,?,?)`
+        ).bind(newId, rule.type, rule.interpretation, rule.symbolSetKey, rule.state, rule.sortOrder, now, now),
+        ...rule.symbolIds.map((symbolId, index) => database.prepare(
+          "INSERT INTO visual_symbol_composition_rule_members(rule_id,symbol_id,member_order) VALUES(?,?,?)"
+        ).bind(newId, symbolId, index)),
+      ]);
+      const records = await loadCompositionRules(database);
+      return json({ record: records.find((record) => record.id === newId) }, { status: 201 });
+    } catch (error) {
+      const duplicate = /UNIQUE constraint failed/i.test(error.message);
+      return failure(duplicate ? "An active rule already exists for this symbol set and rule type." : error.message, duplicate ? 409 : 400);
+    }
+  }
+  const existingRow = ruleId
+    ? await database.prepare("SELECT * FROM visual_symbol_composition_rules WHERE id=?").bind(ruleId).first()
+    : null;
+  if (!existingRow) return failure("Composition rule not found.", 404);
+  if (request.method === "PATCH") {
+    const body = await readJson(request);
+    if (!body) return failure("Send a JSON object.");
+    const currentRecords = await loadCompositionRules(database);
+    const existing = currentRecords.find((record) => record.id === ruleId);
+    try {
+      const rule = await normalizeCompositionRule(database, body, {
+        ...existingRow,
+        symbolIds: existing?.symbolIds || [],
+      });
+      const now = new Date().toISOString();
+      await database.batch([
+        database.prepare(
+          `UPDATE visual_symbol_composition_rules
+           SET rule_type=?,interpretation=?,symbol_set_key=?,state=?,sort_order=?,updated_at=?
+           WHERE id=?`
+        ).bind(rule.type, rule.interpretation, rule.symbolSetKey, rule.state, rule.sortOrder, now, ruleId),
+        database.prepare("DELETE FROM visual_symbol_composition_rule_members WHERE rule_id=?").bind(ruleId),
+        ...rule.symbolIds.map((symbolId, index) => database.prepare(
+          "INSERT INTO visual_symbol_composition_rule_members(rule_id,symbol_id,member_order) VALUES(?,?,?)"
+        ).bind(ruleId, symbolId, index)),
+      ]);
+      const records = await loadCompositionRules(database);
+      return json({ record: records.find((record) => record.id === ruleId) });
+    } catch (error) {
+      const duplicate = /UNIQUE constraint failed/i.test(error.message);
+      return failure(duplicate ? "An active rule already exists for this symbol set and rule type." : error.message, duplicate ? 409 : 400);
+    }
+  }
+  if (request.method === "DELETE") {
+    await database.prepare(
+      "UPDATE visual_symbol_composition_rules SET state='retired',updated_at=? WHERE id=?"
+    ).bind(new Date().toISOString(), ruleId).run();
+    return json({ ok: true, retired: true });
+  }
+  return failure("Method not allowed.", 405);
 }
 
 const ARCHIVE_MATERIAL_TYPES = new Set(["final-image","sketch","process-photo","note","voice-memo","video","document","artifact"]);
@@ -1544,8 +1727,10 @@ export async function handleConstructApi(request,env){
   const mediaPublic=path.match(/^\/api\/construct\/media\/([^/]+)$/);if(mediaPublic)return publicMediaApi(request,env,decodeURIComponent(mediaPublic[1]));
   const entityMediaPublic=path.match(/^\/api\/construct\/entity-media\/([^/]+)$/);if(entityMediaPublic)return publicEntityMediaApi(request,env,decodeURIComponent(entityMediaPublic[1]));
   if(path==="/api/legend/categories")return publicLegendCategories(env);
+  if(path==="/api/legend/composition-rules")return publicCompositionRules(request,env);
   const publicMatch=path.match(/^\/api\/(flash|legend|visual-language|art|archive|archive-collections)(?:\/([^/]+))?$/);if(publicMatch)return publicCatalog(request,env,canonicalResource(publicMatch[1]),publicMatch[2]?decodeURIComponent(publicMatch[2]):"");
   const auth=requireStudioAdmin(request,env);if(auth)return auth;
+  const legendCompositionMatch=path.match(/^\/api\/admin\/legend\/composition-rules(?:\/([^/]+))?$/);if(legendCompositionMatch)return adminCompositionRules(request,env,legendCompositionMatch[1]?decodeURIComponent(legendCompositionMatch[1]):"");
   const legendCategoryMatch=path.match(/^\/api\/admin\/legend\/categories(?:\/([^/]+))?$/);if(legendCategoryMatch)return legendCategoryApi(request,env,legendCategoryMatch[1]?decodeURIComponent(legendCategoryMatch[1]):"");
   const eventMatch=path.match(/^\/api\/admin\/events\/([^/]+)\/create-archive-record$/);if(eventMatch&&request.method==="POST")return eventArchive(request,env,decodeURIComponent(eventMatch[1]));
   const mediaFileMatch=path.match(/^\/api\/admin\/media\/([^/]+)\/file$/);if(mediaFileMatch)return adminMediaFileApi(request,env,decodeURIComponent(mediaFileMatch[1]));

@@ -470,6 +470,43 @@ export async function sendCommunicationPreferencesLink(env, message = {}) {
   });
 }
 
+export async function notifyTattooBuildDraftResume(env, request, draft, rawToken, options = {}) {
+  const kind = draft.draft_kind || draft.kind;
+  const label = kind === "maze_design" ? "Maze Studio draft" : "Build Your Own draft";
+  const route = kind === "maze_design" ? "/tattoos/build/maze/" : "/tattoos/build/";
+  const resumeUrl = `${publicUrl(env, request, route)}#resume=${encodeURIComponent(rawToken)}`;
+  const expiration = draft.expires_at
+    ? new Intl.DateTimeFormat("en-US", {
+        timeZone: DEFAULT_TIMEZONE,
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(draft.expires_at))
+    : "";
+  const text = [
+    `Your art.pill TATTOO HOUSE ${label} is saved.`,
+    "",
+    "Use this private link to continue editing:",
+    resumeUrl,
+    "",
+    "The link remains active for 30 days after your last online save.",
+    expiration ? `Current expiration: ${expiration}.` : "",
+    "Reference uploads are not stored with drafts and must be attached again before final submission.",
+    "",
+    "This is only a saved draft. Nothing has been submitted to the Studio for review.",
+    "If you did not request this email, you can ignore it.",
+  ].filter(Boolean).join("\n");
+  return sendTransactionalEmail(env, {
+    to: draft.owner_email || draft.email,
+    subject: `Continue your art.pill ${label}`,
+    text,
+    templateKey: "tattoo_build_draft_resume",
+    relatedType: "tattoo_build_draft",
+    relatedId: draft.id,
+    idempotencyKey: options.idempotencyKey || `tattoo_build_draft_resume:${draft.id}`,
+  });
+}
+
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     headers: {
@@ -707,8 +744,11 @@ function submissionDetailLines(submission) {
     ],
     build_brief: [
       "selected_elements",
+      "symbol_ids",
       "placement",
       "size",
+      "scale",
+      "design_intent",
       "timeline",
       "message",
       "instagram",
@@ -717,9 +757,11 @@ function submissionDetailLines(submission) {
       "maze_explanation",
       "placement",
       "size",
+      "scale",
       "timeline",
       "message",
       "instagram",
+      "maze_artifact_snapshot",
     ],
     art_acquisition: ["artwork", "artwork_title", "budget_range", "message", "instagram"],
     consultation: ["consultation_type", "preferred_dates", "message", "instagram"],
@@ -734,6 +776,23 @@ function submissionDetailLines(submission) {
       ...flashSheetDesignLines(payload, "sheet_design_selections", "Requested sheet designs"),
       ...flashSheetDesignLines(payload, "approved_sheet_designs", "Approved sheet designs"),
     );
+  }
+  if (submission.type === "build_brief" && Array.isArray(payload.symbol_snapshot)) {
+    const personalNotes = payload.symbol_snapshot
+      .filter((symbol) => asString(symbol?.client_note))
+      .map((symbol, index) => `- ${asString(symbol.name) || asString(symbol.id) || `Symbol ${index + 1}`}: ${asString(symbol.client_note)}`);
+    if (personalNotes.length) lines.push("Personal symbol descriptions", ...personalNotes);
+    const composition = payload.composition_snapshot;
+    if (composition?.reading) lines.push(compactLine("Composition reading", composition.reading));
+    if (Array.isArray(composition?.appliedRules) && composition.appliedRules.length) {
+      lines.push(
+        "Authored Legend relationships",
+        ...composition.appliedRules.map((rule) => `- ${asString(rule.type) || "reading"}: ${asString(rule.interpretation)}`),
+      );
+    }
+    if (payload.client_composition_snapshot?.reading) {
+      lines.push(compactLine("Exact reading shown to client", payload.client_composition_snapshot.reading));
+    }
   }
   return lines;
 }

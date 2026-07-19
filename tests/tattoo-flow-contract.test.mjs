@@ -10,6 +10,16 @@ import {
   handleDeleteSubmission,
   handleUpdateSubmission,
 } from "../functions/api/submissions/_lib.js";
+import { handleConstructApi } from "../functions/api/construct/_lib.js";
+import { buildCompositionSnapshot } from "../js/build-composition.js";
+import {
+  handleCreateBuildDraft,
+  handleDeleteBuildDraft,
+  handleEmailBuildDraft,
+  handleGetBuildDraft,
+  handleUpdateBuildDraft,
+  reapExpiredTattooBuildDrafts,
+} from "../functions/api/build-drafts/_lib.js";
 import {
   handleAdminCancelAppointment,
   handleAdminCompleteAppointment,
@@ -144,6 +154,18 @@ function jsonRequest(path, payload, headers = {}) {
     method: "POST",
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(payload),
+  });
+}
+
+function draftRequest(path, method = "GET", payload, token = "", headers = {}) {
+  return new Request(`https://example.test${path}`, {
+    method,
+    headers: {
+      ...(payload === undefined ? {} : { "content-type": "application/json" }),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
   });
 }
 
@@ -419,6 +441,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.ok(columns("submissions").has("idempotency_key"));
   assert.ok(columns("booking_tokens").has("purpose"));
   assert.ok(columns("tattoo_settings").has("session_estimate_copy_json"));
+  assert.ok(columns("visual_symbols").has("build_guidance_json"));
   for (const name of [
     "purpose",
     "hold_expires_at",
@@ -430,7 +453,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   ]) assert.ok(columns("appointments").has(name), `appointments.${name}`);
 
   const tables = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((row) => row.name));
-  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_calls"]) {
+  for (const name of ["appointment_events", "tattoo_settings", "tattoo_rate_cards", "special_project_calls", "visual_symbol_composition_rules", "visual_symbol_composition_rule_members"]) {
     assert.ok(tables.has(name), name);
   }
 
@@ -453,6 +476,141 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
       { id: "tattoo_quarter", label: "Quarter Day Session" },
     ],
   );
+});
+
+test("Legend Build Guidance and composition rules normalize, publish, deduplicate, and respect route precedence", async () => {
+  const database = migratedDatabase();
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: "legend-admin",
+  };
+  const adminRequest = (path, method, body) => new Request(`https://example.test${path}`, {
+    method,
+    headers: {
+      authorization: "Bearer legend-admin",
+      "content-type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  const guidanceResponse = await handleConstructApi(adminRequest("/api/admin/legend/fig-eye", "PATCH", {
+    build_guidance_json: {
+      essence: "Holds what is not ready to be released.",
+      emotional_tones: ["protective", "patient", "protective"],
+      reflection_questions: ["What are you holding?", "What is ready to be released?"],
+    },
+  }), env);
+  assert.equal(guidanceResponse.status, 200);
+
+  const publicSymbolResponse = await handleConstructApi(
+    new Request("https://example.test/api/legend/fig-eye"),
+    env,
+  );
+  assert.equal(publicSymbolResponse.status, 200);
+  const publicSymbol = await publicSymbolResponse.json();
+  assert.equal(publicSymbol.record.buildGuidance.essence, "Holds what is not ready to be released.");
+  assert.deepEqual(publicSymbol.record.buildGuidance.emotionalTones, ["protective", "patient"]);
+
+  const createResponse = await handleConstructApi(adminRequest("/api/admin/legend/composition-rules", "POST", {
+    type: "reading",
+    interpretation: "Containment connected to a remembered path may suggest carrying something through repetition.",
+    state: "published",
+    symbolIds: ["fig-eye", "maze-path"],
+  }), env);
+  assert.equal(createResponse.status, 201);
+  const created = await createResponse.json();
+  assert.deepEqual(created.record.symbolIds, ["fig-eye", "maze-path"]);
+
+  const duplicateResponse = await handleConstructApi(adminRequest("/api/admin/legend/composition-rules", "POST", {
+    type: "reading",
+    interpretation: "A duplicate set in reverse order.",
+    state: "draft",
+    symbolIds: ["maze-path", "fig-eye"],
+  }), env);
+  assert.equal(duplicateResponse.status, 409);
+  const repeatedMemberResponse = await handleConstructApi(adminRequest("/api/admin/legend/composition-rules", "POST", {
+    type: "tension",
+    interpretation: "Repeated members are invalid.",
+    state: "draft",
+    symbolIds: ["maze-path", "maze-path"],
+  }), env);
+  assert.equal(repeatedMemberResponse.status, 400);
+
+  const publicRulesResponse = await handleConstructApi(
+    new Request("https://example.test/api/legend/composition-rules"),
+    env,
+  );
+  assert.equal(publicRulesResponse.status, 200);
+  const publicRules = await publicRulesResponse.json();
+  assert.equal(publicRules.count, 1);
+  assert.equal(publicRules.records[0].id, created.record.id);
+
+  const patchResponse = await handleConstructApi(adminRequest(`/api/admin/legend/composition-rules/${created.record.id}`, "PATCH", {
+    interpretation: "An updated approved reading.",
+    symbolIds: ["maze-path", "fig-eye"],
+  }), env);
+  assert.equal(patchResponse.status, 200);
+  const patched = await patchResponse.json();
+  assert.deepEqual(patched.record.symbolIds, ["maze-path", "fig-eye"]);
+  assert.equal(patched.record.interpretation, "An updated approved reading.");
+
+  database.prepare("UPDATE visual_symbols SET state='retired' WHERE id='maze-path'").run();
+  const filteredRulesResponse = await handleConstructApi(
+    new Request("https://example.test/api/legend/composition-rules"),
+    env,
+  );
+  assert.equal((await filteredRulesResponse.json()).count, 0);
+  const retireResponse = await handleConstructApi(adminRequest(`/api/admin/legend/composition-rules/${created.record.id}`, "DELETE"), env);
+  assert.equal(retireResponse.status, 200);
+  assert.equal(database.prepare("SELECT state FROM visual_symbol_composition_rules WHERE id=?").get(created.record.id).state, "retired");
+});
+
+test("composition readings prefer exact authored rules, cap subsets, and keep conservative fallbacks", () => {
+  const symbols = [
+    { id: "a", name: "A", meaning: "First meaning.", themes: ["memory", "body"] },
+    { id: "b", name: "B", meaning: "Second meaning.", themes: ["memory", "release"] },
+    { id: "c", name: "C", meaning: "Third meaning.", themes: ["threshold"] },
+  ];
+  const rules = [
+    { id: "ab", type: "reading", interpretation: "A and B may suggest remembered release.", symbolIds: ["a", "b"], sortOrder: 2 },
+    { id: "ac", type: "tension", interpretation: "A and C hold memory against a threshold.", symbolIds: ["a", "c"], sortOrder: 1 },
+    { id: "bc", type: "reading", interpretation: "B and C may suggest release through a threshold.", symbolIds: ["b", "c"], sortOrder: 3 },
+    { id: "abc", type: "reading", interpretation: "The full set has one approved reading.", symbolIds: ["a", "b", "c"], sortOrder: 9 },
+  ];
+
+  const exact = buildCompositionSnapshot({ symbols, rules, selectedIds: ["a", "b", "c"] });
+  assert.deepEqual(exact.appliedRules.map((rule) => rule.id), ["abc"]);
+  assert.match(exact.reading, /One possible reading within the Legend/);
+
+  const subset = buildCompositionSnapshot({ symbols, rules: rules.slice(0, 3), selectedIds: ["a", "b", "c"] });
+  assert.deepEqual(subset.appliedRules.map((rule) => rule.id), ["ac", "ab", "bc"]);
+  assert.equal(subset.appliedRules.length, 3);
+
+  const shared = buildCompositionSnapshot({ symbols, rules: [], selectedIds: ["a", "b"] });
+  assert.deepEqual(shared.sharedThemes, ["memory"]);
+  assert.match(shared.reading, /may suggest a relationship/);
+
+  const open = buildCompositionSnapshot({ symbols, rules: [], selectedIds: ["a", "c"] });
+  assert.match(open.reading, /no fixed relationship has been authored/i);
+  assert.match(open.reading, /Design Intent/);
+
+  const single = buildCompositionSnapshot({ symbols, rules: [], selectedIds: ["a"] });
+  assert.match(single.reading, /First meaning/);
+
+  const largeSymbols = Array.from({ length: 12 }, (_, index) => ({
+    id: `large-${index + 1}`,
+    name: `Large ${index + 1}`,
+    meaning: `Meaning ${index + 1} should not be concatenated into a large-build reading.`,
+    themes: ["shared-theme", index % 2 ? "odd" : "even"],
+  }));
+  const large = buildCompositionSnapshot({
+    symbols: largeSymbols,
+    rules: [],
+    selectedIds: largeSymbols.map((symbol) => symbol.id),
+  });
+  assert.match(large.reading, /12 selected symbols/);
+  assert.match(large.reading, /shared-theme/);
+  assert.doesNotMatch(large.reading, /Meaning 12/);
 });
 
 test("the applied tattoo baseline keeps its production filename and 0039 stays replay-safe", () => {
@@ -550,6 +708,14 @@ test("public tattoo settings publish active tattoo booking hours", async () => {
 test("Build submissions require intent, snapshot stable published symbol IDs, stay out of People, and are idempotent", async () => {
   const database = migratedDatabase();
   const env = { SUBMISSIONS_DB: new LocalD1(database) };
+  database.prepare(
+    `INSERT INTO visual_symbol_composition_rules
+     (id,rule_type,interpretation,symbol_set_key,state,sort_order,created_at,updated_at)
+     VALUES('path-room-reading','reading','A returning path inside a held room may suggest protected repetition.','maze-path|maze-room','published',1,datetime('now'),datetime('now'))`
+  ).run();
+  database.prepare(
+    "INSERT INTO visual_symbol_composition_rule_members(rule_id,symbol_id,member_order) VALUES('path-room-reading','maze-path',0),('path-room-reading','maze-room',1)"
+  ).run();
   const payload = {
     type: "build_brief",
     name: "Build Client",
@@ -559,6 +725,13 @@ test("Build submissions require intent, snapshot stable published symbol IDs, st
     design_intent: "A protective path made from three linked marks.",
     review_consent: "yes",
     symbol_ids: ["maze-path", "maze-room"],
+    composition_snapshot_json: JSON.stringify({
+      version: 1,
+      selectedSymbolIds: ["maze-path", "maze-room"],
+      appliedRules: [],
+      sharedThemes: ["protection"],
+      reading: "This is the exact reading that remained visible in the client's resumed draft.",
+    }),
   };
   const headers = { "idempotency-key": "build-contract-test" };
 
@@ -588,9 +761,411 @@ test("Build submissions require intent, snapshot stable published symbol IDs, st
   assert.deepEqual(saved.symbol_ids, ["maze-path", "maze-room"]);
   assert.deepEqual(saved.symbol_snapshot.map((symbol) => symbol.id), saved.symbol_ids);
   assert.equal(saved.design_intent, payload.design_intent);
+  assert.deepEqual(saved.authored_composition_rules.map((rule) => rule.id), ["path-room-reading"]);
+  assert.equal(saved.composition_snapshot.appliedRules[0].exact, true);
+  assert.equal(saved.client_composition_snapshot.reading, "This is the exact reading that remained visible in the client's resumed draft.");
 
   const missingIntent = await handleCreateSubmission(jsonRequest("/api/submissions", { ...payload, design_intent: "" }), env);
   assert.equal(missingIntent.status, 400);
+});
+
+test("Build submissions reject empty, duplicate, oversized, and unavailable symbol selections", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database) };
+  const payload = {
+    type: "build_brief",
+    name: "Build Boundary Client",
+    email: "build-boundary@example.test",
+    age_confirmed: "yes",
+    placement: "Upper arm",
+    design_intent: "A protected route.",
+    review_consent: "yes",
+  };
+
+  const empty = await handleCreateSubmission(jsonRequest("/api/submissions", payload), env);
+  assert.equal(empty.status, 400);
+
+  const duplicate = await handleCreateSubmission(jsonRequest("/api/submissions", {
+    ...payload,
+    symbol_ids: ["maze-path", "maze-path"],
+  }), env);
+  assert.equal(duplicate.status, 400);
+
+  const oversized = await handleCreateSubmission(jsonRequest("/api/submissions", {
+    ...payload,
+    symbol_ids: Array.from({ length: 13 }, (_, index) => `symbol-${index}`),
+  }), env);
+  assert.equal(oversized.status, 400);
+
+  const unavailable = await handleCreateSubmission(jsonRequest("/api/submissions", {
+    ...payload,
+    symbol_ids: ["missing-symbol"],
+  }), env);
+  assert.equal(unavailable.status, 409);
+  assert.equal((await unavailable.json()).code, "SYMBOL_UNAVAILABLE");
+});
+
+test("Build drafts hash resume tokens, autosync with revisions, email links, and finalize into symbol notes", async () => {
+  const database = migratedDatabase();
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { messageId: `draft-${sent.length}` };
+      },
+    },
+  };
+  const draftPayload = {
+    version: 1,
+    clientDraftId: "client-build-draft",
+    symbolSelections: [{
+      id: "maze-path",
+      order: 0,
+      name: "The Path",
+      category: "MAZE",
+      note: "Returning home with a different understanding.",
+    }],
+    compositionSnapshot: {
+      version: 1,
+      selectedSymbolIds: ["maze-path"],
+      appliedRules: [],
+      sharedThemes: [],
+      reading: "The exact single-symbol reading shown before the draft was emailed.",
+    },
+    contact: { firstName: "Draft", lastName: "Client", email: "draft@example.test", phone: "" },
+    placement: "Upper arm",
+    scale: "Palm-size",
+    timeline: "No rush",
+    designIntent: "A protected route.",
+    message: "",
+  };
+  const created = await handleCreateBuildDraft(draftRequest(
+    "/api/build-drafts",
+    "POST",
+    { kind: "build_brief", email: "draft@example.test", payload: draftPayload },
+    "",
+    { "cf-connecting-ip": "192.0.2.10" },
+  ), env);
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  assert.equal(createdBody.emailSent, true);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].text, /\/tattoos\/build\/#resume=/);
+  assert.doesNotMatch(sent[0].text, /A protected route/);
+  const stored = database.prepare("SELECT * FROM tattoo_build_drafts WHERE id=?").get(createdBody.draft.id);
+  assert.notEqual(stored.token_hash, createdBody.resumeToken);
+  assert.equal(stored.token_hash.length, 64);
+
+  const fetched = await handleGetBuildDraft(draftRequest(
+    "/api/build-drafts/current",
+    "GET",
+    undefined,
+    createdBody.resumeToken,
+  ), env);
+  assert.equal(fetched.status, 200);
+  const fetchedDraft = (await fetched.json()).draft;
+  assert.equal(fetchedDraft.payload.symbolSelections[0].note, draftPayload.symbolSelections[0].note);
+  assert.equal(fetchedDraft.payload.compositionSnapshot.reading, draftPayload.compositionSnapshot.reading);
+
+  const updated = await handleUpdateBuildDraft(draftRequest(
+    "/api/build-drafts/current",
+    "PATCH",
+    {
+      revision: 1,
+      payload: {
+        ...draftPayload,
+        designIntent: "A protected route that returns.",
+      },
+    },
+    createdBody.resumeToken,
+  ), env);
+  assert.equal(updated.status, 200);
+  assert.equal((await updated.json()).draft.revision, 2);
+
+  const conflict = await handleUpdateBuildDraft(draftRequest(
+    "/api/build-drafts/current",
+    "PATCH",
+    { revision: 1, payload: draftPayload },
+    createdBody.resumeToken,
+  ), env);
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, "DRAFT_CONFLICT");
+
+  const resent = await handleEmailBuildDraft(draftRequest(
+    "/api/build-drafts/current/email",
+    "POST",
+    {},
+    createdBody.resumeToken,
+    { "cf-connecting-ip": "192.0.2.10" },
+  ), env);
+  assert.equal(resent.status, 200);
+  assert.equal(sent.length, 2);
+
+  const submissionPayload = {
+    type: "build_brief",
+    firstName: "Draft",
+    lastName: "Client",
+    email: "draft@example.test",
+    age_confirmed: "yes",
+    placement: "Upper arm",
+    design_intent: "A protected route that returns.",
+    review_consent: "yes",
+    symbol_ids: ["maze-path"],
+    symbol_selections: [{ id: "maze-path", order: 0, note: draftPayload.symbolSelections[0].note }],
+    composition_snapshot: draftPayload.compositionSnapshot,
+  };
+  const submitted = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    submissionPayload,
+    { "x-build-draft-token": createdBody.resumeToken },
+  ), env);
+  assert.equal(submitted.status, 200);
+  const submissionId = (await submitted.json()).submissionId;
+  const savedPayload = JSON.parse(database.prepare(
+    "SELECT payload_json FROM submissions WHERE id=?"
+  ).get(submissionId).payload_json);
+  assert.equal(savedPayload.symbol_snapshot[0].client_note, draftPayload.symbolSelections[0].note);
+  assert.equal(savedPayload.client_composition_snapshot.reading, draftPayload.compositionSnapshot.reading);
+  const finalized = database.prepare(
+    "SELECT status,submission_id,payload_json FROM tattoo_build_drafts WHERE id=?"
+  ).get(createdBody.draft.id);
+  assert.equal(finalized.status, "submitted");
+  assert.equal(finalized.submission_id, submissionId);
+  assert.equal(finalized.payload_json, "{}");
+});
+
+test("a failed resume email keeps the draft available and can be retried", async () => {
+  const database = migratedDatabase();
+  let attempts = 0;
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send() {
+        attempts += 1;
+        if (attempts === 1) throw new Error("Temporary delivery failure");
+        return { messageId: "draft-retry-sent" };
+      },
+    },
+  };
+  const payload = {
+    version: 1,
+    clientDraftId: "email-retry-build",
+    symbolSelections: [{
+      id: "maze-path",
+      order: 0,
+      name: "The Path",
+      category: "MAZE",
+      note: "Keep this description while delivery is retried.",
+    }],
+    contact: { email: "retry-draft@example.test" },
+    designIntent: "A route that can be resumed.",
+  };
+  const created = await handleCreateBuildDraft(draftRequest(
+    "/api/build-drafts",
+    "POST",
+    { kind: "build_brief", email: "retry-draft@example.test", payload },
+    "",
+    { "cf-connecting-ip": "192.0.2.30" },
+  ), env);
+  const createdBody = await created.json();
+  assert.equal(created.status, 201);
+  assert.equal(createdBody.emailSent, false);
+  assert.match(createdBody.deliveryError, /Temporary delivery failure/);
+  assert.ok(createdBody.resumeToken);
+
+  const stillAvailable = await handleGetBuildDraft(draftRequest(
+    "/api/build-drafts/current",
+    "GET",
+    undefined,
+    createdBody.resumeToken,
+  ), env);
+  assert.equal(stillAvailable.status, 200);
+  assert.equal((await stillAvailable.json()).draft.payload.designIntent, payload.designIntent);
+
+  const retried = await handleEmailBuildDraft(draftRequest(
+    "/api/build-drafts/current/email",
+    "POST",
+    {},
+    createdBody.resumeToken,
+    { "cf-connecting-ip": "192.0.2.30" },
+  ), env);
+  assert.equal(retried.status, 200);
+  assert.equal((await retried.json()).emailSent, true);
+  assert.equal(attempts, 2);
+  assert.deepEqual(
+    database.prepare(
+      "SELECT delivered FROM tattoo_build_draft_email_attempts WHERE draft_id=? ORDER BY created_at,id"
+    ).all(createdBody.draft.id).map((row) => row.delivered).sort(),
+    [0, 1],
+  );
+});
+
+test("Maze drafts enforce size, revocation, expiration cleanup, and email rate limits", async () => {
+  const database = migratedDatabase();
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: { async send() { return { messageId: crypto.randomUUID() }; } },
+  };
+  const mazePayload = {
+    version: 1,
+    clientDraftId: "maze-client-draft",
+    mazeWalls: [{ instanceId: "wall-1", kind: "straight", points: [0, 0, 100, 0], stroke: "#151413", strokeWidth: 20, zIndex: 1 }],
+    mazeShapes: [],
+    contact: { email: "maze-draft@example.test" },
+    placement: "",
+    scale: "",
+    mazeExplanation: "",
+  };
+  const created = await handleCreateBuildDraft(draftRequest(
+    "/api/build-drafts",
+    "POST",
+    { kind: "maze_design", email: "maze-draft@example.test", payload: mazePayload },
+    "",
+    { "cf-connecting-ip": "192.0.2.20" },
+  ), env);
+  const createdBody = await created.json();
+  assert.equal(created.status, 201);
+  assert.match(database.prepare(
+    "SELECT payload_json FROM tattoo_build_drafts WHERE id=?"
+  ).get(createdBody.draft.id).payload_json, /wall-1/);
+
+  const revoked = await handleDeleteBuildDraft(draftRequest(
+    "/api/build-drafts/current",
+    "DELETE",
+    undefined,
+    createdBody.resumeToken,
+  ), env);
+  assert.equal(revoked.status, 200);
+  assert.equal(database.prepare(
+    "SELECT status,payload_json FROM tattoo_build_drafts WHERE id=?"
+  ).get(createdBody.draft.id).status, "revoked");
+
+  const oversized = await handleCreateBuildDraft(draftRequest(
+    "/api/build-drafts",
+    "POST",
+    {
+      kind: "maze_design",
+      email: "oversized@example.test",
+      payload: { ...mazePayload, mazeWalls: [{ ...mazePayload.mazeWalls[0], extra: "x".repeat(2 * 1024 * 1024) }] },
+    },
+    "",
+    { "cf-connecting-ip": "192.0.2.21" },
+  ), env);
+  assert.equal(oversized.status, 413);
+
+  for (let index = 0; index < 3; index += 1) {
+    const response = await handleCreateBuildDraft(draftRequest(
+      "/api/build-drafts",
+      "POST",
+      { kind: "maze_design", email: "limited@example.test", payload: { ...mazePayload, clientDraftId: `limited-${index}` } },
+      "",
+      { "cf-connecting-ip": "192.0.2.22" },
+    ), env);
+    assert.equal(response.status, 201);
+  }
+  const limited = await handleCreateBuildDraft(draftRequest(
+    "/api/build-drafts",
+    "POST",
+    { kind: "maze_design", email: "limited@example.test", payload: mazePayload },
+    "",
+    { "cf-connecting-ip": "192.0.2.22" },
+  ), env);
+  assert.equal(limited.status, 429);
+
+  database.prepare(
+    "UPDATE tattoo_build_drafts SET status='active',expires_at=? WHERE id=?"
+  ).run(new Date(Date.now() - 1000).toISOString(), createdBody.draft.id);
+  const reaped = await reapExpiredTattooBuildDrafts(env);
+  assert.ok(reaped.expired >= 1);
+  assert.equal(database.prepare(
+    "SELECT status,payload_json FROM tattoo_build_drafts WHERE id=?"
+  ).get(createdBody.draft.id).payload_json, "{}");
+});
+
+test("Maze submissions require generated artifacts and snapshot their wall and shape counts", async () => {
+  const database = migratedDatabase();
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSION_FILES: new MemoryBucket(),
+  };
+  const payload = {
+    type: "maze_design",
+    name: "Maze Client",
+    email: "maze@example.test",
+    age_confirmed: "yes",
+    maze_explanation: "A route through a protected threshold.",
+    review_consent: "yes",
+  };
+
+  const missingArtifacts = await handleCreateSubmission(jsonRequest("/api/submissions", payload), env);
+  assert.equal(missingArtifacts.status, 400);
+
+  const created = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    payload,
+    [
+      {
+        fieldName: "maze_image",
+        fileName: "maze.png",
+        contentType: "image/png",
+        body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+      },
+      {
+        fieldName: "maze_json_file",
+        fileName: "maze.json",
+        contentType: "application/json",
+        body: JSON.stringify({
+          mazeWalls: [{ id: "wall-1" }],
+          mazeShapes: [{ id: "shape-1" }],
+        }),
+      },
+    ],
+  ), env);
+  assert.equal(created.status, 200);
+  const submissionId = (await created.json()).submissionId;
+  const saved = JSON.parse(
+    database.prepare("SELECT payload_json FROM submissions WHERE id = ?").get(submissionId).payload_json,
+  );
+  assert.deepEqual(saved.maze_artifact_snapshot, { wallCount: 1, shapeCount: 1 });
+});
+
+test("Build review UI keeps managed themes, load recovery, readable snapshots, and responsive Maze sizing", () => {
+  const builder = readFileSync(join(ROOT, "js", "build-builder.js"), "utf8");
+  const buildPage = readFileSync(join(ROOT, "tattoos", "build", "index.html"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const constructManager = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
+  const composition = readFileSync(join(ROOT, "js", "build-composition.js"), "utf8");
+  const mazeStyles = readFileSync(join(ROOT, "apps", "maze", "src", "styles.css"), "utf8");
+  const mazeBuild = readFileSync(join(ROOT, "apps", "maze", "vite.config.ts"), "utf8");
+
+  assert.match(builder, /const otherThemes = \[\.\.\.availableThemes\]/);
+  assert.match(builder, /setBuilderState\("The Legend could not be loaded\./);
+  assert.match(builder, /legendRetry\?\.addEventListener\("click", init\)/);
+  assert.match(buildPage, /id="builderState"/);
+  assert.match(buildPage, /id="legendRetry"/);
+  assert.match(buildPage, /\.symbol-info-button\{/);
+  assert.match(buildPage, /id="legendDrawer"/);
+  assert.match(buildPage, /id="compositionSnapshotJson"/);
+  assert.match(buildPage, /type="module" src="\/js\/build-builder\.js"/);
+  assert.doesNotMatch(buildPage, /class="grain"/);
+  assert.match(builder, /openDrawer\(sym\.id, info\)/);
+  assert.match(builder, /card\.addEventListener\("click", \(\) => toggleSymbol\(sym, card\)\)/);
+  assert.match(builder, /drawerNoteInput\.disabled = !isSelected/);
+  assert.match(builder, /event\.key === "Escape"/);
+  assert.match(composition, /MAX_APPLIED_RULES = 3/);
+  assert.match(constructManager, /Legend Composition Rules/);
+  assert.match(constructManager, /Build Guidance/);
+  assert.match(studio, /class="symbol-snapshot-item"/);
+  assert.match(studio, /Exact reading shown to client/);
+  assert.match(studio, /typeof item === "object" \? JSON\.stringify\(item\)/);
+  assert.match(mazeStyles, /grid-template-columns: minmax\(240px, 280px\) minmax\(500px, 1fr\) minmax\(280px, 330px\)/);
+  assert.match(mazeStyles, /background: var\(--color-bg\)/);
+  assert.match(mazeBuild, /codeSplitting:/);
 });
 
 test("Custom submissions reject underage clients and dates inside the managed lead time", async () => {
@@ -948,6 +1523,7 @@ test("large cover-ups require at least three angle photographs without automatic
     database.prepare("SELECT files_json FROM submissions WHERE id = ?").get(submissionId).files_json,
   );
   assert.equal(storedFiles.filter((file) => file.fieldName === "cover_up_photos").length, 3);
+  assert.equal(storedFiles.some((file) => file.fieldName === "placement_photo"), false);
 
   const additionalPhotos = await handleCreateSubmission(multipartRequest(
     "/api/submissions",
@@ -1690,6 +2266,35 @@ test("tattoo admin notification subjects use canonical art.pill names without ch
     });
     assert.equal(sent.at(-1).subject, `art.pill Tattoo House ${name}`);
   }
+
+  await notifyAdminSubmissionReceived(env, {
+    id: "build-detail-notification",
+    type: "build_brief",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: {
+      selected_elements: "The Path",
+      symbol_ids: ["maze-path"],
+      placement: "Upper arm",
+      scale: "Palm-size",
+      design_intent: "A protected route.",
+    },
+  });
+  assert.match(sent.at(-1).text, /Symbol Ids: maze-path/);
+  assert.match(sent.at(-1).text, /Scale: Palm-size/);
+  assert.match(sent.at(-1).text, /Design Intent: A protected route\./);
+
+  await notifyAdminSubmissionReceived(env, {
+    id: "maze-detail-notification",
+    type: "maze_design",
+    contact: { name: "Collector", email: "collector@example.test" },
+    payload: {
+      maze_explanation: "A returning path.",
+      scale: "Forearm-size",
+      maze_artifact_snapshot: { wallCount: 4, shapeCount: 2 },
+    },
+  });
+  assert.match(sent.at(-1).text, /Scale: Forearm-size/);
+  assert.match(sent.at(-1).text, /Maze Artifact Snapshot: \{"wallCount":4,"shapeCount":2\}/);
 
   const managedSheetPayload = {
     sheet_design_selections: [
