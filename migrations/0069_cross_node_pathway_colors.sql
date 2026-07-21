@@ -11,6 +11,7 @@ SET color = CASE id
   WHEN 'path-merch-03' THEN '#0039BD'
   WHEN 'path-merch-04' THEN '#005D25'
   WHEN 'path-events-05' THEN '#6D3D15'
+  WHEN 'path-events-08' THEN '#0039BD'
   WHEN 'path-archive-01' THEN '#6E0404'
   WHEN 'path-archive-02' THEN '#0039BD'
   WHEN 'path-archive-03' THEN '#F08000'
@@ -30,6 +31,7 @@ WHERE id IN (
   'path-merch-03',
   'path-merch-04',
   'path-events-05',
+  'path-events-08',
   'path-archive-01',
   'path-archive-02',
   'path-archive-03',
