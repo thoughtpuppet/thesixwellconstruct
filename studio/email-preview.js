@@ -40,6 +40,7 @@
     const tokenHelp = make("div", "email-preview-token-help");
     const historyPanel = make("div", "email-preview-history");
     historyPanel.hidden = true;
+    const actionHelp = make("p", "email-preview-action-help");
     const iframe = document.createElement("iframe");
     iframe.title = "Designed email preview";
     iframe.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
@@ -69,14 +70,35 @@
     const button = (label, action, className = "") => {
       const node = make("button", className, label); node.type = "button"; node.dataset.action = action; return node;
     };
-    actions.append(
-      button("Save Draft", "save", "is-primary"), button("Discard Changes", "discard"),
-      button("Publish", "publish"), button("Send Test", "test"), button("View History", "history"),
+    const saveButton = button("Save Draft", "save", "is-primary");
+    const discardButton = button("Discard Changes", "discard");
+    const publishButton = button("Publish", "publish");
+    const testButton = button("Send Test", "test");
+    const historyButton = button("View History", "history");
+    actions.append(saveButton, discardButton, publishButton, testButton, historyButton);
+
+    const desktopButton = button("Desktop", "desktop", "is-active");
+    const mobileButton = button("Mobile", "mobile");
+    const htmlButton = button("Rendered HTML", "html", "is-active");
+    const textButton = button("Plain Text", "text");
+    const publishedButton = button("Published version", "published");
+    const workingButton = button("Working copy", "working", "is-active");
+    const displayGroup = (label, buttons) => {
+      const group = make("div", "email-preview-display-group");
+      const controls = make("div", "email-preview-display-buttons");
+      controls.append(...buttons);
+      group.append(make("span", "email-preview-display-label", label), controls);
+      return group;
+    };
+    const displayControls = make("div", "email-preview-display");
+    displayControls.append(
+      displayGroup("Viewport", [desktopButton, mobileButton]),
+      displayGroup("Format", [htmlButton, textButton]),
+      displayGroup("Preview source", [publishedButton, workingButton]),
     );
-    const displayControls = make("div", "email-preview-toolbar email-preview-display");
-    displayControls.append(button("Desktop", "desktop", "is-active"), button("Mobile", "mobile"), button("Rendered HTML", "html", "is-active"), button("Plain Text", "text"), button("Published", "published"), button("Draft", "draft", "is-active"));
-    editor.append(tokenHelp, form, actions, historyPanel);
-    preview.append(displayControls, meta, make("div", "email-preview-stage"));
+    const sourceHelp = make("p", "email-preview-source-help", "Working copy shows the editor, including unsaved changes. Published version shows the copy currently used by live emails.");
+    editor.append(tokenHelp, form, actions, actionHelp, historyPanel);
+    preview.append(displayControls, sourceHelp, meta, make("div", "email-preview-stage"));
     preview.lastElementChild.append(frame);
     editorLayout.append(editor, preview);
     root.replaceChildren(status, filters, editorLayout);
@@ -85,7 +107,7 @@
     async function api(path, options = {}) {
       const response = await fetch(path, { cache: "no-store", ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) { const error = new Error(payload.error || `Request failed (${response.status}).`); error.status = response.status; error.payload = payload; throw error; }
+      if (!response.ok) { const error = new Error(payload.error || payload.delivery?.error || `Request failed (${response.status}).`); error.status = response.status; error.payload = payload; throw error; }
       return payload;
     }
     const setStatus = (message, error = false) => { status.textContent = message; status.classList.toggle("is-error", error); };
@@ -98,7 +120,7 @@
       [...new Set(catalog.map((entry) => entry[key]).filter(Boolean))].sort().forEach((value) => option(select, value, title(value)));
       if ([...select.options].some((entry) => entry.value === current)) select.value = current;
     }
-    function rebuildTemplates(preferred = "") {
+    async function rebuildTemplates(preferred = "") {
       const matches = catalog.filter((entry) => (!brandSelect.value || entry.brand === brandSelect.value)
         && (!audienceSelect.value || entry.audience === audienceSelect.value)
         && (!stageSelect.value || entry.stage === stageSelect.value)
@@ -106,15 +128,34 @@
       templateSelect.replaceChildren();
       matches.forEach((entry) => option(templateSelect, id(entry), `${entry.label} · ${entry.variant}`));
       if (matches.some((entry) => id(entry) === preferred)) templateSelect.value = preferred;
-      loadTemplate();
+      await loadTemplate();
     }
     function dirty() { return content && savedContent && !same(content, savedContent); }
+    function setPreviewSource(source) {
+      publishedButton.classList.toggle("is-active", source === "published");
+      workingButton.classList.toggle("is-active", source === "working");
+    }
     function updateActions() {
       const isDirty = dirty();
-      actions.querySelector('[data-action="save"]').disabled = !isDirty;
-      actions.querySelector('[data-action="discard"]').disabled = !isDirty;
-      actions.querySelector('[data-action="publish"]').disabled = isDirty || !revision;
-      actions.querySelector('[data-action="test"]').disabled = isDirty || !revision;
+      const hasDraft = Boolean(revision);
+      saveButton.disabled = !isDirty && hasDraft;
+      discardButton.disabled = !isDirty;
+      publishButton.disabled = isDirty || !hasDraft;
+      testButton.disabled = isDirty || !hasDraft;
+      publishedButton.disabled = !definition?.published;
+
+      saveButton.title = saveButton.disabled ? "This draft is already saved." : hasDraft ? "Save the changes in the working copy." : "Create a private draft from the working copy.";
+      discardButton.title = discardButton.disabled ? "There are no unsaved changes to discard." : "Return to the last saved version.";
+      publishButton.title = isDirty ? "Save the draft before publishing." : hasDraft ? "Make this draft the live email version." : "Save a draft before publishing.";
+      testButton.title = isDirty ? "Save the draft before sending a test." : hasDraft ? "Send this draft to the configured admin inbox." : "Save a draft before sending a test.";
+      publishedButton.title = definition?.published ? "Preview the version currently used by live emails." : "No published version exists yet.";
+      workingButton.title = "Preview the editor's current working copy.";
+
+      actionHelp.textContent = isDirty
+        ? "The working copy has unsaved changes. Save the draft before sending a test or publishing."
+        : hasDraft
+          ? `Draft revision ${revision} is saved. Send Test delivers only to the configured admin inbox; Publish makes this revision the live email copy.`
+          : "Save Draft creates a private revision without changing live emails. Once saved, Send Test and Publish become available.";
     }
     function renderMeta(payload) {
       meta.innerHTML = `<div class="email-preview-meta-row"><strong>Subject</strong><span></span></div><div class="email-preview-meta-row"><strong>Preheader</strong><span></span></div>`;
@@ -129,7 +170,15 @@
       try {
         const payload = await api("/api/admin/notifications/preview", { method: "POST", body: JSON.stringify({ templateKey: selected.templateKey, variant: selected.variant, content }) });
         renderMeta(payload);
-        setStatus(`${selected.label} · ${dirty() ? "unsaved preview" : revision ? `draft revision ${revision}` : "code default"}`);
+        setPreviewSource("working");
+        const workingState = dirty()
+          ? "unsaved changes"
+          : definition?.draft
+            ? `saved draft revision ${revision}`
+            : definition?.published
+              ? `published revision ${definition.published.revision} loaded as a working copy`
+              : "code default loaded as a working copy";
+        setStatus(`${selected.label} · ${workingState}`);
       } catch (error) {
         setStatus(error.payload?.errors?.join(" ") || error.message, true);
       }
@@ -160,6 +209,7 @@
         revision = definition.draft?.revision || 0;
         content = clone(active?.content || definition.defaultContent);
         savedContent = clone(content);
+        setPreviewSource("working");
         buildForm(); updateActions(); await renderUnsaved();
       } catch (error) {
         if ([401, 403].includes(error.status)) setStatus("Admin authentication required. Open Studio and enter the bearer token first.", true);
@@ -170,11 +220,12 @@
       const payload = await api("/api/admin/notifications/preview");
       catalog = (payload.templates || []).filter((entry) => !allowedBrands.size || allowedBrands.has(entry.brand));
       filtersFor(brandSelect, "brand", "brands"); filtersFor(audienceSelect, "audience", "audiences"); filtersFor(stageSelect, "stage", "stages"); filtersFor(publicationSelect, "status", "statuses");
-      rebuildTemplates(preferred);
+      await rebuildTemplates(preferred);
     }
 
-    [brandSelect, audienceSelect, stageSelect, publicationSelect].forEach((select) => select.addEventListener("change", () => rebuildTemplates(templateSelect.value)));
-    templateSelect.addEventListener("change", loadTemplate);
+    [brandSelect, audienceSelect, stageSelect, publicationSelect].forEach((select) => select.addEventListener("change", () => rebuildTemplates(templateSelect.value).catch((error) => setStatus(error.message, true))));
+    templateSelect.addEventListener("change", () => loadTemplate().catch((error) => setStatus(error.message, true)));
+    form.addEventListener("submit", (event) => event.preventDefault());
     actions.addEventListener("click", async (event) => {
       const action = event.target.dataset.action; if (!action || !selected) return;
       const endpoint = `/api/admin/notifications/templates/${encodeURIComponent(selected.templateKey)}`;
@@ -214,14 +265,19 @@
       const action = event.target.dataset.action; if (!action) return;
       if (action === "desktop" || action === "mobile") { frame.classList.toggle("is-mobile", action === "mobile"); }
       if (action === "html" || action === "text") { iframe.hidden = action === "text"; plain.hidden = action === "html"; }
-      if (action === "published" || action === "draft") {
+      if (action === "working") await renderUnsaved();
+      if (action === "published") {
         const params = new URLSearchParams({ templateKey: selected.templateKey, variant: selected.variant, source: action });
-        try { renderMeta(await api(`/api/admin/notifications/preview?${params}`)); } catch (error) { setStatus(error.message, true); }
+        try {
+          const payload = await api(`/api/admin/notifications/preview?${params}`);
+          renderMeta(payload);
+          setPreviewSource("published");
+          setStatus(`${selected.label} · published revision ${payload.revision || definition.published?.revision} · live email version`);
+        } catch (error) { setStatus(error.message, true); }
       }
       [...displayControls.querySelectorAll("button")].forEach((button) => {
         if (["desktop", "mobile"].includes(action) && ["desktop", "mobile"].includes(button.dataset.action)) button.classList.toggle("is-active", button.dataset.action === action);
         if (["html", "text"].includes(action) && ["html", "text"].includes(button.dataset.action)) button.classList.toggle("is-active", button.dataset.action === action);
-        if (["published", "draft"].includes(action) && ["published", "draft"].includes(button.dataset.action)) button.classList.toggle("is-active", button.dataset.action === action);
       });
     });
     refreshCatalog().catch((error) => setStatus(error.status === 401 ? "Admin authentication required. Open Studio and enter the bearer token first." : error.message, true));
