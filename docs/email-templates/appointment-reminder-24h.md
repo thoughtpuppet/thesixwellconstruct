@@ -23,6 +23,8 @@ Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow.
 
 When: {{appointment_start}} - {{appointment_end}}
 Session: {{booking_type_label}}
+{{extended_day_fee_line}}
+{{extended_day_billing_policy_line}}
 
 Please review before arriving:
 
@@ -80,6 +82,8 @@ session.
 - `{{day_of_instructions_url}}` (tattoo and build sessions only)
 - `{{location_parking_url}}` (in-person sessions only)
 - `{{appointment_id}}`
+- `{{session_fee_amount}}` (Extended Day only)
+- `{{minimum_billable_minutes}}` (Extended Day only)
 
 ## Optional Notes For Codex
 
@@ -89,3 +93,5 @@ Day-of instructions only apply to tattoo and build sessions - omit them for
 consultations. Virtual consultations skip location/parking entirely and
 include the Zoom join link (link only, no password) directly under the
 session line.
+Extended Day reminders repeat the $200 fee due with the final balance and the
+10-hour block / eight-hour billing-minimum policy.

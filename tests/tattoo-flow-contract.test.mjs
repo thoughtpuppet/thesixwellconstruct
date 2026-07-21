@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   handleCreateSubmission,
   handleDeleteSubmission,
+  handleGetSubmission,
   handleUpdateSubmission,
 } from "../functions/api/submissions/_lib.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
@@ -24,6 +25,10 @@ import {
   handleAdminCancelAppointment,
   handleAdminCompleteAppointment,
   handleAdminCreateAppointmentMeeting,
+  handleAdminCreateTattooRenderingRequest,
+  handleAdminResendTattooRenderingRequest,
+  handleAdminCancelTattooRenderingRequest,
+  handleAdminCreateAvailability,
   handleAdminCreateBookingToken,
   handleAdminCreateDirectBookingInvite,
   handleAdminRescheduleAppointment,
@@ -32,7 +37,9 @@ import {
   handleAdminTattooSettings,
   handleAdminTattooSessionPlan,
   handleCancelAppointment,
+  handleConfirmBooking,
   handleBookingContext,
+  handleCreateBookingCheckout,
   handleCreateBookingHold,
   handleCreateReplacementCheckout,
   handlePublicConsultationContext,
@@ -45,6 +52,7 @@ import {
   handleSaveBookingSessionPlan,
   handleSquareWebhook,
   reapExpiredBookingHolds,
+  reapExpiredTattooRenderingRequests,
 } from "../functions/api/booking/_lib.js";
 import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
 import {
@@ -54,6 +62,7 @@ import {
   notifyAdminAppointmentConfirmed,
   notifyAdminAppointmentRescheduled,
   notifyAdminSubmissionReceived,
+  notifyAppointmentConfirmed,
   notifyAppointmentCancelled,
   notifySubmissionReceived,
   retryPendingAdminAppointmentNotifications,
@@ -469,6 +478,369 @@ test("Tattoo project forms expose the same required total-budget ranges", () => 
   }
 });
 
+test("Original-design tattoo paths disclose the additional-rendering drawing fee", () => {
+  const drawingFeeNotice = "One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.";
+  const applicableSources = [
+    ["Custom", join(ROOT, "tattoos", "inquire", "custom", "index.html")],
+    ["Build", join(ROOT, "tattoos", "build", "index.html")],
+    ["Maze", join(ROOT, "apps", "maze", "src", "App.tsx")],
+    ["Special Projects", join(ROOT, "tattoos", "special-projects", "apply", "index.html")],
+  ];
+  for (const [label, path] of applicableSources) {
+    assert.ok(readFileSync(path, "utf8").includes(drawingFeeNotice), `${label} drawing-fee notice`);
+  }
+
+  const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
+  assert.equal(bookingPage.split(drawingFeeNotice).length - 1, 1, "booking approved-budget explanation");
+  assert.match(bookingPage, /budgetLabel \? `<label class="session-plan-ack"><input id="budgetAck"/);
+  assert.match(bookingPage, /Artist-approved additional concept sketches are separate, non-refundable \$50 fees that are not credited toward the tattoo total and must be paid before drawing begins/);
+
+  const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");
+  assert.match(policies, /substantially different alternate concept/);
+  assert.match(policies, /Minor refinements to the chosen direction and artist-initiated redraws remain included/);
+  assert.match(policies, /fee is not credited toward the tattoo total/);
+  assert.match(policies, /requested before the appointment/);
+
+  const emailTemplates = readFileSync(join(ROOT, "functions", "api", "notifications", "_email-templates.js"), "utf8");
+  const emailLib = readFileSync(join(ROOT, "functions", "api", "notifications", "_lib.js"), "utf8");
+  assert.match(emailLib, /Your paid tattoo deposit includes one developed design direction/);
+  assert.match(emailTemplates, /tattoo_rendering_payment_requested/);
+  assert.match(emailTemplates, /tattoo_rendering_payment_confirmed/);
+
+  const excludedSources = [
+    ["Flash", join(ROOT, "tattoos", "flash", "claim", "index.html")],
+    ["Consultation", join(ROOT, "tattoos", "inquire", "consultation", "index.html")],
+    ["Build session", join(ROOT, "tattoos", "build", "in-person", "index.html")],
+  ];
+  for (const [label, path] of excludedSources) {
+    assert.ok(!readFileSync(path, "utf8").includes(drawingFeeNotice), `${label} excludes drawing-fee notice`);
+  }
+});
+
+test("rendering-request migration, Studio guards, Square line item, history, resend, and cancellation stay separate from deposits", async () => {
+  const database = migratedDatabase();
+  const adminToken = "rendering-admin";
+  const sent = [];
+  const env = squareEnv(database, {
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    SQUARE_WEBHOOK_SIGNATURE_KEY: "rendering-signature",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: crypto.randomUUID() }; } },
+  });
+  assert.ok(database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tattoo_rendering_requests'").get());
+
+  const startAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(new Date(startAt).getTime() + 3 * 60 * 60 * 1000).toISOString();
+  insertSubmissionFixture(database, {
+    id: "render-project",
+    type: "tattoo_inquiry",
+    status: "booked",
+    tattooStage: "tattoo_scheduled",
+    name: "Rendering Client",
+    email: "rendering@example.test",
+  });
+  insertAppointmentFixture(database, {
+    id: "render-appointment",
+    submissionId: "render-project",
+    bookingTypeId: "tattoo_half",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    depositCents: 10000,
+  });
+
+  const unauthorized = await handleAdminCreateTattooRenderingRequest(
+    jsonRequest("/api/admin/booking/rendering-requests", { submissionId: "render-project" }),
+    env,
+  );
+  assert.notEqual(unauthorized.status, 200);
+
+  const squareBodies = [];
+  let paymentLinkNumber = 0;
+  await withMockFetch(async (input, init = {}) => {
+    const target = String(input);
+    if (target.endsWith("/v2/online-checkout/payment-links") && init.method === "POST") {
+      squareBodies.push(JSON.parse(init.body));
+      paymentLinkNumber += 1;
+      return jsonFetchResponse({ payment_link: {
+        id: `render-link-${paymentLinkNumber}`,
+        order_id: `render-order-${paymentLinkNumber}`,
+        url: `https://square.link/u/render-${paymentLinkNumber}`,
+      } });
+    }
+    if (target.includes("/v2/orders/render-order-") && !init.method) {
+      return jsonFetchResponse({ order: { state: "OPEN" } });
+    }
+    if (target.includes("/v2/online-checkout/payment-links/render-link-") && init.method === "DELETE") {
+      return new Response(null, { status: 200 });
+    }
+    throw new Error(`Unexpected Square request: ${target}`);
+  }, async () => {
+    const created = await handleAdminCreateTattooRenderingRequest(adminJsonRequest(
+      "/api/admin/booking/rendering-requests",
+      { submissionId: "render-project", appointmentId: "render-appointment" },
+      adminToken,
+    ), env);
+    assert.equal(created.status, 200);
+    const first = (await created.json()).renderingRequest;
+    assert.equal(first.status, "pending");
+    assert.equal(first.amountCents, 5000);
+    assert.equal(first.expiresAt, startAt);
+    assert.equal(squareBodies[0].order.line_items.length, 1);
+    assert.deepEqual(squareBodies[0].order.line_items[0], {
+      name: "Additional Tattoo Concept Sketch",
+      quantity: "1",
+      base_price_money: { amount: 5000, currency: "USD" },
+    });
+    assert.equal(database.prepare("SELECT count(*) count FROM deposit_payments WHERE appointment_id='render-appointment'").get().count, 0);
+    assert.match(sent.at(-1).text, /non-refundable/i);
+    assert.match(sent.at(-1).text, /not credited toward the tattoo total/i);
+    assert.match(sent.at(-1).text, /appointment and included design direction remain unchanged/i);
+
+    const duplicate = await handleAdminCreateTattooRenderingRequest(adminJsonRequest(
+      "/api/admin/booking/rendering-requests",
+      { submissionId: "render-project" },
+      adminToken,
+    ), env);
+    assert.equal(duplicate.status, 409);
+    assert.equal((await duplicate.json()).code, "RENDERING_REQUEST_PENDING");
+
+    const detail = await handleGetSubmission(
+      new Request("https://example.test/api/admin/submissions/render-project", {
+        headers: { authorization: `Bearer ${adminToken}` },
+      }),
+      env,
+      "render-project",
+    );
+    assert.equal(detail.status, 200);
+    assert.equal((await detail.json()).submission.renderingRequests.length, 1);
+
+    const resent = await handleAdminResendTattooRenderingRequest(adminJsonRequest(
+      `/api/admin/booking/rendering-requests/${first.id}/resend`,
+      {},
+      adminToken,
+    ), env, first.id);
+    assert.equal(resent.status, 200);
+    assert.equal(sent.length, 2);
+
+    const cancelled = await handleAdminCancelTattooRenderingRequest(adminJsonRequest(
+      `/api/admin/booking/rendering-requests/${first.id}/cancel`,
+      {},
+      adminToken,
+    ), env, first.id);
+    assert.equal(cancelled.status, 200);
+    assert.equal((await cancelled.json()).renderingRequest.status, "cancelled");
+    assert.equal(database.prepare("SELECT status FROM appointments WHERE id='render-appointment'").get().status, "confirmed");
+
+    const sequential = await handleAdminCreateTattooRenderingRequest(adminJsonRequest(
+      "/api/admin/booking/rendering-requests",
+      { submissionId: "render-project" },
+      adminToken,
+    ), env);
+    assert.equal(sequential.status, 200);
+    assert.equal((await sequential.json()).renderingRequest.requestNumber, 2);
+  });
+
+  insertSubmissionFixture(database, { id: "render-flash", type: "flash_claim", status: "booked", tattooStage: "tattoo_scheduled" });
+  insertAppointmentFixture(database, {
+    id: "render-flash-appointment",
+    submissionId: "render-flash",
+    bookingTypeId: "tattoo_quarter",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+  });
+  const flashRejected = await handleAdminCreateTattooRenderingRequest(adminJsonRequest(
+    "/api/admin/booking/rendering-requests",
+    { submissionId: "render-flash" },
+    adminToken,
+  ), env);
+  assert.equal(flashRejected.status, 409);
+  assert.equal((await flashRejected.json()).code, "RENDERING_PROJECT_INELIGIBLE");
+});
+
+test("rendering webhooks are idempotent and late payments require attention without changing the appointment or deposit", async () => {
+  const database = migratedDatabase();
+  const adminToken = "rendering-webhook-admin";
+  const signatureKey = "rendering-webhook-secret";
+  const notificationUrl = "https://example.test/api/square/webhook";
+  const sent = [];
+  const env = squareEnv(database, {
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    SQUARE_WEBHOOK_SIGNATURE_KEY: signatureKey,
+    SQUARE_WEBHOOK_NOTIFICATION_URL: notificationUrl,
+    EMAIL: { async send(message) { sent.push(message); return { messageId: crypto.randomUUID() }; } },
+  });
+  const startAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(new Date(startAt).getTime() + 90 * 60 * 1000).toISOString();
+  insertSubmissionFixture(database, { id: "webhook-render-project", type: "maze_design", status: "booked", tattooStage: "tattoo_scheduled" });
+  insertAppointmentFixture(database, {
+    id: "webhook-render-appointment",
+    submissionId: "webhook-render-project",
+    bookingTypeId: "tattoo_quarter",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    depositCents: 5000,
+  });
+  insertPaymentFixture(database, {
+    id: "original-deposit",
+    appointmentId: "webhook-render-appointment",
+    checkoutId: "original-deposit-link",
+    orderId: "original-deposit-order",
+    status: "paid",
+    amountCents: 5000,
+  });
+
+  let renderingId = "";
+  await withMockFetch(async (input, init = {}) => {
+    const target = String(input);
+    if (target.endsWith("/v2/online-checkout/payment-links") && init.method === "POST") {
+      return jsonFetchResponse({ payment_link: { id: "webhook-render-link", order_id: "webhook-render-order", url: "https://square.link/u/webhook-render" } });
+    }
+    throw new Error(`Unexpected Square request: ${target}`);
+  }, async () => {
+    const response = await handleAdminCreateTattooRenderingRequest(adminJsonRequest(
+      "/api/admin/booking/rendering-requests",
+      { submissionId: "webhook-render-project" },
+      adminToken,
+    ), env);
+    assert.equal(response.status, 200);
+    renderingId = (await response.json()).renderingRequest.id;
+  });
+
+  const rawBody = JSON.stringify({
+    type: "payment.updated",
+    data: { object: { payment: { id: "render-payment", order_id: "webhook-render-order", status: "COMPLETED" } } },
+  });
+  const signature = await squareWebhookSignatureForTest(rawBody, signatureKey, notificationUrl);
+  const makeWebhook = () => new Request(notificationUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-square-hmacsha256-signature": signature },
+    body: rawBody,
+  });
+  await withMockFetch(
+    async () => jsonFetchResponse({ order: { id: "webhook-render-order", state: "COMPLETED", net_amount_due_money: { amount: 0, currency: "USD" } } }),
+    async () => {
+      assert.equal((await handleSquareWebhook(makeWebhook(), env)).status, 200);
+      assert.equal((await handleSquareWebhook(makeWebhook(), env)).status, 200);
+    },
+  );
+  assert.equal(database.prepare("SELECT status FROM tattoo_rendering_requests WHERE id=?").get(renderingId).status, "paid");
+  assert.equal(database.prepare("SELECT count(*) count FROM notification_deliveries WHERE template_key='tattoo_rendering_payment_confirmed' AND related_id=?").get(renderingId).count, 1);
+  assert.equal(database.prepare("SELECT status FROM appointments WHERE id='webhook-render-appointment'").get().status, "confirmed");
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE id='original-deposit'").get().status, "paid");
+
+  const now = new Date().toISOString();
+  database.prepare(
+    `INSERT INTO tattoo_rendering_requests (
+      id, submission_id, appointment_id, request_number, amount_cents, currency, status,
+      square_order_id, square_payment_link_id, square_checkout_url, expires_at, raw_json, created_at, updated_at
+    ) VALUES ('late-render','webhook-render-project','webhook-render-appointment',2,5000,'USD','pending',
+              'late-render-order','late-render-link','https://square.link/u/late',?,'{}',?,?)`,
+  ).run(new Date(Date.now() - 1000).toISOString(), now, now);
+  await withMockFetch(async (input, init = {}) => {
+    const target = String(input);
+    if (target.includes("/v2/orders/late-render-order")) return jsonFetchResponse({ order: { state: "OPEN" } });
+    if (target.includes("/v2/online-checkout/payment-links/late-render-link") && init.method === "DELETE") return new Response(null, { status: 200 });
+    throw new Error(`Unexpected Square request: ${target}`);
+  }, async () => {
+    const summary = await reapExpiredTattooRenderingRequests(env);
+    assert.equal(summary.expired, 1);
+  });
+  assert.equal(database.prepare("SELECT status FROM tattoo_rendering_requests WHERE id='late-render'").get().status, "expired");
+
+  const lateBody = JSON.stringify({
+    type: "payment.updated",
+    data: { object: { payment: { id: "late-payment", order_id: "late-render-order", status: "COMPLETED" } } },
+  });
+  const lateSignature = await squareWebhookSignatureForTest(lateBody, signatureKey, notificationUrl);
+  const lateRequest = new Request(notificationUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-square-hmacsha256-signature": lateSignature },
+    body: lateBody,
+  });
+  await withMockFetch(
+    async () => jsonFetchResponse({ order: { state: "COMPLETED", net_amount_due_money: { amount: 0, currency: "USD" } } }),
+    async () => assert.equal((await handleSquareWebhook(lateRequest, env)).status, 200),
+  );
+  assert.equal(database.prepare("SELECT status FROM tattoo_rendering_requests WHERE id='late-render'").get().status, "payment_attention");
+  assert.equal(database.prepare("SELECT status FROM appointments WHERE id='webhook-render-appointment'").get().status, "confirmed");
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE id='original-deposit'").get().status, "paid");
+
+  const cancelledAppointment = await handleAdminCancelAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments/webhook-render-appointment/cancel",
+    { reason: "Paid rendering retention contract" },
+    adminToken,
+  ), env, "webhook-render-appointment");
+  assert.equal(cancelledAppointment.status, 200);
+  assert.equal(database.prepare("SELECT status FROM tattoo_rendering_requests WHERE id=?").get(renderingId).status, "paid");
+});
+
+test("rescheduling moves rendering expiry and appointment cancellation invalidates only unpaid rendering links", async () => {
+  const database = migratedDatabase();
+  const adminToken = "rendering-lifecycle-admin";
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const now = new Date().toISOString();
+  const originalStart = new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString();
+  const originalEnd = new Date(Date.now() + 121.5 * 60 * 60 * 1000).toISOString();
+  const targetStart = new Date(Date.now() + 144 * 60 * 60 * 1000).toISOString();
+  const targetEnd = new Date(Date.now() + 145.5 * 60 * 60 * 1000).toISOString();
+  insertSubmissionFixture(database, {
+    id: "render-lifecycle-project",
+    type: "special_project",
+    status: "booked",
+    tattooStage: "tattoo_scheduled",
+  });
+  insertAvailabilityWindow(database, {
+    id: "render-lifecycle-target",
+    bookingTypeId: "tattoo_quarter",
+    startAt: targetStart,
+    endAt: targetEnd,
+  });
+  insertAppointmentFixture(database, {
+    id: "render-lifecycle-appointment",
+    submissionId: "render-lifecycle-project",
+    bookingTypeId: "tattoo_quarter",
+    status: "confirmed",
+    purpose: "tattoo",
+    startAt: originalStart,
+    endAt: originalEnd,
+  });
+  database.prepare(
+    `INSERT INTO tattoo_rendering_requests (
+      id, submission_id, appointment_id, request_number, amount_cents, currency, status,
+      square_order_id, square_payment_link_id, square_checkout_url, expires_at, raw_json, created_at, updated_at
+    ) VALUES ('render-lifecycle-request','render-lifecycle-project','render-lifecycle-appointment',1,5000,'USD','pending',
+              'render-lifecycle-order','render-lifecycle-link','https://square.link/u/render-lifecycle',?,'{}',?,?)`,
+  ).run(originalStart, now, now);
+
+  const moved = await handleAdminRescheduleAppointment(adminJsonRequest(
+    "/api/admin/booking/appointments/render-lifecycle-appointment/reschedule",
+    { availabilityWindowId: "render-lifecycle-target", note: "Move rendering deadline with appointment" },
+    adminToken,
+  ), env, "render-lifecycle-appointment");
+  const movedPayload = await moved.json();
+  assert.equal(moved.status, 200, JSON.stringify(movedPayload));
+  assert.equal(database.prepare("SELECT expires_at FROM tattoo_rendering_requests WHERE id='render-lifecycle-request'").get().expires_at, targetStart);
+
+  await withMockFetch(async (input, init = {}) => {
+    const target = String(input);
+    if (target.includes("/v2/online-checkout/payment-links/render-lifecycle-link") && init.method === "DELETE") {
+      return new Response(null, { status: 200 });
+    }
+    throw new Error(`Unexpected Square request: ${target}`);
+  }, async () => {
+    const cancelled = await handleAdminCancelAppointment(adminJsonRequest(
+      "/api/admin/booking/appointments/render-lifecycle-appointment/cancel",
+      { reason: "Lifecycle contract cancellation" },
+      adminToken,
+    ), env, "render-lifecycle-appointment");
+    assert.equal(cancelled.status, 200, JSON.stringify(await cancelled.clone().json()));
+  });
+  assert.equal(database.prepare("SELECT status FROM tattoo_rendering_requests WHERE id='render-lifecycle-request'").get().status, "cancelled");
+  assert.equal(database.prepare("SELECT status FROM appointments WHERE id='render-lifecycle-appointment'").get().status, "cancelled");
+});
+
 test("All tattoo project types require budget and canonical ranges remain accepted", async () => {
   const database = migratedDatabase();
   const env = { SUBMISSIONS_DB: new LocalD1(database) };
@@ -574,12 +946,13 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
   assert.equal(database.prepare("SELECT lead_time_days FROM tattoo_settings WHERE id = 'default'").get().lead_time_days, 14);
   assert.deepEqual(
     database.prepare(
-      "SELECT id, label FROM booking_types WHERE id IN ('tattoo_quarter','tattoo_half','tattoo_full') ORDER BY id"
+      "SELECT id, label, duration_minutes, deposit_cents, session_fee_cents, minimum_billable_minutes FROM booking_types WHERE id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended') ORDER BY id"
     ).all().map((row) => ({ ...row })),
     [
-      { id: "tattoo_full", label: "Full Day Session" },
-      { id: "tattoo_half", label: "Half Day Session" },
-      { id: "tattoo_quarter", label: "Quarter Day Session" },
+      { id: "tattoo_extended", label: "Extended Day Session", duration_minutes: 600, deposit_cents: 35000, session_fee_cents: 20000, minimum_billable_minutes: 480 },
+      { id: "tattoo_full", label: "Full Day Session", duration_minutes: 360, deposit_cents: 20000, session_fee_cents: 0, minimum_billable_minutes: 0 },
+      { id: "tattoo_half", label: "Half Day Session", duration_minutes: 180, deposit_cents: 10000, session_fee_cents: 0, minimum_billable_minutes: 0 },
+      { id: "tattoo_quarter", label: "Quarter Day Session", duration_minutes: 90, deposit_cents: 5000, session_fee_cents: 0, minimum_billable_minutes: 0 },
     ],
   );
 });
@@ -1287,10 +1660,10 @@ test("Build review UI keeps managed themes, load recovery, readable snapshots, a
   assert.match(studio, /typeof item === "object" \? JSON\.stringify\(item\)/);
   assert.match(receipt, /placement, scale, and budget before recommending/);
   assert.match(receipt, /placement, scale, and budget can translate/);
-  assert.match(studio, /Approved Project Budget/);
+  assert.match(studio, /Approved Tattoo-Work Budget/);
   assert.match(studio, /approvedBudgetMinCents/);
   assert.match(studio, /Client-submitted comfort range/);
-  assert.match(bookingPage, /Approved project budget/);
+  assert.match(bookingPage, /Approved tattoo-work budget/);
   assert.match(bookingPage, /id="budgetAck"/);
   assert.match(bookingPage, /budgetAcknowledged:planHasReviewedBudget/);
   assert.match(mazeStyles, /grid-template-columns: minmax\(240px, 280px\) minmax\(500px, 1fr\) minmax\(280px, 330px\)/);
@@ -1798,7 +2171,7 @@ test("explicit consultation requirements move through completion before tattoo a
   assert.equal(tattooTokenResponse.status, 200);
   const tattooToken = (await tattooTokenResponse.json()).token;
   assert.equal(tattooToken.purpose, "tattoo");
-  assert.deepEqual(tattooToken.allowedBookingTypes, ["tattoo_quarter"]);
+  assert.deepEqual(tattooToken.allowedBookingTypes, ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
 });
 
 test("reviewed project budgets gate tattoo booking and require client agreement", async () => {
@@ -1926,7 +2299,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     currency: "USD",
   });
   assert.equal(sent.length, 1);
-  assert.match(sent[0].text, /Approved project budget: \$800.+\$1,200/);
+  assert.match(sent[0].text, /Approved tattoo-work budget: \$800.+\$1,200/);
   const firstRawToken = new URL(firstToken.bookingUrl).searchParams.get("token");
 
   const firstContextResponse = await handleBookingContext(
@@ -2032,7 +2405,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
   ), env);
   assert.equal(secondTokenResponse.status, 200);
   const secondToken = (await secondTokenResponse.json()).token;
-  assert.match(sent.at(-1).text, /Approved project budget: \$1,250/);
+  assert.match(sent.at(-1).text, /Approved tattoo-work budget: \$1,250/);
   assert.doesNotMatch(sent.at(-1).text, /\$1,250.+\$1,250/);
   const secondRawToken = new URL(secondToken.bookingUrl).searchParams.get("token");
   const startAt = new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString();
@@ -2069,6 +2442,160 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     availabilityWindowId: "reviewed-budget-window",
   }), env);
   assert.equal(hold.status, 200);
+});
+
+test("Extended Day is standard, snapshot-safe, acknowledged, and charges only its deposit in Square", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    SQUARE_ACCESS_TOKEN: "square-token",
+    SQUARE_LOCATION_ID: "square-location",
+  };
+
+  const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom()), env);
+  const submissionId = (await created.json()).submissionId;
+  const approved = await handleUpdateSubmission(
+    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
+    env,
+    submissionId,
+  );
+  assert.equal(approved.status, 200);
+  const planResponse = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "client_choice",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 2,
+      estimatedTotalMinutesMin: 480,
+      estimatedTotalMinutesMax: 600,
+      artistNote: "Choose one longer appointment or split the work.",
+      approvedBudgetMinCents: 160000,
+      approvedBudgetMaxCents: 200000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(planResponse.status, 200);
+
+  const tokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    { submissionId, purpose: "tattoo", allowedBookingTypes: ["tattoo_half"], revokeExisting: true },
+    adminToken,
+  ), env);
+  assert.equal(tokenResponse.status, 200);
+  const issuedToken = (await tokenResponse.json()).token;
+  assert.deepEqual(issuedToken.allowedBookingTypes, [
+    "tattoo_quarter",
+    "tattoo_half",
+    "tattoo_full",
+    "tattoo_extended",
+  ]);
+  const rawToken = new URL(issuedToken.bookingUrl).searchParams.get("token");
+  const agreement = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: rawToken,
+    preference: "one_longer_session",
+    acknowledged: true,
+    budgetAcknowledged: true,
+  }), env);
+  assert.equal(agreement.status, 200);
+
+  const noExtendedDatesResponse = await handleBookingContext(
+    new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`),
+    env,
+  );
+  const noExtendedDatesContext = await noExtendedDatesResponse.json();
+  assert.ok(noExtendedDatesContext.bookingTypes.some((type) => type.id === "tattoo_extended"));
+  assert.equal(noExtendedDatesContext.availabilityWindows.some((windowItem) => windowItem.bookingTypeId === "tattoo_extended"), false);
+
+  const startAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  startAt.setUTCHours(14, 0, 0, 0);
+  const tooShortEnd = new Date(startAt.getTime() + 9 * 60 * 60 * 1000);
+  const rejectedWindow = await handleAdminCreateAvailability(adminJsonRequest(
+    "/api/admin/booking/availability",
+    { venture: "tattooing", bookingTypeId: "tattoo_extended", startAt: startAt.toISOString(), endAt: tooShortEnd.toISOString(), isBlackout: false },
+    adminToken,
+  ), env);
+  assert.equal(rejectedWindow.status, 400);
+  assert.match((await rejectedWindow.json()).error, /exactly 10 hours/i);
+
+  const endAt = new Date(startAt.getTime() + 10 * 60 * 60 * 1000);
+  insertAvailabilityWindow(database, {
+    id: "extended-day-window",
+    bookingTypeId: "tattoo_extended",
+    startAt: startAt.toISOString(),
+    endAt: endAt.toISOString(),
+  });
+  const contextResponse = await handleBookingContext(
+    new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`),
+    env,
+  );
+  const context = await contextResponse.json();
+  const extendedType = context.bookingTypes.find((type) => type.id === "tattoo_extended");
+  assert.deepEqual(
+    {
+      durationMinutes: extendedType.durationMinutes,
+      durationRangeLabel: extendedType.durationRangeLabel,
+      depositCents: extendedType.depositCents,
+      sessionFeeCents: extendedType.sessionFeeCents,
+      minimumBillableMinutes: extendedType.minimumBillableMinutes,
+    },
+    { durationMinutes: 600, durationRangeLabel: "8-10 hours", depositCents: 35000, sessionFeeCents: 20000, minimumBillableMinutes: 480 },
+  );
+  const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
+  assert.match(bookingPage, /No Extended Day dates are currently available\. Shorter sessions remain bookable\./);
+
+  const missingAcknowledgement = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: rawToken,
+    bookingTypeId: "tattoo_extended",
+    availabilityWindowId: "extended-day-window",
+  }), env);
+  assert.equal(missingAcknowledgement.status, 400);
+  assert.match((await missingAcknowledgement.json()).error, /acknowledge the Extended Day/i);
+
+  let squareRequestBody = null;
+  const checkoutResponse = await withMockFetch(async (_url, init) => {
+    squareRequestBody = JSON.parse(init.body);
+    return jsonFetchResponse({ payment_link: { id: "extended-link", order_id: "extended-order", url: "https://square.test/extended" } });
+  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: rawToken,
+    bookingTypeId: "tattoo_extended",
+    availabilityWindowId: "extended-day-window",
+    tipCents: 2500,
+    extendedDayAcknowledged: true,
+  }), env));
+  assert.equal(checkoutResponse.status, 200);
+  assert.deepEqual(squareRequestBody.order.line_items.map((item) => item.base_price_money.amount), [35000, 2500]);
+  assert.doesNotMatch(JSON.stringify(squareRequestBody.order.line_items), /20000|Extended Day Fee/);
+
+  const appointmentId = (await checkoutResponse.json()).appointmentId;
+  const appointmentRow = rowObject(database.prepare(
+    "SELECT session_fee_cents, minimum_billable_minutes, extended_day_acknowledged_at FROM appointments WHERE id = ?",
+  ).get(appointmentId));
+  assert.equal(appointmentRow.session_fee_cents, 20000);
+  assert.equal(appointmentRow.minimum_billable_minutes, 480);
+  assert.ok(appointmentRow.extended_day_acknowledged_at);
+
+  const confirmation = await handleConfirmBooking(
+    new Request(`https://example.test/api/booking/confirm?appointment=${encodeURIComponent(appointmentId)}`),
+    { ...env, SQUARE_ACCESS_TOKEN: "", SQUARE_LOCATION_ID: "" },
+  );
+  const confirmedPayload = await confirmation.json();
+  assert.deepEqual(confirmedPayload.pricingSummary, {
+    laborMinimumCents: 160000,
+    laborMaximumCents: 200000,
+    sessionFeeCents: 20000,
+    combinedMinimumCents: 180000,
+    combinedMaximumCents: 220000,
+    depositCreditCents: 35000,
+    remainingMinimumCents: 145000,
+    remainingMaximumCents: 185000,
+    currency: "USD",
+  });
 });
 
 test("private booking holds enforce the token and parent lifecycle inside the atomic insert", async () => {
@@ -2786,6 +3313,15 @@ test("client transactional email catalog renders exact HTML and plain-text varia
     "event_ticket_cancelled",
     "event_ticket_reminder_24h",
     "event_open_mic_slot",
+    "admin_submission_received",
+    "admin_appointment_confirmed",
+    "admin_appointment_rescheduled",
+    "admin_event_waitlist_received",
+    "admin_event_open_mic_received",
+    "admin_event_ticket_paid",
+    "admin_test",
+    "crm_relationship_followup",
+    "crm_communication_preferences",
   ]);
   assert.ok(catalog.length >= 25);
   catalog.forEach((entry) => {
@@ -2807,6 +3343,70 @@ test("client transactional email catalog renders exact HTML and plain-text varia
     assert.doesNotMatch(rendered.text, /\bundefined\b|\bnull\b/);
   });
   assert.deepEqual([...required], []);
+  const nodeVariants = new Map(catalog.map((entry) => [`${entry.templateKey}:${entry.variant}`, entry.brand]));
+  assert.equal(nodeVariants.get("submission_received:art_acquisition"), "art");
+  assert.equal(nodeVariants.get("submission_received:studio_visit"), "art");
+  assert.equal(nodeVariants.get("studio_booking_confirmed:studio_visit"), "art");
+  assert.equal(nodeVariants.get("appointment_reminder_24h:studio_visit"), "art");
+  assert.equal(nodeVariants.get("submission_received:studio_space"), "events");
+  assert.equal(nodeVariants.get("studio_booking_confirmed:studio_space"), "events");
+  assert.equal(nodeVariants.get("admin_submission_received:construct_art"), "art");
+  assert.equal(nodeVariants.get("admin_appointment_confirmed:construct_event"), "events");
+  assert.match(renderClientEmailPreview("submission_received", "art_acquisition").html, /#0039BD/);
+  assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_visit").html, /#0039BD/);
+  assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_space").html, /#005D25/);
+});
+
+test("Art inquiries and studio bookings use their routed node email families", async () => {
+  const sent = [];
+  const env = {
+    PUBLIC_SITE_URL: "https://example.test",
+    EVENTS_FROM_EMAIL: "studio@example.test",
+    EVENTS_FROM_NAME: "the six.well construct",
+    EVENTS_REPLY_TO: "studio@example.test",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: `node-email-${sent.length}` }; } },
+  };
+
+  await notifySubmissionReceived(env, {
+    id: "art-acquisition-email",
+    type: "art_acquisition",
+    contact_name: "Collector",
+    contact_email: "collector@example.test",
+    payload_json: JSON.stringify({ artwork_title: "Signal Study" }),
+  });
+  assert.match(sent.at(-1).subject, /six\.well construct.*art acquisition inquiry received/i);
+  assert.match(sent.at(-1).html, /#0039BD/);
+  assert.doesNotMatch(sent.at(-1).html, /art\.pill TATTOO HOUSE/);
+
+  await notifyAppointmentConfirmed(env, null, {
+    id: "open-studio-visit-email",
+    booking_type_id: "studio_visit",
+    booking_type_label: "Open Studio Visit",
+    purpose: "studio",
+    client_name: "Visitor",
+    client_email: "visitor@example.test",
+    start_at: "2026-08-08T16:00:00.000Z",
+    end_at: "2026-08-08T17:00:00.000Z",
+    deposit_cents: 5000,
+    currency: "USD",
+  });
+  assert.match(sent.at(-1).html, /ART STUDIO VISIT/);
+  assert.match(sent.at(-1).html, /#0039BD/);
+
+  await notifyAppointmentConfirmed(env, null, {
+    id: "studio-gathering-email",
+    booking_type_id: "studio_gathering",
+    booking_type_label: "Studio Gathering",
+    purpose: "studio",
+    client_name: "Host",
+    client_email: "host@example.test",
+    start_at: "2026-08-08T18:00:00.000Z",
+    end_at: "2026-08-08T20:00:00.000Z",
+    deposit_cents: 15000,
+    currency: "USD",
+  });
+  assert.match(sent.at(-1).html, /STUDIO RESERVATION/);
+  assert.match(sent.at(-1).html, /#005D25/);
 });
 
 test("client email renderer escapes dynamic HTML and rejects unsafe action URLs", () => {
@@ -3039,7 +3639,7 @@ test("production email sends use only the published copy revision and keep live 
   assert.equal(recorded.email_theme, "tattoo");
 });
 
-test("studio cancellations and due reminders keep the six.well identity", async () => {
+test("Open Studio Visit cancellations and reminders keep the Art node identity", async () => {
   const cancellationSends = [];
   const cancellation = await notifyAppointmentCancelled(
     {
@@ -3068,8 +3668,9 @@ test("studio cancellations and due reminders keep the six.well identity", async 
   );
   assert.equal(cancellation.ok, true);
   assert.equal(cancellationSends[0].from.name, "the six.well construct");
-  assert.match(cancellationSends[0].subject, /studio booking/i);
-  assert.match(cancellationSends[0].html, /STUDIO RESERVATION CANCELLED/);
+  assert.match(cancellationSends[0].subject, /Open Studio Visit/i);
+  assert.match(cancellationSends[0].html, /ART STUDIO VISIT CANCELLED/);
+  assert.match(cancellationSends[0].html, /#0039BD/);
   assert.doesNotMatch(cancellationSends[0].html, /art\.pill/i);
   assert.doesNotMatch(cancellationSends[0].text, /art\.pill/i);
 
@@ -3102,7 +3703,8 @@ test("studio cancellations and due reminders keep the six.well identity", async 
   });
   assert.equal(reminderResult.sent, 1);
   assert.equal(reminderSends[0].from.name, "the six.well construct");
-  assert.match(reminderSends[0].html, /STUDIO REMINDER/);
+  assert.match(reminderSends[0].html, /ART STUDIO VISIT REMINDER/);
+  assert.match(reminderSends[0].html, /#0039BD/);
   assert.doesNotMatch(reminderSends[0].html, /art\.pill/i);
   assert.doesNotMatch(reminderSends[0].text, /art\.pill/i);
 });
@@ -3738,6 +4340,7 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
     "/api/booking/reschedule",
     "/api/booking/replacement-checkout",
     "/api/admin/booking/direct-invites",
+    "/api/admin/booking/rendering-requests",
     "/api/tattoo/settings",
     "/api/admin/tattoo/settings",
   ]) assert.match(worker, new RegExp(route.replaceAll("/", "\\/")), route);
@@ -3749,6 +4352,8 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(worker, /appointmentRescheduleMatch/);
   assert.match(worker, /handleAdminCancelAppointment/);
   assert.match(worker, /appointmentCancelMatch/);
+  assert.match(worker, /renderingRequestMatch/);
+  assert.match(worker, /reapExpiredTattooRenderingRequests/);
   assert.match(worker, /tattoos\/flash\/detail\/index\.html/);
   assert.match(submissionsStudio, /Resolve Historic Lifecycle/);
   assert.match(submissionsStudio, /data-resolve-historic-lifecycle/);
@@ -3759,6 +4364,11 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /tab === "tattoo" \? "appointments"/);
   assert.match(submissionsStudio, /function renderAppointmentsManager\(\)/);
   assert.match(submissionsStudio, /data-cancel-appointment/);
+  assert.match(submissionsStudio, /Additional Renderings/);
+  assert.match(submissionsStudio, /data-create-rendering-request/);
+  assert.match(submissionsStudio, /data-copy-rendering-link/);
+  assert.match(submissionsStudio, /data-resend-rendering-request/);
+  assert.match(submissionsStudio, /data-cancel-rendering-request/);
   assert.match(submissionsStudio, /data-force-delete="1"/);
   assert.match(submissionsStudio, /if \(nextStatus !== submission\.status\) changes\.status = nextStatus/);
   assert.match(privateBookingPage, /id="clientDetailsSection"/);

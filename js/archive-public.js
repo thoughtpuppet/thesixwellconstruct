@@ -342,6 +342,7 @@
         const searched = normalizeItems(searchPayload);
         const records = searchPayload && (searched.length || Number(first(searchPayload.total, searchPayload.pagination && searchPayload.pagination.total, 0)) === 0) ? searched : itemResults;
         const total = Number(first(searchPayload && searchPayload.total, searchPayload && searchPayload.pagination && searchPayload.pagination.total, itemPayload.total, itemPayload.pagination && itemPayload.pagination.total, records.length)) || 0;
+        queryInput.dataset.analyticsResults = String(total);
         renderOriginThread(itemPayload);
         renderFacets(itemPayload);
         count.textContent = `${total} ${total === 1 ? "record" : "records"}`;
@@ -365,7 +366,10 @@
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => navigate({ q: queryInput.value.trim() }, "replace"), 500);
     });
-    facets.addEventListener("change", (event) => navigate({ [event.target.name]: event.target.value }));
+    facets.addEventListener("change", (event) => {
+      window.SixWellAnalytics?.track("filter_change", { action: event.target.name, itemId: event.target.value || "all" });
+      navigate({ [event.target.name]: event.target.value });
+    });
     app.querySelector("[data-clear-filters]").addEventListener("click", () => {
       const url = new URL(location.href);
       ["q", "origin", "from", ...facetDefinitions.map(([key]) => key), "page"].forEach((key) => url.searchParams.delete(key));
@@ -385,6 +389,8 @@
       }
     });
     results.addEventListener("click", (event) => {
+      const record = event.target.closest(".archive-card");
+      if (record) window.SixWellAnalytics?.track("item_open", { action: "archive-record", itemId: new URL(record.href, location.href).pathname });
       if (event.target.closest("[data-empty-clear]")) app.querySelector("[data-clear-filters]").click();
       if (event.target.closest("[data-archive-retry]")) load();
     });
@@ -584,6 +590,7 @@
           if (show) visible += 1;
         });
         empty.hidden = visible !== 0;
+        if (mode !== "replace") window.SixWellAnalytics?.track("filter_change", { action: "archive-timeline", itemId: era || kind || "all", count: visible });
       }
       const initial = new URL(location.href).searchParams;
       eraSelect.value = initial.get("era") || "";

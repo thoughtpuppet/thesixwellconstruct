@@ -46,6 +46,15 @@
   .client-intake-field input:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
   .client-intake-note { margin:0; color:var(--muted); font-size:12px; line-height:1.7; }
   .session-list,.window-list { display:grid; gap:10px; }
+  .pace-intro,.extended-pricing { border:5px solid var(--ring-soft); padding:18px; display:grid; gap:10px; }
+  .pace-intro h2,.extended-pricing h2,.extended-pricing h3 { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:17px; font-weight:900; line-height:1.12; text-transform:uppercase; }
+  .pace-intro p,.extended-pricing p { margin:0; color:var(--muted); font-size:13px; line-height:1.7; }
+  .pricing-lines { display:grid; gap:0; border-top:5px solid var(--ring-faint); }
+  .pricing-line { display:flex; justify-content:space-between; gap:18px; padding:11px 0; border-bottom:5px solid var(--ring-faint); color:var(--muted); font-size:13px; }
+  .pricing-line strong { color:#FFE7CA; font-family:var(--sans); text-align:right; }
+  .extended-ack { display:grid; grid-template-columns:20px 1fr; gap:10px; color:var(--muted); font-size:12px; line-height:1.65; }
+  .extended-ack input { width:18px; height:18px; margin-top:2px; accent-color:var(--signal); }
+  .availability-note { display:block; margin-top:8px; color:var(--signal); font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
   .session-plan-panel { border:5px solid rgba(110,4,4,.45); padding:20px; display:grid; gap:16px; }
   .session-plan-title { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
   .session-plan-copy { margin:0; color:rgba(255,231,202,.62); font-size:13px; line-height:1.7; }
@@ -114,6 +123,8 @@
     .booking-grid { grid-template-columns:1fr; gap:24px; }
     .client-intake-grid { grid-template-columns:1fr; }
     .client-intake-field:first-child { grid-column:auto; }
+    .pricing-lines > div { display:grid; grid-template-columns:1fr; gap:4px; }
+    .pricing-lines strong { text-align:left; }
     .panel { position:static; }
   }
 </style>
@@ -180,7 +191,12 @@
       <div id="appointmentSelection">
       <section class="section">
         <p class="section-label" id="sessionSectionLabel">Session &amp; Deposit</p>
+        <div id="paceIntro" class="pace-intro hidden">
+          <h2>Choose how you want to pace your tattoo</h2>
+          <p>Your project may be completed in one longer appointment or split across shorter sessions. Extended Day is optional. Choose the session that best fits your project, comfort, and available time. If your tattoo requires additional appointments, this booking reserves the first session and the studio will coordinate the remaining dates with you.</p>
+        </div>
         <div id="sessionList" class="session-list"></div>
+        <div id="extendedPricing" class="extended-pricing hidden"></div>
       </section>
       <section class="section">
         <p class="section-label">Available Windows</p>
@@ -202,6 +218,9 @@
       <div class="panel-row"><span class="panel-key">Session</span><span id="sessionValue">Select a session</span></div>
       <div class="panel-row"><span class="panel-key">Window</span><span id="windowValue">Select a time</span></div>
       <div class="panel-row"><span class="panel-key" id="depositKey">Deposit</span><span id="depositValue">-</span></div>
+      <div id="sessionFeeRow" class="panel-row hidden"><span class="panel-key">Extended Day Fee</span><span id="sessionFeeValue">-</span></div>
+      <div id="estimatedTotalRow" class="panel-row hidden"><span class="panel-key">Estimated Total</span><span id="estimatedTotalValue">-</span></div>
+      <div id="remainingBalanceRow" class="panel-row hidden"><span class="panel-key">Estimated Remaining</span><span id="remainingBalanceValue">-</span></div>
       <div class="tip-control">
         <span class="panel-key">Optional Tip</span>
         <div class="tip-options" role="group" aria-label="Optional tip amount">
@@ -240,7 +259,9 @@
   const sessionPlanSection = document.getElementById("sessionPlanSection");
   const sessionEstimateHeading = document.getElementById("sessionEstimateHeading");
   const sessionPlanPanel = document.getElementById("sessionPlanPanel");
+  const paceIntro = document.getElementById("paceIntro");
   const appointmentSelection = document.getElementById("appointmentSelection");
+  const extendedPricing = document.getElementById("extendedPricing");
   const windowListEl = document.getElementById("windowList");
   const windowToolsEl = document.getElementById("windowTools");
   const monthSelectEl = document.getElementById("monthSelect");
@@ -252,6 +273,12 @@
   const sessionValue = document.getElementById("sessionValue");
   const windowValue = document.getElementById("windowValue");
   const depositValue = document.getElementById("depositValue");
+  const sessionFeeRow = document.getElementById("sessionFeeRow");
+  const sessionFeeValue = document.getElementById("sessionFeeValue");
+  const estimatedTotalRow = document.getElementById("estimatedTotalRow");
+  const estimatedTotalValue = document.getElementById("estimatedTotalValue");
+  const remainingBalanceRow = document.getElementById("remainingBalanceRow");
+  const remainingBalanceValue = document.getElementById("remainingBalanceValue");
   const tipValue = document.getElementById("tipValue");
   const totalValue = document.getElementById("totalValue");
   const customTipInput = document.getElementById("customTipInput");
@@ -270,6 +297,8 @@
   let selectedPlanPreference = "";
   let planAcknowledged = false;
   let budgetAcknowledged = false;
+  let extendedDayAcknowledged = false;
+  const EXTENDED_DAY_BOOKING_TYPE_ID = "tattoo_extended";
   const defaultSessionEstimateCopy = {
     sectionHeading: "Your Session Plan",
     oneSessionLabel: "One-session plan",
@@ -311,7 +340,9 @@
     const fourth = futureDate(8, 11, 0, 360);
     const fifth = futureDate(35, 12, 0, 90);
     const sixth = futureDate(63, 14, 0, 180);
+    const seventh = futureDate(12, 9, 0, 600);
     return {
+      purpose: "tattoo",
       client: { name: "Preview Client", email: "client@example.com", phone: "" },
       submission: { id: "preview", type: "tattoo_inquiry" },
       sessionPlan: {
@@ -360,6 +391,18 @@
           depositLabel: "$200",
           currency: "USD",
         },
+        {
+          id: "tattoo_extended",
+          label: "Extended Day Session",
+          description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with an 8-hour billing minimum at the approved project rate, plus a $200 Extended Day fee.",
+          durationMinutes: 600,
+          durationRangeLabel: "8-10 hours",
+          depositCents: 35000,
+          depositLabel: "$350",
+          sessionFeeCents: 20000,
+          minimumBillableMinutes: 480,
+          currency: "USD",
+        },
       ],
       availabilityWindows: [
         { id: "preview-1", bookingTypeId: "tattoo_quarter", note: "", ...first },
@@ -368,6 +411,7 @@
         { id: "preview-4", bookingTypeId: "tattoo_full", note: "", ...fourth },
         { id: "preview-5", bookingTypeId: "tattoo_quarter", note: "", ...fifth },
         { id: "preview-6", bookingTypeId: "tattoo_half", note: "", ...sixth },
+        { id: "preview-7", bookingTypeId: "tattoo_extended", note: "", ...seventh },
       ],
     };
   }
@@ -387,6 +431,7 @@
     }
     if (!Array.isArray(payload.bookingTypes) || !Array.isArray(payload.availabilityWindows)) return null;
     return {
+      purpose: payload.purpose || "tattoo",
       client: payload.client || { name: "Preview Client", email: "", phone: "" },
       requiresClientDetails: Boolean(payload.requiresClientDetails),
       submission: payload.submission || { id: "preview", type: "tattoo_inquiry" },
@@ -457,7 +502,8 @@
     checkoutBtn.disabled = !selectedType
       || !selectedWindow
       || !planIsReady(context?.sessionPlan)
-      || !clientDetailsAreReady();
+      || !clientDetailsAreReady()
+      || (selectedType.id === EXTENDED_DAY_BOOKING_TYPE_ID && !extendedDayAcknowledged);
   }
 
   function setTip(cents, fromCustom = false) {
@@ -615,6 +661,74 @@
       : `${money(plan.approvedBudgetMinCents, currency)}–${money(plan.approvedBudgetMaxCents, currency)}`;
   }
 
+  function pricingRangeLabel(minimum, maximum, currency = "USD") {
+    const min = Math.max(0, Number(minimum) || 0);
+    const max = Math.max(min, Number(maximum) || min);
+    return min === max ? money(min, currency) : `${money(min, currency)}–${money(max, currency)}`;
+  }
+
+  function extendedDayPricing() {
+    if (selectedType?.id !== EXTENDED_DAY_BOOKING_TYPE_ID) return null;
+    const plan = context?.sessionPlan;
+    const currency = selectedType.currency || plan?.approvedBudgetCurrency || "USD";
+    const laborMin = Number(plan?.approvedBudgetMinCents || 0);
+    const laborMax = Number(plan?.approvedBudgetMaxCents || laborMin);
+    const fee = Number(selectedType.sessionFeeCents || 0);
+    const deposit = Number(selectedType.depositCents || 0);
+    return {
+      currency,
+      laborMin,
+      laborMax,
+      fee,
+      deposit,
+      totalMin: laborMin + fee,
+      totalMax: laborMax + fee,
+      remainingMin: Math.max(0, laborMin + fee - deposit),
+      remainingMax: Math.max(0, laborMax + fee - deposit),
+    };
+  }
+
+  function windowMatchesType(windowItem, type) {
+    if (!type) return true;
+    if (type.id === EXTENDED_DAY_BOOKING_TYPE_ID) {
+      return windowItem.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID;
+    }
+    return !windowItem.bookingTypeId || windowItem.bookingTypeId === type.id;
+  }
+
+  function renderExtendedDayPricing() {
+    const pricing = extendedDayPricing();
+    if (!pricing) {
+      extendedPricing.classList.add("hidden");
+      extendedPricing.innerHTML = "";
+      return;
+    }
+    const hasBudget = pricing.laborMin > 0 && pricing.laborMax >= pricing.laborMin;
+    extendedPricing.classList.remove("hidden");
+    extendedPricing.innerHTML = `
+      ${hasBudget ? `
+        <h3>Your Extended Day estimate</h3>
+        <div class="pricing-lines">
+          <div><span>Approved tattoo work</span><strong>${escapeHtml(pricingRangeLabel(pricing.laborMin, pricing.laborMax, pricing.currency))}</strong></div>
+          <div><span>Extended Day fee</span><strong>+${escapeHtml(money(pricing.fee, pricing.currency))}</strong></div>
+          <div><span>Estimated total</span><strong>${escapeHtml(pricingRangeLabel(pricing.totalMin, pricing.totalMax, pricing.currency))}</strong></div>
+          <div><span>Deposit due today</span><strong>−${escapeHtml(money(pricing.deposit, pricing.currency))}</strong></div>
+          <div><span>Estimated remaining balance</span><strong>${escapeHtml(pricingRangeLabel(pricing.remainingMin, pricing.remainingMax, pricing.currency))}</strong></div>
+        </div>
+      ` : ""}
+      <h3>10-hour Custom example</h3>
+      <div class="pricing-lines">
+        <div><span>Tattoo work: 10 hours × $200/hour</span><strong>$2,000</strong></div>
+        <div><span>Extended Day fee</span><strong>+$200</strong></div>
+        <div><span>Extended Day total</span><strong>$2,200</strong></div>
+        <div><span>Deposit paid at booking</span><strong>−$350</strong></div>
+        <div><span>Remaining balance</span><strong>$1,850</strong></div>
+      </div>
+      <p class="fine">Extended Day is optional. You may choose Quarter, Half, or Full Day instead and split your project across multiple appointments. Shorter sessions do not include the $200 Extended Day fee.</p>
+      <label class="extended-ack"><input id="extendedDayAck" type="checkbox" ${extendedDayAcknowledged ? "checked" : ""}><span>I understand that Extended Day reserves a 10-hour appointment block, has an eight-hour billing minimum at my approved project rate, and adds a $200 Extended Day fee. I understand that I may instead choose a shorter session and split my project across multiple appointments.</span></label>
+    `;
+  }
+
   function planIsReady(plan) {
     if (!plan) return true;
     const sessionReady = !["required", "client_choice", "not_available"].includes(plan.splitPolicy)
@@ -735,15 +849,15 @@
       <p class="session-plan-copy">${sessionCopyHtml(policyCopy)}</p>
       ${budgetLabel ? `
         <div class="approved-budget">
-          <span class="approved-budget-label">Approved project budget</span>
+          <span class="approved-budget-label">Approved tattoo-work budget</span>
           <strong class="approved-budget-value">${escapeHtml(budgetLabel)}</strong>
-          <p class="session-plan-copy">This project-total range applies to the approved scope and session plan. Your tattoo deposit is applied to the final tattoo cost. Changes to placement, scale, detail, or session planning may require a revised range before booking.</p>
+          <p class="session-plan-copy">This range covers the approved tattoo work before any optional Extended Day fee. Your tattoo deposit is applied to the final total. Changes to placement, scale, detail, or session planning may require a revised range before booking. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</p>
         </div>
       ` : ""}
       ${planIsReady(plan) ? `<div class="status">${escapeHtml(savedMessage)}</div>` : ""}
       <div class="session-plan-options">${choices.map(([value,title,meta]) => `<button class="choice ${selectedPlanPreference === value ? "active" : ""}" type="button" data-plan-preference="${value}"><span><span class="choice-title">${escapeHtml(title)}</span><span class="choice-meta">${escapeHtml(meta)}</span></span></button>`).join("")}</div>
       <label class="session-plan-ack"><input id="sessionPlanAck" type="checkbox" ${planAcknowledged ? "checked" : ""}><span>${escapeHtml(copy.acknowledgement)}</span></label>
-      ${budgetLabel ? `<label class="session-plan-ack"><input id="budgetAck" type="checkbox" ${budgetAcknowledged ? "checked" : ""}><span>I have reviewed and agree to the approved project budget of ${escapeHtml(budgetLabel)} for this scope. I understand that scope changes may require a revised budget before booking.</span></label>` : ""}
+      ${budgetLabel ? `<label class="session-plan-ack"><input id="budgetAck" type="checkbox" ${budgetAcknowledged ? "checked" : ""}><span>I have reviewed and agree to the approved tattoo-work budget of ${escapeHtml(budgetLabel)} before any optional Extended Day fee. I understand that scope changes may require a revised budget before booking. My paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.</span></label>` : ""}
       <button class="session-plan-confirm" id="confirmSessionPlanBtn" type="button" ${selectedPlanPreference && planAcknowledged && (!budgetLabel || budgetAcknowledged) ? "" : "disabled"}>${escapeHtml(copy.confirmButtonLabel)}</button>
       <p class="fine" id="sessionPlanStatus"></p>
     `;
@@ -754,19 +868,20 @@
     const types = context.bookingTypes || [];
     const windows = context.availabilityWindows || [];
     renderSessionPlan();
+    paceIntro.classList.toggle("hidden", context?.purpose !== "tattoo");
     sessionListEl.innerHTML = types.map((type) => `
       <button class="choice ${selectedType?.id === type.id ? "active" : ""}" type="button" data-type="${escapeHtml(type.id)}">
         <span>
           <span class="choice-title">${escapeHtml(type.label)}</span>
-          <span class="choice-meta">${escapeHtml(minutesLabel(type.durationMinutes))} / ${escapeHtml(type.description)}</span>
+          <span class="choice-meta">${escapeHtml(type.durationRangeLabel || minutesLabel(type.durationMinutes))} / ${escapeHtml(type.description)}</span>
+          ${type.id === EXTENDED_DAY_BOOKING_TYPE_ID && !windows.some((windowItem) => windowMatchesType(windowItem, type)) ? '<span class="availability-note">No Extended Day dates are currently available. Shorter sessions remain bookable.</span>' : ""}
         </span>
         <span class="price-wrap"><span class="price">${escapeHtml(type.depositLabel)}</span><span class="price-label">${context?.purpose === "consultation" ? "Reservation fee" : "Deposit"}</span></span>
       </button>
     `).join("");
 
-    const visibleWindows = sortedWindows(windows.filter((windowItem) => {
-      return !selectedType || !windowItem.bookingTypeId || windowItem.bookingTypeId === selectedType.id;
-    }));
+    renderExtendedDayPricing();
+    const visibleWindows = sortedWindows(windows.filter((windowItem) => windowMatchesType(windowItem, selectedType)));
     const monthKeys = [...new Set(visibleWindows.map((windowItem) => monthKey(windowItem.startAt)).filter(Boolean))];
     if (selectedWindow && !selectedMonthKey) selectedMonthKey = monthKey(selectedWindow.startAt);
     if (!monthKeys.includes(selectedMonthKey)) {
@@ -787,7 +902,9 @@
     renderCalendar(selectedMonthKey, monthWindows);
 
     if (!visibleWindows.length) {
-      windowListEl.innerHTML = '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
+      windowListEl.innerHTML = selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
+        ? '<div class="status">No Extended Day dates are currently available. You may choose Quarter, Half, or Full Day and split the project across appointments.</div>'
+        : '<div class="status">No open booking windows are available yet. Reply to your approval email if you need help.</div>';
     } else if (!selectedMonthKey) {
       windowListEl.innerHTML = renderWindowButton(visibleWindows[0], { next: true });
     } else if (!selectedDayKey) {
@@ -800,8 +917,20 @@
     sessionValue.textContent = selectedType ? selectedType.label : "Select a session";
     windowValue.textContent = selectedWindow ? formatDate(selectedWindow.startAt) : "Select a time";
     depositValue.textContent = selectedType ? selectedType.depositLabel : "-";
+    const extendedPricingSummary = extendedDayPricing();
+    sessionFeeRow.classList.toggle("hidden", !extendedPricingSummary);
+    estimatedTotalRow.classList.toggle("hidden", !extendedPricingSummary || !extendedPricingSummary.laborMin);
+    remainingBalanceRow.classList.toggle("hidden", !extendedPricingSummary || !extendedPricingSummary.laborMin);
+    sessionFeeValue.textContent = extendedPricingSummary ? `+${money(extendedPricingSummary.fee, extendedPricingSummary.currency)}` : "-";
+    estimatedTotalValue.textContent = extendedPricingSummary?.laborMin ? pricingRangeLabel(extendedPricingSummary.totalMin, extendedPricingSummary.totalMax, extendedPricingSummary.currency) : "-";
+    remainingBalanceValue.textContent = extendedPricingSummary?.laborMin ? pricingRangeLabel(extendedPricingSummary.remainingMin, extendedPricingSummary.remainingMax, extendedPricingSummary.currency) : "-";
     tipValue.textContent = money(selectedTipCents, selectedType?.currency || "USD");
     totalValue.textContent = selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
+    checkoutNote.textContent = selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
+      ? `Square collects only the ${selectedType.depositLabel} deposit${selectedTipCents ? " and your optional tip" : ""} today. The $200 Extended Day fee is included in the final studio balance, and the deposit is credited toward your final total.`
+      : context?.purpose === "consultation"
+        ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
+        : "The tattoo deposit is applied toward the appointment total. Shorter sessions have no Extended Day fee, and additional dates can be coordinated when needed. Optional tips are itemized separately on the Square receipt.";
     updateCheckoutState();
     window.dispatchEvent(new CustomEvent("sixwell:booking-rendered"));
   }
@@ -922,11 +1051,18 @@
   sessionListEl.addEventListener("click", (event) => {
     const button = event.target.closest("[data-type]");
     if (!button) return;
+    if (selectedType?.id !== button.dataset.type) extendedDayAcknowledged = false;
     selectedType = context.bookingTypes.find((type) => type.id === button.dataset.type) || null;
     if (selectedWindow?.bookingTypeId && selectedWindow.bookingTypeId !== selectedType?.id) selectedWindow = null;
     selectedMonthKey = selectedWindow ? monthKey(selectedWindow.startAt) : "";
     selectedDayKey = selectedWindow ? dayKey(selectedWindow.startAt) : "";
     render();
+  });
+
+  extendedPricing.addEventListener("change", (event) => {
+    if (event.target.id !== "extendedDayAck") return;
+    extendedDayAcknowledged = event.target.checked;
+    updateCheckoutState();
   });
 
   monthSelectEl.addEventListener("change", () => {
@@ -1000,6 +1136,7 @@
         bookingTypeId: selectedType.id,
         availabilityWindowId: selectedWindow.id,
         tipCents: selectedTipCents,
+        extendedDayAcknowledged: selectedType.id === EXTENDED_DAY_BOOKING_TYPE_ID && extendedDayAcknowledged,
         clientName: clientNameInput.value.trim(),
         clientEmail: clientEmailInput.value.trim(),
         clientPhone: clientPhoneInput.value.trim(),

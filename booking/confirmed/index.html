@@ -216,18 +216,21 @@
     const hoursUntilStart = Number.isFinite(hoursParam) && hoursParam !== 0 ? hoursParam : 26;
     const tipCents = params.get("tip") === "1" ? 2500 : 0;
     const start = new Date(Date.now() + hoursUntilStart * 60 * 60 * 1000);
-    const end = new Date(start.getTime() + 180 * 60 * 1000);
+    const extended = params.get("type") === "extended";
+    const end = new Date(start.getTime() + (extended ? 600 : 180) * 60 * 1000);
     return {
       appointment: {
         id: "demo",
-        bookingTypeId: "tattoo_half",
-        bookingTypeLabel: "Half Day Session",
+        bookingTypeId: extended ? "tattoo_extended" : "tattoo_half",
+        bookingTypeLabel: extended ? "Extended Day Session" : "Half Day Session",
         clientName: "Jordan Rivera",
         startAt: start.toISOString(),
         endAt: end.toISOString(),
-        depositCents: 10000,
+        depositCents: extended ? 35000 : 10000,
+        sessionFeeCents: extended ? 20000 : 0,
+        minimumBillableMinutes: extended ? 480 : 0,
         tipCents,
-        totalDueCents: 10000 + tipCents,
+        totalDueCents: (extended ? 35000 : 10000) + tipCents,
         currency: "USD",
         status: state === "cancelled" ? "cancelled" : (state === "pending" ? "pending_deposit" : "confirmed"),
         meeting: null,
@@ -235,6 +238,17 @@
       depositStatus: state === "pending" ? "pending" : "paid",
       supportEmail: DEFAULT_SUPPORT_EMAIL,
       hoursUntilStart,
+      pricingSummary: extended ? {
+        laborMinimumCents: 160000,
+        laborMaximumCents: 200000,
+        sessionFeeCents: 20000,
+        combinedMinimumCents: 180000,
+        combinedMaximumCents: 220000,
+        depositCreditCents: 35000,
+        remainingMinimumCents: 145000,
+        remainingMaximumCents: 185000,
+        currency: "USD",
+      } : null,
     };
   }
 
@@ -268,6 +282,14 @@
     const locationRows = paid && !isCancelled && appointment.bookingTypeId !== "consult_virtual"
       ? [renderRow("Location", STUDIO_ADDRESS)]
       : [];
+    const pricing = payload.pricingSummary;
+    const pricingRows = pricing && Number(pricing.sessionFeeCents || 0) > 0 ? [
+      renderRow("Approved Tattoo Work", `${money(pricing.laborMinimumCents, pricing.currency)}${pricing.laborMinimumCents === pricing.laborMaximumCents ? "" : ` - ${money(pricing.laborMaximumCents, pricing.currency)}`}`),
+      renderRow("Extended Day Fee", `+${money(pricing.sessionFeeCents, pricing.currency)} / due with final studio balance`),
+      renderRow("Estimated Total", `${money(pricing.combinedMinimumCents, pricing.currency)}${pricing.combinedMinimumCents === pricing.combinedMaximumCents ? "" : ` - ${money(pricing.combinedMaximumCents, pricing.currency)}`}`),
+      renderRow("Estimated Remaining Balance", `${money(pricing.remainingMinimumCents, pricing.currency)}${pricing.remainingMinimumCents === pricing.remainingMaximumCents ? "" : ` - ${money(pricing.remainingMaximumCents, pricing.currency)}`}`),
+      renderRow("Billing Policy", "10-hour appointment block / eight-hour minimum at your approved project rate"),
+    ] : [];
     details.innerHTML = [
       renderRow("Client", appointment.clientName),
       renderRow("When", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
@@ -275,6 +297,7 @@
       renderRow("Deposit", `${money(appointment.depositCents, appointment.currency)} / ${paid ? "received" : "pending"}`),
       renderRow("Optional Tip", money(appointment.tipCents || 0, appointment.currency)),
       renderRow("Total Paid Today", money(appointment.totalDueCents || appointment.depositCents || 0, appointment.currency)),
+      ...pricingRows,
       calendarRow(appointment, paid, isCancelled),
       renderRow("Status", appointment.status.replace(/_/g, " ")),
     ].filter(Boolean).join("");

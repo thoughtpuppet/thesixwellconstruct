@@ -4536,6 +4536,11 @@ function restoreDoorwayExitAfterHistoryNavigation() {
 }
 
 function startShapeStreamDoorwayExit() {
+  window.SixWellAnalytics?.track('interactive_milestone', {
+    action: 'doorway-exit',
+    itemId: 'entry-room',
+    progress: 75
+  });
   doorwayExit.calibrationTransitionPreview = false;
   doorwayExit.calibrationPreview = 'none';
   doorwayExit.calibrationBlinkElapsed = 0;
@@ -4656,6 +4661,12 @@ function finishShapeStreamDoorwayExitHandoff() {
       handoffExtras.homeGhostIntroDelay = ghostIntroDelay;
     }
     markEntryHandoff('complete', handoffExtras);
+    window.SixWellAnalytics?.track('interactive_complete', {
+      action: 'enter-home',
+      itemId: 'entry-room',
+      progress: 100
+    });
+    window.SixWellAnalytics?.flush?.(true);
     window.location.href = SHAPE_STREAM_FINAL_GRID.homeHref;
   };
   const holdMs = Math.max(0, SHAPE_STREAM_FINAL_GRID.homeFadeHoldDuration || 0) * 1000;
@@ -5439,6 +5450,10 @@ function activateShapeStreamFinalGrid() {
     return;
   }
   shapeStream.finalGrid.active = true;
+  window.SixWellAnalytics?.track('interactive_start', {
+    action: 'final-grid',
+    itemId: 'entry-room'
+  });
   shapeStream.finalGrid.animating = true;
   shapeStream.finalGrid.phase = 'forming';
   shapeStream.finalGrid.elapsed = 0;

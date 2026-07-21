@@ -173,6 +173,7 @@
     function openSymbol(record, { push = true, move = true } = {}) {
       if (!record) return;
       selectedId = record.slug || record.id;
+      if (push) window.SixWellAnalytics?.track("item_open", { action: "legend-symbol", itemId: selectedId });
       const layers = recordsFor(record);
       const category = categoryById.get(record.category_id)?.name || record.category_id;
       const canonical = safeSvg(record.svg_markup);
@@ -215,10 +216,11 @@
       const button = event.target.closest("[data-category]");
       if (!button) return;
       activeCategory = button.dataset.category;
+      window.SixWellAnalytics?.track("filter_change", { action: "legend-category", itemId: activeCategory });
       filters.querySelectorAll("button").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
       paint();
     });
-    search.addEventListener("input", () => { query = search.value.trim(); paint(); });
+    search.addEventListener("input", () => { query = search.value.trim(); paint(); search.dataset.analyticsResults = String(root.querySelectorAll("[data-symbol]").length); });
     root.addEventListener("click", (event) => {
       const card = event.target.closest("[data-symbol]");
       if (!card) return;

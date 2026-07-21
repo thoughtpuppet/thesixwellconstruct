@@ -322,7 +322,7 @@
       client records. Send Test is the only action that delivers mail, and it can
       send only to the configured admin inbox.
     </p>
-    <div class="email-preview-app" data-email-preview data-brands="tattoo,studio"></div>
+    <div class="email-preview-app" data-email-preview data-brands="tattoo,art,events,studio"></div>
   </section>
 </main>
 <script>
@@ -366,9 +366,12 @@
         "",
         "Approved session options:",
         "",
+        "- Quarter Day Session: 1.5 hours. Deposit: $50.",
         "- Half Day Session: 3 hours - Approx. 3 hours for medium approved projects or developed symbolic work. Deposit: $100.",
+        "- Full Day Session: 6 hours. Deposit: $200.",
+        "- Extended Day Session: 8-10 hours. Reserves a 10-hour block with an eight-hour billing minimum at the approved project rate. Deposit: $350. A flat $200 Extended Day fee is due with the final studio balance.",
         "",
-        "Deposit due to book: $100",
+        "Choose one longer appointment or split the project across shorter sessions. Extended Day is optional; Quarter, Half, and Full Day do not add the $200 fee.",
         "",
         "Before booking, please review:",
         "",
@@ -383,6 +386,29 @@
         "",
         "Thank you,",
         "art.pill TATTOO HOUSE",
+      ],
+    },
+    {
+      key: "appointment_confirmed (Extended Day)",
+      subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
+      body: [
+        `Hi ${NAME},`,
+        "",
+        "Your art.pill TATTOO HOUSE appointment is confirmed.",
+        "",
+        `When: ${WHEN_START} - ${WHEN_END_TATTOO}`,
+        "Session: Extended Day Session",
+        "Deposit: $350 received",
+        "Extended Day fee: $200 due with the final studio balance",
+        "Billing policy: 10-hour appointment block / eight-hour minimum at your approved project rate",
+        "",
+        "Confirmation page: https://thesixwellconstruct.com/booking/confirmed/?appointment=demo",
+        `Day-of instructions: ${RESOURCES.dayOfInstructionsUrl}`,
+        `Location & parking: ${RESOURCES.locationParkingUrl}`,
+        "",
+        "Thank you,",
+        "Saiel Solehman",
+        "[art.pill TATTOO HOUSE]",
       ],
     },
     {

@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="/studio/construct-manager.css?v=multi-styles">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
+<link rel="stylesheet" href="/studio/analytics.css?v=2">
 <link rel="stylesheet" href="/studio/people-manager.css?v=4">
 <link rel="stylesheet" href="/css/select-menu.css?v=1">
 <style>
@@ -450,6 +451,7 @@
   </header>
   <nav class="tabs" id="tabs" aria-label="Console sections">
     <button class="tab is-active" type="button" data-tab="home">Home</button>
+    <button class="tab" type="button" data-tab="analytics">Analytics</button>
     <button class="tab" type="button" data-tab="people">People</button>
     <button class="tab" type="button" data-tab="tattoo">Tattoo Booking</button>
     <button class="tab" type="button" data-tab="studio">Studio Booking</button>
@@ -484,6 +486,7 @@
 
 <script src="/js/select-menu.js?v=2"></script>
 <script src="/studio/admin-collapse.js?v=2"></script>
+<script src="/studio/analytics.js?v=2"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -514,7 +517,7 @@
   const AVAILABILITY_CONFIGS = {
     tattoo: {
       groups: [
-        { category: "tattooing", label: "Tattooing Hours", note: "Applies to Quarter, Half, and Full sessions.", containerId: "weeklyRulesTattooing" },
+        { category: "tattooing", label: "Tattooing Hours", note: "Applies to Quarter, Half, Full, and Extended Day sessions. Extended Day appears only where a complete 10-hour block fits.", containerId: "weeklyRulesTattooing" },
         { category: "consultation", label: "Consultation Hours", note: "Applies to in-person and virtual consultations, and in-person build sessions.", containerId: "weeklyRulesConsultation" },
       ],
       sessionTypeOptions: [
@@ -525,8 +528,9 @@
         ["tattoo_quarter", "Quarter Day Session"],
         ["tattoo_half", "Half Day Session"],
         ["tattoo_full", "Full Day Session"],
+        ["tattoo_extended", "Extended Day Session (10-hour block)"],
       ],
-      bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_full", "consult_in_person", "consult_virtual", "build_in_person"],
+      bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended", "consult_in_person", "consult_virtual", "build_in_person"],
       walkInPlaceholder: "Small flash, build consults, or studio note",
       allowUnscopedExceptions: true,
       showWalkIns: true,
@@ -548,6 +552,7 @@
     },
   };
   const TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
+  const ORIGINAL_TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
   const HOME_DAY_COLORS = {
     tattoo: "var(--color-tattooing,#6E0404)",
     art: "var(--color-art,#0039BD)",
@@ -559,11 +564,13 @@
     ["tattoo_quarter", "Quarter Day Session"],
     ["tattoo_half", "Half Day Session"],
     ["tattoo_full", "Full Day Session"],
+    ["tattoo_extended", "Extended Day Session"],
   ];
   const DIRECT_INVITE_SESSION_NOTES = {
     tattoo_quarter: "The composition is planned for a Quarter Day Session.",
     tattoo_half: "The composition is planned for a Half Day Session.",
     tattoo_full: "The composition is planned for a Full Day Session.",
+    tattoo_extended: "The composition is planned for an optional Extended Day Session (8-10 hours). This reserves a 10-hour appointment block, has an eight-hour billing minimum at the approved project rate, and adds a $200 Extended Day fee. The $350 deposit is credited toward the final total. A shorter session and split appointments remain possible.",
   };
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
@@ -1288,7 +1295,9 @@
 
   function buildSubnav() {
     let html = "";
-    if (activeTab === "people") {
+    if (activeTab === "analytics") {
+      html = [["overview","Overview"],["journeys","Journeys"],["acquisition","Acquisition"],["performance","Performance"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+    } else if (activeTab === "people") {
       html = [["directory","Directory"],["attention","Needs Attention"],["outreach","Outreach"],["integrations","Integrations & Imports"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "tattoo") {
       html = `
@@ -2360,6 +2369,7 @@
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Day Session</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Day Session</span></label>
               <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Day Session</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_extended"><span>Extended Day Session (8-10 hours)</span></label>
             </div>
             <label class="field">Session plan wording <span class="contact">(client-facing)</span>
               <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(DIRECT_INVITE_SESSION_NOTES.tattoo_quarter)}</textarea>
@@ -2476,9 +2486,23 @@
   }
 
   function renderActiveTab() {
+    document.body.classList.toggle("is-analytics-tab", activeTab === "analytics");
     if (activeTab !== "people") window.PeopleManager?.unmount?.();
     tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
     buildSubnav();
+
+    if (activeTab === "analytics") {
+      layoutEl.classList.add("single");
+      listPane.classList.add("hidden");
+      toolbarEl.innerHTML = "";
+      if (!window.StudioAnalytics) {
+        detailEl.innerHTML = '<p class="empty">Analytics manager could not be loaded.</p>';
+        setStatus("Analytics unavailable");
+        return;
+      }
+      window.StudioAnalytics.render({ root: detailEl, token, view: subView, setStatus }).catch((error) => setStatus(error.message));
+      return;
+    }
 
     if (activeTab === "home") {
       layoutEl.classList.add("single");
@@ -2587,7 +2611,7 @@
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
-    subView = tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
+    subView = tab === "analytics" ? (window.StudioAnalytics?.hashState?.().view || "overview") : tab === "tattoo" ? "appointments" : tab === "people" ? "directory" : tab === "legend" ? "symbols" : tab === "archive" ? "dossiers" : tab === "site" ? "pathways" : tab === "shared" ? "media" : tab === "merch" ? "products" : "requests";
     selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
@@ -3259,6 +3283,8 @@
     if (!appointment) return "";
     const currency = appointment.currency || "USD";
     const depositCents = Number(appointment.depositCents || 0);
+    const sessionFeeCents = Number(appointment.sessionFeeCents || 0);
+    const minimumBillableMinutes = Number(appointment.minimumBillableMinutes || 0);
     const tipCents = Number(appointment.tipCents || 0);
     const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
     const meeting = appointment.meeting || null;
@@ -3296,6 +3322,7 @@ ${holdExpiresAt ? `Checkout hold expires: ${escapeHtml(formatDate(holdExpiresAt)
 ${replacementFor ? `Replacement for: ${escapeHtml(replacementFor)}\n` : ""}${replacedBy ? `Replaced by: ${escapeHtml(replacedBy)}\n` : ""}
 ${appointmentIsConfirmed(appointment) && !isVirtual ? `Location: ${escapeHtml(STUDIO_ADDRESS)}\n` : ""}
 Reservation/deposit: ${escapeHtml(money(depositCents, currency))}
+${sessionFeeCents ? `Extended Day fee due with final balance: ${escapeHtml(money(sessionFeeCents, currency))}\n` : ""}${minimumBillableMinutes ? `Billing minimum: ${escapeHtml(String(minimumBillableMinutes / 60))} hours at the approved project rate\n` : ""}
 Optional tip: ${escapeHtml(money(tipCents, currency))}
 Total paid today: ${escapeHtml(money(totalCents, currency))}
 Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
@@ -3309,6 +3336,52 @@ ${meetingLines}
           ${canCompleteConsultation ? `<button class="button" type="button" data-complete-appointment="${escapeHtml(appointment.id)}">Mark Consultation Complete</button>` : ""}
           ${appointmentIsConfirmed(appointment) ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
         </div>
+      </div>
+    `;
+  }
+
+  function renderAdditionalRenderings(submission) {
+    if (!ORIGINAL_TATTOO_PROJECT_TYPES.has(submission.type)) return "";
+    const requests = Array.isArray(submission.renderingRequests) ? submission.renderingRequests : [];
+    const appointment = appointments
+      .filter((item) => item.submissionId === submission.id)
+      .filter((item) => item.purpose === "tattoo" && item.status === "confirmed")
+      .filter((item) => new Date(item.startAt).getTime() > Date.now())
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())[0] || null;
+    if (!appointment && !requests.length) return "";
+    const pending = requests.find((item) => item.status === "pending") || null;
+    const statusLabel = {
+      pending: "Pending payment",
+      paid: "Paid / ready to draw",
+      cancelled: "Cancelled",
+      expired: "Expired",
+      payment_attention: "Payment attention",
+    };
+    const history = requests.length
+      ? requests.map((item) => `
+          <div class="value" style="margin-top:10px;white-space:normal;overflow-wrap:anywhere;">
+            <strong>Concept sketch ${escapeHtml(String(item.requestNumber || ""))}</strong><br>
+            Status: ${escapeHtml(statusLabel[item.status] || titleize(item.status))}<br>
+            Amount: ${escapeHtml(money(item.amountCents || 5000, item.currency || "USD"))}<br>
+            ${item.paidAt ? `Paid: ${escapeHtml(formatDate(item.paidAt))}<br>` : ""}
+            ${item.expiresAt ? `Link expires: ${escapeHtml(formatDate(item.expiresAt))}<br>` : ""}
+            ${item.squareOrderId ? `Square order: ${escapeHtml(item.squareOrderId)}<br>` : ""}
+            ${item.status === "pending" && item.checkoutUrl ? `<div class="booking-actions" style="margin-top:8px;">
+              <button class="button" type="button" data-copy-rendering-link="${escapeHtml(item.checkoutUrl)}">Copy Payment Link</button>
+              <button class="button" type="button" data-resend-rendering-request="${escapeHtml(item.id)}">Resend Email</button>
+              <button class="button danger-button" type="button" data-cancel-rendering-request="${escapeHtml(item.id)}">Cancel Request</button>
+            </div>` : ""}
+          </div>
+        `).join("")
+      : `<p class="contact">No additional concept sketches have been requested.</p>`;
+    return `
+      <div class="assist-panel" id="additionalRenderingsPanel">
+        <label>Additional Renderings</label>
+        <p class="contact">One developed design direction is included with the paid tattoo deposit. Create a separate $50 request only after approving a substantially different alternate concept. Drawing begins after payment; minor refinements and artist-initiated redraws remain included.</p>
+        ${appointment && !pending ? `<div class="booking-actions" style="margin-top:10px;"><button class="button" type="button" data-create-rendering-request="${escapeHtml(submission.id)}" data-appointment-id="${escapeHtml(appointment.id)}">Create &amp; Email $50 Request</button></div>` : ""}
+        ${pending ? `<p class="contact" style="margin-top:10px;">One request is already awaiting payment. Another can be created after it is paid, cancelled, or expired.</p>` : ""}
+        ${!appointment && requests.length ? `<p class="contact" style="margin-top:10px;">History is retained. A new request requires an upcoming confirmed tattoo appointment.</p>` : ""}
+        ${history}
       </div>
     `;
   }
@@ -3327,6 +3400,7 @@ ${meetingLines}
     const clientName = submission.contactName || payloadValue(submission, "name") || "Preview Client";
     return {
       createdAt: Date.now(),
+      purpose: defaultTokenPurpose(submission),
       client: {
         name: clientName,
         email: submission.contactEmail || "",
@@ -3448,12 +3522,12 @@ ${meetingLines}
         <div class="field"><label for="planMinutesMax">Total minutes maximum</label><input id="planMinutesMax" name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMax ?? "")}"></div>
         <div class="field wide"><label for="planArtistNote">Client-facing session note</label><textarea id="planArtistNote" name="artistNote" placeholder="Explain the recommended pacing, breaks, or anything the client should know before scheduling.">${escapeHtml(plan.artistNote || "")}</textarea></div>
         <div class="field wide">
-          <h3>Approved Project Budget</h3>
-          <p class="contact">Client-submitted comfort range: <strong>${escapeHtml(submittedBudget || "Not available")}</strong>. Enter the reviewed project-total range deliberately; the original inquiry value remains unchanged.</p>
+          <h3>Approved Tattoo-Work Budget</h3>
+          <p class="contact">Client-submitted comfort range: <strong>${escapeHtml(submittedBudget || "Not available")}</strong>. Enter the reviewed tattoo-labor range before the optional $200 Extended Day fee; the original inquiry value remains unchanged.</p>
         </div>
         <div class="field"><label for="approvedBudgetMinDollars">Approved minimum (USD)</label><input id="approvedBudgetMinDollars" name="approvedBudgetMinDollars" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(approvedMinimumDollars)}" placeholder="e.g. 800"></div>
         <div class="field"><label for="approvedBudgetMaxDollars">Approved maximum (USD)</label><input id="approvedBudgetMaxDollars" name="approvedBudgetMaxDollars" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(approvedMaximumDollars)}" placeholder="e.g. 1200"></div>
-        <p class="contact wide">Both values are required before a tattoo booking link can be generated. Use the same value twice for an exact total. Consultation links do not require a tattoo budget.</p>
+        <p class="contact wide">Both values are required before a tattoo booking link can be generated. Use the same value twice for an exact tattoo-work total. If the client selects Extended Day, the booking page adds the $200 fee, subtracts the $350 deposit credit, and shows the resulting balance. Consultation links do not require a tattoo budget.</p>
       </form>
       <p class="session-plan-client-state">Session-plan response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}<br>Budget response: ${escapeHtml(budgetResponse)}</p>
       <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button">Save Session Plan</button></div>
@@ -3529,7 +3603,7 @@ ${meetingLines}
   function defaultAllowedBookingTypes(submission, purpose = defaultTokenPurpose(submission)) {
     return purpose === "consultation"
       ? ["consult_in_person"]
-      : ["tattoo_quarter", "tattoo_half", "tattoo_full"];
+      : ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
   }
 
   function sortedTypeList(values) {
@@ -3542,7 +3616,7 @@ ${meetingLines}
     return `
       <div class="field" style="margin-top:10px;" id="tokenOptions" data-default-token-types="${escapeHtml(sortedTypeList(defaults))}" data-default-token-purpose="${escapeHtml(purpose)}">
         <label>Booking Link Controls</label>
-        <div class="contact" style="margin-bottom:8px;">Purpose is lifecycle-bound: prerequisite consultation links expose only the in-person consultation; tattoo links require the completed consultation and final session plan when applicable.</div>
+        <div class="contact" style="margin-bottom:8px;">Purpose is lifecycle-bound: prerequisite consultation links expose only the in-person consultation. Every newly approved tattoo link automatically includes Quarter, Half, Full, and optional Extended Day so the client can choose one longer appointment or split the work across shorter sessions.</div>
         <div class="field" style="margin-bottom:10px;">
           <label for="tokenPurpose">Link purpose</label>
           <select id="tokenPurpose"><option value="consultation" ${purpose === "consultation" ? "selected" : ""}>Prerequisite consultation</option><option value="tattoo" ${purpose === "tattoo" ? "selected" : ""}>Tattoo appointment</option></select>
@@ -3550,7 +3624,7 @@ ${meetingLines}
         <div class="booking-actions" style="align-items:flex-start;">
           ${PRIVATE_BOOKING_TYPE_OPTIONS.map(([value, label]) => `
             <label class="check" style="margin:0;min-width:190px;">
-              <input type="checkbox" data-token-type value="${escapeHtml(value)}"${defaults.includes(value) ? " checked" : ""}>
+              <input type="checkbox" data-token-type value="${escapeHtml(value)}"${defaults.includes(value) ? " checked" : ""} disabled>
               <span class="check-label">${escapeHtml(label)}</span>
             </label>
           `).join("")}
@@ -3579,7 +3653,7 @@ ${meetingLines}
     const purpose = document.getElementById("tokenPurpose")?.value || "tattoo";
     const compatibleTypes = purpose === "consultation"
       ? new Set(["consult_in_person"])
-      : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full"]);
+      : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
     if (selected.some((type) => !compatibleTypes.has(type))) {
       throw new Error(`The selected session types are not compatible with the ${purpose} link purpose.`);
     }
@@ -3661,6 +3735,7 @@ ${meetingLines}
       ${typeFields(submission)}
       ${renderFiles(submission)}
       ${renderPaymentSummary(submission)}
+      ${renderAdditionalRenderings(submission)}
       ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<div class="session-plan-editor" id="tattooSessionPlanEditor"></div>` : ""}
 
       <div class="actions">
@@ -3737,16 +3812,26 @@ ${meetingLines}
       const purposeSelect = document.getElementById("tokenPurpose");
       const syncTokenTypes = () => {
         const purpose = purposeSelect?.value || "tattoo";
-        const compatible = purpose === "consultation" ? new Set(["consult_in_person"]) : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full"]);
+        const compatible = purpose === "consultation" ? new Set(["consult_in_person"]) : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
         document.querySelectorAll("[data-token-type]").forEach((input) => {
           const allowed = compatible.has(input.value);
-          input.disabled = !allowed;
+          input.disabled = true;
           input.checked = allowed;
         });
       };
       purposeSelect?.addEventListener("change", syncTokenTypes);
       syncTokenTypes();
     }
+  }
+
+  async function refreshActiveSubmissionDetail() {
+    if (!activeId) return null;
+    const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`);
+    if (!payload.submission) return null;
+    const index = submissions.findIndex((item) => item.id === activeId);
+    if (index >= 0) submissions[index] = payload.submission;
+    renderDetail(payload.submission);
+    return payload.submission;
   }
 
   function localDateTimeToIso(value) {
@@ -4226,17 +4311,18 @@ ${meetingLines}
       <form class="availability-item" data-booking-type-form="${escapeHtml(type.id)}">
         <span class="pill">${escapeHtml(type.label || titleize(type.id))}</span>
         <div class="contact">${escapeHtml(type.description || "")}</div>
-        <div class="meta">${escapeHtml(String(type.durationMinutes || 0))} minutes · ${escapeHtml(priceFieldLabel(type))}: ${escapeHtml(type.depositLabel || money(type.depositCents, type.currency || "USD"))}</div>
+        <div class="meta">${escapeHtml(type.durationRangeLabel || `${String(type.durationMinutes || 0)} minutes`)} · ${escapeHtml(priceFieldLabel(type))}: ${escapeHtml(type.depositLabel || money(type.depositCents, type.currency || "USD"))}${Number(type.sessionFeeCents || 0) ? ` · Session fee: ${escapeHtml(money(type.sessionFeeCents, type.currency || "USD"))}` : ""}${Number(type.minimumBillableMinutes || 0) ? ` · Billing minimum: ${escapeHtml(String(type.minimumBillableMinutes))} minutes` : ""}</div>
         <div class="schedule-grid">
           <div class="field">
             <label>${escapeHtml(priceFieldLabel(type))}</label>
             <input data-booking-type-field="depositDollars" type="number" min="0" step="0.01" value="${escapeHtml(priceInputValue(type.depositCents))}" required>
           </div>
           <div class="field">
-            <label>Currency</label>
-            <div class="value">${escapeHtml(type.currency || "USD")}</div>
+            <label>Session Fee</label>
+            <input data-booking-type-field="sessionFeeDollars" type="number" min="0" step="0.01" value="${escapeHtml(priceInputValue(type.sessionFeeCents))}" required>
           </div>
         </div>
+        <div class="contact">Currency: ${escapeHtml(type.currency || "USD")}. The session fee is not collected by Square at booking; it remains part of the final studio balance.</div>
         <div class="booking-actions">
           <button class="button" type="submit">Save Price</button>
         </div>
@@ -4535,6 +4621,7 @@ ${meetingLines}
         <div class="field">
           <label for="availabilityType">Session Type</label>
           <select id="availabilityType">${sessionTypeOptionsHtml}</select>
+          <div class="contact">Extended Day exceptions must span exactly 10 hours.</div>
         </div>
         <div class="field">
           <label for="availabilityCapacity">Same-Time Capacity</label>
@@ -4830,7 +4917,8 @@ ${meetingLines}
     localStorage.setItem(tokenKey, token);
     tokenModal.classList.add("hidden");
     try {
-      await loadAndRender();
+      if (activeTab === "analytics") renderActiveTab();
+      else await loadAndRender();
     } catch (error) {
       setStatus(error.message);
       tokenModal.classList.remove("hidden");
@@ -4878,6 +4966,74 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const createRenderingRequest = event.target.closest("[data-create-rendering-request]");
+    if (createRenderingRequest) {
+      if (!window.confirm("Confirm that the artist approved one substantially different alternate concept sketch. Create and email the separate non-refundable $50 payment request?")) return;
+      createRenderingRequest.disabled = true;
+      setStatus("Creating additional concept sketch payment request");
+      try {
+        const payload = await api("/api/admin/booking/rendering-requests", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            submissionId: createRenderingRequest.dataset.createRenderingRequest,
+            appointmentId: createRenderingRequest.dataset.appointmentId || "",
+          }),
+        });
+        await refreshActiveSubmissionDetail();
+        setStatus(payload.delivery?.ok
+          ? "$50 concept sketch payment link created and emailed"
+          : "$50 concept sketch payment link created; email delivery needs attention");
+      } catch (error) {
+        setStatus(error.message || "Rendering payment request could not be created");
+        if (createRenderingRequest.isConnected) createRenderingRequest.disabled = false;
+      }
+      return;
+    }
+
+    const copyRenderingLink = event.target.closest("[data-copy-rendering-link]");
+    if (copyRenderingLink) {
+      await navigator.clipboard?.writeText(copyRenderingLink.dataset.copyRenderingLink || "").catch(() => {});
+      setStatus("Rendering payment link copied");
+      return;
+    }
+
+    const resendRenderingRequest = event.target.closest("[data-resend-rendering-request]");
+    if (resendRenderingRequest) {
+      resendRenderingRequest.disabled = true;
+      setStatus("Resending rendering payment link");
+      try {
+        const payload = await api(`/api/admin/booking/rendering-requests/${encodeURIComponent(resendRenderingRequest.dataset.resendRenderingRequest)}/resend`, {
+          method: "POST",
+        });
+        setStatus(payload.delivery?.ok
+          ? "Rendering payment link emailed again"
+          : "Rendering link remains active; email delivery needs attention");
+      } catch (error) {
+        setStatus(error.message || "Rendering payment link could not be resent");
+        if (resendRenderingRequest.isConnected) resendRenderingRequest.disabled = false;
+      }
+      return;
+    }
+
+    const cancelRenderingRequest = event.target.closest("[data-cancel-rendering-request]");
+    if (cancelRenderingRequest) {
+      if (!window.confirm("Cancel and invalidate this unpaid rendering payment link? The tattoo appointment and included design direction will not change.")) return;
+      cancelRenderingRequest.disabled = true;
+      setStatus("Cancelling rendering payment request");
+      try {
+        await api(`/api/admin/booking/rendering-requests/${encodeURIComponent(cancelRenderingRequest.dataset.cancelRenderingRequest)}/cancel`, {
+          method: "POST",
+        });
+        await refreshActiveSubmissionDetail();
+        setStatus("Rendering payment request cancelled");
+      } catch (error) {
+        setStatus(error.message || "Rendering payment request could not be cancelled");
+        if (cancelRenderingRequest.isConnected) cancelRenderingRequest.disabled = false;
+      }
+      return;
+    }
+
     const refreshTattooSettings = event.target.closest("[data-refresh-tattoo-settings]");
     if (refreshTattooSettings) {
       setStatus("Refreshing tattoo settings");
@@ -5618,17 +5774,20 @@ ${meetingLines}
       event.preventDefault();
       const id = bookingTypeForm.dataset.bookingTypeForm;
       const input = bookingTypeForm.querySelector('[data-booking-type-field="depositDollars"]');
+      const sessionFeeInput = bookingTypeForm.querySelector('[data-booking-type-field="sessionFeeDollars"]');
       const dollars = Number(input?.value || 0);
-      if (!Number.isFinite(dollars) || dollars < 0) {
+      const sessionFeeDollars = Number(sessionFeeInput?.value || 0);
+      if (!Number.isFinite(dollars) || dollars < 0 || !Number.isFinite(sessionFeeDollars) || sessionFeeDollars < 0) {
         setStatus("Enter a valid price");
         return;
       }
       const depositCents = Math.round(dollars * 100);
+      const sessionFeeCents = Math.round(sessionFeeDollars * 100);
       setStatus("Saving price");
       const payload = await api(`/api/admin/booking/types/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ depositCents }),
+        body: JSON.stringify({ depositCents, sessionFeeCents }),
       });
       const index = bookingTypes.findIndex((type) => type.id === id);
       if (index >= 0) bookingTypes[index] = payload.bookingType;
@@ -5846,14 +6005,20 @@ ${meetingLines}
       setStatus("Choose a studio booking type for studio exceptions");
       return;
     }
+    const startAt = localDateTimeToIso(document.getElementById("availabilityStart").value);
+    const endAt = localDateTimeToIso(document.getElementById("availabilityEnd").value);
+    if (bookingTypeId === "tattoo_extended" && Date.parse(endAt) - Date.parse(startAt) !== 600 * 60 * 1000) {
+      setStatus("Extended Day exceptions must protect exactly 10 hours");
+      return;
+    }
     setStatus("Adding exception");
     await api("/api/admin/booking/availability", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         venture: "tattooing",
-        startAt: localDateTimeToIso(document.getElementById("availabilityStart").value),
-        endAt: localDateTimeToIso(document.getElementById("availabilityEnd").value),
+        startAt,
+        endAt,
         bookingTypeId,
         capacity: document.getElementById("availabilityCapacity").value,
         bufferBeforeMinutes: document.getElementById("bufferBefore").value,
@@ -5871,7 +6036,13 @@ ${meetingLines}
     setStatus("Exception added");
   });
 
-  refreshBtn.addEventListener("click", () => loadAndRender().catch((error) => setStatus(error.message)));
+  refreshBtn.addEventListener("click", () => {
+    if (activeTab === "analytics") {
+      window.StudioAnalytics?.refresh?.().catch((error) => setStatus(error.message));
+      return;
+    }
+    loadAndRender().catch((error) => setStatus(error.message));
+  });
   testEmailBtn.addEventListener("click", async () => {
     testEmailBtn.disabled = true;
     setStatus("Sending test email…");
@@ -6004,12 +6175,21 @@ ${meetingLines}
     setStatus("Locked");
   });
 
+  const analyticsHashState = window.StudioAnalytics?.hashState?.();
+  if (analyticsHashState?.active) {
+    activeTab = "analytics";
+    subView = analyticsHashState.view;
+  }
+
   if (directInvitePreview) {
     tokenModal.classList.add("hidden");
     activeTab = "tattoo";
     subView = "direct-invite";
     renderActiveTab();
     setStatus("Direct invite preview");
+  } else if (token && activeTab === "analytics") {
+    tokenModal.classList.add("hidden");
+    renderActiveTab();
   } else if (token) {
     tokenModal.classList.add("hidden");
     loadAndRender().catch((error) => {

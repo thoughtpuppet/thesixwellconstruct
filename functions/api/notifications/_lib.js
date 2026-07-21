@@ -13,6 +13,8 @@ import {
   buildCrmFollowupEmail,
   buildSubmissionReceivedEmail,
   buildTattooDraftResumeEmail,
+  buildTattooRenderingPaymentConfirmedEmail,
+  buildTattooRenderingPaymentRequestEmail,
   clientEmailPreviewCatalog,
   renderClientEmailPreview,
   emailTemplateDefinition,
@@ -65,12 +67,23 @@ const DEFAULT_BOOKING_TYPES = {
     depositCents: 20000,
     currency: "USD",
   },
+  tattoo_extended: {
+    label: "Extended Day Session",
+    description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with an 8-hour billing minimum at the approved project rate, plus a $200 Extended Day fee.",
+    durationMinutes: 600,
+    depositCents: 35000,
+    sessionFeeCents: 20000,
+    minimumBillableMinutes: 480,
+    currency: "USD",
+  },
 };
 const TATTOO_DAY_SESSION_LABELS = Object.freeze({
   tattoo_quarter: "Quarter Day Session",
   tattoo_half: "Half Day Session",
   tattoo_full: "Full Day Session",
+  tattoo_extended: "Extended Day Session",
 });
+const EXTENDED_DAY_BOOKING_TYPE_ID = "tattoo_extended";
 
 function notificationDb(env) {
   return env.SUBMISSIONS_DB || null;
@@ -146,6 +159,7 @@ const CONSULTATION_BOOKING_TYPE_IDS = [
 ];
 // Studio bookings are the construct's own product (not the tattoo house).
 const STUDIO_BOOKING_TYPE_IDS = ["studio_visit", "studio_gathering", "studio_rental"];
+const ART_BOOKING_TYPE_IDS = ["studio_visit"];
 const CONFIRMATION_PATHS = {
   [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/consultation/",
   [VIRTUAL_CONSULTATION_BOOKING_TYPE_ID]: "/booking/confirmed/virtual-consultation/",
@@ -263,12 +277,17 @@ function formatDuration(minutes) {
 }
 
 function normalizeBookingType(row) {
+  const id = row.id;
+  const durationMinutes = row.duration_minutes ?? row.durationMinutes ?? 0;
   return {
-    id: row.id,
-    label: TATTOO_DAY_SESSION_LABELS[row.id] || row.label,
+    id,
+    label: TATTOO_DAY_SESSION_LABELS[id] || row.label,
     description: row.description || "",
-    durationMinutes: row.duration_minutes ?? row.durationMinutes ?? 0,
+    durationMinutes,
     depositCents: row.deposit_cents ?? row.depositCents ?? 0,
+    sessionFeeCents: row.session_fee_cents ?? row.sessionFeeCents ?? 0,
+    minimumBillableMinutes: row.minimum_billable_minutes ?? row.minimumBillableMinutes ?? 0,
+    durationRangeLabel: id === EXTENDED_DAY_BOOKING_TYPE_ID ? "8-10 hours" : formatDuration(durationMinutes),
     currency: row.currency || "USD",
   };
 }
@@ -295,7 +314,8 @@ async function bookingTypesForToken(env, token) {
     const placeholders = allowedIds.map(() => "?").join(", ");
     const result = await db
       .prepare(
-        `SELECT id, label, description, duration_minutes, deposit_cents, currency
+        `SELECT id, label, description, duration_minutes, deposit_cents,
+                session_fee_cents, minimum_billable_minutes, currency
          FROM booking_types
          WHERE active = 1 AND id IN (${placeholders})`
       )
@@ -315,10 +335,13 @@ function sessionOptionsText(bookingTypes) {
     return "Available session options are shown on your private booking page.";
   }
   return bookingTypes.map((type) => {
-    const duration = formatDuration(type.durationMinutes);
+    const duration = type.durationRangeLabel || formatDuration(type.durationMinutes);
     const deposit = formatMoney(type.depositCents, type.currency);
     const details = [duration, type.description].filter(Boolean).join(" - ");
-    return `- ${type.label}${details ? `: ${details}` : ""} Deposit: ${deposit}.`;
+    const extended = type.id === EXTENDED_DAY_BOOKING_TYPE_ID
+      ? ` Extended Day fee: ${formatMoney(type.sessionFeeCents, type.currency)}, due with the remaining studio balance. The ${deposit} deposit is credited toward the final total. Extended Day is optional; you may choose a shorter session and split the project across appointments.`
+      : "";
+    return `- ${type.label}${details ? `: ${details}` : ""} Deposit: ${deposit}.${extended}`;
   }).join("\n");
 }
 
@@ -650,6 +673,8 @@ function normalizeAppointment(row) {
     depositCents: row.deposit_cents ?? row.depositCents ?? 0,
     tipCents: row.tip_cents ?? row.tipCents ?? 0,
     totalDueCents: (row.deposit_cents ?? row.depositCents ?? 0) + (row.tip_cents ?? row.tipCents ?? 0),
+    sessionFeeCents: row.session_fee_cents ?? row.sessionFeeCents ?? 0,
+    minimumBillableMinutes: row.minimum_billable_minutes ?? row.minimumBillableMinutes ?? 0,
     currency: row.currency || "USD",
     purpose: row.purpose || "",
     status: row.status || "",
@@ -657,6 +682,16 @@ function normalizeAppointment(row) {
     originalStartAt: row.original_start_at || row.originalStartAt || "",
     originalEndAt: row.original_end_at || row.originalEndAt || "",
     meeting: meetingJoinUrl ? { joinUrl: meetingJoinUrl } : null,
+  };
+}
+
+function extendedDayEmailFields(appointment) {
+  if (appointment.bookingTypeId !== EXTENDED_DAY_BOOKING_TYPE_ID) {
+    return { sessionFeeText: "", billingPolicyText: "" };
+  }
+  return {
+    sessionFeeText: `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance`,
+    billingPolicyText: "Extended Day reserves a 10-hour appointment block and has an 8-hour billing minimum at your approved project rate. The Extended Day fee is not charged again during a no-cost reschedule.",
   };
 }
 
@@ -714,6 +749,18 @@ const SUBMISSION_RECEIPTS = {
     subject: "In-person Build reservation started",
     expectation: "Your requested 90-minute Build session is held only while checkout is active.",
     next: "The session becomes confirmed after Square reports a successful reservation-fee payment.",
+  },
+  art_acquisition: {
+    label: "art acquisition inquiry",
+    subject: "Art acquisition inquiry received",
+    expectation: "The Art studio will review the work, availability, budget, and questions you shared.",
+    next: "The studio will reply with availability, acquisition details, or the next step.",
+  },
+  studio_booking: {
+    label: "studio booking request",
+    subject: "Studio booking request received",
+    expectation: "The studio will review the requested date, group size, and use of the space.",
+    next: "The studio will reply with availability and the next step.",
   },
 };
 
@@ -896,13 +943,30 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   if (!normalized.contactEmail) return { ok: false, skipped: true };
 
   const type = normalizedSubmissionType(normalized.type);
-  const profile = SUBMISSION_RECEIPTS[type] || {
+  const studioVisit = type === "studio_booking" && normalized.payload?.booking_type_id === "studio_visit";
+  const constructTheme = type === "art_acquisition" || studioVisit
+    ? "construct_art"
+    : type === "studio_booking"
+      ? "construct_event"
+      : "tattoo";
+  const baseProfile = SUBMISSION_RECEIPTS[type] || {
     label: "project submission",
     subject: "Project submission received",
     expectation: "The studio will review the information you shared before deciding the next step.",
     next: "If more information or booking access is needed, the studio will contact you by email.",
   };
-  const settings = await tattooReceiptSettings(env);
+  const profile = studioVisit
+    ? {
+        label: "Open Studio Visit request",
+        subject: "Open Studio Visit request received",
+        expectation: "The Art studio will review the requested visit details and availability.",
+        next: "The studio will reply with the next step or booking details.",
+      }
+    : baseProfile;
+  const constructIdentity = constructTheme === "tattoo" ? null : eventsEmailIdentity(env);
+  const settings = constructIdentity
+    ? { reviewTimeMessage: DEFAULT_REVIEW_TIME_MESSAGE, supportEmail: constructIdentity.replyTo }
+    : await tattooReceiptSettings(env);
   const reviewLine = ["consultation", "build_session"].includes(type)
     ? "Complete checkout from the Square link you opened to keep the selected time."
     : settings.reviewTimeMessage;
@@ -910,8 +974,13 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     ? flashSheetDesignLines(normalized.payload, "sheet_design_selections", "Requested sheet designs:")
     : [];
   const message = buildSubmissionReceivedEmail({
-    variant: ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", consultation: "consultation", build_session: "build_session" })[type] || "custom",
-    subject: `art.pill TATTOO HOUSE — ${profile.subject}`,
+    variant: studioVisit
+      ? "studio_visit"
+      : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
+    theme: constructTheme,
+    subject: constructIdentity
+      ? `the six.well construct — ${profile.subject}`
+      : `art.pill TATTOO HOUSE — ${profile.subject}`,
     clientName: normalized.contactName,
     label: profile.label,
     submissionId: normalized.id,
@@ -924,6 +993,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
 
   return sendTransactionalEmail(env, {
     to: normalized.contactEmail,
+    ...(constructIdentity || {}),
     ...message,
     templateKey: "submission_received",
     relatedType: "submission",
@@ -935,6 +1005,12 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
 export async function notifyAdminSubmissionReceived(env, submission, options = {}) {
   const normalized = normalizeSubmission(submission);
   const formName = tattooFormName(normalized.type);
+  const studioVisit = normalized.type === "studio_booking" && normalized.payload?.booking_type_id === "studio_visit";
+  const theme = normalized.type === "art_acquisition" || studioVisit
+    ? "construct_art"
+    : normalized.type === "studio_booking"
+      ? "construct_event"
+      : "tattoo";
   const detailLines = submissionDetailLines(normalized);
   const lines = [
     "New form submission received.",
@@ -954,6 +1030,8 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
   ];
 
   return sendAdminNotification(env, null, {
+    theme,
+    templateVariant: theme,
     subject: formName
       ? tattooSubject(formName)
       : `New submission: ${labelFromKey(normalized.type)}`,
@@ -1019,6 +1097,13 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
     feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received`,
+    sessionFeeText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+      ? `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance`
+      : "",
+    billingPolicyText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+      ? "Extended Day reserves a 10-hour appointment block and has an 8-hour billing minimum at your approved project rate."
+      : "",
+    renderingPolicyText: "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
@@ -1123,9 +1208,13 @@ async function sendBuildSessionConfirmed(env, request, appointment, options = {}
 
 async function sendStudioBookingConfirmed(env, request, appointment, options = {}) {
   const identity = eventsEmailIdentity(env);
+  const studioVisit = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
   const message = buildAppointmentConfirmedEmail({
-    kind: "studio",
-    subject: "Your studio booking at the six.well construct is confirmed",
+    kind: studioVisit ? "studio_visit" : "studio_space",
+    variant: studioVisit ? "studio_visit" : "studio_space",
+    subject: studioVisit
+      ? "Your Open Studio Visit at the six.well construct is confirmed"
+      : "Your studio booking at the six.well construct is confirmed",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
@@ -1171,6 +1260,7 @@ export async function notifyAppointmentConfirmed(env, request, appointmentRow, o
 export async function notifyAdminAppointmentConfirmed(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   const studio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
+  const art = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
   const when = [formatDate(appointment.startAt), formatDate(appointment.endAt)]
     .filter(Boolean)
     .join(" - ");
@@ -1189,6 +1279,7 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
     "",
     "Payment",
     compactLine("Deposit / fee", `${formatMoney(appointment.depositCents, appointment.currency)} received`),
+    appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance`) : "",
     appointment.tipCents ? compactLine("Optional tip", formatMoney(appointment.tipCents, appointment.currency)) : "",
     compactLine("Total paid", formatMoney(appointment.totalDueCents, appointment.currency)),
     "",
@@ -1197,8 +1288,8 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
   ];
 
   return sendAdminNotification(env, request, {
-    theme: studio ? "construct_studio" : "tattoo",
-    templateVariant: studio ? "construct_studio" : "tattoo",
+    theme: art ? "construct_art" : studio ? "construct_event" : "tattoo",
+    templateVariant: art ? "construct_art" : studio ? "construct_event" : "tattoo",
     subject: studio
       ? `Booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
       : tattooAdminBookingSubject(appointment, "Confirmed"),
@@ -1210,16 +1301,62 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
   });
 }
 
+export async function notifyTattooRenderingPaymentRequested(env, request, renderingRow, options = {}) {
+  if (!renderingRow?.client_email) return { ok: false, skipped: true };
+  const message = buildTattooRenderingPaymentRequestEmail({
+    clientName: renderingRow.client_name,
+    requestNumber: renderingRow.request_number,
+    amountText: formatMoney(renderingRow.amount_cents || 5000, renderingRow.currency || "USD"),
+    appointmentWhen: renderingRow.start_at
+      ? `${formatDate(renderingRow.start_at)} - ${formatDate(renderingRow.end_at)}`
+      : "",
+    expiresAt: renderingRow.expires_at ? formatDate(renderingRow.expires_at) : "",
+    checkoutUrl: renderingRow.square_checkout_url,
+  });
+  return sendTransactionalEmail(env, {
+    to: renderingRow.client_email,
+    ...message,
+    templateKey: "tattoo_rendering_payment_requested",
+    templateVariant: "default",
+    relatedType: "tattoo_rendering_request",
+    relatedId: renderingRow.id,
+    idempotencyKey: options.idempotencyKey || `tattoo_rendering_payment_requested:${renderingRow.id}`,
+  });
+}
+
+export async function notifyTattooRenderingPaymentConfirmed(env, request, renderingRow, options = {}) {
+  if (!renderingRow?.client_email) return { ok: false, skipped: true };
+  const message = buildTattooRenderingPaymentConfirmedEmail({
+    clientName: renderingRow.client_name,
+    requestNumber: renderingRow.request_number,
+    amountText: formatMoney(renderingRow.amount_cents || 5000, renderingRow.currency || "USD"),
+    appointmentWhen: renderingRow.start_at
+      ? `${formatDate(renderingRow.start_at)} - ${formatDate(renderingRow.end_at)}`
+      : "",
+  });
+  return sendTransactionalEmail(env, {
+    to: renderingRow.client_email,
+    ...message,
+    templateKey: "tattoo_rendering_payment_confirmed",
+    templateVariant: "default",
+    relatedType: "tattoo_rendering_request",
+    relatedId: renderingRow.id,
+    idempotencyKey: options.idempotencyKey || `tattoo_rendering_payment_confirmed:${renderingRow.id}`,
+  });
+}
+
 function rescheduledAppointmentProfile(appointment) {
   const virtual = appointment.bookingTypeId === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID;
   const build = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session";
   const consultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
     || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
   const studio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
+  const art = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
   return {
     studio,
+    art,
     virtual,
-    label: studio ? "studio booking" : build ? "Build session" : consultation ? "consultation" : "tattoo appointment",
+    label: art ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : consultation ? "consultation" : "tattoo appointment",
   };
 }
 
@@ -1231,7 +1368,8 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
   const message = buildAppointmentRescheduledEmail({
-    kind: profile.studio ? "studio" : "tattoo",
+    kind: profile.art ? "studio_visit" : profile.studio ? "studio_space" : "tattoo",
+    variant: profile.art ? "studio_visit" : profile.studio ? "studio_space" : "tattoo",
     subject: `Your ${profile.label} has been rescheduled`,
     label: profile.label,
     clientName: appointment.clientName,
@@ -1240,6 +1378,7 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
       : "",
     newTime: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
+    ...extendedDayEmailFields(appointment),
     zoomUrl: profile.virtual ? appointment.meeting?.joinUrl || "" : "",
     zoomStatus: profile.virtual && !appointment.meeting?.joinUrl
       ? "Zoom details will be sent separately if the link is not ready yet."
@@ -1266,8 +1405,8 @@ export async function notifyAdminAppointmentRescheduled(env, request, appointmen
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
   return sendAdminNotification(env, request, {
-    theme: profile.studio ? "construct_studio" : "tattoo",
-    templateVariant: profile.studio ? "construct_studio" : "tattoo",
+    theme: profile.art ? "construct_art" : profile.studio ? "construct_event" : "tattoo",
+    templateVariant: profile.art ? "construct_art" : profile.studio ? "construct_event" : "tattoo",
     subject: profile.studio
       ? `Booking rescheduled: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
       : tattooAdminBookingSubject(appointment, "Rescheduled"),
@@ -1280,6 +1419,8 @@ export async function notifyAdminAppointmentRescheduled(env, request, appointmen
       compactLine("Submission ID", appointment.submissionId),
       previousStartAt ? compactLine("Previous time", `${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}`) : "",
       compactLine("New time", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
+      appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance`) : "",
+      appointment.minimumBillableMinutes ? compactLine("Billing policy", `${appointment.minimumBillableMinutes / 60}-hour minimum inside the reserved 10-hour block`) : "",
       compactLine("Reschedules used", appointment.rescheduleCount),
       "",
       compactLine("Client", appointment.clientName),
@@ -1823,11 +1964,12 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
   if (!appointment.clientEmail) return { ok: false, skipped: true };
 
   const isStudio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
+  const isArt = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
   const isBuild = appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session";
   const isPrerequisiteConsultation = appointment.purpose === "prerequisite_consultation";
   const isConsultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
     || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
-  const occasion = isStudio ? "studio booking" : isBuild ? "Build session" : isPrerequisiteConsultation ? "project consultation" : isConsultation ? "consultation" : "appointment";
+  const occasion = isArt ? "Open Studio Visit" : isStudio ? "studio booking" : isBuild ? "Build session" : isPrerequisiteConsultation ? "project consultation" : isConsultation ? "consultation" : "appointment";
   const rebookUrl = isBuild
     ? `${publicBaseUrl(env, request)}/tattoos/build/in-person/?rebook=1`
     : isConsultation && !isPrerequisiteConsultation
@@ -1842,13 +1984,14 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
       ? "This consultation belongs to your reviewed tattoo project. Contact the studio to continue that project; do not start a separate public consultation."
       : "A cancelled tattoo appointment does not convert into a consultation. Contact the studio if you want to discuss a future project or appointment.";
   const message = buildAppointmentCancelledEmail({
-    variant: isStudio ? "studio" : isBuild ? "build" : isPrerequisiteConsultation ? "prerequisite" : isConsultation ? "consultation" : "tattoo",
-    kind: isStudio ? "studio" : "tattoo",
+    variant: isArt ? "studio_visit" : isStudio ? "studio_space" : isBuild ? "build" : isPrerequisiteConsultation ? "prerequisite" : isConsultation ? "consultation" : "tattoo",
+    kind: isArt ? "studio_visit" : isStudio ? "studio_space" : "tattoo",
     subject: `Your ${occasion.toLowerCase()} has been cancelled`,
     clientName: appointment.clientName,
     occasion,
     scheduled: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
+    ...extendedDayEmailFields(appointment),
     policyText,
     rebookUrl,
     nextText,
@@ -2072,7 +2215,8 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
   const isConsultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
     || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
   const isStudio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
-  const occasion = isStudio ? "studio booking" : isBuild ? "Build session" : isConsultation ? "consultation" : "tattoo appointment";
+  const isArt = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
+  const occasion = isArt ? "Open Studio Visit" : isStudio ? "studio booking" : isBuild ? "Build session" : isConsultation ? "consultation" : "tattoo appointment";
   const brand = isStudio ? "the six.well construct" : "art.pill TATTOO HOUSE";
   const resourceActions = isVirtual || isStudio
     ? []
@@ -2083,14 +2227,15 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
           { label: "Location & parking", href: resources.locationParkingUrl },
         ];
   const message = buildAppointmentReminderEmail({
-    kind: isStudio ? "studio" : isVirtual ? "consultation_virtual" : "tattoo",
-    variant: isStudio ? "studio" : isBuild ? "build" : isVirtual ? "virtual" : isConsultation ? "consultation" : "tattoo",
+    kind: isArt ? "studio_visit" : isStudio ? "studio_space" : isVirtual ? "consultation_virtual" : "tattoo",
+    variant: isArt ? "studio_visit" : isStudio ? "studio_space" : isBuild ? "build" : isVirtual ? "virtual" : isConsultation ? "consultation" : "tattoo",
     subject: `Reminder: Your ${occasion} with ${brand} is tomorrow`,
     occasion,
     brand,
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: appointment.bookingTypeLabel,
+    ...extendedDayEmailFields(appointment),
     zoomUrl: isVirtual ? appointment.meeting?.joinUrl || "" : "",
     zoomStatus: isVirtual && !appointment.meeting?.joinUrl
       ? "Contact the studio if your link has not arrived."

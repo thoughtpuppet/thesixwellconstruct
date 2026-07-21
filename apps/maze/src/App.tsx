@@ -380,7 +380,7 @@ function SubmitDialog({
               <option value="$2,000+">$2,000+</option>
               <option value="I’m flexible / I’d like guidance">I’m flexible / I’d like guidance</option>
             </select>
-            <span className="maze-submit-help" id="maze-budget-help">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote.</span>
+            <span className="maze-submit-help" id="maze-budget-help">This helps me recommend an appropriate size, level of detail, and session plan. It does not determine your final quote. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</span>
           </label>
           <label className="maze-submit-full">
             What does this maze carry?

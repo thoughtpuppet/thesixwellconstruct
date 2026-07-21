@@ -55,7 +55,7 @@
     const meta = make("div", "email-preview-meta");
 
     const selectFields = [
-      ["template", "Template"], ["brand", "Brand"], ["audience", "Audience"],
+      ["template", "Template"], ["brand", "Node / brand"], ["audience", "Audience"],
       ["stage", "Journey stage"], ["publication", "Publication status"],
     ].map(([name, label]) => {
       const wrap = make("label", "email-preview-control");
@@ -144,11 +144,14 @@
     };
     const id = (entry) => `${entry.templateKey}:${entry.variant}`;
     const currentEntry = () => catalog.find((entry) => id(entry) === templateSelect.value);
+    const filterValueLabel = (key, value) => key === "brand"
+      ? ({ tattoo: "Tattoo node", art: "Art node", events: "Events node", studio: "Studio / CRM" })[value] || title(value)
+      : title(value);
 
     function filtersFor(select, key, label) {
       const current = select.value;
       select.replaceChildren(); option(select, "", `All ${label}`);
-      [...new Set(catalog.map((entry) => entry[key]).filter(Boolean))].sort().forEach((value) => option(select, value, title(value)));
+      [...new Set(catalog.map((entry) => entry[key]).filter(Boolean))].sort().forEach((value) => option(select, value, filterValueLabel(key, value)));
       if ([...select.options].some((entry) => entry.value === current)) select.value = current;
     }
     async function rebuildTemplates(preferred = "") {
@@ -239,6 +242,7 @@
     async function loadTemplate() {
       selected = currentEntry();
       if (!selected) { editorLayout.hidden = true; setStatus("No templates match the selected filters."); return; }
+      root.dataset.activeBrand = selected.brand || "studio";
       editorLayout.hidden = false;
       try {
         const params = new URLSearchParams({ variant: selected.variant });

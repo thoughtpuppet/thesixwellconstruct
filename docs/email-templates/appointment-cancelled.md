@@ -21,6 +21,7 @@ Your art.pill TATTOO HOUSE appointment has been cancelled.
 
 Was scheduled: {{appointment_start}} - {{appointment_end}}
 Session: {{booking_type_label}}
+{{extended_day_billing_policy_line}}
 
 Per studio policy, deposits and payments are non-refundable. One reschedule
 is allowed with at least 48 hours notice; a new deposit is required for
@@ -62,11 +63,15 @@ art.pill TATTOO HOUSE
 - `{{rebook_url}}`
 - `{{support_email}}`
 - `{{appointment_id}}`
+- `{{minimum_billable_minutes}}` (Extended Day only)
 
 ## Optional Notes For Codex
 
-Use the "deposits" wording for `tattoo_quarter`/`tattoo_half`/`tattoo_full`
+Use the "deposits" wording for `tattoo_quarter`/`tattoo_half`/`tattoo_full`/`tattoo_extended`
 and the "reservation fees" wording for `consult_in_person`,
 `consult_virtual`, and `build_in_person`. The rebook link points to
 `/tattoos/build/in-person/?rebook=1` for build sessions and
 `/tattoos/inquire/consultation/?rebook=1` for everything else.
+For Extended Day, identify the cancelled appointment as the 10-hour block
+with the eight-hour minimum at the approved project rate. Do not imply that
+the later $200 fee was collected through Square.

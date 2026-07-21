@@ -5,6 +5,8 @@ import {
   notifyAppointmentConfirmed,
   notifyAppointmentRescheduled,
   notifyBookingLinkCreated,
+  notifyTattooRenderingPaymentConfirmed,
+  notifyTattooRenderingPaymentRequested,
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
@@ -49,7 +51,7 @@ const VIRTUAL_CONSULTATION_BOOKING_TYPE_ID = "consult_virtual";
 const STUDIO_BOOKING_TYPE_IDS = ["studio_visit", "studio_gathering", "studio_rental"];
 
 const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
-  tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full"],
+  tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"],
   consultation: ["consult_in_person", "consult_virtual", "build_in_person"],
   studio: STUDIO_BOOKING_TYPE_IDS,
 };
@@ -57,11 +59,16 @@ const TATTOO_DAY_SESSION_LABELS = Object.freeze({
   tattoo_quarter: "Quarter Day Session",
   tattoo_half: "Half Day Session",
   tattoo_full: "Full Day Session",
+  tattoo_extended: "Extended Day Session",
 });
+const EXTENDED_DAY_BOOKING_TYPE_ID = "tattoo_extended";
 
 // Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.
 const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
 const TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
+const ORIGINAL_TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
+const TATTOO_RENDERING_FEE_CENTS = 5000;
+const TATTOO_RENDERING_CURRENCY = "USD";
 const SESSION_CATEGORIES = new Set(["artist_review", "one_session", "multiple_sessions"]);
 const SPLIT_POLICIES = new Set(["artist_review", "required", "client_choice", "not_available"]);
 const CLIENT_SESSION_PREFERENCES = new Set(["studio_plan", "one_longer_session", "multiple_shorter_sessions"]);
@@ -214,18 +221,38 @@ function parseJsonField(value, fallback) {
 }
 
 function normalizeBookingType(row) {
+  const durationMinutes = Number(row.duration_minutes ?? row.durationMinutes ?? 0);
+  const minimumBillableMinutes = Number(row.minimum_billable_minutes ?? row.minimumBillableMinutes ?? 0);
   return {
     id: row.id,
     venture: row.venture,
     label: TATTOO_DAY_SESSION_LABELS[row.id] || row.label,
     description: row.description || "",
-    durationMinutes: row.duration_minutes,
+    durationMinutes,
     depositCents: row.deposit_cents,
     depositLabel: formatMoney(row.deposit_cents, row.currency || "USD"),
     currency: row.currency || "USD",
     active: Boolean(row.active),
     sortOrder: row.sort_order || 0,
+    sessionFeeCents: Number(row.session_fee_cents ?? row.sessionFeeCents ?? 0),
+    sessionFeeLabel: formatMoney(Number(row.session_fee_cents ?? row.sessionFeeCents ?? 0), row.currency || "USD"),
+    minimumBillableMinutes,
+    durationRangeLabel: row.id === EXTENDED_DAY_BOOKING_TYPE_ID
+      ? "8-10 hours"
+      : formatDurationLabel(durationMinutes),
   };
+}
+
+function formatDurationLabel(minutes) {
+  const total = Number(minutes || 0);
+  if (!total) return "";
+  if (total % 60 === 0) {
+    const hours = total / 60;
+    return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  }
+  const hours = Math.floor(total / 60);
+  const remainder = total % 60;
+  return hours ? `${hours}h ${remainder}m` : `${remainder} minutes`;
 }
 
 function normalizeWindow(row) {
@@ -319,6 +346,9 @@ function normalizeAppointment(row) {
     depositCents: row.deposit_cents,
     tipCents: row.tip_cents || 0,
     totalDueCents: row.deposit_cents + (row.tip_cents || 0),
+    sessionFeeCents: Number(row.session_fee_cents || 0),
+    minimumBillableMinutes: Number(row.minimum_billable_minutes || 0),
+    extendedDayAcknowledgedAt: row.extended_day_acknowledged_at || "",
     currency: row.currency || "USD",
     squareOrderId: row.square_order_id || "",
     squarePaymentLinkId: row.square_payment_link_id || "",
@@ -989,6 +1019,25 @@ function reviewedBudgetIsComplete(plan) {
     && (plan?.approved_budget_currency || "USD") === "USD";
 }
 
+function pricingSummaryForAppointment(plan, appointment) {
+  if (!reviewedBudgetIsComplete(plan) || !appointment) return null;
+  const laborMinimumCents = Number(plan.approved_budget_min_cents);
+  const laborMaximumCents = Number(plan.approved_budget_max_cents);
+  const sessionFeeCents = Number(appointment.sessionFeeCents ?? appointment.session_fee_cents ?? 0);
+  const depositCreditCents = Number(appointment.depositCents ?? appointment.deposit_cents ?? 0);
+  return {
+    laborMinimumCents,
+    laborMaximumCents,
+    sessionFeeCents,
+    combinedMinimumCents: laborMinimumCents + sessionFeeCents,
+    combinedMaximumCents: laborMaximumCents + sessionFeeCents,
+    depositCreditCents,
+    remainingMinimumCents: Math.max(0, laborMinimumCents + sessionFeeCents - depositCreditCents),
+    remainingMaximumCents: Math.max(0, laborMaximumCents + sessionFeeCents - depositCreditCents),
+    currency: plan.approved_budget_currency || appointment.currency || "USD",
+  };
+}
+
 function sessionPlanRequiresClientResponse(plan) {
   return Boolean(plan && ["required", "client_choice", "not_available"].includes(plan.split_policy));
 }
@@ -1350,6 +1399,15 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
   if (window.booking_type_id && window.booking_type_id !== bookingTypeId) {
     return { error: "That appointment time does not match the selected session." };
   }
+  if (
+    bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+    && (
+      window.booking_type_id !== EXTENDED_DAY_BOOKING_TYPE_ID
+      || new Date(window.end_at).getTime() - new Date(window.start_at).getTime() !== 600 * 60 * 1000
+    )
+  ) {
+    return { error: "Extended Day requires a dedicated 10-hour availability window." };
+  }
 
   const countRow = await db
     .prepare(
@@ -1527,12 +1585,13 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       `INSERT OR IGNORE INTO appointments (
         id, submission_id, booking_token_id, booking_type_id, availability_window_id,
         status, purpose, client_name, client_email, client_phone, start_at, end_at,
-        deposit_cents, tip_cents, currency, hold_expires_at, hold_state,
+        deposit_cents, tip_cents, session_fee_cents, minimum_billable_minutes,
+        extended_day_acknowledged_at, currency, hold_expires_at, hold_state,
         replacement_for_appointment_id, reschedule_count, original_start_at,
         original_end_at, created_at, updated_at
       )
       SELECT ?, ?, ?, ?, aw.id, 'pending_deposit', ?, ?, ?, ?, aw.start_at, aw.end_at,
-             ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?
+             ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?
       FROM availability_windows aw
       WHERE aw.id = ? AND aw.active = 1 AND aw.is_blackout = 0
         AND (aw.booking_type_id IS NULL OR aw.booking_type_id = ?)
@@ -1643,6 +1702,9 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.clientPhone || null,
       values.depositCents,
       values.tipCents || 0,
+      values.sessionFeeCents || 0,
+      values.minimumBillableMinutes || 0,
+      values.extendedDayAcknowledgedAt || null,
       values.currency || "USD",
       values.holdExpiresAt,
       values.replacementForAppointmentId || null,
@@ -1696,13 +1758,16 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
   return Number(results?.[0]?.meta?.changes || 0) > 0;
 }
 
-async function createPendingAppointment(db, tokenContext, bookingTypeId, windowId, tipCents = 0) {
+async function createPendingAppointment(db, tokenContext, bookingTypeId, windowId, tipCents = 0, extendedDayAcknowledged = false) {
   const now = new Date().toISOString();
   const bookingType = await db
     .prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
     .bind(bookingTypeId)
     .first();
   if (!bookingType) return { error: "Unknown booking type." };
+  if (bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID && extendedDayAcknowledged !== true) {
+    return { error: "Review and acknowledge the Extended Day pricing and billing policy before checkout." };
+  }
 
   const purpose = tokenContext.purpose === "consultation" ? "prerequisite_consultation" : "tattoo";
   if (purposeForBookingType(bookingType.id, purpose === "prerequisite_consultation") !== purpose) {
@@ -1772,6 +1837,9 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     clientPhone: tokenContext.token.contact_phone || null,
     depositCents: bookingType.deposit_cents,
     tipCents,
+    sessionFeeCents: bookingType.session_fee_cents || 0,
+    minimumBillableMinutes: bookingType.minimum_billable_minutes || 0,
+    extendedDayAcknowledgedAt: bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null,
     currency: bookingType.currency || "USD",
     holdExpiresAt: holdExpiryFromNow(),
     now,
@@ -2703,7 +2771,9 @@ export async function handleCreateBookingHold(request, env) {
       db,
       context,
       asString(body.bookingTypeId),
-      asString(body.availabilityWindowId)
+      asString(body.availabilityWindowId),
+      0,
+      body.extendedDayAcknowledged === true
     );
     if (result.error) return errorResponse(result.error, result.code ? 409 : 400, {
       ...(result.code ? { code: result.code } : {}),
@@ -2966,6 +3036,125 @@ async function savePendingPaymentLink(db, appointment, paymentLink) {
   return saved;
 }
 
+function normalizeTattooRenderingRequest(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    submissionId: row.submission_id,
+    appointmentId: row.appointment_id,
+    requestNumber: Number(row.request_number || 0),
+    amountCents: Number(row.amount_cents || TATTOO_RENDERING_FEE_CENTS),
+    currency: row.currency || TATTOO_RENDERING_CURRENCY,
+    status: row.status,
+    squareOrderId: row.square_order_id || "",
+    squarePaymentLinkId: row.square_payment_link_id || "",
+    checkoutUrl: row.square_checkout_url || "",
+    squarePaymentId: row.square_payment_id || "",
+    expiresAt: row.expires_at || "",
+    paidAt: row.paid_at || "",
+    cancelledAt: row.cancelled_at || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function selectTattooRenderingRequest(db, requestId) {
+  return db.prepare(
+    `SELECT trr.*, a.client_name, a.client_email, a.start_at, a.end_at,
+            a.status AS appointment_status, a.purpose AS appointment_purpose,
+            s.type AS submission_type
+     FROM tattoo_rendering_requests trr
+     JOIN appointments a ON a.id = trr.appointment_id
+     JOIN submissions s ON s.id = trr.submission_id
+     WHERE trr.id = ?`
+  ).bind(requestId).first();
+}
+
+async function createTattooRenderingSquarePaymentLink(request, env, renderingRequest) {
+  if (!squareConfigured(env)) throw new Error("Square is not configured.");
+  const redirectUrl = new URL("/booking/confirmed/", baseUrlFromRequest(request));
+  redirectUrl.searchParams.set("appointment", renderingRequest.appointment_id);
+  const response = await fetch(`${squareBaseUrl(env)}/v2/online-checkout/payment-links`, {
+    method: "POST",
+    headers: {
+      "Square-Version": "2026-05-20",
+      "Authorization": `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      idempotency_key: renderingRequest.id,
+      order: {
+        location_id: asString(env.SQUARE_LOCATION_ID),
+        line_items: [
+          squareLineItem(
+            "Additional Tattoo Concept Sketch",
+            TATTOO_RENDERING_FEE_CENTS,
+            TATTOO_RENDERING_CURRENCY,
+          ),
+        ],
+      },
+      checkout_options: {
+        redirect_url: redirectUrl.toString(),
+        ask_for_shipping_address: false,
+      },
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.errors?.[0]?.detail || "Square rendering-fee checkout failed.");
+  return payload.payment_link;
+}
+
+async function updatePendingRenderingExpiry(db, appointmentId, expiresAt) {
+  const now = new Date().toISOString();
+  await db.prepare(
+    `UPDATE tattoo_rendering_requests SET expires_at = ?, updated_at = ?
+     WHERE appointment_id = ? AND status = 'pending'`
+  ).bind(expiresAt, now, appointmentId).run();
+}
+
+async function invalidatePendingRenderingRequestsForAppointment(db, env, appointmentId, actor, reason) {
+  const pending = (await db.prepare(
+    `SELECT * FROM tattoo_rendering_requests
+     WHERE appointment_id = ? AND status = 'pending' ORDER BY created_at`
+  ).bind(appointmentId).all()).results || [];
+  const summary = { cancelled: 0, attention: 0 };
+  for (const row of pending) {
+    const now = new Date().toISOString();
+    let needsAttention = false;
+    try {
+      if (row.square_payment_link_id) await invalidateSquarePaymentLink(env, row.square_payment_link_id);
+      const result = await db.prepare(
+        `UPDATE tattoo_rendering_requests
+         SET status = 'cancelled', cancelled_at = ?, updated_at = ?
+         WHERE id = ? AND status = 'pending'`
+      ).bind(now, now, row.id).run();
+      if (Number(result?.meta?.changes || 0) > 0) summary.cancelled += 1;
+    } catch (error) {
+      needsAttention = true;
+      const result = await db.prepare(
+        `UPDATE tattoo_rendering_requests
+         SET status = 'payment_attention', raw_json = ?, updated_at = ?
+         WHERE id = ? AND status = 'pending'`
+      ).bind(JSON.stringify({ reason, error: error.message }), now, row.id).run();
+      if (Number(result?.meta?.changes || 0) > 0) summary.attention += 1;
+    }
+    await db.prepare(
+      `INSERT INTO appointment_events (
+        id, appointment_id, event_type, actor, note, metadata_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      crypto.randomUUID(),
+      appointmentId,
+      needsAttention ? "tattoo_rendering_payment_attention" : "tattoo_rendering_cancelled",
+      actor,
+      reason,
+      JSON.stringify({ renderingRequestId: row.id }),
+      now,
+    ).run();
+  }
+  return summary;
+}
+
 async function selectAppointmentWithMeeting(db, appointmentId) {
   return db
     .prepare(
@@ -3217,7 +3406,8 @@ export async function handleCreateBookingCheckout(request, env) {
       context,
       asString(body.bookingTypeId),
       asString(body.availabilityWindowId),
-      tip.tipCents
+      tip.tipCents,
+      body.extendedDayAcknowledged === true
     );
     if (result.error) return errorResponse(result.error, result.code ? 409 : 400, {
       ...(result.code ? { code: result.code } : {}),
@@ -3817,6 +4007,23 @@ async function confirmPaidAppointment(db, env, request, appointmentRow, order, p
         appointment.id,
         appointment.id,
         now,
+      ),
+      db.prepare(
+        `UPDATE tattoo_rendering_requests
+         SET appointment_id = ?, expires_at = ?, updated_at = ?
+         WHERE appointment_id = ? AND status = 'pending'
+           AND EXISTS (
+             SELECT 1 FROM appointments replacement
+             WHERE replacement.id = ? AND replacement.status = 'confirmed'
+               AND replacement.updated_at = ?
+           )`
+      ).bind(
+        appointment.id,
+        appointment.startAt,
+        now,
+        appointment.replacementForAppointmentId,
+        appointment.id,
+        now,
       )
     );
   }
@@ -3915,10 +4122,14 @@ export async function handleConfirmBooking(request, env) {
     const tattooSettings = await db.prepare(
       "SELECT support_email FROM tattoo_settings WHERE id = 'default'"
     ).first();
+    const sessionPlan = appointment.submissionId
+      ? await loadTattooSessionPlan(db, appointment.submissionId)
+      : null;
 
     return json({
       ok: true,
       appointment,
+      pricingSummary: pricingSummaryForAppointment(sessionPlan, appointment),
       depositStatus,
       supportEmail: tattooSettings?.support_email || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
       hoursUntilStart,
@@ -4031,6 +4242,13 @@ export async function handleCancelAppointment(request, env, options = {}) {
       }
     }
 
+    const renderingCancellation = await invalidatePendingRenderingRequestsForAppointment(
+      db,
+      env,
+      appointmentId,
+      actor,
+      "Appointment cancelled; unpaid additional-rendering links were invalidated.",
+    );
     const now = new Date().toISOString();
     const reason = asString(body.reason).slice(0, 500) || (actor === "admin" ? "Cancelled by Studio" : "Cancelled by client");
     const appointmentPurpose = appointmentRow.purpose || purposeForBookingType(appointmentRow.booking_type_id, Boolean(appointmentRow.booking_token_id));
@@ -4141,6 +4359,7 @@ export async function handleCancelAppointment(request, env, options = {}) {
       hoursUntilStart,
       supportEmail: tattooSettings?.support_email || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
       meetingNeedsAttention: !meetingCleanup.cleaned,
+      renderingCancellation,
     });
   } catch (error) {
     return errorResponse("Unable to cancel appointment.", 500, {
@@ -4538,6 +4757,9 @@ async function createReplacementCheckout(request, env, db, appointmentRow, avail
     clientPhone: original.clientPhone,
     depositCents: bookingTypeRow.deposit_cents,
     tipCents: 0,
+    sessionFeeCents: bookingTypeRow.session_fee_cents || 0,
+    minimumBillableMinutes: bookingTypeRow.minimum_billable_minutes || 0,
+    extendedDayAcknowledgedAt: original.extendedDayAcknowledgedAt || (original.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null),
     currency: bookingTypeRow.currency || "USD",
     holdExpiresAt: holdExpiryFromNow(),
     replacementForAppointmentId: original.id,
@@ -4697,6 +4919,7 @@ async function moveConfirmedAppointment(
   if (Number(results?.[0]?.meta?.changes || 0) < 1) {
     return { error: "The new appointment time became unavailable before the move completed.", status: 409 };
   }
+  await updatePendingRenderingExpiry(db, original.id, availability.window.start_at);
 
   let meetingNeedsAttention = false;
   let meetingError = "";
@@ -4897,12 +5120,124 @@ function webhookLooksPaid(payload, order) {
   return payment?.status === "COMPLETED" && Number.isFinite(netDue) && netDue === 0;
 }
 
+async function processTattooRenderingSquareWebhook(request, env, db, renderingRow, payload, orderId) {
+  const order = await fetchSquareOrderForReconciliation(env, orderId);
+  const paymentId = webhookPaymentId(payload);
+  const now = new Date().toISOString();
+  if (!webhookLooksPaid(payload, order)) {
+    await db.prepare(
+      `UPDATE tattoo_rendering_requests
+       SET square_payment_id = COALESCE(?, square_payment_id), raw_json = ?, updated_at = ?
+       WHERE id = ? AND status = 'pending'`
+    ).bind(paymentId || null, JSON.stringify(order || payload), now, renderingRow.id).run();
+    return json({ ok: true, paid: false, renderingRequestId: renderingRow.id });
+  }
+  if (renderingRow.status === "paid") {
+    return json({
+      ok: true,
+      paid: true,
+      ignored: true,
+      reason: "Rendering payment was already recorded.",
+      renderingRequestId: renderingRow.id,
+    });
+  }
+  if (
+    renderingRow.status === "payment_attention"
+    && paymentId
+    && renderingRow.square_payment_id === paymentId
+  ) {
+    return json({
+      ok: true,
+      paid: true,
+      attention: true,
+      ignored: true,
+      reason: "Rendering payment attention was already recorded.",
+      renderingRequestId: renderingRow.id,
+    });
+  }
+
+  const appointment = await db.prepare("SELECT status, start_at FROM appointments WHERE id = ?")
+    .bind(renderingRow.appointment_id)
+    .first();
+  const late = renderingRow.status !== "pending"
+    || renderingRow.expires_at <= now
+    || appointment?.status !== "confirmed"
+    || appointment?.start_at <= now;
+  if (late) {
+    await db.batch([
+      db.prepare(
+        `UPDATE tattoo_rendering_requests
+         SET status = 'payment_attention', square_payment_id = COALESCE(?, square_payment_id),
+             raw_json = ?, updated_at = ?
+         WHERE id = ? AND status <> 'paid'`
+      ).bind(paymentId || null, JSON.stringify(order || payload), now, renderingRow.id),
+      db.prepare(
+        `INSERT INTO appointment_events (
+          id, appointment_id, event_type, actor, note, metadata_json, created_at
+        ) VALUES (?, ?, 'tattoo_rendering_late_payment_attention', 'square_webhook', ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(),
+        renderingRow.appointment_id,
+        "Square reported an additional-rendering payment after the request became inactive.",
+        JSON.stringify({ renderingRequestId: renderingRow.id, orderId, paymentId, previousStatus: renderingRow.status }),
+        now,
+      ),
+    ]);
+    return json({
+      ok: true,
+      paid: true,
+      attention: true,
+      reason: "Late rendering payment requires Studio review.",
+      renderingRequestId: renderingRow.id,
+    });
+  }
+
+  const results = await db.batch([
+    db.prepare(
+      `UPDATE tattoo_rendering_requests
+       SET status = 'paid', square_payment_id = COALESCE(?, square_payment_id),
+           paid_at = ?, raw_json = ?, updated_at = ?
+       WHERE id = ? AND status = 'pending' AND expires_at > ?`
+    ).bind(paymentId || null, now, JSON.stringify(order || payload), now, renderingRow.id, now),
+    db.prepare(
+      `INSERT INTO appointment_events (
+        id, appointment_id, event_type, actor, note, metadata_json, created_at
+      ) SELECT ?, appointment_id, 'tattoo_rendering_paid', 'square_webhook',
+               'Additional concept sketch is paid and ready to draw', ?, ?
+        FROM tattoo_rendering_requests WHERE id = ? AND status = 'paid' AND paid_at = ?`
+    ).bind(
+      crypto.randomUUID(),
+      JSON.stringify({ renderingRequestId: renderingRow.id, orderId, paymentId }),
+      now,
+      renderingRow.id,
+      now,
+    ),
+  ]);
+  const recorded = Number(results?.[0]?.meta?.changes || 0) > 0;
+  if (recorded) {
+    const saved = await selectTattooRenderingRequest(db, renderingRow.id);
+    await notifyTattooRenderingPaymentConfirmed(env, request, saved);
+  }
+  return json({
+    ok: true,
+    paid: true,
+    ignored: !recorded,
+    renderingRequestId: renderingRow.id,
+  });
+}
+
 async function processSquareWebhookPayload(request, env, rawBody) {
   const payload = JSON.parse(rawBody || "{}");
   const orderId = webhookOrderId(payload);
   if (!orderId) return json({ ok: true, ignored: true, reason: "No Square order id." });
 
   const db = requireBookingDb(env);
+  const renderingRow = await db.prepare(
+    "SELECT * FROM tattoo_rendering_requests WHERE square_order_id = ? LIMIT 1"
+  ).bind(orderId).first();
+  if (renderingRow) {
+    return processTattooRenderingSquareWebhook(request, env, db, renderingRow, payload, orderId);
+  }
   const appointmentRow = await db
     .prepare("SELECT * FROM appointments WHERE square_order_id = ? ORDER BY created_at DESC LIMIT 1")
     .bind(orderId)
@@ -5258,6 +5593,270 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
   }
 }
 
+export async function handleAdminCreateTattooRenderingRequest(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  const submissionId = asString(body.submissionId);
+  const requestedAppointmentId = asString(body.appointmentId);
+  if (!submissionId) return errorResponse("submissionId is required.", 400);
+
+  let db;
+  let insertedId = "";
+  try {
+    db = requireBookingDb(env);
+    const now = new Date().toISOString();
+    const appointment = await db.prepare(
+      `SELECT a.*, s.type AS submission_type
+       FROM appointments a
+       JOIN submissions s ON s.id = a.submission_id
+       WHERE a.submission_id = ?
+         AND (? = '' OR a.id = ?)
+         AND a.status = 'confirmed'
+         AND a.purpose = 'tattoo'
+         AND a.start_at > ?
+       ORDER BY a.start_at ASC LIMIT 1`
+    ).bind(submissionId, requestedAppointmentId, requestedAppointmentId, now).first();
+    if (!appointment) {
+      return errorResponse("An upcoming confirmed tattoo appointment is required.", 409, {
+        code: "RENDERING_APPOINTMENT_REQUIRED",
+      });
+    }
+    if (!ORIGINAL_TATTOO_PROJECT_SUBMISSION_TYPES.has(appointment.submission_type)) {
+      return errorResponse("Additional rendering requests apply only to original-design tattoo projects.", 409, {
+        code: "RENDERING_PROJECT_INELIGIBLE",
+      });
+    }
+    const existingPending = await db.prepare(
+      "SELECT id FROM tattoo_rendering_requests WHERE submission_id = ? AND status = 'pending' LIMIT 1"
+    ).bind(submissionId).first();
+    if (existingPending) {
+      return errorResponse("This project already has a pending rendering payment request.", 409, {
+        code: "RENDERING_REQUEST_PENDING",
+        renderingRequestId: existingPending.id,
+      });
+    }
+    const numberRow = await db.prepare(
+      "SELECT COALESCE(MAX(request_number), 0) + 1 AS next_number FROM tattoo_rendering_requests WHERE submission_id = ?"
+    ).bind(submissionId).first();
+    insertedId = crypto.randomUUID();
+    await db.prepare(
+      `INSERT INTO tattoo_rendering_requests (
+        id, submission_id, appointment_id, request_number, amount_cents, currency,
+        status, expires_at, raw_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, '{}', ?, ?)`
+    ).bind(
+      insertedId,
+      submissionId,
+      appointment.id,
+      Number(numberRow?.next_number || 1),
+      TATTOO_RENDERING_FEE_CENTS,
+      TATTOO_RENDERING_CURRENCY,
+      appointment.start_at,
+      now,
+      now,
+    ).run();
+
+    const draft = await selectTattooRenderingRequest(db, insertedId);
+    const paymentLink = await createTattooRenderingSquarePaymentLink(request, env, draft);
+    const savedAt = new Date().toISOString();
+    await db.batch([
+      db.prepare(
+        `UPDATE tattoo_rendering_requests
+         SET square_order_id = ?, square_payment_link_id = ?, square_checkout_url = ?,
+             raw_json = ?, updated_at = ?
+         WHERE id = ? AND status = 'pending'`
+      ).bind(
+        paymentLink.order_id || null,
+        paymentLink.id || null,
+        paymentLink.url,
+        JSON.stringify(paymentLink),
+        savedAt,
+        insertedId,
+      ),
+      db.prepare(
+        `INSERT INTO appointment_events (
+          id, appointment_id, event_type, actor, note, metadata_json, created_at
+        ) VALUES (?, ?, 'tattoo_rendering_requested', 'admin', ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(),
+        appointment.id,
+        `Additional concept sketch request ${Number(numberRow?.next_number || 1)}`,
+        JSON.stringify({ renderingRequestId: insertedId, amountCents: TATTOO_RENDERING_FEE_CENTS }),
+        savedAt,
+      ),
+    ]);
+    const saved = await selectTattooRenderingRequest(db, insertedId);
+    const delivery = await notifyTattooRenderingPaymentRequested(env, request, saved);
+    return json({
+      ok: true,
+      renderingRequest: normalizeTattooRenderingRequest(saved),
+      delivery,
+    });
+  } catch (error) {
+    if (db && insertedId) {
+      await db.prepare(
+        `DELETE FROM tattoo_rendering_requests
+         WHERE id = ? AND status = 'pending' AND square_order_id IS NULL`
+      ).bind(insertedId).run().catch(() => {});
+    }
+    if (String(error.message || error).includes("UNIQUE constraint failed")) {
+      return errorResponse("This project already has a pending rendering payment request.", 409, {
+        code: "RENDERING_REQUEST_PENDING",
+      });
+    }
+    return errorResponse("Unable to create the rendering payment request.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminResendTattooRenderingRequest(request, env, requestId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  try {
+    const db = requireBookingDb(env);
+    const row = await selectTattooRenderingRequest(db, requestId);
+    if (!row) return errorResponse("Rendering request not found.", 404);
+    if (row.status !== "pending" || !row.square_checkout_url) {
+      return errorResponse("Only pending rendering payment requests can be resent.", 409);
+    }
+    if (row.expires_at <= new Date().toISOString() || row.appointment_status !== "confirmed") {
+      return errorResponse("This rendering payment link is no longer active.", 409);
+    }
+    const delivery = await notifyTattooRenderingPaymentRequested(env, request, row, {
+      idempotencyKey: `tattoo_rendering_payment_requested:${row.id}:resend:${crypto.randomUUID()}`,
+    });
+    return json({ ok: true, renderingRequest: normalizeTattooRenderingRequest(row), delivery });
+  } catch (error) {
+    return errorResponse("Unable to resend the rendering payment request.", 500, { detail: error.message });
+  }
+}
+
+export async function handleAdminCancelTattooRenderingRequest(request, env, requestId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  try {
+    const db = requireBookingDb(env);
+    const row = await selectTattooRenderingRequest(db, requestId);
+    if (!row) return errorResponse("Rendering request not found.", 404);
+    if (row.status !== "pending") return errorResponse("Only pending rendering requests can be cancelled.", 409);
+    if (row.square_order_id) {
+      const order = await fetchSquareOrderForReconciliation(env, row.square_order_id);
+      if (orderLooksPaid(order)) {
+        return errorResponse("Square reports this request as paid. Wait for webhook reconciliation or review the payment in Studio.", 409, {
+          code: "RENDERING_REQUEST_ALREADY_PAID",
+        });
+      }
+    }
+    if (row.square_payment_link_id) await invalidateSquarePaymentLink(env, row.square_payment_link_id);
+    const now = new Date().toISOString();
+    const result = await db.batch([
+      db.prepare(
+        `UPDATE tattoo_rendering_requests
+         SET status = 'cancelled', cancelled_at = ?, updated_at = ?
+         WHERE id = ? AND status = 'pending'`
+      ).bind(now, now, requestId),
+      db.prepare(
+        `INSERT INTO appointment_events (
+          id, appointment_id, event_type, actor, note, metadata_json, created_at
+        ) SELECT ?, appointment_id, 'tattoo_rendering_cancelled', 'admin',
+                 'Additional concept sketch payment request cancelled', ?, ?
+          FROM tattoo_rendering_requests WHERE id = ? AND status = 'cancelled' AND updated_at = ?`
+      ).bind(crypto.randomUUID(), JSON.stringify({ renderingRequestId: requestId }), now, requestId, now),
+    ]);
+    if (Number(result?.[0]?.meta?.changes || 0) < 1) {
+      return errorResponse("The rendering request changed before it could be cancelled.", 409);
+    }
+    return json({
+      ok: true,
+      renderingRequest: normalizeTattooRenderingRequest(await selectTattooRenderingRequest(db, requestId)),
+    });
+  } catch (error) {
+    return errorResponse("Unable to cancel the rendering payment request.", 500, { detail: error.message });
+  }
+}
+
+export async function reapExpiredTattooRenderingRequests(env) {
+  const db = requireBookingDb(env);
+  const now = new Date().toISOString();
+  const rows = (await db.prepare(
+    `SELECT * FROM tattoo_rendering_requests
+     WHERE status = 'pending' AND expires_at <= ?
+     ORDER BY expires_at ASC LIMIT 100`
+  ).bind(now).all()).results || [];
+  const summary = { checked: 0, expired: 0, paidAttention: 0, attention: 0 };
+  for (const row of rows) {
+    summary.checked += 1;
+    try {
+      const order = row.square_order_id
+        ? await fetchSquareOrderForReconciliation(env, row.square_order_id)
+        : null;
+      if (orderLooksPaid(order)) {
+        const result = await db.prepare(
+          `UPDATE tattoo_rendering_requests
+           SET status = 'payment_attention', square_payment_id = COALESCE(square_payment_id, ''),
+               raw_json = ?, updated_at = ?
+           WHERE id = ? AND status = 'pending'`
+        ).bind(JSON.stringify(order), now, row.id).run();
+        if (Number(result?.meta?.changes || 0) > 0) {
+          summary.paidAttention += 1;
+          await db.prepare(
+            `INSERT INTO appointment_events (
+              id, appointment_id, event_type, actor, note, metadata_json, created_at
+            ) VALUES (?, ?, 'tattoo_rendering_late_payment_attention', 'reaper', ?, ?, ?)`
+          ).bind(
+            crypto.randomUUID(),
+            row.appointment_id,
+            "Square reported payment at or after the appointment-start deadline.",
+            JSON.stringify({ renderingRequestId: row.id, orderId: row.square_order_id }),
+            now,
+          ).run();
+        }
+        continue;
+      }
+      if (row.square_payment_link_id) await invalidateSquarePaymentLink(env, row.square_payment_link_id);
+      const result = await db.prepare(
+        `UPDATE tattoo_rendering_requests SET status = 'expired', updated_at = ?
+         WHERE id = ? AND status = 'pending'`
+      ).bind(now, row.id).run();
+      if (Number(result?.meta?.changes || 0) > 0) {
+        summary.expired += 1;
+        await db.prepare(
+          `INSERT INTO appointment_events (
+            id, appointment_id, event_type, actor, note, metadata_json, created_at
+          ) VALUES (?, ?, 'tattoo_rendering_expired', 'reaper', ?, ?, ?)`
+        ).bind(
+          crypto.randomUUID(),
+          row.appointment_id,
+          "Unpaid additional concept sketch payment link expired at appointment start.",
+          JSON.stringify({ renderingRequestId: row.id }),
+          now,
+        ).run();
+      }
+    } catch (error) {
+      const result = await db.prepare(
+        `UPDATE tattoo_rendering_requests SET status = 'payment_attention', raw_json = ?, updated_at = ?
+         WHERE id = ? AND status = 'pending'`
+      ).bind(JSON.stringify({ error: error.message, expiredAt: row.expires_at }), now, row.id).run();
+      if (Number(result?.meta?.changes || 0) > 0) {
+        summary.attention += 1;
+        await db.prepare(
+          `INSERT INTO appointment_events (
+            id, appointment_id, event_type, actor, note, metadata_json, created_at
+          ) VALUES (?, ?, 'tattoo_rendering_payment_attention', 'reaper', ?, ?, ?)`
+        ).bind(
+          crypto.randomUUID(),
+          row.appointment_id,
+          error.message,
+          JSON.stringify({ renderingRequestId: row.id }),
+          now,
+        ).run();
+      }
+    }
+  }
+  return summary;
+}
+
 export async function handleAdminResolveTattooLifecycleReview(request, env, submissionId) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
@@ -5524,15 +6123,19 @@ export async function handleAdminCreateBookingToken(request, env) {
       return errorResponse("Booking link expiration must be a valid future timestamp.", 400);
     }
     const expiresAt = new Date(expiresAtMs).toISOString();
+    const standardApprovedTattooOffer = purpose === "tattoo"
+      && submission.source_path !== "/studio/direct-booking-invite";
     const hasSuppliedBookingTypes = body.allowedBookingTypes !== undefined;
     if (hasSuppliedBookingTypes && !Array.isArray(body.allowedBookingTypes)) {
       return errorResponse("Allowed booking types must be a non-empty list.", 400);
     }
-    const allowed = hasSuppliedBookingTypes
-      ? body.allowedBookingTypes.map(asString).filter(Boolean)
-      : purpose === "consultation"
-        ? ["consult_in_person"]
-        : ["tattoo_quarter", "tattoo_half", "tattoo_full"];
+    const allowed = standardApprovedTattooOffer
+      ? [...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing]
+      : hasSuppliedBookingTypes
+        ? body.allowedBookingTypes.map(asString).filter(Boolean)
+        : purpose === "consultation"
+          ? ["consult_in_person"]
+          : [...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing];
     if (!allowed.length) {
       return errorResponse("Allowed booking types must be a non-empty list.", 400);
     }
@@ -6050,7 +6653,7 @@ function normalizeSpecialProjectCall(row) {
 }
 
 async function tattooSettingsPayload(db, includeInactive = false) {
-  const [settingsResult, ratesResult, callsResult, hoursResult] = await db.batch([
+  const [settingsResult, ratesResult, callsResult, hoursResult, bookingTypesResult] = await db.batch([
     db.prepare("SELECT * FROM tattoo_settings WHERE id = 'default'"),
     db.prepare(
       `SELECT * FROM tattoo_rate_cards ${includeInactive ? "" : "WHERE active = 1"}
@@ -6062,6 +6665,11 @@ async function tattooSettingsPayload(db, includeInactive = false) {
        WHERE venture = 'tattooing' AND category = 'tattooing' AND active = 1
        ORDER BY day_of_week ASC`
     ),
+    db.prepare(
+      `SELECT * FROM booking_types
+       WHERE venture = 'tattooing' ${includeInactive ? "" : "AND active = 1"}
+       ORDER BY sort_order ASC, label ASC`
+    ),
   ]);
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const settingsRow = settingsResult.results?.[0] || null;
@@ -6069,6 +6677,7 @@ async function tattooSettingsPayload(db, includeInactive = false) {
     settings: normalizeTattooSettingsRow(settingsRow),
     rateCards: (ratesResult.results || []).map(normalizeTattooRateCard),
     specialProjects: (callsResult.results || []).map(normalizeSpecialProjectCall),
+    bookingTypes: (bookingTypesResult.results || []).map(normalizeBookingType),
     displayedHours: (hoursResult.results || []).map((row) => ({
       dayOfWeek: Number(row.day_of_week),
       day: dayNames[Number(row.day_of_week)] || "",
@@ -6430,6 +7039,8 @@ export async function handleAdminUpdateBookingType(request, env, id) {
 
   const deposit = parseDepositCents(body.depositCents);
   if (deposit.error) return errorResponse(deposit.error, 400);
+  const sessionFee = parseDepositCents(body.sessionFeeCents ?? 0);
+  if (sessionFee.error) return errorResponse(sessionFee.error.replace("Deposit", "Session fee"), 400);
 
   try {
     const db = requireBookingDb(env);
@@ -6440,8 +7051,8 @@ export async function handleAdminUpdateBookingType(request, env, id) {
     if (!existing) return errorResponse("Booking type not found.", 404);
 
     await db
-      .prepare("UPDATE booking_types SET deposit_cents = ?, updated_at = ? WHERE id = ?")
-      .bind(deposit.depositCents, new Date().toISOString(), id)
+      .prepare("UPDATE booking_types SET deposit_cents = ?, session_fee_cents = ?, updated_at = ? WHERE id = ?")
+      .bind(deposit.depositCents, sessionFee.depositCents, new Date().toISOString(), id)
       .run();
 
     const updated = await db
@@ -6702,6 +7313,13 @@ export async function handleAdminCreateAvailability(request, env) {
   if (new Date(endAt).getTime() <= new Date(startAt).getTime()) {
     return errorResponse("endAt must be after startAt.", 400);
   }
+  if (
+    !body.isBlackout
+    && asString(body.bookingTypeId) === EXTENDED_DAY_BOOKING_TYPE_ID
+    && new Date(endAt).getTime() - new Date(startAt).getTime() !== 600 * 60 * 1000
+  ) {
+    return errorResponse("Extended Day availability must reserve exactly 10 hours.", 400);
+  }
 
   try {
     const db = requireBookingDb(env);
@@ -6830,6 +7448,13 @@ export async function handleAdminUpdateAvailability(request, env, id) {
       active: body.active === undefined ? current.active : body.active ? 1 : 0,
       note: body.note === undefined ? current.note : asString(body.note),
     };
+    if (
+      !next.is_blackout
+      && next.booking_type_id === EXTENDED_DAY_BOOKING_TYPE_ID
+      && new Date(next.end_at).getTime() - new Date(next.start_at).getTime() !== 600 * 60 * 1000
+    ) {
+      return errorResponse("Extended Day availability must reserve exactly 10 hours.", 400);
+    }
     if (!next.is_blackout && next.active) {
       const existing = await db
         .prepare(

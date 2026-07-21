@@ -840,6 +840,7 @@ stage.addEventListener('click',e=>{
 
   // ① Main logo expand
   if(isOverLogo(mx,my)&&expandProgress<0.05&&state!=='collapsing'){
+    window.SixWellAnalytics?.track('interactive_start',{action:'open-construct',itemId:'home-construct'});
     VENTURES.forEach((v,i)=>{
       if(v.fromDot>=0){const p=getDotCurrentPos(v.fromDot);dotStartX[i]=p.x;dotStartY[i]=p.y;}
       else{const edge=getRingEdgeForNode(v);dotStartX[i]=edge.x;dotStartY[i]=edge.y;}
@@ -854,11 +855,13 @@ stage.addEventListener('click',e=>{
   if(state==='expanded'&&subNodeState==='expanded'){
     const hsn=getHoveredSubNode(mx,my);
     if(hsn>=0){
+      const pathway=SUB_NODE_DATA[VENTURES[activeVentureIdx].name][hsn];
+      window.SixWellAnalytics?.track('pathway_open',{action:'navigate',itemId:pathway.name,sectionId:VENTURES[activeVentureIdx].name});
       // use fade transition if available, fall back to direct navigation
       if(typeof window._constructFade==='function')
-        window._constructFade(SUB_NODE_DATA[VENTURES[activeVentureIdx].name][hsn].url);
+        window._constructFade(pathway.url);
       else
-        window.location.href=SUB_NODE_DATA[VENTURES[activeVentureIdx].name][hsn].url;
+        window.location.href=pathway.url;
       return;
     }
   }
@@ -874,6 +877,7 @@ stage.addEventListener('click',e=>{
       }
       subNodeCollapseProgress=0;subNodeState='collapsing';subNodeHP.fill(0);
     }else{
+      window.SixWellAnalytics?.track('node_open',{action:'open-pathways',itemId:VENTURES[hn].name});
       // Different/new entry: old pathways return home while the new set opens.
       if(activeVentureIdx>=0&&subNodeState!=='idle') queueOutgoingSubNodes(activeVentureIdx);
       activeVentureIdx=hn;

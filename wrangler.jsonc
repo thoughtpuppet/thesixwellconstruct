@@ -20,6 +20,12 @@
       "database_id": "ec619569-212f-43b7-9b8c-6ac3bfed85e5"
     }
   ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "SITE_ANALYTICS",
+      "dataset": "swc_site_analytics"
+    }
+  ],
   "r2_buckets": [
     {
       "binding": "SUBMISSION_FILES",

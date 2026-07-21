@@ -16,7 +16,7 @@ Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed
 ## Applies To
 
 Regular tattoo session bookings only (`tattoo_quarter`, `tattoo_half`,
-`tattoo_full`). Consultation and build-session bookings use their own
+`tattoo_full`, `tattoo_extended`). Consultation and build-session bookings use their own
 templates - see [consultation-confirmed-in-person.md](consultation-confirmed-in-person.md),
 [consultation-confirmed-virtual.md](consultation-confirmed-virtual.md), and
 [build-session-confirmed.md](build-session-confirmed.md).
@@ -30,6 +30,8 @@ Your art.pill TATTOO HOUSE appointment is confirmed.
 When: {{appointment_start}} - {{appointment_end}}
 Session: {{booking_type_label}}
 Deposit: {{deposit_amount}} received
+{{extended_day_fee_line}}
+{{extended_day_billing_policy_line}}
 
 Confirmation page: {{confirmation_url}}
 Day-of instructions: {{day_of_instructions_url}}
@@ -49,6 +51,8 @@ Saiel Solehman
 - `{{appointment_end}}`
 - `{{booking_type_label}}`
 - `{{deposit_amount}}`
+- `{{session_fee_amount}}` (Extended Day only; due with final studio balance)
+- `{{minimum_billable_minutes}}` (Extended Day only)
 - `{{confirmation_url}}`
 - `{{day_of_instructions_url}}`
 - `{{location_parking_url}}`
@@ -61,3 +65,6 @@ payment process once the deposit is confirmed. Include location and day-of
 links here because this is the client's practical reference email.
 This template never includes a Zoom link - regular tattoo sessions are
 in-person only.
+For Extended Day, state that the $200 session fee remains due with the final
+studio balance and that the reserved 10-hour block has an eight-hour billing
+minimum at the approved project rate.

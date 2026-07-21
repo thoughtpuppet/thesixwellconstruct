@@ -23,7 +23,15 @@ Approved session options:
 
 {{session_options}}
 
-Deposit due to book: {{deposit_amount}}
+Choose how you want to pace your tattoo. Every newly approved tattoo link
+includes Quarter Day, Half Day, Full Day, and optional Extended Day. You may
+complete the work in one longer appointment or split it across shorter
+sessions.
+
+Extended Day reserves a 10-hour block, has an eight-hour billing minimum at
+the approved project rate, and adds a $200 fee due with the final studio
+balance. Its $350 booking deposit is credited toward the final total. The
+shorter session options do not add this fee.
 
 Before booking, please review:
 
@@ -50,6 +58,8 @@ art.pill TATTOO HOUSE
 - `{{allowed_booking_types}}`
 - `{{session_options}}`
 - `{{deposit_amount}}`
+- `{{session_fee_amount}}` (Extended Day only)
+- `{{minimum_billable_minutes}}` (Extended Day only)
 - `{{booking_terms_url}}`
 - `{{day_of_instructions_url}}`
 - `{{submission_id}}`

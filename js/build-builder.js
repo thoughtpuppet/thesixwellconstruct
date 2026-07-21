@@ -479,6 +479,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
   }
 
   function continueToForm() {
+    window.SixWellAnalytics?.track("interactive_milestone", { action: "build-brief", itemId: "build-your-own", progress: 75, count: selected.size });
     const intent = document.getElementById("designIntent");
     const form = document.getElementById("build-form");
     if (form) form.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
@@ -526,9 +527,11 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
 
     buildSelect(filterRow, categories, activeCategory, (value) => {
       activeCategory = value;
+      window.SixWellAnalytics?.track("filter_change", { action: "build-category", itemId: value });
     });
     buildSelect(themeFilterRow, themes, activeTheme, (value) => {
       activeTheme = value;
+      window.SixWellAnalytics?.track("filter_change", { action: "build-theme", itemId: value });
     });
   }
 
@@ -608,6 +611,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
     restoredCompositionSnapshot = null;
     if (selected.has(sym.id)) {
       selected.delete(sym.id);
+      window.SixWellAnalytics?.track("interactive_milestone", { action: "symbol-remove", itemId: sym.id, count: selected.size });
       card.classList.remove("selected");
       card.setAttribute("aria-pressed", "false");
       updateBrief(`${sym.name} removed. ${selected.size} of ${MAX_SELECTIONS} selected.`);
@@ -620,6 +624,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
         return;
       }
       selected.add(sym.id);
+      window.SixWellAnalytics?.track(selected.size === 1 ? "interactive_start" : "interactive_milestone", { action: "symbol-add", itemId: sym.id, count: selected.size });
       selectionMeta.set(sym.id, { name: sym.name, category: sym.category });
       card.classList.add("selected");
       card.setAttribute("aria-pressed", "true");
@@ -909,6 +914,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
     hasUnavailableSymbols: () => [...selected].some((id) => !byId.has(id)),
     submissionHeaders: () => resumeToken ? { "x-build-draft-token": resumeToken } : {},
     complete: () => {
+      window.SixWellAnalytics?.track("interactive_complete", { action: "build-submitted", itemId: "build-your-own", progress: 100, count: selected.size });
       window.clearTimeout(saveTimer);
       try { localStorage.removeItem(STORAGE_KEY); } catch {}
       storeResumeToken("");

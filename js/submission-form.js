@@ -108,6 +108,7 @@
 
         if (typeof options.onSuccess === "function") {
           clearIdempotencyKey();
+          window.dispatchEvent(new CustomEvent("sixwell:form-complete", { detail: { formId: form.id || form.getAttribute("name") || "submission-form" } }));
           options.onSuccess(payload);
           return;
         }
@@ -118,6 +119,7 @@
           redirectTarget = receiptUrl.pathname + receiptUrl.search + receiptUrl.hash;
         }
         clearIdempotencyKey();
+        window.dispatchEvent(new CustomEvent("sixwell:form-complete", { detail: { formId: form.id || form.getAttribute("name") || "submission-form" } }));
         window.location.href = redirectTarget;
       } catch (error) {
         submitting = false;

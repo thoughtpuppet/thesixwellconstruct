@@ -2,6 +2,7 @@
   const STYLE_LABELS = { symbolic:"symbolic", surreal:"surreal", mythic:"mythic", "special-project":"special projects" };
   const DEFAULT_ALT = "Tattoo portfolio work by Saiel Dauhn Solehman";
   let portfolioOptions = { styles: [], collections: [] };
+  const trackAnalytics = (name, properties) => global.SixWellAnalytics?.track(name, properties);
 
   function optionLabel(kind, value) {
     if (kind === "style" && String(value || "").trim().toLowerCase() === "unclassified") return "";
@@ -81,7 +82,7 @@
       button.type = "button";
       button.setAttribute("aria-pressed", String(active));
       button.append(node("span", "chip-label", label), node("span", "chip-count", count));
-      button.addEventListener("click", onClick);
+      button.addEventListener("click",()=>{trackAnalytics("filter_change",{action:"portfolio-filter",itemId:label});onClick()});
       return button;
     }
     function renderFilters() {
@@ -209,7 +210,7 @@
       if(!fresh||!healed){media.append(gallery);return}
       const comparison=node("div","portfolio-media-view");comparison.hidden=true;comparison.setAttribute("aria-label","Fresh and healed result comparison");compareMedia(resultImages,comparison);
       const controls=node("div","portfolio-view-switch"),galleryButton=node("button","","Gallery"),compareButton=node("button","","Compare");controls.setAttribute("role","group");controls.setAttribute("aria-label","Tattoo image view");galleryButton.type=compareButton.type="button";galleryButton.setAttribute("aria-pressed","true");compareButton.setAttribute("aria-pressed","false");
-      function setView(view){const comparing=view==="compare";gallery.hidden=comparing;comparison.hidden=!comparing;galleryButton.setAttribute("aria-pressed",String(!comparing));compareButton.setAttribute("aria-pressed",String(comparing))}
+      function setView(view){const comparing=view==="compare";gallery.hidden=comparing;comparison.hidden=!comparing;galleryButton.setAttribute("aria-pressed",String(!comparing));compareButton.setAttribute("aria-pressed",String(comparing));trackAnalytics("interactive_milestone",{action:"portfolio-view",itemId:item.id,progress:comparing?50:25})}
       galleryButton.addEventListener("click",()=>setView("gallery"));compareButton.addEventListener("click",()=>setView("compare"));controls.append(node("span","portfolio-detail-label","View"),galleryButton,compareButton);media.append(controls,gallery,comparison);
     }
     function coverUpDocumentation(images) {
@@ -250,6 +251,7 @@
     }
     async function openDetail(summary,trigger,historyMode="push") {
       const sequence=++requestSequence;returnFocus=trigger||returnFocus;openedFromGallery=historyMode==="push";
+      if(historyMode==="push")trackAnalytics("item_open",{action:"portfolio-work",itemId:summary.id});
       if(historyMode==="push"){history.replaceState({portfolioGallery:{activeStyle,activeCollection,activeCoverUps,scrollY:window.scrollY,focusId:summary.id}},"",location.href);const url=new URL(location.href);url.searchParams.set("work",summary.id);history.pushState({portfolioWork:summary.id},"",url)}
       detail.replaceChildren(node("div","portfolio-detail-state","Loading tattoo details…"));detail.classList.add("open");document.body.classList.add("is-portfolio-detail");
       try{const response=await fetch(`/api/portfolio/${encodeURIComponent(summary.id)}`,{headers:{accept:"application/json"},cache:"no-store"});if(!response.ok)throw new Error();const payload=await response.json();if(sequence!==requestSequence)return;paintDetail(payload.item)}catch{if(sequence!==requestSequence)return;detail.replaceChildren();const state=node("div","portfolio-detail-state");state.append(node("h1","overlay-title","This tattoo is not available."),node("p","","It may be unpublished, archived, or temporarily unavailable."));const link=node("a","","Return to the portfolio");link.href="/tattoos/portfolio/";state.append(link);detail.append(state);document.body.classList.add("is-portfolio-detail");detail.classList.add("open")}

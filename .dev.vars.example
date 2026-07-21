@@ -26,6 +26,13 @@ OUTREACH_INDIVIDUAL_SMS_ENABLED=false
 OUTREACH_EMAIL_CAMPAIGNS_ENABLED=false
 OUTREACH_SMS_CAMPAIGNS_ENABLED=false
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
+# Studio site analytics reads the existing Cloudflare Web Analytics RUM data
+# and the custom swc_site_analytics Analytics Engine dataset with one narrowly
+# scoped Account Analytics Read token. The site tag is the public token already
+# present in Cloudflare's automatically injected Web Analytics beacon.
+CLOUDFLARE_ACCOUNT_ID=replace-with-your-cloudflare-account-id
+CLOUDFLARE_WEB_ANALYTICS_SITE_TAG=replace-with-your-web-analytics-site-tag
+CLOUDFLARE_ANALYTICS_API_TOKEN=replace-with-an-account-analytics-read-token
 SQUARE_ACCESS_TOKEN=replace-with-your-square-access-token
 SQUARE_LOCATION_ID=replace-with-your-square-location-id
 SQUARE_ENVIRONMENT=sandbox

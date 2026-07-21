@@ -22,6 +22,7 @@ import {
 import {
   handleAdminCreateAvailability,
   handleAdminCreateAppointmentMeeting,
+  handleAdminCreateTattooRenderingRequest,
   handleAdminCancelAppointment,
   handleAdminCompleteAppointment,
   handleAdminCreateBookingToken,
@@ -36,6 +37,8 @@ import {
   handleAdminListSubmissionTokens,
   handleAdminListWalkIns,
   handleAdminReleasePendingAppointment,
+  handleAdminResendTattooRenderingRequest,
+  handleAdminCancelTattooRenderingRequest,
   handleAdminRescheduleAppointment,
   handleAdminResolveTattooLifecycleReview,
   handleAdminRevokeBookingToken,
@@ -68,6 +71,7 @@ import {
   handleRescheduleAppointment,
   handleRescheduleContext,
   reapExpiredBookingHolds,
+  reapExpiredTattooRenderingRequests,
   handleSquareWebhook,
   handleStudioSquareWebhook,
 } from "./functions/api/booking/_lib.js";
@@ -101,6 +105,11 @@ import {
   handleUpdateBuildDraft,
   reapExpiredTattooBuildDrafts,
 } from "./functions/api/build-drafts/_lib.js";
+import {
+  handleAdminAnalytics,
+  handleAnalyticsEvents,
+  rollupSiteAnalytics,
+} from "./functions/api/analytics/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -179,6 +188,30 @@ function assetPathForRequest(pathname) {
   if (pathname.startsWith("/art/") && !hasFileExtension(pathname)) return `${pathname}.html`;
   if (!hasFileExtension(pathname)) return `${pathname}/index.html`;
   return pathname;
+}
+
+function shouldInjectSiteAnalytics(request, response) {
+  const url = new URL(request.url);
+  const pathname = url.pathname.toLowerCase();
+  const contentType = response.headers.get("content-type") || "";
+  if (request.method !== "GET" || response.status !== 200 || !contentType.includes("text/html")) return false;
+  if (isLocalPreview(url) || url.searchParams.has("preview")) return false;
+  if (
+    pathname.startsWith("/api/") || pathname.startsWith("/studio/") || pathname.startsWith("/tools/") ||
+    pathname.startsWith("/sixwellconstruct/") || pathname.includes("managed-preview") ||
+    pathname.includes("connections-preview") || pathname.includes("/previews/")
+  ) return false;
+  return !(response.headers.get("x-robots-tag") || "").toLowerCase().includes("noindex");
+}
+
+async function servePublicAsset(request, env, pathname) {
+  const response = await env.ASSETS.fetch(assetRequest(request, pathname));
+  if (!shouldInjectSiteAnalytics(request, response) || typeof HTMLRewriter === "undefined") return response;
+  return new HTMLRewriter().on("body", {
+    element(element) {
+      element.append('<script src="/js/site-analytics.js?v=1" defer></script>', { html: true });
+    },
+  }).transform(response);
 }
 
 function isFrontDoorPath(pathname) {
@@ -716,6 +749,20 @@ async function handleBookingApi(request, env) {
     return handleAdminCreateAppointmentMeeting(request, env, decodeURIComponent(appointmentMeetingMatch[1]));
   }
 
+  if (pathname === "/api/admin/booking/rendering-requests") {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleAdminCreateTattooRenderingRequest(request, env);
+  }
+
+  const renderingRequestMatch = pathname.match(/^\/api\/admin\/booking\/rendering-requests\/([^/]+)\/(resend|cancel)$/);
+  if (renderingRequestMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    const requestId = decodeURIComponent(renderingRequestMatch[1]);
+    return renderingRequestMatch[2] === "resend"
+      ? handleAdminResendTattooRenderingRequest(request, env, requestId)
+      : handleAdminCancelTattooRenderingRequest(request, env, requestId);
+  }
+
   const lifecycleReviewResolveMatch = pathname.match(/^\/api\/admin\/booking\/lifecycle-review\/([^/]+)\/resolve$/);
   if (lifecycleReviewResolveMatch) {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
@@ -793,6 +840,14 @@ export default {
     const url = new URL(request.url);
     if (isLocalOnlyPath(url.pathname) && !isLocalPreview(url)) {
       return notFoundPage(request, env);
+    }
+
+    if (url.pathname === "/api/analytics/events") {
+      return handleAnalyticsEvents(request, env);
+    }
+
+    if (url.pathname === "/api/admin/analytics") {
+      return handleAdminAnalytics(request, env);
     }
 
     if (
@@ -921,11 +976,11 @@ export default {
     }
 
     if (isFrontDoorPath(url.pathname)) {
-      return env.ASSETS.fetch(assetRequest(request, "/index.html"));
+      return servePublicAsset(request, env, "/index.html");
     }
 
     if (isHomePath(url.pathname)) {
-      return env.ASSETS.fetch(assetRequest(request, "/home/index.html"));
+      return servePublicAsset(request, env, "/home/index.html");
     }
 
     if (
@@ -936,19 +991,19 @@ export default {
     }
 
     if (isEventDetailPagePath(url.pathname)) {
-      return env.ASSETS.fetch(assetRequest(request, eventDetailAssetPath(url.pathname)));
+      return servePublicAsset(request, env, eventDetailAssetPath(url.pathname));
     }
 
     if (isFlashDetailPagePath(url.pathname)) {
-      return env.ASSETS.fetch(assetRequest(request, "/tattoos/flash/detail/index.html"));
+      return servePublicAsset(request, env, "/tattoos/flash/detail/index.html");
     }
 
     const archiveAssetPath = archiveDynamicAssetPath(url.pathname);
     if (archiveAssetPath) {
-      return env.ASSETS.fetch(assetRequest(request, archiveAssetPath));
+      return servePublicAsset(request, env, archiveAssetPath);
     }
 
-    return env.ASSETS.fetch(assetRequest(request, assetPathForRequest(url.pathname)));
+    return servePublicAsset(request, env, assetPathForRequest(url.pathname));
   },
   async scheduled(controller, env, ctx) {
     ctx.waitUntil(retryPendingAdminAppointmentNotifications(env));
@@ -956,7 +1011,9 @@ export default {
     ctx.waitUntil(sendDueEventTicketReminders(env));
     ctx.waitUntil(reapStalePendingTickets(env));
     ctx.waitUntil(reapExpiredBookingHolds(env));
+    ctx.waitUntil(reapExpiredTattooRenderingRequests(env));
     ctx.waitUntil(reapExpiredTattooBuildDrafts(env));
     ctx.waitUntil(processDueOutreach(env));
+    ctx.waitUntil(rollupSiteAnalytics(env));
   },
 };

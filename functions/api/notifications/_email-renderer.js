@@ -22,6 +22,13 @@ const THEMES = Object.freeze({
     accentBright: "#397F34",
     buttonText: SHARED.body,
   },
+  construct_art: {
+    id: "construct_art",
+    brand: "the six.well construct",
+    accent: "#0039BD",
+    accentBright: "#0F72DB",
+    buttonText: SHARED.body,
+  },
   construct_studio: {
     id: "construct_studio",
     brand: "the six.well construct",

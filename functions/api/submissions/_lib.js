@@ -1442,9 +1442,12 @@ export async function handleGetSubmission(request, env, id) {
             OR (related_type = 'appointment' AND related_id IN (
               SELECT id FROM appointments WHERE submission_id = ?
             ))
+            OR (related_type = 'tattoo_rendering_request' AND related_id IN (
+              SELECT id FROM tattoo_rendering_requests WHERE submission_id = ?
+            ))
          ORDER BY created_at DESC`
       )
-      .bind(id, id)
+      .bind(id, id, id)
       .all();
 
     const appointmentEvents = await db.prepare(
@@ -1453,6 +1456,32 @@ export async function handleGetSubmission(request, env, id) {
        WHERE a.submission_id = ?
        ORDER BY ae.created_at ASC`
     ).bind(id).all();
+
+    const renderingRequestRows = await db.prepare(
+      `SELECT id, submission_id, appointment_id, request_number, amount_cents, currency,
+              status, square_order_id, square_payment_link_id, square_checkout_url,
+              square_payment_id, expires_at, paid_at, cancelled_at, created_at, updated_at
+       FROM tattoo_rendering_requests
+       WHERE submission_id = ? ORDER BY created_at DESC`
+    ).bind(id).all();
+    const renderingRequests = (renderingRequestRows.results || []).map((requestRow) => ({
+      id: requestRow.id,
+      submissionId: requestRow.submission_id,
+      appointmentId: requestRow.appointment_id,
+      requestNumber: Number(requestRow.request_number || 0),
+      amountCents: Number(requestRow.amount_cents || 5000),
+      currency: requestRow.currency || "USD",
+      status: requestRow.status,
+      squareOrderId: requestRow.square_order_id || "",
+      squarePaymentLinkId: requestRow.square_payment_link_id || "",
+      checkoutUrl: requestRow.square_checkout_url || "",
+      squarePaymentId: requestRow.square_payment_id || "",
+      expiresAt: requestRow.expires_at || "",
+      paidAt: requestRow.paid_at || "",
+      cancelledAt: requestRow.cancelled_at || "",
+      createdAt: requestRow.created_at,
+      updatedAt: requestRow.updated_at,
+    }));
 
     const sheetDesignRows = (await db.prepare(
       `SELECT sfd.sheet_design_id,sfd.flash_item_id,sfd.code_snapshot,sfd.label_snapshot,
@@ -1521,6 +1550,7 @@ export async function handleGetSubmission(request, env, id) {
         sheet_design_selections: sheetDesignSelections,
         flashConflict,
         flash_conflict: flashConflict,
+        renderingRequests,
       },
       events: events.results || [],
       appointmentEvents: appointmentEvents.results || [],
