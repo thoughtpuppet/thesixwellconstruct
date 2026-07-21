@@ -29,6 +29,7 @@
     let rendered = null;
     let revision = 0;
     let renderTimer = 0;
+    let pendingAction = "";
 
     const status = make("div", "email-preview-status", "Loading email template manager");
     const filters = make("div", "email-preview-toolbar");
@@ -41,6 +42,9 @@
     const historyPanel = make("div", "email-preview-history");
     historyPanel.hidden = true;
     const actionHelp = make("p", "email-preview-action-help");
+    const actionStatus = make("div", "email-preview-action-status", "Ready");
+    actionStatus.setAttribute("role", "status");
+    actionStatus.setAttribute("aria-live", "polite");
     const iframe = document.createElement("iframe");
     iframe.title = "Designed email preview";
     iframe.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
@@ -75,7 +79,15 @@
     const publishButton = button("Publish", "publish");
     const testButton = button("Send Test", "test");
     const historyButton = button("View History", "history");
-    actions.append(saveButton, discardButton, publishButton, testButton, historyButton);
+    actions.append(saveButton, discardButton, publishButton, testButton, historyButton, actionStatus);
+    const actionButtons = [saveButton, discardButton, publishButton, testButton, historyButton];
+    const actionLabels = {
+      save: ["Save Draft", "Saving Draft…"],
+      discard: ["Discard Changes", "Discarding…"],
+      publish: ["Publish", "Publishing…"],
+      test: ["Send Test", "Sending Test…"],
+      history: ["View History", "Loading History…"],
+    };
 
     const desktopButton = button("Desktop", "desktop", "is-active");
     const mobileButton = button("Mobile", "mobile");
@@ -111,6 +123,25 @@
       return payload;
     }
     const setStatus = (message, error = false) => { status.textContent = message; status.classList.toggle("is-error", error); };
+    const setActionStatus = (message, tone = "") => {
+      actionStatus.textContent = message;
+      actionStatus.classList.toggle("is-success", tone === "success");
+      actionStatus.classList.toggle("is-error", tone === "error");
+    };
+    const startAction = (action, message) => {
+      pendingAction = action;
+      actions.classList.add("is-busy");
+      actions.setAttribute("aria-busy", "true");
+      setActionStatus(message);
+      updateActions();
+    };
+    const finishAction = (message, tone) => {
+      pendingAction = "";
+      actions.classList.remove("is-busy");
+      actions.setAttribute("aria-busy", "false");
+      setActionStatus(message, tone);
+      updateActions();
+    };
     const id = (entry) => `${entry.templateKey}:${entry.variant}`;
     const currentEntry = () => catalog.find((entry) => id(entry) === templateSelect.value);
 
@@ -138,11 +169,18 @@
     function updateActions() {
       const isDirty = dirty();
       const hasDraft = Boolean(revision);
-      saveButton.disabled = !isDirty && hasDraft;
-      discardButton.disabled = !isDirty;
-      publishButton.disabled = isDirty || !hasDraft;
-      testButton.disabled = isDirty || !hasDraft;
+      const busy = Boolean(pendingAction);
+      saveButton.disabled = busy || (!isDirty && hasDraft);
+      discardButton.disabled = busy || !isDirty;
+      publishButton.disabled = busy || isDirty || !hasDraft;
+      testButton.disabled = busy || isDirty || !hasDraft;
+      historyButton.disabled = busy;
       publishedButton.disabled = false;
+
+      actionButtons.forEach((button) => {
+        const labels = actionLabels[button.dataset.action];
+        button.textContent = pendingAction === button.dataset.action ? labels[1] : labels[0];
+      });
 
       saveButton.title = saveButton.disabled ? "This draft is already saved." : hasDraft ? "Save the changes in the working copy." : "Create a private draft from the working copy.";
       discardButton.title = discardButton.disabled ? "There are no unsaved changes to discard." : "Return to the last saved version.";
@@ -227,31 +265,64 @@
     templateSelect.addEventListener("change", () => loadTemplate().catch((error) => setStatus(error.message, true)));
     form.addEventListener("submit", (event) => event.preventDefault());
     actions.addEventListener("click", async (event) => {
-      const action = event.target.dataset.action; if (!action || !selected) return;
+      const action = event.target.dataset.action; if (!action || !selected || pendingAction) return;
       const endpoint = `/api/admin/notifications/templates/${encodeURIComponent(selected.templateKey)}`;
       try {
-        if (action === "discard") { content = clone(savedContent); buildForm(); updateActions(); return renderUnsaved(); }
+        if (action === "discard") {
+          startAction(action, "Discarding unsaved changes…");
+          content = clone(savedContent);
+          buildForm();
+          await renderUnsaved();
+          finishAction("Unsaved changes discarded.", "success");
+          return;
+        }
         if (action === "save") {
+          startAction(action, "Saving this draft…");
           const payload = await api(`${endpoint}/draft?variant=${encodeURIComponent(selected.variant)}`, { method: "PUT", body: JSON.stringify({ content, baseRevision: revision || definition.published?.revision || 0 }) });
-          revision = payload.draft.revision; savedContent = clone(payload.draft.content); updateActions(); setStatus(`Draft revision ${revision} saved.`); await refreshCatalog(id(selected)); return;
+          revision = payload.draft.revision;
+          savedContent = clone(payload.draft.content);
+          definition.draft = payload.draft;
+          const catalogEntry = currentEntry();
+          if (catalogEntry) {
+            catalogEntry.status = "draft";
+            catalogEntry.draftRevision = revision;
+          }
+          setStatus(`${selected.label} · saved draft revision ${revision}`);
+          finishAction(`Draft saved · revision ${revision}. You can safely send a test now.`, "success");
+          return;
         }
         if (action === "publish") {
           if ((definition.schema?.fields || []).some((field) => field.policy) && !confirm("Publish this revision? Policy-marked copy is included in this template.")) return;
+          startAction(action, `Publishing revision ${revision}…`);
           await api(`${endpoint}/publish?variant=${encodeURIComponent(selected.variant)}`, { method: "POST", body: JSON.stringify({ revision }) });
-          setStatus(`Revision ${revision} published.`); await refreshCatalog(id(selected)); return;
+          setStatus(`Revision ${revision} published.`);
+          await refreshCatalog(id(selected));
+          finishAction(`Revision ${revision} is published and live.`, "success");
+          return;
         }
         if (action === "test") {
-          await api(`${endpoint}/test?variant=${encodeURIComponent(selected.variant)}`, { method: "POST", body: JSON.stringify({ revision }) }); setStatus("Protected test sent to the configured admin inbox."); return;
+          startAction(action, `Sending test for revision ${revision}…`);
+          const payload = await api(`${endpoint}/test?variant=${encodeURIComponent(selected.variant)}`, { method: "POST", body: JSON.stringify({ revision }) });
+          const recipient = payload.delivery?.recipient;
+          setStatus("Protected test email sent.");
+          finishAction(recipient ? `Test sent successfully to ${recipient}.` : "Test sent successfully to the configured admin inbox.", "success");
+          return;
         }
         if (action === "history") {
+          startAction(action, "Loading revision history…");
           const payload = await api(`${endpoint}/history?variant=${encodeURIComponent(selected.variant)}`);
           historyPanel.hidden = !historyPanel.hidden;
           historyPanel.replaceChildren(...(payload.history || []).map((item) => {
             const row = make("div", "email-preview-history-row", `Revision ${item.revision} · ${item.status} · ${item.updated_at}`);
             const restore = button("Restore as Draft", "restore"); restore.dataset.revision = item.revision; row.append(restore); return row;
           }));
+          finishAction(historyPanel.hidden ? "Revision history closed." : "Revision history loaded.", "success");
         }
-      } catch (error) { setStatus(error.payload?.errors?.join(" ") || error.message, true); }
+      } catch (error) {
+        const message = error.payload?.errors?.join(" ") || error.message;
+        setStatus(message, true);
+        finishAction(`${title(action)} failed: ${message}`, "error");
+      }
     });
     historyPanel.addEventListener("click", async (event) => {
       if (event.target.dataset.action !== "restore") return;

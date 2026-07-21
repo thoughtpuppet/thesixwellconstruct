@@ -1607,8 +1607,9 @@ export async function handleAdminEmailTemplates(request, env) {
       const result = renderEmailTemplateContent(selected.templateKey, selected.variant, draft.content);
       if (!result?.validation.ok) return errorResponse("Saved draft is invalid.", 422, { errors: result?.validation?.errors || [] });
       const rendered = { ...result.rendered, subject: `[TEST] ${result.rendered.subject}` };
+      const recipient = adminNotificationAddress(env);
       const delivery = await sendTransactionalEmail(env, {
-        to: adminNotificationAddress(env),
+        to: recipient,
         fromEmail: env.ADMIN_NOTIFICATION_FROM_EMAIL || DEFAULT_ADMIN_FROM_ADDRESS,
         fromName: env.ADMIN_NOTIFICATION_FROM_NAME || "Studio email tests",
         replyTo: replyToAddress(env),
@@ -1621,7 +1622,7 @@ export async function handleAdminEmailTemplates(request, env) {
         relatedId: `${selected.templateKey}:${selected.variant}:${draft.revision}`,
         idempotencyKey: `email_template_test:${selected.templateKey}:${selected.variant}:${draft.revision}:${crypto.randomUUID()}`,
       });
-      return deliveryResponse(delivery);
+      return deliveryResponse({ ...delivery, recipient });
     }
   } catch (error) {
     return errorResponse(error.message || "Email template operation failed.", 500);

@@ -2932,6 +2932,9 @@ test("Studio email templates save, validate, preview, test, publish, and restore
     method: "POST", headers, body: JSON.stringify({ revision: 1 }),
   }), env);
   assert.equal(testResponse.status, 200);
+  const testResult = await testResponse.json();
+  assert.equal(testResult.ok, true);
+  assert.equal(testResult.delivery.recipient, "studio@example.test");
   assert.equal(sent.length, 1);
   assert.equal(sent[0].to, "studio@example.test");
   assert.match(sent[0].subject, /^\[TEST\] /);

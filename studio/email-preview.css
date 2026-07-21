@@ -100,8 +100,58 @@
 
 .email-preview-actions button.is-primary,
 .email-preview-display button.is-active { border-color: var(--accent, #fcb467); color: var(--accent, #fcb467); }
+.email-preview-actions button:not(:disabled):active,
+.email-preview-display button:not(:disabled):active,
+.email-preview-history button:not(:disabled):active {
+  transform: translate(2px, 2px);
+  border-color: var(--accent, #fcb467);
+  background: rgba(252, 180, 103, .1);
+}
 .email-preview-actions button:disabled,
 .email-preview-display button:disabled { opacity: .28; cursor: not-allowed; }
+
+.email-preview-actions.is-busy button[data-action] {
+  cursor: wait;
+}
+
+.email-preview-action-status {
+  flex: 1 0 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 11px 13px;
+  border: 5px solid var(--ring-soft, rgba(109, 61, 21, .4));
+  color: var(--muted, rgba(255, 231, 202, .62));
+  font: 800 11px/1.45 var(--sans, Arial, sans-serif);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.email-preview-actions.is-busy .email-preview-action-status {
+  border-color: var(--accent, #fcb467);
+  color: var(--accent, #fcb467);
+  animation: email-preview-status-pulse 900ms ease-in-out infinite alternate;
+}
+
+.email-preview-action-status.is-success {
+  border-color: var(--accent, #fcb467);
+  color: #ffe7ca;
+  background: rgba(252, 180, 103, .08);
+}
+
+.email-preview-action-status.is-error {
+  border-color: #ec5e26;
+  color: #ff9a70;
+  background: rgba(236, 94, 38, .08);
+}
+
+@keyframes email-preview-status-pulse {
+  from { background: rgba(252, 180, 103, .03); }
+  to { background: rgba(252, 180, 103, .14); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-preview-actions.is-busy .email-preview-action-status { animation: none; }
+}
 
 .email-preview-display {
   display: grid;
