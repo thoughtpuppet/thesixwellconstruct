@@ -75,6 +75,18 @@ import {
   renderClientEmailPreview,
 } from "../functions/api/notifications/_email-templates.js";
 import { escapeEmailHtml } from "../functions/api/notifications/_email-renderer.js";
+import {
+  generateSubmissionBriefDocument,
+  handleAdminBriefTemplates,
+  handleAdminSubmissionBriefDocument,
+  handlePublicBriefDownload,
+} from "../functions/api/brief-documents/_lib.js";
+import {
+  briefTemplateDefault,
+  buildBriefSample,
+  renderBriefHtml,
+  validateBriefTemplateContent,
+} from "../functions/api/brief-documents/_templates.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TATTOO_BUDGET_RANGES = [
@@ -163,6 +175,17 @@ class MemoryBucket {
 
   async delete(key) {
     this.objects.delete(key);
+  }
+
+  async get(key) {
+    const object = this.objects.get(key);
+    if (!object) return null;
+    return {
+      body: object.body,
+      arrayBuffer: async () => object.body,
+      httpMetadata: object.options.httpMetadata || {},
+      customMetadata: object.options.customMetadata || {},
+    };
   }
 }
 
@@ -514,6 +537,75 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
   ];
   for (const [label, path] of excludedSources) {
     assert.ok(!readFileSync(path, "utf8").includes(drawingFeeNotice), `${label} excludes drawing-fee notice`);
+  }
+});
+
+test("public tattoo Rates keeps its approved copy and presents every session length as one list", () => {
+  const source = readFileSync(join(ROOT, "tattoos", "index.html"), "utf8");
+  assert.match(source, />Rates &amp; Sessions</);
+  assert.doesNotMatch(source, /Rates &amp; Project Scope|rates-intro/);
+  assert.match(source, /Original flash pieces are offered at a lower rate/);
+  assert.match(source, /All sessions require a deposit, applied toward the total cost/);
+
+  const sessionIds = ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
+  const positions = sessionIds.map((id) => source.indexOf(`data-booking-type="${id}"`));
+  positions.forEach((position, index) => assert.ok(position > -1, `${sessionIds[index]} is listed`));
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "session lengths use booking order");
+  assert.match(source, /<ul class="session-list" id="tattooSessionList"[\s\S]*data-booking-type="tattoo_extended"[\s\S]*<\/ul>/);
+  assert.doesNotMatch(source, /class="extended-day-policy"/);
+  assert.match(source, /tattooSessionTypes = Array\.isArray\(payload\.bookingTypes\)/);
+});
+
+test("Extended Day client surfaces use the approved optional-session copy", () => {
+  const description = "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.";
+  const optionality = "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.";
+  const clientSources = [
+    join(ROOT, "tattoos", "index.html"),
+    join(ROOT, "booking", "index.html"),
+    join(ROOT, "functions", "api", "notifications", "_lib.js"),
+    join(ROOT, "studio", "previews", "index.html"),
+    join(ROOT, "studio", "submissions", "index.html"),
+  ];
+  for (const path of clientSources) {
+    const source = readFileSync(path, "utf8");
+    assert.ok(source.includes(description), `${path} includes the Extended Day description`);
+    assert.ok(source.includes(optionality), `${path} includes the Extended Day optionality policy`);
+  }
+
+  const deprecatedPolicy = /eight-hour billing|8-hour billing|eight-hour minimum|8-hour minimum/i;
+  const updatedSources = [
+    ...clientSources,
+    join(ROOT, "booking", "confirmed", "index.html"),
+    join(ROOT, "booking", "reschedule", "index.html"),
+    join(ROOT, "docs", "email-templates", "appointment-cancelled.md"),
+    join(ROOT, "docs", "email-templates", "appointment-confirmed.md"),
+    join(ROOT, "docs", "email-templates", "appointment-reminder-24h.md"),
+    join(ROOT, "docs", "email-templates", "private-booking-link.md"),
+  ];
+  for (const path of updatedSources) {
+    assert.doesNotMatch(readFileSync(path, "utf8"), deprecatedPolicy, `${path} removes superseded client copy`);
+  }
+});
+
+test("tattoo forms keep short controls uniform while paragraph fields can grow", () => {
+  const sharedStyles = readFileSync(join(ROOT, "css", "tattoos.css"), "utf8");
+  assert.match(sharedStyles, /--tattoo-short-field-height:\s*53px/);
+  assert.match(sharedStyles, /input:not\(\[type="hidden"\]\):not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="range"\]\):not\(\.honeypot\)/);
+  assert.match(sharedStyles, /height:\s*var\(--tattoo-short-field-height\)\s*!important/);
+  assert.match(sharedStyles, /\.tattoo-flow textarea\s*\{[\s\S]*min-height:\s*124px[\s\S]*field-sizing:\s*content[\s\S]*resize:\s*vertical/);
+
+  const formSources = [
+    join(ROOT, "tattoos", "inquire", "custom", "index.html"),
+    join(ROOT, "tattoos", "flash", "claim", "index.html"),
+    join(ROOT, "tattoos", "build", "index.html"),
+    join(ROOT, "tattoos", "build", "in-person", "index.html"),
+    join(ROOT, "tattoos", "inquire", "consultation", "index.html"),
+    join(ROOT, "tattoos", "special-projects", "apply", "index.html"),
+  ];
+  for (const path of formSources) {
+    const source = readFileSync(path, "utf8");
+    assert.match(source, /<body class="tattoo-flow"/);
+    assert.match(source, /href="\/css\/tattoos\.css"/);
   }
 });
 
@@ -949,7 +1041,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
       "SELECT id, label, duration_minutes, deposit_cents, session_fee_cents, minimum_billable_minutes FROM booking_types WHERE id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended') ORDER BY id"
     ).all().map((row) => ({ ...row })),
     [
-      { id: "tattoo_extended", label: "Extended Day Session", duration_minutes: 600, deposit_cents: 35000, session_fee_cents: 20000, minimum_billable_minutes: 480 },
+      { id: "tattoo_extended", label: "Extended Day Session", duration_minutes: 600, deposit_cents: 35000, session_fee_cents: 20000, minimum_billable_minutes: 0 },
       { id: "tattoo_full", label: "Full Day Session", duration_minutes: 360, deposit_cents: 20000, session_fee_cents: 0, minimum_billable_minutes: 0 },
       { id: "tattoo_half", label: "Half Day Session", duration_minutes: 180, deposit_cents: 10000, session_fee_cents: 0, minimum_billable_minutes: 0 },
       { id: "tattoo_quarter", label: "Quarter Day Session", duration_minutes: 90, deposit_cents: 5000, session_fee_cents: 0, minimum_billable_minutes: 0 },
@@ -2444,7 +2536,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
   assert.equal(hold.status, 200);
 });
 
-test("Extended Day is standard, snapshot-safe, acknowledged, and charges only its deposit in Square", async () => {
+test("Extended Day is optional, has no billing minimum, remains acknowledged, and charges only its deposit in Square", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
   const env = {
@@ -2542,9 +2634,8 @@ test("Extended Day is standard, snapshot-safe, acknowledged, and charges only it
       durationRangeLabel: extendedType.durationRangeLabel,
       depositCents: extendedType.depositCents,
       sessionFeeCents: extendedType.sessionFeeCents,
-      minimumBillableMinutes: extendedType.minimumBillableMinutes,
     },
-    { durationMinutes: 600, durationRangeLabel: "8-10 hours", depositCents: 35000, sessionFeeCents: 20000, minimumBillableMinutes: 480 },
+    { durationMinutes: 600, durationRangeLabel: "8-10 hours", depositCents: 35000, sessionFeeCents: 20000 },
   );
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.match(bookingPage, /No Extended Day dates are currently available\. Shorter sessions remain bookable\./);
@@ -2577,7 +2668,7 @@ test("Extended Day is standard, snapshot-safe, acknowledged, and charges only it
     "SELECT session_fee_cents, minimum_billable_minutes, extended_day_acknowledged_at FROM appointments WHERE id = ?",
   ).get(appointmentId));
   assert.equal(appointmentRow.session_fee_cents, 20000);
-  assert.equal(appointmentRow.minimum_billable_minutes, 480);
+  assert.equal(appointmentRow.minimum_billable_minutes, 0);
   assert.ok(appointmentRow.extended_day_acknowledged_at);
 
   const confirmation = await handleConfirmBooking(
@@ -3110,6 +3201,10 @@ test("a paid replacement updates both appointment states in People", async () =>
       { source_id: replacementId, status: "confirmed" },
       { source_id: originalId, status: "cancelled" },
     ],
+  );
+  assert.equal(
+    database.prepare("SELECT description FROM booking_types WHERE id = 'tattoo_extended'").get().description,
+    "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.",
   );
 });
 
@@ -5443,4 +5538,193 @@ test("inside 48 hours reschedule creates one resumable paid replacement and pres
     reschedule_count: 0,
     replaced_by_appointment_id: null,
   });
+});
+
+test("Build and Maze brief templates render required client content without sensitive fields", () => {
+  for (const [templateKey, kind] of [["tattoo_build_brief_pdf", "build"], ["tattoo_maze_brief_pdf", "maze"]]) {
+    const content = briefTemplateDefault(templateKey);
+    const validation = validateBriefTemplateContent(templateKey, content);
+    assert.equal(validation.ok, true, validation.errors.join(" "));
+    const source = buildBriefSample(kind);
+    source.payload.dob = "1990-01-01";
+    source.payload.consent = "private consent answer";
+    source.payload.internal_notes = "never show this";
+    const rendered = renderBriefHtml({
+      templateKey,
+      content,
+      source,
+      mazeImageDataUrl: source.mazeImageDataUrl || "",
+    });
+    assert.match(rendered.html, /Submission reference/);
+    assert.match(rendered.html, /not final tattoo artwork, a quote, or booking approval/i);
+    assert.doesNotMatch(rendered.html, /1990-01-01|private consent answer|never show this/);
+    if (kind === "build") {
+      assert.match(rendered.html, /Threshold/);
+      assert.match(rendered.html, /Shared themes/);
+      assert.match(rendered.html, /The passage is read before/);
+    } else {
+      assert.match(rendered.html, /Submitted Maze design/);
+      assert.match(rendered.html, /open center represents/);
+    }
+  }
+  const unsafe = briefTemplateDefault("tattoo_build_brief_pdf");
+  unsafe.copy.disclaimer = "No protected policy token";
+  unsafe.style.accent = "custom-hex";
+  const invalid = validateBriefTemplateContent("tattoo_build_brief_pdf", unsafe);
+  assert.equal(invalid.ok, false);
+  assert.match(invalid.errors.join(" "), /policy_scope|approved accent/i);
+  const receipt = buildSubmissionReceivedEmail({
+    variant: "build",
+    clientName: "Jordan",
+    label: "Build Your Own submission",
+    submissionId: "build-brief-receipt",
+    expectation: "The Studio will review the brief.",
+    next: "The Studio will follow up.",
+    reviewLine: "Review timing applies.",
+    supportEmail: "studio@example.test",
+    briefUrl: "https://example.test/api/tattoo/briefs/document?v=1&sig=test",
+  });
+  assert.match(receipt.html, /Download submitted brief/);
+  assert.match(receipt.html, /api\/tattoo\/briefs\/document/);
+});
+
+test("brief document migration replays safely and enforces one final document per submission and kind", () => {
+  const database = migratedDatabase({ before: "0068_submission_brief_documents.sql" });
+  const migration = readFileSync(join(ROOT, "migrations", "0068_submission_brief_documents.sql"), "utf8");
+  database.exec(migration);
+  database.exec(migration);
+  insertSubmissionFixture(database, { id: "submission-brief-unique", type: "build_brief" });
+  const now = new Date().toISOString();
+  const insert = database.prepare(
+    `INSERT INTO submission_brief_documents
+     (id,submission_id,document_kind,status,template_key,template_revision,template_snapshot_json,source_snapshot_json,client_access_status,access_version,created_at,updated_at)
+     VALUES(?,?,?,'pending','tattoo_build_brief_pdf',0,'{}','{}','disabled',1,?,?)`,
+  );
+  insert.run("document-one", "submission-brief-unique", "build", now, now);
+  assert.throws(() => insert.run("document-two", "submission-brief-unique", "build", now, now), /UNIQUE constraint failed/);
+});
+
+test("brief PDF generation freezes one document, stores it privately, and revokes or replaces signed access", async () => {
+  const database = migratedDatabase();
+  insertSubmissionFixture(database, { id: "submission-brief-build", type: "build_brief", name: "Jordan Rivera", email: "jordan@example.test" });
+  const sample = buildBriefSample("build");
+  database.prepare("UPDATE submissions SET payload_json=? WHERE id=?")
+    .run(JSON.stringify(sample.payload), "submission-brief-build");
+  const bucket = new MemoryBucket();
+  let renders = 0;
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSION_FILES: bucket,
+    SUBMISSIONS_ADMIN_TOKEN: "brief-admin-token",
+    BRIEF_LINK_SECRET: "brief-link-secret-for-tests",
+    PUBLIC_SITE_URL: "https://example.test",
+    BROWSER: {
+      async quickAction(action, payload) {
+        renders += 1;
+        assert.equal(action, "pdf");
+        assert.match(payload.html, /Jordan Rivera/);
+        assert.equal(payload.pdfOptions.format, "letter");
+        return new Response(new TextEncoder().encode("%PDF-1.7\nbrief-test\n%%EOF"), { status: 200 });
+      },
+    },
+  };
+  const row = database.prepare("SELECT * FROM submissions WHERE id=?").get("submission-brief-build");
+  const first = await generateSubmissionBriefDocument(env, new Request("https://example.test/api/submissions"), row);
+  assert.equal(first.ok, true, first.error);
+  assert.equal(first.document.status, "ready");
+  assert.match(first.document.clientUrl, /\/api\/tattoo\/briefs\//);
+  assert.equal(renders, 1);
+  assert.equal(bucket.objects.has("submission-briefs/submission-brief-build/final.pdf"), true);
+  const frozenSnapshot = database.prepare("SELECT template_snapshot_json,source_snapshot_json FROM submission_brief_documents WHERE submission_id=?")
+    .get("submission-brief-build");
+  database.prepare("UPDATE submissions SET payload_json=? WHERE id=?").run(JSON.stringify({ changed: true }), "submission-brief-build");
+  const replay = await generateSubmissionBriefDocument(env, new Request("https://example.test/api/submissions"), row);
+  assert.equal(replay.ok, true);
+  assert.equal(renders, 1);
+  assert.deepEqual(database.prepare("SELECT template_snapshot_json,source_snapshot_json FROM submission_brief_documents WHERE submission_id=?")
+    .get("submission-brief-build"), frozenSnapshot);
+
+  const initialUrl = first.document.clientUrl;
+  const initialDownload = await handlePublicBriefDownload(new Request(initialUrl), env, first.document.id);
+  assert.equal(initialDownload.status, 200);
+  assert.equal(initialDownload.headers.get("cache-control"), "private, no-store, max-age=0");
+  const revoke = await handleAdminSubmissionBriefDocument(adminJsonRequest(
+    "/api/admin/submissions/submission-brief-build/brief-document/revoke", {}, "brief-admin-token",
+  ), env, "submission-brief-build", "revoke");
+  assert.equal(revoke.status, 200);
+  assert.equal((await handlePublicBriefDownload(new Request(initialUrl), env, first.document.id)).status, 404);
+  const internal = await handleAdminSubmissionBriefDocument(draftRequest(
+    "/api/admin/submissions/submission-brief-build/brief-document/download", "GET", undefined, "brief-admin-token",
+  ), env, "submission-brief-build", "download");
+  assert.equal(internal.status, 200);
+  const reissue = await handleAdminSubmissionBriefDocument(adminJsonRequest(
+    "/api/admin/submissions/submission-brief-build/brief-document/reissue", {}, "brief-admin-token",
+  ), env, "submission-brief-build", "reissue");
+  const reissuedPayload = await reissue.json();
+  assert.equal(reissuedPayload.briefDocument.clientAccessStatus, "active");
+  assert.notEqual(reissuedPayload.briefDocument.clientUrl, initialUrl);
+  assert.equal((await handlePublicBriefDownload(new Request(initialUrl), env, first.document.id)).status, 403);
+  assert.equal((await handlePublicBriefDownload(new Request(reissuedPayload.briefDocument.clientUrl), env, first.document.id)).status, 200);
+});
+
+test("PDF template manager protects authentication, stale drafts, publishing, history, and discard", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: "brief-admin-token" };
+  const unauthorized = await handleAdminBriefTemplates(draftRequest("/api/admin/brief-templates", "GET"), env);
+  assert.equal(unauthorized.status, 401);
+  const catalogResponse = await handleAdminBriefTemplates(draftRequest("/api/admin/brief-templates", "GET", undefined, "brief-admin-token"), env);
+  assert.equal(catalogResponse.status, 200);
+  assert.equal((await catalogResponse.json()).templates.length, 2);
+  const content = briefTemplateDefault("tattoo_build_brief_pdf");
+  content.copy.intro = "Edited future Build brief introduction.";
+  const saved = await handleAdminBriefTemplates(adminJsonRequest(
+    "/api/admin/brief-templates/tattoo_build_brief_pdf/draft", { content, baseRevision: 0 }, "brief-admin-token", "PUT",
+  ), env);
+  const savedPayload = await saved.json();
+  assert.equal(saved.status, 200, JSON.stringify(savedPayload));
+  assert.equal(savedPayload.draft.revision, 1);
+  const stale = await handleAdminBriefTemplates(adminJsonRequest(
+    "/api/admin/brief-templates/tattoo_build_brief_pdf/draft", { content, baseRevision: 0 }, "brief-admin-token", "PUT",
+  ), env);
+  assert.equal(stale.status, 409);
+  const published = await handleAdminBriefTemplates(adminJsonRequest(
+    "/api/admin/brief-templates/tattoo_build_brief_pdf/publish", { revision: 1 }, "brief-admin-token",
+  ), env);
+  assert.equal(published.status, 200);
+  const secondContent = JSON.parse(JSON.stringify(content));
+  secondContent.copy.intro = "Second draft to discard.";
+  const secondDraft = await handleAdminBriefTemplates(adminJsonRequest(
+    "/api/admin/brief-templates/tattoo_build_brief_pdf/draft", { content: secondContent, baseRevision: 1 }, "brief-admin-token", "PUT",
+  ), env);
+  const secondDraftPayload = await secondDraft.json();
+  const discarded = await handleAdminBriefTemplates(adminJsonRequest(
+    "/api/admin/brief-templates/tattoo_build_brief_pdf/discard", { revision: secondDraftPayload.draft.revision }, "brief-admin-token",
+  ), env);
+  assert.equal(discarded.status, 200);
+  const history = await handleAdminBriefTemplates(draftRequest(
+    "/api/admin/brief-templates/tattoo_build_brief_pdf/history", "GET", undefined, "brief-admin-token",
+  ), env);
+  const historyPayload = await history.json();
+  assert.equal(history.status, 200);
+  assert.ok(historyPayload.history.some((entry) => entry.status === "published"));
+  assert.ok(historyPayload.history.some((entry) => entry.status === "retired"));
+});
+
+test("brief PDF routes, Studio controls, Browser binding, and client email templates remain contractually wired", () => {
+  const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  const wrangler = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8");
+  const previews = readFileSync(join(ROOT, "studio", "previews", "index.html"), "utf8");
+  const submissionsStudio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const templates = readFileSync(join(ROOT, "functions", "api", "notifications", "_email-templates.js"), "utf8");
+  assert.match(worker, /handlePublicBriefDownload/);
+  assert.match(worker, /handleAdminBriefTemplates/);
+  assert.match(worker, /brief-document/);
+  assert.match(worker, /async function handleSubmissionsApi[\s\S]*briefDocumentMatch[\s\S]*Unknown submissions API route/);
+  assert.match(wrangler, /"browser"\s*:\s*\{\s*"binding"\s*:\s*"BROWSER"/s);
+  assert.match(previews, /PDF Template Manager/);
+  assert.match(previews, /studio\/pdf-preview\.js/);
+  assert.match(submissionsStudio, /Client Brief PDF/);
+  assert.match(submissionsStudio, /Generate &amp; Email Client/);
+  assert.match(templates, /tattoo_brief_ready/);
+  assert.match(templates, /Download submitted brief/);
 });

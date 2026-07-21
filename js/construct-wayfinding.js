@@ -33,6 +33,7 @@
     portfolio: 'Portfolio',
     received: 'Received',
     special: 'Special projects',
+    'special-projects': 'Special Projects',
     submission: 'Submission',
     virtual: 'Virtual',
   };
@@ -49,6 +50,7 @@
     if (!segment) return '';
     var clean = String(segment).replace(/\.html$/i, '');
     if (/^ap-/.test(clean)) return clean.toUpperCase();
+    if (SECTION_LABELS[clean.toLowerCase()]) return SECTION_LABELS[clean.toLowerCase()];
     return titleCase(clean)
       .split(' ')
       .map(function(part) { return SECTION_LABELS[part.toLowerCase()] || part; })

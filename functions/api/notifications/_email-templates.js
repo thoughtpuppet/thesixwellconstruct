@@ -62,6 +62,10 @@ export function buildSubmissionReceivedEmail(data) {
     details: [
       { label: "Submission reference", value: data.submissionId },
     ],
+    primaryAction: data.briefUrl ? {
+      label: data.briefLabel || "Download submitted brief",
+      href: data.briefUrl,
+    } : null,
     sections: [
       requested.length ? {
         title: "Requested sheet designs:",
@@ -78,6 +82,30 @@ export function buildSubmissionReceivedEmail(data) {
       `Questions or corrections? Email ${data.supportEmail} and include your submission reference.`,
     ],
     signature: construct ? constructSignature() : tattooSignature(),
+  });
+}
+
+export function buildTattooBriefReadyEmail(data) {
+  const label = data.variant === "maze" ? "Maze brief" : "Build Your Own brief";
+  return renderClientEmail({
+    templateKey: "tattoo_brief_ready",
+    templateVariant: data.variant === "maze" ? "maze" : "build",
+    variables: { client_name: data.clientName || "there", brief_label: label },
+    theme: "tattoo",
+    subject: data.subject || `Your art.pill ${label} PDF is ready`,
+    preheader: "Your submitted project brief is ready to download.",
+    classification: "SUBMITTED PROJECT BRIEF",
+    headline: `Your ${label} PDF is ready.`,
+    greeting: `Hi ${data.clientName || "there"},`,
+    intro: [
+      "Your final submitted project brief has been preserved as a PDF for your records.",
+    ],
+    primaryAction: { label: "Download submitted brief", href: data.briefUrl },
+    notice: [
+      "This private link remains available unless the Studio replaces or revokes it.",
+      "The PDF records the brief you submitted. It is not final tattoo artwork, a quote, or booking approval.",
+    ],
+    signature: tattooSignature(),
   });
 }
 
@@ -568,6 +596,8 @@ export function buildCommunicationPreferencesEmail(data) {
 const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "tattoo_build_draft_resume", variant: "build", label: "Saved Build draft", brand: "tattoo", audience: "client", stage: "inquiry" },
   { templateKey: "tattoo_build_draft_resume", variant: "maze", label: "Saved Maze draft", brand: "tattoo", audience: "client", stage: "inquiry" },
+  { templateKey: "tattoo_brief_ready", variant: "build", label: "Build brief PDF ready", brand: "tattoo", audience: "client", stage: "inquiry" },
+  { templateKey: "tattoo_brief_ready", variant: "maze", label: "Maze brief PDF ready", brand: "tattoo", audience: "client", stage: "inquiry" },
   { templateKey: "submission_received", variant: "custom", label: "Custom project receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "submission_received", variant: "flash", label: "Flash claim receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "submission_received", variant: "build", label: "Build brief receipt", brand: "tattoo", stage: "inquiry" },
@@ -692,6 +722,12 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       resumeUrl: mode === "maze" ? "https://thesixwellconstruct.com/tattoos/build/maze/#resume=demo-private-token" : "https://thesixwellconstruct.com/tattoos/build/#resume=demo-private-token",
       expiration: "August 18, 2026",
     });
+  } else if (key === "tattoo_brief_ready") {
+    rendered = buildTattooBriefReadyEmail({
+      variant: mode === "maze" ? "maze" : "build",
+      clientName: SAMPLE.clientName,
+      briefUrl: "https://thesixwellconstruct.com/api/tattoo/briefs/demo-document?v=1&sig=sample",
+    });
   } else if (key === "submission_received") {
     const flash = mode === "flash";
     const profiles = {
@@ -726,6 +762,7 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       next: profile[2],
       reviewLine: ["consultation", "build_session"].includes(mode) ? "Complete checkout to keep the selected time." : "Most project submissions are reviewed within 5-7 business days.",
       supportEmail: SAMPLE.supportEmail,
+      briefUrl: ["build", "maze"].includes(mode) ? "https://thesixwellconstruct.com/api/tattoo/briefs/demo-document?v=1&sig=sample" : "",
     });
   } else if (key === "booking_link_created") {
     const consultation = mode === "consultation";

@@ -193,7 +193,7 @@
         <p class="section-label" id="sessionSectionLabel">Session &amp; Deposit</p>
         <div id="paceIntro" class="pace-intro hidden">
           <h2>Choose how you want to pace your tattoo</h2>
-          <p>Your project may be completed in one longer appointment or split across shorter sessions. Extended Day is optional. Choose the session that best fits your project, comfort, and available time. If your tattoo requires additional appointments, this booking reserves the first session and the studio will coordinate the remaining dates with you.</p>
+          <p>Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
         </div>
         <div id="sessionList" class="session-list"></div>
         <div id="extendedPricing" class="extended-pricing hidden"></div>
@@ -394,13 +394,12 @@
         {
           id: "tattoo_extended",
           label: "Extended Day Session",
-          description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with an 8-hour billing minimum at the approved project rate, plus a $200 Extended Day fee.",
+          description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.",
           durationMinutes: 600,
           durationRangeLabel: "8-10 hours",
           depositCents: 35000,
           depositLabel: "$350",
           sessionFeeCents: 20000,
-          minimumBillableMinutes: 480,
           currency: "USD",
         },
       ],
@@ -724,8 +723,8 @@
         <div><span>Deposit paid at booking</span><strong>−$350</strong></div>
         <div><span>Remaining balance</span><strong>$1,850</strong></div>
       </div>
-      <p class="fine">Extended Day is optional. You may choose Quarter, Half, or Full Day instead and split your project across multiple appointments. Shorter sessions do not include the $200 Extended Day fee.</p>
-      <label class="extended-ack"><input id="extendedDayAck" type="checkbox" ${extendedDayAcknowledged ? "checked" : ""}><span>I understand that Extended Day reserves a 10-hour appointment block, has an eight-hour billing minimum at my approved project rate, and adds a $200 Extended Day fee. I understand that I may instead choose a shorter session and split my project across multiple appointments.</span></label>
+      <p class="fine">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
+      <label class="extended-ack"><input id="extendedDayAck" type="checkbox" ${extendedDayAcknowledged ? "checked" : ""}><span>I understand that Extended Day is optional, reserves a 10-hour appointment block, and adds a $200 Extended Day fee. I may instead choose a Quarter, Half, or Full Day session and split my project across shorter appointments.</span></label>
     `;
   }
 

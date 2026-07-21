@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Circle, Layer, Rect, Stage, Transformer } from "react-konva";
 import type Konva from "konva";
 import { symbolLibrary } from "../data/symbols";
-import type { CanvasItem, MazeShape, MazeTool, MazeWall, Selection } from "../types";
+import type { CanvasItem, CanvasLayout, MazeShape, MazeTool, MazeWall, Selection } from "../types";
 import { uuid } from "../lib/id";
 import { pathLength, perfectMazeWall, smoothCurvePoints, wallStampPoints } from "../lib/maze";
+import { CANVAS_LAYOUTS } from "../lib/canvas-layout";
 import { MazeGeometryShape } from "./MazeGeometryShape";
 import { MazeWallLine } from "./MazeWallLine";
 import { SymbolImage } from "./SymbolImage";
@@ -15,6 +16,7 @@ type ConstructCanvasProps = {
   mazeShapes: MazeShape[];
   selected: Selection;
   mazeTool: MazeTool;
+  canvasLayout: CanvasLayout;
   workspaceMode: "construct" | "maze";
   onSelect: (selection: Selection) => void;
   onChange: (item: CanvasItem) => void;
@@ -31,8 +33,6 @@ type ConstructCanvasProps = {
   onStageReady: (stage: Konva.Stage | null) => void;
 };
 
-export const CANVAS_WIDTH = 1200;
-export const CANVAS_HEIGHT = 760;
 const CURVE_POINT_SPACING = 10;
 const CURVE_RESISTANCE = 0.2;
 const CURVE_CLOSE_DISTANCE = 28;
@@ -44,6 +44,7 @@ export function ConstructCanvas({
   mazeShapes,
   selected,
   mazeTool,
+  canvasLayout,
   workspaceMode,
   onSelect,
   onChange,
@@ -59,6 +60,7 @@ export function ConstructCanvas({
   onMazeShapeDelete,
   onStageReady
 }: ConstructCanvasProps) {
+  const { width: canvasWidth, height: canvasHeight } = CANVAS_LAYOUTS[canvasLayout];
   const containerRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
@@ -75,8 +77,8 @@ export function ConstructCanvas({
     onStageReady(stageRef.current);
   }, [onStageReady]);
 
-  // Fit the fixed-resolution canvas into whatever width the container has, so
-  // the stage scales down on small screens instead of overflowing into scroll.
+  // Fit the selected logical canvas into whatever width the container has, so
+  // drawing coordinates remain stable while the display scales responsively.
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) {
@@ -87,7 +89,7 @@ export function ConstructCanvas({
       const viewportSafeWidth = Math.max(320, window.innerWidth - 28);
       const available = Math.min(container.clientWidth || viewportSafeWidth, viewportSafeWidth);
       if (available > 0) {
-        setScale(Math.min(1, available / CANVAS_WIDTH));
+        setScale(Math.min(1, available / canvasWidth));
       }
     };
 
@@ -99,7 +101,7 @@ export function ConstructCanvas({
       observer.disconnect();
       window.removeEventListener("resize", updateScale);
     };
-  }, []);
+  }, [canvasWidth]);
 
   const nextZIndex = () => {
     const zIndexes = [
@@ -165,7 +167,7 @@ export function ConstructCanvas({
   const stagePoint = () => {
     const stage = stageRef.current;
     // getRelativePointerPosition accounts for the stage scale, so draw/erase
-    // coordinates stay in the 1200x760 logical space at any display size.
+    // coordinates stay in the selected logical canvas at any display size.
     const pointer = stage?.getRelativePointerPosition();
     return pointer ? { x: pointer.x, y: pointer.y } : null;
   };
@@ -402,8 +404,8 @@ export function ConstructCanvas({
     <div className="canvas-shell" ref={containerRef}>
       <Stage
         ref={stageRef}
-        width={CANVAS_WIDTH * scale}
-        height={CANVAS_HEIGHT * scale}
+        width={canvasWidth * scale}
+        height={canvasHeight * scale}
         scaleX={scale}
         scaleY={scale}
         className="construct-stage"
@@ -418,14 +420,14 @@ export function ConstructCanvas({
         <Layer>
           <Rect
             name="canvas-background"
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
+            width={canvasWidth}
+            height={canvasHeight}
             fill="#b88f4e"
           />
           <Rect
             name="canvas-background"
-            x={CANVAS_WIDTH / 2 - 165}
-            y={CANVAS_HEIGHT / 2 - 120}
+            x={canvasWidth / 2 - 165}
+            y={canvasHeight / 2 - 120}
             width={330}
             height={240}
             fill="#d4b271"
@@ -436,8 +438,8 @@ export function ConstructCanvas({
             name="canvas-background"
             x={28}
             y={28}
-            width={CANVAS_WIDTH - 56}
-            height={CANVAS_HEIGHT - 56}
+            width={canvasWidth - 56}
+            height={canvasHeight - 56}
             stroke="#211f1d"
             strokeWidth={2}
             opacity={0.14}

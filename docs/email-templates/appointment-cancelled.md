@@ -63,7 +63,6 @@ art.pill TATTOO HOUSE
 - `{{rebook_url}}`
 - `{{support_email}}`
 - `{{appointment_id}}`
-- `{{minimum_billable_minutes}}` (Extended Day only)
 
 ## Optional Notes For Codex
 
@@ -72,6 +71,6 @@ and the "reservation fees" wording for `consult_in_person`,
 `consult_virtual`, and `build_in_person`. The rebook link points to
 `/tattoos/build/in-person/?rebook=1` for build sessions and
 `/tattoos/inquire/consultation/?rebook=1` for everything else.
-For Extended Day, identify the cancelled appointment as the 10-hour block
-with the eight-hour minimum at the approved project rate. Do not imply that
-the later $200 fee was collected through Square.
+For Extended Day, identify the cancelled appointment as an optional 8-10 hour
+session that reserved a 10-hour appointment block with a $200 Extended Day
+fee. Do not imply that the later $200 fee was collected through Square.

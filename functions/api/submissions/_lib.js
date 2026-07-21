@@ -12,6 +12,11 @@ import {
   buildCompositionSnapshot,
   normalizeCompositionSnapshot,
 } from "../../../js/build-composition.js";
+import {
+  generateSubmissionBriefDocument,
+  loadBriefDocument,
+  presentBriefDocument,
+} from "../brief-documents/_lib.js";
 
 const VALID_STATUSES = new Set([
   "new",
@@ -1266,15 +1271,35 @@ export async function handleCreateSubmission(request, env) {
       console.error("Unable to record optional submission marketing consent.", error);
     });
 
+    let briefResult = null;
+    if (["build_brief", "maze_design"].includes(submission.type)) {
+      briefResult = await generateSubmissionBriefDocument(env, request, {
+        id,
+        type: submission.type,
+        contact: submission.contact,
+        payload: submission.payload,
+        files: savedFiles,
+        createdAt: now,
+      });
+    }
+
     const clientNotification = await notifySubmissionReceived(env, {
       id,
       ...submission,
       files: savedFiles,
+      briefUrl: briefResult?.ok ? briefResult.document?.clientUrl : "",
+      briefLabel: "Download submitted brief",
     });
     const adminNotification = await notifyAdminSubmissionReceived(env, {
       id,
       ...submission,
       files: savedFiles,
+      payload: {
+        ...submission.payload,
+        ...(["build_brief", "maze_design"].includes(submission.type)
+          ? { brief_pdf_status: briefResult?.document?.status || "failed" }
+          : {}),
+      },
     });
 
     return json({
@@ -1282,6 +1307,7 @@ export async function handleCreateSubmission(request, env) {
       submissionId: id,
       filesStored: savedFiles.filter((file) => file.stored).length,
       filesReceived: savedFiles.length,
+      briefDocument: briefResult?.document || null,
       notifications: {
         client: notificationOutcome(clientNotification),
         admin: notificationOutcome(adminNotification),
@@ -1445,9 +1471,12 @@ export async function handleGetSubmission(request, env, id) {
             OR (related_type = 'tattoo_rendering_request' AND related_id IN (
               SELECT id FROM tattoo_rendering_requests WHERE submission_id = ?
             ))
+            OR (related_type = 'submission_brief_document' AND related_id IN (
+              SELECT id FROM submission_brief_documents WHERE submission_id = ?
+            ))
          ORDER BY created_at DESC`
       )
-      .bind(id, id, id)
+      .bind(id, id, id, id)
       .all();
 
     const appointmentEvents = await db.prepare(
@@ -1539,6 +1568,8 @@ export async function handleGetSubmission(request, env, id) {
     }
 
     const normalized = normalizeRow(row);
+    const briefDocumentRow = await loadBriefDocument(db, id);
+    const briefDocument = await presentBriefDocument(env, request, briefDocumentRow);
     const flashConflict = flashReservation?.conflictSubmissionId
       ? `Reserved by submission ${flashReservation.conflictSubmissionId}`
       : "";
@@ -1551,6 +1582,7 @@ export async function handleGetSubmission(request, env, id) {
         flashConflict,
         flash_conflict: flashConflict,
         renderingRequests,
+        briefDocument,
       },
       events: events.results || [],
       appointmentEvents: appointmentEvents.results || [],
@@ -2003,6 +2035,7 @@ export async function handleDeleteSubmission(request, env, id) {
     const db = requireSubmissionDb(env);
     const current = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
     if (!current) return errorResponse("Submission not found.", 404);
+    const briefDocument = await loadBriefDocument(db, id);
 
     const appointmentCount = await db
       .prepare("SELECT COUNT(*) AS count FROM appointments WHERE submission_id = ?")
@@ -2033,7 +2066,10 @@ export async function handleDeleteSubmission(request, env, id) {
     if (!force && storedFiles.length) {
       return errorResponse("Submission has stored files. Archive it instead of deleting so file history is not orphaned.", 409);
     }
-    if (force && storedFiles.length && !env.SUBMISSION_FILES) {
+    if (!force && briefDocument) {
+      return errorResponse("Submission has a client brief PDF record. Archive it instead of deleting.", 409);
+    }
+    if (force && (storedFiles.length || briefDocument?.storage_key) && !env.SUBMISSION_FILES) {
       return errorResponse("File storage is unavailable, so this entry cannot be permanently deleted without orphaning its stored files.", 503);
     }
 
@@ -2088,6 +2124,14 @@ export async function handleDeleteSubmission(request, env, id) {
           deletedFileCount += 1;
         } catch {
           cleanupWarnings.push(`Stored file cleanup failed for ${file.id || file.storageKey}.`);
+        }
+      }
+      if (briefDocument?.storage_key) {
+        try {
+          await env.SUBMISSION_FILES.delete(briefDocument.storage_key);
+          deletedFileCount += 1;
+        } catch {
+          cleanupWarnings.push("Stored brief PDF cleanup failed.");
         }
       }
     }

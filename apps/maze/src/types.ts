@@ -119,6 +119,14 @@ export type MazeShape = {
   zIndex: number;
 };
 
+export type CanvasLayout = "tall" | "square" | "wide";
+
+export type MazeState = {
+  canvasLayout: CanvasLayout;
+  mazeWalls: MazeWall[];
+  mazeShapes: MazeShape[];
+};
+
 export type MazeTool =
   | { type: "select" }
   | { type: "eraser"; width: number }

@@ -83,7 +83,6 @@ session.
 - `{{location_parking_url}}` (in-person sessions only)
 - `{{appointment_id}}`
 - `{{session_fee_amount}}` (Extended Day only)
-- `{{minimum_billable_minutes}}` (Extended Day only)
 
 ## Optional Notes For Codex
 
@@ -93,5 +92,7 @@ Day-of instructions only apply to tattoo and build sessions - omit them for
 consultations. Virtual consultations skip location/parking entirely and
 include the Zoom join link (link only, no password) directly under the
 session line.
-Extended Day reminders repeat the $200 fee due with the final balance and the
-10-hour block / eight-hour billing-minimum policy.
+Extended Day reminders state: “Optional 8-10 hour session. Reserves a 10-hour
+appointment block with a $200 Extended Day fee.” They also state that Extended
+Day is always optional and that Quarter, Half, and Full Day sessions do not
+include the fee.

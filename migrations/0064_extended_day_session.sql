@@ -11,6 +11,6 @@ INSERT OR IGNORE INTO booking_types (
   session_fee_cents, minimum_billable_minutes
 ) VALUES (
   'tattoo_extended', 'tattooing', 'Extended Day Session',
-  'Optional 8-10 hour session. Reserves a 10-hour appointment block with an 8-hour billing minimum at the approved project rate, plus a $200 Extended Day fee.',
-  600, 35000, 'USD', 1, 40, datetime('now'), datetime('now'), 20000, 480
+  'Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.',
+  600, 35000, 'USD', 1, 40, datetime('now'), datetime('now'), 20000, 0
 );

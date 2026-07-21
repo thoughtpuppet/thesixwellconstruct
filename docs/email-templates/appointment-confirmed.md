@@ -52,7 +52,6 @@ Saiel Solehman
 - `{{booking_type_label}}`
 - `{{deposit_amount}}`
 - `{{session_fee_amount}}` (Extended Day only; due with final studio balance)
-- `{{minimum_billable_minutes}}` (Extended Day only)
 - `{{confirmation_url}}`
 - `{{day_of_instructions_url}}`
 - `{{location_parking_url}}`
@@ -65,6 +64,7 @@ payment process once the deposit is confirmed. Include location and day-of
 links here because this is the client's practical reference email.
 This template never includes a Zoom link - regular tattoo sessions are
 in-person only.
-For Extended Day, state that the $200 session fee remains due with the final
-studio balance and that the reserved 10-hour block has an eight-hour billing
-minimum at the approved project rate.
+For Extended Day, use: “Optional 8-10 hour session. Reserves a 10-hour
+appointment block with a $200 Extended Day fee.” State that Extended Day is
+always optional and that Quarter, Half, and Full Day sessions do not include
+the fee.

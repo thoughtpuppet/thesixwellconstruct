@@ -12,6 +12,7 @@ import {
   buildCommunicationPreferencesEmail,
   buildCrmFollowupEmail,
   buildSubmissionReceivedEmail,
+  buildTattooBriefReadyEmail,
   buildTattooDraftResumeEmail,
   buildTattooRenderingPaymentConfirmedEmail,
   buildTattooRenderingPaymentRequestEmail,
@@ -69,11 +70,10 @@ const DEFAULT_BOOKING_TYPES = {
   },
   tattoo_extended: {
     label: "Extended Day Session",
-    description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with an 8-hour billing minimum at the approved project rate, plus a $200 Extended Day fee.",
+    description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.",
     durationMinutes: 600,
     depositCents: 35000,
     sessionFeeCents: 20000,
-    minimumBillableMinutes: 480,
     currency: "USD",
   },
 };
@@ -286,7 +286,6 @@ function normalizeBookingType(row) {
     durationMinutes,
     depositCents: row.deposit_cents ?? row.depositCents ?? 0,
     sessionFeeCents: row.session_fee_cents ?? row.sessionFeeCents ?? 0,
-    minimumBillableMinutes: row.minimum_billable_minutes ?? row.minimumBillableMinutes ?? 0,
     durationRangeLabel: id === EXTENDED_DAY_BOOKING_TYPE_ID ? "8-10 hours" : formatDuration(durationMinutes),
     currency: row.currency || "USD",
   };
@@ -315,7 +314,7 @@ async function bookingTypesForToken(env, token) {
     const result = await db
       .prepare(
         `SELECT id, label, description, duration_minutes, deposit_cents,
-                session_fee_cents, minimum_billable_minutes, currency
+                session_fee_cents, currency
          FROM booking_types
          WHERE active = 1 AND id IN (${placeholders})`
       )
@@ -339,7 +338,7 @@ function sessionOptionsText(bookingTypes) {
     const deposit = formatMoney(type.depositCents, type.currency);
     const details = [duration, type.description].filter(Boolean).join(" - ");
     const extended = type.id === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? ` Extended Day fee: ${formatMoney(type.sessionFeeCents, type.currency)}, due with the remaining studio balance. The ${deposit} deposit is credited toward the final total. Extended Day is optional; you may choose a shorter session and split the project across appointments.`
+      ? " Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "";
     return `- ${type.label}${details ? `: ${details}` : ""} Deposit: ${deposit}.${extended}`;
   }).join("\n");
@@ -591,6 +590,23 @@ export async function notifyTattooBuildDraftResume(env, request, draft, rawToken
   });
 }
 
+export async function notifyTattooBriefReady(env, request, data, options = {}) {
+  if (!data?.clientEmail || !data?.briefUrl) return { ok: false, skipped: true };
+  const message = buildTattooBriefReadyEmail({
+    variant: data.kind === "maze" ? "maze" : "build",
+    clientName: data.clientName,
+    briefUrl: data.briefUrl,
+  });
+  return sendTransactionalEmail(env, {
+    to: data.clientEmail,
+    ...message,
+    templateKey: "tattoo_brief_ready",
+    relatedType: "submission_brief_document",
+    relatedId: data.documentId,
+    idempotencyKey: options.idempotencyKey || `tattoo_brief_ready:${data.documentId}:${data.accessVersion}`,
+  });
+}
+
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
     headers: {
@@ -653,6 +669,8 @@ function normalizeSubmission(rowOrSubmission) {
     contactPhone: rowOrSubmission.contactPhone || rowOrSubmission.contact_phone || contact.phone || "",
     status: rowOrSubmission.status || "new",
     tattooStage: rowOrSubmission.tattooStage || rowOrSubmission.tattoo_stage || "",
+    briefUrl: rowOrSubmission.briefUrl || "",
+    briefLabel: rowOrSubmission.briefLabel || "",
     payload,
   };
 }
@@ -674,7 +692,6 @@ function normalizeAppointment(row) {
     tipCents: row.tip_cents ?? row.tipCents ?? 0,
     totalDueCents: (row.deposit_cents ?? row.depositCents ?? 0) + (row.tip_cents ?? row.tipCents ?? 0),
     sessionFeeCents: row.session_fee_cents ?? row.sessionFeeCents ?? 0,
-    minimumBillableMinutes: row.minimum_billable_minutes ?? row.minimumBillableMinutes ?? 0,
     currency: row.currency || "USD",
     purpose: row.purpose || "",
     status: row.status || "",
@@ -691,7 +708,7 @@ function extendedDayEmailFields(appointment) {
   }
   return {
     sessionFeeText: `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance`,
-    billingPolicyText: "Extended Day reserves a 10-hour appointment block and has an 8-hour billing minimum at your approved project rate. The Extended Day fee is not charged again during a no-cost reschedule.",
+    billingPolicyText: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you. The Extended Day fee is not charged again during a no-cost reschedule.",
   };
 }
 
@@ -860,6 +877,7 @@ function submissionDetailLines(submission) {
       "budget_range",
       "design_intent",
       "timeline",
+      "brief_pdf_status",
       "message",
       "instagram",
     ],
@@ -870,6 +888,7 @@ function submissionDetailLines(submission) {
       "scale",
       "budget_range",
       "timeline",
+      "brief_pdf_status",
       "message",
       "instagram",
       "maze_artifact_snapshot",
@@ -989,6 +1008,8 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     next: profile.next,
     reviewLine,
     supportEmail: settings.supportEmail,
+    briefUrl: normalized.briefUrl,
+    briefLabel: normalized.briefLabel,
   });
 
   return sendTransactionalEmail(env, {
@@ -1101,7 +1122,7 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
       ? `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance`
       : "",
     billingPolicyText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? "Extended Day reserves a 10-hour appointment block and has an 8-hour billing minimum at your approved project rate."
+      ? "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "",
     renderingPolicyText: "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
@@ -1420,7 +1441,6 @@ export async function notifyAdminAppointmentRescheduled(env, request, appointmen
       previousStartAt ? compactLine("Previous time", `${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}`) : "",
       compactLine("New time", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
       appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance`) : "",
-      appointment.minimumBillableMinutes ? compactLine("Billing policy", `${appointment.minimumBillableMinutes / 60}-hour minimum inside the reserved 10-hour block`) : "",
       compactLine("Reschedules used", appointment.rescheduleCount),
       "",
       compactLine("Client", appointment.clientName),

@@ -462,10 +462,6 @@
     flex-direction:column;
     gap:14px;
   }
-  .rates-intro {
-    max-width:680px;
-    margin:0 0 28px;
-  }
   .rate-list li {
     display:grid;
     grid-template-columns:minmax(110px,0.3fr) minmax(0,1fr);
@@ -508,16 +504,39 @@
     margin-top:24px; font-family:var(--serif); font-size:12px;
     letter-spacing:0.04em; color:var(--text-dim); line-height:1.7; max-width:600px;
   }
-  .extended-day-policy {
-    display:grid;
-    gap:16px;
-    max-width:760px;
-    margin-top:30px;
-    border:5px solid rgba(252,184,103,0.28);
-    padding:24px;
+  .session-offerings { margin-top:48px; max-width:900px; }
+  .session-offerings-title {
+    margin:8px 0 24px;
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:clamp(26px,4vw,42px);
+    font-weight:900;
+    letter-spacing:-0.03em;
   }
-  .extended-day-policy h3 { margin:0; color:var(--accent); font-family:var(--sans); font-size:18px; font-weight:900; text-transform:uppercase; }
-  .extended-day-policy p { margin:0; color:var(--text-mute); font-family:var(--serif); font-size:13px; line-height:1.7; }
+  .session-list { list-style:none; display:grid; }
+  .session-list > li {
+    display:grid;
+    grid-template-columns:minmax(150px,0.28fr) minmax(0,1fr);
+    gap:22px;
+    align-items:start;
+    padding:22px 0;
+    border-bottom:5px solid rgba(252,184,103,0.14);
+  }
+  .session-list > li:first-child { border-top:5px solid rgba(252,184,103,0.14); }
+  .session-duration {
+    color:var(--signal);
+    font-family:var(--sans);
+    font-size:clamp(28px,4vw,46px);
+    font-weight:900;
+    letter-spacing:-0.015em !important;
+    line-height:0.95 !important;
+  }
+  .session-description,
+  .session-policy,
+  .session-deposit { margin:0; color:var(--text-mute); font-family:var(--serif); font-size:13px; line-height:1.7; }
+  .session-policy { margin-top:12px; }
+  .session-deposit { margin-top:10px; color:var(--text-dim); }
+  .session-deposit strong { color:var(--text); font-family:var(--sans); }
   .extended-day-example { display:grid; gap:0; border-top:5px solid rgba(252,184,103,0.14); }
   .extended-day-example div { display:flex; justify-content:space-between; gap:20px; padding:10px 0; border-bottom:5px solid rgba(252,184,103,0.1); color:var(--text-mute); font-family:var(--serif); font-size:13px; line-height:1.5; }
   .extended-day-example strong { color:var(--text); font-family:var(--sans); white-space:nowrap; }
@@ -602,6 +621,7 @@
     .brand-copy { font-size:17px; line-height:1.15; text-wrap:auto; }
     .side-notes { border-left:none; padding-left:0; border-top:5px solid var(--ring-faint); padding-top:24px; }
     .rate-list li { grid-template-columns:1fr; gap:10px; }
+    .session-list > li { grid-template-columns:1fr; gap:12px; }
     .booking-cta { grid-template-columns:1fr; align-items:flex-start; }
   }
   @media (max-width:640px) {
@@ -718,7 +738,7 @@
             <h3 class="ledger-title" data-copy-id="tattoos-flash-ledger-title">Flash</h3>
           </div>
           <div>
-            <p class="ledger-body" data-copy-id="tattoos-flash-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 18px"><span style="font-size: 16px">Pre-drawn designs. <br>Open a flash item, learn about the design, then send a claim if it resonates.</span></span></span></p>
+            <p class="ledger-body" data-copy-id="tattoos-flash-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 18px"><span style="font-size: 16px">Pre-drawn designs. <br>Open a flash item, learn about the design, then claim it if it resonates.</span></span></span></p>
           </div>
           <div>
             <p class="ledger-status" style="color: rgb(255, 231, 202); opacity: 1;"><br></p>
@@ -772,7 +792,7 @@
         <div class="ritual-intro">
           <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-process-label"><span style="font-size: 14px"><span style="color: rgb(255, 231, 202)">How It Works</span></span></p>
           <h2 class="section-title" data-copy-id="tattoos-process-title">A review path before the session.</h2>
-          <p class="section-body" data-copy-id="tattoos-process-body"><span style="color: rgba(252, 184, 103, 0.64)">Every path begins with review. Flash claims, custom inquiries, and Special Projects are considered fit then a private token booking link is sent.</span></p>
+          <p class="section-body" data-copy-id="tattoos-process-body"><span style="color: rgba(252, 184, 103, 0.64)">Every path begins with review. Flash claims, custom inquiries, and Special Projects are reviewed then once approved, a token booking link is sent.</span></p>
         </div>
         <div class="path-list" aria-label="Booking process">
           <article class="path-step">
@@ -799,29 +819,51 @@
       <div class="price-fit">
         <div>
           <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-rates-label"><span style="color: rgb(255, 231, 202)"><span style="font-size: 14px">Rates</span></span></p>
-          <h2 class="section-title" data-copy-id="tattoos-rates-title">Rates &amp; Project Scope</h2>
-          <p class="fit-body rates-intro" data-copy-id="tattoos-rates-intro">Rates are based on tattoo time and project type. Your final total is shaped by placement, scale, detail, and the recommended session plan.</p>
+          <h2 class="section-title" data-copy-id="tattoos-rates-title">Rates &amp; Sessions</h2>
           <ul class="rate-list" id="tattooRateList" aria-live="polite">
-            <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Existing flash is billed at the published flash rate. Final scope depends on placement, scale, and tattoo time.</span></p></div></li>
-            <li data-rate-service="custom"><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom, Story-Driven &amp; Build</p><p class="fit-body" data-copy-id="tattoos-rate-custom-body"><span style="color: rgba(252, 184, 103, 0.64)">Original custom work, symbolic compositions, and Build Your Own designs are billed at the custom rate.</span></p></div></li>
-            <li data-rate-service="special"><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="fit-body" data-copy-id="tattoos-rate-special-body"><span style="color: rgba(252, 184, 103, 0.64)">Select open calls may begin at this rate. The specific call, commitment, and project scope determine the confirmed rate.</span></p></div></li>
+            <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Original flash pieces are offered at a lower rate.</span></p></div></li>
+            <li data-rate-service="custom"><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom &amp; Story-Driven &amp; Built Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-custom-body"><span style="color: rgba(252, 184, 103, 0.64)">Custom work, complex symbolic compositions, and narrative pieces. Build your own concept/maze designs are also subjected to this rate.</span></p></div></li>
+            <li data-rate-service="special"><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="fit-body" data-copy-id="tattoos-rate-special-body"><span style="color: rgba(252, 184, 103, 0.64)">communal, collaborative or experimental work. Starting rate is to incentivize participation and also reflects the appreciation of the extended commitment that is required and the possible depth of these sessions.</span></p></div></li>
           </ul>
-          <article class="extended-day-policy">
-            <h3>Extended Day Session — <span id="extendedDayDuration">8–10 hours</span></h3>
-            <p>Extended Day is an optional way to complete more work in one appointment. It reserves a 10-hour appointment block, has an eight-hour billing minimum at your approved project rate, and adds a flat <strong id="extendedDayFee">$200</strong> Extended Day fee. The <strong id="extendedDayDeposit">$350</strong> booking deposit is credited toward your final total.</p>
-            <p>You do not have to choose Extended Day. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments. If additional appointments are needed, the studio will coordinate the remaining dates with you.</p>
-            <div>
-              <p class="rate-label">10-hour Custom example</p>
-              <div class="extended-day-example">
-                <div><span>Tattoo work: 10 hours × $200/hour</span><strong>$2,000</strong></div>
-                <div><span>Extended Day fee</span><strong>+$200</strong></div>
-                <div><span>Extended Day total</span><strong>$2,200</strong></div>
-                <div><span>Deposit paid at booking</span><strong>−$350</strong></div>
-                <div><span>Remaining balance</span><strong>$1,850</strong></div>
-              </div>
-            </div>
-          </article>
-          <p class="fine-print" data-copy-id="tattoos-rates-fine-print">Your budget helps guide scope and session planning; it does not set the quote. Final pricing is confirmed before booking. A non-refundable deposit is required to reserve an appointment and is applied to the final tattoo cost.</p>
+          <div class="session-offerings" aria-labelledby="sessionOfferingsTitle">
+            <p class="section-label">Session Options</p>
+            <h3 class="session-offerings-title" id="sessionOfferingsTitle">Session Lengths</h3>
+            <ul class="session-list" id="tattooSessionList" aria-live="polite">
+              <li data-booking-type="tattoo_quarter">
+                <span class="session-duration">1h 30m</span>
+                <div><p class="rate-label session-name">Quarter Day Session</p><p class="session-description">Approx. 1.5 hours for small approved projects, flash, or focused work.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$50</strong></p></div>
+              </li>
+              <li data-booking-type="tattoo_half">
+                <span class="session-duration">3 hours</span>
+                <div><p class="rate-label session-name">Half Day Session</p><p class="session-description">Approx. 3 hours for medium approved projects or developed symbolic work.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$100</strong></p></div>
+              </li>
+              <li data-booking-type="tattoo_full">
+                <span class="session-duration">6 hours</span>
+                <div><p class="rate-label session-name">Full Day Session</p><p class="session-description">Up to 6 hours for large approved work, special projects, or deeper sessions.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$200</strong></p></div>
+              </li>
+              <li data-booking-type="tattoo_extended">
+                <span class="session-duration">8–10 hours</span>
+                <div>
+                  <p class="rate-label session-name">Extended Day Session</p>
+                  <p class="session-description">Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.</p>
+                  <p class="session-policy"><br></p>
+                  <p class="session-policy">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
+                  <p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$350</strong></p>
+                  <div>
+                    <p class="rate-label">10-hour Custom example</p>
+                    <div class="extended-day-example">
+                      <div><span>Tattoo work: 10 hours × $200/hour</span><strong>$2,000</strong></div>
+                      <div><span>Extended Day fee</span><strong>+$200</strong></div>
+                      <div><span>Extended Day total</span><strong>$2,200</strong></div>
+                      <div><span>Deposit paid at booking</span><strong>−$350</strong></div>
+                      <div><span>Remaining balance</span><strong>$1,850</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <p class="fine-print" data-copy-id="tattoos-rates-fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
         </div>
       </div>
     </section>
@@ -876,15 +918,15 @@
         var publicRateCopy = {
           flash: {
             label: "Flash Sessions",
-            body: "Existing flash is billed at the published flash rate. Final scope depends on placement, scale, and tattoo time."
+            body: "Original flash pieces are offered at a lower rate."
           },
           custom: {
-            label: "Custom, Story-Driven & Build",
-            body: "Original custom work, symbolic compositions, and Build Your Own designs are billed at the custom rate."
+            label: "Custom & Story-Driven & Built Sessions",
+            body: "Custom work, complex symbolic compositions, and narrative pieces. Build your own concept/maze designs are also subjected to this rate."
           },
           special: {
             label: "Special Projects",
-            body: "Select open calls may begin at this rate. The specific call, commitment, and project scope determine the confirmed rate."
+            body: "communal, collaborative or experimental work. Starting rate is to incentivize participation and also reflects the appreciation of the extended commitment that is required and the possible depth of these sessions."
           }
         };
         var rateCards = (Array.isArray(payload.rateCards) ? payload.rateCards : []).filter(function(card) {
@@ -914,15 +956,28 @@
             rateList.append(item);
           });
         }
-        var extendedType = (Array.isArray(payload.bookingTypes) ? payload.bookingTypes : []).find(function(type) { return type.id === "tattoo_extended"; });
-        if (extendedType) {
-          var extendedDuration = document.getElementById("extendedDayDuration");
-          var extendedFee = document.getElementById("extendedDayFee");
-          var extendedDeposit = document.getElementById("extendedDayDeposit");
-          if (extendedDuration) extendedDuration.textContent = extendedType.durationRangeLabel || "8–10 hours";
-          if (extendedFee) extendedFee.textContent = extendedType.sessionFeeLabel || "$200";
-          if (extendedDeposit) extendedDeposit.textContent = extendedType.depositLabel || "$350";
-        }
+        var tattooSessionTypes = Array.isArray(payload.bookingTypes) ? payload.bookingTypes : [];
+        var tattooSessionIds = ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
+        tattooSessionIds.forEach(function(id) {
+          var item = document.querySelector('[data-booking-type="' + id + '"]');
+          if (!item) return;
+          var type = tattooSessionTypes.find(function(candidate) { return candidate.id === id; });
+          item.hidden = !type;
+          if (!type) return;
+          var duration = item.querySelector(".session-duration");
+          var name = item.querySelector(".session-name");
+          var description = item.querySelector(".session-description");
+          if (duration) duration.textContent = type.durationRangeLabel || "";
+          if (name) name.textContent = type.label || "Tattoo session";
+          if (description && type.description) description.textContent = type.description;
+          item.querySelectorAll(".session-deposit-value").forEach(function(target) {
+            target.textContent = type.depositLabel || "";
+          });
+          if (id === "tattoo_extended") {
+            var extendedFee = document.getElementById("extendedDayFee");
+            if (extendedFee) extendedFee.textContent = type.sessionFeeLabel || "$200";
+          }
+        });
       })
       .catch(function() {
         var status = document.getElementById("specialProjectsStatus");

@@ -32,6 +32,9 @@
       "bucket_name": "swc-submission-files"
     }
   ],
+  "browser": {
+    "binding": "BROWSER"
+  },
   "send_email": [
     {
       "name": "EMAIL"

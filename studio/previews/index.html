@@ -64,6 +64,7 @@
   }
 </style>
 <link rel="stylesheet" href="/studio/email-preview.css">
+<link rel="stylesheet" href="/studio/pdf-preview.css">
 </head>
 <body>
 <header>
@@ -324,6 +325,16 @@
     </p>
     <div class="email-preview-app" data-email-preview data-brands="tattoo,art,events,studio"></div>
   </section>
+
+  <section id="pdf-templates">
+    <h2>PDF Template Manager</h2>
+    <p class="section-note">
+      Edit the structured Build and Maze brief copy and approved print styles,
+      then inspect the actual rendered PDF generated from fixed sample data.
+      Published changes apply only to future documents; completed client PDFs remain frozen.
+    </p>
+    <div class="pdf-preview-app" data-pdf-preview></div>
+  </section>
 </main>
 <script>
 (function(){
@@ -369,9 +380,9 @@
         "- Quarter Day Session: 1.5 hours. Deposit: $50.",
         "- Half Day Session: 3 hours - Approx. 3 hours for medium approved projects or developed symbolic work. Deposit: $100.",
         "- Full Day Session: 6 hours. Deposit: $200.",
-        "- Extended Day Session: 8-10 hours. Reserves a 10-hour block with an eight-hour billing minimum at the approved project rate. Deposit: $350. A flat $200 Extended Day fee is due with the final studio balance.",
+        "- Extended Day Session: Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Deposit: $350.",
         "",
-        "Choose one longer appointment or split the project across shorter sessions. Extended Day is optional; Quarter, Half, and Full Day do not add the $200 fee.",
+        "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
         "",
         "Before booking, please review:",
         "",
@@ -400,7 +411,7 @@
         "Session: Extended Day Session",
         "Deposit: $350 received",
         "Extended Day fee: $200 due with the final studio balance",
-        "Billing policy: 10-hour appointment block / eight-hour minimum at your approved project rate",
+        "Session option: Optional 8-10 hour session / reserves a 10-hour appointment block",
         "",
         "Confirmation page: https://thesixwellconstruct.com/booking/confirmed/?appointment=demo",
         `Day-of instructions: ${RESOURCES.dayOfInstructionsUrl}`,
@@ -701,5 +712,6 @@
 })();
 </script>
 <script src="/studio/email-preview.js"></script>
+<script src="/studio/pdf-preview.js"></script>
 </body>
 </html>

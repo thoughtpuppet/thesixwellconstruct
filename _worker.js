@@ -110,6 +110,11 @@ import {
   handleAnalyticsEvents,
   rollupSiteAnalytics,
 } from "./functions/api/analytics/_lib.js";
+import {
+  handleAdminBriefTemplates,
+  handleAdminSubmissionBriefDocument,
+  handlePublicBriefDownload,
+} from "./functions/api/brief-documents/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -528,6 +533,14 @@ async function handleSubmissionsApi(request, env) {
     return handleAdminListSubmissionTokens(request, env, decodeURIComponent(submissionTokensMatch[1]));
   }
 
+  const briefDocumentMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/brief-document(?:\/(download|revoke|reissue))?$/);
+  if (briefDocumentMatch) {
+    const action = briefDocumentMatch[2] || "";
+    const allowed = action === "download" ? ["GET"] : action ? ["POST"] : ["GET", "POST"];
+    if (!allowed.includes(method)) return methodNotAllowed(method, allowed);
+    return handleAdminSubmissionBriefDocument(request, env, decodeURIComponent(briefDocumentMatch[1]), action);
+  }
+
   const match = pathname.match(/^\/api\/admin\/submissions\/([^/]+)$/);
   if (match) {
     const id = decodeURIComponent(match[1]);
@@ -547,6 +560,7 @@ async function handleBuildDraftsApi(request, env) {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleCreateBuildDraft(request, env);
   }
+
   if (pathname === "/api/build-drafts/current") {
     if (method === "GET") return handleGetBuildDraft(request, env);
     if (method === "PATCH") return handleUpdateBuildDraft(request, env);
@@ -947,6 +961,15 @@ export default {
 
     if (url.pathname.startsWith("/api/admin/notifications/")) {
       return handleNotificationsApi(request, env);
+    }
+
+    if (url.pathname === "/api/admin/brief-templates" || url.pathname.startsWith("/api/admin/brief-templates/")) {
+      return handleAdminBriefTemplates(request, env);
+    }
+
+    const publicBriefMatch = url.pathname.match(/^\/api\/tattoo\/briefs\/([^/]+)$/);
+    if (publicBriefMatch) {
+      return handlePublicBriefDownload(request, env, decodeURIComponent(publicBriefMatch[1]));
     }
 
     if (

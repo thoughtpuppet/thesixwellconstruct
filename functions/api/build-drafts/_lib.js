@@ -126,9 +126,13 @@ function normalizeBuildPayload(payload = {}) {
 }
 
 function normalizeMazePayload(payload = {}) {
+  const canvasLayout = ["tall", "square", "wide"].includes(payload.canvasLayout)
+    ? payload.canvasLayout
+    : "wide";
   return {
     version: 1,
     clientDraftId: asString(payload.clientDraftId, 160),
+    canvasLayout,
     mazeWalls: Array.isArray(payload.mazeWalls) ? payload.mazeWalls : [],
     mazeShapes: Array.isArray(payload.mazeShapes) ? payload.mazeShapes : [],
     contact: normalizeContact(payload.contact),

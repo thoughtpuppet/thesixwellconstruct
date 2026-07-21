@@ -222,7 +222,6 @@ function parseJsonField(value, fallback) {
 
 function normalizeBookingType(row) {
   const durationMinutes = Number(row.duration_minutes ?? row.durationMinutes ?? 0);
-  const minimumBillableMinutes = Number(row.minimum_billable_minutes ?? row.minimumBillableMinutes ?? 0);
   return {
     id: row.id,
     venture: row.venture,
@@ -236,7 +235,6 @@ function normalizeBookingType(row) {
     sortOrder: row.sort_order || 0,
     sessionFeeCents: Number(row.session_fee_cents ?? row.sessionFeeCents ?? 0),
     sessionFeeLabel: formatMoney(Number(row.session_fee_cents ?? row.sessionFeeCents ?? 0), row.currency || "USD"),
-    minimumBillableMinutes,
     durationRangeLabel: row.id === EXTENDED_DAY_BOOKING_TYPE_ID
       ? "8-10 hours"
       : formatDurationLabel(durationMinutes),
@@ -347,7 +345,6 @@ function normalizeAppointment(row) {
     tipCents: row.tip_cents || 0,
     totalDueCents: row.deposit_cents + (row.tip_cents || 0),
     sessionFeeCents: Number(row.session_fee_cents || 0),
-    minimumBillableMinutes: Number(row.minimum_billable_minutes || 0),
     extendedDayAcknowledgedAt: row.extended_day_acknowledged_at || "",
     currency: row.currency || "USD",
     squareOrderId: row.square_order_id || "",
@@ -1585,13 +1582,13 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       `INSERT OR IGNORE INTO appointments (
         id, submission_id, booking_token_id, booking_type_id, availability_window_id,
         status, purpose, client_name, client_email, client_phone, start_at, end_at,
-        deposit_cents, tip_cents, session_fee_cents, minimum_billable_minutes,
+        deposit_cents, tip_cents, session_fee_cents,
         extended_day_acknowledged_at, currency, hold_expires_at, hold_state,
         replacement_for_appointment_id, reschedule_count, original_start_at,
         original_end_at, created_at, updated_at
       )
       SELECT ?, ?, ?, ?, aw.id, 'pending_deposit', ?, ?, ?, ?, aw.start_at, aw.end_at,
-             ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?
+             ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?
       FROM availability_windows aw
       WHERE aw.id = ? AND aw.active = 1 AND aw.is_blackout = 0
         AND (aw.booking_type_id IS NULL OR aw.booking_type_id = ?)
@@ -1703,7 +1700,6 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.depositCents,
       values.tipCents || 0,
       values.sessionFeeCents || 0,
-      values.minimumBillableMinutes || 0,
       values.extendedDayAcknowledgedAt || null,
       values.currency || "USD",
       values.holdExpiresAt,
@@ -1838,7 +1834,6 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     depositCents: bookingType.deposit_cents,
     tipCents,
     sessionFeeCents: bookingType.session_fee_cents || 0,
-    minimumBillableMinutes: bookingType.minimum_billable_minutes || 0,
     extendedDayAcknowledgedAt: bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null,
     currency: bookingType.currency || "USD",
     holdExpiresAt: holdExpiryFromNow(),
@@ -4758,7 +4753,6 @@ async function createReplacementCheckout(request, env, db, appointmentRow, avail
     depositCents: bookingTypeRow.deposit_cents,
     tipCents: 0,
     sessionFeeCents: bookingTypeRow.session_fee_cents || 0,
-    minimumBillableMinutes: bookingTypeRow.minimum_billable_minutes || 0,
     extendedDayAcknowledgedAt: original.extendedDayAcknowledgedAt || (original.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null),
     currency: bookingTypeRow.currency || "USD",
     holdExpiresAt: holdExpiryFromNow(),

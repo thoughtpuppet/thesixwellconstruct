@@ -570,7 +570,7 @@
     tattoo_quarter: "The composition is planned for a Quarter Day Session.",
     tattoo_half: "The composition is planned for a Half Day Session.",
     tattoo_full: "The composition is planned for a Full Day Session.",
-    tattoo_extended: "The composition is planned for an optional Extended Day Session (8-10 hours). This reserves a 10-hour appointment block, has an eight-hour billing minimum at the approved project rate, and adds a $200 Extended Day fee. The $350 deposit is credited toward the final total. A shorter session and split appointments remain possible.",
+    tattoo_extended: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
   };
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
@@ -3284,7 +3284,6 @@
     const currency = appointment.currency || "USD";
     const depositCents = Number(appointment.depositCents || 0);
     const sessionFeeCents = Number(appointment.sessionFeeCents || 0);
-    const minimumBillableMinutes = Number(appointment.minimumBillableMinutes || 0);
     const tipCents = Number(appointment.tipCents || 0);
     const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
     const meeting = appointment.meeting || null;
@@ -3322,7 +3321,7 @@ ${holdExpiresAt ? `Checkout hold expires: ${escapeHtml(formatDate(holdExpiresAt)
 ${replacementFor ? `Replacement for: ${escapeHtml(replacementFor)}\n` : ""}${replacedBy ? `Replaced by: ${escapeHtml(replacedBy)}\n` : ""}
 ${appointmentIsConfirmed(appointment) && !isVirtual ? `Location: ${escapeHtml(STUDIO_ADDRESS)}\n` : ""}
 Reservation/deposit: ${escapeHtml(money(depositCents, currency))}
-${sessionFeeCents ? `Extended Day fee due with final balance: ${escapeHtml(money(sessionFeeCents, currency))}\n` : ""}${minimumBillableMinutes ? `Billing minimum: ${escapeHtml(String(minimumBillableMinutes / 60))} hours at the approved project rate\n` : ""}
+${sessionFeeCents ? `Extended Day fee due with final balance: ${escapeHtml(money(sessionFeeCents, currency))}\n` : ""}
 Optional tip: ${escapeHtml(money(tipCents, currency))}
 Total paid today: ${escapeHtml(money(totalCents, currency))}
 Square order: ${escapeHtml(appointment.squareOrderId || "pending")}
@@ -3382,6 +3381,45 @@ ${meetingLines}
         ${pending ? `<p class="contact" style="margin-top:10px;">One request is already awaiting payment. Another can be created after it is paid, cancelled, or expired.</p>` : ""}
         ${!appointment && requests.length ? `<p class="contact" style="margin-top:10px;">History is retained. A new request requires an upcoming confirmed tattoo appointment.</p>` : ""}
         ${history}
+      </div>
+    `;
+  }
+
+  function renderBriefDocument(submission) {
+    if (!["build_brief", "maze_design"].includes(submission.type)) return "";
+    const documentRecord = submission.briefDocument || null;
+    const payload = submission.payload || {};
+    const hasRequiredSource = submission.type === "build_brief"
+      ? Array.isArray(payload.symbol_snapshot) && payload.symbol_snapshot.length > 0
+      : Array.isArray(submission.files) && submission.files.some((file) => file?.fieldName === "maze_image" && file?.storageKey);
+    const status = documentRecord?.status || "missing";
+    const statusLabel = status === "pending" ? "Generating" : titleize(status);
+    let actions = "";
+    if (!documentRecord || ["failed", "pending"].includes(status)) {
+      actions = hasRequiredSource ? `
+        <button class="button" type="button" data-brief-generate="${escapeHtml(submission.id)}">${documentRecord ? "Retry PDF" : "Generate PDF"}</button>
+        <button class="button" type="button" data-brief-generate-email="${escapeHtml(submission.id)}">${documentRecord ? "Retry &amp; Email Client" : "Generate &amp; Email Client"}</button>
+      ` : `<p class="contact">The frozen symbols or stored Maze PNG required to create this document are unavailable.</p>`;
+    } else if (status === "ready") {
+      actions = `
+        <button class="button" type="button" data-brief-download="${escapeHtml(documentRecord.internalDownloadUrl)}" data-brief-filename="${escapeHtml(documentRecord.fileName || "art-pill-brief.pdf")}">Download Studio Copy</button>
+        ${documentRecord.clientUrl ? `<button class="button" type="button" data-brief-copy-link="${escapeHtml(documentRecord.clientUrl)}">Copy Client Link</button><button class="button" type="button" data-brief-email="${escapeHtml(submission.id)}">Email Client Link</button>` : ""}
+        ${documentRecord.clientAccessStatus === "active" ? `<button class="button danger-button" type="button" data-brief-revoke="${escapeHtml(submission.id)}">Revoke Client Access</button>` : `<button class="button" type="button" data-brief-reissue="${escapeHtml(submission.id)}">Issue Replacement Link</button><button class="button" type="button" data-brief-reissue-email="${escapeHtml(submission.id)}">Issue &amp; Email Link</button>`}
+      `;
+    }
+    return `
+      <div class="assist-panel" id="clientBriefPdfPanel">
+        <label>Client Brief PDF</label>
+        <p class="contact">Immutable final-submission record. Template edits affect only future PDFs.</p>
+        <div class="value" style="margin-top:10px;white-space:normal;overflow-wrap:anywhere;">
+          Status: ${escapeHtml(statusLabel)}<br>
+          ${documentRecord?.generatedAt ? `Generated: ${escapeHtml(formatDate(documentRecord.generatedAt))}<br>` : ""}
+          ${documentRecord?.templateRevision !== undefined ? `Template revision: ${escapeHtml(String(documentRecord.templateRevision || "Repository default"))}<br>` : ""}
+          ${documentRecord?.contentSha256 ? `SHA-256: ${escapeHtml(documentRecord.contentSha256)}<br>` : ""}
+          ${documentRecord?.clientAccessStatus ? `Client access: ${escapeHtml(titleize(documentRecord.clientAccessStatus))}<br>` : ""}
+          ${documentRecord?.failureMessage ? `Generation error: ${escapeHtml(documentRecord.failureMessage)}<br>` : ""}
+        </div>
+        <div class="booking-actions" style="margin-top:10px;">${actions}</div>
       </div>
     `;
   }
@@ -3676,7 +3714,8 @@ ${meetingLines}
     const hasStoredFiles = Array.isArray(submission.files) && submission.files.some((file) => file?.storageKey);
     const isProtected = ["booked", "paid", "cancelled", "archived"].includes(submission.status)
       || hasAppointment
-      || hasStoredFiles;
+      || hasStoredFiles
+      || Boolean(submission.briefDocument);
     const historicPrerequisiteAppointment = historicPrerequisiteAppointmentFor(submission.id);
     const hasDirectAppointment = hasAppointment && !TATTOO_PROJECT_TYPES.has(submission.type);
     const tattooStage = submission.tattooStage || submission.tattoo_stage || "";
@@ -3734,6 +3773,7 @@ ${meetingLines}
 
       ${typeFields(submission)}
       ${renderFiles(submission)}
+      ${renderBriefDocument(submission)}
       ${renderPaymentSummary(submission)}
       ${renderAdditionalRenderings(submission)}
       ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<div class="session-plan-editor" id="tattooSessionPlanEditor"></div>` : ""}
@@ -4311,7 +4351,7 @@ ${meetingLines}
       <form class="availability-item" data-booking-type-form="${escapeHtml(type.id)}">
         <span class="pill">${escapeHtml(type.label || titleize(type.id))}</span>
         <div class="contact">${escapeHtml(type.description || "")}</div>
-        <div class="meta">${escapeHtml(type.durationRangeLabel || `${String(type.durationMinutes || 0)} minutes`)} · ${escapeHtml(priceFieldLabel(type))}: ${escapeHtml(type.depositLabel || money(type.depositCents, type.currency || "USD"))}${Number(type.sessionFeeCents || 0) ? ` · Session fee: ${escapeHtml(money(type.sessionFeeCents, type.currency || "USD"))}` : ""}${Number(type.minimumBillableMinutes || 0) ? ` · Billing minimum: ${escapeHtml(String(type.minimumBillableMinutes))} minutes` : ""}</div>
+        <div class="meta">${escapeHtml(type.durationRangeLabel || `${String(type.durationMinutes || 0)} minutes`)} · ${escapeHtml(priceFieldLabel(type))}: ${escapeHtml(type.depositLabel || money(type.depositCents, type.currency || "USD"))}${Number(type.sessionFeeCents || 0) ? ` · Session fee: ${escapeHtml(money(type.sessionFeeCents, type.currency || "USD"))}` : ""}</div>
         <div class="schedule-grid">
           <div class="field">
             <label>${escapeHtml(priceFieldLabel(type))}</label>
@@ -4966,6 +5006,75 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const briefAction = event.target.closest("[data-brief-generate],[data-brief-generate-email],[data-brief-email],[data-brief-revoke],[data-brief-reissue],[data-brief-reissue-email]");
+    if (briefAction) {
+      const submissionId = briefAction.dataset.briefGenerate
+        || briefAction.dataset.briefGenerateEmail
+        || briefAction.dataset.briefEmail
+        || briefAction.dataset.briefRevoke
+        || briefAction.dataset.briefReissue
+        || briefAction.dataset.briefReissueEmail;
+      const revoke = Boolean(briefAction.dataset.briefRevoke);
+      if (revoke && !window.confirm("Revoke this client PDF link? The Studio copy remains available.")) return;
+      const reissue = Boolean(briefAction.dataset.briefReissue || briefAction.dataset.briefReissueEmail);
+      const emailClient = Boolean(briefAction.dataset.briefGenerateEmail || briefAction.dataset.briefEmail || briefAction.dataset.briefReissueEmail);
+      briefAction.disabled = true;
+      setStatus(revoke ? "Revoking client PDF access" : reissue ? "Issuing replacement PDF link" : "Generating client brief PDF");
+      try {
+        const suffix = revoke ? "/revoke" : reissue ? "/reissue" : "";
+        const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}/brief-document${suffix}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ emailClient }),
+        });
+        await refreshActiveSubmissionDetail();
+        setStatus(revoke
+          ? "Client PDF access revoked; Studio copy retained"
+          : emailClient
+            ? (payload.delivery?.ok ? "Client brief PDF link emailed" : "PDF is ready; email delivery needs attention")
+            : reissue ? "Replacement client PDF link issued" : "Client brief PDF is ready");
+      } catch (error) {
+        await refreshActiveSubmissionDetail().catch(() => {});
+        setStatus(error.message || "Client brief PDF action failed");
+        if (briefAction.isConnected) briefAction.disabled = false;
+      }
+      return;
+    }
+
+    const copyBriefLink = event.target.closest("[data-brief-copy-link]");
+    if (copyBriefLink) {
+      await navigator.clipboard?.writeText(copyBriefLink.dataset.briefCopyLink || "").catch(() => {});
+      setStatus("Private client PDF link copied");
+      return;
+    }
+
+    const downloadBrief = event.target.closest("[data-brief-download]");
+    if (downloadBrief) {
+      downloadBrief.disabled = true;
+      setStatus("Downloading Studio PDF copy");
+      try {
+        const response = await fetch(downloadBrief.dataset.briefDownload, { headers: { authorization: `Bearer ${token}` } });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || `Download failed (${response.status})`);
+        }
+        const blobUrl = URL.createObjectURL(await response.blob());
+        const anchor = document.createElement("a");
+        anchor.href = blobUrl;
+        anchor.download = downloadBrief.dataset.briefFilename || "art-pill-brief.pdf";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(blobUrl);
+        setStatus("Studio PDF copy downloaded");
+      } catch (error) {
+        setStatus(error.message || "Studio PDF download failed");
+      } finally {
+        if (downloadBrief.isConnected) downloadBrief.disabled = false;
+      }
+      return;
+    }
+
     const createRenderingRequest = event.target.closest("[data-create-rendering-request]");
     if (createRenderingRequest) {
       if (!window.confirm("Confirm that the artist approved one substantially different alternate concept sketch. Create and email the separate non-refundable $50 payment request?")) return;
@@ -5559,7 +5668,8 @@ ${meetingLines}
       const force = deleteSubmissionButton.dataset.forceDelete === "1"
         || ["booked", "paid", "cancelled", "archived"].includes(submission?.status)
         || hasAppointment
-        || hasStoredFiles;
+        || hasStoredFiles
+        || Boolean(submission?.briefDocument);
       const label = submission?.contactName || submission?.contactEmail || "this entry";
       const confirmationMessage = force
         ? `Permanently delete ${label}? This removes the submission, private links, and stored files. Appointment and payment history will be retained without this submission link. This cannot be undone.`

@@ -5,12 +5,20 @@ import { ArrowLeft, Redo2, Send, Undo2 } from "lucide-react";
 import { ConstructCanvas } from "./components/ConstructCanvas";
 import { Inspector } from "./components/Inspector";
 import { MazeTools } from "./components/MazeTools";
+import {
+  CANVAS_LAYOUT_OPTIONS,
+  CANVAS_LAYOUTS,
+  defaultCanvasLayout,
+  fitMazeToLayout,
+  isCanvasLayout
+} from "./lib/canvas-layout";
 import { shapeTouchedByEraser, splitWallByEraser } from "./lib/maze";
-import type { MazeShape, MazeTool, MazeWall, Selection } from "./types";
+import type { CanvasLayout, MazeShape, MazeState, MazeTool, MazeWall, Selection } from "./types";
 import "./maze-submit.css";
 
 const LEGACY_STORAGE_KEY = "art-pill-maze-design";
-const STORAGE_KEY = "art-pill-maze-draft:v1";
+const PREVIOUS_STORAGE_KEY = "art-pill-maze-draft:v1";
+const STORAGE_KEY = "art-pill-maze-draft:v2";
 const TOKEN_STORAGE_KEY = "art-pill-maze-resume-token";
 const SUBMISSION_IDEMPOTENCY_KEY = "sixwell:submission-idempotency:/tattoos/build/maze/:maze-form";
 const MAX_UNDO_STEPS = 60;
@@ -18,11 +26,6 @@ const AUTOSAVE_DELAY_MS = 600;
 const KIOSK = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("kiosk");
 const PREVIEW = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "1";
 const KIOSK_IDLE_MS = 150000;
-
-type MazeState = {
-  mazeWalls: MazeWall[];
-  mazeShapes: MazeShape[];
-};
 
 type MazeFormDraft = {
   firstName: string;
@@ -61,8 +64,19 @@ type ServerDraft = {
   payload: MazeDraftPayload;
 };
 
-function emptyState(): MazeState {
-  return { mazeWalls: [], mazeShapes: [] };
+function emptyState(canvasLayout = defaultCanvasLayout()): MazeState {
+  return { canvasLayout, mazeWalls: [], mazeShapes: [] };
+}
+
+function normalizeMazeState(value: Partial<MazeState> | null | undefined, emptyLayout = defaultCanvasLayout()): MazeState {
+  const mazeWalls = Array.isArray(value?.mazeWalls) ? value.mazeWalls : [];
+  const mazeShapes = Array.isArray(value?.mazeShapes) ? value.mazeShapes : [];
+  const canvasLayout = isCanvasLayout(value?.canvasLayout)
+    ? value.canvasLayout
+    : mazeWalls.length || mazeShapes.length
+      ? "wide"
+      : emptyLayout;
+  return { canvasLayout, mazeWalls, mazeShapes };
 }
 
 function emptyForm(): MazeFormDraft {
@@ -96,15 +110,12 @@ function loadDraft(): MazeDraftEnvelope {
   };
   if (KIOSK || PREVIEW) return fallback;
   try {
-    const current = localStorage.getItem(STORAGE_KEY);
+    const current = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(PREVIOUS_STORAGE_KEY);
     if (current) {
       const parsed = JSON.parse(current) as Partial<MazeDraftEnvelope> & Partial<MazeState>;
       const storedState = parsed.state || parsed;
       return {
-        state: {
-          mazeWalls: Array.isArray(storedState.mazeWalls) ? storedState.mazeWalls : [],
-          mazeShapes: Array.isArray(storedState.mazeShapes) ? storedState.mazeShapes : []
-        },
+        state: normalizeMazeState(storedState, fallback.state.canvasLayout),
         form: { ...emptyForm(), ...(parsed.form || {}) },
         clientDraftId: parsed.clientDraftId || fallback.clientDraftId,
         serverDraftId: parsed.serverDraftId || "",
@@ -116,10 +127,7 @@ function loadDraft(): MazeDraftEnvelope {
     const parsed = JSON.parse(legacy) as Partial<MazeState>;
     return {
       ...fallback,
-      state: {
-        mazeWalls: Array.isArray(parsed.mazeWalls) ? parsed.mazeWalls : [],
-        mazeShapes: Array.isArray(parsed.mazeShapes) ? parsed.mazeShapes : []
-      }
+      state: normalizeMazeState(parsed, fallback.state.canvasLayout)
     };
   } catch {
     return fallback;
@@ -146,6 +154,7 @@ function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: stri
   return {
     version: 1,
     clientDraftId,
+    canvasLayout: state.canvasLayout,
     mazeWalls: state.mazeWalls,
     mazeShapes: state.mazeShapes,
     contact: {
@@ -499,6 +508,134 @@ function SaveEmailDialog({
   );
 }
 
+function CanvasLayoutPicker({
+  value,
+  onChange
+}: {
+  value: CanvasLayout;
+  onChange: (layout: CanvasLayout) => void;
+}) {
+  return (
+    <section className="canvas-layout-bar" aria-labelledby="canvas-layout-heading">
+      <div className="canvas-layout-copy">
+        <span>Canvas layout</span>
+        <p id="canvas-layout-heading">{CANVAS_LAYOUTS[value].description}</p>
+      </div>
+      <div className="canvas-layout-options" role="group" aria-label="Choose canvas layout">
+        {CANVAS_LAYOUT_OPTIONS.map((layout) => (
+          <button
+            key={layout.id}
+            type="button"
+            className={value === layout.id ? "active" : ""}
+            aria-pressed={value === layout.id}
+            onClick={() => onChange(layout.id)}
+          >
+            <span className={`canvas-layout-icon ${layout.id}`} aria-hidden="true" />
+            <span>{layout.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MobileQuickTools({
+  tool,
+  onToolChange
+}: {
+  tool: MazeTool;
+  onToolChange: (tool: MazeTool) => void;
+}) {
+  const eraserWidth = tool.type === "eraser" ? tool.width : 48;
+  return (
+    <div className="mobile-quick-tools" role="toolbar" aria-label="Quick maze tools">
+      <button
+        type="button"
+        className={tool.type === "wall" ? "active" : ""}
+        aria-pressed={tool.type === "wall"}
+        onClick={() => onToolChange(
+          tool.type === "wall"
+            ? tool
+            : { type: "wall", variant: "straight", stroke: "#151413", strokeWidth: 20 }
+        )}
+      >
+        Draw
+      </button>
+      <button
+        type="button"
+        className={tool.type === "select" ? "active" : ""}
+        aria-pressed={tool.type === "select"}
+        onClick={() => onToolChange({ type: "select" })}
+      >
+        Select
+      </button>
+      <button
+        type="button"
+        className={tool.type === "eraser" ? "active" : ""}
+        aria-pressed={tool.type === "eraser"}
+        onClick={() => onToolChange({ type: "eraser", width: eraserWidth })}
+      >
+        Erase
+      </button>
+    </div>
+  );
+}
+
+function CanvasLayoutDialog({
+  target,
+  onCancel,
+  onFit,
+  onStartFresh
+}: {
+  target: CanvasLayout | null;
+  onCancel: () => void;
+  onFit: () => void;
+  onStartFresh: () => void;
+}) {
+  const fitButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!target) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    fitButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [target, onCancel]);
+
+  if (!target) return null;
+  const next = CANVAS_LAYOUTS[target];
+
+  return (
+    <div className="maze-submit-overlay" role="dialog" aria-modal="true" aria-labelledby="canvas-layout-dialog-title" aria-describedby="canvas-layout-dialog-note">
+      <div className="maze-submit-panel canvas-layout-dialog">
+        <div className="maze-submit-head">
+          <h2 id="canvas-layout-dialog-title">Change to {next.label}?</h2>
+          <button type="button" className="maze-submit-close" onClick={onCancel} aria-label="Keep current canvas layout">
+            &times;
+          </button>
+        </div>
+        <p className="maze-submit-note" id="canvas-layout-dialog-note">
+          This maze already has marks. Fit preserves the full design and centers it inside the new canvas. Start fresh clears the marks and opens a blank {next.label.toLowerCase()} canvas.
+        </p>
+        <div className="maze-submit-actions canvas-layout-dialog-actions">
+          <button type="button" onClick={onCancel}>Keep current</button>
+          <button type="button" className="start-fresh" onClick={onStartFresh}>Start fresh</button>
+          <button ref={fitButtonRef} type="button" className="primary" onClick={onFit}>Fit design</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const initialDraftRef = useRef<MazeDraftEnvelope | null>(null);
   if (!initialDraftRef.current) initialDraftRef.current = loadDraft();
@@ -517,6 +654,7 @@ export default function App() {
   const [stage, setStage] = useState<Konva.Stage | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [pendingCanvasLayout, setPendingCanvasLayout] = useState<CanvasLayout | null>(null);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState(
     KIOSK || PREVIEW
@@ -570,6 +708,32 @@ export default function App() {
     stateRef.current = next;
     setState(next);
   }, []);
+
+  const requestCanvasLayout = (canvasLayout: CanvasLayout) => {
+    if (canvasLayout === stateRef.current.canvasLayout) return;
+    if (!stateRef.current.mazeWalls.length && !stateRef.current.mazeShapes.length) {
+      commit((current) => ({ ...current, canvasLayout }));
+      setSelected(null);
+      return;
+    }
+    setPendingCanvasLayout(canvasLayout);
+  };
+
+  const fitPendingCanvasLayout = () => {
+    if (!pendingCanvasLayout) return;
+    const nextLayout = pendingCanvasLayout;
+    setPendingCanvasLayout(null);
+    commit((current) => fitMazeToLayout(current, nextLayout));
+    setSelected(null);
+  };
+
+  const startFreshCanvasLayout = () => {
+    if (!pendingCanvasLayout) return;
+    const nextLayout = pendingCanvasLayout;
+    setPendingCanvasLayout(null);
+    commit(() => emptyState(nextLayout));
+    setSelected(null);
+  };
 
   const undo = () => {
     if (undoStack.length === 0) return;
@@ -646,6 +810,7 @@ export default function App() {
       }
 
       const next = {
+        canvasLayout: current.canvasLayout,
         mazeWalls: nextWalls.sort(byZ),
         mazeShapes: nextShapes.sort(byZ)
       };
@@ -691,21 +856,27 @@ export default function App() {
     if (KIOSK || PREVIEW) return;
     const server = serverDraftRef.current;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      state: { mazeWalls: payload.mazeWalls, mazeShapes: payload.mazeShapes },
+      state: {
+        canvasLayout: payload.canvasLayout,
+        mazeWalls: payload.mazeWalls,
+        mazeShapes: payload.mazeShapes
+      },
       form: payloadToForm(payload),
       clientDraftId: payload.clientDraftId,
       serverDraftId: server?.id || "",
       serverRevision: server?.revision || 0
     } satisfies MazeDraftEnvelope));
+    localStorage.removeItem(PREVIOUS_STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   };
 
   const resetMaze = () => {
     if (!KIOSK && !PREVIEW) {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(PREVIOUS_STORAGE_KEY);
       localStorage.removeItem(LEGACY_STORAGE_KEY);
     }
-    commit(() => emptyState());
+    commit((current) => emptyState(current.canvasLayout));
     setSelected(null);
   };
 
@@ -793,10 +964,7 @@ export default function App() {
           return;
         }
         const payload = remote.payload;
-        const restored = {
-          mazeWalls: Array.isArray(payload.mazeWalls) ? payload.mazeWalls : [],
-          mazeShapes: Array.isArray(payload.mazeShapes) ? payload.mazeShapes : []
-        };
+        const restored = normalizeMazeState(payload, "wide");
         stateRef.current = restored;
         setState(restored);
         const nextForm = payloadToForm(payload);
@@ -874,6 +1042,7 @@ export default function App() {
   const completeDraft = () => {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(PREVIOUS_STORAGE_KEY);
       localStorage.removeItem(LEGACY_STORAGE_KEY);
     } catch { /* storage can be unavailable */ }
     clearResumeToken();
@@ -967,27 +1136,32 @@ export default function App() {
         <aside className="palette" aria-label="Maze design palette">
           <MazeTools tool={mazeTool} onToolChange={setMazeTool} />
         </aside>
-        <ConstructCanvas
-          items={[]}
-          mazeWalls={state.mazeWalls}
-          mazeShapes={state.mazeShapes}
-          selected={selected}
-          workspaceMode="maze"
-          mazeTool={mazeTool}
-          onSelect={setSelected}
-          onChange={() => undefined}
-          onMazeWallAdd={addMazeWall}
-          onMazeWallChange={updateMazeWall}
-          onMazeWallDelete={deleteMazeWall}
-          onMazeEraseStart={beginErase}
-          onMazeEraseAt={eraseAt}
-          onMazeEraseEnd={endErase}
-          onMazeWallPreview={() => undefined}
-          onMazeShapeAdd={addMazeShape}
-          onMazeShapeChange={updateMazeShape}
-          onMazeShapeDelete={deleteMazeShape}
-          onStageReady={setStage}
-        />
+        <div className="canvas-workspace">
+          <CanvasLayoutPicker value={state.canvasLayout} onChange={requestCanvasLayout} />
+          <MobileQuickTools tool={mazeTool} onToolChange={setMazeTool} />
+          <ConstructCanvas
+            items={[]}
+            canvasLayout={state.canvasLayout}
+            mazeWalls={state.mazeWalls}
+            mazeShapes={state.mazeShapes}
+            selected={selected}
+            workspaceMode="maze"
+            mazeTool={mazeTool}
+            onSelect={setSelected}
+            onChange={() => undefined}
+            onMazeWallAdd={addMazeWall}
+            onMazeWallChange={updateMazeWall}
+            onMazeWallDelete={deleteMazeWall}
+            onMazeEraseStart={beginErase}
+            onMazeEraseAt={eraseAt}
+            onMazeEraseEnd={endErase}
+            onMazeWallPreview={() => undefined}
+            onMazeShapeAdd={addMazeShape}
+            onMazeShapeChange={updateMazeShape}
+            onMazeShapeDelete={deleteMazeShape}
+            onStageReady={setStage}
+          />
+        </div>
         <Inspector
           workspaceTab="maze"
           selectedSymbol={null}
@@ -1029,6 +1203,12 @@ export default function App() {
         status={saveStatus}
         onClose={() => setSaveDialogOpen(false)}
         onSave={emailMazeDraft}
+      />
+      <CanvasLayoutDialog
+        target={pendingCanvasLayout}
+        onCancel={() => setPendingCanvasLayout(null)}
+        onFit={fitPendingCanvasLayout}
+        onStartFresh={startFreshCanvasLayout}
       />
       {KIOSK ? (
         <button type="button" className="kiosk-start-over" onClick={resetMaze}>
