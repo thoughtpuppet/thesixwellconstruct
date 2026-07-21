@@ -81,7 +81,7 @@
     const mobileButton = button("Mobile", "mobile");
     const htmlButton = button("Rendered HTML", "html", "is-active");
     const textButton = button("Plain Text", "text");
-    const publishedButton = button("Published version", "published");
+    const publishedButton = button("Live version", "published");
     const workingButton = button("Working copy", "working", "is-active");
     const displayGroup = (label, buttons) => {
       const group = make("div", "email-preview-display-group");
@@ -96,7 +96,7 @@
       displayGroup("Format", [htmlButton, textButton]),
       displayGroup("Preview source", [publishedButton, workingButton]),
     );
-    const sourceHelp = make("p", "email-preview-source-help", "Working copy shows the editor, including unsaved changes. Published version shows the copy currently used by live emails.");
+    const sourceHelp = make("p", "email-preview-source-help", "Working copy shows the editor, including unsaved changes. Live version shows the copy currently used by outgoing emails; before the first publish, that is the repository default.");
     editor.append(tokenHelp, form, actions, actionHelp, historyPanel);
     preview.append(displayControls, sourceHelp, meta, make("div", "email-preview-stage"));
     preview.lastElementChild.append(frame);
@@ -142,13 +142,13 @@
       discardButton.disabled = !isDirty;
       publishButton.disabled = isDirty || !hasDraft;
       testButton.disabled = isDirty || !hasDraft;
-      publishedButton.disabled = !definition?.published;
+      publishedButton.disabled = false;
 
       saveButton.title = saveButton.disabled ? "This draft is already saved." : hasDraft ? "Save the changes in the working copy." : "Create a private draft from the working copy.";
       discardButton.title = discardButton.disabled ? "There are no unsaved changes to discard." : "Return to the last saved version.";
       publishButton.title = isDirty ? "Save the draft before publishing." : hasDraft ? "Make this draft the live email version." : "Save a draft before publishing.";
       testButton.title = isDirty ? "Save the draft before sending a test." : hasDraft ? "Send this draft to the configured admin inbox." : "Save a draft before sending a test.";
-      publishedButton.title = definition?.published ? "Preview the version currently used by live emails." : "No published version exists yet.";
+      publishedButton.title = definition?.published ? "Preview the published revision currently used by live emails." : "Preview the repository default currently used by live emails.";
       workingButton.title = "Preview the editor's current working copy.";
 
       actionHelp.textContent = isDirty
@@ -272,7 +272,10 @@
           const payload = await api(`/api/admin/notifications/preview?${params}`);
           renderMeta(payload);
           setPreviewSource("published");
-          setStatus(`${selected.label} · published revision ${payload.revision || definition.published?.revision} · live email version`);
+          const liveState = Number(payload.revision || 0)
+            ? `published revision ${payload.revision} · live email version`
+            : "repository default · live email fallback";
+          setStatus(`${selected.label} · ${liveState}`);
         } catch (error) { setStatus(error.message, true); }
       }
       [...displayControls.querySelectorAll("button")].forEach((button) => {

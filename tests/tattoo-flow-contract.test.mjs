@@ -2959,6 +2959,40 @@ test("Studio email templates save, validate, preview, test, publish, and restore
   assert.equal(delivery.email_theme, "tattoo");
 });
 
+test("Studio creates the email revision store on the first draft save when migration 0063 is pending", async () => {
+  const database = migratedDatabase({ before: "0063_email_template_editor.sql" });
+  const token = "email-template-bootstrap-admin";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: token,
+  };
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const base = "https://example.test/api/admin/notifications/templates/appointment_confirmed";
+  const initial = await (await handleAdminEmailTemplates(
+    new Request(`${base}?variant=tattoo`, { headers }),
+    env,
+  )).json();
+
+  assert.equal(initial.draft, null);
+  assert.equal(initial.published, null);
+  assert.equal(database.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='email_template_revisions'",
+  ).get(), undefined);
+
+  const saveResponse = await handleAdminEmailTemplates(new Request(`${base}/draft?variant=tattoo`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ baseRevision: 0, content: initial.defaultContent }),
+  }), env);
+  assert.equal(saveResponse.status, 200);
+  const saved = await saveResponse.json();
+  assert.equal(saved.draft.revision, 1);
+  assert.equal(saved.draft.status, "draft");
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) AS count FROM email_template_revisions WHERE template_key=? AND variant=?",
+  ).get("appointment_confirmed", "tattoo").count, 1);
+});
+
 test("production email sends use only the published copy revision and keep live business data", async () => {
   const database = migratedDatabase();
   const sent = [];

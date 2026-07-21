@@ -19,6 +19,37 @@ export function isTemplateStoreUnavailable(error) {
   return /email_template_revisions|no such table/i.test(String(error?.message || error || ""));
 }
 
+async function initializeTemplateStore(db) {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS email_template_revisions (
+      id TEXT PRIMARY KEY,
+      template_key TEXT NOT NULL,
+      variant TEXT NOT NULL DEFAULT 'default',
+      revision INTEGER NOT NULL CHECK (revision > 0),
+      status TEXT NOT NULL CHECK (status IN ('draft', 'published', 'retired')),
+      content_json TEXT NOT NULL,
+      created_by TEXT NOT NULL DEFAULT 'studio',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      published_by TEXT,
+      published_at TEXT,
+      UNIQUE(template_key, variant, revision)
+    )`,
+  ).run();
+  await db.prepare(
+    `CREATE UNIQUE INDEX IF NOT EXISTS email_template_one_draft
+     ON email_template_revisions(template_key, variant) WHERE status = 'draft'`,
+  ).run();
+  await db.prepare(
+    `CREATE UNIQUE INDEX IF NOT EXISTS email_template_one_published
+     ON email_template_revisions(template_key, variant) WHERE status = 'published'`,
+  ).run();
+  await db.prepare(
+    `CREATE INDEX IF NOT EXISTS email_template_history
+     ON email_template_revisions(template_key, variant, revision DESC)`,
+  ).run();
+}
+
 export async function templateRevision(db, templateKey, variant, status = "published") {
   if (!db) return null;
   try {
@@ -53,8 +84,7 @@ async function maxRevision(db, templateKey, variant) {
   return Number(row?.revision || 0);
 }
 
-export async function saveTemplateDraft(db, { templateKey, variant, content, baseRevision, actor = "studio" }) {
-  if (!db) throw new Error("Missing D1 binding SUBMISSIONS_DB.");
+async function writeTemplateDraft(db, { templateKey, variant, content, baseRevision, actor }) {
   const draft = await templateRevision(db, templateKey, variant, "draft");
   const published = await templateRevision(db, templateKey, variant, "published");
   const expected = draft?.revision || published?.revision || 0;
@@ -76,6 +106,18 @@ export async function saveTemplateDraft(db, { templateKey, variant, content, bas
      VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
   ).bind(crypto.randomUUID(), templateKey, variant, revision, JSON.stringify(content), actor, timestamp, timestamp).run();
   return templateRevision(db, templateKey, variant, "draft");
+}
+
+export async function saveTemplateDraft(db, { templateKey, variant, content, baseRevision, actor = "studio" }) {
+  if (!db) throw new Error("Missing D1 binding SUBMISSIONS_DB.");
+  const input = { templateKey, variant, content, baseRevision, actor };
+  try {
+    return await writeTemplateDraft(db, input);
+  } catch (error) {
+    if (!isTemplateStoreUnavailable(error)) throw error;
+    await initializeTemplateStore(db);
+    return writeTemplateDraft(db, input);
+  }
 }
 
 export async function publishTemplateDraft(db, { templateKey, variant, revision, actor = "studio" }) {
