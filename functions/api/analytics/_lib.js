@@ -56,6 +56,10 @@ function sqlString(value) {
   return `'${String(value ?? "").replace(/'/g, "''")}'`;
 }
 
+function analyticsSqlDate(value) {
+  return new Date(value).toISOString().slice(0, 19);
+}
+
 export function normalizeAnalyticsPath(value) {
   let pathname = "/";
   try { pathname = new URL(String(value || "/"), "https://analytics.invalid").pathname; } catch {}
@@ -423,8 +427,8 @@ async function analyticsSql(env, query) {
 
 function customWhere(range, filters, eventNames = []) {
   const conditions = [
-    `timestamp >= toDateTime(${sqlString(range.startIso)})`,
-    `timestamp < toDateTime(${sqlString(range.endIso)})`,
+    `timestamp >= toDateTime(${sqlString(analyticsSqlDate(range.startIso))})`,
+    `timestamp < toDateTime(${sqlString(analyticsSqlDate(range.endIso))})`,
   ];
   if (eventNames.length === 1) conditions.push(`blob1 = ${sqlString(eventNames[0])}`);
   else if (eventNames.length) conditions.push(`blob1 IN (${eventNames.map(sqlString).join(",")})`);
@@ -444,7 +448,7 @@ async function fetchCustomOverview(env, range, filters) {
   const [sessions, engagement, daily, groups] = await Promise.all([
     analyticsSql(env, `SELECT count(DISTINCT index1) sessions FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])}`),
     analyticsSql(env, `SELECT count(DISTINCT index1) engaged_sessions, sum(_sample_interval * double1) / sum(_sample_interval) avg_active_seconds FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_exit"])} AND double1 >= 10`),
-    analyticsSql(env, `SELECT toString(toDate(timestamp)) date, sum(_sample_interval) value FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY date ORDER BY date`),
+    analyticsSql(env, `SELECT formatDateTime(timestamp, '%Y-%m-%d', 'Etc/UTC') date, sum(_sample_interval) value FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY date ORDER BY date`),
     analyticsSql(env, `SELECT blob5 label, sum(_sample_interval) value FROM ${DATASET} WHERE ${customWhere(range, filters, ["page_view"])} GROUP BY label ORDER BY value DESC LIMIT 20`),
   ]);
   return {

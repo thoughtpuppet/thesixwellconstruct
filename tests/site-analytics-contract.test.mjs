@@ -130,6 +130,7 @@ test("Cloudflare RUM parsing applies adaptive sample intervals and metric units"
 test("12-month RUM views clamp live requests to available history and report partial coverage", async () => {
   const originalFetch = globalThis.fetch;
   const starts = [];
+  const sqlBodies = [];
   globalThis.fetch = async (url, options = {}) => {
     if (String(url).includes("/graphql")) {
       const body = JSON.parse(options.body);
@@ -138,6 +139,7 @@ test("12-month RUM views clamp live requests to available history and report par
         status: 200, headers: { "content-type": "application/json" },
       });
     }
+    sqlBodies.push(String(options.body || ""));
     return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
   };
   try {
@@ -151,6 +153,9 @@ test("12-month RUM views clamp live requests to available history and report par
     assert.equal(payload.sources.rum.state, "partial");
     assert.equal(payload.state, "partial");
     assert.ok(starts.every((value) => !value || Date.now() - new Date(value).getTime() <= 181 * 24 * 60 * 60 * 1000));
+    assert.ok(sqlBodies.every((body) => !/toDateTime\('[^']*\.\d{3}Z'\)/.test(body)));
+    assert.ok(sqlBodies.every((body) => !/toString\s*\(/i.test(body)));
+    assert.ok(sqlBodies.some((body) => body.includes("formatDateTime(timestamp, '%Y-%m-%d', 'Etc/UTC')")));
   } finally {
     globalThis.fetch = originalFetch;
   }
