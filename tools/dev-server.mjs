@@ -5,14 +5,32 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   clientEmailPreviewCatalog,
+  emailTemplateDefinition,
+  renderEmailTemplateContent,
   renderClientEmailPreview,
 } from "../functions/api/notifications/_email-templates.js";
+import { renderEmailContent } from "../functions/api/notifications/_email-content.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
 const apiProxyOrigin = (process.env.SWC_API_ORIGIN || "https://thesixwellconstruct.com").replace(/\/+$/g, "");
+const localEmailTemplates = new Map();
+
+async function requestJson(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  if (!chunks.length) return null;
+  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { return null; }
+}
+
+function localEmailKey(templateKey, variant) { return `${templateKey}:${variant}`; }
+function localEmailResponse(res, status, payload) {
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-SWC-Local-Preview": "1" });
+  res.end(JSON.stringify(payload));
+  return true;
+}
 
 const types = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -357,35 +375,74 @@ function proxyHeaders(req) {
 
 async function handleApiProxy(req, res) {
   const localUrl = new URL(req.url || "/", `http://${host}:${port}`);
-  if (localUrl.pathname === "/api/admin/notifications/preview") {
-    if (req.method !== "GET") {
-      res.writeHead(405, {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "no-store",
-        "Allow": "GET",
-      });
-      res.end(JSON.stringify({ error: "Method not allowed." }));
-      return true;
+  if (localUrl.pathname === "/api/admin/notifications/templates" || localUrl.pathname.startsWith("/api/admin/notifications/templates/")) {
+    const parts = localUrl.pathname.slice("/api/admin/notifications/templates".length).split("/").filter(Boolean).map(decodeURIComponent);
+    if (!parts.length) return localEmailResponse(res, 200, { templates: clientEmailPreviewCatalog().map((entry) => ({ ...entry, status: localEmailTemplates.get(localEmailKey(entry.templateKey, entry.variant))?.published ? "published" : localEmailTemplates.get(localEmailKey(entry.templateKey, entry.variant))?.draft ? "draft" : "default" })) });
+    const [templateKey, action] = parts;
+    const variant = String(localUrl.searchParams.get("variant") || "");
+    const definition = emailTemplateDefinition(templateKey, variant);
+    if (!definition) return localEmailResponse(res, 404, { error: "Unsupported email template." });
+    const key = localEmailKey(definition.templateKey, definition.variant);
+    const state = localEmailTemplates.get(key) || { draft: null, published: null, history: [] };
+    if (req.method === "GET") return localEmailResponse(res, 200, action === "history" ? { history: state.history } : { ...definition, rendered: undefined, draft: state.draft, published: state.published });
+    const body = await requestJson(req);
+    if (!body) return localEmailResponse(res, 400, { error: "Expected JSON body." });
+    if (req.method === "PUT" && action === "draft") {
+      const rendered = renderEmailTemplateContent(templateKey, variant, body.content);
+      if (!rendered?.validation.ok) return localEmailResponse(res, 422, { error: "Template copy is invalid.", errors: rendered?.validation?.errors || [] });
+      const expected = state.draft?.revision || state.published?.revision || 0;
+      if (Number(body.baseRevision) !== expected) return localEmailResponse(res, 409, { error: "Template draft is stale.", expectedRevision: expected });
+      state.draft = { revision: state.draft?.revision || expected + 1, status: "draft", content: body.content, updated_at: new Date().toISOString() };
+      state.history = [state.draft, ...state.history.filter((item) => item.revision !== state.draft.revision)]; localEmailTemplates.set(key, state);
+      return localEmailResponse(res, 200, { draft: state.draft });
     }
+    if (req.method === "POST" && action === "publish") {
+      if (!state.draft || state.draft.revision !== Number(body.revision)) return localEmailResponse(res, 409, { error: "Template draft is stale." });
+      if (state.published) state.history = state.history.map((item) => item.revision === state.published.revision ? { ...item, status: "retired" } : item);
+      state.published = { ...state.draft, status: "published" }; state.draft = null;
+      state.history = [state.published, ...state.history.filter((item) => item.revision !== state.published.revision)]; localEmailTemplates.set(key, state);
+      return localEmailResponse(res, 200, { published: state.published });
+    }
+    if (req.method === "POST" && action === "restore") {
+      const source = state.history.find((item) => item.revision === Number(body.revision));
+      if (!source) return localEmailResponse(res, 404, { error: "Template revision was not found." });
+      const next = Math.max(0, ...state.history.map((item) => item.revision)) + 1;
+      state.draft = { revision: next, status: "draft", content: source.content, updated_at: new Date().toISOString() }; state.history.unshift(state.draft); localEmailTemplates.set(key, state);
+      return localEmailResponse(res, 200, { draft: state.draft });
+    }
+    if (req.method === "POST" && action === "test") return localEmailResponse(res, 200, { ok: true, mocked: true });
+    return localEmailResponse(res, 405, { error: "Method not allowed." });
+  }
+  if (localUrl.pathname === "/api/admin/notifications/preview") {
+    if (!["GET", "POST"].includes(req.method)) return localEmailResponse(res, 405, { error: "Method not allowed." });
     const catalog = clientEmailPreviewCatalog();
-    const templateKey = String(localUrl.searchParams.get("templateKey") || "").trim();
-    const requestedVariant = String(localUrl.searchParams.get("variant") || "").trim();
+    const body = req.method === "POST" ? await requestJson(req) : null;
+    const templateKey = String(body?.templateKey || localUrl.searchParams.get("templateKey") || "").trim();
+    const requestedVariant = String(body?.variant || localUrl.searchParams.get("variant") || "").trim();
     if (!templateKey) {
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store",
         "X-SWC-Local-Preview": "1",
       });
-      res.end(JSON.stringify({ templates: catalog }));
+      res.end(JSON.stringify({ templates: catalog.map((entry) => ({ ...entry, status: localEmailTemplates.get(localEmailKey(entry.templateKey, entry.variant))?.published ? "published" : localEmailTemplates.get(localEmailKey(entry.templateKey, entry.variant))?.draft ? "draft" : "default" })) }));
       return true;
     }
     const matches = catalog.filter((entry) => entry.templateKey === templateKey);
     const selected = requestedVariant
       ? matches.find((entry) => entry.variant === requestedVariant)
       : matches[0];
-    const rendered = selected
-      ? renderClientEmailPreview(selected.templateKey, selected.variant)
-      : null;
+    const state = selected ? localEmailTemplates.get(localEmailKey(selected.templateKey, selected.variant)) : null;
+    const chosenContent = body?.content || (localUrl.searchParams.get("source") === "draft" ? state?.draft?.content : state?.published?.content);
+    let rendered = selected ? (chosenContent ? renderEmailTemplateContent(selected.templateKey, selected.variant, chosenContent)?.rendered : renderClientEmailPreview(selected.templateKey, selected.variant)) : null;
+    if (selected?.templateKey === "crm_relationship_followup" && body?.compose) {
+      const composeDefinition = emailTemplateDefinition(selected.templateKey, selected.variant);
+      const semantic = cloneStructured(composeDefinition.rendered.semantic);
+      semantic.subject = String(body.compose.subject || ""); semantic.preheader = String(body.compose.preheader || ""); semantic.intro = String(body.compose.body || "").split(/\n\s*\n/); rendered = renderClientEmailPreview(selected.templateKey, selected.variant);
+      rendered = state?.published?.content
+        ? renderEmailContent(semantic, state.published.content, composeDefinition.options)
+        : (await import("../functions/api/notifications/_email-renderer.js")).renderClientEmail(semantic);
+    }
     if (!selected || !rendered) {
       res.writeHead(404, {
         "Content-Type": "application/json; charset=utf-8",
@@ -441,6 +498,8 @@ async function handleApiProxy(req, res) {
     return true;
   }
 }
+
+function cloneStructured(value) { return JSON.parse(JSON.stringify(value)); }
 
 async function resolveFile(urlPath) {
   let file = safePath(urlPath);

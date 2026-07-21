@@ -1,8 +1,12 @@
 # art.pill TATTOO HOUSE Email Template Packet
 
-These files are editable source docs for the transactional email and manual text
-copy used by the art.pill TATTOO HOUSE booking flow. Edit the words in the template files,
-then hand the docs back to Codex for implementation.
+These files are legacy implementation notes. They are no longer the editable
+source of truth for live email copy.
+
+Use the protected Studio Email Template Manager at `/studio/previews/` (or the
+event-specific view at `/studio/events-previews/`) to edit, preview, version,
+publish, test, or restore repository-authored email templates. Code defaults are
+revision zero and remain the safe fallback until a Studio revision is published.
 
 ## Sender
 

@@ -8,11 +8,24 @@ import {
   buildEventReminderEmail,
   buildEventTicketCancelledEmail,
   buildEventTicketPaidEmail,
+  buildAdminNotificationEmail,
+  buildCommunicationPreferencesEmail,
+  buildCrmFollowupEmail,
   buildSubmissionReceivedEmail,
   buildTattooDraftResumeEmail,
   clientEmailPreviewCatalog,
   renderClientEmailPreview,
+  emailTemplateDefinition,
+  renderEmailTemplateContent,
 } from "./_email-templates.js";
+import { renderEmailContent, validateEmailContent } from "./_email-content.js";
+import {
+  publishTemplateDraft,
+  restoreTemplateRevision,
+  saveTemplateDraft,
+  templateHistory,
+  templateRevision,
+} from "./_email-template-store.js";
 
 const DEFAULT_FROM_ADDRESS = "saisolehman@artpilltattoohouse.com";
 const DEFAULT_FROM_NAME = "art.pill TATTOO HOUSE";
@@ -338,21 +351,27 @@ async function recordDelivery(db, delivery) {
     await db
       .prepare(
         `INSERT INTO notification_deliveries (
-          id, channel, template_key, recipient, subject, related_type,
-          related_id, idempotency_key, status, error, sent_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, channel, template_key, template_variant, template_revision, email_theme,
+          recipient, subject, related_type, related_id, idempotency_key, status, error, sent_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(idempotency_key) DO UPDATE SET
           status = excluded.status,
           error = excluded.error,
           sent_at = excluded.sent_at,
           subject = excluded.subject,
           recipient = excluded.recipient,
+          template_variant = excluded.template_variant,
+          template_revision = excluded.template_revision,
+          email_theme = excluded.email_theme,
           created_at = excluded.created_at`
       )
       .bind(
         crypto.randomUUID(),
         delivery.channel,
         delivery.templateKey,
+        delivery.templateVariant || "default",
+        Number(delivery.templateRevision || 0),
+        delivery.theme || delivery.emailTheme || "",
         delivery.recipient || delivery.to,
         delivery.subject || null,
         delivery.relatedType || null,
@@ -394,9 +413,31 @@ async function sendTransactionalEmail(env, message) {
     return { ok: true, skipped: true };
   }
 
+  let outgoing = { ...message };
+  if (message.semantic && message.templateKey && !message.contentLocked) {
+    try {
+      const definition = emailTemplateDefinition(message.templateKey, message.templateVariant || "default");
+      const published = await templateRevision(db, message.templateKey, message.templateVariant || "default", "published");
+      if (definition && published) {
+        const validation = validateEmailContent(message.semantic, published.content, definition.options);
+        if (!validation.ok) throw new Error(validation.errors.join(" "));
+        outgoing = {
+          ...message,
+          ...renderEmailContent(message.semantic, published.content, definition.options),
+          templateRevision: published.revision,
+        };
+      } else {
+        outgoing.templateRevision = 0;
+      }
+    } catch (error) {
+      outgoing.templateRevision = 0;
+      console.warn(`Email template fallback for ${message.templateKey}/${message.templateVariant || "default"}.`, error.message);
+    }
+  }
+
   if (!env.EMAIL?.send) {
     await recordDelivery(db, {
-      ...message,
+      ...outgoing,
       channel: "email",
       status: "skipped",
       error: "Missing EMAIL send_email binding.",
@@ -412,18 +453,18 @@ async function sendTransactionalEmail(env, message) {
 
   try {
     const response = await env.EMAIL.send({
-      to: message.to,
+      to: outgoing.to,
       from: {
-        email: message.fromEmail || fromAddress(env),
-        name: message.fromName || fromName(env),
+        email: outgoing.fromEmail || fromAddress(env),
+        name: outgoing.fromName || fromName(env),
       },
-      replyTo: message.replyTo || replyToAddress(env),
-      subject: message.subject,
-      text: message.text,
-      html: message.html || textToHtml(message.text),
+      replyTo: outgoing.replyTo || replyToAddress(env),
+      subject: outgoing.subject,
+      text: outgoing.text,
+      html: outgoing.html || textToHtml(outgoing.text),
     });
     await recordDelivery(db, {
-      ...message,
+      ...outgoing,
       channel: "email",
       status: "sent",
       sentAt: new Date().toISOString(),
@@ -438,7 +479,7 @@ async function sendTransactionalEmail(env, message) {
   } catch (error) {
     const errorDetail = [error?.code, error?.message].filter(Boolean).join(": ") || "Unknown email delivery error.";
     await recordDelivery(db, {
-      ...message,
+      ...outgoing,
       channel: "email",
       status: "failed",
       error: errorDetail,
@@ -460,10 +501,17 @@ export async function sendCrmFollowupEmail(env, message = {}) {
   if (!to || !subject || !body) {
     return { ok: false, skipped: true, error: "Recipient, subject, and message are required." };
   }
+  const emailTheme = asString(message.emailTheme) === "tattoo" ? "tattoo" : "construct_studio";
+  const rendered = buildCrmFollowupEmail({
+    theme: emailTheme,
+    subject,
+    preheader: asString(message.preheader),
+    body,
+  });
   return sendTransactionalEmail(env, {
     to,
-    subject,
-    text: body,
+    ...(emailTheme === "construct_studio" ? eventsEmailIdentity(env) : {}),
+    ...rendered,
     templateKey: "crm_relationship_followup",
     relatedType: "crm_person",
     relatedId: asString(message.personId) || null,
@@ -478,16 +526,10 @@ export async function sendCommunicationPreferencesLink(env, message = {}) {
   if (!to || !url) {
     return { ok: false, skipped: true, error: "Recipient and preferences URL are required." };
   }
+  const rendered = buildCommunicationPreferencesEmail({ url });
   return sendTransactionalEmail(env, {
     to,
-    subject: "Manage your Six.Well communication preferences",
-    text: [
-      "Use this secure link to review or change your Six.Well email preferences:",
-      "",
-      url,
-      "",
-      "This link expires in 30 minutes. If you did not request it, you can ignore this email.",
-    ].join("\n"),
+    ...rendered,
     templateKey: "crm_communication_preferences",
     relatedType: "communication_preferences",
     relatedId: asString(message.tokenId) || null,
@@ -510,6 +552,7 @@ export async function notifyTattooBuildDraftResume(env, request, draft, rawToken
       }).format(new Date(draft.expires_at))
     : "";
   const message = buildTattooDraftResumeEmail({
+    variant: kind === "maze_design" ? "maze" : "build",
     subject: `Continue your art.pill ${label}`,
     label,
     resumeUrl,
@@ -822,15 +865,29 @@ async function sendAdminNotification(env, request, message) {
   const recipient = adminNotificationAddress(env);
   if (!recipient) return { ok: false, skipped: true };
 
+  const key = asString(message.templateKey);
+  const theme = message.theme
+    || (key.includes("event") ? "construct_event" : key.includes("submission") || key.includes("appointment") ? "tattoo" : "construct_studio");
+  const rendered = buildAdminNotificationEmail({
+    templateKey: key,
+    variant: message.templateVariant || theme,
+    theme,
+    subject: message.subject,
+    preheader: message.preheader,
+    classification: message.classification,
+    headline: message.headline,
+    sectionTitle: message.sectionTitle,
+    lines: message.lines,
+    studioUrl: studioConsoleUrl(env, request),
+  });
+
   return sendTransactionalEmail(env, {
     to: recipient,
     fromEmail: env.ADMIN_NOTIFICATION_FROM_EMAIL || DEFAULT_ADMIN_FROM_ADDRESS,
     fromName: env.ADMIN_NOTIFICATION_FROM_NAME || "art.pill notifications",
     replyTo: replyToAddress(env),
     ...message,
-    text: [...message.lines, "", compactLine("Studio console", studioConsoleUrl(env, request))]
-      .filter((line) => line !== "")
-      .join("\n"),
+    ...rendered,
   });
 }
 
@@ -853,6 +910,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     ? flashSheetDesignLines(normalized.payload, "sheet_design_selections", "Requested sheet designs:")
     : [];
   const message = buildSubmissionReceivedEmail({
+    variant: ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", consultation: "consultation", build_session: "build_session" })[type] || "custom",
     subject: `art.pill TATTOO HOUSE — ${profile.subject}`,
     clientName: normalized.contactName,
     label: profile.label,
@@ -1139,6 +1197,8 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
   ];
 
   return sendAdminNotification(env, request, {
+    theme: studio ? "construct_studio" : "tattoo",
+    templateVariant: studio ? "construct_studio" : "tattoo",
     subject: studio
       ? `Booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
       : tattooAdminBookingSubject(appointment, "Confirmed"),
@@ -1206,6 +1266,8 @@ export async function notifyAdminAppointmentRescheduled(env, request, appointmen
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
   return sendAdminNotification(env, request, {
+    theme: profile.studio ? "construct_studio" : "tattoo",
+    templateVariant: profile.studio ? "construct_studio" : "tattoo",
     subject: profile.studio
       ? `Booking rescheduled: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
       : tattooAdminBookingSubject(appointment, "Rescheduled"),
@@ -1371,40 +1433,200 @@ async function deliveryById(db, notificationId) {
     .first();
 }
 
-export function handleAdminPreviewNotification(request, env) {
+function selectedEmailTemplate(templateKey, requestedVariant) {
+  const catalog = clientEmailPreviewCatalog();
+  const matches = catalog.filter((entry) => entry.templateKey === templateKey);
+  if (!matches.length) return { error: "Unsupported email template." };
+  const selected = requestedVariant
+    ? matches.find((entry) => entry.variant === requestedVariant)
+    : matches[0];
+  return selected ? { selected } : { error: "Unsupported email template variant." };
+}
+
+export async function handleAdminPreviewNotification(request, env) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
-  if (request.method !== "GET") {
+  if (!["GET", "POST"].includes(request.method)) {
     return errorResponse("Method not allowed.", 405);
   }
 
   const url = new URL(request.url);
-  const templateKey = asString(url.searchParams.get("templateKey"));
-  const requestedVariant = asString(url.searchParams.get("variant"));
+  const body = request.method === "POST" ? await readJsonBody(request) : null;
+  if (request.method === "POST" && !body) return errorResponse("Expected JSON body.", 400);
+  const templateKey = asString(body?.templateKey || url.searchParams.get("templateKey"));
+  const requestedVariant = asString(body?.variant || url.searchParams.get("variant"));
   const catalog = clientEmailPreviewCatalog();
   if (!templateKey) {
-    return json({ templates: catalog });
+    const templates = await Promise.all(catalog.map(async (entry) => {
+      const definition = emailTemplateDefinition(entry.templateKey, entry.variant);
+      const draft = await templateRevision(notificationDb(env), entry.templateKey, entry.variant, "draft");
+      const published = await templateRevision(notificationDb(env), entry.templateKey, entry.variant, "published");
+      return {
+        ...entry,
+        status: draft ? "draft" : published ? "published" : "default",
+        draftRevision: draft?.revision || null,
+        publishedRevision: published?.revision || 0,
+        schema: definition?.schema,
+      };
+    }));
+    return json({ templates });
   }
 
-  const matches = catalog.filter((entry) => entry.templateKey === templateKey);
-  if (!matches.length) {
-    return errorResponse("Unsupported client email preview template.", 404);
+  const selection = selectedEmailTemplate(templateKey, requestedVariant);
+  if (selection.error) return errorResponse(selection.error, 404);
+  const selected = selection.selected;
+  if (request.method === "POST" && selected.templateKey === "crm_relationship_followup" && body?.compose) {
+    const compose = body.compose && typeof body.compose === "object" && !Array.isArray(body.compose) ? body.compose : {};
+    const subject = asString(compose.subject).slice(0, 300);
+    const preheader = asString(compose.preheader).slice(0, 300);
+    const messageBody = asString(compose.body).slice(0, 10_000);
+    if (!subject || !messageBody) return errorResponse("Subject and message are required for CRM preview.", 422);
+    const base = buildCrmFollowupEmail({
+      theme: selected.variant === "tattoo" ? "tattoo" : "construct_studio",
+      subject,
+      preheader,
+      body: messageBody,
+    });
+    const wrapperDefinition = emailTemplateDefinition(selected.templateKey, selected.variant);
+    const published = await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "published");
+    const composed = published
+      ? renderEmailContent(base.semantic, published.content, wrapperDefinition.options)
+      : base;
+    return json({
+      ...selected,
+      ...composed,
+      revision: published?.revision || 0,
+      source: "composer",
+    });
   }
-  const selected = requestedVariant
-    ? matches.find((entry) => entry.variant === requestedVariant)
-    : matches[0];
-  if (!selected) {
-    return errorResponse("Unsupported client email preview variant.", 404);
+  const definition = emailTemplateDefinition(selected.templateKey, selected.variant);
+  let content = body?.content || null;
+  let revision = 0;
+  let source = "default";
+  if (!content && asString(url.searchParams.get("source")) !== "default") {
+    const draft = asString(url.searchParams.get("source")) === "draft"
+      ? await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "draft")
+      : null;
+    const published = draft || await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "published");
+    if (published) {
+      content = published.content;
+      revision = published.revision;
+      source = published.status;
+    }
   }
-
-  const rendered = renderClientEmailPreview(selected.templateKey, selected.variant);
+  const result = content
+    ? renderEmailTemplateContent(selected.templateKey, selected.variant, content)
+    : null;
+  if (result && !result.validation.ok) return errorResponse("Template copy is invalid.", 422, { errors: result.validation.errors });
+  const rendered = result?.rendered || renderClientEmailPreview(selected.templateKey, selected.variant);
   if (!rendered) {
-    return errorResponse("Unable to render client email preview.", 500);
+    return errorResponse("Unable to render email preview.", 500);
   }
   return json({
     ...selected,
     ...rendered,
+    content: content || definition.defaultContent,
+    schema: definition.schema,
+    revision,
+    source,
   });
+}
+
+export async function handleAdminEmailTemplates(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const url = new URL(request.url);
+  const prefix = "/api/admin/notifications/templates";
+  const parts = url.pathname.slice(prefix.length).split("/").filter(Boolean).map(decodeURIComponent);
+  if (!parts.length && request.method === "GET") {
+    const previewUrl = new URL("/api/admin/notifications/preview", url);
+    return handleAdminPreviewNotification(new Request(previewUrl, request), env);
+  }
+  const templateKey = asString(parts[0]);
+  const action = asString(parts[1]);
+  const variant = asString(url.searchParams.get("variant"));
+  const selection = selectedEmailTemplate(templateKey, variant);
+  if (selection.error) return errorResponse(selection.error, 404);
+  const selected = selection.selected;
+  const definition = emailTemplateDefinition(selected.templateKey, selected.variant);
+  const db = notificationDb(env);
+  if (!db) return errorResponse("Missing D1 binding SUBMISSIONS_DB.", 503);
+
+  if (request.method === "GET" && (!action || action === "history")) {
+    const draft = await templateRevision(db, selected.templateKey, selected.variant, "draft");
+    const published = await templateRevision(db, selected.templateKey, selected.variant, "published");
+    const history = action === "history" ? await templateHistory(db, selected.templateKey, selected.variant) : undefined;
+    return json({
+      ...selected,
+      schema: definition.schema,
+      defaultContent: definition.defaultContent,
+      draft,
+      published,
+      history,
+    });
+  }
+
+  const body = await readJsonBody(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  try {
+    if (request.method === "PUT" && action === "draft") {
+      const validation = validateEmailContent(definition.rendered.semantic, body.content, definition.options);
+      if (!validation.ok) return errorResponse("Template copy is invalid.", 422, { errors: validation.errors });
+      const saved = await saveTemplateDraft(db, {
+        templateKey: selected.templateKey,
+        variant: selected.variant,
+        content: validation.content,
+        baseRevision: body.baseRevision,
+      });
+      if (saved?.conflict) return errorResponse("Template draft is stale.", 409, saved);
+      return json({ draft: saved });
+    }
+    if (request.method === "POST" && action === "publish") {
+      const draft = await templateRevision(db, selected.templateKey, selected.variant, "draft");
+      if (!draft) return errorResponse("No saved draft is available to publish.", 409);
+      const validation = validateEmailContent(definition.rendered.semantic, draft.content, definition.options);
+      if (!validation.ok) return errorResponse("Saved draft is invalid.", 422, { errors: validation.errors });
+      const published = await publishTemplateDraft(db, { templateKey: selected.templateKey, variant: selected.variant, revision: body.revision });
+      if (published?.conflict) return errorResponse("Template draft is stale.", 409, published);
+      return json({ published });
+    }
+    if (request.method === "POST" && action === "restore") {
+      const draft = await restoreTemplateRevision(db, {
+        templateKey: selected.templateKey,
+        variant: selected.variant,
+        revision: body.revision,
+        baseRevision: body.baseRevision,
+      });
+      if (draft?.conflict) return errorResponse("Template draft is stale.", 409, draft);
+      if (!draft) return errorResponse("Template revision was not found.", 404);
+      return json({ draft });
+    }
+    if (request.method === "POST" && action === "test") {
+      const draft = await templateRevision(db, selected.templateKey, selected.variant, "draft");
+      if (!draft || draft.revision !== Number(body.revision)) return errorResponse("Save the current draft before sending a test.", 409);
+      const result = renderEmailTemplateContent(selected.templateKey, selected.variant, draft.content);
+      if (!result?.validation.ok) return errorResponse("Saved draft is invalid.", 422, { errors: result?.validation?.errors || [] });
+      const rendered = { ...result.rendered, subject: `[TEST] ${result.rendered.subject}` };
+      const delivery = await sendTransactionalEmail(env, {
+        to: adminNotificationAddress(env),
+        fromEmail: env.ADMIN_NOTIFICATION_FROM_EMAIL || DEFAULT_ADMIN_FROM_ADDRESS,
+        fromName: env.ADMIN_NOTIFICATION_FROM_NAME || "Studio email tests",
+        replyTo: replyToAddress(env),
+        ...rendered,
+        templateKey: selected.templateKey,
+        templateVariant: selected.variant,
+        templateRevision: draft.revision,
+        contentLocked: true,
+        relatedType: "email_template_test",
+        relatedId: `${selected.templateKey}:${selected.variant}:${draft.revision}`,
+        idempotencyKey: `email_template_test:${selected.templateKey}:${selected.variant}:${draft.revision}:${crypto.randomUUID()}`,
+      });
+      return deliveryResponse(delivery);
+    }
+  } catch (error) {
+    return errorResponse(error.message || "Email template operation failed.", 500);
+  }
+  return errorResponse("Method not allowed.", 405);
 }
 
 export async function handleAdminResendNotification(request, env) {
@@ -1619,6 +1841,7 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
       ? "This consultation belongs to your reviewed tattoo project. Contact the studio to continue that project; do not start a separate public consultation."
       : "A cancelled tattoo appointment does not convert into a consultation. Contact the studio if you want to discuss a future project or appointment.";
   const message = buildAppointmentCancelledEmail({
+    variant: isStudio ? "studio" : isBuild ? "build" : isPrerequisiteConsultation ? "prerequisite" : isConsultation ? "consultation" : "tattoo",
     kind: isStudio ? "studio" : "tattoo",
     subject: `Your ${occasion.toLowerCase()} has been cancelled`,
     clientName: appointment.clientName,
@@ -1714,6 +1937,7 @@ export async function notifyEventTicketCancelled(env, request, ticketRow, option
     ? "A full refund has been issued to your original payment method. It may take a few business days to appear."
     : "If you were charged, a refund will be handled separately — reply to this email if you have any questions.";
   const message = buildEventTicketCancelledEmail({
+    variant: options.refunded ? "refunded" : "no_refund",
     subject: `Your ticket for ${title} was cancelled`,
     title,
     clientName: ticketRow.contact_name,
@@ -1859,6 +2083,7 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
         ];
   const message = buildAppointmentReminderEmail({
     kind: isStudio ? "studio" : isVirtual ? "consultation_virtual" : "tattoo",
+    variant: isStudio ? "studio" : isBuild ? "build" : isVirtual ? "virtual" : isConsultation ? "consultation" : "tattoo",
     subject: `Reminder: Your ${occasion} with ${brand} is tomorrow`,
     occasion,
     brand,

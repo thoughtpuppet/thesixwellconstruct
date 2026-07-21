@@ -1711,13 +1711,25 @@
             </select>
           </label>
           <label class="people-wide" data-email-subject>Subject<input name="subject" maxlength="300"></label>
+          <label data-email-design>Identity
+            <select name="emailTheme">
+              <option value="construct_studio">the six.well construct</option>
+              <option value="tattoo">art.pill TATTOO HOUSE</option>
+            </select>
+          </label>
+          <label data-email-design>Preheader<input name="preheader" maxlength="300" placeholder="Inbox preview text"></label>
           <label class="people-wide">Message<textarea name="bodyText" required maxlength="10000"></textarea></label>
           <label>Schedule (optional)<input name="scheduledAt" type="datetime-local"></label>
         </div>
         <div class="people-actions">
           <button class="button" type="submit">Preview recipient</button>
+          <button class="button" type="button" data-preview-designed-email>Preview designed email</button>
           <button class="button" type="button" data-send-followup hidden>Send follow-up</button>
           <span class="people-helper" data-form-status role="status" aria-live="polite"></span>
+        </div>
+        <div class="people-record" data-designed-email-preview hidden>
+          <iframe title="Designed CRM email preview" style="width:100%;height:680px;border:0;background:#0e0e0e"></iframe>
+          <details><summary>Plain text</summary><pre style="white-space:pre-wrap"></pre></details>
         </div>
       </form>`;
   }
@@ -2160,6 +2172,8 @@
       const sendButton = outreachForm.querySelector("[data-send-followup]");
       const syncFollowupChannel = () => {
         outreachForm.querySelector("[data-email-subject]").hidden = outreachForm.elements.channel.value !== "email";
+        outreachForm.querySelectorAll("[data-email-design],[data-preview-designed-email]").forEach((control) => { control.hidden = outreachForm.elements.channel.value !== "email"; });
+        outreachForm.querySelector("[data-designed-email-preview]").hidden = true;
         sendButton.hidden = true;
       };
       outreachForm.elements.channel.addEventListener("change", syncFollowupChannel);
@@ -2168,6 +2182,29 @@
         control.addEventListener("input", () => { sendButton.hidden = true; });
       });
       syncFollowupChannel();
+      outreachForm.querySelector("[data-preview-designed-email]")?.addEventListener("click", async () => {
+        try {
+          const theme = formValue(outreachForm, "emailTheme") === "tattoo" ? "tattoo" : "construct_studio";
+          const payload = await api("/api/admin/notifications/preview", {
+            method: "POST",
+            body: {
+              templateKey: "crm_relationship_followup",
+              variant: theme,
+              compose: {
+                subject: formValue(outreachForm, "subject"),
+                preheader: formValue(outreachForm, "preheader"),
+                body: formValue(outreachForm, "bodyText"),
+              },
+            },
+          });
+          const panel = outreachForm.querySelector("[data-designed-email-preview]");
+          panel.querySelector("iframe").srcdoc = payload.html || "";
+          panel.querySelector("pre").textContent = payload.text || "";
+          panel.hidden = false;
+        } catch (error) {
+          setFormStatus(outreachForm, error.message || "Could not render the designed email.", "error");
+        }
+      });
       outreachForm.addEventListener("submit", async (event) => {
         event.preventDefault();
         try {
@@ -2202,6 +2239,8 @@
               channel: formValue(outreachForm, "channel"),
               followupId: formValue(outreachForm, "followupId") || null,
               subject: formValue(outreachForm, "subject"),
+              preheader: formValue(outreachForm, "preheader"),
+              emailTheme: formValue(outreachForm, "emailTheme"),
               bodyText: formValue(outreachForm, "bodyText"),
               scheduledAt: scheduledLocal ? localDateTimeToIso(scheduledLocal) : null,
               requestId,

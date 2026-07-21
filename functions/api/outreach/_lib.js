@@ -1364,6 +1364,8 @@ async function sendCommunication(env, database, communication) {
     const result = await sendCrmFollowupEmail(env, {
       to: communication.normalized_destination,
       subject: communication.subject,
+      preheader: communication.preheader,
+      emailTheme: communication.email_theme,
       text: communication.body_text,
       personId: communication.person_id,
       communicationId: communication.id,
@@ -1423,6 +1425,8 @@ async function handleSendFollowup(request, env, database) {
   const personId = asString(body.personId, 200);
   const channel = asString(body.channel, 20).toLowerCase();
   const subject = asString(body.subject, 300);
+  const preheader = asString(body.preheader, 300);
+  const emailTheme = asString(body.emailTheme, 40) === "tattoo" ? "tattoo" : "construct_studio";
   const message = asString(body.bodyText || body.body || body.message, channel === "sms" ? 1600 : 10_000);
   const followupId = asString(body.followupId, 200) || null;
   const requestId = asString(body.requestId, 300);
@@ -1439,6 +1443,8 @@ async function handleSendFollowup(request, env, database) {
     if (
       existing.subject !== subject
       || existing.body_text !== expectedBody
+      || asString(existing.preheader) !== preheader
+      || asString(existing.email_theme || "construct_studio") !== emailTheme
       || (existing.followup_id || null) !== followupId
     ) {
       return failure("That request id was already used for a different follow-up.", 409);
@@ -1468,9 +1474,9 @@ async function handleSendFollowup(request, env, database) {
   await database.prepare(`
     INSERT OR IGNORE INTO crm_communications(
       id,person_id,followup_id,channel,purpose,direction,provider,
-      normalized_destination,subject,body_text,status,idempotency_key,
+      normalized_destination,subject,preheader,email_theme,body_text,status,idempotency_key,
       scheduled_at,created_at,updated_at
-    ) VALUES(?,?,?,?,'relationship','outbound',?,?,?,?,?,?, ?,?,?)
+    ) VALUES(?,?,?,?,'relationship','outbound',?,?,?,?,?,?,?,?, ?,?,?)
   `).bind(
     communicationId,
     personId,
@@ -1479,6 +1485,8 @@ async function handleSendFollowup(request, env, database) {
     providerForChannel(channel),
     eligibility.destination,
     subject,
+    channel === "email" ? preheader : "",
+    channel === "email" ? emailTheme : "construct_studio",
     channel === "sms" ? smsCampaignBody(message) : message,
     scheduledAt && new Date(scheduledAt).getTime() > Date.now() ? "scheduled" : "queued",
     idempotencyKey,

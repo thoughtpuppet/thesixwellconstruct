@@ -1,231 +1,230 @@
 (function () {
   const TOKEN_KEY = "swc_submissions_admin_token";
-
-  function createElement(tag, className, text) {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
-    if (text !== undefined) element.textContent = text;
-    return element;
-  }
-
-  function option(select, value, label) {
-    const entry = document.createElement("option");
-    entry.value = value;
-    entry.textContent = label;
-    select.appendChild(entry);
-  }
-
-  function titleCase(value) {
-    return String(value || "")
-      .replace(/[_-]+/g, " ")
-      .replace(/\b\w/g, (character) => character.toUpperCase());
-  }
+  const make = (tag, className = "", text = "") => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+  };
+  const title = (value) => String(value || "").replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const get = (object, path) => path.split(".").reduce((value, key) => value?.[key], object);
+  const set = (object, path, value) => {
+    const parts = path.split(".");
+    const leaf = parts.pop();
+    let cursor = object;
+    parts.forEach((part) => { cursor[part] ||= {}; cursor = cursor[part]; });
+    cursor[leaf] = value;
+  };
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+  const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
   function init(root) {
-    const allowedBrands = new Set(
-      String(root.dataset.brands || "")
-        .split(",")
-        .map((brand) => brand.trim())
-        .filter(Boolean),
-    );
+    const allowedBrands = new Set(String(root.dataset.brands || "").split(",").map((v) => v.trim()).filter(Boolean));
     const token = localStorage.getItem(TOKEN_KEY) || "";
     let catalog = [];
-    let filtered = [];
-    let activeTab = "html";
-    let viewport = "desktop";
+    let selected = null;
+    let definition = null;
+    let content = null;
+    let savedContent = null;
+    let rendered = null;
+    let revision = 0;
+    let renderTimer = 0;
 
-    const status = createElement("div", "email-preview-status", "Loading production templates");
-    const toolbar = createElement("div", "email-preview-toolbar");
-    const templateControl = createElement("div", "email-preview-control");
-    const templateLabel = createElement("label", "", "Template");
-    const templateSelect = createElement("select");
-    const brandControl = createElement("div", "email-preview-control");
-    const brandLabel = createElement("label", "", "Brand");
-    const brandSelect = createElement("select");
-    const stageControl = createElement("div", "email-preview-control");
-    const stageLabel = createElement("label", "", "Journey stage");
-    const stageSelect = createElement("select");
-    const modeRow = createElement("div", "email-preview-toolbar");
-    const viewportControl = createElement("div", "email-preview-control");
-    const viewportLabel = createElement("label", "", "Viewport");
-    const viewportButtons = createElement("div", "email-preview-viewport");
-    const desktopButton = createElement("button", "is-active", "Desktop");
-    desktopButton.type = "button";
-    const mobileButton = createElement("button", "", "Mobile");
-    mobileButton.type = "button";
-    const tabControl = createElement("div", "email-preview-control");
-    const tabLabel = createElement("label", "", "Format");
-    const tabButtons = createElement("div", "email-preview-tabs");
-    const htmlButton = createElement("button", "is-active", "Rendered HTML");
-    htmlButton.type = "button";
-    const textButton = createElement("button", "", "Plain text");
-    textButton.type = "button";
-    const meta = createElement("div", "email-preview-meta");
-    const subjectRow = createElement("div", "email-preview-meta-row");
-    const subjectLabel = createElement("strong", "", "Subject");
-    const subjectValue = createElement("span");
-    const preheaderRow = createElement("div", "email-preview-meta-row");
-    const preheaderLabel = createElement("strong", "", "Preheader");
-    const preheaderValue = createElement("span");
-    const stage = createElement("div", "email-preview-stage");
-    const frame = createElement("div", "email-preview-frame");
+    const status = make("div", "email-preview-status", "Loading email template manager");
+    const filters = make("div", "email-preview-toolbar");
+    const editorLayout = make("div", "email-preview-editor-layout");
+    const editor = make("section", "email-preview-editor");
+    const preview = make("section", "email-preview-output");
+    const actions = make("div", "email-preview-actions");
+    const form = make("form", "email-preview-form");
+    const tokenHelp = make("div", "email-preview-token-help");
+    const historyPanel = make("div", "email-preview-history");
+    historyPanel.hidden = true;
     const iframe = document.createElement("iframe");
-    iframe.title = "Rendered transactional email preview";
+    iframe.title = "Designed email preview";
     iframe.setAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
-    const plainText = createElement("pre", "email-preview-text");
-    plainText.hidden = true;
+    const plain = make("pre", "email-preview-text");
+    plain.hidden = true;
+    const frame = make("div", "email-preview-frame");
+    frame.append(iframe, plain);
+    const meta = make("div", "email-preview-meta");
 
-    templateControl.append(templateLabel, templateSelect);
-    brandControl.append(brandLabel, brandSelect);
-    stageControl.append(stageLabel, stageSelect);
-    toolbar.append(templateControl, brandControl, stageControl);
-    viewportButtons.append(desktopButton, mobileButton);
-    viewportControl.append(viewportLabel, viewportButtons);
-    tabButtons.append(htmlButton, textButton);
-    tabControl.append(tabLabel, tabButtons);
-    modeRow.append(viewportControl, tabControl);
-    subjectRow.append(subjectLabel, subjectValue);
-    preheaderRow.append(preheaderLabel, preheaderValue);
-    meta.append(subjectRow, preheaderRow);
-    frame.append(iframe, plainText);
-    stage.append(frame);
-    root.replaceChildren(status, toolbar, modeRow, meta, stage);
+    const selectFields = [
+      ["template", "Template"], ["brand", "Brand"], ["audience", "Audience"],
+      ["stage", "Journey stage"], ["publication", "Publication status"],
+    ].map(([name, label]) => {
+      const wrap = make("label", "email-preview-control");
+      wrap.append(make("span", "", label));
+      const select = document.createElement("select");
+      select.name = name;
+      wrap.append(select);
+      filters.append(wrap);
+      return select;
+    });
+    const [templateSelect, brandSelect, audienceSelect, stageSelect, publicationSelect] = selectFields;
+    const option = (select, value, label) => {
+      const node = document.createElement("option"); node.value = value; node.textContent = label; select.append(node);
+    };
 
-    function setStatus(message, error = false) {
-      status.textContent = message;
-      status.classList.toggle("is-error", error);
-    }
+    const button = (label, action, className = "") => {
+      const node = make("button", className, label); node.type = "button"; node.dataset.action = action; return node;
+    };
+    actions.append(
+      button("Save Draft", "save", "is-primary"), button("Discard Changes", "discard"),
+      button("Publish", "publish"), button("Send Test", "test"), button("View History", "history"),
+    );
+    const displayControls = make("div", "email-preview-toolbar email-preview-display");
+    displayControls.append(button("Desktop", "desktop", "is-active"), button("Mobile", "mobile"), button("Rendered HTML", "html", "is-active"), button("Plain Text", "text"), button("Published", "published"), button("Draft", "draft", "is-active"));
+    editor.append(tokenHelp, form, actions, historyPanel);
+    preview.append(displayControls, meta, make("div", "email-preview-stage"));
+    preview.lastElementChild.append(frame);
+    editorLayout.append(editor, preview);
+    root.replaceChildren(status, filters, editorLayout);
 
-    async function api(params = "") {
-      const headers = { Accept: "application/json" };
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const response = await fetch(`/api/admin/notifications/preview${params}`, {
-        headers,
-        cache: "no-store",
-      });
+    const authHeaders = () => ({ Accept: "application/json", "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) });
+    async function api(path, options = {}) {
+      const response = await fetch(path, { cache: "no-store", ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const error = new Error(payload.error || `Preview request failed (${response.status}).`);
-        error.status = response.status;
-        throw error;
-      }
+      if (!response.ok) { const error = new Error(payload.error || `Request failed (${response.status}).`); error.status = response.status; error.payload = payload; throw error; }
       return payload;
     }
+    const setStatus = (message, error = false) => { status.textContent = message; status.classList.toggle("is-error", error); };
+    const id = (entry) => `${entry.templateKey}:${entry.variant}`;
+    const currentEntry = () => catalog.find((entry) => id(entry) === templateSelect.value);
 
-    function renderAuthError() {
-      const auth = createElement("div", "email-preview-auth");
-      const copy = createElement("p", "", "The production email preview endpoint is protected. Open Studio, enter the admin token, then return to this preview.");
-      const link = createElement("a", "", "Open Studio");
-      link.href = "/studio/submissions/";
-      auth.append(copy, link);
-      stage.replaceChildren(auth);
-      meta.hidden = true;
-      modeRow.hidden = true;
+    function filtersFor(select, key, label) {
+      const current = select.value;
+      select.replaceChildren(); option(select, "", `All ${label}`);
+      [...new Set(catalog.map((entry) => entry[key]).filter(Boolean))].sort().forEach((value) => option(select, value, title(value)));
+      if ([...select.options].some((entry) => entry.value === current)) select.value = current;
     }
-
-    function rebuildFilters() {
-      const brands = [...new Set(catalog.map((entry) => entry.brand))];
-      const stages = [...new Set(catalog.map((entry) => entry.stage))];
-      brandSelect.replaceChildren();
-      stageSelect.replaceChildren();
-      option(brandSelect, "", "All brands");
-      brands.forEach((brand) => option(brandSelect, brand, titleCase(brand)));
-      option(stageSelect, "", "All stages");
-      stages.forEach((journeyStage) => option(stageSelect, journeyStage, titleCase(journeyStage)));
-    }
-
-    function rebuildTemplates(preferredId = "") {
-      const brand = brandSelect.value;
-      const journeyStage = stageSelect.value;
-      filtered = catalog.filter((entry) => (
-        (!brand || entry.brand === brand)
-        && (!journeyStage || entry.stage === journeyStage)
-      ));
+    function rebuildTemplates(preferred = "") {
+      const matches = catalog.filter((entry) => (!brandSelect.value || entry.brand === brandSelect.value)
+        && (!audienceSelect.value || entry.audience === audienceSelect.value)
+        && (!stageSelect.value || entry.stage === stageSelect.value)
+        && (!publicationSelect.value || entry.status === publicationSelect.value));
       templateSelect.replaceChildren();
-      filtered.forEach((entry) => {
-        const id = `${entry.templateKey}:${entry.variant}`;
-        option(templateSelect, id, `${entry.label} · ${entry.variant || "default"}`);
-      });
-      const preferredExists = filtered.some((entry) => `${entry.templateKey}:${entry.variant}` === preferredId);
-      if (preferredExists) templateSelect.value = preferredId;
-      loadSelected();
+      matches.forEach((entry) => option(templateSelect, id(entry), `${entry.label} · ${entry.variant}`));
+      if (matches.some((entry) => id(entry) === preferred)) templateSelect.value = preferred;
+      loadTemplate();
     }
-
-    async function loadSelected() {
-      const selectedId = templateSelect.value;
-      const selected = filtered.find((entry) => `${entry.templateKey}:${entry.variant}` === selectedId);
-      if (!selected) {
-        setStatus("No templates match the selected filters", true);
-        subjectValue.textContent = "";
-        preheaderValue.textContent = "";
-        iframe.srcdoc = "";
-        plainText.textContent = "";
-        return;
-      }
-      setStatus(`Rendering ${selected.label}`);
+    function dirty() { return content && savedContent && !same(content, savedContent); }
+    function updateActions() {
+      const isDirty = dirty();
+      actions.querySelector('[data-action="save"]').disabled = !isDirty;
+      actions.querySelector('[data-action="discard"]').disabled = !isDirty;
+      actions.querySelector('[data-action="publish"]').disabled = isDirty || !revision;
+      actions.querySelector('[data-action="test"]').disabled = isDirty || !revision;
+    }
+    function renderMeta(payload) {
+      meta.innerHTML = `<div class="email-preview-meta-row"><strong>Subject</strong><span></span></div><div class="email-preview-meta-row"><strong>Preheader</strong><span></span></div>`;
+      meta.children[0].lastElementChild.textContent = payload.subject || "";
+      meta.children[1].lastElementChild.textContent = payload.preheader || "";
+      iframe.srcdoc = payload.html || "";
+      plain.textContent = payload.text || "";
+      rendered = payload;
+    }
+    async function renderUnsaved() {
+      if (!selected || !content) return;
       try {
-        const params = new URLSearchParams({
-          templateKey: selected.templateKey,
-          variant: selected.variant,
-        });
-        const payload = await api(`?${params}`);
-        subjectValue.textContent = payload.subject || "";
-        preheaderValue.textContent = payload.preheader || "";
-        iframe.srcdoc = payload.html || "";
-        plainText.textContent = payload.text || "";
-        setStatus(`${payload.theme || selected.brand} · exact production renderer`);
+        const payload = await api("/api/admin/notifications/preview", { method: "POST", body: JSON.stringify({ templateKey: selected.templateKey, variant: selected.variant, content }) });
+        renderMeta(payload);
+        setStatus(`${selected.label} · ${dirty() ? "unsaved preview" : revision ? `draft revision ${revision}` : "code default"}`);
       } catch (error) {
-        if (error.status === 401 || error.status === 403) {
-          renderAuthError();
-          setStatus("Admin authentication required", true);
-          return;
-        }
-        setStatus(error.message, true);
+        setStatus(error.payload?.errors?.join(" ") || error.message, true);
       }
     }
-
-    function setViewport(nextViewport) {
-      viewport = nextViewport;
-      frame.classList.toggle("is-mobile", viewport === "mobile");
-      desktopButton.classList.toggle("is-active", viewport === "desktop");
-      mobileButton.classList.toggle("is-active", viewport === "mobile");
-    }
-
-    function setTab(nextTab) {
-      activeTab = nextTab;
-      iframe.hidden = activeTab !== "html";
-      plainText.hidden = activeTab !== "text";
-      htmlButton.classList.toggle("is-active", activeTab === "html");
-      textButton.classList.toggle("is-active", activeTab === "text");
-    }
-
-    brandSelect.addEventListener("change", () => rebuildTemplates());
-    stageSelect.addEventListener("change", () => rebuildTemplates());
-    templateSelect.addEventListener("change", loadSelected);
-    desktopButton.addEventListener("click", () => setViewport("desktop"));
-    mobileButton.addEventListener("click", () => setViewport("mobile"));
-    htmlButton.addEventListener("click", () => setTab("html"));
-    textButton.addEventListener("click", () => setTab("text"));
-
-    api()
-      .then((payload) => {
-        catalog = Array.isArray(payload.templates) ? payload.templates : [];
-        if (allowedBrands.size) {
-          catalog = catalog.filter((entry) => allowedBrands.has(entry.brand));
-        }
-        rebuildFilters();
-        rebuildTemplates();
-        if (!catalog.length) setStatus("No production templates are available", true);
-      })
-      .catch((error) => {
-        if (error.status === 401 || error.status === 403) {
-          renderAuthError();
-          setStatus("Admin authentication required", true);
-          return;
-        }
-        setStatus(error.message, true);
+    function queueRender() { clearTimeout(renderTimer); renderTimer = setTimeout(renderUnsaved, 180); updateActions(); }
+    function buildForm() {
+      form.replaceChildren();
+      const allowed = definition.schema?.allowedTokens || [];
+      tokenHelp.textContent = allowed.length ? `Allowed variables: ${allowed.map((item) => `{{${item}}}`).join("  ")}` : "This template has no editable variables.";
+      (definition.schema?.fields || []).forEach((field) => {
+        const label = make("label", `email-preview-field${field.policy ? " is-policy" : ""}`);
+        label.append(make("span", "", `${field.label}${field.policy ? " · policy copy" : ""}`));
+        const control = field.type === "textarea" || field.type === "paragraphs" ? document.createElement("textarea") : document.createElement("input");
+        const value = get(content, field.path);
+        control.value = Array.isArray(value) ? value.join("\n\n") : value || "";
+        control.addEventListener("input", () => { set(content, field.path, field.type === "paragraphs" ? control.value.split(/\n\s*\n/).map((item) => item.trim()).filter(Boolean) : control.value); queueRender(); });
+        label.append(control); form.append(label);
       });
-  }
+    }
+    async function loadTemplate() {
+      selected = currentEntry();
+      if (!selected) { editorLayout.hidden = true; setStatus("No templates match the selected filters."); return; }
+      editorLayout.hidden = false;
+      try {
+        const params = new URLSearchParams({ variant: selected.variant });
+        definition = await api(`/api/admin/notifications/templates/${encodeURIComponent(selected.templateKey)}?${params}`);
+        const active = definition.draft || definition.published;
+        revision = definition.draft?.revision || 0;
+        content = clone(active?.content || definition.defaultContent);
+        savedContent = clone(content);
+        buildForm(); updateActions(); await renderUnsaved();
+      } catch (error) {
+        if ([401, 403].includes(error.status)) setStatus("Admin authentication required. Open Studio and enter the bearer token first.", true);
+        else setStatus(error.message, true);
+      }
+    }
+    async function refreshCatalog(preferred = templateSelect.value) {
+      const payload = await api("/api/admin/notifications/preview");
+      catalog = (payload.templates || []).filter((entry) => !allowedBrands.size || allowedBrands.has(entry.brand));
+      filtersFor(brandSelect, "brand", "brands"); filtersFor(audienceSelect, "audience", "audiences"); filtersFor(stageSelect, "stage", "stages"); filtersFor(publicationSelect, "status", "statuses");
+      rebuildTemplates(preferred);
+    }
 
+    [brandSelect, audienceSelect, stageSelect, publicationSelect].forEach((select) => select.addEventListener("change", () => rebuildTemplates(templateSelect.value)));
+    templateSelect.addEventListener("change", loadTemplate);
+    actions.addEventListener("click", async (event) => {
+      const action = event.target.dataset.action; if (!action || !selected) return;
+      const endpoint = `/api/admin/notifications/templates/${encodeURIComponent(selected.templateKey)}`;
+      try {
+        if (action === "discard") { content = clone(savedContent); buildForm(); updateActions(); return renderUnsaved(); }
+        if (action === "save") {
+          const payload = await api(`${endpoint}/draft?variant=${encodeURIComponent(selected.variant)}`, { method: "PUT", body: JSON.stringify({ content, baseRevision: revision || definition.published?.revision || 0 }) });
+          revision = payload.draft.revision; savedContent = clone(payload.draft.content); updateActions(); setStatus(`Draft revision ${revision} saved.`); await refreshCatalog(id(selected)); return;
+        }
+        if (action === "publish") {
+          if ((definition.schema?.fields || []).some((field) => field.policy) && !confirm("Publish this revision? Policy-marked copy is included in this template.")) return;
+          await api(`${endpoint}/publish?variant=${encodeURIComponent(selected.variant)}`, { method: "POST", body: JSON.stringify({ revision }) });
+          setStatus(`Revision ${revision} published.`); await refreshCatalog(id(selected)); return;
+        }
+        if (action === "test") {
+          await api(`${endpoint}/test?variant=${encodeURIComponent(selected.variant)}`, { method: "POST", body: JSON.stringify({ revision }) }); setStatus("Protected test sent to the configured admin inbox."); return;
+        }
+        if (action === "history") {
+          const payload = await api(`${endpoint}/history?variant=${encodeURIComponent(selected.variant)}`);
+          historyPanel.hidden = !historyPanel.hidden;
+          historyPanel.replaceChildren(...(payload.history || []).map((item) => {
+            const row = make("div", "email-preview-history-row", `Revision ${item.revision} · ${item.status} · ${item.updated_at}`);
+            const restore = button("Restore as Draft", "restore"); restore.dataset.revision = item.revision; row.append(restore); return row;
+          }));
+        }
+      } catch (error) { setStatus(error.payload?.errors?.join(" ") || error.message, true); }
+    });
+    historyPanel.addEventListener("click", async (event) => {
+      if (event.target.dataset.action !== "restore") return;
+      try {
+        const endpoint = `/api/admin/notifications/templates/${encodeURIComponent(selected.templateKey)}/restore?variant=${encodeURIComponent(selected.variant)}`;
+        await api(endpoint, { method: "POST", body: JSON.stringify({ revision: Number(event.target.dataset.revision), baseRevision: revision || definition.published?.revision || 0 }) });
+        historyPanel.hidden = true; await refreshCatalog(id(selected));
+      } catch (error) { setStatus(error.message, true); }
+    });
+    displayControls.addEventListener("click", async (event) => {
+      const action = event.target.dataset.action; if (!action) return;
+      if (action === "desktop" || action === "mobile") { frame.classList.toggle("is-mobile", action === "mobile"); }
+      if (action === "html" || action === "text") { iframe.hidden = action === "text"; plain.hidden = action === "html"; }
+      if (action === "published" || action === "draft") {
+        const params = new URLSearchParams({ templateKey: selected.templateKey, variant: selected.variant, source: action });
+        try { renderMeta(await api(`/api/admin/notifications/preview?${params}`)); } catch (error) { setStatus(error.message, true); }
+      }
+      [...displayControls.querySelectorAll("button")].forEach((button) => {
+        if (["desktop", "mobile"].includes(action) && ["desktop", "mobile"].includes(button.dataset.action)) button.classList.toggle("is-active", button.dataset.action === action);
+        if (["html", "text"].includes(action) && ["html", "text"].includes(button.dataset.action)) button.classList.toggle("is-active", button.dataset.action === action);
+        if (["published", "draft"].includes(action) && ["published", "draft"].includes(button.dataset.action)) button.classList.toggle("is-active", button.dataset.action === action);
+      });
+    });
+    refreshCatalog().catch((error) => setStatus(error.status === 401 ? "Admin authentication required. Open Studio and enter the bearer token first." : error.message, true));
+  }
   document.querySelectorAll("[data-email-preview]").forEach(init);
 })();

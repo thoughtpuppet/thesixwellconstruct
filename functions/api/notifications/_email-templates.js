@@ -1,4 +1,10 @@
 import { renderClientEmail } from "./_email-renderer.js";
+import {
+  editableEmailContent,
+  emailContentSchema,
+  renderEmailContent,
+  validateEmailContent,
+} from "./_email-content.js";
 
 function list(values) {
   return (Array.isArray(values) ? values : []).filter((entry) => String(entry || "").trim());
@@ -17,6 +23,9 @@ function constructSignature(closing = "") {
 export function buildTattooDraftResumeEmail(data) {
   const expiration = data.expiration ? `Current expiration: ${data.expiration}.` : "";
   return renderClientEmail({
+    templateKey: "tattoo_build_draft_resume",
+    templateVariant: data.variant || "build",
+    variables: { draft_label: data.label, expiration_line: expiration },
     theme: "tattoo",
     subject: data.subject,
     preheader: "Your private draft link and what to know before continuing.",
@@ -40,6 +49,9 @@ export function buildTattooDraftResumeEmail(data) {
 export function buildSubmissionReceivedEmail(data) {
   const requested = list(data.requestedSheetDesigns);
   return renderClientEmail({
+    templateKey: "submission_received",
+    templateVariant: data.variant || "custom",
+    variables: { client_name: data.clientName || "there", submission_label: data.label, support_email: data.supportEmail, review_line: data.reviewLine },
     theme: "tattoo",
     subject: data.subject,
     preheader: "Your submission reference, review expectations, and next steps.",
@@ -53,6 +65,7 @@ export function buildSubmissionReceivedEmail(data) {
       requested.length ? {
         title: "Requested sheet designs:",
         paragraphs: requested,
+        editableParagraphs: false,
       } : null,
       {
         title: "What happens next",
@@ -70,7 +83,13 @@ export function buildSubmissionReceivedEmail(data) {
 export function buildBookingLinkEmail(data) {
   const consultation = Boolean(data.consultation);
   const approvedDesigns = list(data.approvedSheetDesigns);
+  const budgetNotice = data.approvedBudget
+    ? "Review and agree to this project-total range in the private booking link before choosing an appointment. The tattoo deposit is applied to the final tattoo cost."
+    : "";
   return renderClientEmail({
+    templateKey: "booking_link_created",
+    templateVariant: consultation ? "consultation" : "tattoo",
+    variables: { client_name: data.clientName || "there", budget_notice: budgetNotice },
     theme: "tattoo",
     subject: data.subject,
     preheader: consultation
@@ -90,10 +109,12 @@ export function buildBookingLinkEmail(data) {
       approvedDesigns.length ? {
         title: "Approved sheet designs:",
         paragraphs: approvedDesigns,
+        editableParagraphs: false,
       } : null,
       {
         title: consultation ? "Available consultation option" : "Approved tattoo session options",
         paragraphs: [data.sessionOptions],
+        editableParagraphs: false,
       },
     ],
     details: [
@@ -116,9 +137,7 @@ export function buildBookingLinkEmail(data) {
       },
     ],
     notice: [
-      data.approvedBudget
-        ? "Review and agree to this project-total range in the private booking link before choosing an appointment. The tattoo deposit is applied to the final tattoo cost."
-        : "",
+      budgetNotice,
       consultation
         ? "The consultation fee is non-refundable and is not a tattoo deposit. Paying schedules only the prerequisite consultation; the tattoo remains unbooked until consultation completion, a final session plan, and a separate tattoo booking link."
         : "This link is private to your project. Tattoo deposits are non-refundable and go toward the final cost of the scheduled tattoo. Personalized aftercare instructions are provided at the appointment.",
@@ -179,6 +198,9 @@ export function buildAppointmentConfirmedEmail(data) {
     href: resource.href,
   }));
   return renderClientEmail({
+    templateKey: data.templateKey || (data.kind === "studio" ? "studio_booking_confirmed" : data.kind === "consultation_in_person" ? "consultation_confirmed_in_person" : data.kind === "consultation_virtual" ? "consultation_confirmed_virtual" : data.kind === "build_session" ? "build_session_confirmed" : "appointment_confirmed"),
+    templateVariant: data.variant || (data.kind === "tattoo" ? (data.tipText ? "tip" : "tattoo") : "default"),
+    variables: { client_name: data.clientName || "there" },
     theme: profile.theme,
     subject: data.subject,
     preheader: "Date, time, payment details, and everything you need before arriving.",
@@ -207,6 +229,9 @@ export function buildAppointmentRescheduledEmail(data) {
   const studio = data.kind === "studio";
   const theme = studio ? "construct_studio" : "tattoo";
   return renderClientEmail({
+    templateKey: "appointment_rescheduled",
+    templateVariant: studio ? "studio" : (data.variant || "tattoo"),
+    variables: { client_name: data.clientName || "there", appointment_label: data.label },
     theme,
     subject: data.subject,
     preheader: `Your updated ${data.label} time and confirmation details.`,
@@ -236,6 +261,9 @@ export function buildAppointmentRescheduledEmail(data) {
 export function buildAppointmentCancelledEmail(data) {
   const studio = data.kind === "studio";
   return renderClientEmail({
+    templateKey: "appointment_cancelled",
+    templateVariant: data.variant || (studio ? "studio" : "tattoo"),
+    variables: { client_name: data.clientName || "there", occasion: data.occasion, support_email: data.supportEmail },
     theme: studio ? "construct_studio" : "tattoo",
     subject: data.subject,
     preheader: `Cancellation details for your ${data.occasion}.`,
@@ -262,6 +290,9 @@ export function buildAppointmentReminderEmail(data) {
   const studio = data.kind === "studio";
   const virtual = data.kind === "consultation_virtual";
   return renderClientEmail({
+    templateKey: "appointment_reminder_24h",
+    templateVariant: data.variant || (studio ? "studio" : virtual ? "virtual" : "tattoo"),
+    variables: { client_name: data.clientName || "there", occasion: data.occasion, brand: data.brand },
     theme: studio ? "construct_studio" : "tattoo",
     subject: data.subject,
     preheader: `Your ${data.occasion} is tomorrow. Review the time and arrival details.`,
@@ -290,6 +321,9 @@ export function buildAppointmentReminderEmail(data) {
 
 export function buildEventTicketPaidEmail(data) {
   return renderClientEmail({
+    templateKey: "event_ticket_paid",
+    templateVariant: data.variant || "default",
+    variables: { client_name: data.clientName || "there", event_title: data.title },
     theme: "construct_event",
     subject: data.subject,
     preheader: `Your admission details for ${data.title}.`,
@@ -314,6 +348,9 @@ export function buildEventTicketPaidEmail(data) {
 
 export function buildEventTicketCancelledEmail(data) {
   return renderClientEmail({
+    templateKey: "event_ticket_cancelled",
+    templateVariant: data.variant || "refunded",
+    variables: { client_name: data.clientName || "there", event_title: data.title },
     theme: "construct_event",
     subject: data.subject,
     preheader: `Cancellation and refund details for ${data.title}.`,
@@ -333,6 +370,9 @@ export function buildEventTicketCancelledEmail(data) {
 
 export function buildEventOpenMicSlotEmail(data) {
   return renderClientEmail({
+    templateKey: "event_open_mic_slot",
+    templateVariant: data.variant || "default",
+    variables: { performer_name: data.performerName || "there", event_title: data.title },
     theme: "construct_event",
     subject: data.subject,
     preheader: `Your assigned performance time for ${data.title}.`,
@@ -355,6 +395,9 @@ export function buildEventOpenMicSlotEmail(data) {
 
 export function buildEventReminderEmail(data) {
   return renderClientEmail({
+    templateKey: "event_ticket_reminder_24h",
+    templateVariant: data.variant || "default",
+    variables: { client_name: data.clientName || "there", event_title: data.title },
     theme: "construct_event",
     subject: data.subject,
     preheader: `${data.title} is tomorrow. Review the time and admission details.`,
@@ -376,10 +419,75 @@ export function buildEventReminderEmail(data) {
   });
 }
 
+export function buildAdminNotificationEmail(data) {
+  const theme = ["tattoo", "construct_event", "construct_studio"].includes(data.theme)
+    ? data.theme
+    : "construct_studio";
+  const source = theme === "tattoo" ? "art.pill" : theme === "construct_event" ? "event" : "studio";
+  return renderClientEmail({
+    templateKey: data.templateKey || "admin_test",
+    templateVariant: data.variant || source,
+    variables: { admin_subject: data.subject },
+    theme,
+    subject: data.subject,
+    preheader: data.preheader || "A new Studio notification is ready for review.",
+    classification: data.classification || `${source.toUpperCase()} ADMIN ALERT`,
+    headline: data.headline || data.subject,
+    sections: [{
+      id: "notification_details",
+      title: data.sectionTitle || "Notification details",
+      paragraphs: list(data.lines),
+      editableParagraphs: false,
+    }],
+    primaryAction: data.studioUrl ? { label: "Open Studio", href: data.studioUrl } : null,
+    signature: constructSignature(),
+    footer: ["Internal administrative correspondence."],
+  });
+}
+
+export function buildCrmFollowupEmail(data) {
+  const theme = data.theme === "tattoo" ? "tattoo" : "construct_studio";
+  return renderClientEmail({
+    templateKey: "crm_relationship_followup",
+    templateVariant: theme,
+    variables: {},
+    theme,
+    subject: data.subject,
+    preheader: data.preheader || "A personal note from the studio.",
+    classification: data.classification || "STUDIO CORRESPONDENCE",
+    headline: data.headline || "A note from the studio.",
+    intro: list(String(data.body || "").split(/\n\s*\n/)),
+    signature: theme === "tattoo" ? tattooSignature(true) : constructSignature("Warmly,"),
+  });
+}
+
+export function buildCommunicationPreferencesEmail(data) {
+  return renderClientEmail({
+    templateKey: "crm_communication_preferences",
+    templateVariant: "construct_studio",
+    variables: {},
+    theme: "construct_studio",
+    subject: "Manage your Six.Well communication preferences",
+    preheader: "Review or change how the studio contacts you.",
+    classification: "COMMUNICATION PREFERENCES",
+    headline: "Your communication settings are ready.",
+    intro: ["Use the secure link below to review or change your Six.Well email preferences."],
+    primaryAction: { label: "Manage preferences", href: data.url },
+    notice: ["This link expires in 30 minutes. If you did not request it, you can ignore this email."],
+    signature: constructSignature(),
+  });
+}
+
 const PREVIEW_CATALOG = Object.freeze([
-  { templateKey: "tattoo_build_draft_resume", variant: "build", label: "Saved Build draft", brand: "tattoo", stage: "inquiry" },
+  { templateKey: "tattoo_build_draft_resume", variant: "build", label: "Saved Build draft", brand: "tattoo", audience: "client", stage: "inquiry" },
+  { templateKey: "tattoo_build_draft_resume", variant: "maze", label: "Saved Maze draft", brand: "tattoo", audience: "client", stage: "inquiry" },
   { templateKey: "submission_received", variant: "custom", label: "Custom project receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "submission_received", variant: "flash", label: "Flash claim receipt", brand: "tattoo", stage: "inquiry" },
+  { templateKey: "submission_received", variant: "build", label: "Build brief receipt", brand: "tattoo", stage: "inquiry" },
+  { templateKey: "submission_received", variant: "maze", label: "Maze submission receipt", brand: "tattoo", stage: "inquiry" },
+  { templateKey: "submission_received", variant: "special", label: "Special project receipt", brand: "tattoo", stage: "inquiry" },
+  { templateKey: "submission_received", variant: "consultation", label: "Consultation request receipt", brand: "tattoo", stage: "inquiry" },
+  { templateKey: "submission_received", variant: "build_session", label: "Build-session request receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "booking_link_created", variant: "tattoo", label: "Private tattoo booking link", brand: "tattoo", stage: "booking" },
   { templateKey: "booking_link_created", variant: "consultation", label: "Prerequisite consultation link", brand: "tattoo", stage: "booking" },
   { templateKey: "appointment_confirmed", variant: "tattoo", label: "Tattoo appointment confirmed", brand: "tattoo", stage: "appointment" },
@@ -390,9 +498,12 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "appointment_rescheduled", variant: "tattoo", label: "Tattoo appointment rescheduled", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_cancelled", variant: "tattoo", label: "Tattoo appointment cancelled", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_cancelled", variant: "consultation", label: "Consultation cancelled", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_cancelled", variant: "prerequisite", label: "Prerequisite consultation cancelled", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_cancelled", variant: "build", label: "Build session cancelled", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_reminder_24h", variant: "tattoo", label: "Tattoo appointment reminder", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_reminder_24h", variant: "virtual", label: "Virtual consultation reminder", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_reminder_24h", variant: "consultation", label: "In-person consultation reminder", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_reminder_24h", variant: "build", label: "Build session reminder", brand: "tattoo", stage: "appointment" },
   { templateKey: "studio_booking_confirmed", variant: "default", label: "Studio booking confirmed", brand: "studio", stage: "studio" },
   { templateKey: "appointment_rescheduled", variant: "studio", label: "Studio booking rescheduled", brand: "studio", stage: "studio" },
   { templateKey: "appointment_cancelled", variant: "studio", label: "Studio booking cancelled", brand: "studio", stage: "studio" },
@@ -402,10 +513,22 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "event_ticket_cancelled", variant: "no_refund", label: "Event ticket cancelled without refund", brand: "events", stage: "events" },
   { templateKey: "event_ticket_reminder_24h", variant: "default", label: "Event reminder", brand: "events", stage: "events" },
   { templateKey: "event_open_mic_slot", variant: "default", label: "Open-mic slot assigned", brand: "events", stage: "events" },
+  { templateKey: "admin_submission_received", variant: "tattoo", label: "New tattoo submission alert", brand: "tattoo", audience: "admin", stage: "admin" },
+  { templateKey: "admin_appointment_confirmed", variant: "tattoo", label: "Tattoo appointment admin alert", brand: "tattoo", audience: "admin", stage: "admin" },
+  { templateKey: "admin_appointment_confirmed", variant: "construct_studio", label: "Studio booking admin alert", brand: "studio", audience: "admin", stage: "admin" },
+  { templateKey: "admin_appointment_rescheduled", variant: "tattoo", label: "Tattoo reschedule admin alert", brand: "tattoo", audience: "admin", stage: "admin" },
+  { templateKey: "admin_appointment_rescheduled", variant: "construct_studio", label: "Studio reschedule admin alert", brand: "studio", audience: "admin", stage: "admin" },
+  { templateKey: "admin_event_waitlist_received", variant: "construct_event", label: "Event waitlist admin alert", brand: "events", audience: "admin", stage: "admin" },
+  { templateKey: "admin_event_open_mic_received", variant: "construct_event", label: "Open mic admin alert", brand: "events", audience: "admin", stage: "admin" },
+  { templateKey: "admin_event_ticket_paid", variant: "construct_event", label: "Event ticket admin alert", brand: "events", audience: "admin", stage: "admin" },
+  { templateKey: "admin_test", variant: "construct_studio", label: "Administrative test notification", brand: "studio", audience: "admin", stage: "admin" },
+  { templateKey: "crm_relationship_followup", variant: "construct_studio", label: "CRM relationship email - Six.Well", brand: "studio", audience: "crm", stage: "relationship", omitEditable: ["subject", "preheader", "intro"] },
+  { templateKey: "crm_relationship_followup", variant: "tattoo", label: "CRM relationship email - art.pill", brand: "tattoo", audience: "crm", stage: "relationship", omitEditable: ["subject", "preheader", "intro"] },
+  { templateKey: "crm_communication_preferences", variant: "construct_studio", label: "Communication preferences link", brand: "studio", audience: "client", stage: "relationship" },
 ]);
 
 export function clientEmailPreviewCatalog() {
-  return PREVIEW_CATALOG.map((entry) => ({ ...entry }));
+  return PREVIEW_CATALOG.map((entry) => ({ audience: "client", ...entry }));
 }
 
 const SAMPLE = Object.freeze({
@@ -456,28 +579,34 @@ export function renderClientEmailPreview(templateKey, variant = "") {
 
   if (key === "tattoo_build_draft_resume") {
     rendered = buildTattooDraftResumeEmail({
-      subject: "Continue your art.pill Build Your Own draft",
-      label: "Build Your Own draft",
-      resumeUrl: "https://thesixwellconstruct.com/tattoos/build/#resume=demo-private-token",
+      variant: mode || "build",
+      subject: mode === "maze" ? "Continue your art.pill Maze Studio draft" : "Continue your art.pill Build Your Own draft",
+      label: mode === "maze" ? "Maze Studio draft" : "Build Your Own draft",
+      resumeUrl: mode === "maze" ? "https://thesixwellconstruct.com/tattoos/build/maze/#resume=demo-private-token" : "https://thesixwellconstruct.com/tattoos/build/#resume=demo-private-token",
       expiration: "August 18, 2026",
     });
   } else if (key === "submission_received") {
     const flash = mode === "flash";
+    const profiles = {
+      custom: ["custom tattoo project", "The studio will review the concept, placement, scale, references, budget, and timing before deciding the next step.", "If the project is a fit, you will receive the appropriate next step or a private tattoo-booking link."],
+      flash: ["flash claim", "The studio will review placement, scale, budget, and the selected flash record.", "If your claim is approved while the design is still available, you will receive a private tattoo-booking link."],
+      build: ["Build Your Own submission", "The studio will review your symbols, composition, placement, scale, and budget.", "If the project is a fit, the Studio will send the appropriate next step."],
+      maze: ["Maze Studio submission", "The studio will review the generated maze, placement, scale, and project notes.", "If the project is a fit, the Studio will send the appropriate next step."],
+      special: ["special project application", "The studio will review the application, scope, placement, references, budget, and timing.", "If the project is a fit, the Studio will contact you with the next step."],
+      consultation: ["consultation request", "Your selected consultation time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
+      build_session: ["Build session request", "Your selected Build session time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
+    };
+    const profile = profiles[mode] || profiles.custom;
     rendered = buildSubmissionReceivedEmail({
-      subject: flash
-        ? "art.pill TATTOO HOUSE - Flash claim received"
-        : "art.pill TATTOO HOUSE - Custom tattoo project received",
+      variant: mode || "custom",
+      subject: `art.pill TATTOO HOUSE - ${profile[0]} received`,
       clientName: SAMPLE.clientName,
-      label: flash ? "flash claim" : "custom tattoo project",
+      label: profile[0],
       submissionId: "demo-submission-014",
       requestedSheetDesigns: flash ? ["A is Moth - placement: Forearm - scale: 4 in"] : [],
-      expectation: flash
-        ? "The studio will review placement, scale, budget, and the selected flash record. Multiple claims may be reviewed; the design is reserved only when the first compatible claim is approved."
-        : "The studio will review the concept, placement, scale, references, budget, and timing before deciding the next step.",
-      next: flash
-        ? "If your claim is approved while the design is still available, you will receive a private tattoo-booking link."
-        : "If the project is a fit, you will receive the appropriate next step or a private tattoo-booking link.",
-      reviewLine: "Most project submissions are reviewed within 5-7 business days.",
+      expectation: profile[1],
+      next: profile[2],
+      reviewLine: ["consultation", "build_session"].includes(mode) ? "Complete checkout to keep the selected time." : "Most project submissions are reviewed within 5-7 business days.",
       supportEmail: SAMPLE.supportEmail,
     });
   } else if (key === "booking_link_created") {
@@ -564,18 +693,20 @@ export function renderClientEmailPreview(templateKey, variant = "") {
   } else if (key === "appointment_cancelled") {
     const studio = mode === "studio";
     const consultation = mode === "consultation";
+    const prerequisite = mode === "prerequisite";
     const build = mode === "build";
-    const occasion = studio ? "studio booking" : build ? "Build session" : consultation ? "consultation" : "appointment";
+    const occasion = studio ? "studio booking" : build ? "Build session" : prerequisite ? "project consultation" : consultation ? "consultation" : "appointment";
     rendered = buildAppointmentCancelledEmail({
+      variant: mode || "tattoo",
       kind: studio ? "studio" : "tattoo",
       subject: `Your ${occasion.toLowerCase()} has been cancelled`,
       clientName: SAMPLE.clientName,
       occasion,
       scheduled: SAMPLE.when,
-      session: studio ? "Studio Gathering" : build ? "In-Person Build Session" : consultation ? "In-Person Consultation" : SAMPLE.session,
+      session: studio ? "Studio Gathering" : build ? "In-Person Build Session" : consultation || prerequisite ? "In-Person Consultation" : SAMPLE.session,
       policyText: studio
         ? "Per studio policy, deposits and payments are non-refundable. Cancellation is separate from the one-time reschedule option."
-        : consultation || build
+        : consultation || prerequisite || build
           ? "Per studio policy, reservation fees are non-refundable. One reschedule is allowed with at least 48 hours notice; a new reservation fee is required for reschedules made within 48 hours."
           : "Per studio policy, deposits and payments are non-refundable. Cancellation is separate from the one-time reschedule option.",
       rebookUrl: build
@@ -585,30 +716,40 @@ export function renderClientEmailPreview(templateKey, variant = "") {
           : "",
       nextText: studio
         ? "Reply to this email if you would like help planning another date."
+        : prerequisite
+          ? "This consultation belongs to your reviewed tattoo project. Contact the studio to continue that project; do not start a separate public consultation."
         : "Contact the studio if you want to discuss a future project or appointment.",
       supportEmail: SAMPLE.supportEmail,
     });
   } else if (key === "appointment_reminder_24h") {
     const studio = mode === "studio";
     const virtual = mode === "virtual";
+    const build = mode === "build";
+    const consultation = mode === "consultation";
     rendered = buildAppointmentReminderEmail({
       kind: studio ? "studio" : virtual ? "consultation_virtual" : "tattoo",
+      variant: mode || "tattoo",
       subject: studio
         ? "Reminder: Your studio booking with the six.well construct is tomorrow"
         : virtual
           ? "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow"
+          : build
+            ? "Reminder: Your Build session with art.pill TATTOO HOUSE is tomorrow"
+            : consultation
+              ? "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow"
           : "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow",
-      occasion: studio ? "studio booking" : virtual ? "consultation" : "tattoo appointment",
+      occasion: studio ? "studio booking" : build ? "Build session" : virtual || consultation ? "consultation" : "tattoo appointment",
       brand: studio ? "the six.well construct" : "art.pill TATTOO HOUSE",
       clientName: SAMPLE.clientName,
       when: SAMPLE.when,
-      session: studio ? "Studio Gathering" : virtual ? "Virtual Consultation" : SAMPLE.session,
+      session: studio ? "Studio Gathering" : build ? "In-Person Build Session" : virtual ? "Virtual Consultation" : consultation ? "In-Person Consultation" : SAMPLE.session,
       zoomUrl: virtual ? SAMPLE.zoomUrl : "",
       calendarUrl: SAMPLE.calendarUrl,
       resources: studio || virtual ? [] : [
         { label: "Day-of instructions", href: SAMPLE.dayOfInstructionsUrl },
         { label: "Location & parking", href: SAMPLE.locationParkingUrl },
       ],
+      notice: build || virtual || consultation || studio ? "" : "Personalized aftercare instructions will be provided at your appointment.",
     });
   } else if (key === "event_ticket_paid") {
     rendered = buildEventTicketPaidEmail({
@@ -623,6 +764,7 @@ export function renderClientEmailPreview(templateKey, variant = "") {
     });
   } else if (key === "event_ticket_cancelled") {
     rendered = buildEventTicketCancelledEmail({
+      variant: mode || "refunded",
       subject: `Your ticket for ${SAMPLE.eventTitle} was cancelled`,
       title: SAMPLE.eventTitle,
       clientName: SAMPLE.clientName,
@@ -652,6 +794,29 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       where: SAMPLE.eventWhere,
       eventUrl: "https://thesixwellconstruct.com/events/cultandshift/",
     });
+  } else if (key === "crm_relationship_followup") {
+    rendered = buildCrmFollowupEmail({
+      theme: mode === "tattoo" ? "tattoo" : "construct_studio",
+      subject: "A note from the studio",
+      preheader: "Following up after your recent visit.",
+      body: "Hi Jordan,\n\nIt was good to see you at the studio. I wanted to follow up and see how everything is settling in.\n\nReply whenever you have a moment.",
+    });
+  } else if (key === "crm_communication_preferences") {
+    rendered = buildCommunicationPreferencesEmail({
+      url: "https://thesixwellconstruct.com/communication-preferences/?token=demo-secure-token",
+    });
+  } else if (key.startsWith("admin_") || key === "admin_test") {
+    const event = mode === "construct_event" || key.includes("event");
+    const tattoo = mode === "tattoo" || key.includes("submission") || key.includes("appointment");
+    rendered = buildAdminNotificationEmail({
+      templateKey: key,
+      variant: mode || (event ? "construct_event" : tattoo ? "tattoo" : "construct_studio"),
+      theme: event ? "construct_event" : tattoo ? "tattoo" : "construct_studio",
+      subject: "Studio notification: sample record",
+      headline: "A new record needs review.",
+      lines: ["Reference: demo-record-014", "Name: Jordan Rivera", "Status: ready for review"],
+      studioUrl: "https://thesixwellconstruct.com/studio/",
+    });
   }
 
   if (!rendered) return null;
@@ -659,5 +824,34 @@ export function renderClientEmailPreview(templateKey, variant = "") {
     templateKey: key,
     variant: mode,
     ...rendered,
+  };
+}
+
+export function emailTemplateDefinition(templateKey, variant = "") {
+  const catalog = clientEmailPreviewCatalog();
+  const entry = catalog.find((item) => item.templateKey === templateKey && item.variant === variant)
+    || catalog.find((item) => item.templateKey === templateKey);
+  if (!entry) return null;
+  const rendered = renderClientEmailPreview(entry.templateKey, entry.variant);
+  if (!rendered?.semantic) return null;
+  const options = { omit: entry.omitEditable || [] };
+  return {
+    ...entry,
+    defaultContent: editableEmailContent(rendered.semantic, options),
+    schema: emailContentSchema(rendered.semantic, options),
+    rendered,
+    options,
+  };
+}
+
+export function renderEmailTemplateContent(templateKey, variant, content) {
+  const definition = emailTemplateDefinition(templateKey, variant);
+  if (!definition) return null;
+  const validation = validateEmailContent(definition.rendered.semantic, content, definition.options);
+  if (!validation.ok) return { definition, validation, rendered: null };
+  return {
+    definition,
+    validation,
+    rendered: renderEmailContent(definition.rendered.semantic, validation.content, definition.options),
   };
 }

@@ -78,6 +78,7 @@ import {
   reapStalePendingTickets,
 } from "./functions/api/events/_lib.js";
 import {
+  handleAdminEmailTemplates,
   handleAdminPreviewNotification,
   handleAdminResendNotification,
   retryPendingAdminAppointmentNotifications,
@@ -763,8 +764,12 @@ async function handleNotificationsApi(request, env) {
   }
 
   if (pathname === "/api/admin/notifications/preview") {
-    if (method !== "GET") return methodNotAllowed(method, ["GET"]);
+    if (!["GET", "POST"].includes(method)) return methodNotAllowed(method, ["GET", "POST"]);
     return handleAdminPreviewNotification(request, env);
+  }
+
+  if (pathname === "/api/admin/notifications/templates" || pathname.startsWith("/api/admin/notifications/templates/")) {
+    return handleAdminEmailTemplates(request, env);
   }
 
   return notFound("Unknown notifications API route.");

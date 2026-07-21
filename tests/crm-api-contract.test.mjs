@@ -697,6 +697,9 @@ test("individual follow-up email completes its task only after provider acceptan
       async send(message) {
         sends += 1;
         assert.equal(message.to, "followup@example.test");
+        assert.match(message.html, /art\.pill TATTOO HOUSE/);
+        assert.match(message.html, /Inbox preview for the healed-work note/);
+        assert.match(message.text, /Reply if you would like me/);
         return { messageId: "email-message-1" };
       },
     },
@@ -706,6 +709,8 @@ test("individual follow-up email completes its task only after provider acceptan
     channel: "email",
     followupId,
     subject: "How is everything healing?",
+    preheader: "Inbox preview for the healed-work note",
+    emailTheme: "tattoo",
     bodyText: "Reply if you would like me to look at anything.",
     requestId: "followup-request-1",
   };
@@ -716,6 +721,8 @@ test("individual follow-up email completes its task only after provider acceptan
   }));
   assert.equal(result.response.status, 200, JSON.stringify(result.payload));
   assert.equal(result.payload.communication.status, "accepted");
+  assert.equal(result.payload.communication.preheader, sendBody.preheader);
+  assert.equal(result.payload.communication.email_theme, "tattoo");
   assert.equal(database.prepare("SELECT status FROM crm_followups WHERE id=?").get(followupId).status, "done");
   assert.equal(sends, 1);
 

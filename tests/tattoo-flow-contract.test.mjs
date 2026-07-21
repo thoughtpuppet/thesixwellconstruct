@@ -48,6 +48,7 @@ import {
 } from "../functions/api/booking/_lib.js";
 import { ingestCrmSourceRecord } from "../functions/api/crm/ingest.js";
 import {
+  handleAdminEmailTemplates,
   handleAdminPreviewNotification,
   handleAdminResendNotification,
   notifyAdminAppointmentConfirmed,
@@ -2840,14 +2841,14 @@ test("client email renderer escapes dynamic HTML and rejects unsafe action URLs"
 
 test("protected client email preview exposes only approved canned variants", async () => {
   const token = "preview-admin-token";
-  const unauthorized = handleAdminPreviewNotification(
+  const unauthorized = await handleAdminPreviewNotification(
     new Request("https://example.test/api/admin/notifications/preview"),
     { SUBMISSIONS_ADMIN_TOKEN: token },
   );
   assert.equal(unauthorized.status, 401);
 
   const headers = { Authorization: `Bearer ${token}` };
-  const catalogResponse = handleAdminPreviewNotification(
+  const catalogResponse = await handleAdminPreviewNotification(
     new Request("https://example.test/api/admin/notifications/preview", { headers }),
     { SUBMISSIONS_ADMIN_TOKEN: token },
   );
@@ -2856,7 +2857,7 @@ test("protected client email preview exposes only approved canned variants", asy
   assert.ok(catalogPayload.templates.length >= 25);
   assert.equal(JSON.stringify(catalogPayload).includes("client@example"), false);
 
-  const previewResponse = handleAdminPreviewNotification(
+  const previewResponse = await handleAdminPreviewNotification(
     new Request(
       "https://example.test/api/admin/notifications/preview?templateKey=appointment_confirmed&variant=tip",
       { headers },
@@ -2869,7 +2870,7 @@ test("protected client email preview exposes only approved canned variants", asy
   assert.equal(previewPayload.html, exact.html);
   assert.equal(previewPayload.text, exact.text);
 
-  const unsupported = handleAdminPreviewNotification(
+  const unsupported = await handleAdminPreviewNotification(
     new Request(
       "https://example.test/api/admin/notifications/preview?templateKey=appointment_confirmed&variant=client-controlled",
       { headers },
@@ -2877,6 +2878,128 @@ test("protected client email preview exposes only approved canned variants", asy
     { SUBMISSIONS_ADMIN_TOKEN: token },
   );
   assert.equal(unsupported.status, 404);
+});
+
+test("Studio email templates save, validate, preview, test, publish, and restore revisions", async () => {
+  const database = migratedDatabase();
+  const sent = [];
+  const token = "email-template-admin";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: token,
+    ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: "template-test" }; } },
+  };
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const base = "https://example.test/api/admin/notifications/templates/appointment_confirmed";
+
+  const initialResponse = await handleAdminEmailTemplates(new Request(`${base}?variant=tattoo`, { headers }), env);
+  assert.equal(initialResponse.status, 200);
+  const initial = await initialResponse.json();
+  assert.equal(initial.draft, null);
+  assert.equal(initial.published, null);
+  assert.ok(initial.schema.allowedTokens.includes("client_name"));
+
+  const content = structuredClone(initial.defaultContent);
+  content.headline = "Your private appointment dossier is ready.";
+  const saveResponse = await handleAdminEmailTemplates(new Request(`${base}/draft?variant=tattoo`, {
+    method: "PUT", headers, body: JSON.stringify({ baseRevision: 0, content }),
+  }), env);
+  assert.equal(saveResponse.status, 200);
+  const saved = await saveResponse.json();
+  assert.equal(saved.draft.revision, 1);
+
+  const staleResponse = await handleAdminEmailTemplates(new Request(`${base}/draft?variant=tattoo`, {
+    method: "PUT", headers, body: JSON.stringify({ baseRevision: 0, content }),
+  }), env);
+  assert.equal(staleResponse.status, 409);
+
+  const invalid = structuredClone(content);
+  invalid.greeting = "Hello <script>alert(1)</script>";
+  const invalidResponse = await handleAdminEmailTemplates(new Request(`${base}/draft?variant=tattoo`, {
+    method: "PUT", headers, body: JSON.stringify({ baseRevision: 1, content: invalid }),
+  }), env);
+  assert.equal(invalidResponse.status, 422);
+
+  const previewResponse = await handleAdminPreviewNotification(new Request("https://example.test/api/admin/notifications/preview", {
+    method: "POST", headers, body: JSON.stringify({ templateKey: "appointment_confirmed", variant: "tattoo", content }),
+  }), env);
+  const preview = await previewResponse.json();
+  assert.match(preview.html, /private appointment dossier/);
+  assert.match(preview.text, /private appointment dossier/);
+
+  const testResponse = await handleAdminEmailTemplates(new Request(`${base}/test?variant=tattoo`, {
+    method: "POST", headers, body: JSON.stringify({ revision: 1 }),
+  }), env);
+  assert.equal(testResponse.status, 200);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, "studio@example.test");
+  assert.match(sent[0].subject, /^\[TEST\] /);
+
+  const publishResponse = await handleAdminEmailTemplates(new Request(`${base}/publish?variant=tattoo`, {
+    method: "POST", headers, body: JSON.stringify({ revision: 1 }),
+  }), env);
+  assert.equal(publishResponse.status, 200);
+  const published = await publishResponse.json();
+  assert.equal(published.published.revision, 1);
+
+  const restoreResponse = await handleAdminEmailTemplates(new Request(`${base}/restore?variant=tattoo`, {
+    method: "POST", headers, body: JSON.stringify({ revision: 1, baseRevision: 1 }),
+  }), env);
+  assert.equal(restoreResponse.status, 200);
+  const restored = await restoreResponse.json();
+  assert.equal(restored.draft.revision, 2);
+  assert.deepEqual(restored.draft.content, content);
+
+  const delivery = database.prepare(
+    "SELECT template_variant,template_revision,email_theme FROM notification_deliveries WHERE related_type='email_template_test'",
+  ).get();
+  assert.equal(delivery.template_variant, "tattoo");
+  assert.equal(delivery.template_revision, 1);
+  assert.equal(delivery.email_theme, "tattoo");
+});
+
+test("production email sends use only the published copy revision and keep live business data", async () => {
+  const database = migratedDatabase();
+  const sent = [];
+  const token = "published-template-admin";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: token,
+    EMAIL: { async send(message) { sent.push(message); return { messageId: "published-copy" }; } },
+  };
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const base = "https://example.test/api/admin/notifications/templates/submission_received";
+  const initial = await (await handleAdminEmailTemplates(new Request(`${base}?variant=custom`, { headers }), env)).json();
+  const content = structuredClone(initial.defaultContent);
+  content.headline = "Your {{submission_label}} is now inside the Studio dossier.";
+  let response = await handleAdminEmailTemplates(new Request(`${base}/draft?variant=custom`, {
+    method: "PUT", headers, body: JSON.stringify({ baseRevision: 0, content }),
+  }), env);
+  assert.equal(response.status, 200);
+  response = await handleAdminEmailTemplates(new Request(`${base}/publish?variant=custom`, {
+    method: "POST", headers, body: JSON.stringify({ revision: 1 }),
+  }), env);
+  assert.equal(response.status, 200);
+
+  const delivery = await notifySubmissionReceived(env, {
+    id: "published-template-submission",
+    type: "tattoo_inquiry",
+    contact_name: "Live Client",
+    contact_email: "live-client@example.test",
+    payload_json: JSON.stringify({}),
+  });
+  assert.equal(delivery.ok, true);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].html, /custom tattoo project is now inside the Studio dossier/);
+  assert.match(sent[0].html, /Hi Live Client/);
+  assert.match(sent[0].html, /published-template-submission/);
+  const recorded = database.prepare(
+    "SELECT template_variant,template_revision,email_theme FROM notification_deliveries WHERE related_id='published-template-submission' AND template_key='submission_received'",
+  ).get();
+  assert.equal(recorded.template_variant, "custom");
+  assert.equal(recorded.template_revision, 1);
+  assert.equal(recorded.email_theme, "tattoo");
 });
 
 test("studio cancellations and due reminders keep the six.well identity", async () => {

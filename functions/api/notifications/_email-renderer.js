@@ -357,6 +357,9 @@ export function renderClientEmail(message) {
     text,
     html,
     theme: theme.id,
+    templateKey: value(message.templateKey),
+    templateVariant: value(message.templateVariant) || "default",
+    semantic: JSON.parse(JSON.stringify(message)),
   };
 }
 
