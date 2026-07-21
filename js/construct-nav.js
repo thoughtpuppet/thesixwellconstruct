@@ -129,7 +129,24 @@
     document.head.appendChild(link);
   }
 
+  function ensureSelectMenuSystem() {
+    if (!document.querySelector('link[href^="/css/select-menu.css"]')) {
+      var selectStyles = document.createElement('link');
+      selectStyles.rel = 'stylesheet';
+      selectStyles.href = '/css/select-menu.css?v=1';
+      selectStyles.setAttribute('data-sixwell-select-menu-styles', 'true');
+      document.head.appendChild(selectStyles);
+    }
+    if (!window.SixWellSelectMenu && !document.querySelector('script[src^="/js/select-menu.js"]')) {
+      var selectScript = document.createElement('script');
+      selectScript.src = '/js/select-menu.js?v=2';
+      selectScript.setAttribute('data-sixwell-select-menu-script', 'true');
+      document.body.appendChild(selectScript);
+    }
+  }
+
   refreshVentureColors();
+  ensureSelectMenuSystem();
 
   /* ── CONFIGURATION ────────────────────────────────────────
      All visual values live here. Adjust freely.

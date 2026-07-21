@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
 <link rel="stylesheet" href="/studio/people-manager.css?v=4">
+<link rel="stylesheet" href="/css/select-menu.css?v=1">
 <style>
   :root {
     color-scheme: dark;
@@ -92,36 +93,7 @@
   }
   select:focus,input:focus,textarea:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
 
-  /* Custom dropdown — replaces native <select> for full hover/option styling control */
-  .custom-select { position:relative; width:100%; }
-  .native-select-hidden, .native-input-hidden { position:absolute; opacity:0; width:1px; height:1px; padding:0; border:0; margin:0; pointer-events:none; }
-  .custom-select-trigger {
-    width:100%; display:flex; align-items:center; justify-content:space-between;
-    background:var(--bg); color:#FCB867; border:5px solid var(--ring-faint);
-    font-family:inherit; font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
-    padding:10px 12px; cursor:pointer; transition:border-color var(--t-fast);
-  }
-  .custom-select-trigger:hover { border-color:var(--accent); }
-  .custom-select-arrow {
-    width:12px; height:8px; flex:none; margin-left:8px;
-    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FCB867' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat center / contain;
-  }
-  .custom-select-list {
-    display:none; list-style:none; margin:0; padding:0;
-    position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:10;
-    background:var(--bg); border:5px solid var(--ring-faint);
-    max-height:240px; overflow-y:auto;
-    scrollbar-color: var(--accent) transparent; scrollbar-width: thin;
-  }
-  .custom-select.open .custom-select-list { display:block; }
-  .custom-select-list::-webkit-scrollbar { width:8px; background:transparent; }
-  .custom-select-list::-webkit-scrollbar-track { background:transparent; }
-  .custom-select-list::-webkit-scrollbar-thumb { background:var(--accent); border:2px solid transparent; background-clip:padding-box; }
-  .custom-select-option {
-    padding:10px 12px; font-family:inherit; font-weight:700; text-transform:uppercase; letter-spacing:0.07em;
-    color:#FCB867; cursor:pointer;
-  }
-  .custom-select-option:hover, .custom-select-option.is-selected { background:#FCB867; color:#0e0e0e; }
+  .native-input-hidden { position:absolute; opacity:0; width:1px; height:1px; padding:0; border:0; margin:0; pointer-events:none; }
 
   /* Custom date & time pickers — replace native input[type=time]/[type=datetime-local] */
   .datetimepicker, .timepicker { position:relative; width:100%; }
@@ -510,6 +482,7 @@
   </form>
 </div>
 
+<script src="/js/select-menu.js?v=2"></script>
 <script src="/studio/admin-collapse.js?v=2"></script>
 <script>
 (function(){
@@ -644,72 +617,14 @@
   function pad2(n) { return String(n).padStart(2, "0"); }
 
   function closeAllCustomPopups() {
-    document.querySelectorAll(".custom-select.open, .datetimepicker.open, .timepicker.open").forEach((el) => el.classList.remove("open"));
+    window.SixWellSelectMenu?.closeAll();
+    document.querySelectorAll(".datetimepicker.open, .timepicker.open").forEach((el) => el.classList.remove("open"));
   }
   document.addEventListener("click", (event) => {
-    document.querySelectorAll(".custom-select.open, .datetimepicker.open, .timepicker.open").forEach((el) => {
+    document.querySelectorAll(".datetimepicker.open, .timepicker.open").forEach((el) => {
       if (!el.contains(event.target)) el.classList.remove("open");
     });
   });
-
-  function enhanceSelect(select) {
-    if (select.dataset.enhanced) return;
-    select.dataset.enhanced = "1";
-
-    const wrap = document.createElement("div");
-    wrap.className = "custom-select";
-    select.insertAdjacentElement("beforebegin", wrap);
-    wrap.appendChild(select);
-    select.classList.add("native-select-hidden");
-
-    const trigger = document.createElement("button");
-    trigger.type = "button";
-    trigger.className = "custom-select-trigger";
-    trigger.innerHTML = `<span class="custom-select-value"></span><span class="custom-select-arrow"></span>`;
-    const valueLabel = trigger.querySelector(".custom-select-value");
-
-    const list = document.createElement("ul");
-    list.className = "custom-select-list";
-    list.setAttribute("role", "listbox");
-
-    function sync() {
-      list.innerHTML = "";
-      [...select.options].forEach((opt, index) => {
-        const li = document.createElement("li");
-        li.className = "custom-select-option" + (index === select.selectedIndex ? " is-selected" : "");
-        li.dataset.value = opt.value;
-        li.textContent = opt.textContent;
-        li.setAttribute("role", "option");
-        list.appendChild(li);
-      });
-      const opt = select.options[select.selectedIndex];
-      valueLabel.textContent = opt ? opt.textContent : "";
-    }
-
-    trigger.addEventListener("click", () => {
-      if (select.disabled) return;
-      const willOpen = !wrap.classList.contains("open");
-      closeAllCustomPopups();
-      if (willOpen) wrap.classList.add("open");
-    });
-
-    list.addEventListener("click", (event) => {
-      const li = event.target.closest(".custom-select-option");
-      if (!li) return;
-      if (select.value !== li.dataset.value) {
-        select.value = li.dataset.value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      sync();
-      wrap.classList.remove("open");
-    });
-
-    select.addEventListener("change", sync);
-    wrap.insertBefore(trigger, select);
-    wrap.appendChild(list);
-    select._customSync = sync;
-    sync();
-  }
 
   function formatTimeLabel(h, m) {
     const period = h < 12 ? "AM" : "PM";
@@ -918,7 +833,7 @@
   }
 
   function enhanceControls(root) {
-    root.querySelectorAll("select:not([data-enhanced])").forEach(enhanceSelect);
+    window.SixWellSelectMenu?.enhance(root);
     root.querySelectorAll('input[type="datetime-local"]:not([data-enhanced])').forEach(enhanceDateTimeInput);
     root.querySelectorAll('input[type="time"]:not([data-enhanced])').forEach(enhanceTimeInput);
   }

@@ -224,6 +224,7 @@
     const disabled = select.disabled || instance.options.length === 0;
     instance.trigger.disabled = disabled;
     instance.trigger.setAttribute("aria-disabled", String(disabled));
+    instance.trigger.setAttribute("aria-required", String(select.required));
     instance.root.classList.toggle("is-disabled", disabled);
     instance.root.classList.toggle("is-active", select.classList.contains("is-active"));
     if (!instance.root.classList.contains("open")) instance.activeIndex = selectedEnabledIndex(instance);
@@ -373,7 +374,7 @@
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["disabled", "hidden", "class", "label", "selected", "value", "aria-label", "aria-describedby"],
+      attributeFilter: ["disabled", "required", "hidden", "class", "label", "selected", "value", "aria-label", "aria-describedby"],
     });
   }
 
