@@ -5,6 +5,10 @@ const EVENT_SCHEMA_VERSION = "1";
 const MAX_BODY_BYTES = 32 * 1024;
 const MAX_EVENTS = 32;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// The account currently exposes a little over 26 weeks of Cloudflare RUM data.
+// Stay below that boundary so initial backfill and 12-month views request only
+// the history the source can actually return; D1 continues retaining 366 days.
+const RUM_LIVE_DAYS = 180;
 
 const ALLOWED_EVENTS = new Set([
   "page_view", "page_exit", "section_view", "navigation", "outbound_link", "cta",
@@ -194,6 +198,29 @@ function sourceState(ready, error = "", dataThrough = "") {
   return { state: ready ? "current" : "unavailable", ready, error, dataThrough, lastUpdated: ready ? new Date().toISOString() : "" };
 }
 
+function rumQueryWindow(range, now = new Date()) {
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const availableFrom = new Date(today.getTime() - RUM_LIVE_DAYS * DAY_MS);
+  if (range.end <= availableFrom) throw new Error("Cloudflare RUM history is outside the account retention window.");
+  const start = range.start < availableFrom ? availableFrom : range.start;
+  return {
+    range: { ...range, start, startIso: start.toISOString() },
+    partial: start > range.start,
+    coverageFrom: isoDate(start),
+  };
+}
+
+function readyRumState(data, dataThrough) {
+  const state = sourceState(true, "", dataThrough);
+  if (data?.sourcePartial) state.state = "partial";
+  state.coverage = { from: data?.sourceCoverageFrom || "", through: dataThrough };
+  if (data) {
+    delete data.sourcePartial;
+    delete data.sourceCoverageFrom;
+  }
+  return state;
+}
+
 function graphqlConfig(env) {
   const accountId = safeString(env.CLOUDFLARE_ACCOUNT_ID, 64);
   const siteTag = safeString(env.CLOUDFLARE_WEB_ANALYTICS_SITE_TAG, 160);
@@ -294,10 +321,11 @@ const PERFORMANCE_QUERY = `query SitePerformance($accountTag: String!, $vitalsFi
 }`;
 
 async function fetchRumOverview(env, range, filters) {
+  const window = rumQueryWindow(range);
   const siteTag = graphqlConfig(env).siteTag;
   const account = await cloudflareGraphQL(env, OVERVIEW_QUERY, {
-    filter: rumFilter(range, { ...filters, siteTag }),
-    vitalsFilter: rumFilter(range, { ...filters, siteTag }),
+    filter: rumFilter(window.range, { ...filters, siteTag }),
+    vitalsFilter: rumFilter(window.range, { ...filters, siteTag }),
   });
   const allRows = account.pageloads || [];
   const rows = filters.group ? allRows.filter((row) => analyticsContentGroup(row.dimensions?.requestPath) === filters.group) : allRows;
@@ -317,6 +345,8 @@ async function fetchRumOverview(env, range, filters) {
     pageViews, visits, series: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     paths: paths.slice(0, 25),
     contentGroups: sumBy(paths, (row) => analyticsContentGroup(row.label), (row) => row.value).slice(0, 12),
+    sourcePartial: window.partial,
+    sourceCoverageFrom: window.coverageFrom,
     vitals: {
       lcp: timeValue(vitals.largestContentfulPaintP75),
       inp: timeValue(vitals.interactionToNextPaintP75),
@@ -326,8 +356,9 @@ async function fetchRumOverview(env, range, filters) {
 }
 
 async function fetchRumAcquisition(env, range, filters) {
+  const window = rumQueryWindow(range);
   const siteTag = graphqlConfig(env).siteTag;
-  const account = await cloudflareGraphQL(env, ACQUISITION_QUERY, { filter: rumFilter(range, { ...filters, siteTag }) });
+  const account = await cloudflareGraphQL(env, ACQUISITION_QUERY, { filter: rumFilter(window.range, { ...filters, siteTag }) });
   const selected = (rows) => filters.group ? (rows || []).filter((row) => analyticsContentGroup(row.dimensions?.requestPath) === filters.group) : rows || [];
   const list = (key, field) => sumBy(selected(account[key]), (row) => row.dimensions?.[field]).slice(0, 25);
   return {
@@ -335,12 +366,14 @@ async function fetchRumAcquisition(env, range, filters) {
     referrers: list("referrers", "refererHost"), countries: list("countries", "countryName"),
     devices: list("devices", "deviceType"), browsers: list("browsers", "userAgentBrowser"),
     operatingSystems: list("operatingSystems", "userAgentOS"),
+    sourcePartial: window.partial, sourceCoverageFrom: window.coverageFrom,
   };
 }
 
 async function fetchRumPerformance(env, range, filters) {
+  const window = rumQueryWindow(range);
   const siteTag = graphqlConfig(env).siteTag;
-  const filter = rumFilter(range, { ...filters, siteTag });
+  const filter = rumFilter(window.range, { ...filters, siteTag });
   const account = await cloudflareGraphQL(env, PERFORMANCE_QUERY, { vitalsFilter: filter, performanceFilter: filter });
   const timingByPath = new Map((account.timingsByPath || []).map((row) => [normalizeAnalyticsPath(row.dimensions?.requestPath), row.quantiles || {}]));
   const paths = (account.vitalsByPath || []).map((row) => {
@@ -362,7 +395,7 @@ async function fetchRumPerformance(env, range, filters) {
   const summaryPath = [...paths].sort((a, b) => Number(b.samples || 0) - Number(a.samples || 0))[0] || {};
   return {
     summary: { lcp: summaryPath.lcp || 0, inp: summaryPath.inp || 0, cls: summaryPath.cls || 0, fcp: summaryPath.fcp || 0, pageLoad: summaryPath.pageLoad || 0 },
-    series, paths, elements: [],
+    series, paths, elements: [], sourcePartial: window.partial, sourceCoverageFrom: window.coverageFrom,
   };
 }
 
@@ -378,8 +411,13 @@ async function analyticsSql(env, query) {
   const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/analytics_engine/sql`, {
     method: "POST", headers: { authorization: `Bearer ${config.token}`, "content-type": "text/plain; charset=utf-8" }, body: `${query}\nFORMAT JSON`,
   });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || payload.errors?.[0]?.message || `Analytics Engine returned ${response.status}.`);
+  const raw = await response.text();
+  let payload = {};
+  try { payload = JSON.parse(raw); } catch {}
+  if (!response.ok) {
+    const detail = payload.error || payload.errors?.[0]?.message || safeString(raw, 1000);
+    throw new Error(detail || `Analytics Engine returned ${response.status}.`);
+  }
   return Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : [];
 }
 
@@ -567,21 +605,23 @@ async function buildAnalyticsView(env, options) {
   };
   const tasks = [];
   if (options.view === "overview") {
-    tasks.push(fetchRumOverview(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = sourceState(true, "", payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
+    tasks.push(fetchRumOverview(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = readyRumState(data, payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
     tasks.push(fetchCustomOverview(env, range, filters).then((data) => { payload.custom = data; payload.sources.custom = sourceState(true, "", payload.dataThrough); }).catch((error) => { payload.sources.custom = sourceState(false, error.message); }));
   } else if (options.view === "journeys") {
     tasks.push(fetchCustomJourneys(env, range, filters).then((data) => { payload.custom = data; payload.sources.custom = sourceState(true, "", payload.dataThrough); }).catch((error) => { payload.sources.custom = sourceState(false, error.message); }));
   } else if (options.view === "acquisition") {
-    tasks.push(fetchRumAcquisition(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = sourceState(true, "", payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
+    tasks.push(fetchRumAcquisition(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = readyRumState(data, payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
     tasks.push(fetchCustomAcquisition(env, range, filters).then((data) => { payload.custom = data; payload.sources.custom = sourceState(true, "", payload.dataThrough); }).catch((error) => { payload.sources.custom = sourceState(false, error.message); }));
   } else if (options.view === "performance") {
-    tasks.push(fetchRumPerformance(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = sourceState(true, "", payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
+    tasks.push(fetchRumPerformance(env, range, filters).then((data) => { payload.rum = data; payload.sources.rum = readyRumState(data, payload.dataThrough); }).catch((error) => { payload.sources.rum = sourceState(false, error.message); }));
   }
   await Promise.all(tasks);
   const rollups = options.includeRollups === false ? [] : await loadRollups(env, range, options.view);
   applyRollupFallback(options.view, payload, rollups);
   const states = Object.values(payload.sources);
-  payload.state = states.length && states.every((state) => state.ready) ? "current" : states.some((state) => state.ready) ? "partial" : rollups.length ? "stale" : "unavailable";
+  payload.state = states.length && states.every((state) => state.ready)
+    ? (states.some((state) => state.state === "partial") ? "partial" : "current")
+    : states.some((state) => state.ready) ? "partial" : rollups.length ? "stale" : "unavailable";
   if (payload.state === "stale" && payload.rollupCoverage?.through) payload.dataThrough = payload.rollupCoverage.through;
   return payload;
 }
@@ -664,7 +704,7 @@ async function saveRollupRows(database, rows) {
 async function nextRollupDay(database, source, today) {
   const state = await database.prepare("SELECT last_complete_day FROM site_analytics_rollup_state WHERE source=?").bind(source).first();
   if (state?.last_complete_day) return isoDate(new Date(`${state.last_complete_day}T00:00:00Z`).getTime() + DAY_MS);
-  if (source === "rum") return isoDate(new Date(`${today}T00:00:00Z`).getTime() - 366 * DAY_MS);
+  if (source === "rum") return isoDate(new Date(`${today}T00:00:00Z`).getTime() - RUM_LIVE_DAYS * DAY_MS);
   return isoDate(new Date(`${today}T00:00:00Z`).getTime() - DAY_MS);
 }
 

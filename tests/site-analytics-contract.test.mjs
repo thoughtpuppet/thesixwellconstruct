@@ -127,6 +127,35 @@ test("Cloudflare RUM parsing applies adaptive sample intervals and metric units"
   }
 });
 
+test("12-month RUM views clamp live requests to available history and report partial coverage", async () => {
+  const originalFetch = globalThis.fetch;
+  const starts = [];
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes("/graphql")) {
+      const body = JSON.parse(options.body);
+      starts.push(body.variables.filter?.datetime_geq || body.variables.vitalsFilter?.datetime_geq);
+      return new Response(JSON.stringify({ data: { viewer: { accounts: [{ pageloads: [], vitals: [] }] } } }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const response = await handleAdminAnalytics(new Request("https://example.com/api/admin/analytics?view=overview&range=12m", {
+      headers: { authorization: "Bearer secret" },
+    }), {
+      SUBMISSIONS_ADMIN_TOKEN: "secret", CLOUDFLARE_ACCOUNT_ID: "account",
+      CLOUDFLARE_WEB_ANALYTICS_SITE_TAG: "site", CLOUDFLARE_ANALYTICS_API_TOKEN: "token",
+    });
+    const payload = await response.json();
+    assert.equal(payload.sources.rum.state, "partial");
+    assert.equal(payload.state, "partial");
+    assert.ok(starts.every((value) => !value || Date.now() - new Date(value).getTime() <= 181 * 24 * 60 * 60 * 1000));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("failed live sources use stale aggregates and never manufacture zero", async () => {
   const rows = [
     { day: "2026-07-19", source: "rum", metric: "page_views", dimension_a: "", dimension_b: "", value: 42, sample_count: 42, updated_at: "2026-07-20T01:00:00Z" },
