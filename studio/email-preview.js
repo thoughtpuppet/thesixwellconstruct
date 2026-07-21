@@ -242,7 +242,6 @@
     async function loadTemplate() {
       selected = currentEntry();
       if (!selected) { editorLayout.hidden = true; setStatus("No templates match the selected filters."); return; }
-      root.dataset.activeBrand = selected.brand || "studio";
       editorLayout.hidden = false;
       try {
         const params = new URLSearchParams({ variant: selected.variant });

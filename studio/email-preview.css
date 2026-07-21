@@ -1,27 +1,6 @@
 .email-preview-app {
-  --accent: #fcb467;
-  --ring-soft: rgba(252, 180, 103, .4);
-  --ring-faint: rgba(252, 180, 103, .18);
   display: grid;
   gap: 16px;
-}
-
-.email-preview-app[data-active-brand="tattoo"] {
-  --accent: #9a2323;
-  --ring-soft: rgba(110, 4, 4, .52);
-  --ring-faint: rgba(110, 4, 4, .25);
-}
-
-.email-preview-app[data-active-brand="art"] {
-  --accent: #0f72db;
-  --ring-soft: rgba(0, 57, 189, .52);
-  --ring-faint: rgba(0, 57, 189, .25);
-}
-
-.email-preview-app[data-active-brand="events"] {
-  --accent: #397f34;
-  --ring-soft: rgba(0, 93, 37, .52);
-  --ring-faint: rgba(0, 93, 37, .25);
 }
 
 .email-preview-toolbar {
