@@ -18,10 +18,10 @@
   ────────────────────────────────────────────────────────── */
 
   --color-bg:         #0E0E0E;   /* site background — near black */
-  --color-body:       #FFE7CA;   /* all body text — warm off-white */
-  --color-text-muted: rgba(255, 231, 202, 0.66); /* secondary copy, descriptions, notes */
-  --color-text-dim:   rgba(255, 231, 202, 0.38); /* metadata and footers */
-  --color-text-ghost: rgba(255, 231, 202, 0.16); /* placeholders and empty states */
+  --color-body:       #FBD19D;   /* all body text — warm off-white */
+  --color-text-muted: rgba(251, 209, 157, 0.66); /* secondary copy, descriptions, notes */
+  --color-text-dim:   rgba(251, 209, 157, 0.38); /* metadata and footers */
+  --color-text-ghost: rgba(251, 209, 157, 0.16); /* placeholders and empty states */
   --color-accent:     #FCB467;   /* global amber — wordmark, landing accents */
   --color-accent-dim: rgba(252, 180, 103, 0.36); /* amber at low opacity — borders, dividers */
   --color-breadcrumb-dim:     rgba(252, 184, 103, 0.30); /* ancestor links and matching UI labels */
@@ -127,7 +127,7 @@
   --type-body-transform:  uppercase;
 
   --type-descriptor-font:      var(--font-serif);
-  --type-descriptor-color:     rgba(252, 184, 103, 0.55);
+  --type-descriptor-color:     rgba(252, 184, 103, 0.75);
   --type-descriptor-size:      12px;
   --type-descriptor-weight:    400;
   --type-descriptor-style:     normal;
