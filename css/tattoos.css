@@ -20,6 +20,16 @@
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
+.tattoos-page.tattoo-resource-page {
+  background: var(--color-bg);
+}
+
+.tattoos-page.tattoo-resource-page::before {
+  content: none;
+  opacity: 0;
+  background-image: none;
+}
+
 .tattoos-page .tattoos-shell {
   position: relative;
   z-index: 2;
@@ -180,6 +190,24 @@
   font-size: 10px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
+}
+
+.tattoos-page.tattoo-resource-page .hero-panel .panel-label,
+.tattoos-page.tattoo-resource-page .section-kicker,
+.tattoos-page.tattoo-resource-page .mini-label {
+  color: var(--color-breadcrumb-dim, rgba(252, 184, 103, 0.30));
+}
+
+.tattoos-page.tattoo-resource-page .section-title {
+  color: var(--venture-accent, var(--color-tattooing));
+}
+
+.tattoos-page.tattoo-resource-page .hero-panel p,
+.tattoos-page.tattoo-resource-page .section-card p,
+.tattoos-page.tattoo-resource-page .info-panel p,
+.tattoos-page.tattoo-resource-page .resource-list,
+.tattoos-page.tattoo-resource-page .arrival-item p {
+  color: var(--color-text-muted);
 }
 
 .tattoos-page .hero-panel .panel-title,

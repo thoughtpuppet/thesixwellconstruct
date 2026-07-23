@@ -31,6 +31,10 @@ Please review before arriving:
 - Day-of instructions: {{day_of_instructions_url}}
 - Location & parking: {{location_parking_url}}
 
+Your deposit goes toward the final tattoo cost. At the start of your
+appointment, after the final design, placement, and session price are confirmed,
+the remaining balance must be paid before tattooing begins.
+
 Reply to this thread if you have any questions or concerns before your
 session.
 

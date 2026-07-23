@@ -284,7 +284,7 @@
     const pricing = payload.pricingSummary;
     const pricingRows = pricing && Number(pricing.sessionFeeCents || 0) > 0 ? [
       renderRow("Approved Tattoo Work", `${money(pricing.laborMinimumCents, pricing.currency)}${pricing.laborMinimumCents === pricing.laborMaximumCents ? "" : ` - ${money(pricing.laborMaximumCents, pricing.currency)}`}`),
-      renderRow("Extended Day Fee", `+${money(pricing.sessionFeeCents, pricing.currency)} / due with final studio balance`),
+      renderRow("Extended Day Fee", `+${money(pricing.sessionFeeCents, pricing.currency)} / due with the remaining balance at the start of your appointment, before tattooing begins`),
       renderRow("Estimated Total", `${money(pricing.combinedMinimumCents, pricing.currency)}${pricing.combinedMinimumCents === pricing.combinedMaximumCents ? "" : ` - ${money(pricing.combinedMaximumCents, pricing.currency)}`}`),
       renderRow("Estimated Remaining Balance", `${money(pricing.remainingMinimumCents, pricing.currency)}${pricing.remainingMinimumCents === pricing.remainingMaximumCents ? "" : ` - ${money(pricing.remainingMaximumCents, pricing.currency)}`}`),
       renderRow("Session Option", "Optional 8-10 hour session / reserves a 10-hour appointment block"),
@@ -294,6 +294,7 @@
       renderRow("When", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
       ...locationRows,
       renderRow("Deposit", `${money(appointment.depositCents, appointment.currency)} / ${paid ? "received" : "pending"}`),
+      renderRow("Final Payment", "At the start of your appointment, the remaining balance is collected after the final session price is confirmed and before tattooing begins"),
       renderRow("Optional Tip", money(appointment.tipCents || 0, appointment.currency)),
       renderRow("Total Paid Today", money(appointment.totalDueCents || appointment.depositCents || 0, appointment.currency)),
       ...pricingRows,

@@ -439,8 +439,8 @@ select option:checked {
   footer.bottom a,
   .footer p,
   .footer a {
-    font-size: 10px !important;
-    letter-spacing: 0.18em !important;
+    font-size: var(--type-footer-size, 10px) !important;
+    letter-spacing: var(--type-footer-tracking, 0.18em) !important;
   }
 
   /* ── Forms — comfortable touch targets ────────────────── */

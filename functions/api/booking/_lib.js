@@ -841,6 +841,7 @@ function appointmentCalendarDescription(env, request, appointment) {
   } else {
     lines.push(`Studio address: ${studioCalendarLocation(env)}`);
     if (appointment.purpose === "tattoo") {
+      lines.push("Final payment: At the start of your appointment, the remaining balance is collected after the final session price is confirmed and before tattooing begins.");
       lines.push(`Day-of prep: ${resources.dayOfInstructionsUrl}`);
     }
     lines.push(`Location & parking: ${resources.locationParkingUrl}`);

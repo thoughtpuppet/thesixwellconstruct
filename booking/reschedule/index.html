@@ -132,7 +132,7 @@
         ['Reschedules used', `${Number(appointment.rescheduleCount || 0)} of 1`]
       ].map(([key,value]) => `<div class="detail-row"><span class="detail-key">${escapeHtml(key)}</span><span class="detail-value">${escapeHtml(value)}</span></div>`).join('');
       if (payload.requiresReplacementPayment) {
-        elements.policyPanel.innerHTML = `<span class="policy-label">Under ${Number(payload.noticeHours || 48)} hours</span><strong>A new same-type payment is required.</strong><p>Your original appointment stays confirmed while you choose a new time and complete checkout. It is replaced only after the new payment succeeds.${extended ? ' Square collects the Extended Day deposit only; the $200 fee remains due with the final studio balance.' : ''}</p>`;
+        elements.policyPanel.innerHTML = `<span class="policy-label">Under ${Number(payload.noticeHours || 48)} hours</span><strong>A new same-type payment is required.</strong><p>Your original appointment stays confirmed while you choose a new time and complete checkout. It is replaced only after the new payment succeeds.${extended ? ' Square collects the Extended Day deposit only; the $200 fee remains due with the remaining balance at the start of your appointment, before tattooing begins.' : ''}</p>`;
         elements.rescheduleButton.textContent = `Continue to ${payload.bookingType?.depositLabel || 'new'} checkout`;
       } else {
         elements.policyPanel.innerHTML = `<span class="policy-label">At least ${Number(payload.noticeHours || 48)} hours</span><strong>Your existing payment moves with the booking.</strong><p>Choose one new time of the same appointment type. The move completes immediately after confirmation.</p>`;

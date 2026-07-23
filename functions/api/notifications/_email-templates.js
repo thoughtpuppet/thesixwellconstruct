@@ -326,7 +326,7 @@ export function buildAppointmentConfirmedEmail(data) {
       { label: "Add to calendar", href: data.calendarUrl },
       ...resourceActions,
     ],
-    outro: [data.billingPolicyText, data.renderingPolicyText, profile.body],
+    outro: [data.billingPolicyText, data.renderingPolicyText, data.paymentPolicyText, profile.body],
     signature: profile.signature,
   });
 }
@@ -700,6 +700,9 @@ function previewConfirmation(kind, subject, overrides = {}) {
     tipText: overrides.tipText || "",
     totalPaidText: overrides.totalPaidText || "",
     zoomUrl: overrides.zoomUrl || "",
+    paymentPolicyText: overrides.paymentPolicyText || (kind === "tattoo"
+      ? "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins."
+      : ""),
     confirmationUrl: overrides.confirmationUrl || SAMPLE.confirmationUrl,
     calendarUrl: SAMPLE.calendarUrl,
     resources: overrides.resources || [
@@ -936,7 +939,9 @@ export function renderClientEmailPreview(templateKey, variant = "") {
         { label: "Day-of instructions", href: SAMPLE.dayOfInstructionsUrl },
         { label: "Location & parking", href: SAMPLE.locationParkingUrl },
       ],
-      notice: build || virtual || consultation || studio ? "" : "Personalized aftercare instructions will be provided at your appointment.",
+      notice: build || virtual || consultation || studio
+        ? ""
+        : "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins. Personalized aftercare instructions will be provided at your appointment.",
     });
   } else if (key === "event_ticket_paid") {
     rendered = buildEventTicketPaidEmail({

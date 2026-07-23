@@ -587,6 +587,74 @@ test("Extended Day client surfaces use the approved optional-session copy", () =
   }
 });
 
+test("tattoo final-payment guidance consistently requires payment at the appointment before tattooing begins", () => {
+  const paymentRule = "At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins";
+  const fullRuleSources = [
+    join(ROOT, "tattoos", "policies", "index.html"),
+    join(ROOT, "tattoos", "day-of", "index.html"),
+    join(ROOT, "functions", "api", "notifications", "_lib.js"),
+    join(ROOT, "functions", "api", "notifications", "_email-templates.js"),
+    join(ROOT, "docs", "email-templates", "client-resource-pages.md"),
+    join(ROOT, "docs", "email-templates", "appointment-confirmed.md"),
+    join(ROOT, "docs", "email-templates", "appointment-reminder-24h.md"),
+  ];
+  for (const path of fullRuleSources) {
+    const source = readFileSync(path, "utf8").replace(/\s+/g, " ");
+    assert.ok(source.includes(paymentRule), `${path} states the final-payment rule`);
+  }
+
+  const supportingSources = [
+    join(ROOT, "booking", "confirmed", "index.html"),
+    join(ROOT, "booking", "reschedule", "index.html"),
+    join(ROOT, "functions", "api", "booking", "_lib.js"),
+  ];
+  for (const path of supportingSources) {
+    assert.match(readFileSync(path, "utf8"), /before tattooing begins/i, `${path} keeps the payment timing visible`);
+  }
+
+  const supersededCopy = /final payment is due at the session|due at the time of your appointment|tattooing, final payment/i;
+  for (const path of [...fullRuleSources, ...supportingSources]) {
+    assert.doesNotMatch(readFileSync(path, "utf8"), supersededCopy, `${path} removes end-of-session payment wording`);
+  }
+});
+
+test("tattoo client-resource pages use an opaque solid canvas without the shared wash", () => {
+  const resourcePages = [
+    join(ROOT, "tattoos", "policies", "index.html"),
+    join(ROOT, "tattoos", "day-of", "index.html"),
+    join(ROOT, "tattoos", "location-parking", "index.html"),
+  ];
+  for (const path of resourcePages) {
+    assert.match(readFileSync(path, "utf8"), /<body class="tattoos-page tattoo-resource-page"/);
+  }
+
+  const sharedStyles = readFileSync(join(ROOT, "css", "tattoos.css"), "utf8");
+  assert.match(sharedStyles, /\.tattoos-page\.tattoo-resource-page\s*\{\s*background:\s*var\(--color-bg\)/);
+  assert.match(sharedStyles, /\.tattoos-page\.tattoo-resource-page::before\s*\{\s*content:\s*none;\s*opacity:\s*0;\s*background-image:\s*none/);
+  assert.match(sharedStyles, /\.tattoos-page\.tattoo-resource-page \.section-kicker,[\s\S]*color:\s*var\(--color-breadcrumb-dim/);
+  assert.match(sharedStyles, /\.tattoos-page\.tattoo-resource-page \.section-title\s*\{\s*color:\s*var\(--venture-accent/);
+  assert.match(sharedStyles, /\.tattoos-page\.tattoo-resource-page \.hero-panel p,[\s\S]*\.tattoos-page\.tattoo-resource-page \.resource-list,[\s\S]*color:\s*var\(--color-text-muted\)/);
+
+  const tokens = readFileSync(join(ROOT, "css", "tokens.css"), "utf8");
+  assert.match(tokens, /--color-breadcrumb-dim:\s*rgba\(252,\s*184,\s*103,\s*0\.30\)/);
+  assert.match(tokens, /--color-breadcrumb-hover:\s*rgba\(252,\s*184,\s*103,\s*0\.55\)/);
+  assert.match(tokens, /--color-breadcrumb-ghost:\s*rgba\(252,\s*184,\s*103,\s*0\.13\)/);
+  assert.match(tokens, /--color-breadcrumb-current:\s*rgba\(252,\s*184,\s*103,\s*0\.80\)/);
+
+  const typography = readFileSync(join(ROOT, "css", "site-typography.css"), "utf8");
+  assert.match(typography, /\.construct-breadcrumb a \{[\s\S]*color:\s*var\(--type-breadcrumb-color,\s*var\(--color-breadcrumb-dim/);
+  assert.match(typography, /\.construct-breadcrumb-sep \{[\s\S]*color:\s*var\(--color-breadcrumb-ghost/);
+  assert.match(typography, /\.construct-breadcrumb-current \{[\s\S]*color:\s*var\(--color-breadcrumb-current/);
+
+  const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");
+  assert.match(policies, /\.tattoos-page \.hero\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);\s*align-items:\s*start/);
+  assert.match(policies, /body\.tattoos-page #policy-hero-intro\s*\{\s*max-width:\s*min\(100%, 680px\)\s*!important/);
+  assert.match(policies, /<p class="hero-lead" id="policy-hero-intro">/);
+  assert.match(policies, /<h1\b[^>]*\bdata-fit-width\b/);
+  assert.doesNotMatch(policies, /<span class="panel-label"><br><\/span>/);
+  assert.doesNotMatch(policies, /Before you book/);
+});
+
 test("tattoo forms keep short controls uniform while paragraph fields can grow", () => {
   const sharedStyles = readFileSync(join(ROOT, "css", "tattoos.css"), "utf8");
   assert.match(sharedStyles, /--tattoo-short-field-height:\s*53px/);

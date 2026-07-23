@@ -707,7 +707,7 @@ function extendedDayEmailFields(appointment) {
     return { sessionFeeText: "", billingPolicyText: "" };
   }
   return {
-    sessionFeeText: `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance`,
+    sessionFeeText: `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance at the start of your appointment, before tattooing begins`,
     billingPolicyText: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you. The Extended Day fee is not charged again during a no-cost reschedule.",
   };
 }
@@ -1119,12 +1119,13 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
     session: appointment.bookingTypeLabel,
     feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received`,
     sessionFeeText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance`
+      ? `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance at the start of your appointment, before tattooing begins`
       : "",
     billingPolicyText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
       ? "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "",
     renderingPolicyText: "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
+    paymentPolicyText: "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins.",
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
@@ -1300,7 +1301,7 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
     "",
     "Payment",
     compactLine("Deposit / fee", `${formatMoney(appointment.depositCents, appointment.currency)} received`),
-    appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance`) : "",
+    appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance at the start of the appointment, before tattooing begins`) : "",
     appointment.tipCents ? compactLine("Optional tip", formatMoney(appointment.tipCents, appointment.currency)) : "",
     compactLine("Total paid", formatMoney(appointment.totalDueCents, appointment.currency)),
     "",
@@ -1440,7 +1441,7 @@ export async function notifyAdminAppointmentRescheduled(env, request, appointmen
       compactLine("Submission ID", appointment.submissionId),
       previousStartAt ? compactLine("Previous time", `${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}`) : "",
       compactLine("New time", `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`),
-      appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance`) : "",
+      appointment.sessionFeeCents ? compactLine("Extended Day fee", `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with remaining studio balance at the start of the appointment, before tattooing begins`) : "",
       compactLine("Reschedules used", appointment.rescheduleCount),
       "",
       compactLine("Client", appointment.clientName),
@@ -2263,7 +2264,7 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
     calendarUrl: appointmentCalendarUrl(env, null, appointment),
     resources: resourceActions,
     notice: !isStudio && !isVirtual && !isConsultation && !isBuild
-      ? "Personalized aftercare instructions will be provided at your appointment."
+      ? "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins. Personalized aftercare instructions will be provided at your appointment."
       : "",
   });
   const identity = isStudio ? eventsEmailIdentity(env) : {};

@@ -29,10 +29,12 @@ versions of the same content.
 - Deposits are non-refundable and go toward the final tattoo cost.
 - One reschedule is allowed if requested at least 48 hours in advance.
 - Rescheduling within 48 hours requires a new deposit.
-- Final payment is due at the appointment.
-- Preferred payment is cash. Other options may include Cash App, Apple Pay, or
-  credit/debit card.
-- Card transactions may include a processing fee.
+- The deposit goes toward the final tattoo cost. At the start of your
+  appointment, after the final design, placement, and session price are
+  confirmed, the remaining balance must be paid before tattooing begins.
+- Preferred payment is cash. Cash App, Apple Pay, and credit/debit card are
+  also accepted.
+- A 3% processing fee applies to all digital transactions.
 - Major last-minute design changes may require rescheduling and a new deposit.
 - No-shows forfeit the deposit and may not be rebooked.
 - Guests should be approved before the appointment.

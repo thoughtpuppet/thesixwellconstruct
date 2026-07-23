@@ -18,12 +18,16 @@
   ────────────────────────────────────────────────────────── */
 
   --color-bg:         #0E0E0E;   /* site background — near black */
-  --color-body:       #FFE7CA;   /* all body text — warm off-white */
+  --color-body:       #FBD19D;   /* all body text — warm off-white */
   --color-text-muted: rgba(255, 231, 202, 0.66); /* secondary copy, descriptions, notes */
-  --color-text-dim:   rgba(255, 231, 202, 0.38); /* metadata, footers, breadcrumbs */
+  --color-text-dim:   rgba(255, 231, 202, 0.38); /* metadata and footers */
   --color-text-ghost: rgba(255, 231, 202, 0.16); /* placeholders and empty states */
   --color-accent:     #FCB467;   /* global amber — wordmark, landing accents */
-  --color-accent-dim: rgba(252, 180, 103, 0.25); /* amber at low opacity — borders, dividers */
+  --color-accent-dim: rgba(252, 180, 103, 0.36); /* amber at low opacity — borders, dividers */
+  --color-breadcrumb-dim:     rgba(252, 184, 103, 0.30); /* ancestor links and matching UI labels */
+  --color-breadcrumb-hover:   rgba(252, 184, 103, 0.55); /* ancestor link hover/focus */
+  --color-breadcrumb-ghost:   rgba(252, 184, 103, 0.13); /* separators */
+  --color-breadcrumb-current: rgba(252, 184, 103, 0.80); /* current page */
 
 
   /* ──────────────────────────────────────────────────────────
@@ -62,7 +66,7 @@
   --color-about:            #FCB467;
   --color-about-dim:        rgba(252, 180, 103, 0.25);
   --color-about-bright:     #FDC385;
-  --color-about-dark:       #C17D2F;
+  --color-about-dark:       #C48745;
 
   /* EVENTS */
   --color-events:           #005D25;
@@ -77,10 +81,10 @@
   --color-music-dark:       #611C55;
 
   /* WRITINGS */
-  --color-writings:         #FFE7CA;
-  --color-writings-dim:     rgba(255, 231, 202, 0.25);
-  --color-writings-bright:  #FFECD5;
-  --color-writings-dark:    #A28D71;
+  --color-writings:         #FBDAB1;
+  --color-writings-dim:     rgba(251, 218, 177, 0.25);
+  --color-writings-bright:  #FCE1C1;
+  --color-writings-dark:    #A28967;
 
   /* ARCHIVE */
   --color-archive:          #6D3D15;
@@ -106,6 +110,66 @@
 
   --font-display: 'Inter', Arial, sans-serif;
   --font-serif:   Georgia, 'Times New Roman', Times, serif;
+
+
+  /* TYPOGRAPHY — EDITABLE GLOBAL ROLES
+     These are the source values used by the UI Guide's typography editor.
+     Keep role styling here so a single saved change can flow across every
+     public page that loads tokens.css + site-typography.css. */
+
+  --type-body-font:       var(--font-serif);
+  --type-body-color:      var(--color-body);
+  --type-body-size:       16px;
+  --type-body-weight:     400;
+  --type-body-style:      normal;
+  --type-body-leading:    1.42;
+  --type-body-tracking:   0.1em;
+  --type-body-transform:  uppercase;
+
+  --type-descriptor-font:      var(--font-serif);
+  --type-descriptor-color:     rgba(252, 184, 103, 0.55);
+  --type-descriptor-size:      12px;
+  --type-descriptor-weight:    400;
+  --type-descriptor-style:     normal;
+  --type-descriptor-leading:   1.6;
+  --type-descriptor-tracking:  0.22em;
+  --type-descriptor-transform: uppercase;
+
+  --type-eyebrow-font:      var(--font-serif);
+  --type-eyebrow-color:     var(--venture-accent, var(--venture-color, var(--accent, var(--color-accent))));
+  --type-eyebrow-size:      10px;
+  --type-eyebrow-weight:    400;
+  --type-eyebrow-style:     normal;
+  --type-eyebrow-leading:   1.35;
+  --type-eyebrow-tracking:  0.22em;
+  --type-eyebrow-transform: uppercase;
+
+  --type-breadcrumb-font:      var(--font-serif);
+  --type-breadcrumb-color:     var(--color-breadcrumb-dim);
+  --type-breadcrumb-size:      11px;
+  --type-breadcrumb-weight:    400;
+  --type-breadcrumb-style:     normal;
+  --type-breadcrumb-leading:   1.42;
+  --type-breadcrumb-tracking:  0.18em;
+  --type-breadcrumb-transform: uppercase;
+
+  --type-footer-font:      var(--font-serif);
+  --type-footer-color:     var(--color-text-dim);
+  --type-footer-size:      10px;
+  --type-footer-weight:    400;
+  --type-footer-style:     normal;
+  --type-footer-leading:   1.42;
+  --type-footer-tracking:  0.18em;
+  --type-footer-transform: uppercase;
+
+  --type-meta-font:      var(--font-serif);
+  --type-meta-color:     var(--color-text-dim);
+  --type-meta-size:      11px;
+  --type-meta-weight:    400;
+  --type-meta-style:     normal;
+  --type-meta-leading:   1.42;
+  --type-meta-tracking:  0.18em;
+  --type-meta-transform: uppercase;
 
 
   /* ──────────────────────────────────────────────────────────
@@ -222,10 +286,12 @@ body {
      belong inside contained components, never on html/body or a viewport-wide
      pseudo-element. The shorthand also clears accidental background images. */
   background: var(--color-bg);
-  color: var(--color-body);
-  font-family: var(--font-serif);
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
+  color: var(--type-body-color, var(--color-body));
+  font-family: var(--type-body-font, var(--font-serif));
+  font-size: var(--type-body-size, var(--text-base));
+  font-weight: var(--type-body-weight, 400);
+  font-style: var(--type-body-style, normal);
+  line-height: var(--type-body-leading, var(--leading-normal));
   /* Smoother font rendering on dark backgrounds */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

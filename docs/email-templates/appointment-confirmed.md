@@ -37,6 +37,10 @@ Confirmation page: {{confirmation_url}}
 Day-of instructions: {{day_of_instructions_url}}
 Location & parking: {{location_parking_url}}
 
+Your deposit goes toward the final tattoo cost. At the start of your
+appointment, after the final design, placement, and session price are confirmed,
+the remaining balance must be paid before tattooing begins.
+
 I may follow up directly with prep notes or adjustments before your
 appointment, if needed.
 
@@ -51,7 +55,8 @@ Saiel Solehman
 - `{{appointment_end}}`
 - `{{booking_type_label}}`
 - `{{deposit_amount}}`
-- `{{session_fee_amount}}` (Extended Day only; due with final studio balance)
+- `{{session_fee_amount}}` (Extended Day only; due with the remaining studio
+  balance at the start of the appointment, before tattooing begins)
 - `{{confirmation_url}}`
 - `{{day_of_instructions_url}}`
 - `{{location_parking_url}}`

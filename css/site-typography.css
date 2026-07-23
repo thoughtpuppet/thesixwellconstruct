@@ -1,10 +1,22 @@
 /* Site-wide typography direction: uppercase, tracked text with unified rhythm. */
 
 :where(body, body *:not(script):not(style):not(svg):not(path):not(use):not(canvas):not(img):not(video)) {
-  text-transform: uppercase !important;
-  letter-spacing: 0.1em !important;
-  line-height: 1.42 !important;
+  text-transform: var(--type-body-transform, uppercase) !important;
+  letter-spacing: var(--type-body-tracking, 0.1em) !important;
+  line-height: var(--type-body-leading, 1.42) !important;
   font-variant-caps: normal;
+}
+
+/* Older pages still declare their own body stack after tokens.css. Keep the
+   reading role authoritative here so the UI Guide's body controls are truly
+   global while component-specific type treatments can continue to override
+   the inherited values on headings, buttons, and other named roles. */
+body {
+  color: var(--type-body-color, var(--color-body)) !important;
+  font-family: var(--type-body-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
+  font-size: var(--type-body-size, 16px) !important;
+  font-weight: var(--type-body-weight, 400) !important;
+  font-style: var(--type-body-style, normal) !important;
 }
 
 /* Labels keep the shared display treatment, but text people enter must read
@@ -112,14 +124,15 @@ h6,
   .copy > h1 + .description,
   main > h1 + .lead
 ) {
-  font-family: var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
-  font-size: 12px !important;
-  font-weight: 400 !important;
-  letter-spacing: 0.22em !important;
-  line-height: 1.6 !important;
-  text-transform: uppercase !important;
+  font-family: var(--type-descriptor-font, var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif))) !important;
+  font-size: var(--type-descriptor-size, 12px) !important;
+  font-weight: var(--type-descriptor-weight, 400) !important;
+  font-style: var(--type-descriptor-style, normal) !important;
+  letter-spacing: var(--type-descriptor-tracking, 0.22em) !important;
+  line-height: var(--type-descriptor-leading, 1.6) !important;
+  text-transform: var(--type-descriptor-transform, uppercase) !important;
   font-variant-caps: normal !important;
-  color: rgba(252, 184, 103, 0.55) !important;
+  color: var(--type-descriptor-color, rgba(252, 184, 103, 0.55)) !important;
   max-width: min(100%, 380px) !important;
   text-align: left !important;
   padding-bottom: var(--s4, 16px) !important;
@@ -278,6 +291,31 @@ body.is-mobile #sub-node-labels .sub-node-label {
   font-variant-caps: normal !important;
 }
 
+/* Shared eyebrow / kicker role. Page-specific layout stays local; the visual
+   voice is controlled globally from the UI Guide. */
+:is(
+  .eyebrow,
+  .kicker,
+  .venture-kicker,
+  .section-kicker,
+  .tile-kicker,
+  .meta-kicker,
+  .archive-kicker,
+  .portfolio-detail-kicker,
+  .portfolio-detail-label,
+  .panel-label,
+  .mini-label
+) {
+  color: var(--type-eyebrow-color, var(--venture-accent, var(--venture-color, var(--accent, var(--color-accent))))) !important;
+  font-family: var(--type-eyebrow-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
+  font-size: var(--type-eyebrow-size, 10px) !important;
+  font-weight: var(--type-eyebrow-weight, 400) !important;
+  font-style: var(--type-eyebrow-style, normal) !important;
+  letter-spacing: var(--type-eyebrow-tracking, 0.22em) !important;
+  line-height: var(--type-eyebrow-leading, 1.35) !important;
+  text-transform: var(--type-eyebrow-transform, uppercase) !important;
+}
+
 .breadcrumb,
 .construct-breadcrumb {
   position: relative !important;
@@ -289,12 +327,14 @@ body.is-mobile #sub-node-labels .sub-node-label {
   max-width: 100% !important;
   margin: var(--breadcrumb-flow-offset, 0px) 0 0 !important;
   padding: 0 var(--s6, 40px) var(--s4, 16px) !important;
-  font-family: var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
-  font-size: 11px !important;
-  font-weight: 400 !important;
-  letter-spacing: 0.18em !important;
-  line-height: 1.42 !important;
-  text-transform: uppercase !important;
+  color: var(--type-breadcrumb-color, var(--color-breadcrumb-dim, rgba(252, 184, 103, 0.30))) !important;
+  font-family: var(--type-breadcrumb-font, var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif))) !important;
+  font-size: var(--type-breadcrumb-size, 11px) !important;
+  font-weight: var(--type-breadcrumb-weight, 400) !important;
+  font-style: var(--type-breadcrumb-style, normal) !important;
+  letter-spacing: var(--type-breadcrumb-tracking, 0.18em) !important;
+  line-height: var(--type-breadcrumb-leading, 1.42) !important;
+  text-transform: var(--type-breadcrumb-transform, uppercase) !important;
 }
 
 main > .breadcrumb,
@@ -306,7 +346,7 @@ main > .construct-breadcrumb {
 .breadcrumb a,
 .breadcrumb-link,
 .construct-breadcrumb a {
-  color: rgba(252, 184, 103, 0.30) !important;
+  color: var(--type-breadcrumb-color, var(--color-breadcrumb-dim, rgba(252, 184, 103, 0.30))) !important;
   text-decoration: none !important;
   transition: color var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1)) !important;
 }
@@ -317,19 +357,44 @@ main > .construct-breadcrumb {
 .breadcrumb-link:focus-visible,
 .construct-breadcrumb a:hover,
 .construct-breadcrumb a:focus-visible {
-  color: rgba(252, 184, 103, 0.55) !important;
+  color: var(--color-breadcrumb-hover, rgba(252, 184, 103, 0.55)) !important;
   outline: none;
 }
 
 .breadcrumb-sep,
 .construct-breadcrumb-sep {
-  color: rgba(252, 184, 103, 0.13) !important;
+  color: var(--color-breadcrumb-ghost, rgba(252, 184, 103, 0.13)) !important;
 }
 
 .breadcrumb-current,
 .construct-breadcrumb-current {
-  color: rgba(252, 184, 103, 0.80) !important;
+  color: var(--color-breadcrumb-current, rgba(252, 184, 103, 0.80)) !important;
   opacity: 1 !important;
+}
+
+/* Footer typography is one role across legacy `bottom`, venture `.footer`,
+   Tattoo `.footer-bottom`, and generated Construct footers. */
+:is(footer.bottom, .footer, .footer-bottom, .site-footer, .construct-footer) :where(p, a, span) {
+  color: var(--type-footer-color, var(--color-text-dim)) !important;
+  font-family: var(--type-footer-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
+  font-size: var(--type-footer-size, 10px) !important;
+  font-weight: var(--type-footer-weight, 400) !important;
+  font-style: var(--type-footer-style, normal) !important;
+  letter-spacing: var(--type-footer-tracking, 0.18em) !important;
+  line-height: var(--type-footer-leading, 1.42) !important;
+  text-transform: var(--type-footer-transform, uppercase) !important;
+}
+
+/* Small informational text that is not an eyebrow or navigation control. */
+:is(.metadata, .meta-copy, .caption, figcaption, .hint, .fine-print, .small-print) {
+  color: var(--type-meta-color, var(--color-text-dim)) !important;
+  font-family: var(--type-meta-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
+  font-size: var(--type-meta-size, 11px) !important;
+  font-weight: var(--type-meta-weight, 400) !important;
+  font-style: var(--type-meta-style, normal) !important;
+  letter-spacing: var(--type-meta-tracking, 0.18em) !important;
+  line-height: var(--type-meta-leading, 1.42) !important;
+  text-transform: var(--type-meta-transform, uppercase) !important;
 }
 
 /* Shared brand-band action. Venture pages supply their existing colors and
@@ -375,7 +440,7 @@ main > .construct-breadcrumb {
   .breadcrumb,
   .construct-breadcrumb {
     padding: 0 var(--s5, 24px) var(--s3, 12px) !important;
-    font-size: 10px !important;
+    font-size: var(--type-breadcrumb-size, 11px) !important;
     overflow: hidden !important;
   }
 
