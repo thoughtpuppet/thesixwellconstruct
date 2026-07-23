@@ -18,7 +18,7 @@
   ────────────────────────────────────────────────────────── */
 
   --color-bg:         #0E0E0E;   /* site background — near black */
-  --color-body:       #FBD19D;   /* all body text — warm off-white */
+  --color-body:       #FFE7CA;   /* all body text — warm off-white */
   --color-text-muted: rgba(255, 231, 202, 0.66); /* secondary copy, descriptions, notes */
   --color-text-dim:   rgba(255, 231, 202, 0.38); /* metadata and footers */
   --color-text-ghost: rgba(255, 231, 202, 0.16); /* placeholders and empty states */
