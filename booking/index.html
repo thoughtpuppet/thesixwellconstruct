@@ -8,14 +8,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/walk-in-windows.css">
+<link rel="stylesheet" href="/css/booking-calendar.css">
 <style>
   :root {
     --bg:#0e0e0e; --accent:#FCB867; --signal:#6E0404;
     --ring:#6D3D15; --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --text:#FCB867; --muted:rgba(252,184,103,0.64); --dim:rgba(252,184,103,0.38);
     --ghost:rgba(252,184,103,0.14); --sans:Inter,Arial,sans-serif;
+    --text-mute:var(--muted); --text-dim:var(--dim); --text-ghost:var(--ghost);
     --serif:Georgia,"Times New Roman",Times,serif; --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
   }
   * { box-sizing:border-box; }
@@ -30,10 +33,10 @@
   .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--ring); }
   .section-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--muted); }
   h1 { max-width:720px; margin:16px 0 24px; font-family:var(--sans); font-size:clamp(42px,7vw,88px); line-height:0.88; letter-spacing:0; color:var(--signal); }
-  .lead { max-width:600px; margin:0 0 24px; color:rgba(255,231,202,0.62); font-size:16px; line-height:1.8; }
+  .lead { max-width:600px; margin:0 0 24px; color:var(--color-text-muted, rgba(251,209,157,0.66)); font-size:16px; line-height:1.8; }
   .status { max-width:720px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:22px 0; color:var(--muted); line-height:1.7; }
   .pending-checkout-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
-  .pending-checkout-link,.pending-checkout-button { display:inline-flex; min-height:44px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; padding:0 16px; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+  .pending-checkout-link,.pending-checkout-button { display:inline-flex; min-height:44px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--color-body); padding:0 16px; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
   .pending-checkout-link:hover,.pending-checkout-button:hover { border-color:var(--accent); color:var(--accent); }
   .pending-checkout-button:disabled { opacity:.45; cursor:not-allowed; }
   .booking-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(300px,420px); gap:56px; align-items:start; }
@@ -42,61 +45,44 @@
   .client-intake-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
   .client-intake-field { display:grid; gap:7px; color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
   .client-intake-field:first-child { grid-column:1 / -1; }
-  .client-intake-field input { width:100%; min-height:46px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; padding:0 12px; font-family:var(--sans); font-size:14px; text-transform:none; letter-spacing:0; }
+  .client-intake-field input { width:100%; min-height:46px; border:5px solid var(--ring-faint); background:transparent; color:var(--color-body); padding:0 12px; font-family:var(--sans); font-size:14px; text-transform:none; letter-spacing:0; }
   .client-intake-field input:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
   .client-intake-note { margin:0; color:var(--muted); font-size:12px; line-height:1.7; }
   .session-list,.window-list { display:grid; gap:10px; }
   .pace-intro,.extended-pricing { border:5px solid var(--ring-soft); padding:18px; display:grid; gap:10px; }
-  .pace-intro h2,.extended-pricing h2,.extended-pricing h3 { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:17px; font-weight:900; line-height:1.12; text-transform:uppercase; }
+  .pace-intro h2,.extended-pricing h2,.extended-pricing h3 { margin:0; color:var(--color-body); font-family:var(--sans); font-size:17px; font-weight:900; line-height:1.12; text-transform:uppercase; }
   .pace-intro p,.extended-pricing p { margin:0; color:var(--muted); font-size:13px; line-height:1.7; }
   .pricing-lines { display:grid; gap:0; border-top:5px solid var(--ring-faint); }
   .pricing-line { display:flex; justify-content:space-between; gap:18px; padding:11px 0; border-bottom:5px solid var(--ring-faint); color:var(--muted); font-size:13px; }
-  .pricing-line strong { color:#FFE7CA; font-family:var(--sans); text-align:right; }
+  .pricing-line strong { color:var(--color-body); font-family:var(--sans); text-align:right; }
   .extended-ack { display:grid; grid-template-columns:20px 1fr; gap:10px; color:var(--muted); font-size:12px; line-height:1.65; }
   .extended-ack input { width:18px; height:18px; margin-top:2px; accent-color:var(--signal); }
   .availability-note { display:block; margin-top:8px; color:var(--signal); font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
   .session-plan-panel { border:5px solid rgba(110,4,4,.45); padding:20px; display:grid; gap:16px; }
-  .session-plan-title { margin:0; color:#FFE7CA; font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
-  .session-plan-copy { margin:0; color:rgba(255,231,202,.62); font-size:13px; line-height:1.7; }
+  .session-plan-title { margin:0; color:var(--color-body); font-family:var(--sans); font-size:20px; font-weight:900; text-transform:uppercase; }
+  .session-plan-copy { margin:0; color:var(--color-text-muted, rgba(251,209,157,.66)); font-size:13px; line-height:1.7; }
   .approved-budget { border:5px solid var(--ring-soft); padding:16px; display:grid; gap:8px; }
   .approved-budget-label { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
-  .approved-budget-value { color:#FFE7CA; font-family:var(--sans); font-size:clamp(24px,4vw,36px); font-weight:900; line-height:1; }
+  .approved-budget-value { color:var(--color-body); font-family:var(--sans); font-size:clamp(24px,4vw,36px); font-weight:900; line-height:1; }
   .session-phone-wrap { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .session-phone-trigger { border:0; background:transparent; color:var(--accent); padding:0; font-family:var(--sans); font-size:inherit; font-weight:900; letter-spacing:.02em; text-decoration:underline; text-underline-offset:3px; }
-  .session-phone-trigger:hover,.session-phone-trigger:focus-visible { color:#FFE7CA; outline:0; }
+  .session-phone-trigger:hover,.session-phone-trigger:focus-visible { color:var(--color-body); outline:0; }
   .session-phone-menu { display:inline-flex; align-items:center; gap:6px; }
   .session-phone-menu.hidden { display:none; }
-  .session-phone-menu a { display:inline-flex; align-items:center; min-height:32px; padding:0 9px; border:5px solid var(--ring-faint); color:#FFE7CA; font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.12em; text-decoration:none; text-transform:uppercase; }
+  .session-phone-menu a { display:inline-flex; align-items:center; min-height:32px; padding:0 9px; border:5px solid var(--ring-faint); color:var(--color-body); font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.12em; text-decoration:none; text-transform:uppercase; }
   .session-phone-menu a:hover,.session-phone-menu a:focus-visible { border-color:var(--accent); color:var(--accent); outline:0; }
   .session-plan-options { display:grid; gap:8px; }
   .session-plan-ack { display:grid; grid-template-columns:20px 1fr; gap:10px; align-items:start; color:var(--muted); font-size:12px; line-height:1.6; }
   .session-plan-ack input { width:18px; height:18px; margin-top:2px; accent-color:var(--signal); }
-  .session-plan-confirm { min-height:46px; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+  .session-plan-confirm { min-height:46px; border:5px solid var(--ring-soft); background:transparent; color:var(--color-body); font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
   .session-plan-confirm:disabled { opacity:.4; cursor:not-allowed; }
   .session-plan-confirm:not(:disabled):hover { border-color:var(--accent); color:var(--accent); }
-  .window-tools { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:2px; }
-  .month-nav { display:flex; align-items:center; gap:8px; }
-  .month-button { width:34px; min-height:34px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:14px; font-weight:900; line-height:1; transition:border-color var(--t-fast), color var(--t-fast); }
-  .month-button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
-  .month-button:disabled { opacity:0.32; cursor:not-allowed; }
-  .month-select { min-height:34px; max-width:220px; border:5px solid var(--ring-faint); background:var(--bg); color:#FFE7CA; padding:0 32px 0 10px; font-family:var(--sans); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; }
-  .month-count { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
-  .calendar { display:grid; gap:8px; margin:4px 0 4px; }
-  .calendar-weekdays,.calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px; }
-  .calendar-weekdays span { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-align:center; text-transform:uppercase; }
-  .day-button { aspect-ratio:1; min-width:0; border:5px solid var(--ring-faint); background:transparent; color:rgba(255,231,202,0.32); font-family:var(--sans); font-size:12px; font-weight:900; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
-  .day-button.open { color:#FFE7CA; border-color:var(--ring-soft); }
-  .day-button.open:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.045); }
-  .day-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(110,4,4,0.12); }
-  .day-button.closed { cursor:not-allowed; }
-  .day-button.blank { visibility:hidden; }
   .choice { width:100%; display:grid; grid-template-columns:1fr auto; gap:16px; text-align:left; background:transparent; color:var(--text); border:5px solid var(--ring-faint); padding:18px; transition:border-color var(--t-fast), background var(--t-fast); }
   .choice:hover { border-color:var(--accent); background:rgba(252,184,103,0.045); }
   .choice.active { border-color:var(--signal); background:rgba(110,4,4,0.12); }
   .choice.active .price { color:var(--signal); }
-  .choice-title { display:block; font-family:var(--sans); font-size:15px; font-weight:900; letter-spacing:0; color:#FFE7CA; }
+  .choice-title { display:block; font-family:var(--sans); font-size:15px; font-weight:900; letter-spacing:0; color:var(--color-body); }
   .choice-meta { display:block; margin-top:6px; color:var(--dim); font-size:12px; line-height:1.45; }
-  .next-tag { align-self:start; color:var(--signal); font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:0.14em; text-transform:uppercase; white-space:nowrap; }
   .price-wrap { text-align:right; white-space:nowrap; }
   .price { display:block; font-family:var(--sans); font-size:22px; font-weight:900; color:var(--accent); }
   .price-label { display:block; margin-top:4px; color:rgba(252,184,103,0.42); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
@@ -105,12 +91,12 @@
   .panel-key { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.16em; text-transform:uppercase; }
   .tip-control { display:grid; gap:10px; padding:18px 0; border-bottom:5px solid var(--ring-faint); }
   .tip-options { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
-  .tip-button { min-height:38px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .tip-button { min-height:38px; border:5px solid var(--ring-faint); background:transparent; color:var(--color-body); font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:0.1em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .tip-button:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
-  .tip-button.active { border-color:var(--signal); color:#FFE7CA; background:rgba(110,4,4,0.12); }
-  .custom-tip { width:100%; min-height:42px; border:5px solid var(--ring-faint); background:transparent; color:#FFE7CA; padding:0 12px; font-family:var(--sans); font-size:13px; }
+  .tip-button.active { border-color:var(--signal); color:var(--color-body); background:rgba(110,4,4,0.12); }
+  .custom-tip { width:100%; min-height:42px; border:5px solid var(--ring-faint); background:transparent; color:var(--color-body); padding:0 12px; font-family:var(--sans); font-size:13px; }
   .custom-tip:focus { outline:0; border-color:var(--accent); background:rgba(252,184,103,0.035); }
-  .checkout { width:100%; min-height:52px; margin-top:22px; border:5px solid var(--ring-soft); background:transparent; color:#FFE7CA; font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
+  .checkout { width:100%; min-height:52px; margin-top:22px; border:5px solid var(--ring-soft); background:transparent; color:var(--color-body); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; transition:border-color var(--t-fast), color var(--t-fast), background var(--t-fast); }
   .checkout:enabled:hover { border-color:var(--accent); color:var(--accent); background:rgba(252,184,103,0.04); }
   .checkout:disabled { opacity:0.45; cursor:not-allowed; }
   .fine { margin-top:14px; color:var(--dim); font-size:11px; line-height:1.7; }
@@ -200,15 +186,17 @@
       </section>
       <section class="section">
         <p class="section-label">Available Windows</p>
-        <div id="windowTools" class="window-tools hidden" data-live-edit-ignore="true">
-          <div class="month-nav">
-            <button id="prevMonthBtn" class="month-button" type="button" aria-label="Previous month">&lt;</button>
-            <select id="monthSelect" class="month-select" aria-label="Available month"></select>
-            <button id="nextMonthBtn" class="month-button" type="button" aria-label="Next month">&gt;</button>
+        <div class="cal-wrap" data-live-edit-ignore="true">
+          <div id="windowTools" class="cal-header hidden">
+            <div class="cal-month-nav">
+              <button id="prevMonthBtn" class="cal-nav" type="button" aria-label="Previous month">&lt;</button>
+              <select id="monthSelect" class="cal-month-select" aria-label="Available month"></select>
+              <button id="nextMonthBtn" class="cal-nav" type="button" aria-label="Next month">&gt;</button>
+            </div>
+            <span id="monthCount" class="cal-month-count"></span>
           </div>
-          <span id="monthCount" class="month-count"></span>
+          <div id="calendar" class="hidden"></div>
         </div>
-        <div id="calendar" class="calendar hidden" data-live-edit-ignore="true"></div>
         <div id="windowList" class="window-list"></div>
       </section>
       </div>
@@ -565,12 +553,12 @@
   function renderWindowButton(windowItem, options = {}) {
     const meta = `Ends ${escapeHtml(formatDate(windowItem.endAt))}`;
     return `
-      <button class="choice ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
+      <button class="booking-window-option ${selectedWindow?.id === windowItem.id ? "active" : ""}" type="button" data-window="${escapeHtml(windowItem.id)}">
         <span>
-          <span class="choice-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
-          <span class="choice-meta">${meta}</span>
+          <span class="booking-window-title">${escapeHtml(formatDate(windowItem.startAt))}</span>
+          <span class="booking-window-meta">${meta}</span>
         </span>
-        ${options.next ? '<span class="next-tag">Next Available</span>' : ""}
+        ${options.next ? '<span class="booking-next-tag">Next Available</span>' : ""}
       </button>
     `;
   }
@@ -588,21 +576,21 @@
     const openDays = new Set(monthWindows.map((windowItem) => dayKey(windowItem.startAt)));
     const cells = [];
     for (let blank = 0; blank < firstDay.getDay(); blank += 1) {
-      cells.push('<button class="day-button blank" type="button" tabindex="-1" aria-hidden="true"></button>');
+      cells.push('<button class="cal-day empty" type="button" tabindex="-1" aria-hidden="true"></button>');
     }
     for (let day = 1; day <= daysInMonth; day += 1) {
       const key = `${monthKeyValue}-${String(day).padStart(2, "0")}`;
       const isOpen = openDays.has(key);
       cells.push(`
-        <button class="day-button ${isOpen ? "open" : "closed"} ${selectedDayKey === key ? "active" : ""}" type="button" data-day="${escapeHtml(key)}" ${isOpen ? "" : "disabled"} aria-label="${escapeHtml(key)} ${isOpen ? "open" : "closed"}">
+        <button class="cal-day ${isOpen ? "open" : "past"} ${selectedDayKey === key ? "active" : ""}" type="button" role="gridcell" data-day="${escapeHtml(key)}" ${isOpen ? "" : "disabled"} aria-label="${escapeHtml(key)} ${isOpen ? "open" : "closed"}">
           ${day}
         </button>
       `);
     }
     calendarEl.classList.remove("hidden");
     calendarEl.innerHTML = `
-      <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
-      <div class="calendar-grid">${cells.join("")}</div>
+      <div class="cal-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+      <div class="cal-grid" role="grid" aria-label="Available appointment dates">${cells.join("")}</div>
     `;
   }
 

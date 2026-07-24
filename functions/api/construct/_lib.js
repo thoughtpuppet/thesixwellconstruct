@@ -164,6 +164,7 @@ function normalizeRecord(config, body, existing = {}) {
   if (out.session_category && !["artist_review","one_session","multiple_sessions"].includes(out.session_category)) throw new Error("Invalid session category.");
   if (out.split_policy && !["artist_review","required","client_choice","not_available"].includes(out.split_policy)) throw new Error("Invalid split policy.");
   if (out.process_category && !["standard","experimental"].includes(out.process_category)) throw new Error("Invalid flash process category.");
+  if (out.print_intent && !["unavailable","planned"].includes(out.print_intent)) throw new Error("Invalid print plan.");
   const merged = { ...existing, ...out };
   for (const [minimum,maximum,label] of [["estimated_sessions_min","estimated_sessions_max","session count"],["estimated_total_minutes_min","estimated_total_minutes_max","total time"]]) {
     if (merged[minimum] !== null && merged[maximum] !== null && Number(merged[minimum]) > Number(merged[maximum])) throw new Error(`Minimum ${label} cannot exceed maximum.`);
@@ -1028,6 +1029,7 @@ async function adminList(env, resource) {
 
 async function adminCreate(request, env, resource) {
   const config = RESOURCE_CONFIG[resource]; const body = await readJson(request); if (!config || !body) return failure("Invalid request.");
+  if(resource==="art"&&body.print_intent!==undefined&&!["unavailable","planned"].includes(body.print_intent))return failure("Print plan must be unavailable or planned.");
   const database = db(env); const recordId = text(body.id, 160) || id(config.entityType); const values = normalizeRecord(config, body);
   let styleSelection = [];
   if (resource === "flash") {
@@ -1066,6 +1068,7 @@ async function adminCreate(request, env, resource) {
 
 async function adminUpdate(request, env, resource, recordId, archive = false) {
   const config = RESOURCE_CONFIG[resource]; const body = archive ? { state: "archived" } : await readJson(request); if (!config || !body) return failure("Invalid request.");
+  if(resource==="art"&&body.print_intent!==undefined&&!["unavailable","planned"].includes(body.print_intent))return failure("Print plan must be unavailable or planned.");
   const database = db(env); const beforeRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first(); if (!beforeRow) return failure("Not found.",404);
   const hasStyleUpdate = resource === "flash" && Object.prototype.hasOwnProperty.call(body, "styles");
   let beforeStyleSelection = [];
@@ -1420,7 +1423,7 @@ function entityDirectorySql(where="1=1"){
       WHEN 'event' THEN trim(COALESCE(ev.starts_at,'')||CASE WHEN ev.starts_at IS NOT NULL AND ev.starts_at<>'' AND ev.location<>'' THEN ' · ' ELSE '' END||COALESCE(ev.location,''))
       WHEN 'place' THEN COALESCE(pl.public_location,'') ELSE '' END detail_label,
     COALESCE(cn.id,'') node_resolved_id,COALESCE(cn.name,'') node_name,COALESCE(cn.slug,'') node_slug,COALESCE(cn.color,'') node_color,
-    COALESCE(fi.claimable,0) claimable
+    COALESCE(fi.claimable,0) claimable,COALESCE(mi.shopify_handle,'') shopify_handle
   FROM content_entities ce
   LEFT JOIN flash_items fi ON ce.entity_type='flash_item' AND fi.id=ce.id
   LEFT JOIN flash_series fs ON ce.entity_type='flash_series' AND fs.id=ce.id
@@ -1448,7 +1451,7 @@ function entityDirectorySql(where="1=1"){
 
 function presentEntity(row){
   if(!row)return null;const nodeId=row.node_resolved_id||canonicalNodeAlias(row.legacy_node_id,row.entity_type);const fallback=nodeFallback(nodeId);
-  return {id:row.id,entityType:row.entity_type,title:row.title||row.id,state:row.state||row.visibility,visibility:row.visibility,route:row.route||"",imageUrl:row.image_url||"",kindLabel:row.kind_label||row.entity_type,detailLabel:row.detail_label||"",claimable:Number(row.claimable||0),node:{id:nodeId,name:row.node_name||fallback.name,slug:row.node_slug||fallback.slug,color:row.node_color||fallback.color}};
+  return {id:row.id,entityType:row.entity_type,title:row.title||row.id,state:row.state||row.visibility,visibility:row.visibility,route:row.route||"",imageUrl:row.image_url||"",kindLabel:row.kind_label||row.entity_type,detailLabel:row.detail_label||"",claimable:Number(row.claimable||0),shopifyHandle:row.shopify_handle||"",node:{id:nodeId,name:row.node_name||fallback.name,slug:row.node_slug||fallback.slug,color:row.node_color||fallback.color}};
 }
 
 async function entityRecords(database,ids){
@@ -1481,7 +1484,19 @@ async function validateRelationship(database,body,ignoreId=""){
   const entities=await entityRecords(database,[source,target]);if(!entities.has(source)||!entities.has(target))return failure("Choose two registered entities.",404);
   const relType=await database.prepare("SELECT * FROM relationship_types WHERE id=?").bind(type).first();if(!relType)return failure("Relationship type not found.",404);if(!relType.public_visible&&!ignoreId&&body.public_visible)return failure("That relationship type is disabled for new public connections.",409);
   const duplicate=await database.prepare("SELECT id FROM entity_relationships WHERE ((source_entity_id=? AND target_entity_id=?) OR (source_entity_id=? AND target_entity_id=?)) AND relationship_type_id=? AND id<>?").bind(source,target,target,source,type,ignoreId).first();if(duplicate)return failure("That entity/type connection already exists in one direction.",409);
-  if(body.public_visible){for(const entity of entities.values())if(entity.visibility!=="public"||!entity.route)return failure(`${entity.title} needs a public destination route before this connection can be public.`,409)}
+  if(body.public_visible){
+    for(const entity of entities.values())if(entity.visibility!=="public"||!entity.route)return failure(`${entity.title} needs a public destination route before this connection can be public.`,409);
+    const pair=[...entities.values()],art=pair.find(entity=>entity.entityType==="art_work"),print=pair.find(entity=>entity.entityType==="merch_item"&&String(entity.kindLabel||"").toLowerCase()==="print");
+    if(art&&print){
+      const existingPrint=await database.prepare(`SELECT er.id
+        FROM entity_relationships er
+        JOIN merch_items mi ON mi.id=CASE WHEN er.source_entity_id=? THEN er.target_entity_id ELSE er.source_entity_id END
+        WHERE er.public_visible=1 AND er.id<>? AND (er.source_entity_id=? OR er.target_entity_id=?)
+          AND lower(mi.product_type)='print'
+        LIMIT 1`).bind(art.id,ignoreId,art.id,art.id).first();
+      if(existingPrint)return failure("A painting can have only one public print product. Make the existing print connection private before publishing another.",409);
+    }
+  }
   return {source,target,type,entities};
 }
 

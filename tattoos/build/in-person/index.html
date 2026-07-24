@@ -8,15 +8,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/booking-calendar.css">
 <link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
-    --bg:#0e0e0e; --signal:#6E0404; --ring:#6D3D15;
+    --bg:#0e0e0e; --signal:var(--color-tattooing); --ring:#6D3D15;
+    --venture-color:var(--color-tattooing); --venture-accent:var(--color-tattooing);
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
-    --accent:#FCB867; --text:#FFE7CA;
-    --text-mute:rgba(255,231,202,0.6); --text-dim:rgba(255,231,202,0.35); --text-ghost:rgba(255,231,202,0.12);
+    --accent:#FCB867; --text:var(--color-body, #FBD19D);
+    --text-mute:var(--color-text-muted, rgba(251,209,157,0.66)); --text-dim:var(--color-text-dim, rgba(251,209,157,0.38)); --text-ghost:var(--color-text-ghost, rgba(251,209,157,0.16));
     --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:40px;--s7:64px;--s8:96px;
     --sans:'Inter',Arial,sans-serif;
     --serif:Georgia,'Times New Roman',Times,serif;
@@ -41,7 +43,7 @@
   .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
 
   /* ── LEFT COLUMN ── */
-  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,140px);letter-spacing:-0.05em;line-height:0.88;color:var(--signal);text-transform:uppercase;margin-bottom:var(--s6);}
+  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,140px);letter-spacing:-0.05em;line-height:0.88;color:var(--type-hero-color, var(--venture-accent));text-transform:uppercase;margin-bottom:var(--s6);}
   .page-body{font-size:16px;line-height:1.8;color:var(--text-mute);max-width:560px;}
   .page-body+.page-body{margin-top:var(--s4);}
 

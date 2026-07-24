@@ -11,10 +11,10 @@
 <style>
   :root {
     --bg: #0e0e0e;
-    --body: #FFE7CA;
-    --body-muted: rgba(255, 231, 202, 0.66);
+    --body: var(--color-body, #FBD19D);
+    --body-muted: var(--color-text-muted, rgba(251, 209, 157, 0.66));
     --base-text: rgba(252, 184, 103, 0.72);
-    --body-dim: rgba(255, 231, 202, 0.34);
+    --body-dim: var(--color-text-dim, rgba(251, 209, 157, 0.38));
     --accent: #FCB867;
     --amber-soft: rgba(252, 184, 103, 0.18);
     --amber-faint: rgba(252, 184, 103, 0.105);
@@ -507,7 +507,7 @@
     border: 0;
     border-radius: 6px;
     background: #10100f;
-    color: #FFE7CA;
+    color: var(--color-body, #FBD19D);
     transition: transform 180ms var(--ease);
     /* cards cascade in, paced with the connection lines drawing above */
     animation: cardIn 520ms var(--ease) backwards;
@@ -690,7 +690,7 @@
     min-height: 42px;
     padding: 10px 12px;
     border-left: 5px solid rgba(109, 61, 21, 0.42);
-    color: rgba(255, 231, 202, 0.58);
+    color: var(--color-text-muted, rgba(251, 209, 157, 0.66));
     background: rgba(252, 184, 103, 0.045);
     font-family: var(--sans);
     font-size: 12px;

@@ -22,7 +22,7 @@
   --select-menu-ring: var(--color-accent-dim, var(--ring-faint, rgba(252, 184, 103, 0.25)));
   --select-menu-active-text: #0e0e0e;
   --select-menu-bg: #0e0e0e;
-  --select-menu-text: #FFE7CA;
+  --select-menu-text: var(--color-body, #FBD19D);
   --select-menu-list-max-height: 240px;
   position: relative;
   width: 100%;
@@ -34,13 +34,13 @@
 body[data-venture="tattooing"] .custom-select {
   --select-menu-accent: var(--color-tattooing-bright, #9A2323);
   --select-menu-ring: var(--color-tattooing-dim, rgba(110, 4, 4, 0.25));
-  --select-menu-active-text: #FFE7CA;
+  --select-menu-active-text: var(--color-body, #FBD19D);
 }
 
 body[data-venture="art"] .custom-select {
   --select-menu-accent: var(--color-art-bright, #0F72DB);
   --select-menu-ring: var(--color-art-dim, rgba(0, 57, 189, 0.25));
-  --select-menu-active-text: #FFE7CA;
+  --select-menu-active-text: var(--color-body, #FBD19D);
 }
 
 body[data-venture="merch"] .custom-select {
@@ -58,7 +58,7 @@ body[data-venture="about"] .custom-select {
 body[data-venture="events"] .custom-select {
   --select-menu-accent: var(--color-events-bright, #397F34);
   --select-menu-ring: var(--color-events-dim, rgba(0, 93, 37, 0.25));
-  --select-menu-active-text: #FFE7CA;
+  --select-menu-active-text: var(--color-body, #FBD19D);
 }
 
 body[data-venture="music"] .custom-select {

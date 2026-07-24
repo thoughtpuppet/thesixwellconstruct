@@ -17,6 +17,9 @@
      The foundation every medium page is built on.
   ────────────────────────────────────────────────────────── */
 
+  /* APPROVED CANON — canvas and base ink
+     Primary production reference: /about/mediums/
+     Verified public + Studio consumers: July 23, 2026. */
   --color-bg:         #0E0E0E;   /* site background — near black */
   --color-body:       #FBD19D;   /* all body text — warm off-white */
   --color-text-muted: rgba(251, 209, 157, 0.66); /* secondary copy, descriptions, notes */
@@ -47,7 +50,7 @@
   /* TATTOOING */
   --color-tattooing:        #6E0404;
   --color-tattooing-dim:    rgba(110, 4, 4, 0.25);
-  --color-tattooing-bright: #9A2323;
+  --color-tattooing-bright: #C91818;
   --color-tattooing-dark:   #420202;
 
   /* ART MAKING */
@@ -125,15 +128,69 @@
   --type-body-leading:    1.42;
   --type-body-tracking:   0.1em;
   --type-body-transform:  uppercase;
+  --type-body-size-tablet:     16px;
+  --type-body-leading-tablet:  1.48;
+  --type-body-tracking-tablet: 0.08em;
+  --type-body-size-mobile:     15px;
+  --type-body-leading-mobile:  1.52;
+  --type-body-tracking-mobile: 0.06em;
+  --type-body-size-compact:     14px;
+  --type-body-leading-compact:  1.54;
+  --type-body-tracking-compact: 0.05em;
+
+  --type-hero-font:       var(--font-display);
+  --type-hero-color:      var(--venture-accent, var(--venture-color, var(--color-accent)));
+  --type-hero-size:       clamp(76px, 15vw, 220px);
+  --type-hero-weight:     900;
+  --type-hero-style:      normal;
+  --type-hero-leading:    0.84;
+  --type-hero-tracking:   0em;
+  --type-hero-transform:  uppercase;
+  --type-hero-size-tablet:     clamp(58px, 12vw, 132px);
+  --type-hero-leading-tablet:  0.88;
+  --type-hero-tracking-tablet: 0em;
+  --type-hero-size-mobile:     clamp(42px, 14vw, 74px);
+  --type-hero-leading-mobile:  0.9;
+  --type-hero-tracking-mobile: 0em;
+  --type-hero-size-compact:     clamp(38px, 13vw, 62px);
+  --type-hero-leading-compact:  0.92;
+  --type-hero-tracking-compact: 0em;
+
+  --type-section-font:       var(--font-display);
+  --type-section-color:      var(--color-body);
+  --type-section-size:       clamp(34px, 6vw, 82px);
+  --type-section-weight:     900;
+  --type-section-style:      normal;
+  --type-section-leading:    0.94;
+  --type-section-tracking:   0em;
+  --type-section-transform:  uppercase;
+  --type-section-size-tablet:     clamp(30px, 6vw, 58px);
+  --type-section-leading-tablet:  0.98;
+  --type-section-tracking-tablet: 0em;
+  --type-section-size-mobile:     clamp(28px, 9vw, 44px);
+  --type-section-leading-mobile:  1;
+  --type-section-tracking-mobile: 0em;
+  --type-section-size-compact:     clamp(26px, 8vw, 38px);
+  --type-section-leading-compact:  1.02;
+  --type-section-tracking-compact: 0em;
 
   --type-descriptor-font:      var(--font-serif);
-  --type-descriptor-color:     rgba(252, 184, 103, 0.75);
+  --type-descriptor-color:     rgba(252, 184, 103, 0.55);
   --type-descriptor-size:      12px;
   --type-descriptor-weight:    400;
   --type-descriptor-style:     normal;
   --type-descriptor-leading:   1.6;
   --type-descriptor-tracking:  0.22em;
   --type-descriptor-transform: uppercase;
+  --type-descriptor-size-tablet:     12px;
+  --type-descriptor-leading-tablet:  1.6;
+  --type-descriptor-tracking-tablet: 0.2em;
+  --type-descriptor-size-mobile:     11px;
+  --type-descriptor-leading-mobile:  1.6;
+  --type-descriptor-tracking-mobile: 0.18em;
+  --type-descriptor-size-compact:     10px;
+  --type-descriptor-leading-compact:  1.62;
+  --type-descriptor-tracking-compact: 0.16em;
 
   --type-eyebrow-font:      var(--font-serif);
   --type-eyebrow-color:     var(--venture-accent, var(--venture-color, var(--accent, var(--color-accent))));
@@ -143,6 +200,15 @@
   --type-eyebrow-leading:   1.35;
   --type-eyebrow-tracking:  0.22em;
   --type-eyebrow-transform: uppercase;
+  --type-eyebrow-size-tablet:     10px;
+  --type-eyebrow-leading-tablet:  1.4;
+  --type-eyebrow-tracking-tablet: 0.2em;
+  --type-eyebrow-size-mobile:     9px;
+  --type-eyebrow-leading-mobile:  1.4;
+  --type-eyebrow-tracking-mobile: 0.18em;
+  --type-eyebrow-size-compact:     9px;
+  --type-eyebrow-leading-compact:  1.42;
+  --type-eyebrow-tracking-compact: 0.16em;
 
   --type-breadcrumb-font:      var(--font-serif);
   --type-breadcrumb-color:     var(--color-breadcrumb-dim);
@@ -152,6 +218,33 @@
   --type-breadcrumb-leading:   1.42;
   --type-breadcrumb-tracking:  0.18em;
   --type-breadcrumb-transform: uppercase;
+  --type-breadcrumb-size-tablet:     10px;
+  --type-breadcrumb-leading-tablet:  1.45;
+  --type-breadcrumb-tracking-tablet: 0.16em;
+  --type-breadcrumb-size-mobile:     10px;
+  --type-breadcrumb-leading-mobile:  1.5;
+  --type-breadcrumb-tracking-mobile: 0.14em;
+  --type-breadcrumb-size-compact:     9px;
+  --type-breadcrumb-leading-compact:  1.5;
+  --type-breadcrumb-tracking-compact: 0.12em;
+
+  --type-control-font:       var(--font-display);
+  --type-control-color:      var(--color-body);
+  --type-control-size:       11px;
+  --type-control-weight:     800;
+  --type-control-style:      normal;
+  --type-control-leading:    1.2;
+  --type-control-tracking:   0.14em;
+  --type-control-transform:  uppercase;
+  --type-control-size-tablet:     11px;
+  --type-control-leading-tablet:  1.25;
+  --type-control-tracking-tablet: 0.12em;
+  --type-control-size-mobile:     10px;
+  --type-control-leading-mobile:  1.3;
+  --type-control-tracking-mobile: 0.1em;
+  --type-control-size-compact:     10px;
+  --type-control-leading-compact:  1.3;
+  --type-control-tracking-compact: 0.08em;
 
   --type-footer-font:      var(--font-serif);
   --type-footer-color:     var(--color-text-dim);
@@ -161,6 +254,15 @@
   --type-footer-leading:   1.42;
   --type-footer-tracking:  0.18em;
   --type-footer-transform: uppercase;
+  --type-footer-size-tablet:     10px;
+  --type-footer-leading-tablet:  1.45;
+  --type-footer-tracking-tablet: 0.16em;
+  --type-footer-size-mobile:     9px;
+  --type-footer-leading-mobile:  1.5;
+  --type-footer-tracking-mobile: 0.14em;
+  --type-footer-size-compact:     9px;
+  --type-footer-leading-compact:  1.5;
+  --type-footer-tracking-compact: 0.12em;
 
   --type-meta-font:      var(--font-serif);
   --type-meta-color:     var(--color-text-dim);
@@ -170,6 +272,15 @@
   --type-meta-leading:   1.42;
   --type-meta-tracking:  0.18em;
   --type-meta-transform: uppercase;
+  --type-meta-size-tablet:     10px;
+  --type-meta-leading-tablet:  1.45;
+  --type-meta-tracking-tablet: 0.16em;
+  --type-meta-size-mobile:     10px;
+  --type-meta-leading-mobile:  1.5;
+  --type-meta-tracking-mobile: 0.14em;
+  --type-meta-size-compact:     9px;
+  --type-meta-leading-compact:  1.5;
+  --type-meta-tracking-compact: 0.12em;
 
 
   /* ──────────────────────────────────────────────────────────
@@ -259,6 +370,69 @@
   --max-width:       1080px;  /* max content column width */
   --page-padding-x:  40px;    /* horizontal padding on the page shell */
   --page-padding-y:  80px;    /* vertical padding top/bottom */
+  --page-padding-x-tablet: 28px;
+  --page-padding-y-tablet: 64px;
+  --page-padding-x-mobile: 18px;
+  --page-padding-y-mobile: 48px;
+  --page-padding-x-compact: 14px;
+  --page-padding-y-compact: 40px;
+  --section-gap: 80px;
+  --section-gap-tablet: 64px;
+  --section-gap-mobile: 48px;
+  --section-gap-compact: 40px;
+  --grid-gap: 16px;
+  --grid-gap-tablet: 14px;
+  --grid-gap-mobile: 12px;
+  --grid-gap-compact: 12px;
+  --control-min-height: 44px;
+
+
+  /* STUDIO CONSOLE
+     Studio shares the base palette and typography foundation but keeps
+     application-specific surfaces, density, and operational feedback roles. */
+
+  --studio-bg: var(--color-bg);
+  --studio-panel: #161616;
+  --studio-line: rgba(251, 209, 157, 0.16);
+  --studio-line-strong: rgba(251, 209, 157, 0.32);
+  --studio-text: var(--color-body);
+  --studio-muted: var(--color-text-muted);
+  --studio-dim: var(--color-text-dim);
+  --studio-accent: var(--color-accent);
+  --studio-signal: var(--color-tattooing);
+  --studio-ring: var(--color-archive);
+  --studio-ring-soft: var(--color-archive-dim);
+  --studio-ring-faint: rgba(109, 61, 21, 0.18);
+  --studio-ghost: rgba(252, 180, 103, 0.14);
+  --studio-status-success: #6FAE7C;
+  --studio-status-warning: var(--color-accent);
+  --studio-status-error: #CC8F72;
+  --studio-type-title-size: 18px;
+  --studio-type-title-leading: 1.1;
+  --studio-type-title-tracking: 0.16em;
+  --studio-type-label-size: 10px;
+  --studio-type-label-leading: 1.35;
+  --studio-type-label-tracking: 0.12em;
+  --studio-type-body-size: 13px;
+  --studio-type-body-leading: 1.55;
+  --studio-type-body-tracking: 0em;
+  --studio-type-meta-size: 10px;
+  --studio-type-meta-leading: 1.45;
+  --studio-type-meta-tracking: 0.1em;
+  --studio-control-min-height: 44px;
+  --studio-workspace-gap: 20px;
+  --studio-row-padding: 16px;
+  --studio-pane-padding: 24px;
+  --studio-workspace-gap-tablet: 16px;
+  --studio-row-padding-tablet: 14px;
+  --studio-pane-padding-tablet: 18px;
+  --studio-workspace-gap-mobile: 12px;
+  --studio-row-padding-mobile: 12px;
+  --studio-pane-padding-mobile: 14px;
+  --studio-type-title-size-mobile: 16px;
+  --studio-type-label-size-mobile: 10px;
+  --studio-type-body-size-mobile: 13px;
+  --studio-type-meta-size-mobile: 9px;
 
 }
 

@@ -7,14 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --venture:#6E0404; --ring:#6D3D15;
+    --bg:#0e0e0e; --venture:var(--color-tattooing); --ring:#6D3D15;
+    --venture-color:var(--color-tattooing); --venture-accent:var(--color-tattooing);
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --accent:#FCB867; --text:#FCB867;
     --text-mute:rgba(252,184,103,0.55); --text-dim:rgba(252,184,103,0.30); --text-ghost:rgba(252,184,103,0.13);
-    --body-text:#FFE7CA;
+    --body-text:var(--color-body, #FBD19D);
     --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:40px;--s7:64px;--s8:96px;
     --sans:'Inter',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1); --t-med:0.35s cubic-bezier(0.2,0,0.2,1); --t-slow:0.5s cubic-bezier(0.22,1,0.36,1);
@@ -43,7 +45,7 @@
   .flash-badge{position:absolute;bottom:var(--s4);left:0;font-family:var(--serif);font-size:9px;letter-spacing:0.28em;text-transform:uppercase;color:var(--venture);opacity:0.7;}
   .split-content{padding:var(--s7) var(--s6) var(--s8);display:flex;flex-direction:column;gap:var(--s7);}
   .flash-header{display:flex;flex-direction:column;gap:var(--s3);}
-  .flash-title{font-family:var(--sans);font-weight:900;font-size:clamp(22px,3.5vw,40px);letter-spacing:-0.03em;line-height:0.95;color:var(--body-text);text-transform:uppercase;}
+  .flash-title{font-family:var(--sans);font-weight:900;font-size:clamp(22px,3.5vw,40px);letter-spacing:-0.03em;line-height:0.95;color:var(--type-hero-color, var(--venture-accent));text-transform:uppercase;}
   .flash-meta{display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap;padding-top:var(--s3);border-top:5px solid var(--ring-faint);}
   .meta-item{font-family:var(--serif);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-dim);}
   .meta-sep{color:var(--text-ghost);}

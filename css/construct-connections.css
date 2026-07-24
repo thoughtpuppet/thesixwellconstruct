@@ -158,7 +158,7 @@
 }
 
 .cc-card-title {
-  color: var(--body-text, #FFE7CA);
+  color: var(--body-text, var(--color-body, #FBD19D));
   font: 900 12px/1.25 Arial, sans-serif;
   letter-spacing: .02em;
   text-transform: uppercase;
@@ -222,7 +222,7 @@
 .cc-map-center-copy { position: absolute; top: 24px; left: 50%; width: 190px; align-items: center; gap: 4px; transform: translateX(-50%); }
 .cc-map-copy { position: absolute; align-items: center; gap: 3px; width: 140px; max-width: 140px; text-align: center; }
 .cc-map-center-title,
-.cc-map-title { color: var(--body-text, #FFE7CA); font-family: Arial, sans-serif; font-weight: 900; text-transform: uppercase; }
+.cc-map-title { color: var(--body-text, var(--color-body, #FBD19D)); font-family: Arial, sans-serif; font-weight: 900; text-transform: uppercase; }
 .cc-map-center-title { font-size: 11px; line-height: 1.25; }
 .cc-map-title { font-size: 10px; line-height: 1.25; }
 .cc-map-center-node,

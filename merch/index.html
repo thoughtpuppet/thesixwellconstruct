@@ -54,35 +54,37 @@
      DESIGN TOKENS
   ============================================================ */
   :root {
-    --bg:        #0e0e0e;
+    --bg:        var(--color-bg);
     --bg-raised: #111111;
     --bg-drawer: #0a0a0a;
 
-    --accent:    var(--color-accent, #FCB867);            /* wordmark amber */
-    --accent-hot:var(--color-merch, #F08F00);            /* MERCH medium color — title + six.well source */
+    --venture-color: var(--color-merch);
+    --venture-accent: var(--color-merch);
+    --accent:    var(--color-accent);                     /* wordmark amber */
+    --accent-hot:var(--color-merch);                      /* MERCH medium color — title + six.well source */
 
-    --ring:      #6D3D15;
-    --ring-soft: rgba(109,61,21,0.4);
-    --ring-faint:rgba(109,61,21,0.18);
+    --ring:      var(--color-archive);
+    --ring-soft: color-mix(in srgb, var(--color-archive) 40%, transparent);
+    --ring-faint:color-mix(in srgb, var(--color-archive) 18%, transparent);
 
     /* all text keyed to amber at descending opacity */
-    --text:      #FCB867;
-    --text-mute: rgba(252,184,103,0.55);
-    --text-dim:  rgba(252,184,103,0.30);
-    --text-ghost:rgba(252,184,103,0.13);
+    --text:      var(--color-accent);
+    --text-mute: var(--color-text-muted);
+    --text-dim:  var(--color-text-dim);
+    --text-ghost:var(--color-text-ghost);
 
     --s1:4px; --s2:8px; --s3:12px; --s4:16px;
     --s5:24px; --s6:40px; --s7:64px; --s8:96px;
 
-    --sans: 'Inter',Arial,sans-serif;
-    --serif:Georgia,'Times New Roman',Times,serif;
+    --sans: var(--font-display);
+    --serif:var(--font-serif);
 
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
     --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
 
     /* driven by JS — switches to the active filter's medium color.
        defaults to MERCH hot orange for the "all" state. */
-    --title-color: #F08F00;
+    --title-color: var(--color-merch);
   }
 
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
@@ -165,7 +167,7 @@
   main {
     position:relative; z-index:2;
     max-width:1440px; margin:0 auto;
-    padding:var(--s8) var(--s6) var(--s7);
+    padding:var(--landing-page-padding-y-active) var(--landing-page-padding-x-active);
   }
 
   /* ============================================================
@@ -193,15 +195,16 @@
   ============================================================ */
   .intro {
     display:flex; align-items:flex-end; justify-content:space-between;
-    gap:var(--s6); margin-bottom:var(--s8);
+    gap:var(--s6); margin-bottom:var(--landing-section-gap-active);
   }
   .intro-left {
     display:flex; flex-direction:column; align-items:flex-start;
   }
   .intro h1 {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(80px,14vw,220px);
-    letter-spacing:-0.05em; line-height:0.88;
+    font-family:var(--type-hero-font, var(--sans)); font-weight:var(--type-hero-weight, 900);
+    font-size:var(--type-hero-size-active, var(--type-hero-size));
+    letter-spacing:var(--type-hero-tracking-active, var(--type-hero-tracking));
+    line-height:var(--type-hero-leading-active, var(--type-hero-leading));
     color:var(--title-color);
     transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
   }
@@ -396,7 +399,7 @@
   .grid {
     display:grid;
     grid-template-columns:repeat(3,1fr);
-    gap:var(--s7) var(--s6);
+    gap:var(--landing-grid-gap-active);
   }
 
   /* ============================================================
@@ -904,6 +907,7 @@
     .brand-more { justify-self:end; max-width:100%; }
   }
 </style>
+<link rel="stylesheet" href="/css/landing-family.css">
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <style>
@@ -926,7 +930,7 @@
   }
 </style>
 </head>
-<body data-venture="merch">
+<body data-venture="merch" data-landing-family="merch-commerce">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -959,13 +963,13 @@
 
   <!-- MAIN -->
   <main>
-    <section class="intro">
+    <section class="landing-hero intro">
       <div class="intro-left">
         <p class="intro-above" id="introAbove" data-copy-id="merch-intro-above">everything sellable from the construct</p>
-        <h1 data-copy-id="merch-hero-title">MERCH.</h1>
+        <h1 class="hero-title" data-copy-id="merch-hero-title">MERCH.</h1>
       </div>
       <!-- REWRITE: default descriptor shown when "all" is selected -->
-      <p id="introDesc" data-copy-id="merch-intro-desc" style="color: rgb(240, 128, 0);">an on-going clothing-based installation</p>
+      <p class="hero-descriptor" id="introDesc" data-copy-id="merch-intro-desc" style="color: rgb(240, 128, 0);">an on-going clothing-based installation</p>
     </section>
 
     <section class="brand-band" aria-labelledby="sixwell-brand-title">

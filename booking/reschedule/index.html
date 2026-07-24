@@ -8,16 +8,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
   <link rel="stylesheet" href="/css/transitions.css">
   <style>
-    :root{--bg:#0e0e0e;--signal:#6E0404;--accent:#FCB867;--ornament:var(--signal);--display:var(--signal);--focus:var(--accent);--text:#FFE7CA;--muted:rgba(255,231,202,.68);--dim:rgba(255,231,202,.4);--line:rgba(110,4,4,.4);--line-soft:rgba(110,4,4,.2);--sans:Inter,Arial,sans-serif;--serif:Georgia,"Times New Roman",serif;}
+    :root{--bg:var(--color-bg);--signal:var(--color-tattooing);--venture-color:var(--color-tattooing);--venture-accent:var(--color-tattooing);--accent:var(--color-accent);--ornament:var(--signal);--display:var(--signal);--focus:var(--accent);--text:var(--color-body);--muted:var(--color-text-muted);--dim:var(--color-text-dim);--line:color-mix(in srgb,var(--signal) 40%,transparent);--line-soft:color-mix(in srgb,var(--signal) 20%,transparent);--ring-soft:var(--line);--ring-faint:var(--line-soft);--text-mute:var(--muted);--text-dim:var(--dim);--text-ghost:var(--color-text-ghost);--sans:Inter,Arial,sans-serif;--serif:Georgia,"Times New Roman",serif;--t-fast:160ms;}
     *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:var(--serif)}a{color:inherit;text-decoration:none}button,input{font:inherit}button{cursor:pointer}
     .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
     header{position:sticky;top:0;z-index:10;min-height:72px;padding:24px 40px;display:flex;justify-content:flex-end}.back-link{font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--focus)}
     main{position:relative;z-index:2;width:min(920px,calc(100% - 80px));margin:0 auto;padding:70px 0 90px}.kicker,.field-label,.detail-key,.policy-label{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:var(--focus)}h1{max-width:760px;margin:14px 0 24px;font-family:var(--sans);font-size:clamp(50px,8vw,100px);line-height:.88;letter-spacing:-.045em;color:var(--display)}.lead{max-width:670px;margin:0 0 38px;color:var(--muted);font-size:16px;line-height:1.75}
     .auth-panel,.reschedule-panel,.success-panel,.blocked-panel{border-top:5px solid var(--line);border-bottom:5px solid var(--line-soft);padding:32px 0}.auth-panel{max-width:670px}.field{display:grid;gap:9px}.field-help,.status,.error{font-size:13px;line-height:1.6;color:var(--dim)}input[type="email"]{width:100%;min-height:52px;border:5px solid var(--line);border-radius:0;background:transparent;color:var(--text);padding:12px 14px;font-size:16px;text-transform:none;letter-spacing:normal}.button{min-height:52px;border:5px solid var(--ornament);background:var(--ornament);color:var(--text);padding:0 24px;font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center}.button.secondary{background:transparent;color:var(--focus);border-color:var(--focus)}.button:disabled{opacity:.42;cursor:not-allowed}.auth-actions,.submit-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px}
     .booking-summary{margin:0 0 28px;border-top:1px solid var(--line-soft)}.detail-row{display:grid;grid-template-columns:170px 1fr;gap:18px;padding:15px 0;border-bottom:1px solid var(--line-soft)}.detail-value{color:var(--muted);line-height:1.55}.policy{margin:0 0 30px;padding:20px;border-left:5px solid var(--ornament);background:rgba(110,4,4,.1)}.policy strong{display:block;margin:6px 0 8px;font-family:var(--sans);font-size:18px;color:var(--display)}.policy p{margin:0;color:var(--muted);line-height:1.65}.pending-checkout{margin:0;padding:24px;border:5px solid var(--line);display:grid;gap:14px}.pending-checkout p{margin:0;color:var(--muted);line-height:1.65}
-    fieldset{border:0;margin:0;padding:0;min-width:0}legend{width:100%;padding:0 0 14px;margin:0 0 18px;border-bottom:1px solid var(--line-soft);font-family:var(--sans);font-size:13px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--focus)}.day-tabs{display:flex;gap:8px;overflow:auto;padding:2px 2px 12px;scrollbar-width:thin}.day-tab{flex:0 0 auto;min-height:54px;border:1px solid var(--line);background:transparent;color:var(--muted);padding:8px 14px;font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.day-tab[aria-selected="true"]{border-color:var(--ornament);background:var(--ornament);color:var(--text)}.time-panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.time-option{min-height:52px;border:5px solid var(--line-soft);background:transparent;color:var(--muted);padding:10px;font-size:14px;text-align:left}.time-option[aria-pressed="true"]{border-color:var(--focus);background:rgba(110,4,4,.15);color:var(--text)}.selection-status{min-height:22px;margin:16px 0 0;color:var(--focus);font-size:13px;line-height:1.5}.empty{padding:24px;border:1px solid var(--line-soft);color:var(--muted);line-height:1.65}.error{color:var(--focus)}.success-panel h2,.blocked-panel h2{margin:0 0 14px;font-family:var(--sans);font-size:clamp(30px,5vw,52px);line-height:.94;color:var(--display)}.success-panel p,.blocked-panel p{max-width:650px;color:var(--muted);line-height:1.7}.support-link{color:var(--focus);text-decoration:underline;text-underline-offset:3px}
+    fieldset{border:0;margin:0;padding:0;min-width:0}legend{width:100%;padding:0 0 14px;margin:0 0 18px;border-bottom:1px solid var(--line-soft);font-family:var(--sans);font-size:13px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--focus)}.reschedule-calendar{max-width:520px}.time-panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.selection-status{min-height:22px;margin:16px 0 0;color:var(--focus);font-size:13px;line-height:1.5}.empty{padding:24px;border:5px solid var(--line-soft);color:var(--muted);line-height:1.65}.error{color:var(--focus)}.success-panel h2,.blocked-panel h2{margin:0 0 14px;font-family:var(--sans);font-size:clamp(30px,5vw,52px);line-height:.94;color:var(--display)}.success-panel p,.blocked-panel p{max-width:650px;color:var(--muted);line-height:1.7}.support-link{color:var(--focus);text-decoration:underline;text-underline-offset:3px}
     [hidden]{display:none!important}:where(a,button,input):focus-visible{outline:2px solid var(--focus);outline-offset:3px}
     footer{position:relative;z-index:2;width:min(920px,calc(100% - 80px));margin:0 auto;padding:40px 0 56px;border-top:5px solid var(--line-soft);display:flex;justify-content:space-between;gap:20px;color:var(--dim);font-size:10px;letter-spacing:.18em;text-transform:uppercase}
     @media(max-width:720px){header{min-height:60px;padding:18px 22px}main,footer{width:min(100% - 40px,920px)}main{padding-top:46px}.detail-row{grid-template-columns:1fr;gap:4px}.time-panel{grid-template-columns:1fr 1fr}.button,.day-tab,.time-option{font-size:16px}.auth-actions .button,.submit-actions .button{width:100%}}
@@ -26,6 +27,7 @@
   </style>
   <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/tattoos.css">
+  <link rel="stylesheet" href="/css/booking-calendar.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
   <div class="grain"></div>
@@ -58,7 +60,7 @@
       <form id="rescheduleForm" novalidate>
         <fieldset id="availabilityFieldset">
           <legend id="availabilityHeading">Available times for this booking type</legend>
-          <div class="day-tabs" id="dayTabs" role="tablist" aria-label="Available dates"></div>
+          <div class="reschedule-calendar cal-wrap" id="dayTabs" role="group" aria-label="Available dates"></div>
           <div class="time-panel" id="timePanel" role="tabpanel" aria-live="polite"></div>
         </fieldset>
         <p class="selection-status" id="selectionStatus" role="status" aria-live="polite">Choose a date and time.</p>
@@ -94,11 +96,13 @@
     let selectedWindow = null;
     let dayGroups = [];
     let activeDay = 0;
+    let activeMonth = '';
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const dateKey = (value) => new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
     const formatDate = (value) => new Intl.DateTimeFormat('en-US',{timeZone:TIME_ZONE,weekday:'long',month:'long',day:'numeric',year:'numeric'}).format(new Date(value));
     const formatTime = (value) => new Intl.DateTimeFormat('en-US',{timeZone:TIME_ZONE,hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date(value));
+    const formatOptionDateTime = (value) => new Intl.DateTimeFormat('en-US',{timeZone:TIME_ZONE,weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(value));
     const confirmationPath = (type) => type === 'consult_virtual'
       ? '/booking/confirmed/virtual-consultation/'
       : type === 'consult_in_person'
@@ -152,7 +156,11 @@
 
     function selectWindow(windowItem, button) {
       selectedWindow = windowItem;
-      elements.timePanel.querySelectorAll('.time-option').forEach((entry) => entry.setAttribute('aria-pressed',String(entry === button)));
+      elements.timePanel.querySelectorAll('.time-option').forEach((entry) => {
+        const active = entry === button;
+        entry.classList.toggle('selected',active);
+        entry.setAttribute('aria-pressed',String(active));
+      });
       elements.selectionStatus.textContent = `Selected ${formatDate(windowItem.startAt)} at ${formatTime(windowItem.startAt)}.`;
       elements.rescheduleButton.disabled = false;
     }
@@ -167,8 +175,8 @@
       group.items.forEach((windowItem,index) => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'time-option';
-        button.textContent = formatTime(windowItem.startAt);
+        button.className = `time-option${selectedWindow?.id === windowItem.id ? ' selected' : ''}`;
+        button.innerHTML = `<span class="time-option-title">${escapeHtml(formatOptionDateTime(windowItem.startAt))}</span><span class="time-option-meta">Ends ${escapeHtml(formatOptionDateTime(windowItem.endAt))}</span>`;
         button.setAttribute('aria-pressed',String(selectedWindow?.id === windowItem.id));
         button.addEventListener('click',()=>selectWindow(windowItem,button));
         button.addEventListener('keydown',(event)=>{
@@ -184,41 +192,105 @@
 
     function activateDay(index, focus = false) {
       activeDay = index;
-      [...elements.dayTabs.querySelectorAll('.day-tab')].forEach((tab,tabIndex)=>{
-        const active = tabIndex === index;
-        tab.setAttribute('aria-selected',String(active));
-        tab.tabIndex = active ? 0 : -1;
+      [...elements.dayTabs.querySelectorAll('.cal-day[data-day-index]')].forEach((button)=>{
+        const active = Number(button.dataset.dayIndex) === index;
+        button.classList.toggle('active',active);
+        button.setAttribute('aria-pressed',String(active));
       });
       renderTimes();
-      if (focus) elements.dayTabs.querySelectorAll('.day-tab')[index]?.focus();
+      if (focus) elements.dayTabs.querySelector(`.cal-day[data-day-index="${index}"]`)?.focus();
+    }
+
+    function monthKeys() {
+      return [...new Set(dayGroups.map((group)=>group.key.slice(0,7)))];
+    }
+
+    function renderMonth() {
+      const months = monthKeys();
+      if (!activeMonth || !months.includes(activeMonth)) activeMonth = months[0] || '';
+      if (!activeMonth) {
+        elements.dayTabs.innerHTML = '<p class="empty">No same-type availability is currently open. Check back later or contact the Studio.</p>';
+        renderTimes();
+        return;
+      }
+
+      const monthIndex = months.indexOf(activeMonth);
+      const [year,month] = activeMonth.split('-').map(Number);
+      const firstDay = new Date(Date.UTC(year,month - 1,1)).getUTCDay();
+      const daysInMonth = new Date(Date.UTC(year,month,0)).getUTCDate();
+      const groupsByKey = new Map(dayGroups.map((group,index)=>[group.key,{group,index}]));
+      const cells = [];
+      for (let blank = 0; blank < firstDay; blank += 1) {
+        cells.push('<button class="cal-day empty" type="button" tabindex="-1" aria-hidden="true"></button>');
+      }
+      for (let day = 1; day <= daysInMonth; day += 1) {
+        const key = `${activeMonth}-${String(day).padStart(2,'0')}`;
+        const match = groupsByKey.get(key);
+        const selected = match && match.index === activeDay;
+        cells.push(`<button class="cal-day ${match ? 'open' : 'past'}${selected ? ' active' : ''}" type="button" ${match ? `data-day-index="${match.index}"` : 'disabled'} aria-label="${escapeHtml(key)} ${match ? 'open' : 'closed'}" aria-pressed="${selected ? 'true' : 'false'}">${day}</button>`);
+      }
+      const monthOpenCount = dayGroups
+        .filter((group)=>group.key.startsWith(`${activeMonth}-`))
+        .reduce((count,group)=>count + group.items.length,0);
+      elements.dayTabs.innerHTML = `
+        <div class="cal-header">
+          <div class="cal-month-nav">
+            <button class="cal-nav" id="reschedulePrevMonth" type="button" aria-label="Previous available month" ${monthIndex <= 0 ? 'disabled' : ''}>&lt;</button>
+            <select class="cal-month-select" id="rescheduleMonthSelect" aria-label="Available month">
+              ${months.map((key)=>`<option value="${key}" ${key === activeMonth ? 'selected' : ''}>${new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'long',year:'numeric'}).format(new Date(`${key}-01T12:00:00Z`))}</option>`).join('')}
+            </select>
+            <button class="cal-nav" id="rescheduleNextMonth" type="button" aria-label="Next available month" ${monthIndex >= months.length - 1 ? 'disabled' : ''}>&gt;</button>
+          </div>
+          <span class="cal-month-count">${monthOpenCount} open</span>
+        </div>
+        <div class="cal-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+        <div class="cal-grid">${cells.join('')}</div>`;
+      elements.dayTabs.querySelector('#rescheduleMonthSelect')?.addEventListener('change',(event)=>{
+        activeMonth = event.target.value;
+        const firstGroupIndex = dayGroups.findIndex((group)=>group.key.startsWith(`${activeMonth}-`));
+        if (firstGroupIndex >= 0) activeDay = firstGroupIndex;
+        renderMonth();
+        renderTimes();
+      });
+      elements.dayTabs.querySelector('#reschedulePrevMonth')?.addEventListener('click',()=>{
+        if (monthIndex <= 0) return;
+        activeMonth = months[monthIndex - 1];
+        activeDay = dayGroups.findIndex((group)=>group.key.startsWith(`${activeMonth}-`));
+        renderMonth();
+        renderTimes();
+      });
+      elements.dayTabs.querySelector('#rescheduleNextMonth')?.addEventListener('click',()=>{
+        if (monthIndex >= months.length - 1) return;
+        activeMonth = months[monthIndex + 1];
+        activeDay = dayGroups.findIndex((group)=>group.key.startsWith(`${activeMonth}-`));
+        renderMonth();
+        renderTimes();
+      });
+      elements.dayTabs.querySelectorAll('.cal-day[data-day-index]').forEach((button)=>{
+        button.addEventListener('click',()=>activateDay(Number(button.dataset.dayIndex)));
+        button.addEventListener('keydown',(event)=>{
+          if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
+          event.preventDefault();
+          const visible = [...elements.dayTabs.querySelectorAll('.cal-day[data-day-index]')];
+          const index = visible.indexOf(button);
+          const delta = event.key === 'ArrowDown' ? 7 : event.key === 'ArrowUp' ? -7 : event.key === 'ArrowRight' ? 1 : -1;
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? visible.length - 1 : Math.max(0,Math.min(visible.length - 1,index + delta));
+          const nextDayIndex = Number(visible[next]?.dataset.dayIndex);
+          if (Number.isInteger(nextDayIndex)) activateDay(nextDayIndex,true);
+        });
+      });
     }
 
     function renderAvailability(payload) {
       const sameType = (payload.availabilityWindows || []).filter((item)=>payload.bookingType.id === 'tattoo_extended' ? item.bookingTypeId === 'tattoo_extended' : (!item.bookingTypeId || item.bookingTypeId === payload.bookingType.id));
       dayGroups = groupWindows(sameType);
-      elements.dayTabs.innerHTML = '';
-      dayGroups.forEach((group,index)=>{
-        const tab = document.createElement('button');
-        tab.type = 'button';
-        tab.className = 'day-tab';
-        tab.id = `day-tab-${index}`;
-        tab.setAttribute('role','tab');
-        tab.setAttribute('aria-controls','timePanel');
-        tab.textContent = new Intl.DateTimeFormat('en-US',{timeZone:TIME_ZONE,weekday:'short',month:'short',day:'numeric'}).format(new Date(group.items[0].startAt));
-        tab.addEventListener('click',()=>activateDay(index));
-        tab.addEventListener('keydown',(event)=>{
-          if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-          event.preventDefault();
-          const next = event.key === 'Home' ? 0 : event.key === 'End' ? dayGroups.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + dayGroups.length) % dayGroups.length;
-          activateDay(next,true);
-        });
-        elements.dayTabs.appendChild(tab);
-      });
       activeDay = 0;
+      activeMonth = dayGroups[0]?.key.slice(0,7) || '';
       selectedWindow = null;
       elements.rescheduleButton.disabled = true;
       elements.selectionStatus.textContent = dayGroups.length ? 'Choose a date and time.' : 'No same-type availability is currently open.';
-      activateDay(0);
+      renderMonth();
+      renderTimes();
     }
 
     function renderPendingCheckout(payload) {

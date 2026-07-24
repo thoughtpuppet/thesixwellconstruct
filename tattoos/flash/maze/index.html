@@ -7,14 +7,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --venture:#6E0404; --ring:#6D3D15;
+    --bg:#0e0e0e; --venture:var(--color-tattooing); --ring:#6D3D15;
+    --venture-color:var(--color-tattooing); --venture-accent:var(--color-tattooing);
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --accent:#FCB867; --text:#FCB867;
     --text-mute:rgba(252,184,103,0.55); --text-dim:rgba(252,184,103,0.30); --text-ghost:rgba(252,184,103,0.13);
-    --body-text:#FFE7CA; --body-mute:rgba(255,231,202,0.62);
+    --body-text:var(--color-body, #FBD19D); --body-mute:var(--color-text-muted, rgba(251,209,157,0.66));
     --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
     --sans:'Inter',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1); --t-med:0.35s cubic-bezier(0.2,0,0.2,1);
@@ -36,7 +38,7 @@
 
   /* ─── Hero ─── */
   .hero { margin-bottom:var(--s8); border-bottom:5px solid var(--ring-faint); padding-bottom:var(--s7); }
-  .series-title { font-family:var(--sans); font-weight:900; font-size:clamp(72px,14vw,192px); letter-spacing:-0.05em; line-height:0.85; color:var(--venture); text-transform:uppercase; margin-bottom:var(--s6); }
+  .series-title { font-family:var(--sans); font-weight:900; font-size:clamp(72px,14vw,192px); letter-spacing:-0.05em; line-height:0.85; color:var(--type-hero-color, var(--venture-accent)); text-transform:uppercase; margin-bottom:var(--s6); }
   .hero-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,480px); gap:var(--s7); align-items:start; }
   .series-statement { max-width:380px; padding-bottom:var(--s4); color:var(--body-text); font-family:var(--serif); font-size:12px; font-weight:400; letter-spacing:0.22em; line-height:1.6; text-align:left; text-transform:uppercase; }
   .series-statement + .series-statement { margin-top:var(--s5); }

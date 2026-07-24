@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
@@ -14,16 +15,17 @@
     --bg-raised:  #111111;
 
     --accent:     #FCB867;
-    --venture-color: #6E0404;
+    --venture-color: var(--color-tattooing);
+    --venture-accent: var(--color-tattooing);
 
     --ring:       #6D3D15;
     --ring-soft:  rgba(109,61,21,0.4);
     --ring-faint: rgba(109,61,21,0.18);
 
-    --text:       #FFE7CA;
-    --text-mute:  rgba(255,231,202,0.6);
-    --text-dim:   rgba(255,231,202,0.32);
-    --text-ghost: rgba(255,231,202,0.12);
+    --text:       var(--color-body, #FBD19D);
+    --text-mute:  var(--color-text-muted, rgba(251,209,157,0.66));
+    --text-dim:   var(--color-text-dim, rgba(251,209,157,0.38));
+    --text-ghost: var(--color-text-ghost, rgba(251,209,157,0.16));
 
     --sans:  'Inter',Arial,sans-serif;
     --serif: Georgia,'Times New Roman',Times,serif;
@@ -35,7 +37,7 @@
     --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
     --t-slow: 0.5s  cubic-bezier(0.22,1,0.36,1);
 
-    --title-color: #6E0404;
+    --title-color: var(--type-hero-color, var(--venture-accent));
   }
 
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
@@ -333,7 +335,7 @@
   .overlay-fragment {
     font-family:var(--serif);
     font-size:14px; line-height:1.65; font-style:italic;
-    color:rgba(255,231,202,0.65);
+    color:var(--color-text-muted, rgba(251,209,157,0.66));
     border-left:5px solid rgba(110,4,4,0.35);
     padding-left:var(--s4);
     margin-bottom:var(--s6);

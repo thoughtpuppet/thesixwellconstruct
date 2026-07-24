@@ -6,22 +6,25 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/walk-in-windows.css">
 <style>
   :root {
-    --bg: #0e0e0e;
-    --accent: #FCB867;
-    --signal: #6E0404;
-    --ring: #6D3D15;
-    --ring-soft: rgba(109,61,21,0.4);
-    --ring-faint: rgba(109,61,21,0.18);
-    --text: #FFE7CA;
-    --text-mute: rgba(255,231,202,0.6);
-    --text-dim: rgba(255,231,202,0.35);
-    --text-ghost: rgba(255,231,202,0.12);
-    --sans: 'Inter',Arial,sans-serif;
-    --serif: Georgia,'Times New Roman',Times,serif;
+    --bg: var(--color-bg);
+    --accent: var(--color-accent);
+    --signal: var(--color-tattooing);
+    --venture-color: var(--color-tattooing);
+    --venture-accent: var(--color-tattooing);
+    --ring: var(--color-archive);
+    --ring-soft: color-mix(in srgb, var(--color-archive) 40%, transparent);
+    --ring-faint: color-mix(in srgb, var(--color-archive) 18%, transparent);
+    --text: var(--color-body, #FBD19D);
+    --text-mute: var(--color-text-muted, rgba(251,209,157,0.66));
+    --text-dim: var(--color-text-dim, rgba(251,209,157,0.38));
+    --text-ghost: var(--color-text-ghost, rgba(251,209,157,0.16));
+    --sans: var(--font-display);
+    --serif: var(--font-serif);
     --s1:4px; --s2:8px; --s3:12px; --s4:16px;
     --s5:24px; --s6:40px; --s7:64px; --s8:96px;
     --t-fast: 0.18s cubic-bezier(0.2,0,0.2,1);
@@ -57,7 +60,7 @@
   main {
     position:relative; z-index:2;
     max-width:1440px; margin:0 auto;
-    padding:var(--s8) var(--s6) var(--s7);
+    padding:var(--landing-page-padding-y-active) var(--landing-page-padding-x-active);
   }
   .hero {
     display:flex; align-items:flex-end; justify-content:space-between;
@@ -524,7 +527,7 @@
   }
   .session-list > li:first-child { border-top:5px solid rgba(252,184,103,0.14); }
   .session-duration {
-    color:var(--signal);
+    color:var(--type-hero-color, var(--venture-accent));
     font-family:var(--sans);
     font-size:clamp(28px,4vw,46px);
     font-weight:900;
@@ -653,11 +656,12 @@
 }
 
 </style>
+<link rel="stylesheet" href="/css/landing-family.css">
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 </head>
-<body class="tattoo-flow" data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing" data-landing-family="tattoo-service">
   <script>
   (function(){
     var o = document.createElement('div');
@@ -682,12 +686,12 @@
     <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
   </header>
   <main>
-    <section class="hero">
+    <section class="landing-hero hero">
       <div class="hero-left">
         <h1 class="hero-title" data-copy-id="tattoos-hero-title">TATTOOS.</h1>
       </div>
       <div class="hero-right">
-        <p class="hero-desc" data-copy-id="tattoos-hero-desc" style="color: rgb(252, 184, 103);">The ink &amp; skin <span style="color: rgb(109, 61, 21)">medium</span> of <span style="color: rgb(252, 184, 103)">saiel dauhn solehman</span><span style="color: rgb(252, 184, 103)">. <span style="color: rgba(252, 184, 103, 0.64)">Original, collaborative and experimental works that push the boundaries of what it means to be a <span style="color: rgb(252, 184, 103)"><strong>tattoo</strong></span></span></span> <span style="color: rgb(0, 113, 235)"><strong>artist</strong></span>.</p>
+        <p class="hero-desc hero-descriptor" data-copy-id="tattoos-hero-desc" style="color: rgb(252, 184, 103);">The ink &amp; skin <span style="color: rgb(109, 61, 21)">medium</span> of <span style="color: rgb(252, 184, 103)">saiel dauhn solehman</span><span style="color: rgb(252, 184, 103)">. <span style="color: rgba(252, 184, 103, 0.64)">Original, collaborative and experimental works that push the boundaries of what it means to be a <span style="color: rgb(252, 184, 103)"><strong>tattoo</strong></span></span></span> <span style="color: rgb(0, 113, 235)"><strong>artist</strong></span>.</p>
         <a class="cta-primary" href="/tattoos/inquire/" style="margin-top:22px;">Choose a path →</a>
       </div>
     </section>
@@ -741,8 +745,8 @@
             <p class="ledger-body" data-copy-id="tattoos-flash-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 18px"><span style="font-size: 16px">Pre-drawn designs. <br>Open a flash item, learn about the design, then claim it if it resonates.</span></span></span></p>
           </div>
           <div>
-            <p class="ledger-status" style="color: rgb(255, 231, 202); opacity: 1;"><br></p>
-            <a class="ledger-action" href="/tattoos/flash/"><span style="color: rgb(255, 231, 202);">Browse flash →</span></a>
+            <p class="ledger-status" style="color: var(--color-body, #FBD19D); opacity: 1;"><br></p>
+            <a class="ledger-action" href="/tattoos/flash/"><span style="color: var(--color-body, #FBD19D);">Browse flash →</span></a>
           </div>
         </article>
         <article class="ledger-row">
@@ -755,7 +759,7 @@
           </div>
           <div>
             <p class="ledger-status" data-copy-id="tattoos-custom-ledger-status">selective review</p>
-            <a class="ledger-action" href="/tattoos/inquire/custom/"><span style="color: rgb(255, 231, 202);">Start inquiry →</span></a>
+            <a class="ledger-action" href="/tattoos/inquire/custom/"><span style="color: var(--color-body, #FBD19D);">Start inquiry →</span></a>
           </div>
         </article>
         <article class="ledger-row">
@@ -768,7 +772,7 @@
           </div>
           <div>
             <p class="ledger-status" data-copy-id="tattoos-build-ledger-status"><br></p>
-            <a class="ledger-action" href="/tattoos/build/"><span style="color: rgb(255, 231, 202);">Build yours →</span></a>
+            <a class="ledger-action" href="/tattoos/build/"><span style="color: var(--color-body, #FBD19D);">Build yours →</span></a>
           </div>
         </article>
         <article class="ledger-row">
@@ -781,7 +785,7 @@
           </div>
           <div>
             <p class="ledger-status" id="specialProjectsStatus" data-copy-id="tattoos-special-ledger-status" aria-live="polite">checking current calls</p>
-            <a class="ledger-action" href="/tattoos/special-projects/"><span style="color: rgb(252, 184, 103);"><span style="color: rgb(255, 231, 202);">View calls →</span></span></a>
+            <a class="ledger-action" href="/tattoos/special-projects/"><span style="color: rgb(252, 184, 103);"><span style="color: var(--color-body, #FBD19D);">View calls →</span></span></a>
           </div>
         </article>
       </div>
@@ -790,7 +794,7 @@
     <section class="section" id="booking-process">
       <div class="ritual">
         <div class="ritual-intro">
-          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-process-label"><span style="font-size: 14px"><span style="color: rgb(255, 231, 202)">How It Works</span></span></p>
+          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-process-label"><span style="font-size: 14px"><span style="color: var(--color-body, #FBD19D)">How It Works</span></span></p>
           <h2 class="section-title" data-copy-id="tattoos-process-title">A review path before the session.</h2>
           <p class="section-body" data-copy-id="tattoos-process-body"><span style="color: rgba(252, 184, 103, 0.64)">Every path begins with review. Flash claims, custom inquiries, and Special Projects are reviewed then once approved, a token booking link is sent.</span></p>
         </div>
@@ -818,7 +822,7 @@
     <section class="section" id="project-fit">
       <div class="price-fit">
         <div>
-          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-rates-label"><span style="color: rgb(255, 231, 202)"><span style="font-size: 14px">Rates</span></span></p>
+          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-rates-label"><span style="color: var(--color-body, #FBD19D)"><span style="font-size: 14px">Rates</span></span></p>
           <h2 class="section-title" data-copy-id="tattoos-rates-title">Rates &amp; Sessions</h2>
           <ul class="rate-list" id="tattooRateList" aria-live="polite">
             <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Original flash pieces are offered at a lower rate.</span></p></div></li>

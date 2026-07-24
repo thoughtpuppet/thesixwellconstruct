@@ -7,18 +7,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/media.css">
 <style>
   :root {
-    --bg:#0e0e0e; --accent:#FCB867; --signal:#6E0404; --ring:#6D3D15;
+    --bg:#0e0e0e; --accent:#FCB867; --signal:var(--color-tattooing); --ring:#6D3D15;
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
-    --text:#FFE7CA; --text-mute:rgba(255,231,202,0.62);
-    --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
+    --text:var(--color-body, #FBD19D); --text-mute:var(--color-text-muted, rgba(251,209,157,0.66));
+    --text-dim:var(--color-text-dim, rgba(251,209,157,0.38)); --text-ghost:var(--color-text-ghost, rgba(251,209,157,0.16));
     --panel:#0f0f0f; --sans:'Inter',Arial,sans-serif;
     --serif:Georgia,'Times New Roman',Times,serif;
     --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
-    --venture-color: #6E0404;
+    --venture-color: var(--color-tattooing);
+    --venture-accent: var(--color-tattooing);
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
   }
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
@@ -34,7 +36,7 @@
   body.modal-open main { z-index:200; }
   .hero { display:flex; align-items:flex-end; justify-content:space-between; gap:48px; margin-bottom:72px; }
   .hero-left { display:flex; flex-direction:column; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; }
+  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--type-hero-color, var(--venture-accent)); text-transform:uppercase; }
   .hero-desc { font-family:var(--serif); font-size:12px; font-weight:400; letter-spacing:0.22em; line-height:1.6; text-align:left; text-transform:uppercase; max-width:380px; padding-bottom:var(--s4); flex-shrink:0; }
   nav.filters { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)) auto; gap:14px; align-items:end; margin-bottom:var(--s6); padding:20px 0 16px; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
   .filter-control { display:grid; gap:8px; min-width:0; }
@@ -139,13 +141,13 @@
   ============================================================ */
   .modal-painting-header { display:flex; flex-direction:column; gap:var(--s2); margin-bottom:var(--s5); }
   .modal-venture-label { font-family:var(--serif); font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:var(--signal); opacity:0.75; }
-  .modal-painting-title { font-family:var(--sans); font-weight:900; font-size:clamp(20px,3.5vw,40px); letter-spacing:-0.04em; line-height:0.92; color:#FFE7CA; text-transform:uppercase; }
+  .modal-painting-title { font-family:var(--sans); font-weight:900; font-size:clamp(20px,3.5vw,40px); letter-spacing:-0.04em; line-height:0.92; color:var(--color-body, #FBD19D); text-transform:uppercase; }
   .modal-painting-meta { display:flex; align-items:center; gap:var(--s3); flex-wrap:wrap; padding-top:var(--s3); border-top:5px solid var(--ring-faint); margin-top:var(--s2); }
   .modal-meta-row-item { font-family:var(--serif); font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-dim); }
   .modal-meta-row-sep { color:var(--text-ghost); font-size:10px; }
   .modal-section { margin-bottom:var(--s5); }
   .modal-block-label { font-family:var(--serif); font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:var(--text-dim); margin-bottom:var(--s3); display:block; }
-  .modal-statement-body { font-family:var(--serif); font-size:14px; line-height:1.8; color:#FFE7CA; }
+  .modal-statement-body { font-family:var(--serif); font-size:14px; line-height:1.8; color:var(--color-body, #FBD19D); }
   .modal-avail-row { display:flex; align-items:center; justify-content:space-between; gap:var(--s4); }
   .modal-avail-left { display:flex; flex-direction:column; gap:4px; }
   .modal-avail-label { font-family:var(--serif); font-size:10px; letter-spacing:0.28em; text-transform:uppercase; color:var(--text-dim); }
@@ -160,10 +162,10 @@
   .modal-related-item { display:flex; align-items:center; justify-content:space-between; padding:var(--s3) var(--s4); border:5px solid var(--ring-faint); transition:border-color var(--t-fast), background var(--t-fast); text-decoration:none; }
   .modal-related-item:hover { border-color:var(--item-color, var(--ring-soft)); background:rgba(0,0,0,0.12); }
   .modal-related-item:hover .modal-related-arrow { color:var(--item-color, var(--text-mute)); transform:translateX(3px); }
-  .modal-related-item:hover .modal-related-title { color:var(--item-color, #FFE7CA); }
+  .modal-related-item:hover .modal-related-title { color:var(--item-color, var(--color-body, #FBD19D)); }
   .modal-related-left { display:flex; flex-direction:column; gap:4px; }
   .modal-related-venture { font-family:var(--serif); font-size:9px; letter-spacing:0.28em; text-transform:uppercase; color:var(--text-dim); }
-  .modal-related-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:#FFE7CA; }
+  .modal-related-title { font-family:var(--sans); font-weight:900; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--color-body, #FBD19D); }
   .modal-related-arrow { font-family:var(--serif); font-size:16px; color:var(--text-dim); transition:color var(--t-fast), transform var(--t-fast); }
   .modal-related-coming { opacity:0.4; pointer-events:none; }
   .selected-piece { display:none; grid-template-columns:minmax(0,1fr) auto; gap:22px; align-items:center; border:5px solid var(--ring-soft); background:rgba(110,4,4,0.08); padding:22px; margin-bottom:28px; }

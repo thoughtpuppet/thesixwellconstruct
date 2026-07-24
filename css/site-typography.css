@@ -2,8 +2,8 @@
 
 :where(body, body *:not(script):not(style):not(svg):not(path):not(use):not(canvas):not(img):not(video)) {
   text-transform: var(--type-body-transform, uppercase) !important;
-  letter-spacing: var(--type-body-tracking, 0.1em) !important;
-  line-height: var(--type-body-leading, 1.42) !important;
+  letter-spacing: var(--type-body-tracking-active, var(--type-body-tracking, 0.1em)) !important;
+  line-height: var(--type-body-leading-active, var(--type-body-leading, 1.42)) !important;
   font-variant-caps: normal;
 }
 
@@ -14,9 +14,15 @@
 body {
   color: var(--type-body-color, var(--color-body)) !important;
   font-family: var(--type-body-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
-  font-size: var(--type-body-size, 16px) !important;
+  font-size: var(--type-body-size-active, var(--type-body-size, 16px)) !important;
   font-weight: var(--type-body-weight, 400) !important;
   font-style: var(--type-body-style, normal) !important;
+}
+
+body[data-venture="tattooing"] {
+  --venture-color: var(--color-tattooing);
+  --venture-accent: var(--color-tattooing);
+  --type-hero-color: var(--color-tattooing);
 }
 
 /* Labels keep the shared display treatment, but text people enter must read
@@ -125,11 +131,11 @@ h6,
   main > h1 + .lead
 ) {
   font-family: var(--type-descriptor-font, var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif))) !important;
-  font-size: var(--type-descriptor-size, 12px) !important;
+  font-size: var(--type-descriptor-size-active, var(--type-descriptor-size, 12px)) !important;
   font-weight: var(--type-descriptor-weight, 400) !important;
   font-style: var(--type-descriptor-style, normal) !important;
-  letter-spacing: var(--type-descriptor-tracking, 0.22em) !important;
-  line-height: var(--type-descriptor-leading, 1.6) !important;
+  letter-spacing: var(--type-descriptor-tracking-active, var(--type-descriptor-tracking, 0.22em)) !important;
+  line-height: var(--type-descriptor-leading-active, var(--type-descriptor-leading, 1.6)) !important;
   text-transform: var(--type-descriptor-transform, uppercase) !important;
   font-variant-caps: normal !important;
   color: var(--type-descriptor-color, rgba(252, 184, 103, 0.55)) !important;
@@ -174,13 +180,42 @@ h6,
   color: inherit !important;
 }
 
-/* Hero titles carry the same heavy Inter weight established by the Tattoo and
-   Merch landing pages, regardless of which page shell renders them. */
+/* Controls opt into the shared role through established text-control classes.
+   Raw buttons remain page-owned because many are visual controls: construct
+   dots, color swatches, cards, calendar days, and image selectors. */
+:where(
+  .button,
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .venture-link
+) {
+  font-family: var(--type-control-font, var(--font-display, Inter, Arial, sans-serif)) !important;
+  font-size: var(--type-control-size-active, var(--type-control-size, 11px)) !important;
+  font-weight: var(--type-control-weight, 800) !important;
+  font-style: var(--type-control-style, normal) !important;
+  letter-spacing: var(--type-control-tracking-active, var(--type-control-tracking, 0.14em)) !important;
+  line-height: var(--type-control-leading-active, var(--type-control-leading, 1.2)) !important;
+  text-transform: var(--type-control-transform, uppercase) !important;
+  min-height: var(--control-min-height, 44px);
+}
+
 .hero-title,
 .page-title,
 .intro h1,
 main > h1 {
   font-weight: 900 !important;
+}
+
+body[data-venture="tattooing"] :is(
+  main h1,
+  .hero-title,
+  .page-title,
+  .gate-title,
+  .series-title,
+  .flash-title
+) {
+  color: var(--type-hero-color, var(--color-tattooing)) !important;
 }
 
 body[data-venture="tattooing"] main h1,
@@ -298,6 +333,7 @@ body.is-mobile #sub-node-labels .sub-node-label {
   .kicker,
   .venture-kicker,
   .section-kicker,
+  .band-kicker,
   .tile-kicker,
   .meta-kicker,
   .archive-kicker,
@@ -308,11 +344,11 @@ body.is-mobile #sub-node-labels .sub-node-label {
 ) {
   color: var(--type-eyebrow-color, var(--venture-accent, var(--venture-color, var(--accent, var(--color-accent))))) !important;
   font-family: var(--type-eyebrow-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
-  font-size: var(--type-eyebrow-size, 10px) !important;
+  font-size: var(--type-eyebrow-size-active, var(--type-eyebrow-size, 10px)) !important;
   font-weight: var(--type-eyebrow-weight, 400) !important;
   font-style: var(--type-eyebrow-style, normal) !important;
-  letter-spacing: var(--type-eyebrow-tracking, 0.22em) !important;
-  line-height: var(--type-eyebrow-leading, 1.35) !important;
+  letter-spacing: var(--type-eyebrow-tracking-active, var(--type-eyebrow-tracking, 0.22em)) !important;
+  line-height: var(--type-eyebrow-leading-active, var(--type-eyebrow-leading, 1.35)) !important;
   text-transform: var(--type-eyebrow-transform, uppercase) !important;
 }
 
@@ -329,11 +365,11 @@ body.is-mobile #sub-node-labels .sub-node-label {
   padding: 0 var(--s6, 40px) var(--s4, 16px) !important;
   color: var(--type-breadcrumb-color, var(--color-breadcrumb-dim, rgba(252, 184, 103, 0.30))) !important;
   font-family: var(--type-breadcrumb-font, var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif))) !important;
-  font-size: var(--type-breadcrumb-size, 11px) !important;
+  font-size: var(--type-breadcrumb-size-active, var(--type-breadcrumb-size, 11px)) !important;
   font-weight: var(--type-breadcrumb-weight, 400) !important;
   font-style: var(--type-breadcrumb-style, normal) !important;
-  letter-spacing: var(--type-breadcrumb-tracking, 0.18em) !important;
-  line-height: var(--type-breadcrumb-leading, 1.42) !important;
+  letter-spacing: var(--type-breadcrumb-tracking-active, var(--type-breadcrumb-tracking, 0.18em)) !important;
+  line-height: var(--type-breadcrumb-leading-active, var(--type-breadcrumb-leading, 1.42)) !important;
   text-transform: var(--type-breadcrumb-transform, uppercase) !important;
 }
 
@@ -374,14 +410,14 @@ main > .construct-breadcrumb {
 
 /* Footer typography is one role across legacy `bottom`, venture `.footer`,
    Tattoo `.footer-bottom`, and generated Construct footers. */
-:is(footer.bottom, .footer, .footer-bottom, .site-footer, .construct-footer) :where(p, a, span) {
+:is(footer.bottom, footer.footer-links, .footer, .footer-bottom, .site-footer, .construct-footer) :where(p, a, span) {
   color: var(--type-footer-color, var(--color-text-dim)) !important;
   font-family: var(--type-footer-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
-  font-size: var(--type-footer-size, 10px) !important;
+  font-size: var(--type-footer-size-active, var(--type-footer-size, 10px)) !important;
   font-weight: var(--type-footer-weight, 400) !important;
   font-style: var(--type-footer-style, normal) !important;
-  letter-spacing: var(--type-footer-tracking, 0.18em) !important;
-  line-height: var(--type-footer-leading, 1.42) !important;
+  letter-spacing: var(--type-footer-tracking-active, var(--type-footer-tracking, 0.18em)) !important;
+  line-height: var(--type-footer-leading-active, var(--type-footer-leading, 1.42)) !important;
   text-transform: var(--type-footer-transform, uppercase) !important;
 }
 
@@ -389,11 +425,11 @@ main > .construct-breadcrumb {
 :is(.metadata, .meta-copy, .caption, figcaption, .hint, .fine-print, .small-print) {
   color: var(--type-meta-color, var(--color-text-dim)) !important;
   font-family: var(--type-meta-font, var(--font-serif, Georgia, "Times New Roman", Times, serif)) !important;
-  font-size: var(--type-meta-size, 11px) !important;
+  font-size: var(--type-meta-size-active, var(--type-meta-size, 11px)) !important;
   font-weight: var(--type-meta-weight, 400) !important;
   font-style: var(--type-meta-style, normal) !important;
-  letter-spacing: var(--type-meta-tracking, 0.18em) !important;
-  line-height: var(--type-meta-leading, 1.42) !important;
+  letter-spacing: var(--type-meta-tracking-active, var(--type-meta-tracking, 0.18em)) !important;
+  line-height: var(--type-meta-leading-active, var(--type-meta-leading, 1.42)) !important;
   text-transform: var(--type-meta-transform, uppercase) !important;
 }
 
@@ -437,10 +473,39 @@ main > .construct-breadcrumb {
 }
 
 @media (max-width: 900px) {
+  body {
+    --type-body-size-active: var(--type-body-size-tablet, var(--type-body-size));
+    --type-body-leading-active: var(--type-body-leading-tablet, var(--type-body-leading));
+    --type-body-tracking-active: var(--type-body-tracking-tablet, var(--type-body-tracking));
+    --type-hero-size-active: var(--type-hero-size-tablet, var(--type-hero-size));
+    --type-hero-leading-active: var(--type-hero-leading-tablet, var(--type-hero-leading));
+    --type-hero-tracking-active: var(--type-hero-tracking-tablet, var(--type-hero-tracking));
+    --type-section-size-active: var(--type-section-size-tablet, var(--type-section-size));
+    --type-section-leading-active: var(--type-section-leading-tablet, var(--type-section-leading));
+    --type-section-tracking-active: var(--type-section-tracking-tablet, var(--type-section-tracking));
+    --type-descriptor-size-active: var(--type-descriptor-size-tablet, var(--type-descriptor-size));
+    --type-descriptor-leading-active: var(--type-descriptor-leading-tablet, var(--type-descriptor-leading));
+    --type-descriptor-tracking-active: var(--type-descriptor-tracking-tablet, var(--type-descriptor-tracking));
+    --type-eyebrow-size-active: var(--type-eyebrow-size-tablet, var(--type-eyebrow-size));
+    --type-eyebrow-leading-active: var(--type-eyebrow-leading-tablet, var(--type-eyebrow-leading));
+    --type-eyebrow-tracking-active: var(--type-eyebrow-tracking-tablet, var(--type-eyebrow-tracking));
+    --type-breadcrumb-size-active: var(--type-breadcrumb-size-tablet, var(--type-breadcrumb-size));
+    --type-breadcrumb-leading-active: var(--type-breadcrumb-leading-tablet, var(--type-breadcrumb-leading));
+    --type-breadcrumb-tracking-active: var(--type-breadcrumb-tracking-tablet, var(--type-breadcrumb-tracking));
+    --type-control-size-active: var(--type-control-size-tablet, var(--type-control-size));
+    --type-control-leading-active: var(--type-control-leading-tablet, var(--type-control-leading));
+    --type-control-tracking-active: var(--type-control-tracking-tablet, var(--type-control-tracking));
+    --type-footer-size-active: var(--type-footer-size-tablet, var(--type-footer-size));
+    --type-footer-leading-active: var(--type-footer-leading-tablet, var(--type-footer-leading));
+    --type-footer-tracking-active: var(--type-footer-tracking-tablet, var(--type-footer-tracking));
+    --type-meta-size-active: var(--type-meta-size-tablet, var(--type-meta-size));
+    --type-meta-leading-active: var(--type-meta-leading-tablet, var(--type-meta-leading));
+    --type-meta-tracking-active: var(--type-meta-tracking-tablet, var(--type-meta-tracking));
+  }
+
   .breadcrumb,
   .construct-breadcrumb {
-    padding: 0 var(--s5, 24px) var(--s3, 12px) !important;
-    font-size: var(--type-breadcrumb-size, 11px) !important;
+    padding: 0 var(--page-padding-x-tablet, 28px) var(--s3, 12px) !important;
     overflow: hidden !important;
   }
 
@@ -451,20 +516,6 @@ main > .construct-breadcrumb {
   }
 }
 
-@media (max-width: 900px) {
-  .hero-title,
-  .page-title {
-    font-size: clamp(64px, 20vw, 118px) !important;
-  }
-}
-
-@media (max-width: 520px) {
-  .hero-title,
-  .page-title {
-    font-size: clamp(56px, 19vw, 92px) !important;
-  }
-}
-
 @media (max-width: 768px) {
   :where(
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
@@ -472,6 +523,82 @@ main > .construct-breadcrumb {
     select
   ) {
     font-size: 16px !important;
+  }
+}
+
+@media (max-width: 700px) {
+  body {
+    --type-body-size-active: var(--type-body-size-mobile, var(--type-body-size-tablet));
+    --type-body-leading-active: var(--type-body-leading-mobile, var(--type-body-leading-tablet));
+    --type-body-tracking-active: var(--type-body-tracking-mobile, var(--type-body-tracking-tablet));
+    --type-hero-size-active: var(--type-hero-size-mobile, var(--type-hero-size-tablet));
+    --type-hero-leading-active: var(--type-hero-leading-mobile, var(--type-hero-leading-tablet));
+    --type-hero-tracking-active: var(--type-hero-tracking-mobile, var(--type-hero-tracking-tablet));
+    --type-section-size-active: var(--type-section-size-mobile, var(--type-section-size-tablet));
+    --type-section-leading-active: var(--type-section-leading-mobile, var(--type-section-leading-tablet));
+    --type-section-tracking-active: var(--type-section-tracking-mobile, var(--type-section-tracking-tablet));
+    --type-descriptor-size-active: var(--type-descriptor-size-mobile, var(--type-descriptor-size-tablet));
+    --type-descriptor-leading-active: var(--type-descriptor-leading-mobile, var(--type-descriptor-leading-tablet));
+    --type-descriptor-tracking-active: var(--type-descriptor-tracking-mobile, var(--type-descriptor-tracking-tablet));
+    --type-eyebrow-size-active: var(--type-eyebrow-size-mobile, var(--type-eyebrow-size-tablet));
+    --type-eyebrow-leading-active: var(--type-eyebrow-leading-mobile, var(--type-eyebrow-leading-tablet));
+    --type-eyebrow-tracking-active: var(--type-eyebrow-tracking-mobile, var(--type-eyebrow-tracking-tablet));
+    --type-breadcrumb-size-active: var(--type-breadcrumb-size-mobile, var(--type-breadcrumb-size-tablet));
+    --type-breadcrumb-leading-active: var(--type-breadcrumb-leading-mobile, var(--type-breadcrumb-leading-tablet));
+    --type-breadcrumb-tracking-active: var(--type-breadcrumb-tracking-mobile, var(--type-breadcrumb-tracking-tablet));
+    --type-control-size-active: var(--type-control-size-mobile, var(--type-control-size-tablet));
+    --type-control-leading-active: var(--type-control-leading-mobile, var(--type-control-leading-tablet));
+    --type-control-tracking-active: var(--type-control-tracking-mobile, var(--type-control-tracking-tablet));
+    --type-footer-size-active: var(--type-footer-size-mobile, var(--type-footer-size-tablet));
+    --type-footer-leading-active: var(--type-footer-leading-mobile, var(--type-footer-leading-tablet));
+    --type-footer-tracking-active: var(--type-footer-tracking-mobile, var(--type-footer-tracking-tablet));
+    --type-meta-size-active: var(--type-meta-size-mobile, var(--type-meta-size-tablet));
+    --type-meta-leading-active: var(--type-meta-leading-mobile, var(--type-meta-leading-tablet));
+    --type-meta-tracking-active: var(--type-meta-tracking-mobile, var(--type-meta-tracking-tablet));
+  }
+
+  .breadcrumb,
+  .construct-breadcrumb {
+    padding-right: var(--page-padding-x-mobile, 18px) !important;
+    padding-left: var(--page-padding-x-mobile, 18px) !important;
+  }
+}
+
+@media (max-width: 380px) {
+  body {
+    --type-body-size-active: var(--type-body-size-compact, var(--type-body-size-mobile));
+    --type-body-leading-active: var(--type-body-leading-compact, var(--type-body-leading-mobile));
+    --type-body-tracking-active: var(--type-body-tracking-compact, var(--type-body-tracking-mobile));
+    --type-hero-size-active: var(--type-hero-size-compact, var(--type-hero-size-mobile));
+    --type-hero-leading-active: var(--type-hero-leading-compact, var(--type-hero-leading-mobile));
+    --type-hero-tracking-active: var(--type-hero-tracking-compact, var(--type-hero-tracking-mobile));
+    --type-section-size-active: var(--type-section-size-compact, var(--type-section-size-mobile));
+    --type-section-leading-active: var(--type-section-leading-compact, var(--type-section-leading-mobile));
+    --type-section-tracking-active: var(--type-section-tracking-compact, var(--type-section-tracking-mobile));
+    --type-descriptor-size-active: var(--type-descriptor-size-compact, var(--type-descriptor-size-mobile));
+    --type-descriptor-leading-active: var(--type-descriptor-leading-compact, var(--type-descriptor-leading-mobile));
+    --type-descriptor-tracking-active: var(--type-descriptor-tracking-compact, var(--type-descriptor-tracking-mobile));
+    --type-eyebrow-size-active: var(--type-eyebrow-size-compact, var(--type-eyebrow-size-mobile));
+    --type-eyebrow-leading-active: var(--type-eyebrow-leading-compact, var(--type-eyebrow-leading-mobile));
+    --type-eyebrow-tracking-active: var(--type-eyebrow-tracking-compact, var(--type-eyebrow-tracking-mobile));
+    --type-breadcrumb-size-active: var(--type-breadcrumb-size-compact, var(--type-breadcrumb-size-mobile));
+    --type-breadcrumb-leading-active: var(--type-breadcrumb-leading-compact, var(--type-breadcrumb-leading-mobile));
+    --type-breadcrumb-tracking-active: var(--type-breadcrumb-tracking-compact, var(--type-breadcrumb-tracking-mobile));
+    --type-control-size-active: var(--type-control-size-compact, var(--type-control-size-mobile));
+    --type-control-leading-active: var(--type-control-leading-compact, var(--type-control-leading-mobile));
+    --type-control-tracking-active: var(--type-control-tracking-compact, var(--type-control-tracking-mobile));
+    --type-footer-size-active: var(--type-footer-size-compact, var(--type-footer-size-mobile));
+    --type-footer-leading-active: var(--type-footer-leading-compact, var(--type-footer-leading-mobile));
+    --type-footer-tracking-active: var(--type-footer-tracking-compact, var(--type-footer-tracking-mobile));
+    --type-meta-size-active: var(--type-meta-size-compact, var(--type-meta-size-mobile));
+    --type-meta-leading-active: var(--type-meta-leading-compact, var(--type-meta-leading-mobile));
+    --type-meta-tracking-active: var(--type-meta-tracking-compact, var(--type-meta-tracking-mobile));
+  }
+
+  .breadcrumb,
+  .construct-breadcrumb {
+    padding-right: var(--page-padding-x-compact, 14px) !important;
+    padding-left: var(--page-padding-x-compact, 14px) !important;
   }
 }
 

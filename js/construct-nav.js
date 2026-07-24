@@ -1376,12 +1376,11 @@
       if (!venture) return null;
       venture.label = node.name || venture.label;
       venture.url = node.route || venture.url;
-      if (node.color) venture.color = node.color;
       venture.pathways = (node.pathways || []).slice(0, 9).map(function(pathway) {
         return {
           label: pathway.name,
           url: pathway.route,
-          color: pathway.color || node.color || venture.color,
+          color: pathway.color || venture.color,
         };
       });
       return venture;

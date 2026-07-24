@@ -1,0 +1,220 @@
+/* ============================================================
+   Landing Family foundation
+   ============================================================
+   Shared visual contract for public landing variants. This layer owns
+   semantic medium aliases, responsive spacing activation, hero roles,
+   structural rhythm, focus visibility, and the mobile control floor.
+   Variant composition remains in each landing's existing stylesheet.
+   ============================================================ */
+
+body[data-landing-family] {
+  --landing-page-padding-x-active: var(--page-padding-x);
+  --landing-page-padding-y-active: var(--page-padding-y);
+  --landing-section-gap-active: var(--section-gap);
+  --landing-grid-gap-active: var(--grid-gap);
+  --landing-control-min-height-active: var(--control-min-height);
+  --landing-structural-rule: 5px;
+
+  background: var(--color-bg);
+  color: var(--type-body-color, var(--color-body));
+}
+
+body[data-landing-family="art-catalog"] {
+  --venture-color: var(--color-art);
+  --venture-accent: var(--color-art);
+  --venture-dim: var(--color-art-dim);
+  --type-hero-color: var(--color-art);
+}
+
+body[data-landing-family="tattoo-service"] {
+  --venture-color: var(--color-tattooing);
+  --venture-accent: var(--color-tattooing);
+  --venture-dim: var(--color-tattooing-dim);
+  --type-hero-color: var(--color-tattooing);
+}
+
+body[data-landing-family="merch-commerce"] {
+  --venture-color: var(--color-merch);
+  --venture-accent: var(--color-merch);
+  --venture-dim: var(--color-merch-dim);
+  --type-hero-color: var(--color-merch);
+}
+
+body[data-landing-family="events-program"] {
+  --venture-color: var(--color-events);
+  --venture-accent: var(--color-events);
+  --venture-dim: var(--color-events-dim);
+  --type-hero-color: var(--color-events);
+}
+
+body[data-landing-family] > :is(.grain, .venture-grain) {
+  display: none;
+}
+
+body[data-landing-family] .landing-hero {
+  margin-bottom: var(--landing-section-gap-active);
+}
+
+body[data-landing-family="events-program"] .landing-hero {
+  margin-bottom: 0;
+}
+
+body[data-landing-family] .landing-hero .hero-title {
+  color: var(--type-hero-color, var(--venture-accent));
+  font-family: var(--type-hero-font, var(--font-display));
+  font-size: var(--type-hero-size-active, var(--type-hero-size));
+  font-weight: var(--type-hero-weight, 900);
+  font-style: var(--type-hero-style, normal);
+  letter-spacing: var(--type-hero-tracking-active, var(--type-hero-tracking));
+  line-height: var(--type-hero-leading-active, var(--type-hero-leading));
+  text-transform: var(--type-hero-transform, uppercase);
+}
+
+body[data-landing-family] .landing-hero .hero-descriptor {
+  color: var(--type-descriptor-color);
+  font-family: var(--type-descriptor-font, var(--font-serif));
+  font-size: var(--type-descriptor-size-active, var(--type-descriptor-size));
+  font-weight: var(--type-descriptor-weight, 400);
+  font-style: var(--type-descriptor-style, normal);
+  letter-spacing: var(--type-descriptor-tracking-active, var(--type-descriptor-tracking));
+  line-height: var(--type-descriptor-leading-active, var(--type-descriptor-leading));
+  text-transform: var(--type-descriptor-transform, uppercase);
+}
+
+body[data-landing-family] :where(
+  .studio-visit-link,
+  .cart-toggle,
+  .overlay-close,
+  .drawer-close
+) {
+  color: var(--type-control-color, var(--color-body));
+  font-family: var(--type-control-font, var(--font-display));
+  font-size: var(--type-control-size-active, var(--type-control-size));
+  font-weight: var(--type-control-weight, 800);
+  font-style: var(--type-control-style, normal);
+  letter-spacing: var(--type-control-tracking-active, var(--type-control-tracking));
+  line-height: var(--type-control-leading-active, var(--type-control-leading));
+  text-transform: var(--type-control-transform, uppercase);
+}
+
+body[data-landing-family] :where(
+  .medium-heading,
+  .work-info,
+  .chip-count
+) {
+  color: var(--type-meta-color, var(--color-text-dim));
+  font-family: var(--type-meta-font, var(--font-serif));
+  font-size: var(--type-meta-size-active, var(--type-meta-size));
+  font-weight: var(--type-meta-weight, 400);
+  font-style: var(--type-meta-style, normal);
+  letter-spacing: var(--type-meta-tracking-active, var(--type-meta-tracking));
+  line-height: var(--type-meta-leading-active, var(--type-meta-leading));
+  text-transform: var(--type-meta-transform, uppercase);
+}
+
+body[data-landing-family] footer.bottom :where(p, a) {
+  color: var(--type-footer-color, var(--color-text-dim));
+  font-family: var(--type-footer-font, var(--font-serif));
+  font-size: var(--type-footer-size-active, var(--type-footer-size));
+  font-weight: var(--type-footer-weight, 400);
+  font-style: var(--type-footer-style, normal);
+  letter-spacing: var(--type-footer-tracking-active, var(--type-footer-tracking));
+  line-height: var(--type-footer-leading-active, var(--type-footer-leading));
+  text-transform: var(--type-footer-transform, uppercase);
+}
+
+body[data-landing-family] .work-grid {
+  gap: var(--landing-grid-gap-active);
+}
+
+body[data-landing-family="merch-commerce"] .grid {
+  gap: var(--landing-grid-gap-active);
+}
+
+body[data-landing-family] :where(
+  .chip,
+  .studio-visit-link,
+  .cart-toggle,
+  .overlay-close,
+  .drawer-close,
+  .source-filter-trigger,
+  .source-filter-option,
+  .size-pill,
+  .finish-pill,
+  .card-add,
+  .card-acquire,
+  .checkout-btn,
+  .nav-inquire,
+  .cta-primary,
+  .brand-link,
+  .ledger-action
+):focus-visible {
+  outline: var(--landing-structural-rule) solid var(--venture-accent);
+  outline-offset: 4px;
+}
+
+@media (max-width: 900px) {
+  body[data-landing-family] {
+    --landing-page-padding-x-active: var(--page-padding-x-tablet);
+    --landing-page-padding-y-active: var(--page-padding-y-tablet);
+    --landing-section-gap-active: var(--section-gap-tablet);
+    --landing-grid-gap-active: var(--grid-gap-tablet);
+  }
+}
+
+@media (max-width: 700px) {
+  body[data-landing-family] {
+    --landing-page-padding-x-active: var(--page-padding-x-mobile);
+    --landing-page-padding-y-active: var(--page-padding-y-mobile);
+    --landing-section-gap-active: var(--section-gap-mobile);
+    --landing-grid-gap-active: var(--grid-gap-mobile);
+  }
+
+  body[data-landing-family] :where(
+    .chip,
+    .studio-visit-link,
+    .cart-toggle,
+    .overlay-close,
+    .drawer-close,
+    .source-filter-trigger,
+    .source-filter-option,
+    .size-pill,
+    .finish-pill,
+    .card-add,
+    .card-acquire,
+    .checkout-btn,
+    .color-swatch,
+    .qty-btn,
+    .nav-inquire,
+    .cta-primary,
+    .brand-link,
+    .ledger-action
+  ) {
+    min-width: var(--landing-control-min-height-active);
+    min-height: var(--landing-control-min-height-active);
+  }
+
+  body[data-landing-family="tattoo-service"] header.top .nav-inquire {
+    min-height: var(--landing-control-min-height-active) !important;
+  }
+}
+
+@media (max-width: 380px) {
+  body[data-landing-family] {
+    --landing-page-padding-x-active: var(--page-padding-x-compact);
+    --landing-page-padding-y-active: var(--page-padding-y-compact);
+    --landing-section-gap-active: var(--section-gap-compact);
+    --landing-grid-gap-active: var(--grid-gap-compact);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-landing-family] *,
+  body[data-landing-family] *::before,
+  body[data-landing-family] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

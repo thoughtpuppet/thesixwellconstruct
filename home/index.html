@@ -1084,8 +1084,9 @@ const SUB_NODE_DATA = {
   const managedVentures=payload.nodes.slice(0,9).map((node,index)=>{
     const prior=priorByName.get(node.name)||{};
     const slot=slots[index]||slots[slots.length-1];
-    SUB_NODE_DATA[node.name]=(node.pathways||[]).slice(0,9).map(path=>({name:path.name,url:path.route,color:path.color||node.color||prior.color||slot.color}));
-    return {name:node.name,color:node.color||prior.color||slot.color,angle:slot.angle,dist:slot.dist,fromDot:slot.fromDot};
+    const semanticColor=prior.color||slot.color;
+    SUB_NODE_DATA[node.name]=(node.pathways||[]).slice(0,9).map(path=>({name:path.name,url:path.route,color:path.color||semanticColor}));
+    return {name:node.name,color:semanticColor,angle:slot.angle,dist:slot.dist,fromDot:slot.fromDot};
   });
   VENTURES.splice(0,VENTURES.length,...managedVentures);
   document.documentElement.dataset.managedNavigation='live';

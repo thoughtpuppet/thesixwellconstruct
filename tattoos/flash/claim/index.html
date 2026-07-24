@@ -7,13 +7,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
-    --bg:#0e0e0e; --accent:#FCB867; --signal:#6E0404; --ring:#6D3D15;
+    --bg:#0e0e0e; --accent:#FCB867; --signal:var(--color-tattooing); --ring:#6D3D15;
+    --venture-color:var(--color-tattooing); --venture-accent:var(--color-tattooing);
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
-    --text:#FFE7CA; --text-mute:rgba(255,231,202,0.62);
-    --text-dim:rgba(255,231,202,0.38); --text-ghost:rgba(255,231,202,0.14);
+    --text:var(--color-body, #FBD19D); --text-mute:var(--color-text-muted, rgba(251,209,157,0.66));
+    --text-dim:var(--color-text-dim, rgba(251,209,157,0.38)); --text-ghost:var(--color-text-ghost, rgba(251,209,157,0.16));
     --sans:'Inter',Arial,sans-serif; --serif:Georgia,'Times New Roman',Times,serif;
     --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:40px; --s7:64px; --s8:96px;
     --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
@@ -26,7 +28,7 @@
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
 main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .layout { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(380px,560px); gap:72px; align-items:start; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(50px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--signal); text-transform:uppercase; margin-bottom:38px; }
+  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(50px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--type-hero-color, var(--venture-accent)); text-transform:uppercase; margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
   .path-list { list-style:none; display:flex; flex-direction:column; max-width:620px; border-top:5px solid var(--ring-faint); margin-top:44px; }

@@ -1,0 +1,358 @@
+:root {
+  color-scheme: dark;
+  --bg: var(--studio-bg, var(--color-bg, #0e0e0e));
+  --panel: var(--studio-panel, #161616);
+  --line: var(--studio-line, rgba(255, 231, 202, 0.16));
+  --line-strong: var(--studio-line-strong, rgba(255, 231, 202, 0.32));
+  --text: var(--studio-text, var(--color-body, #FBD19D));
+  --muted: var(--studio-muted, var(--color-text-muted, rgba(251, 209, 157, 0.66)));
+  --dim: var(--studio-dim, var(--color-text-dim, rgba(251, 209, 157, 0.38)));
+  --accent: var(--studio-accent, var(--color-accent, #FCB867));
+  --signal: var(--studio-signal, var(--color-tattooing, #6E0404));
+  --ring: var(--studio-ring, var(--color-archive, #6D3D15));
+  --ring-soft: var(--studio-ring-soft, var(--color-archive-dim, rgba(109, 61, 21, 0.4)));
+  --ring-faint: var(--studio-ring-faint, rgba(109, 61, 21, 0.18));
+  --ghost: var(--studio-ghost, rgba(252, 184, 103, 0.14));
+  --t-fast: var(--duration-fast, 0.18s) var(--ease-out, cubic-bezier(0.2, 0, 0.2, 1));
+  --sans: var(--font-display, Inter, Arial, sans-serif);
+  --serif: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  --studio-workspace-gap-active: var(--studio-workspace-gap, 20px);
+  --studio-row-padding-active: var(--studio-row-padding, 16px);
+  --studio-pane-padding-active: var(--studio-pane-padding, 24px);
+  --studio-type-title-size-active: var(--studio-type-title-size, 18px);
+  --studio-type-label-size-active: var(--studio-type-label-size, 10px);
+  --studio-type-body-size-active: var(--studio-type-body-size, 13px);
+  --studio-type-meta-size-active: var(--studio-type-meta-size, 10px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+body.studio-console {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: var(--studio-type-body-size-active);
+  line-height: var(--studio-type-body-leading, 1.55);
+}
+
+.studio-console button,
+.studio-console input,
+.studio-console textarea,
+.studio-console select {
+  max-width: 100%;
+  font: inherit;
+}
+
+.studio-console button {
+  cursor: pointer;
+}
+
+.studio-console :where(button, a, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.studio-console :where(h1, h2, h3, h4, .section-toggle, .detail-section-toggle) {
+  font-family: var(--sans);
+}
+
+.studio-console h1 {
+  font-size: var(--studio-type-title-size-active);
+  line-height: var(--studio-type-title-leading, 1.1);
+  letter-spacing: var(--studio-type-title-tracking, 0.16em);
+}
+
+.studio-console :where(label, .tab, .subnav-btn, .button, .section-toggle, .detail-section-toggle) {
+  font-family: var(--sans);
+  font-size: var(--studio-type-label-size-active);
+  line-height: var(--studio-type-label-leading, 1.35);
+  letter-spacing: var(--studio-type-label-tracking, 0.12em);
+}
+
+.studio-console :where(.status, .meta, .date, .pill, .contact, .cm-meta, .people-record-meta) {
+  font-size: var(--studio-type-meta-size-active);
+  line-height: var(--studio-type-meta-leading, 1.45);
+  letter-spacing: var(--studio-type-meta-tracking, 0.1em);
+}
+
+.studio-console :where(.button, .tab, .subnav-btn, .icon-button) {
+  min-height: var(--studio-control-min-height, 44px);
+}
+
+.studio-console :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select) {
+  min-height: var(--studio-control-min-height, 44px);
+}
+
+.studio-console :where(.status, [role="status"], [aria-live="polite"], [aria-live="assertive"]) {
+  overflow-wrap: anywhere;
+}
+
+.studio-console :where(.cm-notice, .people-notice, .portfolio-upload-status, .cm-upload-status)[data-kind="error"],
+.studio-console .status.is-error {
+  color: var(--studio-status-error, #CC8F72);
+}
+
+.studio-console :where(.cm-notice, .people-notice, .portfolio-upload-status, .cm-upload-status)[data-kind="success"],
+.studio-console .status.is-success {
+  color: var(--studio-status-success, #6FAE7C);
+}
+
+.studio-console :where(img, video, iframe, canvas, svg, table) {
+  max-width: 100%;
+}
+
+.studio-console :where(.token-card, dialog, [role="dialog"]) {
+  max-width: calc(100vw - 28px);
+  max-height: calc(100dvh - 28px);
+  overflow: auto;
+}
+
+.studio-console :where(.select-menu, .select-menu-list, [role="listbox"], [role="menu"]) {
+  max-width: calc(100vw - 28px);
+  max-height: min(360px, calc(100dvh - 28px));
+  overflow: auto;
+}
+
+.studio-console input[type="file"] {
+  width: 100%;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --studio-workspace-gap-active: var(--studio-workspace-gap-tablet, 16px);
+    --studio-row-padding-active: var(--studio-row-padding-tablet, 14px);
+    --studio-pane-padding-active: var(--studio-pane-padding-tablet, 18px);
+  }
+
+  .studio-console .tabs,
+  .studio-console .subnav,
+  .studio-console .cm-workspace-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .studio-console .tabs > *,
+  .studio-console .subnav > *,
+  .studio-console .cm-workspace-nav > * {
+    flex: 0 0 auto;
+  }
+
+  .studio-console .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio-console .list-pane {
+    border-right: 0;
+    border-bottom: 5px solid var(--ring-faint);
+    max-height: min(42vh, 420px);
+  }
+
+  .studio-console .detail-pane {
+    padding: var(--studio-pane-padding-active);
+  }
+
+  .studio-console :where(
+    .hub-body,
+    .grid,
+    .actions,
+    .availability-overview,
+    .availability-manager .schedule-grid,
+    .availability-manager .availability-form,
+    .booking-readiness-grid,
+    .availability-manager .availability-edit-form,
+    .availability-manager .day-row
+  ) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio-console :where(.cm-table, .analytics-table, .people-table) {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  :root {
+    --studio-workspace-gap-active: var(--studio-workspace-gap-mobile, 12px);
+    --studio-row-padding-active: var(--studio-row-padding-mobile, 12px);
+    --studio-pane-padding-active: var(--studio-pane-padding-mobile, 14px);
+    --studio-type-title-size-active: var(--studio-type-title-size-mobile, 16px);
+    --studio-type-label-size-active: var(--studio-type-label-size-mobile, 10px);
+    --studio-type-body-size-active: var(--studio-type-body-size-mobile, 13px);
+    --studio-type-meta-size-active: var(--studio-type-meta-size-mobile, 9px);
+  }
+
+  .studio-console header {
+    align-items: flex-start;
+    padding: 16px 14px;
+  }
+
+  .studio-console .header-actions {
+    width: 100%;
+  }
+
+  .studio-console .tabs {
+    padding-inline: 8px;
+  }
+
+  .studio-console .tab {
+    padding-inline: 14px;
+    white-space: nowrap;
+  }
+
+  .studio-console .subnav {
+    padding: 8px;
+  }
+
+  .studio-console .subnav-btn {
+    white-space: nowrap;
+  }
+
+  .studio-console .toolbar {
+    position: static;
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+
+  .studio-console .toolbar > * {
+    flex: 1 1 150px;
+  }
+
+  .studio-console .list-pane {
+    max-height: min(38vh, 360px);
+  }
+
+  .studio-console .detail-pane {
+    min-width: 0;
+    padding: var(--studio-pane-padding-active);
+  }
+
+  .studio-console :where(
+    .portfolio-grid,
+    .portfolio-angle-grid,
+    .portfolio-settings-grid,
+    .direct-invite-form-grid,
+    .direct-invite-type-grid,
+    .session-plan-grid,
+    .tattoo-settings-grid,
+    .tattoo-settings-row,
+    .tattoo-settings-row.special,
+    .cm-grid,
+    .cm-form-grid,
+    .cm-layer-row,
+    .cm-layer-fields,
+    .cm-context-fields,
+    .cm-archive-entry,
+    .cm-connection-row,
+    .people-form-grid,
+    .people-detail-grid,
+    .analytics-grid,
+    .analytics-grid.equal,
+    .analytics-filters
+  ) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio-console :where(.portfolio-card-actions, .portfolio-angle-actions, .portfolio-option-actions) .button {
+    min-height: var(--studio-control-min-height, 44px);
+  }
+
+  .studio-console .datetimepicker-popup {
+    position: fixed;
+    inset: auto 14px 14px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - 28px);
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .studio-console .datetimepicker-popup .dt-date,
+  .studio-console .datetimepicker-popup .dt-time,
+  .studio-console .timepicker-popup {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .studio-console .datetimepicker-popup .dt-date {
+    border-right: 0;
+    border-bottom: 5px solid var(--ring-faint);
+  }
+
+  .studio-console .timepicker-popup {
+    position: fixed;
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
+    width: auto;
+    max-height: min(60dvh, 360px);
+  }
+
+  .studio-console .day-button,
+  .studio-console .datepicker-nav button,
+  .studio-console .time-option,
+  .studio-console .ampm-button {
+    min-height: var(--studio-control-min-height, 44px);
+  }
+
+  .studio-console .token-modal {
+    align-items: end;
+    padding: 14px;
+  }
+
+  .studio-console .token-card {
+    width: 100%;
+    max-height: calc(100dvh - 28px);
+    padding: 16px;
+  }
+
+  .studio-console :where(.portfolio-drop, .cm-media-drop, .cm-svg-drop) {
+    max-width: 100%;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .studio-console header,
+  .studio-console .detail-pane {
+    padding-inline: 12px;
+  }
+
+  .studio-console .calendar-weekdays,
+  .studio-console .calendar-grid {
+    gap: 2px;
+  }
+
+  .studio-console .day-button {
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-console *,
+  .studio-console *::before,
+  .studio-console *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -1,0 +1,665 @@
+/* Shared painting-detail shell. Per-work content stays in the HTML fallback
+   and is upgraded from /api/art by /js/art-detail-managed.js. */
+
+:root {
+  background: var(--color-bg, #0e0e0e);
+}
+
+.painting-detail-page {
+  --painting-bg: var(--color-bg, #0e0e0e);
+  --painting-accent: var(--color-about, #fcb867);
+  --painting-node: var(--color-art, #0071eb);
+  --painting-ring: var(--color-structural, #6d3d15);
+  --painting-ring-soft: color-mix(in srgb, var(--painting-ring) 40%, transparent);
+  --painting-ring-faint: color-mix(in srgb, var(--painting-ring) 18%, transparent);
+  --painting-text: var(--color-body, #fbd19d);
+  --painting-text-muted: var(--color-text-muted, rgba(252, 184, 103, 0.55));
+  --painting-text-dim: var(--color-text-dim, rgba(252, 184, 103, 0.3));
+  --painting-text-ghost: var(--color-text-ghost, rgba(252, 184, 103, 0.13));
+  --painting-frame-max-width: 560px;
+  --painting-s1: 4px;
+  --painting-s2: 8px;
+  --painting-s3: 12px;
+  --painting-s4: 16px;
+  --painting-s5: 24px;
+  --painting-s6: 40px;
+  --painting-s7: 64px;
+  --painting-s8: 96px;
+  --painting-fast: 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  --painting-medium: 0.35s cubic-bezier(0.2, 0, 0.2, 1);
+  --painting-slow: 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: clip;
+  background: var(--painting-bg);
+  color: var(--painting-accent);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.painting-detail-page *,
+.painting-detail-page *::before,
+.painting-detail-page *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.painting-detail-page a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.painting-detail-page button {
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.painting-detail-page header.top {
+  position: sticky;
+  z-index: 50;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--painting-s5) var(--painting-s6);
+}
+
+.painting-detail-page .cart-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--painting-s3);
+  padding: var(--painting-s2) var(--painting-s4);
+  border: 5px solid var(--painting-ring-soft);
+  transition: border-color var(--painting-fast), background var(--painting-fast);
+}
+
+.painting-detail-page .cart-toggle:hover {
+  border-color: var(--painting-accent);
+  background: rgba(252, 184, 103, 0.04);
+}
+
+.painting-detail-page .cart-label {
+  color: var(--painting-text-muted);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .cart-count {
+  min-width: 14px;
+  color: var(--painting-accent);
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.painting-detail-page .split {
+  display: grid;
+  min-height: calc(100vh - 116px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.painting-detail-page .split-image {
+  position: sticky;
+  top: 73px;
+  display: flex;
+  height: calc(100vh - 73px);
+  align-items: center;
+  justify-content: center;
+  padding: var(--painting-s6);
+  border-right: 5px solid var(--painting-ring-faint);
+}
+
+.painting-detail-page .painting-frame {
+  position: relative;
+  display: inline-flex;
+  width: min(100%, var(--painting-frame-max-width));
+  max-height: calc(100vh - 196px);
+  align-items: flex-end;
+  justify-content: flex-start;
+  cursor: zoom-in;
+}
+
+.painting-detail-page .painting-frame img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100vh - 196px);
+  object-fit: contain;
+  animation: painting-detail-reveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes painting-detail-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.painting-detail-page .painting-badge {
+  position: absolute;
+  bottom: var(--painting-s4);
+  left: 0;
+  color: var(--painting-node);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  opacity: 0.78;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .split-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--painting-s7);
+  padding: var(--painting-s7) var(--painting-s7) var(--painting-s8) var(--painting-s6);
+}
+
+.painting-detail-page .painting-header,
+.painting-detail-page .statement-block,
+.painting-detail-page .availability-block,
+.painting-detail-page .related-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.painting-detail-page .painting-header {
+  gap: var(--painting-s3);
+}
+
+.painting-detail-page .statement-block,
+.painting-detail-page .availability-block,
+.painting-detail-page .related-block {
+  gap: var(--painting-s5);
+}
+
+.painting-detail-page .venture-label,
+.painting-detail-page .block-label {
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .venture-label {
+  color: var(--painting-node);
+  opacity: 0.78;
+}
+
+.painting-detail-page .block-label {
+  padding-bottom: var(--painting-s3);
+  color: var(--painting-text-dim);
+}
+
+.painting-detail-page .painting-title {
+  color: var(--painting-text);
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: clamp(22px, 3.5vw, 40px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+}
+
+.title-preview-fbd19d .painting-title {
+  color: #fbd19d;
+}
+
+.painting-detail-page .painting-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--painting-s4);
+  flex-wrap: wrap;
+  padding-top: var(--painting-s3);
+  border-top: 5px solid var(--painting-ring-faint);
+}
+
+.painting-detail-page .meta-item {
+  color: var(--painting-text-dim);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .meta-sep {
+  color: var(--painting-text-ghost);
+}
+
+.painting-detail-page .statement-body {
+  color: var(--painting-text);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.painting-detail-page .statement-body p + p {
+  margin-top: var(--painting-s5);
+}
+
+.painting-detail-page .statement-body.placeholder {
+  color: var(--painting-text-muted);
+  font-style: italic;
+}
+
+.painting-detail-page .availability-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--painting-s4);
+}
+
+.painting-detail-page .avail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--painting-s4);
+  padding-bottom: var(--painting-s4);
+  border-bottom: 5px solid var(--painting-ring-faint);
+}
+
+.painting-detail-page .avail-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.painting-detail-page .avail-left,
+.painting-detail-page .related-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.painting-detail-page .avail-label {
+  color: var(--painting-text-dim);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .avail-status {
+  color: var(--painting-text-dim);
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .avail-status.available {
+  color: var(--painting-node);
+}
+
+.painting-detail-page .avail-status.sold {
+  color: #c0392b;
+}
+
+.painting-detail-page .avail-status.not-for-sale,
+.painting-detail-page .avail-status.unavailable,
+.painting-detail-page .avail-status.coming-soon,
+.painting-detail-page .avail-status.sold-out,
+.painting-detail-page .avail-status.check-availability {
+  color: var(--painting-text-dim);
+}
+
+.painting-detail-page .avail-action,
+.painting-detail-page .avail-location {
+  padding: var(--painting-s2) var(--painting-s4);
+  border: 5px solid var(--painting-node);
+  color: var(--painting-node);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  transition: background var(--painting-fast), color var(--painting-fast);
+  white-space: nowrap;
+}
+
+.painting-detail-page .avail-action:hover {
+  background: var(--painting-node);
+  color: var(--painting-bg);
+}
+
+.painting-detail-page .avail-action.disabled {
+  border-color: var(--painting-ring-faint);
+  color: var(--painting-text-dim);
+  pointer-events: none;
+}
+
+.painting-detail-page .avail-location {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+.painting-detail-page .related-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--painting-s3);
+}
+
+.painting-detail-page .related-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--painting-s4);
+  border: 5px solid var(--painting-ring-faint);
+  transition: border-color var(--painting-fast), background var(--painting-fast);
+}
+
+.painting-detail-page .related-item:hover {
+  border-color: var(--item-color, var(--painting-ring-soft));
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.painting-detail-page .related-item:hover .related-arrow {
+  color: var(--item-color, var(--painting-text-muted));
+  transform: translateX(3px);
+}
+
+.painting-detail-page .related-item:hover .related-title {
+  color: var(--item-color, var(--painting-text));
+}
+
+.painting-detail-page .related-venture {
+  color: var(--painting-text-dim);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .related-title {
+  color: var(--painting-text);
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .related-arrow {
+  color: var(--painting-text-dim);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 16px;
+  transition: color var(--painting-fast), transform var(--painting-fast);
+}
+
+.painting-detail-page footer.bottom {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--painting-s6);
+  border-top: 5px solid var(--painting-ring-faint);
+  grid-column: 1 / -1;
+}
+
+.painting-detail-page footer.bottom p,
+.painting-detail-page footer.bottom a {
+  color: var(--painting-text-dim);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page footer.bottom a {
+  color: var(--painting-text-muted);
+  transition: color var(--painting-fast);
+}
+
+.painting-detail-page footer.bottom a:hover {
+  color: var(--painting-accent);
+}
+
+.painting-detail-page .cart-overlay {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--painting-medium);
+}
+
+.painting-detail-page .cart-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.painting-detail-page .cart-drawer {
+  position: fixed;
+  z-index: 100;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: min(440px, 100vw);
+  border-left: 5px solid var(--painting-ring-soft);
+  background: #0a0a0a;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--painting-medium);
+}
+
+.painting-detail-page .cart-drawer.open {
+  transform: translateX(0);
+}
+
+.painting-detail-page .drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--painting-s5);
+  border-bottom: 5px solid var(--painting-ring-faint);
+}
+
+.painting-detail-page .drawer-title {
+  color: var(--painting-accent);
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .drawer-close {
+  padding: 4px 12px;
+  color: var(--painting-text-muted);
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+  transition: color var(--painting-fast);
+}
+
+.painting-detail-page .drawer-close:hover {
+  color: var(--painting-accent);
+}
+
+.painting-detail-page .drawer-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.painting-detail-page .drawer-empty {
+  color: var(--painting-text-dim);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .drawer-footer {
+  padding: var(--painting-s5);
+  border-top: 5px solid var(--painting-ring-faint);
+}
+
+.painting-detail-page .checkout-btn {
+  display: block;
+  width: 100%;
+  padding: var(--painting-s4);
+  border: 5px solid var(--painting-ring-soft);
+  background: transparent;
+  color: var(--painting-text-dim);
+  cursor: not-allowed;
+  font-family: var(--font-sans, Inter, Arial, sans-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.painting-detail-page .lightbox {
+  position: fixed;
+  z-index: 300;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 8, 0.97);
+  cursor: zoom-out;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--painting-medium);
+}
+
+.painting-detail-page .lightbox.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.painting-detail-page .lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  cursor: zoom-out;
+  object-fit: contain;
+  opacity: 0;
+  transform: scale(0.97);
+  transition: transform var(--painting-slow) 0.05s, opacity var(--painting-slow) 0.05s;
+}
+
+.painting-detail-page .lightbox.open img {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.painting-detail-page .lightbox-close {
+  position: fixed;
+  z-index: 301;
+  top: var(--painting-s5);
+  right: var(--painting-s6);
+  padding: var(--painting-s2);
+  color: var(--painting-text-muted);
+  cursor: pointer;
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 20px;
+  transition: color var(--painting-fast);
+}
+
+.painting-detail-page .lightbox-close:hover {
+  color: var(--painting-accent);
+}
+
+.painting-detail-page [hidden] {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .painting-detail-page .split {
+    grid-template-columns: 1fr;
+  }
+
+  .painting-detail-page .split-image {
+    position: relative;
+    top: 0;
+    height: auto;
+    min-height: 60vw;
+    padding: var(--painting-s5);
+    border-right: 0;
+    border-bottom: 5px solid var(--painting-ring-faint);
+  }
+
+  .painting-detail-page .painting-frame,
+  .painting-detail-page .painting-frame img {
+    width: auto;
+    max-width: 100%;
+    max-height: 70vw;
+  }
+
+  .painting-detail-page .split-content {
+    padding: var(--painting-s6) var(--painting-s5) var(--painting-s7);
+  }
+
+  .painting-detail-page footer.bottom {
+    grid-column: 1;
+  }
+
+  .painting-detail-page header.top {
+    padding: var(--painting-s4) var(--painting-s5);
+  }
+}
+
+@media (max-width: 700px) {
+  .painting-detail-page header.top {
+    min-height: 60px;
+    padding: var(--painting-s3) var(--painting-s4);
+  }
+
+  .painting-detail-page .cart-toggle {
+    gap: 5px;
+    padding: 5px 8px;
+    border-width: 5px;
+  }
+
+  .painting-detail-page .cart-label,
+  .painting-detail-page .cart-count {
+    font-size: 9px;
+  }
+
+  .painting-detail-page .cart-label {
+    letter-spacing: 0.12em;
+  }
+
+  .painting-detail-page .cart-count {
+    min-width: 10px;
+  }
+
+  .painting-detail-page .avail-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 380px) {
+  .painting-detail-page .cart-toggle {
+    gap: 4px;
+    padding: 4px 6px;
+  }
+
+  .painting-detail-page .cart-label,
+  .painting-detail-page .cart-count {
+    font-size: 8px;
+  }
+
+  .painting-detail-page .cart-label {
+    letter-spacing: 0.1em;
+  }
+
+  .painting-detail-page .cart-count {
+    min-width: 8px;
+  }
+}

@@ -8,13 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block">
+<link rel="stylesheet" href="/css/tokens.css?v=dual-system-contract">
 <style>
 /* ============================================================
    UI GUIDE — the six.well construct
    ------------------------------------------------------------
-   Token-backed reference. Fallback values below mirror css/tokens.css
-   so the guide renders immediately, then the tuner syncs from the live
-   tokens file when served through the local dev server.
+   Token-backed reference. css/tokens.css owns palette, typography,
+   responsive roles, and Studio roles. This file only defines Guide-local
+   aliases and surfaces.
    ------------------------------------------------------------
    Toolbar: "Edit" toggles contenteditable on the whole document
    so notes can be added inline. "Export PDF" opens the print
@@ -22,46 +23,16 @@
    ============================================================ */
 
 :root {
-  /* base */
-  --color-bg:         #0e0e0e;
-  --color-body:       #FFE7CA;
-  --color-text-muted: rgba(255,231,202,.66);
-  --color-text-dim:   rgba(255,231,202,.38);
-  --color-text-ghost: rgba(255,231,202,.16);
-  --color-accent:     #FCB867;
-  --color-accent-dim: rgba(252, 184, 103, 0.25);
-  --color-breadcrumb-dim:     rgba(252, 184, 103, 0.30);
-  --color-breadcrumb-hover:   rgba(252, 184, 103, 0.55);
-  --color-breadcrumb-ghost:   rgba(252, 184, 103, 0.13);
-  --color-breadcrumb-current: rgba(252, 184, 103, 0.80);
-
-  --type-body-font:var(--font-serif); --type-body-color:var(--color-body); --type-body-size:16px; --type-body-weight:400; --type-body-style:normal; --type-body-leading:1.42; --type-body-tracking:.1em; --type-body-transform:uppercase;
-  --type-descriptor-font:var(--font-serif); --type-descriptor-color:rgba(252,184,103,.55); --type-descriptor-size:12px; --type-descriptor-weight:400; --type-descriptor-style:normal; --type-descriptor-leading:1.6; --type-descriptor-tracking:.22em; --type-descriptor-transform:uppercase;
-  --type-eyebrow-font:var(--font-serif); --type-eyebrow-color:var(--color-accent); --type-eyebrow-size:10px; --type-eyebrow-weight:400; --type-eyebrow-style:normal; --type-eyebrow-leading:1.35; --type-eyebrow-tracking:.22em; --type-eyebrow-transform:uppercase;
-  --type-breadcrumb-font:var(--font-serif); --type-breadcrumb-color:var(--color-breadcrumb-dim); --type-breadcrumb-size:11px; --type-breadcrumb-weight:400; --type-breadcrumb-style:normal; --type-breadcrumb-leading:1.42; --type-breadcrumb-tracking:.18em; --type-breadcrumb-transform:uppercase;
-  --type-footer-font:var(--font-serif); --type-footer-color:var(--color-text-dim); --type-footer-size:10px; --type-footer-weight:400; --type-footer-style:normal; --type-footer-leading:1.42; --type-footer-tracking:.18em; --type-footer-transform:uppercase;
-  --type-meta-font:var(--font-serif); --type-meta-color:var(--color-text-dim); --type-meta-size:11px; --type-meta-weight:400; --type-meta-style:normal; --type-meta-leading:1.42; --type-meta-tracking:.18em; --type-meta-transform:uppercase;
-
-  /* medium fallbacks */
-  --color-tattooing: #6E0404;  --color-tattooing-dim: rgba(110,4,4,.25);
-  --color-art:       #0039BD;  --color-art-dim:       rgba(0,57,189,.25);
-  --color-merch:     #F08F00;  --color-merch-dim:     rgba(240,143,0,.25);
-  --color-about:     #FCB867;  --color-about-dim:     rgba(252,184,103,.25);
-  --color-events:    #005D25;  --color-events-dim:    rgba(0,93,37,.25);
-  --color-music:     #A22F8D;  --color-music-dim:     rgba(162,47,141,.25);
-  --color-writings:  #FFE7CA;  --color-writings-dim:  rgba(255,231,202,.25);
-  --color-archive:   #6D3D15;  --color-archive-dim:   rgba(109,61,21,.25);
-  --color-film:      #00857A;  --color-film-dim:      rgba(0,133,122,.25);
-
-  /* type */
-  --font-display: 'Inter',Arial,sans-serif;
-  --font-serif:   Georgia,'Times New Roman',Times,serif;
-
-  /* derived ink levels (from venture-pages.css) */
+  /* Guide-local aliases; source values come from css/tokens.css. */
   --text:       var(--color-body);
   --text-muted: var(--color-text-muted);
   --text-dim:   var(--color-text-dim);
   --text-ghost: var(--color-text-ghost);
+  --bg:         var(--color-bg);
+  --accent:     var(--color-accent);
+  --sans:       var(--font-display);
+  --serif:      var(--font-serif);
+  --t-fast:     var(--duration-fast);
   --ring-soft:  rgba(109,61,21,.4);
   --ring-faint: rgba(109,61,21,.18);
   --surface:      #111111;
@@ -411,6 +382,11 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 @media (max-width: 720px) {
   .shell { padding: 48px 22px 80px; }
   .type-row, .space-row, .ink-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  section.guide > table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
 }
 
 /* ── print / PDF export ── */
@@ -426,11 +402,17 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   @page { size: A4; margin: 10mm; }
 }
 </style>
+<link rel="stylesheet" href="/css/booking-calendar.css?v=canonical-source">
+<link rel="stylesheet" href="/tools/ui-guide-system.css?v=dual-system-contract">
 </head>
 <body>
 
 <div class="toolbar">
   <span class="mark">the six.well construct — ui guide</span>
+  <div class="guide-system-switcher" role="group" aria-label="Interface system">
+    <button type="button" data-guide-system="public" aria-pressed="true">Public Site</button>
+    <button type="button" data-guide-system="studio" aria-pressed="false">Studio Console</button>
+  </div>
   <button id="tuner-toggle" class="tn-toggle" type="button">🎨 Edit colors &amp; type</button>
   <button id="edit-toggle" type="button">✎ Edit</button>
   <button id="print-btn" type="button">⤓ Export PDF</button>
@@ -449,21 +431,19 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <span>export: toolbar → export pdf → enable background graphics</span>
     </div>
 
-    <nav class="toc">
-      <a href="#colors"><span class="n">01</span>Color system</a>
-      <a href="#typography"><span class="n">02</span>Typography</a>
-      <a href="#ink"><span class="n">03</span>Ink &amp; surface levels</a>
-      <a href="#spacing"><span class="n">04</span>Spacing &amp; layout</a>
-      <a href="#components"><span class="n">05</span>Components</a>
-      <a href="#navigation"><span class="n">06</span>Navigation system</a>
-      <a href="#motion"><span class="n">07</span>Motion</a>
-      <a href="#anatomy"><span class="n">08</span>Page anatomy</a>
-      <a href="#sitemap"><span class="n">09</span>Site map</a>
-      <a href="#language"><span class="n">10</span>Language rules</a>
-      <a href="#gotchas"><span class="n">11</span>Gotchas</a>
+    <nav class="toc" aria-label="Guide sections">
+      <a href="#systems"><span class="n">01</span>Foundations</a>
+      <a href="#component-library"><span class="n">02</span>Components</a>
+      <a href="#public-templates"><span class="n">03</span>Public templates</a>
+      <a href="#studio-patterns"><span class="n">04</span>Studio patterns</a>
+      <a href="#specialized-surfaces"><span class="n">05</span>Specialized surfaces</a>
+      <a href="#source-map"><span class="n">06</span>Source map</a>
+      <a href="#colors"><span class="n">Ref</span>Foundation reference</a>
+      <a href="#gotchas"><span class="n">Ref</span>Known gotchas</a>
     </nav>
   </header>
 
+  <div id="contract-root" contenteditable="false"></div>
 
   <!-- ════════════════════ 01 COLOR ════════════════════ -->
   <section class="guide" id="colors">
@@ -521,6 +501,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <div class="tn-section"><span>Global typography roles</span></div>
       <p class="type-role-help">Every role updates live. Font and color fields suggest the shared system values but also accept any valid CSS font stack, hex, rgba, or <code>var(...)</code> value.</p>
       <div id="type-role-list"></div>
+      <div class="tn-section"><span>Responsive role variants</span></div>
+      <p class="type-role-help">Tablet, mobile, and compact values are independent. Editing a smaller viewport never overwrites the desktop role.</p>
+      <div id="responsive-role-list"></div>
+      <div class="tn-section"><span>Public layout roles</span></div>
+      <div id="layout-role-list"></div>
+      <div class="tn-section"><span>Studio operational roles</span></div>
+      <p class="type-role-help">Studio consumes the shared palette while keeping its own panel, density, workspace, feedback, and operational typography roles.</p>
+      <div id="studio-role-list"></div>
       <div class="tn-section"><span>Medium signal colors</span></div>
       <div id="media-list"></div>
       <div class="tn-out">
@@ -746,7 +734,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><td>Wayfinding</td><td><code>js/construct-wayfinding.js</code></td><td>Breadcrumb at top of <code>&lt;main&gt;</code> + normalized footer with "Return to construct" / "Back to [medium]" links; construct/home always points to <code>/home/</code></td></tr>
     </table>
 
-    <h3>Dot nav (order is canonical)</h3>
+    <h3>Dot nav (production order · visual canon pending review)</h3>
     <div class="demo">
       <div class="dotnav-demo">
         <span class="dot current" data-medium="tattooing" title="TATTOOING"></span>
@@ -1046,12 +1034,61 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   ];
   var TYPE_ROLES = [
     {key:'body',name:'Body & paragraphs',sample:'Primary reading text across the site.',defaults:{font:'var(--font-serif)',color:'var(--color-body)',size:'16px',weight:'400',style:'normal',leading:'1.42',tracking:'0.1em',transform:'uppercase'}},
+    {key:'hero',name:'Hero & page titles',sample:'Declarative page title',defaults:{font:'var(--font-display)',color:'var(--venture-accent, var(--venture-color, var(--color-accent)))',size:'clamp(76px, 15vw, 220px)',weight:'900',style:'normal',leading:'0.84',tracking:'0em',transform:'uppercase'}},
+    {key:'section',name:'Section titles',sample:'Section title',defaults:{font:'var(--font-display)',color:'var(--color-body)',size:'clamp(34px, 6vw, 82px)',weight:'900',style:'normal',leading:'0.94',tracking:'0em',transform:'uppercase'}},
     {key:'descriptor',name:'Hero descriptors',sample:'One concise description of the page or medium.',defaults:{font:'var(--font-serif)',color:'rgba(252, 184, 103, 0.55)',size:'12px',weight:'400',style:'normal',leading:'1.6',tracking:'0.22em',transform:'uppercase'}},
     {key:'eyebrow',name:'Eyebrows & kickers',sample:'Section kicker · current medium',defaults:{font:'var(--font-serif)',color:'var(--venture-accent, var(--venture-color, var(--accent, var(--color-accent))))',size:'10px',weight:'400',style:'normal',leading:'1.35',tracking:'0.22em',transform:'uppercase'}},
     {key:'breadcrumb',name:'Breadcrumbs',sample:'Construct / Tattooing / Flash',defaults:{font:'var(--font-serif)',color:'var(--color-breadcrumb-dim)',size:'11px',weight:'400',style:'normal',leading:'1.42',tracking:'0.18em',transform:'uppercase'}},
+    {key:'control',name:'Controls & actions',sample:'Primary action',defaults:{font:'var(--font-display)',color:'var(--color-body)',size:'11px',weight:'800',style:'normal',leading:'1.2',tracking:'0.14em',transform:'uppercase'}},
     {key:'footer',name:'Footers',sample:'Return to construct · Back to medium',defaults:{font:'var(--font-serif)',color:'var(--color-text-dim)',size:'10px',weight:'400',style:'normal',leading:'1.42',tracking:'0.18em',transform:'uppercase'}},
     {key:'meta',name:'Metadata & captions',sample:'Updated July 2026 · Internal reference',defaults:{font:'var(--font-serif)',color:'var(--color-text-dim)',size:'11px',weight:'400',style:'normal',leading:'1.42',tracking:'0.18em',transform:'uppercase'}},
   ];
+  var SYSTEM_TOKEN_GROUPS = [
+    {
+      key:'responsive',
+      target:'responsive-role-list',
+      groups:[
+        ['Body', ['--type-body-size-tablet','--type-body-leading-tablet','--type-body-tracking-tablet','--type-body-size-mobile','--type-body-leading-mobile','--type-body-tracking-mobile','--type-body-size-compact','--type-body-leading-compact','--type-body-tracking-compact']],
+        ['Hero title', ['--type-hero-size-tablet','--type-hero-leading-tablet','--type-hero-tracking-tablet','--type-hero-size-mobile','--type-hero-leading-mobile','--type-hero-tracking-mobile','--type-hero-size-compact','--type-hero-leading-compact','--type-hero-tracking-compact']],
+        ['Section title', ['--type-section-size-tablet','--type-section-leading-tablet','--type-section-tracking-tablet','--type-section-size-mobile','--type-section-leading-mobile','--type-section-tracking-mobile','--type-section-size-compact','--type-section-leading-compact','--type-section-tracking-compact']],
+        ['Descriptor', ['--type-descriptor-size-tablet','--type-descriptor-leading-tablet','--type-descriptor-tracking-tablet','--type-descriptor-size-mobile','--type-descriptor-leading-mobile','--type-descriptor-tracking-mobile','--type-descriptor-size-compact','--type-descriptor-leading-compact','--type-descriptor-tracking-compact']],
+        ['Eyebrow', ['--type-eyebrow-size-tablet','--type-eyebrow-leading-tablet','--type-eyebrow-tracking-tablet','--type-eyebrow-size-mobile','--type-eyebrow-leading-mobile','--type-eyebrow-tracking-mobile','--type-eyebrow-size-compact','--type-eyebrow-leading-compact','--type-eyebrow-tracking-compact']],
+        ['Breadcrumb', ['--type-breadcrumb-size-tablet','--type-breadcrumb-leading-tablet','--type-breadcrumb-tracking-tablet','--type-breadcrumb-size-mobile','--type-breadcrumb-leading-mobile','--type-breadcrumb-tracking-mobile','--type-breadcrumb-size-compact','--type-breadcrumb-leading-compact','--type-breadcrumb-tracking-compact']],
+        ['Controls', ['--type-control-size-tablet','--type-control-leading-tablet','--type-control-tracking-tablet','--type-control-size-mobile','--type-control-leading-mobile','--type-control-tracking-mobile','--type-control-size-compact','--type-control-leading-compact','--type-control-tracking-compact']],
+        ['Footer', ['--type-footer-size-tablet','--type-footer-leading-tablet','--type-footer-tracking-tablet','--type-footer-size-mobile','--type-footer-leading-mobile','--type-footer-tracking-mobile','--type-footer-size-compact','--type-footer-leading-compact','--type-footer-tracking-compact']],
+        ['Metadata', ['--type-meta-size-tablet','--type-meta-leading-tablet','--type-meta-tracking-tablet','--type-meta-size-mobile','--type-meta-leading-mobile','--type-meta-tracking-mobile','--type-meta-size-compact','--type-meta-leading-compact','--type-meta-tracking-compact']]
+      ]
+    },
+    {
+      key:'layout',
+      target:'layout-role-list',
+      groups:[
+        ['Page padding', ['--page-padding-x','--page-padding-y','--page-padding-x-tablet','--page-padding-y-tablet','--page-padding-x-mobile','--page-padding-y-mobile','--page-padding-x-compact','--page-padding-y-compact']],
+        ['Section and grid rhythm', ['--section-gap','--section-gap-tablet','--section-gap-mobile','--section-gap-compact','--grid-gap','--grid-gap-tablet','--grid-gap-mobile','--grid-gap-compact','--control-min-height']]
+      ]
+    },
+    {
+      key:'studio',
+      target:'studio-role-list',
+      groups:[
+        ['Shared aliases', ['--studio-bg','--studio-panel','--studio-line','--studio-line-strong','--studio-text','--studio-muted','--studio-dim','--studio-accent','--studio-signal','--studio-ring','--studio-ring-soft','--studio-ring-faint','--studio-ghost']],
+        ['Feedback', ['--studio-status-success','--studio-status-warning','--studio-status-error']],
+        ['Operational typography', ['--studio-type-title-size','--studio-type-title-leading','--studio-type-title-tracking','--studio-type-label-size','--studio-type-label-leading','--studio-type-label-tracking','--studio-type-body-size','--studio-type-body-leading','--studio-type-body-tracking','--studio-type-meta-size','--studio-type-meta-leading','--studio-type-meta-tracking','--studio-type-title-size-mobile','--studio-type-label-size-mobile','--studio-type-body-size-mobile','--studio-type-meta-size-mobile']],
+        ['Density and panes', ['--studio-control-min-height','--studio-workspace-gap','--studio-row-padding','--studio-pane-padding','--studio-workspace-gap-tablet','--studio-row-padding-tablet','--studio-pane-padding-tablet','--studio-workspace-gap-mobile','--studio-row-padding-mobile','--studio-pane-padding-mobile']]
+      ]
+    }
+  ];
+  var systemTokenState = {};
+  var systemTokenDefaults = {};
+  SYSTEM_TOKEN_GROUPS.forEach(function(section){
+    section.groups.forEach(function(group){
+      group[1].forEach(function(token){
+        var current=cssVar(token);
+        systemTokenState[token]=current;
+        systemTokenDefaults[token]=current;
+      });
+    });
+  });
   var BASE_DIM_TOKEN = '--color-accent-dim';
   var DEFAULT_BASES = {};
   BASES.forEach(function(b){ DEFAULT_BASES[b.token]=baseDefault(b); });
@@ -1067,7 +1104,10 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   TYPE_ROLES.forEach(function(role){ typeState[role.key]=Object.assign({},role.defaults); });
   var DEFAULTS = MEDIUMS.map(function(m){return signalDefault(m);});
   var state = MEDIUMS.map(function(m,i){return {signal:DEFAULTS[i], bright:null, dark:null};});
-  var brightPct = 20, darkPct = 20, fileHandle = null;
+  var defaultMediumState = state.map(function(item){
+    return {signal:item.signal, bright:item.bright, dark:item.dark};
+  });
+  var brightPct = 20, darkPct = 20, fileHandle = null, dirty = false;
 
   /* color math */
   function cssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
@@ -1117,6 +1157,30 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   function baseAccentDim(){ return rgba(baseState['--color-accent'], alphaText(accentDimAlpha)); }
   function textColor(token){ var t=textState[token]; return rgba(t.color, alphaText(t.alpha)); }
   function typeToken(roleKey,fieldKey){ return '--type-'+roleKey+'-'+fieldKey; }
+  function allSystemTokens(){
+    var tokens=[];
+    SYSTEM_TOKEN_GROUPS.forEach(function(section){
+      section.groups.forEach(function(group){ group[1].forEach(function(token){ if(tokens.indexOf(token)===-1){ tokens.push(token); } }); });
+    });
+    return tokens;
+  }
+  function collectEditorTokens(){
+    var tokens={};
+    BASES.forEach(function(b){ tokens[b.token]=baseColor(b.token); });
+    tokens[BASE_DIM_TOKEN]=baseAccentDim();
+    TEXTS.forEach(function(t){ tokens[t.token]=textColor(t.token); });
+    TYPE_ROLES.forEach(function(role){
+      TYPE_FIELDS.forEach(function(field){ tokens[typeToken(role.key,field.key)]=typeState[role.key][field.key]; });
+    });
+    allSystemTokens().forEach(function(token){ tokens[token]=systemTokenState[token]; });
+    MEDIUMS.forEach(function(m,i){
+      tokens['--color-'+m.key]=state[i].signal.toUpperCase();
+      tokens['--color-'+m.key+'-dim']=dim(i);
+      tokens['--color-'+m.key+'-bright']=bright(i).toUpperCase();
+      tokens['--color-'+m.key+'-dark']=dark(i).toUpperCase();
+    });
+    return tokens;
+  }
   function applyStateToCssVars(){
     BASES.forEach(function(b){ setRootVar(b.token, baseColor(b.token)); });
     setRootVar(BASE_DIM_TOKEN, baseAccentDim());
@@ -1124,6 +1188,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     TYPE_ROLES.forEach(function(role){
       TYPE_FIELDS.forEach(function(field){ setRootVar(typeToken(role.key,field.key),typeState[role.key][field.key]); });
     });
+    allSystemTokens().forEach(function(token){ setRootVar(token,systemTokenState[token]); });
     MEDIUMS.forEach(function(m,i){
       setRootVar('--color-'+m.key, state[i].signal.toUpperCase());
       setRootVar('--color-'+m.key+'-dim', dim(i));
@@ -1195,11 +1260,20 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       preview.style.textTransform=values.transform;
     });
   }
+  function syncSystemTokenRows(){
+    allSystemTokens().forEach(function(token){
+      var control=document.querySelector('[data-system-token="'+token+'"]');
+      if(control){ control.value=systemTokenState[token] || ''; }
+    });
+  }
 
   var grid = document.getElementById('medium-swatch-grid');
   var baseList = document.getElementById('base-list');
   var fontList = document.getElementById('font-list');
   var typeRoleList = document.getElementById('type-role-list');
+  var responsiveRoleList = document.getElementById('responsive-role-list');
+  var layoutRoleList = document.getElementById('layout-role-list');
+  var studioRoleList = document.getElementById('studio-role-list');
   var list = document.getElementById('media-list');
   var tuner = document.getElementById('tuner');
 
@@ -1292,6 +1366,32 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       });
     });
   }
+  function systemTokenLabel(token){
+    return token.replace(/^--/,'').replace(/^type-/,'').replace(/^studio-/,'').replace(/-/g,' ');
+  }
+  function buildSystemTokenRows(){
+    var targets={
+      'responsive-role-list':responsiveRoleList,
+      'layout-role-list':layoutRoleList,
+      'studio-role-list':studioRoleList
+    };
+    SYSTEM_TOKEN_GROUPS.forEach(function(section){
+      var target=targets[section.target];
+      if(!target){ return; }
+      target.innerHTML=section.groups.map(function(group){
+        return '<div class="system-token-group"><div class="type-role-summary"><div><div class="nm">'+group[0]+'</div><div class="ky">'+group[1].length+' editable tokens</div></div></div>'+
+          '<div class="system-token-fields">'+group[1].map(function(token){
+            return '<div class="type-field"><label>'+systemTokenLabel(token)+'</label><input type="text" spellcheck="false" data-system-token="'+token+'" value="'+htmlAttr(systemTokenState[token] || '')+'"><code>'+token+'</code></div>';
+          }).join('')+'</div></div>';
+      }).join('');
+      target.querySelectorAll('[data-system-token]').forEach(function(control){
+        control.addEventListener('input',function(){
+          systemTokenState[control.dataset.systemToken]=control.value.trim();
+          refresh();
+        });
+      });
+    });
+  }
   function fontStop(t){
     return '<div class="stop" data-text-token="'+t.token+'">'+
       '<label class="well"><input type="color" data-text-token="'+t.token+'"></label>'+
@@ -1339,6 +1439,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     syncBaseRows();
     syncFontRows();
     syncTypeRoleRows();
+    syncSystemTokenRows();
     MEDIUMS.forEach(function(m,i){
       var sig=state[i].signal, br=bright(i), dk=dark(i), dm=dim(i);
 
@@ -1366,6 +1467,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       });
     });
     renderCSS();
+    window.dispatchEvent(new CustomEvent('ui-guide-tokens-changed',{detail:{tokens:collectEditorTokens(),dirty:dirty}}));
   }
 
   function renderCSS(){
@@ -1389,6 +1491,16 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       });
       lines.push('');
     });
+    SYSTEM_TOKEN_GROUPS.forEach(function(section){
+      lines.push('  /* '+section.key.toUpperCase()+' TOKENS */');
+      section.groups.forEach(function(group){
+        lines.push('  /* '+group[0]+' */');
+        group[1].forEach(function(token){
+          lines.push('  '+pad(token+':')+(systemTokenState[token] || '')+';');
+        });
+      });
+      lines.push('');
+    });
     MEDIUMS.forEach(function(m,i){
       lines.push('  /* '+m.label+' */');
       lines.push('  '+pad('--color-'+m.key+':')+state[i].signal.toUpperCase()+';');
@@ -1405,30 +1517,46 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   /* load current values from tokens.css */
   function loadFromTokens(){
     status('Loading tokens.css…');
-    fetch('/css/tokens.css',{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
-      var n=0, bCount=0, textCount=0, roleCount=0;
+    fetch('/css/tokens.css',{cache:'no-store'}).then(function(r){ if(!r.ok){ throw new Error('HTTP '+r.status); } return r.text(); }).then(function(txt){
+      var n=0, bCount=0, textCount=0, roleCount=0, systemCount=0;
       BASES.forEach(function(b){
         var val=matchVar(txt,b.token);
         if(val && val.charAt(0)==='#'){
           baseState[b.token]=normHex(val).toUpperCase();
+          DEFAULT_BASES[b.token]=baseState[b.token];
           bCount++;
         }
       });
       var dimVal=matchVar(txt,BASE_DIM_TOKEN);
-      if(dimVal){ accentDimAlpha=alphaDefault(dimVal, accentDimAlpha); }
+      if(dimVal){
+        accentDimAlpha=alphaDefault(dimVal, accentDimAlpha);
+        DEFAULT_ACCENT_DIM_ALPHA=accentDimAlpha;
+      }
       TEXTS.forEach(function(t){
         var val=matchVar(txt,t.token);
         if(val){
           textState[t.token].color=colorFromRgba(val,textState[t.token].color);
           textState[t.token].alpha=alphaDefault(val,textState[t.token].alpha);
+          DEFAULT_TEXTS[t.token]={
+            color:textState[t.token].color,
+            alpha:textState[t.token].alpha
+          };
           textCount++;
         }
       });
       TYPE_ROLES.forEach(function(role){
         TYPE_FIELDS.forEach(function(field){
           var val=matchVar(txt,typeToken(role.key,field.key));
-          if(val){ typeState[role.key][field.key]=val; roleCount++; }
+          if(val){
+            typeState[role.key][field.key]=val;
+            role.defaults[field.key]=val;
+            roleCount++;
+          }
         });
+      });
+      allSystemTokens().forEach(function(token){
+        var val=matchVar(txt,token);
+        if(val){ systemTokenState[token]=val; systemTokenDefaults[token]=val; systemCount++; }
       });
       MEDIUMS.forEach(function(m,i){
         var sig=matchVar(txt,'--color-'+m.key);
@@ -1439,9 +1567,16 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         var brN=br?normHex(br):null, dkN=dk?normHex(dk):null;
         state[i].bright=(brN && brN.toLowerCase()!==mixWhite(s,brightPct).toLowerCase())?brN:null;
         state[i].dark  =(dkN && dkN.toLowerCase()!==mixBlack(s,darkPct).toLowerCase())?dkN:null;
+        DEFAULTS[i]=state[i].signal;
+        defaultMediumState[i]={
+          signal:state[i].signal,
+          bright:state[i].bright,
+          dark:state[i].dark
+        };
       });
+      dirty=false;
       refresh();
-      status('Loaded '+bCount+' base colors, '+textCount+' font colors, '+roleCount+' typography settings, and '+n+' signal colors from tokens.css.','ok');
+      status('Clean · loaded '+bCount+' base colors, '+textCount+' font colors, '+roleCount+' typography settings, '+systemCount+' responsive/Studio tokens, and '+n+' signal colors.','ok');
     }).catch(function(e){ status('Could not fetch tokens.css ('+e.message+'). Using defaults.','err'); });
   }
   function matchVar(txt,name){
@@ -1468,6 +1603,9 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
         txt=setVar(txt,typeToken(role.key,field.key),typeState[role.key][field.key]);
       });
     });
+    allSystemTokens().forEach(function(token){
+      txt=setVar(txt,token,systemTokenState[token]);
+    });
     MEDIUMS.forEach(function(m,i){
       txt=setVar(txt,'--color-'+m.key+'-bright', bright(i).toUpperCase());
       txt=setVar(txt,'--color-'+m.key+'-dark', dark(i).toUpperCase());
@@ -1476,35 +1614,90 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     });
     return txt;
   }
+  function validateTokenText(txt){
+    return typeof txt==='string' &&
+      txt.indexOf(':root')!==-1 &&
+      txt.indexOf('--color-tattooing')!==-1 &&
+      txt.indexOf('--type-body-font')!==-1 &&
+      txt.indexOf('--type-hero-size-mobile')!==-1 &&
+      txt.indexOf('--studio-bg')!==-1;
+  }
+  async function localToolRequest(pathname,payload){
+    var response=await fetch(pathname,{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    var data=await response.json().catch(function(){ return {}; });
+    if(!response.ok){ throw new Error(data.error || ('HTTP '+response.status)); }
+    return data;
+  }
+  async function saveWithPicker(){
+    if(!window.showOpenFilePicker){ throw new Error('File System Access is unavailable'); }
+    if(!fileHandle){
+      var picks=await window.showOpenFilePicker({types:[{description:'tokens.css',accept:{'text/css':['.css']}}],multiple:false});
+      fileHandle=picks[0];
+    }
+    if(fileHandle.requestPermission && (await fileHandle.requestPermission({mode:'readwrite'}))!=='granted'){
+      throw new Error('Write permission denied');
+    }
+    var txt=await (await fileHandle.getFile()).text();
+    if(!validateTokenText(txt)){ fileHandle=null; throw new Error('That file is not the expected css/tokens.css'); }
+    var writable=await fileHandle.createWritable();
+    await writable.write(buildUpdated(txt));
+    await writable.close();
+    return 'file picker · '+fileHandle.name;
+  }
   async function saveToFile(){
-    if(!window.showOpenFilePicker){ status('This browser can\'t write files directly — use “Copy CSS block”.','err'); return; }
+    status('Saving…');
     try{
-      if(!fileHandle){
-        var picks=await window.showOpenFilePicker({types:[{description:'tokens.css',accept:{'text/css':['.css']}}],multiple:false});
-        fileHandle=picks[0];
+      var readResult=await localToolRequest('/__tools/read-file',{pathSegments:['css','tokens.css']});
+      if(!validateTokenText(readResult.content)){ throw new Error('Token marker validation failed'); }
+      await localToolRequest('/__tools/write-file',{pathSegments:['css','tokens.css'],content:buildUpdated(readResult.content)});
+      dirty=false;
+      refresh();
+      status('Saved ✓ · localhost write endpoint · css/tokens.css','ok');
+      return;
+    }catch(localError){
+      try{
+        var destination=await saveWithPicker();
+        dirty=false;
+        refresh();
+        status('Saved ✓ · '+destination,'ok');
+      }catch(fileError){
+        if(fileError.name==='AbortError'){ status('Dirty · save cancelled.'); return; }
+        status('Failed · direct write: '+localError.message+' · fallback: '+fileError.message+'. Use Copy CSS block.','err');
       }
-      if((await fileHandle.requestPermission({mode:'readwrite'}))!=='granted'){ status('Write permission denied.','err'); return; }
-      var txt=await (await fileHandle.getFile()).text();
-      if(txt.indexOf('--color-tattooing')===-1){ status('That isn\'t tokens.css — pick css/tokens.css.','err'); fileHandle=null; return; }
-      var w=await fileHandle.createWritable(); await w.write(buildUpdated(txt)); await w.close();
-      status('Saved ✓  Wrote palette, text colors, typography roles, and all 9 ramps into '+fileHandle.name+'. Refresh open site pages to reload tokens.css.','ok');
-    }catch(e){ if(e.name==='AbortError'){status('Save cancelled.');return;} status('Save failed: '+e.message,'err'); }
+    }
   }
   function copyCSS(){
-    navigator.clipboard.writeText(document.getElementById('css-out').textContent).then(
-      function(){ status('Copied — paste the generated palette and typography blocks into css/tokens.css.','ok'); },
-      function(){ status('Copy failed — select the text manually.','err'); });
+    var output=document.getElementById('css-out').textContent;
+    var copied=navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(output) : Promise.reject(new Error('Clipboard API unavailable'));
+    copied.then(
+      function(){ status('Copied ✓ · paste the generated token blocks into css/tokens.css.','ok'); },
+      function(){
+        var range=document.createRange(), selection=window.getSelection();
+        range.selectNodeContents(document.getElementById('css-out'));
+        selection.removeAllRanges(); selection.addRange(range);
+        var ok=false;
+        try{ ok=document.execCommand('copy'); }catch(e){}
+        status(ok?'Copied ✓ · compatibility clipboard fallback.':'Failed · select the generated CSS manually.',ok?'ok':'err');
+      });
   }
   function resetAll(){
     BASES.forEach(function(b){ baseState[b.token]=DEFAULT_BASES[b.token]; });
     accentDimAlpha=DEFAULT_ACCENT_DIM_ALPHA;
     TEXTS.forEach(function(t){ textState[t.token]={color:DEFAULT_TEXTS[t.token].color, alpha:DEFAULT_TEXTS[t.token].alpha}; });
     TYPE_ROLES.forEach(function(role){ typeState[role.key]=Object.assign({},role.defaults); });
-    state=MEDIUMS.map(function(m,idx){return {signal:DEFAULTS[idx],bright:null,dark:null};});
+    allSystemTokens().forEach(function(token){ systemTokenState[token]=systemTokenDefaults[token]; });
+    state=defaultMediumState.map(function(item){
+      return {signal:item.signal,bright:item.bright,dark:item.dark};
+    });
     brightPct=20; darkPct=20;
     document.getElementById('bright-range').value=20; document.getElementById('bright-val').textContent='20';
     document.getElementById('dark-range').value=20; document.getElementById('dark-val').textContent='20';
-    refresh(); status('Reset to built-in defaults.');
+    dirty=false;
+    refresh(); status('Clean · reset to the last values loaded from tokens.css. No file was written.','ok');
   }
 
   /* toggle panel */
@@ -1520,16 +1713,25 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   document.getElementById('reset-all').addEventListener('click', resetAll);
   document.getElementById('tuner-toggle').addEventListener('click', toggleTuner);
   document.getElementById('tuner-open').addEventListener('click', openTuner);
+  tuner.addEventListener('input',function(event){
+    if(event.target.matches('input,select')){
+      dirty=true;
+      status('Dirty · unsaved token changes.');
+    }
+  },true);
 
   buildGrid();
   buildBaseRows();
   buildFontRows();
   buildTypeRoleRows();
+  buildSystemTokenRows();
   buildRows();
+  window.SixWellGuideTokens={getTokens:collectEditorTokens,refresh:refresh,isDirty:function(){return dirty;}};
   refresh();          // paint built-in defaults immediately (no blank flash)
   loadFromTokens();   // then sync to the live tokens.css values
 })();
 </script>
+<script src="/tools/ui-guide-system.js?v=dual-system-contract"></script>
 
 </body>
 </html>

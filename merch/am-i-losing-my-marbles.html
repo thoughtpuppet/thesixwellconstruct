@@ -36,7 +36,7 @@
 
   DESIGN TOKENS:
     --src-color for thoughtpuppet = --color-art / #0039BD
-    Body text = #FFE7CA (off-white, all mediums)
+    Body text = var(--color-body) (#FBD19D, shared across mediums)
     Accent = #FCB867 (wordmark amber)
     Background = #0e0e0e
   ============================================================
@@ -66,7 +66,7 @@
     --ring-faint:rgba(109,61,21,0.18);
 
     /* primary text = off-white on medium pages */
-    --text-body: #FFE7CA;
+    --text-body: var(--color-body, #FBD19D);
     /* amber system for UI chrome */
     --text:      #FCB867;
     --text-mute: rgba(252,184,103,0.55);

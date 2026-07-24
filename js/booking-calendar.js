@@ -21,6 +21,17 @@
     return `${fmt.format(new Date(windowItem.startAt))} - ${fmt.format(new Date(windowItem.endAt))} ET`;
   }
 
+  function formatDateTime(value) {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: TIME_ZONE,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  }
+
   function escapeHtml(value) {
     return String(value || "").replace(/[&<>"']/g, (char) => ({
       "&": "&amp;",
@@ -219,6 +230,17 @@
     timeTriggerLabel = timeTrigger.querySelector("#timeTriggerLabel");
     const freshAddBtn = timeAddBtn.cloneNode(true);
     timeAddBtn.replaceWith(freshAddBtn);
+    const calHeader = calMonthLabel.closest(".cal-header");
+    const calMonthSelect = document.createElement("select");
+    const calMonthCount = document.createElement("span");
+    const calMonthNav = document.createElement("div");
+    calMonthSelect.className = "cal-month-select";
+    calMonthSelect.setAttribute("aria-label", "Available month");
+    calMonthCount.className = "cal-month-count";
+    calMonthNav.className = "cal-month-nav";
+    calMonthNav.append(prevBtn, calMonthSelect, nextBtn);
+    calMonthLabel.hidden = true;
+    calHeader.replaceChildren(calMonthNav, calMonthCount, calMonthLabel);
 
     function indexKey(typeId, key) {
       return `${typeId || ""}|${key}`;
@@ -246,6 +268,28 @@
 
     function windowsFor(date) {
       return windowIndex.get(indexKey(bookingTypeSelect.value, dateKey(date))) || [];
+    }
+
+    function monthKey(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function availableMonthKeys() {
+      const typeId = bookingTypeSelect.value;
+      return [...new Set(windows
+        .filter((item) => !item.bookingTypeId || item.bookingTypeId === typeId)
+        .map((item) => monthKey(new Date(item.startAt))))]
+        .sort();
+    }
+
+    function setCalendarMonth(key) {
+      const [year, month] = String(key || "").split("-").map(Number);
+      if (!year || !month) return;
+      calendarDate = new Date(year, month - 1, 1);
+      pickedDate = null;
+      calendarFocusIndex = 0;
+      renderCalendar();
+      announce(`${calMonthLabel.textContent}.`);
     }
 
     function resetSelectedTime() {
@@ -302,7 +346,10 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "time-option";
-        button.textContent = formatTime(windowItem);
+        button.innerHTML = `
+          <span class="time-option-title">${escapeHtml(formatDateTime(windowItem.startAt))}</span>
+          <span class="time-option-meta">Ends ${escapeHtml(formatDateTime(windowItem.endAt))}</span>
+        `;
         button.setAttribute("role", "option");
         button.setAttribute("aria-selected", String(selectedWindow?.id === windowItem.id));
         button.addEventListener("click", (event) => {
@@ -370,7 +417,22 @@
       const firstOfMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1);
       const firstOfToday = new Date(today.getFullYear(), today.getMonth(), 1);
       calMonthLabel.textContent = `${months[calendarDate.getMonth()]} ${calendarDate.getFullYear()}`;
-      prevBtn.disabled = firstOfMonth <= firstOfToday;
+      const availableMonths = availableMonthKeys();
+      const currentMonthKey = monthKey(calendarDate);
+      const monthIndex = availableMonths.indexOf(currentMonthKey);
+      calMonthSelect.innerHTML = availableMonths.map((key) => {
+        const [year, month] = key.split("-").map(Number);
+        return `<option value="${key}">${months[month - 1]} ${year}</option>`;
+      }).join("");
+      if (monthIndex >= 0) calMonthSelect.value = currentMonthKey;
+      const monthWindowCount = windows.filter((item) => {
+        const start = new Date(item.startAt);
+        return monthKey(start) === currentMonthKey &&
+          (!item.bookingTypeId || item.bookingTypeId === bookingTypeSelect.value);
+      }).length;
+      calMonthCount.textContent = `${monthWindowCount} open`;
+      prevBtn.disabled = monthIndex <= 0 || firstOfMonth <= firstOfToday;
+      nextBtn.disabled = monthIndex < 0 || monthIndex >= availableMonths.length - 1;
       calGrid.innerHTML = "";
 
       const firstDay = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay();
@@ -504,21 +566,20 @@
     }
 
     prevBtn.addEventListener("click", () => {
-      calendarDate.setMonth(calendarDate.getMonth() - 1);
-      pickedDate = null;
+      const keys = availableMonthKeys();
+      const index = keys.indexOf(monthKey(calendarDate));
       timeRow.style.display = "none";
       timePanel.style.display = "none";
-      renderCalendar();
-      announce(`${calMonthLabel.textContent}.`);
+      if (index > 0) setCalendarMonth(keys[index - 1]);
     });
     nextBtn.addEventListener("click", () => {
-      calendarDate.setMonth(calendarDate.getMonth() + 1);
-      pickedDate = null;
+      const keys = availableMonthKeys();
+      const index = keys.indexOf(monthKey(calendarDate));
       timeRow.style.display = "none";
       timePanel.style.display = "none";
-      renderCalendar();
-      announce(`${calMonthLabel.textContent}.`);
+      if (index >= 0 && index < keys.length - 1) setCalendarMonth(keys[index + 1]);
     });
+    calMonthSelect.addEventListener("change", () => setCalendarMonth(calMonthSelect.value));
     timeTrigger.addEventListener("click", (event) => {
       event.stopPropagation();
       timePanel.style.display = timePanel.style.display === "none" ? "block" : "none";

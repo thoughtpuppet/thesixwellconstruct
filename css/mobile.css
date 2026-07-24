@@ -70,14 +70,14 @@ img, video, iframe { max-width: 100%; }
    Matches the Build/In-Person time picker: dark track, amber thumb,
    square ringed controls, no native rounded select chrome. */
 :root {
-  --global-ui-bg: #0d0d0d;
+  --global-ui-bg: var(--color-bg, #0e0e0e);
   --global-ui-field-bg: rgba(14, 14, 14, 0.78);
-  --global-ui-ring: rgba(109, 61, 21, 0.4);
-  --global-ui-text: #FFE7CA;
-  --global-ui-accent: #FCB867;
-  --global-ui-signal: #6E0404;
-  --global-ui-serif: Georgia, "Times New Roman", Times, serif;
-  --global-ui-fast: 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+  --global-ui-ring: var(--color-archive-dim, rgba(109, 61, 21, 0.4));
+  --global-ui-text: var(--color-body, #FBD19D);
+  --global-ui-accent: var(--color-accent, #FCB867);
+  --global-ui-signal: var(--color-tattooing, #6E0404);
+  --global-ui-serif: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  --global-ui-fast: var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1));
 }
 
 html {
@@ -183,7 +183,9 @@ select option:checked {
 ═══════════════════════════════════════════════════════════ */
 @media (max-width: 900px) {
 
-  main { padding: 80px 24px 64px !important; }
+  main {
+    padding: var(--page-padding-y-tablet, 64px) var(--page-padding-x-tablet, 28px) !important;
+  }
   header.top { padding: 16px 20px !important; }
 
   /* Filter rows wrap with breathing room */
@@ -208,7 +210,7 @@ select option:checked {
   /* Field grids stack */
   .field-grid {
     grid-template-columns: 1fr !important;
-    gap: 22px !important;
+    gap: var(--grid-gap-tablet, 14px) !important;
   }
 }
 
@@ -219,7 +221,9 @@ select option:checked {
 ═══════════════════════════════════════════════════════════ */
 @media (max-width: 700px) {
 
-  main { padding: 84px 18px 56px !important; }
+  main {
+    padding: var(--page-padding-y-mobile, 48px) var(--page-padding-x-mobile, 18px) !important;
+  }
   header.top {
     padding: 10px 16px !important;
     min-height: 60px !important;
@@ -232,9 +236,9 @@ select option:checked {
   .page-title,
   .gate-title,
   .series-title {
-    font-size: clamp(48px, 16vw, 84px) !important;
-    line-height: 0.92 !important;
-    letter-spacing: -0.04em !important;
+    font-size: var(--type-hero-size-mobile, clamp(42px, 14vw, 74px)) !important;
+    line-height: var(--type-hero-leading-mobile, 0.9) !important;
+    letter-spacing: var(--type-hero-tracking-mobile, 0) !important;
     white-space: normal !important;   /* desktop titles often set nowrap */
     word-break: break-word;
     overflow-wrap: break-word;
@@ -275,9 +279,9 @@ select option:checked {
     text-align: left !important;
     padding-bottom: 16px !important;
     max-width: min(100%, 380px) !important;
-    line-height: 1.6 !important;
-    font-size: 12px !important;
-    letter-spacing: 0.22em !important;
+    line-height: var(--type-descriptor-leading-mobile, 1.6) !important;
+    font-size: var(--type-descriptor-size-mobile, 11px) !important;
+    letter-spacing: var(--type-descriptor-tracking-mobile, 0.18em) !important;
   }
   .intro-above {
     margin-bottom: 4px !important;
@@ -335,7 +339,7 @@ select option:checked {
   .filter-row .chip {
     font-size: 13px !important;
     padding: 8px 0 !important;
-    min-height: 32px;
+    min-height: var(--control-min-height, 44px);
     display: inline-flex;
     align-items: center;
   }
@@ -344,7 +348,7 @@ select option:checked {
   .grid,
   .work-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 2px !important;
+    gap: var(--grid-gap-mobile, 12px) !important;
   }
   .record-grid,
   .path-grid,
@@ -355,15 +359,16 @@ select option:checked {
   }
 
   /* ── Section spacing ──────────────────────────────────── */
-  .section { padding: 48px 0 !important; }
+  .section { padding: var(--section-gap-mobile, 48px) 0 !important; }
   .section-head {
     grid-template-columns: 1fr !important;
     gap: 18px !important;
     margin-bottom: 24px !important;
   }
   .section-title {
-    font-size: clamp(32px, 9vw, 56px) !important;
-    line-height: 0.94 !important;
+    font-size: var(--type-section-size-mobile, clamp(28px, 9vw, 44px)) !important;
+    line-height: var(--type-section-leading-mobile, 1) !important;
+    letter-spacing: var(--type-section-tracking-mobile, 0) !important;
   }
   .section-body,
   .section-copy {
@@ -536,7 +541,9 @@ select option:checked {
 ═══════════════════════════════════════════════════════════ */
 @media (max-width: 380px) {
 
-  main { padding: 78px 14px 48px !important; }
+  main {
+    padding: var(--page-padding-y-compact, 40px) var(--page-padding-x-compact, 14px) !important;
+  }
   header.top { padding: 8px 12px !important; min-height: 56px !important; }
 
   .intro h1,
@@ -544,17 +551,21 @@ select option:checked {
   .page-title,
   .gate-title,
   .series-title {
-    font-size: clamp(40px, 14vw, 64px) !important;
+    font-size: var(--type-hero-size-compact, clamp(38px, 13vw, 62px)) !important;
+    line-height: var(--type-hero-leading-compact, 0.92) !important;
+    letter-spacing: var(--type-hero-tracking-compact, 0) !important;
   }
 
   .grid,
   .work-grid {
     grid-template-columns: 1fr !important;
-    gap: 3px !important;
+    gap: var(--grid-gap-compact, 12px) !important;
   }
 
   .section-title {
-    font-size: clamp(28px, 8vw, 44px) !important;
+    font-size: var(--type-section-size-compact, clamp(26px, 8vw, 38px)) !important;
+    line-height: var(--type-section-leading-compact, 1.02) !important;
+    letter-spacing: var(--type-section-tracking-compact, 0) !important;
   }
 
   .filter-row {

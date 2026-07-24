@@ -69,491 +69,14 @@ statement:    "placeholder — replace with real statement text"
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
-
-<style>
-  /* ============================================================
-     DESIGN TOKENS — same as art/index.html
-  ============================================================ */
-  :root {
-    --bg:        #0e0e0e;
-    --bg-raised: #111111;
-
-    --accent:    #FCB867;
-    --accent-hot:#0071EB;            /* ART medium blue */
-
-    --ring:      #6D3D15;
-    --ring-soft: rgba(109,61,21,0.4);
-    --ring-faint:rgba(109,61,21,0.18);
-
-    --text:      #FCB867;
-    --text-mute: rgba(252,184,103,0.55);
-    --text-dim:  rgba(252,184,103,0.30);
-    --text-ghost:rgba(252,184,103,0.13);
-    --body-text: #FFE7CA;
-
-    --s1:4px; --s2:8px; --s3:12px; --s4:16px;
-    --s5:24px; --s6:40px; --s7:64px; --s8:96px;
-
-    --sans:  'Inter',Arial,sans-serif;
-    --serif: Georgia,'Times New Roman',Times,serif;
-
-    --t-fast:0.18s cubic-bezier(0.2,0,0.2,1);
-    --t-med: 0.35s cubic-bezier(0.2,0,0.2,1);
-    --t-slow:0.5s  cubic-bezier(0.22,1,0.36,1);
-  }
-
-  /* ============================================================
-     RESET
-  ============================================================ */
-  *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-  html { scroll-behavior:smooth; }
-  html,body {
-    background:var(--bg); color:var(--text);
-    font-family:var(--serif);
-    min-height:100vh; overflow-x:clip;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-  }
-  a { color:inherit; text-decoration:none; }
-  button { background:none; border:none; color:inherit; font:inherit; cursor:pointer; }
-
-  /* ============================================================
-     GRAIN
-  ============================================================ */
-  .grain {
-    position:fixed; inset:0; z-index:1; pointer-events:none;
-    opacity:0.035; mix-blend-mode:overlay;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  }
-
-  /* ============================================================
-     HEADER — same as art/index.html
-  ============================================================ */
-  header.top {
-    position:sticky; top:0; z-index:50;
-    display:flex; align-items:center; justify-content:flex-end;
-    padding:var(--s5) var(--s6);
-  }
-
-  /* cart toggle — visual only until Shopify connected */
-  .cart-toggle {
-    display: flex; align-items: center; gap: var(--s3);
-    padding: var(--s2) var(--s4);
-    border: 5px solid var(--ring-soft);
-    background: none; cursor: pointer; color: inherit;
-    font: inherit;
-    transition: border-color var(--t-fast), background var(--t-fast);
-  }
-  .cart-toggle:hover {
-    border-color: var(--accent);
-    background: rgba(252, 184, 103, 0.04);
-  }
-  .cart-label {
-    font-family: var(--serif); font-size: 11px;
-    letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-mute);
-  }
-  .cart-count {
-    font-family: var(--sans); font-weight: 700; font-size: 12px;
-    color: var(--accent); min-width: 14px; text-align: right;
-  }
-
-  @media (max-width: 700px) {
-    .cart-toggle  { padding: 5px 8px; gap: 5px; border-width: 3px; }
-    .cart-label   { font-size: 9px;  letter-spacing: 0.12em; }
-    .cart-count   { font-size: 9px;  min-width: 10px; }
-  }
-
-  @media (max-width: 380px) {
-    .cart-toggle  { padding: 4px 6px; gap: 4px; border-width: 2px; }
-    .cart-label   { font-size: 8px;  letter-spacing: 0.10em; }
-    .cart-count   { font-size: 8px;  min-width: 8px; }
-  }
-
-  /* ============================================================
-     SPLIT LAYOUT
-  ============================================================ */
-  .split {
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    min-height:calc(100vh - 116px);
-  }
-
-  /* ── LEFT: sticky painting ─────────────────────────────── */
-  .split-image {
-    position:sticky;
-    top:73px;
-    height:calc(100vh - 73px);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:var(--s6);
-    border-right:5px solid var(--ring-faint);
-  }
-
-  /* ============================================================
-     LIGHTBOX — full-screen image view on painting click
-  ============================================================ */
-  .lightbox {
-    position:fixed; inset:0; z-index:300;
-    background:rgba(8,8,8,0.97);
-    display:flex; align-items:center; justify-content:center;
-    opacity:0; pointer-events:none;
-    transition:opacity var(--t-med);
-    cursor:zoom-out;
-  }
-  .lightbox.open {
-    opacity:1; pointer-events:all;
-  }
-  .lightbox img {
-    max-width:92vw; max-height:92vh;
-    object-fit:contain;
-    transform:scale(0.97); opacity:0;
-    transition:transform var(--t-slow) 0.05s, opacity var(--t-slow) 0.05s;
-    cursor:zoom-out;
-  }
-  .lightbox.open img {
-    transform:scale(1); opacity:1;
-  }
-  /* close button */
-  .lightbox-close {
-    position:fixed; top:var(--s5); right:var(--s6);
-    font-family:var(--serif); font-size:20px;
-    color:var(--text-mute); z-index:301;
-    padding:var(--s2); background:none; border:none;
-    cursor:pointer;
-    transition:color var(--t-fast);
-  }
-  .lightbox-close:hover { color:var(--text); }
-
-  /* cursor hint on painting frame */
-  .painting-frame {
-    cursor:zoom-in;
-    position:relative;
-    /*
-      Sizing: constrain width AND height so the image never overflows
-      the sticky column. Let the image scale down naturally within.
-      max-height uses the viewport minus header (116px) minus some breathing room.
-    */
-    width:100%;
-    max-width:480px;
-    height:calc(100vh - 116px - 80px);   /* fills sticky column with breathing room */
-    max-height:680px;                      /* hard cap — prevents giant on tall screens */
-    overflow:hidden;
-  }
-
-  .painting-frame img {
-    width:100%; height:100%;
-    object-fit:contain;          /* contain = full painting always visible, no crop */
-    display:block;
-    /* subtle entrance */
-    animation:paintingReveal 0.8s cubic-bezier(0.22,1,0.36,1) both;
-  }
-
-  @keyframes paintingReveal {
-    from { opacity:0; transform:scale(0.98); }
-    to   { opacity:1; transform:scale(1); }
-  }
-
-  /* edition/availability badge — bottom left of frame */
-  .painting-badge {
-    position:absolute; bottom:var(--s4); left:0;
-    font-family:var(--serif); font-size:9px;
-    letter-spacing:0.28em; text-transform:uppercase;
-    color:var(--accent-hot); opacity:0.7;
-  }
-
-  /* ── RIGHT: scrolling content ──────────────────────────── */
-  .split-content {
-    padding:var(--s7) var(--s7) var(--s8) var(--s6);
-    display:flex;
-    flex-direction:column;
-    gap:var(--s7);
-  }
-
-  /* ============================================================
-     PAINTING HEADER — title block
-  ============================================================ */
-  .painting-header { display:flex; flex-direction:column; gap:var(--s3); }
-
-  /* venture label — Times, small, blue */
-  .venture-label {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.28em; text-transform:uppercase;
-    color:var(--accent-hot); opacity:0.75;
-  }
-
-  /* painting title — Inter 900, large */
-  .painting-title {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(22px,3.5vw,40px);
-    letter-spacing:-0.03em; line-height:0.95;
-    color:var(--body-text);
-  }
-
-  .title-preview-fbd19d .painting-title {
-    color:#FBD19D;
-  }
-
-  /* metadata row — year · medium · type */
-  .painting-meta {
-    display:flex; align-items:center; gap:var(--s4);
-    flex-wrap:wrap;
-    padding-top:var(--s3);
-    border-top:5px solid var(--ring-faint);
-  }
-  .meta-item {
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--text-dim);
-  }
-  .meta-sep { color:var(--text-ghost); }
-
-  /* ============================================================
-     STATEMENT BLOCK
-  ============================================================ */
-  .statement-block { display:flex; flex-direction:column; gap:var(--s5); }
-
-  /* "statement" label */
-  .block-label {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.28em; text-transform:uppercase;
-    color:var(--text-dim);
-    padding-bottom:var(--s3);
-  }
-
-  /* statement body — Times, body-text, generous leading */
-  .statement-body {
-    font-family:var(--serif); font-size:15px;
-    line-height:1.8; color:var(--body-text);
-  }
-
-  /* statement paragraphs */
-  .statement-body p + p { margin-top:var(--s5); }
-
-  /* placeholder state — italic, muted */
-  .statement-body.placeholder {
-    font-style:italic; color:var(--text-mute);
-  }
-
-  /* ============================================================
-     AVAILABILITY BLOCK
-  ============================================================ */
-  .availability-block { display:flex; flex-direction:column; gap:var(--s5); }
-
-  .availability-rows { display:flex; flex-direction:column; gap:var(--s4); }
-
-  /* single availability row: label + status + action */
-  .avail-row {
-    display:flex; align-items:center; justify-content:space-between;
-    gap:var(--s4);
-    padding-bottom:var(--s4);
-  }
-  .avail-row:last-child { border-bottom:none; padding-bottom:0; }
-
-  .avail-left { display:flex; flex-direction:column; gap:4px; }
-
-  /* "original" / "prints" label */
-  .avail-label {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.28em; text-transform:uppercase;
-    color:var(--text-dim);
-  }
-
-  /* status — "available" / "sold" / "unavailable" */
-  .avail-status {
-    font-family:var(--sans); font-weight:900;
-    font-size:13px; letter-spacing:0.02em;
-    text-transform:uppercase;
-  }
-  .avail-status.available  { color:var(--accent-hot); }   /* blue = available */
-  .avail-status.sold       { color:var(--text-dim); }
-  .avail-status.unavailable{ color:var(--text-dim); }
-
-  /* inquiry / purchase button — solid border always, fills on hover */
-  .avail-action {
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.18em; text-transform:uppercase;
-    color:var(--accent-hot);
-    border:5px solid var(--accent-hot);    /* solid always, not faded */
-    padding:var(--s2) var(--s4);
-    transition:
-      background   var(--t-fast),
-      color        var(--t-fast);
-    white-space:nowrap;
-  }
-  .avail-action:hover {
-    background:var(--accent-hot);
-    color:var(--bg);                       /* dark text on filled blue */
-  }
-  .avail-action.disabled {
-    color:var(--text-dim);
-    border-color:var(--ring-faint);
-    pointer-events:none;
-  }
-
-  /* ============================================================
-     RELATED OBJECTS
-  ============================================================ */
-  .related-block { display:flex; flex-direction:column; gap:var(--s5); }
-
-  .related-items { display:flex; flex-direction:column; gap:var(--s3); }
-
-  /* single related item — quiet link row */
-  .related-item {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:var(--s4);
-    border:5px solid var(--ring-faint);
-    transition:border-color var(--t-fast), background var(--t-fast);
-  }
-  /* related item hover — border + arrow + title use --item-color set inline per item.
-     Set --item-color to the medium color on each <a class="related-item"> */
-  .related-item:hover {
-    border-color:var(--item-color, var(--ring-soft));
-    background:rgba(0,0,0,0.12);
-  }
-  .related-item:hover .related-arrow {
-    color:var(--item-color, var(--text-mute));
-    transform:translateX(3px);
-  }
-  .related-item:hover .related-title {
-    color:var(--item-color, var(--body-text));
-  }
-
-  .related-left { display:flex; flex-direction:column; gap:4px; }
-
-  /* venture of related item */
-  .related-venture {
-    font-family:var(--serif); font-size:9px;
-    letter-spacing:0.28em; text-transform:uppercase;
-    color:var(--text-dim);
-  }
-
-  /* item title */
-  .related-title {
-    font-family:var(--sans); font-weight:900;
-    font-size:12px; letter-spacing:0.02em;
-    text-transform:uppercase; color:var(--body-text);
-  }
-
-  /* arrow */
-  .related-arrow {
-    font-family:var(--serif); font-size:16px;
-    color:var(--text-dim);
-    transition:color var(--t-fast), transform var(--t-fast);
-  }
-
-  /* ============================================================
-     FOOTER
-  ============================================================ */
-  footer.bottom {
-    position:relative; z-index:2;
-    grid-column:1 / -1;
-    padding:var(--s6) var(--s6);
-    border-top:5px solid var(--ring-faint);
-    display:flex; justify-content:space-between; align-items:center;
-  }
-  footer.bottom p, footer.bottom a {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
-  }
-  footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
-  footer.bottom a:hover { color:var(--accent); }
-
-  /* ============================================================
-     CART DRAWER — visual only, matches art/index.html
-  ============================================================ */
-  .cart-overlay {
-    position:fixed; inset:0; z-index:90;
-    background:rgba(0,0,0,0.6); opacity:0; pointer-events:none;
-    transition:opacity var(--t-med);
-  }
-  .cart-overlay.open { opacity:1; pointer-events:auto; }
-  .cart-drawer {
-    position:fixed; top:0; right:0; bottom:0;
-    width:min(440px,100vw); z-index:100;
-    background:#0a0a0a;
-    border-left:5px solid rgba(109,61,21,0.4);
-    display:flex; flex-direction:column;
-    transform:translateX(100%);
-    transition:transform var(--t-med);
-  }
-  .cart-drawer.open { transform:translateX(0); }
-  .drawer-header {
-    display:flex; align-items:center; justify-content:space-between;
-    padding:var(--s5); border-bottom:5px solid var(--ring-faint);
-  }
-  .drawer-title {
-    font-family:var(--sans); font-weight:900; font-size:14px;
-    letter-spacing:0.08em; text-transform:uppercase; color:var(--accent);
-  }
-  .drawer-close {
-    font-family:var(--sans); font-weight:300; font-size:28px; line-height:1;
-    color:var(--text-mute); padding:4px 12px;
-    transition:color var(--t-fast);
-  }
-  .drawer-close:hover { color:var(--accent); }
-  .drawer-body {
-    flex:1; display:flex; align-items:center; justify-content:center;
-  }
-  .drawer-empty {
-    font-family:var(--serif); font-size:11px;
-    letter-spacing:0.22em; text-transform:uppercase; color:var(--text-dim);
-  }
-  .drawer-footer { padding:var(--s5); border-top:5px solid var(--ring-faint); }
-  .checkout-btn {
-    display:block; width:100%; padding:var(--s4);
-    border:5px solid var(--ring-soft); background:transparent;
-    color:var(--text-dim);
-    font-family:var(--sans); font-weight:700; font-size:12px;
-    letter-spacing:0.2em; text-transform:uppercase;
-    cursor:not-allowed;
-  }
-
-  /* ============================================================
-     RESPONSIVE — stack on mobile
-  ============================================================ */
-  @media (max-width:900px) {
-    .split {
-      grid-template-columns:1fr;
-    }
-
-    /* image unsticks on mobile — becomes a tall block at top */
-    .split-image {
-      position:relative;
-      top:0;
-      height:auto;
-      min-height:60vw;
-      padding:var(--s5);
-      border-right:none;
-    }
-
-    .painting-frame {
-      max-height:65vw;    /* responsive to viewport width on mobile */
-      height:65vw;
-    }
-
-    .split-content { padding:var(--s6) var(--s5) var(--s7); }
-
-    footer.bottom { grid-column:1; }
-
-    header.top  { padding:var(--s4) var(--s5); }
-}
-@media (max-width: 700px) {
-  header.top {
-    position: sticky;
-    padding: var(--s3) var(--s4);
-    min-height: 60px;
-    align-items: center;
-  }
-}
-
-</style>
+<link rel="stylesheet" href="/css/painting-detail.css">
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 </head>
 
-<body data-venture="art">
+<body class="painting-detail-page" data-venture="art" style="--painting-frame-max-width:480px">
 
   <!-- blink prevention -->
   <script>
@@ -566,10 +89,7 @@ statement:    "placeholder — replace with real statement text"
     if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',fadeOut);}else{fadeOut();}
   })();
   </script>
-
-  <div class="grain"></div>
-
-  <!-- HEADER -->
+<!-- HEADER -->
   <header class="top">
     <button class="cart-toggle" id="cartToggle" aria-label="open cart">
       <span class="cart-label">cart</span>
@@ -615,11 +135,12 @@ statement:    "placeholder — replace with real statement text"
           Update path if asset moves.
         -->
         <img
+          data-art-field="primary-image"
           src="../assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg"
           alt="AM I LOSING MY MARBLES OR HIDING THEM?, acrylic on wood panel, 2023"
           loading="eager"
         />
-        <span class="painting-badge">original available</span>
+        <span class="painting-badge" data-art-field="availability-badge">original available</span>
       </div>
     </div>
 
@@ -629,8 +150,8 @@ statement:    "placeholder — replace with real statement text"
       <!-- TITLE BLOCK -->
       <header class="painting-header">
         <span class="venture-label">art making</span>
-        <h1 class="painting-title" data-copy-id="lostmarbles-painting-title">AM I LOSING MY MARBLES<br>OR HIDING THEM?</h1>
-        <div class="painting-meta">
+        <h1 class="painting-title" data-art-field="title" data-copy-id="lostmarbles-painting-title">AM I LOSING MY MARBLES OR HIDING THEM?</h1>
+        <div class="painting-meta" data-art-meta>
           <span class="meta-item">2023</span>
           <span class="meta-sep">·</span>
           <span class="meta-item">Acrylic on wood panel</span>
@@ -648,7 +169,7 @@ statement:    "placeholder — replace with real statement text"
           Multiple <p> tags are fine — each gets top margin automatically.
           No length limit — this is where the weight lives.
         -->
-        <div class="statement-body placeholder">
+        <div class="statement-body placeholder" data-art-field="statement">
           <p data-copy-id="lostmarbles-statement-body">Statement placeholder — replace this with the real text. Write as long as it needs to be. This is not a caption.</p>
         </div>
       </section>
@@ -659,10 +180,10 @@ statement:    "placeholder — replace with real statement text"
         <div class="availability-rows">
 
           <!-- Original -->
-          <div class="avail-row">
+          <div class="avail-row" data-art-original-row data-original-state="available">
             <div class="avail-left">
               <span class="avail-label">original</span>
-              <span class="avail-status available">available</span>
+              <span class="avail-status available" data-art-original-status>available</span>
             </div>
             <!--
               INQUIRY LINK
@@ -670,18 +191,19 @@ statement:    "placeholder — replace with real statement text"
               e.g. href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry — AM I LOSING MY MARBLES OR HIDING THEM?"
             -->
             <a href="mailto:saiel@thesixwellconstruct.com?subject=Inquiry%20%E2%80%94%20AM%20I%20LOSING%20MY%20MARBLES%20OR%20HIDING%20THEM%3F"
-               class="avail-action">
+               class="avail-action"
+               data-art-original-action>
               inquire
             </a>
           </div>
 
           <!-- Prints -->
-          <div class="avail-row">
+          <div class="avail-row" data-art-print-row data-print-state="unavailable">
             <div class="avail-left">
               <span class="avail-label">prints</span>
-              <span class="avail-status unavailable">unavailable</span>
+              <span class="avail-status unavailable" data-art-print-status>unavailable</span>
             </div>
-            <span class="avail-action disabled">unavailable</span>
+            <a class="avail-action disabled" data-art-print-action aria-disabled="true" tabindex="-1">unavailable</a>
           </div>
 
         </div>
