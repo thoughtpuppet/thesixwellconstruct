@@ -207,28 +207,19 @@
   .form-header{margin-bottom:var(--s6);}
   .form-kicker{font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--signal);opacity:0.7;margin-bottom:var(--s3);}
   .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(28px,4vw,52px);letter-spacing:-0.03em;line-height:0.94;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s4);}
-  .form-note{font-size:14px;line-height:1.75;color:var(--text-mute);max-width:640px;}
+  .build-form-section .form-note{max-width:640px;}
   .selected-summary{background:rgba(110,4,4,0.06);border:5px solid rgba(110,4,4,0.3);padding:var(--s5);margin-bottom:var(--s6);display:none;}
   .selected-summary.visible{display:block;}
   .summary-label{font-family:var(--sans);font-weight:900;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--signal);margin-bottom:var(--s4);}
   .summary-tags{display:flex;flex-wrap:wrap;gap:var(--s2);}
   .summary-tag{font-family:var(--sans);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text);border:5px solid var(--ring-soft);padding:4px 10px;}
-  .field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
   .form-fieldset{border:0;margin:0 0 var(--s5);padding:0;min-width:0;}
   .form-legend{width:100%;padding:0 0 var(--s4);margin-bottom:var(--s5);border-bottom:5px solid var(--ring-faint);font-family:var(--sans);font-size:12px;font-weight:900;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
-  .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
-  .field.full{grid-column:1 / -1;}
-  label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
-  input:not([type="checkbox"]),textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;text-transform:none;letter-spacing:normal;}
-  textarea{min-height:120px;resize:vertical;}
   .intent-field textarea{min-height:180px;}
-  input:focus,textarea:focus,select:focus{outline:2px solid var(--signal);outline-offset:2px;border-color:var(--signal);}
   .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
   .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
   .submit-btn:hover{background:rgba(252,184,103,0.04);border-color:var(--accent);color:var(--accent);}
-  .form-status{font-size:12px;line-height:1.6;color:var(--text-dim);}
-  .field-help{font-size:12px;line-height:1.6;color:var(--text-dim);}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;}
   .mobile-selection-tray{display:none;}
   .draft-dialog{width:min(520px,calc(100vw - 32px));max-width:none;border:5px solid var(--signal);background:var(--bg);color:var(--text);padding:0;}
@@ -284,8 +275,7 @@
     main{padding:var(--s6) var(--s5);}
     .page-title{font-size:clamp(56px,18vw,90px);}
     .symbol-grid{grid-template-columns:1fr;}
-    .field-grid{grid-template-columns:1fr;}
-    input:not([type="checkbox"]),textarea,select,.filter-select{font-size:16px;}
+    .filter-select{font-size:16px;}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
   }
   @media(max-width:700px){
@@ -442,7 +432,7 @@
             <div class="summary-tags" id="summaryTags"></div>
           </div>
 
-          <form id="buildBriefForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+          <form class="public-form" id="buildBriefForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
             <input type="hidden" name="type" value="build_brief">
             <input type="hidden" name="source_path" value="/tattoos/build/">
             <input type="hidden" name="project_category" value="build-your-own">
@@ -546,7 +536,7 @@
   </aside>
 
   <dialog class="draft-dialog" id="buildDraftEmailDialog" aria-labelledby="buildDraftEmailTitle">
-    <form class="draft-dialog-inner" id="buildDraftEmailForm">
+    <form class="draft-dialog-inner public-form" id="buildDraftEmailForm">
       <div class="draft-dialog-head">
         <h2 class="draft-dialog-title" id="buildDraftEmailTitle">Save this build</h2>
         <button class="draft-dialog-close" id="buildDraftEmailClose" type="button" aria-label="Close">&times;</button>

@@ -16,7 +16,7 @@
     .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
     header{position:sticky;top:0;z-index:10;min-height:72px;padding:24px 40px;display:flex;justify-content:flex-end}.back-link{font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--focus)}
     main{position:relative;z-index:2;width:min(920px,calc(100% - 80px));margin:0 auto;padding:70px 0 90px}.kicker,.field-label,.detail-key,.policy-label{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:var(--focus)}h1{max-width:760px;margin:14px 0 24px;font-family:var(--sans);font-size:clamp(50px,8vw,100px);line-height:.88;letter-spacing:-.045em;color:var(--display)}.lead{max-width:670px;margin:0 0 38px;color:var(--muted);font-size:16px;line-height:1.75}
-    .auth-panel,.reschedule-panel,.success-panel,.blocked-panel{border-top:5px solid var(--line);border-bottom:5px solid var(--line-soft);padding:32px 0}.auth-panel{max-width:670px}.field{display:grid;gap:9px}.field-help,.status,.error{font-size:13px;line-height:1.6;color:var(--dim)}input[type="email"]{width:100%;min-height:52px;border:5px solid var(--line);border-radius:0;background:transparent;color:var(--text);padding:12px 14px;font-size:16px;text-transform:none;letter-spacing:normal}.button{min-height:52px;border:5px solid var(--ornament);background:var(--ornament);color:var(--text);padding:0 24px;font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center}.button.secondary{background:transparent;color:var(--focus);border-color:var(--focus)}.button:disabled{opacity:.42;cursor:not-allowed}.auth-actions,.submit-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px}
+    .auth-panel,.reschedule-panel,.success-panel,.blocked-panel{border-top:5px solid var(--line);border-bottom:5px solid var(--line-soft);padding:32px 0}.auth-panel{max-width:670px}.status,.error{font-size:13px;line-height:1.6;color:var(--dim)}.button{min-height:52px;border:5px solid var(--ornament);background:var(--ornament);color:var(--text);padding:0 24px;font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;display:inline-flex;align-items:center;justify-content:center}.button.secondary{background:transparent;color:var(--focus);border-color:var(--focus)}.button:disabled{opacity:.42;cursor:not-allowed}.auth-actions,.submit-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px}
     .booking-summary{margin:0 0 28px;border-top:1px solid var(--line-soft)}.detail-row{display:grid;grid-template-columns:170px 1fr;gap:18px;padding:15px 0;border-bottom:1px solid var(--line-soft)}.detail-value{color:var(--muted);line-height:1.55}.policy{margin:0 0 30px;padding:20px;border-left:5px solid var(--ornament);background:rgba(110,4,4,.1)}.policy strong{display:block;margin:6px 0 8px;font-family:var(--sans);font-size:18px;color:var(--display)}.policy p{margin:0;color:var(--muted);line-height:1.65}.pending-checkout{margin:0;padding:24px;border:5px solid var(--line);display:grid;gap:14px}.pending-checkout p{margin:0;color:var(--muted);line-height:1.65}
     fieldset{border:0;margin:0;padding:0;min-width:0}legend{width:100%;padding:0 0 14px;margin:0 0 18px;border-bottom:1px solid var(--line-soft);font-family:var(--sans);font-size:13px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--focus)}.reschedule-calendar{max-width:520px}.time-panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.selection-status{min-height:22px;margin:16px 0 0;color:var(--focus);font-size:13px;line-height:1.5}.empty{padding:24px;border:5px solid var(--line-soft);color:var(--muted);line-height:1.65}.error{color:var(--focus)}.success-panel h2,.blocked-panel h2{margin:0 0 14px;font-family:var(--sans);font-size:clamp(30px,5vw,52px);line-height:.94;color:var(--display)}.success-panel p,.blocked-panel p{max-width:650px;color:var(--muted);line-height:1.7}.support-link{color:var(--focus);text-decoration:underline;text-underline-offset:3px}
     [hidden]{display:none!important}:where(a,button,input):focus-visible{outline:2px solid var(--focus);outline-offset:3px}
@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/tattoos.css">
   <link rel="stylesheet" href="/css/booking-calendar.css">
+  <link rel="stylesheet" href="/css/forms.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
   <div class="grain"></div>
@@ -39,7 +40,7 @@
 
     <section class="auth-panel" id="authPanel" aria-labelledby="authHeading">
       <h2 class="field-label" id="authHeading">Find your booking</h2>
-      <form id="contextForm" novalidate>
+      <form class="public-form" id="contextForm" novalidate>
         <div class="field">
           <label class="field-label" for="bookingEmail">Booking email</label>
           <input id="bookingEmail" name="email" type="email" autocomplete="email" required aria-describedby="emailHelp">
@@ -57,7 +58,7 @@
       <div class="booking-summary" id="bookingSummary"></div>
       <div class="policy" id="policyPanel"></div>
       <div class="pending-checkout" id="pendingCheckout" hidden></div>
-      <form id="rescheduleForm" novalidate>
+      <form class="public-form" id="rescheduleForm" novalidate>
         <fieldset id="availabilityFieldset">
           <legend id="availabilityHeading">Available times for this booking type</legend>
           <div class="reschedule-calendar cal-wrap" id="dayTabs" role="group" aria-label="Available dates"></div>

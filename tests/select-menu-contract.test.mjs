@@ -23,9 +23,17 @@ test("shared select menus preserve native form controls and expose the synchroni
   assert.match(source, /positionList/);
 });
 
-test("shared select styling follows the Studio geometry with medium-aware accents", () => {
+test("shared select styling uses neutral resting fields with medium-aware interaction accents", () => {
   const styles = read("css/select-menu.css");
-  assert.match(styles, /border: 5px solid var\(--select-menu-ring\)/);
+  assert.match(styles, /--select-menu-rest-border:\s*var\(\s*--form-control-border/);
+  assert.match(styles, /--select-menu-rest-text:\s*var\(\s*--form-control-text/);
+  assert.match(styles, /--select-menu-bg:\s*var\(--form-control-bg/);
+  assert.match(styles, /min-height:\s*var\(--form-control-height,\s*44px\)/);
+  assert.match(styles, /\.custom-select > \.custom-select-trigger[\s\S]*?border: 5px solid var\(--select-menu-rest-border\)[\s\S]*?color: var\(--select-menu-rest-text\)/);
+  assert.match(styles, /\.custom-select > \.custom-select-trigger:hover,[\s\S]*?border-color: var\(--select-menu-accent\)/);
+  assert.match(styles, /\.custom-select > \.custom-select-trigger:focus-visible[\s\S]*?border-color: var\(--select-menu-accent\);[\s\S]*?outline: 0/);
+  assert.match(styles, /\.custom-select-option[\s\S]*?color: var\(--select-menu-rest-text\)/);
+  assert.match(styles, /\.custom-select-option\.is-selected[\s\S]*?background: var\(--select-menu-accent\)/);
   assert.match(styles, /--select-menu-list-max-height: 240px/);
   assert.match(styles, /body\[data-venture="tattooing"\] \.custom-select/);
   assert.match(styles, /body\[data-venture="art"\] \.custom-select/);
@@ -42,9 +50,9 @@ test("production shells load the enhancer while established custom menus can opt
   const mazeEntry = read("apps/maze/src/main.tsx");
   const mazeHtml = read("apps/maze/index.html");
 
-  assert.match(publicShell, /\/css\/select-menu\.css\?v=1/);
+  assert.match(publicShell, /\/css\/select-menu\.css\?v=2/);
   assert.match(publicShell, /\/js\/select-menu\.js\?v=2/);
-  assert.match(studio, /<link rel="stylesheet" href="\/css\/select-menu\.css\?v=1">/);
+  assert.match(studio, /<link rel="stylesheet" href="\/css\/select-menu\.css\?v=2">/);
   assert.match(studio, /<script src="\/js\/select-menu\.js\?v=2"><\/script>/);
   assert.match(studio, /window\.SixWellSelectMenu\?\.enhance\(root\)/);
   assert.doesNotMatch(studio, /function enhanceSelect\(/);

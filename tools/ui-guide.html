@@ -820,7 +820,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
   &lt;link rel="stylesheet" href="/css/media.css"&gt;        <span class="c">&lt;!-- if the page has card grids --&gt;</span>
   &lt;link rel="stylesheet" href="/css/mobile.css"&gt;       <span class="c">&lt;!-- mobile guards --&gt;</span>
   &lt;link rel="stylesheet" href="/css/site-typography.css"&gt; <span class="c">&lt;!-- global type + breadcrumb style --&gt;</span>
-  &lt;link rel="stylesheet" href="/css/forms.css"&gt;          <span class="c">&lt;!-- shared public-form checkboxes --&gt;</span>
+  &lt;link rel="stylesheet" href="/css/forms.css"&gt;          <span class="c">&lt;!-- shared public data-entry fields, statuses, and checkboxes --&gt;</span>
   &lt;style&gt;
     :root { <span class="k">--venture-color</span>: var(--color-tattooing); } <span class="c">/* THIS medium's color */</span>
   &lt;/style&gt;
@@ -854,7 +854,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <li><strong>Use token steps</strong> for size, spacing, easing — don't freestyle values between steps.</li>
       <li><strong>Ecosystem-first:</strong> every page points to at least one other medium — a related-medium band, source lineage, or a quiet next action (inquire, claim, read, attend, collect, listen, revisit, enter the archive). Subtle; discovery, not promotion.</li>
       <li><strong>Mobile pass:</strong> collapse grids with <code>minmax(0,1fr)</code>; verify at 390px; check hero titles for editor-injected font-size spans.</li>
-      <li><strong>Forms:</strong> tattoo/acquisition forms POST <code>multipart/form-data</code> to <code>/api/submissions</code> and include the <code>_gotcha</code> honeypot.</li>
+      <li><strong>Forms:</strong> ordinary visitor data-entry uses <code>.public-form</code> and the interfaces owned by <code>css/forms.css</code>. Tattoo/acquisition submissions POST <code>multipart/form-data</code> to <code>/api/submissions</code> and include the <code>_gotcha</code> honeypot.</li>
       <li><strong>Never push</strong> — commits are fine; the user always pushes manually. Work directly on main in the main repo (no worktrees).</li>
     </ul>
   </section>

@@ -62,20 +62,11 @@
   /* ── RIGHT COLUMN — FORM ── */
   .form-panel{border-top:5px solid var(--ring-soft);padding-top:var(--s6);}
   .form-title{font-family:var(--sans);font-weight:900;font-size:clamp(22px,3vw,34px);letter-spacing:-0.02em;line-height:0.94;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s3);}
-  .form-note{font-size:13px;line-height:1.75;color:var(--text-mute);margin-bottom:var(--s6);}
-  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
-  .field{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
-  .field.full{grid-column:1 / -1;}
-  label{font-family:var(--sans);font-weight:700;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-dim);}
-  input,textarea,select{width:100%;border:5px solid var(--ring-soft);background:rgba(14,14,14,0.78);color:var(--text);font-size:14px;line-height:1.5;padding:13px 14px;border-radius:0;appearance:none;}
-  textarea{min-height:110px;resize:vertical;}
-  input:focus,textarea:focus,select:focus{outline:1px solid var(--signal);border-color:var(--signal);}
   .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
   .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
   .submit-btn:hover{background:rgba(252,184,103,0.04);border-color:var(--accent);color:var(--accent);}
   .submit-btn:disabled{opacity:0.5;cursor:not-allowed;}
-  .form-status{font-size:12px;line-height:1.6;color:var(--text-dim);}
   .payment-holding{padding:var(--s6) 0;}
   .payment-holding-title{font-family:var(--sans);font-weight:900;font-size:18px;letter-spacing:-0.01em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s3);}
   .payment-holding-body{font-size:14px;line-height:1.75;color:var(--text-mute);}
@@ -96,7 +87,6 @@
     main{padding:var(--s6) var(--s5) var(--s7);}
     /* "Consultation." is one long word — 11vw keeps it on one line at any phone width */
     .page-title{font-size:clamp(30px,11vw,90px);}
-    .field-grid{grid-template-columns:1fr;}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
   }
   @media(max-width:700px){
@@ -159,7 +149,7 @@
 
         <!-- STEP 1: FORM -->
         <div id="formStep">
-          <form id="consultForm" novalidate>
+          <form class="public-form" id="consultForm" novalidate>
             <input type="hidden" name="type" value="consultation">
             <input type="hidden" name="source_path" value="/tattoos/inquire/consultation/">
             <input type="hidden" name="subject" value="New Art.Pill Consultation Booking Request">

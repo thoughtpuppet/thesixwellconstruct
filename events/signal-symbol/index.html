@@ -166,22 +166,6 @@
     flex-direction: column;
     gap: 16px;
   }
-  .field label { display: block; margin-bottom: 8px; }
-  .field input,
-  .field select {
-    width: 100%;
-    background: transparent;
-    border: 5px solid var(--ring-faint);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: 15px;
-    padding: 12px 14px;
-  }
-  .field input:focus,
-  .field select:focus {
-    outline: none;
-    border-color: var(--venture-accent);
-  }
   .total-line {
     display: flex;
     justify-content: space-between;
@@ -227,7 +211,6 @@
     padding: 0 24px;
     text-decoration: none;
   }
-  .form-note,
   .form-error,
   .form-success,
   .ticket-state-panel {
@@ -237,8 +220,8 @@
     line-height: 1.6;
     margin: 0;
   }
-  .form-error { color: var(--color-tattooing); display: none; }
-  .form-success { color: var(--venture-accent); display: none; }
+  .form-error,
+  .form-success { display: none; }
   .ticket-state-panel {
     display: none;
     border: 5px solid var(--ring-faint);
@@ -386,7 +369,7 @@
         <aside class="booking-card" id="reserve" aria-labelledby="booking-title">
           <span class="micro-kicker">booking</span>
           <h2 id="booking-title">Reserve a Seat</h2>
-          <form class="ticket-form" id="ticketForm" novalidate>
+          <form class="ticket-form public-form" id="ticketForm" novalidate>
             <div class="field">
               <label for="name">Your name</label>
               <input type="text" id="name" name="name" autocomplete="name" required>
@@ -413,7 +396,7 @@
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
             <div class="total-line"><span>Total</span><strong id="total">-</strong></div>
             <button type="submit" class="submit-btn" id="submitBtn" disabled>Loading</button>
-            <p class="form-error" id="formError"></p>
+            <p class="form-error form-status error" id="formError"></p>
             <p class="form-note" id="formNote">Payment is handled by Square on the next screen. Seats are released if payment is not completed.</p>
           </form>
           <div class="ticket-state-panel" id="ticketStatePanel"></div>
@@ -421,7 +404,7 @@
           <div class="waitlist-panel" id="waitlist">
             <span class="micro-kicker">updates</span>
             <h2>Get Event Updates</h2>
-            <form class="ticket-form" id="waitlistForm" novalidate>
+            <form class="ticket-form public-form" id="waitlistForm" novalidate>
               <div class="field">
                 <label for="waitName">Your name</label>
                 <input type="text" id="waitName" name="name" autocomplete="name" required>
@@ -456,8 +439,8 @@
               </div>
               <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
               <button type="submit" class="submit-btn" id="waitlistBtn">Get updates</button>
-              <p class="form-error" id="waitlistError"></p>
-              <p class="form-success" id="waitlistSuccess"></p>
+              <p class="form-error form-status error" id="waitlistError"></p>
+              <p class="form-success form-status success" id="waitlistSuccess"></p>
             </form>
           </div>
         </aside>

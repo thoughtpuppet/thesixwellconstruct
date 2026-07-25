@@ -265,6 +265,50 @@
   margin-top: 10px;
 }
 
+.form-system-specimen {
+  margin-top: 48px;
+  padding: 24px;
+  border: 5px solid var(--ring-faint);
+}
+
+.form-system-specimen > h3 {
+  margin: 0 0 8px;
+}
+
+.form-system-specimen > p {
+  max-width: 720px;
+  margin: 0 0 24px;
+  color: var(--text-muted);
+}
+
+.form-system-specimen .ui-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.42fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.form-system-specimen .ui-panel,
+.form-system-specimen .ui-detail-card {
+  min-width: 0;
+  padding: 20px;
+  border: 5px solid var(--ring-faint);
+}
+
+.form-system-specimen .wide {
+  grid-column: 1 / -1;
+}
+
+.form-system-specimen .ui-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.form-system-specimen .ui-detail-card h3 {
+  margin: 10px 0;
+}
+
 .source-map-wrap {
   max-width: 100%;
   overflow-x: auto;
@@ -337,6 +381,10 @@
   }
 
   .contract-section-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-system-specimen .ui-form-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 

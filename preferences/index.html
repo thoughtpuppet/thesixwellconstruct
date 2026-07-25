@@ -18,15 +18,10 @@
   .preference-card h2{margin:0;font-size:clamp(28px,5vw,46px);}
   .preference-card p{margin:0;line-height:1.7;}
   .preference-form{display:grid;gap:16px;}
-  .preference-form label{display:grid;gap:8px;font-family:var(--sans,Inter,sans-serif);font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;}
-  .preference-form input[type="email"],.preference-form input[type="tel"]{min-height:54px;border:5px solid var(--line,rgba(255,231,202,.28));border-radius:0;background:transparent;color:inherit;padding:10px 14px;font:500 16px/1.4 var(--sans,Inter,sans-serif);text-transform:none;letter-spacing:normal;}
   .preference-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
   .preference-button{min-height:50px;border:5px solid var(--accent,#fcb867);background:var(--accent,#fcb867);color:#0e0e0e;padding:0 20px;font-family:var(--sans,Inter,sans-serif);font-size:10px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;}
   .preference-button.secondary{background:transparent;color:var(--accent,#fcb867);}
   .preference-button:disabled{opacity:.45;cursor:not-allowed;}
-  .preference-status{min-height:22px;color:var(--text-muted,currentColor);font-size:13px;line-height:1.6;}
-  .preference-status.error{color:#ec5e26;}
-  .preference-status.success{color:#55ba5a;}
   .preference-disclosure{font-size:12px!important;color:var(--text-muted,currentColor);}
   [hidden]{display:none!important;}
 </style>
@@ -45,24 +40,24 @@
       <article class="preference-card" id="requestCard">
         <h2>Send a secure link</h2>
         <p>Enter the email address or mobile number you want to manage. The secure link expires after 30 minutes and does not expose a People profile.</p>
-        <form class="preference-form" id="requestForm" novalidate>
-          <label>Email address
+        <form class="preference-form public-form" id="requestForm" novalidate>
+          <label class="form-field">Email address
             <input name="email" type="email" autocomplete="email" placeholder="you@example.com">
           </label>
-          <label>Mobile number
+          <label class="form-field">Mobile number
             <input name="phone" type="tel" autocomplete="tel" placeholder="+1 404 555 0123">
           </label>
           <div class="preference-actions">
             <button class="preference-button" type="submit">Send secure link</button>
           </div>
-          <p class="preference-status" data-request-status role="status" aria-live="polite"></p>
+          <p class="preference-status form-status" data-request-status role="status" aria-live="polite"></p>
         </form>
       </article>
 
       <article class="preference-card" id="manageCard" hidden>
         <h2>Manage <span data-masked-contact></span></h2>
         <p data-current-state></p>
-        <form class="preference-form" id="manageForm">
+        <form class="preference-form public-form" id="manageForm">
           <label class="form-check form-check--construct">
             <input class="form-check__input" name="optedIn" type="checkbox">
             <span class="form-check__label" data-disclosure></span>
@@ -70,7 +65,7 @@
           <div class="preference-actions">
             <button class="preference-button" type="submit">Save preference</button>
           </div>
-          <p class="preference-status" data-manage-status role="status" aria-live="polite"></p>
+          <p class="preference-status form-status" data-manage-status role="status" aria-live="polite"></p>
         </form>
       </article>
     </div>
@@ -95,7 +90,7 @@
 
   function status(element, message, type) {
     element.textContent = message || "";
-    element.className = "preference-status" + (type ? " " + type : "");
+    element.className = "preference-status form-status" + (type ? " " + type : "");
   }
 
   async function jsonRequest(url, options) {

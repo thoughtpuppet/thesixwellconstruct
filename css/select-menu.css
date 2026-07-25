@@ -20,14 +20,21 @@
 .custom-select {
   --select-menu-accent: var(--color-accent, var(--accent, #FCB867));
   --select-menu-ring: var(--color-accent-dim, var(--ring-faint, rgba(252, 184, 103, 0.25)));
+  --select-menu-rest-border: var(
+    --form-control-border,
+    var(--ring-soft, var(--ring-faint, var(--color-accent-dim, rgba(252, 180, 103, 0.36))))
+  );
+  --select-menu-rest-text: var(
+    --form-control-text,
+    var(--text, var(--body, var(--color-body, #FBD19D)))
+  );
   --select-menu-active-text: #0e0e0e;
-  --select-menu-bg: #0e0e0e;
-  --select-menu-text: var(--color-body, #FBD19D);
+  --select-menu-bg: var(--form-control-bg, #0e0e0e);
   --select-menu-list-max-height: 240px;
   position: relative;
   width: 100%;
   min-width: 0;
-  color: var(--select-menu-accent);
+  color: var(--select-menu-rest-text);
   font-family: var(--sans, var(--font-display, Inter, Arial, sans-serif));
 }
 
@@ -93,17 +100,17 @@ body[data-venture="film"] .custom-select {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--form-control-height, 44px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin: 0;
   padding: 10px 12px;
-  border: 5px solid var(--select-menu-ring);
+  border: 5px solid var(--select-menu-rest-border);
   border-radius: 0;
   background: var(--select-menu-bg);
-  color: var(--select-menu-accent);
+  color: var(--select-menu-rest-text);
   font-family: inherit;
   font-size: 11px;
   font-weight: 700;
@@ -123,8 +130,7 @@ body[data-venture="film"] .custom-select {
 
 .custom-select > .custom-select-trigger:focus-visible {
   border-color: var(--select-menu-accent);
-  outline: 2px solid var(--select-menu-accent);
-  outline-offset: 2px;
+  outline: 0;
 }
 
 .custom-select.is-invalid > .custom-select-trigger {
@@ -168,10 +174,10 @@ body[data-venture="film"] .custom-select {
   padding: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 5px solid var(--select-menu-ring);
+  border: 5px solid var(--select-menu-rest-border);
   border-radius: 0;
   background: var(--select-menu-bg);
-  color: var(--select-menu-accent);
+  color: var(--select-menu-rest-text);
   list-style: none;
   scrollbar-color: var(--select-menu-accent) transparent;
   scrollbar-width: thin;
@@ -211,7 +217,7 @@ body[data-venture="film"] .custom-select {
   align-items: center;
   margin: 0;
   padding: 10px 12px;
-  color: var(--select-menu-accent);
+  color: var(--select-menu-rest-text);
   font-family: inherit;
   font-size: 11px;
   font-weight: 700;
@@ -238,7 +244,7 @@ body[data-venture="film"] .custom-select {
 .custom-select-option.is-disabled:hover,
 .custom-select-option.is-disabled.is-active-option {
   background: transparent;
-  color: var(--select-menu-accent);
+  color: var(--select-menu-rest-text);
 }
 
 .calendar-tools .custom-select {

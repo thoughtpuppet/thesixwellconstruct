@@ -5,6 +5,7 @@
   var cache = new Map();
   var lastByView = new Map();
   var currentContext = null;
+  var currentState = { view: "overview", range: "30d", device: "all", group: "" };
   var chartSequence = 0;
   var GROUPS = [["", "All content"], ["entry", "Entry"], ["home", "Home"], ["tattoos", "Tattoos"], ["art", "Art"], ["merch", "Merch"], ["events", "Events"], ["archive", "Archive"], ["about", "About"], ["booking", "Booking"]];
   var VIEW_TITLES = { overview: "Site overview", journeys: "Visitor journeys", acquisition: "Audience acquisition", performance: "Site performance" };
@@ -44,13 +45,6 @@
       device: ["all", "desktop", "mobile", "tablet"].includes(params.get("device")) ? params.get("device") : "all",
       group: /^[a-z0-9-]{0,48}$/.test(params.get("group") || "") ? params.get("group") || "" : "",
     };
-  }
-
-  function writeHash(state) {
-    var params = new URLSearchParams();
-    params.set("range", state.range); params.set("device", state.device);
-    if (state.group) params.set("group", state.group);
-    history.replaceState(history.state, "", location.pathname + location.search + "#analytics/" + state.view + "?" + params.toString());
   }
 
   function clearHash() {
@@ -245,7 +239,9 @@
     ["analyticsRange", "analyticsDevice", "analyticsGroup"].forEach(function (id) {
       root.querySelector("#" + id)?.addEventListener("change", function () {
         var next = { ...state, range: root.querySelector("#analyticsRange").value, device: root.querySelector("#analyticsDevice").value, group: root.querySelector("#analyticsGroup").value };
-        writeHash(next); render({ ...context, view: next.view }, false);
+        currentState = next;
+        clearHash();
+        render({ ...context, view: next.view }, false);
       });
     });
   }
@@ -253,8 +249,14 @@
   async function render(context, force) {
     currentContext = context;
     var hash = readHash();
-    var state = { view: context.view || hash.view || "overview", range: hash.range, device: hash.device, group: hash.group };
-    writeHash(state);
+    var state = {
+      view: context.view || (hash.active ? hash.view : currentState.view) || "overview",
+      range: hash.active ? hash.range : currentState.range,
+      device: hash.active ? hash.device : currentState.device,
+      group: hash.active ? hash.group : currentState.group,
+    };
+    currentState = state;
+    clearHash();
     context.root.innerHTML = '<div class="analytics-shell"><div class="analytics-head"><div><p class="analytics-eyebrow">Public website · anonymous aggregate</p><h2>' + escapeHtml(VIEW_TITLES[state.view]) + '</h2></div></div><p class="analytics-loading" role="status">Loading analytics…</p></div>';
     context.setStatus?.("Loading analytics");
     try {

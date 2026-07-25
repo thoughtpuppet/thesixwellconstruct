@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
 <link rel="stylesheet" href="/studio/analytics.css?v=2">
 <link rel="stylesheet" href="/studio/people-manager.css?v=4">
-<link rel="stylesheet" href="/css/select-menu.css?v=1">
+<link rel="stylesheet" href="/css/select-menu.css?v=2">
 <style>
   .shell { min-height:100vh; display:grid; grid-template-rows:auto auto auto 1fr; }
   header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:22px 28px; border-bottom:5px solid var(--ring-faint); }
@@ -45,6 +45,7 @@
   .hub-cal .day-button.selected { outline-color:var(--text); box-shadow:inset 0 0 0 2px rgba(14,14,14,0.72); }
   .hub-legend .legend-dot.tattoo { background:var(--color-tattooing,#6E0404); border-color:var(--color-tattooing,#6E0404); }
   .hub-legend .legend-dot.art { background:var(--color-art,#0039BD); border-color:var(--color-art,#0039BD); }
+  .hub-legend .legend-dot.studio { background:var(--color-about,#FCB467); border-color:var(--color-about,#FCB467); }
   .hub-legend .legend-dot.events { background:var(--color-events,#005D25); border-color:var(--color-events,#005D25); }
   .hub-entry { width:100%; text-align:left; border:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:10px 12px; display:grid; gap:4px; cursor:pointer; }
   .hub-entry:hover { border-color:var(--accent); }
@@ -53,6 +54,7 @@
   .hub-entry .he-when { color:var(--dim); font-family:var(--sans); font-size:10px; text-align:right; }
   .hub-entry.kind-tattoo .he-kind { color:var(--color-tattooing-bright,#9A2323); }
   .hub-entry.kind-art .he-kind { color:var(--color-art-bright,#0F72DB); }
+  .hub-entry.kind-studio .he-kind { color:var(--color-about-bright,#FDC385); }
   .hub-entry.kind-event .he-kind { color:var(--color-events-bright,#397F34); }
   @media (max-width:900px) { .hub-body { grid-template-columns:1fr; } }
   h1 { margin:0; font-family:var(--sans); font-size:18px; letter-spacing:0.16em; text-transform:uppercase; color:var(--signal); }
@@ -443,7 +445,7 @@
     <button class="tab" type="button" data-tab="people">People</button>
     <button class="tab" type="button" data-tab="tattoo">Tattoo Booking</button>
     <button class="tab" type="button" data-tab="studio">Studio Booking</button>
-    <button class="tab" type="button" data-tab="art">Art Inquiries</button>
+    <button class="tab" type="button" data-tab="art">Art</button>
     <button class="tab" type="button" data-tab="merch">Merch</button>
     <button class="tab" type="button" data-tab="legend">Legend</button>
     <button class="tab" type="button" data-tab="events">Events</button>
@@ -474,7 +476,7 @@
 
 <script src="/js/select-menu.js?v=2"></script>
 <script src="/studio/admin-collapse.js?v=2"></script>
-<script src="/studio/analytics.js?v=analytics-hash-clear"></script>
+<script src="/studio/analytics.js?v=analytics-url-clean"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -500,6 +502,8 @@
     art: ["art_acquisition", "art_inquiry"],
     events: ["event_rsvp"],
   };
+  const ART_VISIT_BOOKING_TYPE_IDS = ["studio_visit"];
+  const STUDIO_SPACE_BOOKING_TYPE_IDS = ["studio_gathering", "studio_rental"];
   // Per-tab availability scopes. Schedule and appointment views are filtered to
   // each booking tab's categories and booking types.
   const AVAILABILITY_CONFIGS = {
@@ -525,16 +529,28 @@
     },
     studio: {
       groups: [
-        { category: "studio", label: "Studio Hours", note: "Applies to open studio visits, private gatherings, and external event rentals. These can open earlier than tattoo hours.", containerId: "weeklyRulesStudio" },
+        { category: "studio_space", label: "Room Availability", note: "Applies only to private gatherings and external event rentals. It is independent from Studio Visit availability.", containerId: "weeklyRulesStudioSpace" },
       ],
       sessionTypeOptions: [
-        ["", "Any studio booking"],
-        ["studio_visit", "Open Studio Visit"],
+        ["", "Any room booking"],
         ["studio_gathering", "Private Gathering"],
         ["studio_rental", "External Event Rental"],
       ],
-      bookingTypeIds: ["studio_visit", "studio_gathering", "studio_rental"],
-      walkInPlaceholder: "Open studio note",
+      bookingTypeIds: STUDIO_SPACE_BOOKING_TYPE_IDS,
+      walkInPlaceholder: "Room booking note",
+      allowUnscopedExceptions: false,
+      showWalkIns: false,
+    },
+    art: {
+      groups: [
+        { category: "art_visit", label: "Studio Visit Hours", note: "Applies only to Studio Visits. Room bookings use their own availability under Studio Booking.", containerId: "weeklyRulesArtVisit" },
+      ],
+      sessionTypeOptions: [
+        ["", "Any Studio Visit"],
+        ["studio_visit", "Open Studio Visit"],
+      ],
+      bookingTypeIds: ART_VISIT_BOOKING_TYPE_IDS,
+      walkInPlaceholder: "Studio Visit note",
       allowUnscopedExceptions: false,
       showWalkIns: false,
     },
@@ -544,6 +560,7 @@
   const HOME_DAY_COLORS = {
     tattoo: "var(--color-tattooing,#6E0404)",
     art: "var(--color-art,#0039BD)",
+    studio: "var(--color-about,#FCB467)",
     event: "var(--color-events,#005D25)",
   };
   const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
@@ -1243,8 +1260,17 @@
     statusEl.textContent = message;
   }
 
-  function currentTabTypes() {
-    return TAB_TYPES[activeTab] || [];
+  function submissionBookingTypeId(submission) {
+    return submission?.payload?.booking_type_id || submission?.payload?.bookingTypeId || "";
+  }
+
+  function submissionBelongsToTab(submission, tab = activeTab) {
+    if (submission?.type !== "studio_booking") {
+      return (TAB_TYPES[tab] || []).includes(submission?.type);
+    }
+    const bookingTypeId = submissionBookingTypeId(submission);
+    if (bookingTypeId === "studio_visit") return tab === "art";
+    return tab === "studio";
   }
 
   function emptyDetail() {
@@ -1252,7 +1278,11 @@
   }
 
   function buildToolbar() {
-    if (activeTab === "studio" && subView === "bookings") {
+    const isBookingView = (activeTab === "studio" && subView === "bookings")
+      || (activeTab === "art" && subView === "studio-visits");
+    if (isBookingView) {
+      const config = AVAILABILITY_CONFIGS[activeTab];
+      const bookingLabel = activeTab === "art" ? "STUDIO VISITS" : "ROOM BOOKINGS";
       const statusOptions = [
         ["", "ALL BOOKING STATUSES"],
         ["confirmed", "CONFIRMED"],
@@ -1261,13 +1291,13 @@
         ["cancelled", "CANCELLED"],
         ["archived", "ARCHIVED"],
       ];
-      const typeOptions = (AVAILABILITY_CONFIGS.studio.sessionTypeOptions || []).map(([value, label], index) => [
+      const typeOptions = (config.sessionTypeOptions || []).map(([value, label], index) => [
         value,
-        index === 0 ? "ALL STUDIO TYPES" : label.toUpperCase(),
+        index === 0 ? `ALL ${bookingLabel}` : label.toUpperCase(),
       ]);
       toolbarEl.innerHTML = `
-        <select id="statusFilter" aria-label="Filter studio bookings by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>
-        <select id="typeFilter" aria-label="Filter studio bookings by type">${typeOptions.map(([v, l]) => `<option value="${escapeHtml(v)}"${v === typeValue ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select>`;
+        <select id="statusFilter" aria-label="Filter ${activeTab === "art" ? "Studio Visits" : "room bookings"} by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>
+        <select id="typeFilter" aria-label="Filter ${activeTab === "art" ? "Studio Visits" : "room bookings"} by type">${typeOptions.map(([v, l]) => `<option value="${escapeHtml(v)}"${v === typeValue ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select>`;
       enhanceControls(toolbarEl);
       return;
     }
@@ -1303,7 +1333,11 @@
         <button class="subnav-btn ${subView === "bookings" ? "is-active" : ""}" type="button" data-subview="bookings">Bookings</button>
         <button class="subnav-btn ${subView === "availability" ? "is-active" : ""}" type="button" data-subview="availability">Availability</button>`;
     } else if (activeTab === "art") {
-      html = `<button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button><button class="subnav-btn ${subView === "works" ? "is-active" : ""}" type="button" data-subview="works">Works</button>`;
+      html = `
+        <button class="subnav-btn ${subView === "requests" ? "is-active" : ""}" type="button" data-subview="requests">Requests</button>
+        <button class="subnav-btn ${subView === "works" ? "is-active" : ""}" type="button" data-subview="works">Works</button>
+        <button class="subnav-btn ${subView === "studio-visits" ? "is-active" : ""}" type="button" data-subview="studio-visits">Studio Visits</button>
+        <button class="subnav-btn ${subView === "visit-availability" ? "is-active" : ""}" type="button" data-subview="visit-availability">Visit Availability</button>`;
     } else if (activeTab === "merch") {
       html = `<button class="subnav-btn ${subView === "products" ? "is-active" : ""}" type="button" data-subview="products">Products</button>`;
     } else if (activeTab === "legend") {
@@ -1325,17 +1359,17 @@
     subnavEl.innerHTML = html;
   }
 
-  function tabForType(type) {
-    if ((TAB_TYPES.studio || []).includes(type)) return "studio";
-    if ((TAB_TYPES.art || []).includes(type)) return "art";
-    if ((TAB_TYPES.events || []).includes(type)) return "events";
+  function tabForSubmission(submission) {
+    if (submissionBelongsToTab(submission, "art")) return "art";
+    if (submissionBelongsToTab(submission, "studio")) return "studio";
+    if (submissionBelongsToTab(submission, "events")) return "events";
     return "tattoo";
   }
 
   function goToSubmission(id) {
     const sub = submissions.find((s) => s.id === id);
     if (!sub) return;
-    activeTab = tabForType(sub.type);
+    activeTab = tabForSubmission(sub);
     subView = "requests";
     activeId = id;
     activeAppointmentId = "";
@@ -1346,8 +1380,8 @@
   function openStudioAppointment(id) {
     const appointment = appointments.find((item) => item.id === id);
     if (!appointment || !isStudioAppointment(appointment)) return;
-    activeTab = "studio";
-    subView = "bookings";
+    activeTab = isArtVisitAppointment(appointment) ? "art" : "studio";
+    subView = activeTab === "art" ? "studio-visits" : "bookings";
     activeId = "";
     activeAppointmentId = id;
     statusValue = "";
@@ -2529,7 +2563,9 @@
       return;
     }
 
-    if ((activeTab === "tattoo" || activeTab === "studio") && subView === "availability") {
+    const isAvailabilityView = (subView === "availability" && (activeTab === "tattoo" || activeTab === "studio"))
+      || (activeTab === "art" && subView === "visit-availability");
+    if (isAvailabilityView) {
       layoutEl.classList.add("single");
       listPane.classList.add("hidden");
       selectedCalendarDay = "";
@@ -2540,11 +2576,13 @@
     layoutEl.classList.remove("single");
     listPane.classList.remove("hidden");
 
-    if (activeTab === "studio" && subView === "bookings") {
+    const isBookingView = (activeTab === "studio" && subView === "bookings")
+      || (activeTab === "art" && subView === "studio-visits");
+    if (isBookingView) {
       buildToolbar();
       renderStudioBookingList();
       const active = activeAppointmentId ? appointments.find((a) => a.id === activeAppointmentId) : null;
-      renderStudioAppointmentDetail(active && isStudioAppointment(active) ? active : null);
+      renderStudioAppointmentDetail(active && appointmentBelongsToActiveBookingView(active) ? active : null);
       return;
     }
 
@@ -2826,7 +2864,21 @@
   }
 
   function isStudioAppointment(appointment) {
-    return (AVAILABILITY_CONFIGS.studio.bookingTypeIds || []).includes(appointment?.bookingTypeId);
+    return isArtVisitAppointment(appointment) || isStudioSpaceAppointment(appointment);
+  }
+
+  function isArtVisitAppointment(appointment) {
+    return ART_VISIT_BOOKING_TYPE_IDS.includes(appointment?.bookingTypeId);
+  }
+
+  function isStudioSpaceAppointment(appointment) {
+    return STUDIO_SPACE_BOOKING_TYPE_IDS.includes(appointment?.bookingTypeId);
+  }
+
+  function appointmentBelongsToActiveBookingView(appointment) {
+    return activeTab === "art"
+      ? isArtVisitAppointment(appointment)
+      : isStudioSpaceAppointment(appointment);
   }
 
   function appointmentRelatedSubmission(appointment) {
@@ -2841,7 +2893,7 @@
 
   function studioBookingAppointments() {
     return appointments
-      .filter(isStudioAppointment)
+      .filter(appointmentBelongsToActiveBookingView)
       .sort((a, b) => {
         const aTime = Date.parse(a.startAt || a.createdAt || "") || 0;
         const bTime = Date.parse(b.startAt || b.createdAt || "") || 0;
@@ -2858,13 +2910,14 @@
 
   function renderStudioBookingList() {
     const visible = filteredStudioBookingAppointments();
+    const listLabel = activeTab === "art" ? "Studio Visits" : "room bookings";
     if (!visible.length) {
-      listEl.innerHTML = '<p class="empty" style="padding:16px;">No studio bookings found.</p>';
+      listEl.innerHTML = `<p class="empty" style="padding:16px;">No ${listLabel} found.</p>`;
       return;
     }
     listEl.innerHTML = visible.map((appointment) => {
       const related = appointmentRelatedSubmission(appointment);
-      const sourceLabel = related ? "Linked request" : "Private visit";
+      const sourceLabel = related ? "Linked request" : activeTab === "art" ? "Direct Studio Visit" : "Direct room booking";
       return `
         <button class="submission ${appointment.id === activeAppointmentId ? "active" : ""}" type="button" data-studio-appointment-id="${escapeHtml(appointment.id)}">
           <span class="submission-top">
@@ -2881,8 +2934,10 @@
   }
 
   function renderStudioAppointmentDetail(appointment) {
+    const isArtVisit = activeTab === "art";
+    const bookingLabel = isArtVisit ? "Studio Visit" : "Room Booking";
     if (!appointment) {
-      detailEl.innerHTML = '<p class="empty">Select a studio booking to manage details.</p>';
+      detailEl.innerHTML = `<p class="empty">Select a ${bookingLabel.toLowerCase()} to manage details.</p>`;
       return;
     }
     const related = appointmentRelatedSubmission(appointment);
@@ -2892,14 +2947,16 @@
     const totalCents = Number(appointment.totalDueCents || depositCents + tipCents);
     const calendarHref = appointmentIsConfirmed(appointment) ? appointmentCalendarUrl(appointment) : "";
     const checkoutHref = appointment.squareCheckoutUrl || "";
-    const sourceLabel = related ? "Linked studio booking request" : "Private studio visit / direct calendar booking";
+    const sourceLabel = related
+      ? `Linked ${bookingLabel.toLowerCase()} request`
+      : `${bookingLabel} / direct calendar booking`;
     const contactName = appointment.clientName || related?.contactName || "Unnamed";
     const contactEmail = appointment.clientEmail || related?.contactEmail || "";
     const contactPhone = appointment.clientPhone || related?.contactPhone || "";
     detailEl.innerHTML = `
       <div class="detail-head">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span class="pill">Studio Booking / ${escapeHtml(titleize(appointment.status || "unknown"))}</span>
+          <span class="pill">${bookingLabel} / ${escapeHtml(titleize(appointment.status || "unknown"))}</span>
           <span class="pill">${escapeHtml(appointmentTypeLabel(appointment))}</span>
         </div>
         <h2>${escapeHtml(contactName)}</h2>
@@ -2940,14 +2997,18 @@
   }
 
   function refreshStudioBookingViews() {
-    if (activeTab !== "studio" || subView !== "bookings") return;
+    const isBookingView = (activeTab === "studio" && subView === "bookings")
+      || (activeTab === "art" && subView === "studio-visits");
+    if (!isBookingView) return;
     renderStudioBookingList();
     const active = activeAppointmentId ? appointments.find((appointment) => appointment.id === activeAppointmentId) : null;
-    renderStudioAppointmentDetail(active && isStudioAppointment(active) ? active : null);
+    renderStudioAppointmentDetail(active && appointmentBelongsToActiveBookingView(active) ? active : null);
   }
 
   function homeAppointmentKind(appointment) {
-    return isStudioAppointment(appointment) ? "art" : "tattoo";
+    if (isArtVisitAppointment(appointment)) return "art";
+    if (isStudioSpaceAppointment(appointment)) return "studio";
+    return "tattoo";
   }
 
   function homeDayVisualItems(entry) {
@@ -2981,8 +3042,9 @@
     const kinds = new Set();
     if (entry.appts.some((a) => homeAppointmentKind(a) === "tattoo")) kinds.add("tattoo");
     if (entry.appts.some((a) => homeAppointmentKind(a) === "art")) kinds.add("art");
+    if (entry.appts.some((a) => homeAppointmentKind(a) === "studio")) kinds.add("studio");
     if (entry.events.length) kinds.add("event");
-    return ["tattoo", "art", "event"].filter((kind) => kinds.has(kind));
+    return ["tattoo", "art", "studio", "event"].filter((kind) => kinds.has(kind));
   }
 
   function homeDayClass(entry, itemCount) {
@@ -3005,10 +3067,12 @@
   function homeDayCountLabel(dayLabel, entry) {
     const tattooCount = entry?.appts.filter((a) => homeAppointmentKind(a) === "tattoo").length || 0;
     const artCount = entry?.appts.filter((a) => homeAppointmentKind(a) === "art").length || 0;
+    const studioCount = entry?.appts.filter((a) => homeAppointmentKind(a) === "studio").length || 0;
     const eventCount = entry?.events.length || 0;
     const parts = [];
     if (tattooCount) parts.push(`${tattooCount} tattoo appointment${tattooCount !== 1 ? "s" : ""}`);
-    if (artCount) parts.push(`${artCount} art studio booking${artCount !== 1 ? "s" : ""}`);
+    if (artCount) parts.push(`${artCount} Studio Visit${artCount !== 1 ? "s" : ""}`);
+    if (studioCount) parts.push(`${studioCount} room booking${studioCount !== 1 ? "s" : ""}`);
     if (eventCount) parts.push(`${eventCount} event${eventCount !== 1 ? "s" : ""}`);
     return `${dayLabel}: ${parts.length ? parts.join(", ") : "0 bookings, 0 events"}`;
   }
@@ -3108,7 +3172,8 @@
           </div>
           <div class="hub-legend">
             <span class="legend-item"><span class="legend-dot tattoo"></span>Tattoo Appointments</span>
-            <span class="legend-item"><span class="legend-dot art"></span>Art Studio</span>
+            <span class="legend-item"><span class="legend-dot art"></span>Studio Visits</span>
+            <span class="legend-item"><span class="legend-dot studio"></span>Room Bookings</span>
             <span class="legend-item"><span class="legend-dot events"></span>Events</span>
           </div>
         </div>
@@ -3192,8 +3257,7 @@
   }
 
   function renderList() {
-    const tabTypes = currentTabTypes();
-    let visible = submissions.filter((s) => tabTypes.includes(s.type));
+    let visible = submissions.filter((submission) => submissionBelongsToTab(submission));
     if (statusValue) visible = visible.filter((s) => s.status === statusValue);
     if (typeValue) visible = visible.filter((s) => s.type === typeValue);
 
@@ -4296,6 +4360,7 @@ ${meetingLines}
   }
 
   function availabilityScope() {
+    if (activeTab === "art") return "art";
     return activeTab === "studio" ? "studio" : "tattoo";
   }
 
@@ -4393,7 +4458,9 @@ ${meetingLines}
     }
     if (check.id === "booking_settings") {
       const settings = details.settings || {};
-      const typeRows = details.scope === "studio"
+      const isStudioPaymentScope = details.scope === "studio" || details.scope === "art";
+      const scopeName = details.scope === "art" ? "Studio Visit" : details.scope === "studio" ? "Room booking" : "Public";
+      const typeRows = isStudioPaymentScope
         ? (details.publicStudioTypes || [])
         : (details.publicConsultationTypes || []);
       const types = typeRows.map((type) => type.id).join(", ") || "none active";
@@ -4404,8 +4471,8 @@ ${meetingLines}
         `Interval: ${settings.slotIntervalMinutes || 0} minutes`,
         `Daily limit: ${settings.maxBookingsPerDay || 0}`,
         `Default capacity: ${settings.defaultCapacity || 0}`,
-        `${details.scope === "studio" ? "Studio types" : "Public types"}: ${types}`,
-        `${details.scope === "studio" ? "Studio rules" : "Consultation rules"}: ${details.scope === "studio" ? details.activeStudioRuleCount || 0 : details.activeConsultationRuleCount || 0} active`,
+        `${scopeName} types: ${types}`,
+        `${scopeName} rules: ${isStudioPaymentScope ? details.activeStudioRuleCount || 0 : details.activeConsultationRuleCount || 0} active`,
       ];
     }
     return [];
@@ -4521,7 +4588,11 @@ ${meetingLines}
 
   async function renderAvailabilityManager() {
     const config = availabilityConfig();
-    const scopeLabel = activeTab === "studio" ? "Studio" : "Tattoo & Consultation";
+    const scopeLabel = activeTab === "art"
+      ? "Studio Visit"
+      : activeTab === "studio"
+        ? "Room Booking"
+        : "Tattoo & Consultation";
     const weeklyGroupsHtml = config.groups.map((group) => `
           <div class="schedule-group is-open" data-collapse-group>
             <button class="schedule-group-toggle" type="button">${escapeHtml(group.label)}</button>
@@ -4531,7 +4602,7 @@ ${meetingLines}
             </div>
           </div>`).join("");
     const sessionTypeOptionsHtml = renderSessionTypeOptions("", { includeBlank: config.allowUnscopedExceptions !== false });
-    const appointmentCalendarSection = activeTab === "studio" ? `
+    const appointmentCalendarSection = activeTab === "studio" || activeTab === "art" ? `
       <section class="schedule-section" data-collapse-section>
         <button class="section-toggle" type="button">Appointments</button>
         <div class="section-body">
@@ -4648,9 +4719,9 @@ ${meetingLines}
           <input id="availabilityEnd" type="datetime-local" required>
         </div>
         <div class="field">
-          <label for="availabilityType">Session Type</label>
-          <select id="availabilityType">${sessionTypeOptionsHtml}</select>
-          <div class="contact">Extended Day exceptions must span exactly 10 hours.</div>
+              <label for="availabilityType">${activeTab === "art" ? "Visit Type" : activeTab === "studio" ? "Room Booking Type" : "Session Type"}</label>
+              <select id="availabilityType">${sessionTypeOptionsHtml}</select>
+          ${activeTab === "tattoo" ? '<div class="contact">Extended Day exceptions must span exactly 10 hours.</div>' : ""}
         </div>
         <div class="field">
           <label for="availabilityCapacity">Same-Time Capacity</label>
@@ -4687,7 +4758,7 @@ ${meetingLines}
     await loadBookingTypes();
     await loadSchedule();
     await loadWalkIns();
-    if (activeTab === "studio") await loadAvailabilityPreview();
+    if (activeTab === "studio" || activeTab === "art") await loadAvailabilityPreview();
     await loadAvailability();
   }
 
@@ -4961,7 +5032,7 @@ ${meetingLines}
       activeId = "";
       renderStudioBookingList();
       const appointment = appointments.find((item) => item.id === activeAppointmentId);
-      renderStudioAppointmentDetail(appointment && isStudioAppointment(appointment) ? appointment : null);
+      renderStudioAppointmentDetail(appointment && appointmentBelongsToActiveBookingView(appointment) ? appointment : null);
       return;
     }
     const eventRow = event.target.closest("[data-event-slug]");
@@ -6165,7 +6236,7 @@ ${meetingLines}
   toolbarEl.addEventListener("change", (event) => {
     if (event.target.id === "statusFilter") {
       statusValue = event.target.value;
-      if (activeTab === "studio" && subView === "bookings") {
+      if ((activeTab === "studio" && subView === "bookings") || (activeTab === "art" && subView === "studio-visits")) {
         renderStudioBookingList();
         refreshStudioBookingViews();
         return;
@@ -6174,7 +6245,7 @@ ${meetingLines}
       if (activeId) { const s = submissions.find((item) => item.id === activeId); if (s) renderDetail(s); }
     } else if (event.target.id === "typeFilter") {
       typeValue = event.target.value;
-      if (activeTab === "studio" && subView === "bookings") {
+      if ((activeTab === "studio" && subView === "bookings") || (activeTab === "art" && subView === "studio-visits")) {
         renderStudioBookingList();
         refreshStudioBookingViews();
         return;

@@ -167,7 +167,7 @@ test("Studio consumes shared tokens without changing its operational surface", a
     "People",
     "Tattoo Booking",
     "Studio Booking",
-    "Art Inquiries",
+    "Art",
     "Merch",
     "Legend",
     "Events",

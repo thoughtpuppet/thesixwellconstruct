@@ -462,56 +462,9 @@
   }
 }
 
-/* Shared controls for the legacy tattoo journey pages. These pages keep their
-   own established palettes and editorial layouts, while this layer owns form
-   value casing, keyboard focus, mobile input sizing, and reduced motion. */
-
-.tattoo-flow :where(input, textarea, select) {
-  text-transform: none;
-  letter-spacing: normal;
-}
-
-.tattoo-flow {
-  --tattoo-short-field-height: 53px;
-}
-
-.tattoo-flow :where(
-  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.honeypot),
-  select
-) {
-  box-sizing: border-box;
-  height: var(--tattoo-short-field-height) !important;
-  min-height: var(--tattoo-short-field-height) !important;
-  max-height: var(--tattoo-short-field-height) !important;
-  padding-top: 5px !important;
-  padding-bottom: 5px !important;
-}
-
-.tattoo-flow .custom-select > .custom-select-trigger {
-  height: var(--tattoo-short-field-height) !important;
-  min-height: var(--tattoo-short-field-height) !important;
-  max-height: var(--tattoo-short-field-height) !important;
-}
-
-.tattoo-flow textarea {
-  box-sizing: border-box;
-  height: auto;
-  min-height: 124px !important;
-  max-height: none;
-  field-sizing: content;
-  resize: vertical;
-  overflow-y: auto;
-}
-
-.tattoo-flow :where(input, textarea, select, button, a, summary, [tabindex]):focus-visible {
+.tattoo-flow :where(button, a, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent, var(--signal, currentColor));
   outline-offset: 3px;
-}
-
-@media (max-width: 768px) {
-  .tattoo-flow :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select) {
-    font-size: 16px !important;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

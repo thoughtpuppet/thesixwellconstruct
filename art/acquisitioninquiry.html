@@ -46,6 +46,7 @@
 
     --accent:     #FCB867;
     --src-color:  #0071EB;   /* ART medium blue */
+    --venture-accent: var(--src-color);
 
     --ring:       #6D3D15;
     --ring-soft:  rgba(109,61,21,0.4);
@@ -164,54 +165,6 @@
   }
 
   /* ── FIELD GROUP ── */
-  .field-group { display:flex; flex-direction:column; gap:var(--s2); }
-  .field-row {
-    display:grid; grid-template-columns:1fr 1fr; gap:var(--s4);
-  }
-
-  label {
-    font-family:var(--serif); font-size:10px;
-    letter-spacing:0.28em; text-transform:uppercase;
-    color:var(--text-dim);
-    display:block; margin-bottom:var(--s1);
-  }
-
-  input[type="text"],
-  input[type="email"],
-  input[type="tel"],
-  textarea,
-  select {
-    width:100%;
-    background:var(--bg-field);
-    border:5px solid var(--ring-soft);
-    color:var(--body);
-    font-family:var(--serif); font-size:14px;
-    letter-spacing:0.02em;
-    padding:var(--s3) var(--s4);
-    outline:none;
-    transition:border-color var(--t-fast);
-    appearance:none; -webkit-appearance:none;
-    border-radius:0;   /* brutalist — no rounding */
-  }
-  input:focus, textarea:focus, select:focus {
-    border-color:var(--src-color);
-  }
-  input::placeholder, textarea::placeholder {
-    color:var(--text-ghost);
-    font-family:var(--serif);
-  }
-  textarea { resize:vertical; min-height:120px; }
-
-  /* select arrow */
-  .select-wrap { position:relative; }
-  .select-wrap::after {
-    content:"↓";
-    position:absolute; right:var(--s4); top:50%;
-    transform:translateY(-50%);
-    font-family:var(--serif); font-size:12px;
-    color:var(--text-dim); pointer-events:none;
-  }
-
   /* ── INQUIRY TYPE TOGGLE ──
      two large clickable tiles: Purchase / Delivery+Hanging
      selecting one shows/hides the relevant conditional fields */
@@ -300,23 +253,6 @@
   .submit-btn:hover .arrow { transform:translateX(4px); }
 
   /* form status messages */
-  .form-status {
-    font-family:var(--serif); font-size:13px;
-    letter-spacing:0.08em; line-height:1.6;
-    padding:var(--s4);
-    display:none;
-  }
-  .form-status.success {
-    display:block;
-    border:5px solid var(--src-color);
-    color:var(--src-color);
-  }
-  .form-status.error {
-    display:block;
-    border:5px solid #6E0404;
-    color:#6E0404;
-  }
-
   /* ============================================================
      CONTACT INFO PANEL — right column
   ============================================================ */
@@ -433,7 +369,7 @@
       <!-- ======================================================
            FORM
       ====================================================== -->
-      <form class="form-section" id="artAcquisitionForm" method="POST" action="/api/submissions">
+      <form class="form-section public-form" id="artAcquisitionForm" method="POST" action="/api/submissions">
         <input type="hidden" name="type" value="art_acquisition">
         <input type="hidden" name="source_path" value="/art/acquisitioninquiry.html">
         <input type="hidden" name="subject" value="New art acquisition inquiry">

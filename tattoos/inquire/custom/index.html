@@ -44,7 +44,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .guide-links a { display:inline-flex; min-height:38px; align-items:center; padding:0 12px; border:3px solid var(--ring-soft); font-family:var(--sans); font-weight:700; font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent); }
   .form-panel { border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-soft); padding:42px 0; background:transparent; }
   .form-title { font-family:var(--sans); font-weight:900; font-size:26px; line-height:1; color:var(--accent); text-transform:uppercase; margin-bottom:12px; }
-  .form-note { font-size:13px; line-height:1.75; color:var(--text-mute); margin-bottom:30px; }
   .portfolio-reference { display:grid; grid-template-columns:92px minmax(0,1fr); gap:18px; align-items:start; border:5px solid rgba(110,4,4,.45); padding:14px; margin-bottom:28px; }
   .portfolio-reference[hidden] { display:none; }
   .portfolio-reference img { width:92px; aspect-ratio:4/5; object-fit:cover; background:#090909; }
@@ -53,19 +52,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .portfolio-reference-title { color:var(--text); font-family:var(--sans); font-size:14px; font-weight:900; }
   .portfolio-reference-meta,.portfolio-reference-note { color:var(--text-mute); font-size:12px; line-height:1.6; }
   .portfolio-reference-note { color:var(--text-dim); }
-  .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-  .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
-  .field.full { grid-column:1 / -1; }
-  .field[hidden] { display:none; }
-  label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
-  input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
-  input[type="file"] { padding:11px 12px; color:var(--text-mute); }
-  textarea { min-height:132px; resize:vertical; }
-  input:focus,textarea:focus,select:focus { outline:1px solid var(--signal); border-color:var(--signal); }
   .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
-  .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
-  .field-note { font-size:12px; line-height:1.65; color:var(--text-mute); }
-  .required-mark { color:var(--signal); }
   .radio-group { display:flex; gap:24px; align-items:center; min-height:50px; }
   .radio-option { display:flex; align-items:center; gap:8px; }
   .radio-option input { width:16px; height:16px; accent-color:var(--signal); }
@@ -78,7 +65,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } .guide-stack { grid-template-columns:1fr; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 0; } .field-grid { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
+  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 0; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
 @media (max-width: 700px) {
   header.top {
     position: sticky;
@@ -118,7 +105,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
         <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>
         <h2 class="form-title" data-copy-id="inquiry-form-title">Submit for Review</h2>
         <p class="form-note" data-copy-id="inquiry-form-note">Reviewed before booking. Approved projects receive a private token link into the studio booking and deposit flow. Please fill out all questions in detail - vague answers may delay approval.</p>
-        <form id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
+        <form class="public-form" id="inquiryForm" method="POST" action="/api/submissions" enctype="multipart/form-data">
           <input type="hidden" name="type" value="tattoo_inquiry">
           <input type="hidden" name="source_path" value="/tattoos/inquire/custom/">
           <input type="hidden" name="subject" value="New Art.Pill tattoo inquiry">

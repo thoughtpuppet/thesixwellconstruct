@@ -133,7 +133,7 @@
     if (!document.querySelector('link[href^="/css/select-menu.css"]')) {
       var selectStyles = document.createElement('link');
       selectStyles.rel = 'stylesheet';
-      selectStyles.href = '/css/select-menu.css?v=1';
+      selectStyles.href = '/css/select-menu.css?v=2';
       selectStyles.setAttribute('data-sixwell-select-menu-styles', 'true');
       document.head.appendChild(selectStyles);
     }

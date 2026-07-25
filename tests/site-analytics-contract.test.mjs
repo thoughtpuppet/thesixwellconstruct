@@ -242,7 +242,7 @@ test("collector and Studio preserve the privacy and console boundaries", () => {
   for (const view of ["overview", "journeys", "acquisition", "performance"]) assert.match(studio, new RegExp(view));
 });
 
-test("Studio clears analytics URL state when another console section renders", () => {
+test("Studio keeps analytics state out of the shared console URL", () => {
   const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
   const consoleHtml = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
   const location = {
@@ -269,5 +269,7 @@ test("Studio clears analytics URL state when another console section renders", (
   location.hash = "#unrelated";
   window.StudioAnalytics.clearHash();
   assert.equal(replacedUrls.length, 1);
+  assert.doesNotMatch(studio, /function writeHash|writeHash\(/);
+  assert.match(studio, /currentState = next/);
   assert.match(consoleHtml, /activeTab !== "analytics"\) window\.StudioAnalytics\?\.clearHash\?\.\(\)/);
 });

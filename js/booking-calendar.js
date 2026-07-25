@@ -316,8 +316,14 @@
       timePanel.style.display = "none";
       const date = new Date(windowItem.startAt);
       selectedEl.innerHTML = `
-        <div class="slot-item">
-          <span class="slot-item-text"><span class="slot-item-num">Selected ·</span> ${formatDate(date)} at ${formatTime(windowItem)}</span>
+        <div class="slot-item slot-item-selected-time">
+          <span class="slot-item-copy">
+            <span class="slot-item-heading">
+              <span class="slot-item-num">Selected ·</span>
+              <span class="time-option-title">${escapeHtml(formatDateTime(windowItem.startAt))}</span>
+            </span>
+            <span class="time-option-meta">Ends ${escapeHtml(formatDateTime(windowItem.endAt))}</span>
+          </span>
           <button type="button" class="slot-item-remove" aria-label="Clear selected time">×</button>
         </div>
       `;

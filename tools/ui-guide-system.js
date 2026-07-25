@@ -50,9 +50,9 @@
   });
 
   var COMPONENTS = [
-    { id: "component-forms", label: "Forms and validation", system: "public", kind: "component-form", referenceRoute: "/tattoos/flash/claim/?preview=1", sources: ["css/forms.css", "tattoos/flash/claim/index.html", "js/submission-form.js"], adoption: "Shared public checkbox system adopted · medium acknowledgements inherit their route accent · Construct-wide updates remain amber", description: "Text, email, phone, number, textarea, shared checkboxes, consent, help, validation, and status." },
+    { id: "component-forms", label: "Forms and validation", system: "public", kind: "component-form", referenceRoute: "/tattoos/flash/claim/?preview=1", sources: ["css/forms.css", "css/select-menu.css", "tattoos/flash/claim/index.html", "js/submission-form.js"], adoption: "Shared public form system adopted · controls rest neutral · interaction and required acknowledgements inherit their route accent · Construct-wide updates remain amber", description: "Canonical public text, email, phone, date, dropdown, textarea, file, help, validation, status, acknowledgement, and Optional Updates treatment." },
     { id: "component-selects", label: "Dropdowns and filters", system: "public", kind: "component-select", sources: ["js/select-menu.js", "merch/index.html"], description: "Native select, custom listbox, filter chips, tabs, scrolling subnavigation, and disclosures." },
-    { id: "component-scheduling", label: "Public calendar", system: "public", kind: "component-calendar", referenceRoute: "/booking/?preview=1", sources: ["booking/index.html", "css/booking-calendar.css", "js/booking-calendar.js", "booking/reschedule/index.html"], adoption: "Shared public appointment pickers adopted · public variants preserve their workflows · Studio excluded", description: "Canonical public month calendar, availability window, and time-slot selection. Page instances inherit their semantic site/node color." },
+    { id: "component-scheduling", label: "Public calendar", system: "public", kind: "component-calendar", referenceRoute: "/booking/?preview=1", sources: ["booking/index.html", "css/booking-calendar.css", "js/booking-calendar.js", "booking/reschedule/index.html"], adoption: "Shared public appointment pickers adopted · public variants preserve their workflows · Studio excluded", description: "Canonical public month calendar, availability window, and time-slot selection. Hover uses an amber border with body-colored text and no wash, while selection keeps the base node border and wash with body-colored text." },
     { id: "component-uploads", label: "Uploads and media", system: "studio", kind: "component-upload", sources: ["studio/submissions/index.html", "studio/construct-manager.js"], description: "File input, drop zone, preview, progress, success, and failure containment." },
     { id: "component-commerce", label: "Commerce", system: "public", kind: "component-commerce", sources: ["merch/index.html", "merch/lostmarbles-hoodie.html"], description: "Product card, gallery, variant, price, edition, inventory, cart line, subtotal, and checkout feedback." },
     { id: "component-data", label: "Records, tables, timelines", system: "studio", kind: "component-data", sources: ["studio/construct-manager.js", "studio/people-manager.js"], description: "Cards, list rows, metadata, data tables, mobile fallbacks, timelines, pagination, and empty states." },
@@ -279,6 +279,7 @@
         '<div class="component-grid">' + COMPONENTS.map(function (record) {
           return '<article class="component-card"><strong>' + esc(record.label) + '</strong><span>' + esc(record.description) + '</span></article>';
         }).join("") + "</div>" +
+        '<section class="form-system-specimen" aria-labelledby="form-system-specimen-title"><span class="kicker">Forms and validation · css/forms.css</span><h3 id="form-system-specimen-title">Shared public data-entry system</h3><p>Neutral resting controls use one geometry, label, help, status, and placeholder treatment. Medium color appears on interaction and required acknowledgement; Optional Updates remains Construct amber.</p>' + formMarkup(true) + "</section>" +
       "</section>" +
       '<section class="contract-section" id="public-templates">' +
         '<span class="kicker">04 · public templates</span>' +
@@ -356,19 +357,22 @@
   }
 
   function formMarkup(upload) {
-    return '<div class="ui-form-layout"><form class="ui-panel" onsubmit="return false"><div class="ui-field-grid">' +
-      '<label class="ui-field">First name<input autocomplete="given-name" required></label>' +
-      '<label class="ui-field">Last name<input autocomplete="family-name" required></label>' +
-      '<label class="ui-field">Email<input type="email" autocomplete="email" required></label>' +
-      '<label class="ui-field">Phone<input type="tel" autocomplete="tel"></label>' +
-      '<label class="ui-field">Requested date<input type="date"></label>' +
-      '<label class="ui-field">Project type<select><option>Choose one</option><option>Original work</option><option>Consultation</option></select></label>' +
-      '<label class="ui-field wide">Project notes<textarea required></textarea><span class="ui-help">Explain the useful context without changing the underlying submission contract.</span></label>' +
-      (upload ? '<label class="ui-field wide">Reference uploads<input type="file" multiple data-preview-file><span class="ui-help">JPEG, PNG, WebP, or PDF.</span></label>' : "") +
+    return '<div class="ui-form-layout public-form"><form class="ui-panel public-form" onsubmit="return false"><div class="ui-field-grid form-grid">' +
+      '<label class="ui-field form-field">First name<input class="form-control" autocomplete="given-name" required></label>' +
+      '<label class="ui-field form-field">Last name<input class="form-control" autocomplete="family-name" required></label>' +
+      '<label class="ui-field form-field">Email · invalid example<input class="form-control is-invalid" type="email" value="not-an-email" autocomplete="email" aria-invalid="true" required></label>' +
+      '<label class="ui-field form-field">Phone<input class="form-control" type="tel" autocomplete="tel"></label>' +
+      '<label class="ui-field form-field">Requested date<input class="form-control" type="date"></label>' +
+      '<label class="ui-field form-field">Project type<select class="form-control"><option value="">Choose one</option><option>Original work</option><option>Consultation</option></select></label>' +
+      '<label class="ui-field form-field">Readonly reference<input class="form-control" value="Public form specimen" readonly></label>' +
+      '<label class="ui-field form-field">Disabled field<input class="form-control" value="Unavailable" disabled></label>' +
+      '<label class="ui-field form-field form-field--full wide">Project notes<textarea class="form-control form-control--textarea" required></textarea><span class="ui-help form-help">Explain the useful context without changing the underlying submission contract.</span></label>' +
+      (upload ? '<label class="ui-field form-field form-field--full wide">Reference uploads<input class="form-control form-control--file" type="file" multiple data-preview-file><span class="ui-help form-help">JPEG, PNG, WebP, or PDF.</span></label>' : "") +
       '<label class="form-check wide"><input class="form-check__input" type="checkbox" required><span class="form-check__label">I consent to the stated contact and review process.</span></label>' +
       '<div class="form-check-group wide"><p class="form-check-group__heading">Optional updates</p><label class="form-check form-check--construct"><input class="form-check__input" type="checkbox"><span class="form-check__label">Yes, send me Construct-wide updates by email.</span></label><a class="form-check-group__manage" href="#">Manage communication preferences</a></div>' +
       '<div class="ui-actions wide"><button class="ui-action primary" type="submit" data-status-state="success" data-status-copy="Mock submission complete.">Submit</button></div>' +
-    '</div></form><aside class="ui-detail-card"><span class="ui-meta">Before submitting</span><h3>What happens next</h3><p class="ui-copy">Review, response timing, privacy, and the next available pathway remain visible beside the form.</p><p class="ui-status" data-preview-status role="status" aria-live="polite">Clean · ready for input.</p></aside></div>';
+      '<div class="wide"><p class="form-status">Ready for input.</p><p class="form-status form-status--error">Error · review the highlighted field.</p><p class="form-status form-status--success">Success · the form was received.</p></div>' +
+    '</div></form><aside class="ui-detail-card"><span class="ui-meta">css/forms.css owner</span><h3>What happens next</h3><p class="ui-copy">Neutral resting controls share one 5px frame, background, value ink, label, help, and status system. Medium color is reserved for interaction and validation.</p><p class="ui-status form-status" data-preview-status role="status" aria-live="polite">Clean · ready for input.</p></aside></div>';
   }
 
   function calendarCells() {

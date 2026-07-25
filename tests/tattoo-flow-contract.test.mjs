@@ -656,11 +656,11 @@ test("tattoo client-resource pages use an opaque solid canvas without the shared
 });
 
 test("tattoo forms keep short controls uniform while paragraph fields can grow", () => {
-  const sharedStyles = readFileSync(join(ROOT, "css", "tattoos.css"), "utf8");
-  assert.match(sharedStyles, /--tattoo-short-field-height:\s*53px/);
-  assert.match(sharedStyles, /input:not\(\[type="hidden"\]\):not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="range"\]\):not\(\.honeypot\)/);
-  assert.match(sharedStyles, /height:\s*var\(--tattoo-short-field-height\)\s*!important/);
-  assert.match(sharedStyles, /\.tattoo-flow textarea\s*\{[\s\S]*min-height:\s*124px[\s\S]*field-sizing:\s*content[\s\S]*resize:\s*vertical/);
+  const sharedStyles = readFileSync(join(ROOT, "css", "forms.css"), "utf8");
+  assert.match(sharedStyles, /--form-control-height:\s*53px/);
+  assert.match(sharedStyles, /--form-control-textarea-min-height:\s*124px/);
+  assert.match(sharedStyles, /height:\s*var\(--form-control-height\)/);
+  assert.match(sharedStyles, /\.public-form textarea,[\s\S]*min-height:\s*var\(--form-control-textarea-min-height\)[\s\S]*field-sizing:\s*content[\s\S]*resize:\s*vertical/);
 
   const formSources = [
     join(ROOT, "tattoos", "inquire", "custom", "index.html"),
@@ -674,6 +674,8 @@ test("tattoo forms keep short controls uniform while paragraph fields can grow",
     const source = readFileSync(path, "utf8");
     assert.match(source, /<body class="tattoo-flow"/);
     assert.match(source, /href="\/css\/tattoos\.css"/);
+    assert.match(source, /href="\/css\/forms\.css"/);
+    assert.match(source, /class="public-form"/);
   }
 });
 
@@ -1317,7 +1319,7 @@ test("public tattoo settings publish active tattoo booking hours", async () => {
     "UPDATE availability_rules SET start_time = '11:00', end_time = '17:00', active = 1 WHERE id = 'tattooing_monday'"
   ).run();
   database.prepare(
-    "UPDATE availability_rules SET start_time = '09:00', end_time = '15:00', active = 1 WHERE id = 'studio_tuesday'"
+    "UPDATE availability_rules SET start_time = '09:00', end_time = '15:00', active = 1 WHERE id = 'art_visit_tuesday'"
   ).run();
 
   class SelectBatchD1 extends LocalD1 {

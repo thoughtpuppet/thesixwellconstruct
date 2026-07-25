@@ -48,12 +48,17 @@ const VIRTUAL_CONSULTATION_BOOKING_TYPE_ID = "consult_virtual";
 // Studio bookings (open visits / private gatherings / external rentals) are
 // deposit-based and route to a dedicated Square location, but otherwise reuse
 // the tattoo deposit appointment pipeline.
-const STUDIO_BOOKING_TYPE_IDS = ["studio_visit", "studio_gathering", "studio_rental"];
+const ART_VISIT_BOOKING_TYPE_IDS = ["studio_visit"];
+const STUDIO_SPACE_BOOKING_TYPE_IDS = ["studio_gathering", "studio_rental"];
+const STUDIO_BOOKING_TYPE_IDS = [...ART_VISIT_BOOKING_TYPE_IDS, ...STUDIO_SPACE_BOOKING_TYPE_IDS];
 
 const SCHEDULE_CATEGORY_BOOKING_TYPE_IDS = {
   tattooing: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"],
   consultation: ["consult_in_person", "consult_virtual", "build_in_person"],
-  studio: STUDIO_BOOKING_TYPE_IDS,
+  art_visit: ART_VISIT_BOOKING_TYPE_IDS,
+  studio_space: STUDIO_SPACE_BOOKING_TYPE_IDS,
+  // During deployment, legacy rows represent the Studio Visit schedule only.
+  studio: ART_VISIT_BOOKING_TYPE_IDS,
 };
 const TATTOO_DAY_SESSION_LABELS = Object.freeze({
   tattoo_quarter: "Quarter Day Session",
@@ -396,10 +401,17 @@ function holdExpiryFromNow() {
 
 function availabilityScopeFromRequest(request) {
   const scope = new URL(request.url).searchParams.get("scope") || "";
+  if (scope === "art") {
+    return {
+      scope,
+      bookingTypeIds: ART_VISIT_BOOKING_TYPE_IDS,
+      includeUnscoped: false,
+    };
+  }
   if (scope === "studio") {
     return {
       scope,
-      bookingTypeIds: STUDIO_BOOKING_TYPE_IDS,
+      bookingTypeIds: STUDIO_SPACE_BOOKING_TYPE_IDS,
       includeUnscoped: false,
     };
   }
@@ -6843,7 +6855,9 @@ export async function handleAdminGetBookingReadiness(request, env) {
 
   try {
     const db = requireBookingDb(env);
-    const scope = new URL(request.url).searchParams.get("scope") === "studio" ? "studio" : "tattoo";
+    const requestedScope = new URL(request.url).searchParams.get("scope");
+    const scope = ["art", "studio"].includes(requestedScope) ? requestedScope : "tattoo";
+    const usesStudioPayments = scope === "art" || scope === "studio";
     const settingsRow = await db
       .prepare("SELECT * FROM booking_settings WHERE venture = ?")
       .bind("tattooing")
@@ -6867,8 +6881,11 @@ export async function handleAdminGetBookingReadiness(request, env) {
 
     const activeRules = rules.results || [];
     const activeBookingTypes = bookingTypes.results || [];
-    const activeStudioBookingTypes = activeBookingTypes.filter(
-      (type) => STUDIO_BOOKING_TYPE_IDS.includes(type.id) && type.active
+    const activeArtVisitBookingTypes = activeBookingTypes.filter(
+      (type) => ART_VISIT_BOOKING_TYPE_IDS.includes(type.id) && type.active
+    );
+    const activeStudioSpaceBookingTypes = activeBookingTypes.filter(
+      (type) => STUDIO_SPACE_BOOKING_TYPE_IDS.includes(type.id) && type.active
     );
     const activePublicBookingTypes = activeBookingTypes.filter(
       (type) => PUBLIC_SESSION_BOOKING_TYPE_IDS.includes(type.id) && type.active
@@ -6876,11 +6893,14 @@ export async function handleAdminGetBookingReadiness(request, env) {
     const hasConsultationRule = activeRules.some(
       (rule) => (rule.category || "tattooing") === "consultation" && rule.active
     );
-    const hasStudioRule = activeRules.some(
-      (rule) => (rule.category || "tattooing") === "studio" && rule.active
+    const hasArtVisitRule = activeRules.some(
+      (rule) => (rule.category || "tattooing") === "art_visit" && rule.active
+    );
+    const hasStudioSpaceRule = activeRules.some(
+      (rule) => (rule.category || "tattooing") === "studio_space" && rule.active
     );
     const appointmentMeetingsReady = await tableReady(db, "appointment_meetings");
-    const squareWebhookUrl = scope === "studio"
+    const squareWebhookUrl = usesStudioPayments
       ? studioSquareWebhookNotificationUrl(request, env)
       : squareWebhookNotificationUrl(request, env);
     const sharedSettingsReady = Boolean(
@@ -6896,31 +6916,52 @@ export async function handleAdminGetBookingReadiness(request, env) {
       activePublicBookingTypes.length > 0 &&
       hasConsultationRule
     );
-    const studioSettingsReady = Boolean(
+    const artVisitSettingsReady = Boolean(
       sharedSettingsReady &&
-      activeStudioBookingTypes.length > 0 &&
-      hasStudioRule
+      activeArtVisitBookingTypes.length > 0 &&
+      hasArtVisitRule
     );
-    const squareCheckoutReady = scope === "studio"
-      ? squareConfiguredForBookingType(env, "studio_visit")
+    const studioSpaceSettingsReady = Boolean(
+      sharedSettingsReady &&
+      activeStudioSpaceBookingTypes.length > 0 &&
+      hasStudioSpaceRule
+    );
+    const scopedSettingsReady = scope === "art"
+      ? artVisitSettingsReady
+      : scope === "studio"
+        ? studioSpaceSettingsReady
+        : tattooSettingsReady;
+    const squareCheckoutReady = usesStudioPayments
+      ? squareConfiguredForBookingType(env, scope === "art" ? "studio_visit" : "studio_gathering")
       : squareConfigured(env);
-    const squareSignatureReady = scope === "studio"
+    const squareSignatureReady = usesStudioPayments
       ? Boolean(asString(env.SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY))
       : Boolean(asString(env.SQUARE_WEBHOOK_SIGNATURE_KEY));
-    const squareLocationId = scope === "studio"
+    const squareLocationId = usesStudioPayments
       ? asString(env.SQUARE_STUDIO_LOCATION_ID)
       : asString(env.SQUARE_LOCATION_ID);
-    const squareMissingMessage = scope === "studio"
+    const squareMissingMessage = usesStudioPayments
       ? "Missing SQUARE_ACCESS_TOKEN or SQUARE_STUDIO_LOCATION_ID."
       : "Missing SQUARE_ACCESS_TOKEN or SQUARE_LOCATION_ID.";
-    const webhookMissingMessage = scope === "studio"
+    const webhookMissingMessage = usesStudioPayments
       ? "Missing SQUARE_STUDIO_WEBHOOK_SIGNATURE_KEY, so paid studio bookings cannot be trusted from Square webhooks."
       : "Missing SQUARE_WEBHOOK_SIGNATURE_KEY, so paid appointments cannot be trusted from Square webhooks.";
+    const scopeLabel = scope === "art" ? "Studio Visit" : scope === "studio" ? "Room booking" : "Booking";
+    const scopedTypes = scope === "art"
+      ? activeArtVisitBookingTypes
+      : scope === "studio"
+        ? activeStudioSpaceBookingTypes
+        : activePublicBookingTypes;
+    const scopedRuleCount = scope === "art"
+      ? activeRules.filter((rule) => (rule.category || "tattooing") === "art_visit" && rule.active).length
+      : scope === "studio"
+        ? activeRules.filter((rule) => (rule.category || "tattooing") === "studio_space" && rule.active).length
+        : activeRules.filter((rule) => (rule.category || "tattooing") === "consultation" && rule.active).length;
 
     const checks = [
       readinessItem(
-        scope === "studio" ? "studio_square_checkout" : "square_checkout",
-        scope === "studio" ? "Studio Square checkout" : "Square checkout",
+        usesStudioPayments ? "studio_square_checkout" : "square_checkout",
+        usesStudioPayments ? "Studio Square checkout" : "Square checkout",
         squareCheckoutReady,
         squareCheckoutReady
           ? `Checkout can create ${env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox"} Square payment links.`
@@ -6933,8 +6974,8 @@ export async function handleAdminGetBookingReadiness(request, env) {
         }
       ),
       readinessItem(
-        scope === "studio" ? "studio_square_webhook_signing" : "square_webhook_signing",
-        scope === "studio" ? "Studio Square webhook signing" : "Square webhook signing",
+        usesStudioPayments ? "studio_square_webhook_signing" : "square_webhook_signing",
+        usesStudioPayments ? "Studio Square webhook signing" : "Square webhook signing",
         squareSignatureReady,
         squareSignatureReady
           ? "Webhook signature verification is configured."
@@ -6945,7 +6986,7 @@ export async function handleAdminGetBookingReadiness(request, env) {
           scope,
         }
       ),
-      ...(scope === "studio" ? [] : [readinessItem(
+      ...(usesStudioPayments ? [] : [readinessItem(
         "zoom_credentials",
         "Zoom credentials",
         zoomConfigured(env) && appointmentMeetingsReady,
@@ -6964,12 +7005,12 @@ export async function handleAdminGetBookingReadiness(request, env) {
       )]),
       readinessItem(
         "booking_settings",
-        scope === "studio" ? "Studio booking settings" : "Booking settings",
-        scope === "studio" ? studioSettingsReady : tattooSettingsReady,
-        scope === "studio"
-          ? studioSettingsReady
-            ? "Booking settings, studio booking types, and studio hours are ready."
-            : "Booking settings need a horizon, interval, daily limit, capacity, active studio booking type, and active studio hours."
+        `${scopeLabel} settings`,
+        scopedSettingsReady,
+        usesStudioPayments
+          ? scopedSettingsReady
+            ? `${scopeLabel} settings, booking types, and hours are ready.`
+            : `${scopeLabel} settings need a horizon, interval, daily limit, capacity, active booking type, and active hours.`
           : tattooSettingsReady
             ? "Booking settings, public consultation types, and consultation schedule are ready."
             : "Booking settings need a horizon, interval, daily limit, capacity, public consultation type, and active consultation hours.",
@@ -6980,12 +7021,12 @@ export async function handleAdminGetBookingReadiness(request, env) {
             id: type.id,
             depositCents: type.deposit_cents,
           })),
-          publicStudioTypes: activeStudioBookingTypes.map((type) => ({
+          publicStudioTypes: scopedTypes.map((type) => ({
             id: type.id,
             depositCents: type.deposit_cents,
           })),
           activeConsultationRuleCount: activeRules.filter((rule) => (rule.category || "tattooing") === "consultation" && rule.active).length,
-          activeStudioRuleCount: activeRules.filter((rule) => (rule.category || "tattooing") === "studio" && rule.active).length,
+          activeStudioRuleCount: scopedRuleCount,
         }
       ),
     ];
@@ -7175,7 +7216,7 @@ export async function handleAdminListWalkIns(request, env) {
 
   try {
     const scope = availabilityScopeFromRequest(request);
-    if (scope.scope === "studio") {
+    if (scope.scope === "studio" || scope.scope === "art") {
       return json({ scope: scope.scope, walkInWindows: [] });
     }
     const db = requireBookingDb(env);

@@ -101,12 +101,22 @@ test("approved-client booking is the canonical public calendar source", async ()
     /id: "component-scheduling"[\s\S]*?referenceRoute: "\/booking\/\?preview=1"[\s\S]*?sources: \["booking\/index\.html", "css\/booking-calendar\.css", "js\/booking-calendar\.js", "booking\/reschedule\/index\.html"\]/,
   );
   assert.match(systemJs, /Shared public appointment pickers adopted · public variants preserve their workflows · Studio excluded/);
-  assert.match(systemJs, /inherit their semantic site\/node color/);
+  assert.match(systemJs, /Hover uses an amber border with body-colored text and no wash, while selection keeps the base node border and wash with body-colored text/);
   assert.match(calendarCss, /--calendar-node-color:var\(--venture-accent/);
+  assert.doesNotMatch(calendarCss, /--calendar-node-bright/);
   assert.match(calendarCss, /\.cal-month-select/);
   assert.match(calendarCss, /\.cal-month-count/);
+  assert.match(calendarCss, /\.cal-day:hover[^}]*:not\(\.active\)[^}]*border-color:var\(--accent\)[^}]*color:var\(--calendar-text\)[^}]*background:transparent/);
+  assert.match(calendarCss, /\.time-option:hover:not\(\.selected\)[^}]*background:transparent[^}]*border-color:var\(--accent\)[^}]*color:var\(--calendar-text\)/);
+  assert.match(calendarCss, /\.booking-window-option:hover:not\(\.active\)[^}]*border-color:var\(--accent\)[^}]*color:var\(--calendar-text\)[^}]*background:transparent/);
+  assert.match(calendarCss, /\.cal-day\.active[^}]*color:var\(--calendar-text\)/);
+  assert.match(calendarCss, /\.time-option\.selected[^}]*color:var\(--calendar-text\)/);
+  assert.match(calendarCss, /\.booking-window-option\.active \.booking-window-title[^}]*color:var\(--calendar-text\)/);
+  assert.match(calendarCss, /\.slot-item-selected-time \.time-option-title[^}]*color:var\(--calendar-text\)/);
   assert.match(calendarJs, /calMonthSelect\.className = "cal-month-select"/);
   assert.match(calendarJs, /function availableMonthKeys\(\)/);
+  assert.match(calendarJs, /slot-item slot-item-selected-time/);
+  assert.match(calendarJs, /slot-item-heading[\s\S]*time-option-title[\s\S]*time-option-meta/);
   assert.match(bookingHtml, /href="\/css\/booking-calendar\.css"/);
   assert.match(bookingHtml, /class="cal-month-select"/);
   assert.match(bookingHtml, /class="cal-grid" role="grid"/);
@@ -223,8 +233,71 @@ test("shared public checkboxes use one CSS authority with semantic accents", asy
   assert.match(preferences, /form-check form-check--construct/);
 
   assert.match(artInquiry, /\.type-tile input\[type="checkbox"\]\s*\{\s*display:none/);
-  assert.match(systemJs, /id: "component-forms"[\s\S]*?sources: \["css\/forms\.css", "tattoos\/flash\/claim\/index\.html", "js\/submission-form\.js"\]/);
-  assert.match(systemJs, /Shared public checkbox system adopted/);
+  assert.match(systemJs, /id: "component-forms"[\s\S]*?sources: \["css\/forms\.css", "css\/select-menu\.css", "tattoos\/flash\/claim\/index\.html", "js\/submission-form\.js"\]/);
+  assert.match(systemJs, /Shared public form system adopted/);
   assert.match(systemJs, /form-check form-check--construct/);
   assert.match(guideHtml, /href="\/css\/forms\.css\?v=canonical-source"/);
+});
+
+test("ordinary public data-entry fields use the shared form authority", async () => {
+  const formsCss = await read("css/forms.css");
+  const selectCss = await read("css/select-menu.css");
+  const systemJs = await read("tools/ui-guide-system.js");
+  const guideHtml = await read("tools/ui-guide.html");
+  const pagePaths = [
+    "tattoos/flash/claim/index.html",
+    "tattoos/inquire/custom/index.html",
+    "tattoos/special-projects/apply/index.html",
+    "booking/index.html",
+    "booking/reschedule/index.html",
+    "booking/studio/index.html",
+    "booking/studio-visit/index.html",
+    "events/cultandshift/index.html",
+    "events/signal-symbol/index.html",
+    "preferences/index.html",
+    "art/acquisitioninquiry.html",
+    "tattoos/build-managed-preview/index.html",
+  ];
+  const pages = await Promise.all(pagePaths.map(read));
+
+  assert.match(formsCss, /\.public-form\s*\{/);
+  assert.match(formsCss, /--form-control-border:/);
+  assert.match(formsCss, /--form-control-bg:\s*rgba\(14,\s*14,\s*14,\s*0\.78\)/);
+  assert.match(formsCss, /--form-control-height:\s*53px/);
+  assert.match(formsCss, /--form-control-textarea-min-height:\s*124px/);
+  assert.match(formsCss, /border:\s*5px solid var\(--form-control-border\)/);
+  assert.match(formsCss, /font-size:\s*15px/);
+  assert.match(formsCss, /font-size:\s*16px/);
+  assert.match(formsCss, /:user-invalid/);
+  assert.match(formsCss, /:focus-visible[\s\S]{0,180}border-color:\s*var\(--form-control-accent\);[\s\S]{0,80}outline:\s*0/);
+  assert.match(formsCss, /:user-invalid[\s\S]{0,360}border-color:\s*var\(--form-control-accent\);[\s\S]{0,80}outline:\s*0/);
+  assert.match(formsCss, /:-webkit-autofill/);
+  assert.match(formsCss, /input\[type="file"\]::file-selector-button/);
+  assert.match(formsCss, /\.form-status--error/);
+  assert.match(formsCss, /--form-control-error:\s*#EC5E26/);
+  assert.match(formsCss, /--form-control-success:\s*#55BA5A/);
+
+  assert.match(selectCss, /--select-menu-rest-border:\s*var\(\s*--form-control-border/);
+  assert.match(selectCss, /--select-menu-rest-text:\s*var\(\s*--form-control-text/);
+  assert.match(selectCss, /--select-menu-bg:\s*var\(--form-control-bg/);
+  assert.match(selectCss, /min-height:\s*var\(--form-control-height,\s*44px\)/);
+
+  for (const page of pages) {
+    assert.match(page, /href="\/css\/forms\.css(?:\?[^"]+)?"/);
+    assert.match(page, /class="[^"]*\bpublic-form\b/);
+  }
+
+  for (const page of pages.slice(0, 11)) {
+    assert.doesNotMatch(page, /\.field input[\s\S]{0,260}border:\s*5px|input\[type="email"\][\s\S]{0,260}border:\s*5px|\.preference-form input/);
+  }
+
+  assert.match(pages[10], /--venture-accent:\s*var\(--src-color\)/);
+
+  assert.match(systemJs, /class="ui-form-layout public-form"/);
+  assert.match(systemJs, /class="form-control form-control--textarea"/);
+  assert.match(systemJs, /class="form-control form-control--file"/);
+  assert.match(systemJs, /css\/forms\.css owner/);
+  assert.match(systemJs, /class="form-system-specimen"/);
+  assert.match(systemJs, /Shared public data-entry system/);
+  assert.match(guideHtml, /shared public data-entry fields, statuses, and checkboxes/);
 });

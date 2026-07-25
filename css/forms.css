@@ -1,6 +1,299 @@
-/* Shared public-form checkbox system.
-   Ordinary acknowledgements inherit the current medium accent. Construct-wide
-   communication preferences opt into the canonical global amber modifier. */
+/* Shared public data-entry form system.
+   Resting controls use the neutral field treatment. The host medium appears
+   only as an interaction, validation, or acknowledgement signal. */
+
+.public-form {
+  --form-control-border: var(
+    --ring-soft,
+    var(--ring-faint, var(--color-accent-dim, rgba(252, 180, 103, 0.36)))
+  );
+  --form-control-bg: rgba(14, 14, 14, 0.78);
+  --form-control-text: var(
+    --body,
+    var(--color-body, var(--text, #FBD19D))
+  );
+  --form-control-placeholder: var(
+    --text-ghost,
+    var(--color-text-ghost, rgba(251, 209, 157, 0.16))
+  );
+  --form-control-muted: var(
+    --text-mute,
+    var(--text-muted, var(--color-text-muted, rgba(251, 209, 157, 0.66)))
+  );
+  --form-control-dim: var(
+    --text-dim,
+    var(--color-text-dim, rgba(251, 209, 157, 0.38))
+  );
+  --form-control-accent: var(
+    --venture-accent,
+    var(
+      --venture-color,
+      var(--signal, var(--accent, var(--color-accent, #FCB467)))
+    )
+  );
+  --form-control-error: #EC5E26;
+  --form-control-success: #55BA5A;
+  --form-control-height: 53px;
+  --form-control-textarea-min-height: 124px;
+}
+
+.form-grid,
+.public-form .field-grid,
+.public-form .field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.form-field,
+.public-form .field,
+.public-form .field-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-field--full,
+.public-form :is(.field, .field-group).full,
+.public-form :is(.field, .field-group).wide {
+  grid-column: 1 / -1;
+}
+
+.form-field--hidden,
+.form-field.is-hidden,
+.form-field[hidden],
+.public-form :is(.field, .field-group).is-hidden,
+.public-form :is(.field, .field-group)[hidden] {
+  display: none !important;
+}
+
+.form-field__label,
+.form-field > label,
+.public-form :is(.field, .field-group) > label,
+.public-form > label:not(.form-check) {
+  color: var(--form-control-dim);
+  font-family: var(--sans, var(--font-display, Inter, Arial, sans-serif));
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4 !important;
+  letter-spacing: 0.16em !important;
+  text-transform: uppercase !important;
+}
+
+.public-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea,
+  select
+),
+.public-form .form-control,
+.form-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: var(--form-control-height);
+  min-height: var(--form-control-height);
+  max-height: var(--form-control-height);
+  margin: 0;
+  padding: 5px 14px;
+  border: 5px solid var(--form-control-border);
+  border-radius: 0;
+  outline: 0;
+  background: var(--form-control-bg);
+  color: var(--form-control-text);
+  box-shadow: none;
+  font-family: var(--serif, var(--font-serif, Georgia, "Times New Roman", serif));
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+  transition:
+    border-color 0.18s cubic-bezier(0.2, 0, 0.2, 1),
+    outline-color 0.18s cubic-bezier(0.2, 0, 0.2, 1),
+    background 0.18s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.public-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea,
+  select
+):hover:not(:disabled):not([readonly]),
+.public-form .form-control:hover:not(:disabled):not([readonly]),
+.form-control:hover:not(:disabled):not([readonly]) {
+  border-color: var(--form-control-accent);
+}
+
+.public-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea,
+  select
+):focus-visible,
+.public-form .form-control:focus-visible,
+.form-control:focus-visible {
+  border-color: var(--form-control-accent);
+  outline: 0;
+}
+
+.public-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea,
+  select
+):user-invalid,
+.public-form .form-control:user-invalid,
+.public-form .form-control.is-invalid,
+.form-control:user-invalid,
+.form-control.is-invalid {
+  border-color: var(--form-control-accent);
+  outline: 0;
+}
+
+.public-form :where(input, textarea)::placeholder,
+.public-form .form-control::placeholder,
+.form-control::placeholder {
+  color: var(--form-control-placeholder);
+  opacity: 1;
+}
+
+.public-form textarea,
+.public-form textarea.form-control,
+.public-form .form-control--textarea,
+textarea.form-control,
+.form-control--textarea {
+  height: auto;
+  min-height: var(--form-control-textarea-min-height);
+  max-height: none;
+  padding-top: 13px;
+  padding-bottom: 13px;
+  field-sizing: content;
+  resize: vertical;
+  overflow-y: auto;
+}
+
+.public-form input[type="file"],
+input.form-control--file {
+  padding: 8px 12px;
+  color: var(--form-control-muted);
+  cursor: pointer;
+}
+
+.public-form .honeypot {
+  position: absolute !important;
+  left: -10000px !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  height: 1px !important;
+  min-height: 1px !important;
+  max-height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+}
+
+.public-form input[type="file"]::file-selector-button,
+input.form-control--file::file-selector-button {
+  min-height: 27px;
+  margin: 0 12px 0 0;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--form-control-border);
+  color: var(--form-control-text);
+  font: 700 10px/1.2 var(--sans, var(--font-display, Inter, Arial, sans-serif));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.public-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea,
+  select
+):disabled,
+.form-control:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.public-form :where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea
+):read-only:not(:disabled),
+.form-control:read-only:not(:disabled) {
+  opacity: 0.72;
+  cursor: default;
+}
+
+.public-form :where(input, textarea):-webkit-autofill,
+.form-control:-webkit-autofill {
+  -webkit-text-fill-color: var(--form-control-text);
+  box-shadow: 0 0 0 1000px var(--form-control-bg) inset;
+  caret-color: var(--form-control-text);
+}
+
+.form-note {
+  margin: 0 0 30px;
+  color: var(
+    --form-control-muted,
+    var(--text-mute, var(--text-muted, var(--color-text-muted, rgba(251, 209, 157, 0.66))))
+  );
+  font-family: var(--serif, var(--font-serif, Georgia, "Times New Roman", serif));
+  font-size: 13px;
+  line-height: 1.75 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+
+.form-help,
+.public-form :is(.file-note, .field-note, .field-help) {
+  margin: 0;
+  color: var(
+    --form-control-dim,
+    var(--text-dim, var(--color-text-dim, rgba(251, 209, 157, 0.38)))
+  );
+  font-family: var(--serif, var(--font-serif, Georgia, "Times New Roman", serif));
+  font-size: 12px;
+  line-height: 1.6 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+
+.form-required,
+.public-form .required-mark {
+  color: var(
+    --form-control-accent,
+    var(--venture-accent, var(--venture-color, var(--signal, var(--accent, var(--color-accent, #FCB467)))))
+  );
+}
+
+.form-status {
+  min-height: 20px;
+  margin: 0;
+  color: var(
+    --form-control-dim,
+    var(--text-dim, var(--color-text-dim, rgba(251, 209, 157, 0.38)))
+  );
+  font-family: var(--serif, var(--font-serif, Georgia, "Times New Roman", serif));
+  font-size: 12px;
+  line-height: 1.6 !important;
+  letter-spacing: normal !important;
+  text-transform: none !important;
+}
+
+.form-status--error,
+.form-status.is-error,
+.form-status.error,
+.form-status[data-state="error"] {
+  color: var(--form-control-error, #EC5E26);
+}
+
+.form-status--success,
+.form-status.is-success,
+.form-status.success,
+.form-status[data-state="success"],
+.form-status[data-state="ok"] {
+  color: var(--form-control-success, #55BA5A);
+}
 
 label.form-check {
   --form-check-accent: var(
@@ -124,9 +417,28 @@ input.form-check__input:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .public-form :where(input, textarea, select),
+  .form-control,
   label.form-check,
   input.form-check__input,
   .form-check-group__manage {
     transition: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .form-grid,
+  .public-form .field-grid,
+  .public-form .field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .public-form :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    textarea,
+    select
+  ),
+  .form-control {
+    font-size: 16px;
   }
 }

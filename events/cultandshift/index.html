@@ -27,21 +27,14 @@
   .stack { display:grid; gap:22px; }
   .line-panel { border-top:5px solid var(--ring-faint); }
   .detail-row { display:grid; grid-template-columns:140px minmax(0,1fr); gap:16px; border-bottom:5px solid var(--ring-faint); padding:14px 0; color:var(--text-muted); font-family:var(--font-serif); line-height:1.55; }
-  .detail-key, .field label, .form-title { color:var(--venture-dim); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
+  .detail-key, .form-title { color:var(--venture-dim); font-family:var(--font-display); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
   .form-card { border:5px solid var(--ring-faint); padding:18px; display:grid; gap:16px; }
   .form-card form { display:grid; gap:14px; }
-  .field { display:grid; gap:8px; }
-  .field input, .field select, .field textarea { width:100%; background:transparent; border:5px solid var(--ring-faint); color:var(--text); font-family:var(--font-sans); font-size:15px; padding:12px 14px; }
-  .field textarea { min-height:110px; resize:vertical; line-height:1.5; }
-  .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:var(--venture-accent); }
   .total-line { display:flex; justify-content:space-between; gap:18px; align-items:baseline; border-top:5px solid var(--ring-faint); padding-top:14px; color:var(--text-muted); font-family:var(--font-serif); }
   .total-line strong { color:var(--text); font-family:var(--font-display); font-size:20px; }
   .submit-btn { min-height:50px; border:5px solid var(--venture-accent); background:transparent; color:var(--text); font-family:var(--font-display); font-size:11px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; cursor:pointer; }
   .submit-btn:hover:not(:disabled) { background:var(--venture-accent); color:#0e0e0e; }
   .submit-btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .form-note, .form-message { color:var(--text-muted); font-family:var(--font-serif); font-size:13px; line-height:1.55; margin:0; }
-  .form-message[data-state="error"] { color:var(--color-tattooing); }
-  .form-message[data-state="ok"] { color:var(--venture-accent); }
   .honeypot { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
   @media (max-width:900px) {
     .event-grid { grid-template-columns:1fr; }
@@ -74,7 +67,7 @@
 
           <article class="form-card" id="open-mic">
             <span class="form-title">Open Mic Request</span>
-            <form id="micForm" novalidate>
+            <form class="public-form" id="micForm" novalidate>
               <div class="field">
                 <label for="performerName">Performer name</label>
                 <input id="performerName" name="performerName" autocomplete="name" required>
@@ -112,7 +105,7 @@
               </div>
               <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
               <button class="submit-btn" type="submit" id="micBtn">Request a slot</button>
-              <p class="form-message" id="micMessage"></p>
+              <p class="form-message form-status" id="micMessage"></p>
               <p class="form-note">Requests are not final until the host assigns a slot. You will receive an email with your time and performer notes.</p>
             </form>
           </article>
@@ -120,7 +113,7 @@
 
         <aside class="form-card">
           <span class="form-title">Tickets</span>
-          <form id="ticketForm" novalidate>
+          <form class="public-form" id="ticketForm" novalidate>
             <div class="field">
               <label for="name">Your name</label>
               <input id="name" name="name" autocomplete="name" required>
@@ -147,7 +140,7 @@
             <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off" aria-hidden="true">
             <div class="total-line"><span>Total</span><strong id="total">-</strong></div>
             <button class="submit-btn" type="submit" id="ticketBtn" disabled>Loading</button>
-            <p class="form-message" id="ticketMessage"></p>
+            <p class="form-message form-status" id="ticketMessage"></p>
             <p class="form-note" id="ticketNote">Tickets are confirmed after registration or Square payment clears.</p>
           </form>
         </aside>
