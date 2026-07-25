@@ -20,8 +20,6 @@
   .preference-form{display:grid;gap:16px;}
   .preference-form label{display:grid;gap:8px;font-family:var(--sans,Inter,sans-serif);font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;}
   .preference-form input[type="email"],.preference-form input[type="tel"]{min-height:54px;border:5px solid var(--line,rgba(255,231,202,.28));border-radius:0;background:transparent;color:inherit;padding:10px 14px;font:500 16px/1.4 var(--sans,Inter,sans-serif);text-transform:none;letter-spacing:normal;}
-  .preference-choice{grid-template-columns:24px minmax(0,1fr)!important;align-items:start;gap:12px!important;font-family:inherit!important;font-size:14px!important;font-weight:400!important;line-height:1.7!important;letter-spacing:normal!important;text-transform:none!important;}
-  .preference-choice input{width:22px;height:22px;margin:2px 0 0;accent-color:var(--accent,#fcb867);}
   .preference-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
   .preference-button{min-height:50px;border:5px solid var(--accent,#fcb867);background:var(--accent,#fcb867);color:#0e0e0e;padding:0 20px;font-family:var(--sans,Inter,sans-serif);font-size:10px;font-weight:900;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;}
   .preference-button.secondary{background:transparent;color:var(--accent,#fcb867);}
@@ -32,6 +30,7 @@
   .preference-disclosure{font-size:12px!important;color:var(--text-muted,currentColor);}
   [hidden]{display:none!important;}
 </style>
+<link rel="stylesheet" href="/css/forms.css">
 </head>
 <body data-venture="about">
 <main class="about-section-page entrance-fade">
@@ -64,9 +63,9 @@
         <h2>Manage <span data-masked-contact></span></h2>
         <p data-current-state></p>
         <form class="preference-form" id="manageForm">
-          <label class="preference-choice">
-            <input name="optedIn" type="checkbox">
-            <span data-disclosure></span>
+          <label class="form-check form-check--construct">
+            <input class="form-check__input" name="optedIn" type="checkbox">
+            <span class="form-check__label" data-disclosure></span>
           </label>
           <div class="preference-actions">
             <button class="preference-button" type="submit">Save preference</button>

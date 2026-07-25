@@ -1,26 +1,17 @@
 (function () {
-  function ensureConsentStyles() {
-    if (document.getElementById("sixwellMarketingConsentStyles")) return;
-    var styles = document.createElement("style");
-    styles.id = "sixwellMarketingConsentStyles";
-    styles.textContent = ".marketing-consent-options{display:grid;gap:12px;padding:20px 0}.marketing-consent-heading{margin:0;font:900 10px/1.4 var(--sans,sans-serif);letter-spacing:.16em;text-transform:uppercase;color:var(--text-dim,currentColor)}.marketing-consent-choice{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;align-items:start;margin:0;font:400 13px/1.65 var(--serif,serif);letter-spacing:normal;text-transform:none;color:var(--text-mute,currentColor);cursor:pointer}.marketing-consent-choice input{width:20px;height:20px;margin:2px 0 0;accent-color:var(--accent,currentColor)}.marketing-consent-manage{font:700 10px/1.5 var(--sans,sans-serif);letter-spacing:.1em;text-transform:uppercase;color:var(--accent,currentColor)}";
-    document.head.appendChild(styles);
-  }
-
   function ensureMarketingConsent(form) {
     if (!form || form.querySelector("[data-marketing-consent]")) return;
     if (!form.querySelector('[name="email"],[name="from_email"]')) return;
-    ensureConsentStyles();
     var wrap = document.createElement("div");
-    wrap.className = "marketing-consent-options";
+    wrap.className = "form-check-group";
     wrap.dataset.marketingConsent = "1";
     wrap.innerHTML = [
-      '<p class="marketing-consent-heading">Optional updates</p>',
-      '<label class="marketing-consent-choice"><input type="checkbox" name="newsletter_consent" value="yes"><span>Yes, send me The Six.Well newsletter by email. This is optional and I can unsubscribe at any time.</span></label>',
+      '<p class="form-check-group__heading">Optional updates</p>',
+      '<label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Yes, send me The Six.Well newsletter by email. This is optional and I can unsubscribe at any time.</span></label>',
       form.querySelector('[name="phone"]')
-        ? '<label class="marketing-consent-choice"><input type="checkbox" name="sms_marketing_consent" value="yes"><span>Yes, send me occasional Six.Well marketing texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</span></label>'
+        ? '<label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="sms_marketing_consent" value="yes"><span class="form-check__label">Yes, send me occasional Six.Well marketing texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</span></label>'
         : "",
-      '<a class="marketing-consent-manage" href="/preferences/">Manage communication preferences</a>',
+      '<a class="form-check-group__manage" href="/preferences/">Manage communication preferences</a>',
     ].join("");
     var submit = form.querySelector('[type="submit"]');
     var anchor = submit && submit.closest(".form-actions,.submit-row,.actions");

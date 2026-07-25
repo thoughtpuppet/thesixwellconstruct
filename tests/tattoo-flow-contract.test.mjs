@@ -515,7 +515,7 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
 
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.equal(bookingPage.split(drawingFeeNotice).length - 1, 1, "booking approved-budget explanation");
-  assert.match(bookingPage, /budgetLabel \? `<label class="session-plan-ack"><input id="budgetAck"/);
+  assert.match(bookingPage, /budgetLabel \? `<label class="form-check"><input class="form-check__input" id="budgetAck"/);
   assert.match(bookingPage, /Artist-approved additional concept sketches are separate, non-refundable \$50 fees that are not credited toward the tattoo total and must be paid before drawing begins/);
 
   const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");

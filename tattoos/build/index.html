@@ -224,9 +224,6 @@
   .intent-field textarea{min-height:180px;}
   input:focus,textarea:focus,select:focus{outline:2px solid var(--signal);outline-offset:2px;border-color:var(--signal);}
   .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
-  .check{display:grid;grid-template-columns:20px 1fr;gap:12px;align-items:start;margin:6px 0 28px;cursor:pointer;}
-  .check input,.marketing-consent-choice input{appearance:auto;-webkit-appearance:checkbox;width:20px;height:20px;accent-color:var(--signal);margin-top:2px;padding:0;cursor:pointer;}
-  .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
   .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
   .submit-btn:hover{background:rgba(252,184,103,0.04);border-color:var(--accent);color:var(--accent);}
@@ -315,6 +312,7 @@
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/tattoos.css">
+<link rel="stylesheet" href="/css/forms.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
   <script>
@@ -494,14 +492,14 @@
 
             <fieldset class="form-fieldset">
               <legend class="form-legend">Confirm before sending</legend>
-              <label class="check">
-                <input type="checkbox" name="age_confirmed" value="yes" required>
-                <span class="check-label">I confirm that I am 18 years of age or older.</span>
+              <label class="form-check">
+                <input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required>
+                <span class="form-check__label">I confirm that I am 18 years of age or older.</span>
               </label>
 
-              <label class="check">
-                <input type="checkbox" name="review_consent" value="yes" required>
-                <span class="check-label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
+              <label class="form-check">
+                <input class="form-check__input" type="checkbox" name="review_consent" value="yes" required>
+                <span class="form-check__label">I understand this brief is reviewed before a private token booking link is sent, and that submitting does not guarantee a session.</span>
               </label>
             </fieldset>
 

@@ -59,16 +59,13 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
   .field.is-hidden { display:none; }
-  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
+  label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
   input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
   input[type="file"] { padding:11px 12px; color:var(--text-mute); }
   textarea { min-height:124px; resize:vertical; }
   input:focus,textarea:focus,select:focus { outline:2px solid var(--signal); outline-offset:2px; border-color:var(--signal); }
   .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
   .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
-  .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
-  .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; padding:0; }
-  .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .form-fieldset { border:0; margin:0; padding:0; min-width:0; }
   .sheet-picker { grid-column:1 / -1; margin-bottom:18px; }
   .sheet-picker.is-hidden { display:none; }
@@ -77,7 +74,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .sheet-picker-list,.sheet-selection-details { display:grid; gap:12px; }
   .sheet-option { display:grid; grid-template-columns:20px 34px minmax(0,1fr) auto; gap:10px; align-items:center; padding:13px; border:5px solid var(--ring-faint); color:var(--text-mute); }
   .sheet-option:has(input:checked) { border-color:var(--accent); color:var(--text); }
-  .sheet-option input { width:18px; height:18px; margin:0; padding:0; accent-color:var(--signal); }
   .sheet-option-code { font-family:var(--sans); font-weight:900; color:var(--accent); }
   .sheet-option-state { font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); }
   .sheet-option.is-unavailable { opacity:.55; }
@@ -114,6 +110,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/tattoos.css">
+<link rel="stylesheet" href="/css/forms.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
   <script>
@@ -157,9 +154,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <p class="session-plan-kicker">Session structure</p>
             <h3 class="session-plan-title" id="sessionPlanTitle"></h3>
             <p class="session-plan-copy" id="sessionPlanCopy"></p>
-            <label class="check session-ack is-hidden" id="sessionAcknowledgement">
-              <input type="checkbox" name="session_plan_acknowledged" value="yes" id="sessionPlanAcknowledged" form="flashClaimForm">
-              <span class="check-label">I understand that this design has a required session structure set by the artist and that I will review the final estimate before booking.</span>
+            <label class="form-check session-ack is-hidden" id="sessionAcknowledgement">
+              <input class="form-check__input" type="checkbox" name="session_plan_acknowledged" value="yes" id="sessionPlanAcknowledged" form="flashClaimForm">
+              <span class="form-check__label">I understand that this design has a required session structure set by the artist and that I will review the final estimate before booking.</span>
             </label>
           </div>
         </aside>
@@ -233,13 +230,13 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           </fieldset>
           <fieldset class="form-fieldset">
             <legend class="form-legend">Flash claim acknowledgements</legend>
-            <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older.</span></label>
-            <label class="check"><input type="checkbox" name="flash_claim_acknowledged" value="yes" required><span class="check-label">I understand that submitting begins studio review and does not reserve or book the design until availability is confirmed.</span></label>
-            <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
+            <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older.</span></label>
+            <label class="form-check"><input class="form-check__input" type="checkbox" name="flash_claim_acknowledged" value="yes" required><span class="form-check__label">I understand that submitting begins studio review and does not reserve or book the design until availability is confirmed.</span></label>
+            <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand this claim begins review before an appointment is confirmed, and that availability is confirmed by the studio.</span></label>
           </fieldset>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit Claim</button>
-            <p class="form-status" id="formStatus" role="status" aria-live="polite">Flash claims are reviewed before private token booking access is sent.</p>
+            <p class="form-status" id="formStatus" role="status" aria-live="polite">Flash claims are reviewed before booking link is sent.</p>
           </div>
         </form>
       </section>
@@ -428,7 +425,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       els.sheetDesignOptions.innerHTML = designs.map((design) => {
         const checked = selectedSheetDesignIds.has(design.id);
         return `<label class="sheet-option${design.claimable ? "" : " is-unavailable"}">
-          <input type="checkbox" value="${escapeHtml(design.id)}" ${checked ? "checked" : ""} ${design.claimable ? "" : "disabled"}>
+          <input class="form-check__input form-check__input--flush" type="checkbox" value="${escapeHtml(design.id)}" ${checked ? "checked" : ""} ${design.claimable ? "" : "disabled"}>
           <span class="sheet-option-code">${escapeHtml(design.code)}</span>
           <span>${escapeHtml(design.label)}</span>
           <span class="sheet-option-state">${design.claimable ? "Available" : escapeHtml(titleCase(design.state))}</span>

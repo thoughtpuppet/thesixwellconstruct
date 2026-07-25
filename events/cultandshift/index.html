@@ -49,6 +49,7 @@
     .cult-hero .venture-title { font-size: clamp(30px, 9.4vw, 44px); }
   }
 </style>
+<link rel="stylesheet" href="/css/forms.css">
 </head>
 <body class="venture-page" data-venture="events">
   <div class="venture-grain" aria-hidden="true"></div>
@@ -91,8 +92,8 @@
               <div class="field"><label for="micInstagram">Instagram (optional)</label><input id="micInstagram" name="instagram" placeholder="@"></div>
               <div class="field"><label for="micPreferredContact">Preferred contact (optional)</label><select id="micPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
               <div class="field"><label for="micReferralSource">How did you hear about me? (optional)</label><select id="micReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
-              <label class="field"><span><input type="checkbox" name="newsletter_consent" value="yes"> Send me The Six.Well newsletter by email (optional).</span></label>
-              <label class="field"><span><input type="checkbox" name="sms_marketing_consent" value="yes"> Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
+              <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Send me The Six.Well newsletter by email (optional).</span></label>
+              <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="sms_marketing_consent" value="yes"><span class="form-check__label">Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
               <div class="field">
                 <label for="actType">Act type</label>
                 <input id="actType" name="actType" placeholder="poem, song, monologue, movement, reading">
@@ -137,8 +138,8 @@
             <div class="field"><label for="ticketInstagram">Instagram (optional)</label><input id="ticketInstagram" name="instagram" placeholder="@"></div>
             <div class="field"><label for="ticketPreferredContact">Preferred contact (optional)</label><select id="ticketPreferredContact" name="preferred_contact_method"><option value="">Choose one</option><option value="email">Email</option><option value="phone">Phone / text</option><option value="instagram">Instagram</option></select></div>
             <div class="field"><label for="ticketReferralSource">How did you hear about me? (optional)</label><select id="ticketReferralSource" name="referral_source"><option value="">Choose one</option><option value="friend_family">Friend / family</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="google_search">Google / search</option><option value="event_in_person">Event / in person</option><option value="returning_client">Returning client</option><option value="other">Other</option></select></div>
-            <label class="field"><span><input type="checkbox" name="newsletter_consent" value="yes"> Send me The Six.Well newsletter by email (optional).</span></label>
-            <label class="field"><span><input type="checkbox" name="sms_marketing_consent" value="yes"> Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
+            <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Send me The Six.Well newsletter by email (optional).</span></label>
+            <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="sms_marketing_consent" value="yes"><span class="form-check__label">Send me occasional Six.Well marketing texts. Message and data rates may apply; reply STOP to opt out (optional).</span></label>
             <div class="field">
               <label for="seats">Seats</label>
               <select id="seats" name="seats"></select>

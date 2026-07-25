@@ -57,7 +57,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .field { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
   .field.full { grid-column:1 / -1; }
   .field[hidden] { display:none; }
-  label,.check-label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
+  label { font-family:var(--sans); font-weight:700; font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim); }
   input,textarea,select { width:100%; border:5px solid var(--ring-soft); background:rgba(14,14,14,0.78); color:var(--text); font-family:var(--serif); font-size:15px; line-height:1.5; padding:13px 14px; border-radius:0; }
   input[type="file"] { padding:11px 12px; color:var(--text-mute); }
   textarea { min-height:132px; resize:vertical; }
@@ -65,9 +65,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
   .file-note,.form-status { font-size:12px; line-height:1.6; color:var(--text-dim); }
   .field-note { font-size:12px; line-height:1.65; color:var(--text-mute); }
-  .check { display:grid; grid-template-columns:18px 1fr; gap:12px; align-items:start; margin:6px 0 24px; }
-  .check input { width:18px; height:18px; accent-color:var(--signal); margin-top:2px; }
-  .check-label { line-height:1.65; color:var(--text-mute); letter-spacing:0.08em; }
   .required-mark { color:var(--signal); }
   .radio-group { display:flex; gap:24px; align-items:center; min-height:50px; }
   .radio-option { display:flex; align-items:center; gap:8px; }
@@ -95,6 +92,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
 <link rel="stylesheet" href="/css/tattoos.css">
+<link rel="stylesheet" href="/css/forms.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
   <script>
@@ -195,8 +193,8 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
             <div class="field full"><label for="message">Project notes <span class="required-mark">*</span></label><textarea id="message" name="message" required></textarea></div>
           </div>
-          <label class="check"><input type="checkbox" name="age_confirmed" value="yes" required><span class="check-label">I confirm that I am 18 years of age or older. <span class="required-mark">*</span></span></label>
-          <label class="check"><input type="checkbox" name="review_consent" value="yes" required><span class="check-label">I understand this is an inquiry and does not guarantee an appointment.</span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older. <span class="required-mark">*</span></span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand this is an inquiry and does not guarantee an appointment.</span></label>
           <div class="submit-row">
             <button class="cta-primary" type="submit" id="submitBtn">Submit for Review</button>
             <p class="form-status" id="formStatus">Inquiry received means your submission was captured for review. Booking confirmation comes after approval.</p>

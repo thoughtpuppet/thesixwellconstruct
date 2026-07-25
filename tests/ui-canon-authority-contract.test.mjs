@@ -122,3 +122,109 @@ test("approved-client booking is the canonical public calendar source", async ()
     /studio\/submissions/,
   );
 });
+
+test("shared public checkboxes use one CSS authority with semantic accents", async () => {
+  const [
+    formsCss,
+    submissionClient,
+    bookingClient,
+    calendarCss,
+    systemJs,
+    guideHtml,
+    flashClaim,
+    flashDetail,
+    customInquiry,
+    consultation,
+    buildBrief,
+    inPerson,
+    specialApplication,
+    privateBooking,
+    studioBooking,
+    studioVisit,
+    eventRegistration,
+    eventOpenMic,
+    preferences,
+    artInquiry,
+    managedPreview,
+  ] = await Promise.all([
+    read("css/forms.css"),
+    read("js/submission-form.js"),
+    read("js/booking-calendar.js"),
+    read("css/booking-calendar.css"),
+    read("tools/ui-guide-system.js"),
+    read("tools/ui-guide.html"),
+    read("tattoos/flash/claim/index.html"),
+    read("tattoos/flash/detail/index.html"),
+    read("tattoos/inquire/custom/index.html"),
+    read("tattoos/inquire/consultation/index.html"),
+    read("tattoos/build/index.html"),
+    read("tattoos/build/in-person/index.html"),
+    read("tattoos/special-projects/apply/index.html"),
+    read("booking/index.html"),
+    read("booking/studio/index.html"),
+    read("booking/studio-visit/index.html"),
+    read("events/signal-symbol/index.html"),
+    read("events/cultandshift/index.html"),
+    read("preferences/index.html"),
+    read("art/acquisitioninquiry.html"),
+    read("tattoos/build-managed-preview/index.html"),
+  ]);
+
+  assert.match(formsCss, /label\.form-check\s*\{/);
+  assert.match(formsCss, /input\.form-check__input\s*\{/);
+  assert.match(formsCss, /width:\s*18px/);
+  assert.match(formsCss, /appearance:\s*auto/);
+  assert.match(formsCss, /accent-color:\s*var\(/);
+  assert.match(formsCss, /label\.form-check--construct[\s\S]*?--form-check-accent:\s*var\(--color-accent,\s*#FCB467\)/);
+  assert.match(formsCss, /input\.form-check__input:focus-visible/);
+  assert.match(formsCss, /\.form-check-group\s*\{/);
+
+  for (const client of [submissionClient, bookingClient]) {
+    assert.match(client, /form-check form-check--construct/);
+    assert.match(client, /form-check__input/);
+    assert.match(client, /form-check-group__heading/);
+    assert.doesNotMatch(client, /ensureConsentStyles|sixwellMarketingConsentStyles|marketing-consent-choice/);
+  }
+  assert.doesNotMatch(calendarCss, /marketing-consent/);
+
+  const adoptedPages = [
+    flashClaim,
+    flashDetail,
+    customInquiry,
+    consultation,
+    buildBrief,
+    inPerson,
+    specialApplication,
+    privateBooking,
+    studioBooking,
+    studioVisit,
+    eventRegistration,
+    eventOpenMic,
+    preferences,
+    artInquiry,
+    managedPreview,
+  ];
+  for (const page of adoptedPages) {
+    assert.match(page, /href="\/css\/forms\.css(?:\?[^"]+)?"/);
+  }
+
+  const ordinaryControlPages = adoptedPages.filter((page) => page !== artInquiry);
+  for (const page of ordinaryControlPages) {
+    assert.match(page, /form-check__input/);
+    assert.doesNotMatch(page, /\.check\s*\{|\.check input|\.check-label|\.marketing-consent-choice|\.preference-choice|\.extended-ack|\.session-plan-ack/);
+  }
+
+  assert.match(flashClaim, /\.sheet-option:has\(input:checked\)/);
+  assert.match(flashClaim, /form-check__input form-check__input--flush/);
+  assert.match(flashDetail, /\.sheet-design-row:has\(input:checked\)/);
+  assert.match(flashDetail, /input\.className = 'form-check__input form-check__input--flush'/);
+  assert.match(eventRegistration, /form-check form-check--construct/);
+  assert.match(eventOpenMic, /form-check form-check--construct/);
+  assert.match(preferences, /form-check form-check--construct/);
+
+  assert.match(artInquiry, /\.type-tile input\[type="checkbox"\]\s*\{\s*display:none/);
+  assert.match(systemJs, /id: "component-forms"[\s\S]*?sources: \["css\/forms\.css", "tattoos\/flash\/claim\/index\.html", "js\/submission-form\.js"\]/);
+  assert.match(systemJs, /Shared public checkbox system adopted/);
+  assert.match(systemJs, /form-check form-check--construct/);
+  assert.match(guideHtml, /href="\/css\/forms\.css\?v=canonical-source"/);
+});

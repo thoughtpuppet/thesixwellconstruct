@@ -68,13 +68,13 @@
     if (!form || form.querySelector("[data-marketing-consent]")) return;
     if (!form.querySelector('[name="email"]')) return;
     const wrap = document.createElement("div");
-    wrap.className = "marketing-consent-options";
+    wrap.className = "form-check-group";
     wrap.dataset.marketingConsent = "1";
     wrap.innerHTML = `
-      <p class="marketing-consent-heading">Optional updates</p>
-      <label class="marketing-consent-choice"><input type="checkbox" name="newsletter_consent" value="yes"><span>Yes, send me The Six.Well newsletter by email. This is optional and I can unsubscribe at any time.</span></label>
-      ${form.querySelector('[name="phone"]') ? '<label class="marketing-consent-choice"><input type="checkbox" name="sms_marketing_consent" value="yes"><span>Yes, send me occasional Six.Well marketing texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</span></label>' : ""}
-      <a class="marketing-consent-manage" href="/preferences/">Manage communication preferences</a>
+      <p class="form-check-group__heading">Optional updates</p>
+      <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Yes, send me The Six.Well newsletter by email. This is optional and I can unsubscribe at any time.</span></label>
+      ${form.querySelector('[name="phone"]') ? '<label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="sms_marketing_consent" value="yes"><span class="form-check__label">Yes, send me occasional Six.Well marketing texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</span></label>' : ""}
+      <a class="form-check-group__manage" href="/preferences/">Manage communication preferences</a>
     `;
     const submit = form.querySelector('[type="submit"]');
     form.insertBefore(wrap, submit?.closest(".submit-row,.form-actions,.actions") || submit || null);

@@ -50,7 +50,7 @@
   });
 
   var COMPONENTS = [
-    { id: "component-forms", label: "Forms and validation", system: "public", kind: "component-form", sources: ["art/acquisitioninquiry.html", "tattoos/inquire/custom/index.html"], description: "Text, email, phone, number, textarea, checkboxes, radios, consent, help, validation, and status." },
+    { id: "component-forms", label: "Forms and validation", system: "public", kind: "component-form", referenceRoute: "/tattoos/flash/claim/?preview=1", sources: ["css/forms.css", "tattoos/flash/claim/index.html", "js/submission-form.js"], adoption: "Shared public checkbox system adopted · medium acknowledgements inherit their route accent · Construct-wide updates remain amber", description: "Text, email, phone, number, textarea, shared checkboxes, consent, help, validation, and status." },
     { id: "component-selects", label: "Dropdowns and filters", system: "public", kind: "component-select", sources: ["js/select-menu.js", "merch/index.html"], description: "Native select, custom listbox, filter chips, tabs, scrolling subnavigation, and disclosures." },
     { id: "component-scheduling", label: "Public calendar", system: "public", kind: "component-calendar", referenceRoute: "/booking/?preview=1", sources: ["booking/index.html", "css/booking-calendar.css", "js/booking-calendar.js", "booking/reschedule/index.html"], adoption: "Shared public appointment pickers adopted · public variants preserve their workflows · Studio excluded", description: "Canonical public month calendar, availability window, and time-slot selection. Page instances inherit their semantic site/node color." },
     { id: "component-uploads", label: "Uploads and media", system: "studio", kind: "component-upload", sources: ["studio/submissions/index.html", "studio/construct-manager.js"], description: "File input, drop zone, preview, progress, success, and failure containment." },
@@ -365,7 +365,8 @@
       '<label class="ui-field">Project type<select><option>Choose one</option><option>Original work</option><option>Consultation</option></select></label>' +
       '<label class="ui-field wide">Project notes<textarea required></textarea><span class="ui-help">Explain the useful context without changing the underlying submission contract.</span></label>' +
       (upload ? '<label class="ui-field wide">Reference uploads<input type="file" multiple data-preview-file><span class="ui-help">JPEG, PNG, WebP, or PDF.</span></label>' : "") +
-      '<label class="ui-check wide"><input type="checkbox"><span>I consent to the stated contact and review process.</span></label>' +
+      '<label class="form-check wide"><input class="form-check__input" type="checkbox" required><span class="form-check__label">I consent to the stated contact and review process.</span></label>' +
+      '<div class="form-check-group wide"><p class="form-check-group__heading">Optional updates</p><label class="form-check form-check--construct"><input class="form-check__input" type="checkbox"><span class="form-check__label">Yes, send me Construct-wide updates by email.</span></label><a class="form-check-group__manage" href="#">Manage communication preferences</a></div>' +
       '<div class="ui-actions wide"><button class="ui-action primary" type="submit" data-status-state="success" data-status-copy="Mock submission complete.">Submit</button></div>' +
     '</div></form><aside class="ui-detail-card"><span class="ui-meta">Before submitting</span><h3>What happens next</h3><p class="ui-copy">Review, response timing, privacy, and the next available pathway remain visible beside the form.</p><p class="ui-status" data-preview-status role="status" aria-live="polite">Clean · ready for input.</p></aside></div>';
   }

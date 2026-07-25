@@ -12,6 +12,7 @@
 <style>
   :root {
     --bg:#0e0e0e; --signal:#6E0404; --ring:#6D3D15;
+    --venture-color:var(--accent); --venture-accent:var(--accent);
     --ring-soft:rgba(109,61,21,0.4); --ring-faint:rgba(109,61,21,0.18);
     --accent:#FCB867; --text:var(--color-body, #FBD19D);
     --text-mute:var(--color-text-muted, rgba(251,209,157,0.66)); --text-dim:var(--color-text-dim, rgba(251,209,157,0.38)); --text-ghost:var(--color-text-ghost, rgba(251,209,157,0.16));
@@ -55,10 +56,6 @@
   textarea{min-height:110px;resize:vertical;}
   input:focus,textarea:focus,select:focus{outline:1px solid var(--accent);border-color:var(--accent);}
   .honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}
-  .check{display:grid;grid-template-columns:18px 1fr;gap:12px;align-items:start;margin:6px 0 28px;}
-  .check input{width:18px;height:18px;margin-top:2px;padding:0;appearance:none;border:3px solid var(--ring-soft);background:transparent;cursor:pointer;transition:background var(--t-fast),border-color var(--t-fast),box-shadow var(--t-fast);}
-  .check input:checked{background:var(--accent);border-color:var(--accent);box-shadow:inset 0 0 0 3px var(--bg);}
-  .check-label{font-family:var(--sans);font-weight:400;font-size:12px;letter-spacing:0.06em;line-height:1.65;color:var(--text-mute);}
   .submit-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
   .submit-btn{display:inline-flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:700;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-mute);background:transparent;border:5px solid var(--ring-soft);min-height:50px;padding:0 28px;transition:background var(--t-fast),border-color var(--t-fast),color var(--t-fast);cursor:pointer;}
   .submit-btn:hover{background:rgba(252,184,103,0.04);border-color:var(--accent);color:var(--accent);}
@@ -89,6 +86,7 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/forms.css">
 </head>
 <body data-venture="about">
   <script>
@@ -202,9 +200,9 @@
               <input type="hidden" name="availabilityWindowId" id="availabilityWindowId">
             </div>
 
-            <label class="check">
-              <input type="checkbox" name="understand" value="yes" required>
-              <span class="check-label">I understand the deposit holds my date and any remaining balance is settled with the studio. This is a studio booking, not a tattoo appointment.</span>
+            <label class="form-check">
+              <input class="form-check__input" type="checkbox" name="understand" value="yes" required>
+              <span class="form-check__label">I understand the deposit holds my date and any remaining balance is settled with the studio. This is a studio booking, not a tattoo appointment.</span>
             </label>
 
             <div class="submit-row">
