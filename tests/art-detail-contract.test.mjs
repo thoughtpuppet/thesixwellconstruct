@@ -107,6 +107,10 @@ test("all painting detail pages use the shared shell and managed hooks", () => {
     assert.match(html, /data-art-print-action/);
     assert.match(renderedHtml, /data-legacy-connections/, `${name}: Connections host is commented out`);
     assert.match(html, /src="\/js\/art-detail-managed\.js"/);
+    assert.doesNotMatch(renderedHtml, />\s*inquire\s*</i, `${name}: painting action still says inquire`);
+    if (/data-original-state="available"/.test(renderedHtml)) {
+      assert.match(renderedHtml, /data-art-original-action[^>]*>\s*acquire\s*</i, `${name}: available original must say acquire`);
+    }
   }
 });
 
@@ -116,9 +120,22 @@ test("shared painting CSS preserves intrinsic media and every managed state", ()
   assert.match(css, /\.painting-frame img\s*\{[\s\S]*max-height:/);
   assert.doesNotMatch(css, /aspect-ratio:\s*4\s*\/\s*5/);
   assert.match(css, /\.avail-row\s*\{[\s\S]*border-bottom:\s*5px/);
+  assert.match(css, /--painting-node-light:\s*var\(--color-art-bright/);
+  for (const selector of ["painting-badge", "venture-label", "avail-status\\.available"]) {
+    assert.match(css, new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--painting-node-light\\)`, "s"));
+  }
+  assert.match(css, /\.avail-action,[\s\S]*?color:\s*var\(--painting-node-light\)/);
+  assert.match(css, /\.avail-action,[\s\S]*?border:\s*5px solid var\(--painting-node\)/);
   for (const state of ["available", "sold", "not-for-sale", "unavailable", "coming-soon", "sold-out", "check-availability"]) {
     assert.match(css, new RegExp(`\\.avail-status\\.${state.replace("-", "\\-")}`), `missing ${state} CSS state`);
   }
+});
+
+test("managed original acquisition uses the painting-specific acquire label", () => {
+  const source = readFileSync(join(ROOT, "js", "art-detail-managed.js"), "utf8");
+  assert.match(source, /action:\s*"acquire"/);
+  assert.doesNotMatch(source, /action:\s*"inquire"/);
+  assert.match(source, /\/art\/acquisitioninquiry\.html\?work=/);
 });
 
 test("Lost Marbles keeps its preview, archive fallback, and natural title wrapping", () => {

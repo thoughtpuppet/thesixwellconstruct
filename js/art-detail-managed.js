@@ -102,16 +102,16 @@
 
     const action = document.querySelector("[data-art-original-action]");
     const location = document.querySelector("[data-art-original-location]");
-    const canInquire = Number(record.acquisition_eligible) === 1 && state === "available";
+    const canAcquire = Number(record.acquisition_eligible) === 1 && state === "available";
     const hasLocation = state === "sold" && text(location?.textContent);
 
     if (location) location.hidden = !hasLocation;
     if (!action) return;
     action.hidden = hasLocation;
     if (hasLocation) return;
-    setAction(action, canInquire
+    setAction(action, canAcquire
       ? {
-          action: "inquire",
+          action: "acquire",
           href: `/art/acquisitioninquiry.html?work=${encodeURIComponent(record.slug || record.id)}`,
           disabled: false,
         }

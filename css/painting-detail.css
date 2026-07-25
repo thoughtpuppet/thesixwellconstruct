@@ -9,6 +9,7 @@
   --painting-bg: var(--color-bg, #0e0e0e);
   --painting-accent: var(--color-about, #fcb867);
   --painting-node: var(--color-art, #0071eb);
+  --painting-node-light: var(--color-art-bright, #0f72db);
   --painting-ring: var(--color-structural, #6d3d15);
   --painting-ring-soft: color-mix(in srgb, var(--painting-ring) 40%, transparent);
   --painting-ring-faint: color-mix(in srgb, var(--painting-ring) 18%, transparent);
@@ -151,11 +152,10 @@
   position: absolute;
   bottom: var(--painting-s4);
   left: 0;
-  color: var(--painting-node);
+  color: var(--painting-node-light);
   font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
   font-size: 9px;
   letter-spacing: 0.28em;
-  opacity: 0.78;
   text-transform: uppercase;
 }
 
@@ -193,8 +193,7 @@
 }
 
 .painting-detail-page .venture-label {
-  color: var(--painting-node);
-  opacity: 0.78;
+  color: var(--painting-node-light);
 }
 
 .painting-detail-page .block-label {
@@ -297,7 +296,7 @@
 }
 
 .painting-detail-page .avail-status.available {
-  color: var(--painting-node);
+  color: var(--painting-node-light);
 }
 
 .painting-detail-page .avail-status.sold {
@@ -316,7 +315,7 @@
 .painting-detail-page .avail-location {
   padding: var(--painting-s2) var(--painting-s4);
   border: 5px solid var(--painting-node);
-  color: var(--painting-node);
+  color: var(--painting-node-light);
   font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
   font-size: 11px;
   letter-spacing: 0.18em;
