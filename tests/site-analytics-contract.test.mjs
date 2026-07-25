@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { runInNewContext } from "node:vm";
 
 import {
   ANALYTICS_EVENT_NAMES,
@@ -239,4 +240,34 @@ test("collector and Studio preserve the privacy and console boundaries", () => {
   assert.match(readFileSync(join(ROOT, "functions", "api", "analytics", "_lib.js"), "utf8"), /\$accountTag: String!/);
   assert.match(consoleHtml, />Analytics</);
   for (const view of ["overview", "journeys", "acquisition", "performance"]) assert.match(studio, new RegExp(view));
+});
+
+test("Studio clears analytics URL state when another console section renders", () => {
+  const studio = readFileSync(join(ROOT, "studio", "analytics.js"), "utf8");
+  const consoleHtml = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const location = {
+    hash: "#analytics/overview?range=30d&device=all",
+    pathname: "/studio/submissions/",
+    search: "?preview=1",
+  };
+  const replacedUrls = [];
+  const history = {
+    state: {},
+    replaceState(_state, _title, url) {
+      replacedUrls.push(url);
+      location.hash = url.includes("#") ? url.slice(url.indexOf("#")) : "";
+    },
+  };
+  const window = {};
+
+  runInNewContext(studio, { window, location, history, URLSearchParams });
+  assert.equal(window.StudioAnalytics.hashState().active, true);
+  window.StudioAnalytics.clearHash();
+  assert.deepEqual(replacedUrls, ["/studio/submissions/?preview=1"]);
+  assert.equal(location.hash, "");
+
+  location.hash = "#unrelated";
+  window.StudioAnalytics.clearHash();
+  assert.equal(replacedUrls.length, 1);
+  assert.match(consoleHtml, /activeTab !== "analytics"\) window\.StudioAnalytics\?\.clearHash\?\.\(\)/);
 });

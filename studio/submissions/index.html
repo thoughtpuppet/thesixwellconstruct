@@ -474,7 +474,7 @@
 
 <script src="/js/select-menu.js?v=2"></script>
 <script src="/studio/admin-collapse.js?v=2"></script>
-<script src="/studio/analytics.js?v=2"></script>
+<script src="/studio/analytics.js?v=analytics-hash-clear"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -2475,6 +2475,7 @@
 
   function renderActiveTab() {
     document.body.classList.toggle("is-analytics-tab", activeTab === "analytics");
+    if (activeTab !== "analytics") window.StudioAnalytics?.clearHash?.();
     if (activeTab !== "people") window.PeopleManager?.unmount?.();
     tabsEl.querySelectorAll(".tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tab === activeTab));
     buildSubnav();

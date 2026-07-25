@@ -53,6 +53,11 @@
     history.replaceState(history.state, "", location.pathname + location.search + "#analytics/" + state.view + "?" + params.toString());
   }
 
+  function clearHash() {
+    if (!readHash().active) return;
+    history.replaceState(history.state, "", location.pathname + location.search);
+  }
+
   function sourceMarkup(payload) {
     var sources = Object.entries(payload.sources || {});
     if (!sources.length) return "";
@@ -268,5 +273,6 @@
     render: render,
     refresh: function () { return currentContext ? render(currentContext, true) : Promise.resolve(); },
     hashState: readHash,
+    clearHash: clearHash,
   };
 })(window);
