@@ -439,6 +439,70 @@
   }
 }
 
+@media (max-width: 700px) {
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    border: 0;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row,
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row:last-child {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto 1fr auto;
+    gap: 0 !important;
+    align-items: stretch;
+    padding: 0 !important;
+    border: 5px solid var(--ring-faint);
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row > div,
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row.is-primary > div {
+    padding: 14px 12px;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row > div + div {
+    border-top: 5px solid var(--ring-faint);
+    border-left: 0;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row > div:first-child {
+    justify-self: stretch;
+    text-align: left;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-title {
+    font-size: clamp(20px, 6.15vw, 24px) !important;
+    letter-spacing: -0.04em !important;
+    line-height: 0.92 !important;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-body,
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-body * {
+    font-size: clamp(11px, 3.2vw, 13px) !important;
+    line-height: 1.25 !important;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row > div:last-child {
+    justify-content: flex-end;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-status,
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-action {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-status:has(> br:only-child) {
+    display: none;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-action {
+    margin-top: 12px;
+  }
+}
+
 .tattoo-flow :where(button, a, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent, var(--signal, currentColor));
   outline-offset: 3px;

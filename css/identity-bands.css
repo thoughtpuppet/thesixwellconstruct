@@ -87,11 +87,18 @@
   overflow: hidden;
 }
 
+@media (min-width: 769px) {
+  .brand-band .band-identity {
+    margin-top: calc(var(--band-kicker-line-height) + var(--band-title-gap));
+    aspect-ratio: auto;
+  }
+}
+
 .brand-band .band-mark {
   position: absolute;
   inset: 0;
   max-width: none;
-  object-position: right center;
+  object-position: center;
 }
 
 .band-identity-link {
@@ -329,9 +336,9 @@
 }
 
 .band-actions .brand-band-link[href^="/about/"] {
-  border-color: var(--color-accent-dim);
+  border-color: var(--band-copy-color);
   background: transparent;
-  color: var(--color-accent-dim);
+  color: var(--band-copy-color);
 }
 
 .band-actions .brand-band-link[href^="/about/"]:is(:hover, :focus-visible) {
@@ -452,6 +459,8 @@
 
   .brand-band .band-mark {
     object-position: calc(100% - 20px) center;
+    transform: translateY(12px) scale(0.8);
+    transform-origin: calc(100% - 20px) center;
   }
 
   .brand-band .band-identity,
