@@ -20,7 +20,7 @@ const PAGES = {
   "tattoos/flash/detail/index.html": "00e39d142e0609c14a8c2f1e2627a55a62fc18da8e16e14b7b045f715c18dd2a",
   "tattoos/flash/index.html": "14240f03e6db18dbdc812d6abb0c4397df6de183838b6b87be6d824cebfc7578",
   "tattoos/flash/maze/index.html": "c64e277f52d32203d26dfcd3d10d323aabfc5907c2f8041f344caefb9c881674",
-  "tattoos/index.html": "fa5bdb44c052c572606006a261a9d64cc1475f7debc73a9e35ba4ace823aec9d",
+  "tattoos/index.html": "ffcc41d0862b0c1307ccccd7528f33816500d75f3aeec054e33ab32af54f8778",
   "tattoos/inquire/consultation/index.html": "7b9c15b091eff6e688b1c8e7bdf6414bb50cce27323edc0cc85d7299635e0536",
   "tattoos/inquire/custom/index.html": "786b8b31e21fe1518244735ca6a906637e4332aebf07ace1ceef30bec3714710",
   "tattoos/inquire/index.html": "8f17808a958f0e404334521a55794d1627259325ad9efd80e355fd7ea3f72979",

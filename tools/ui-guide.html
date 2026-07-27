@@ -695,7 +695,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <div class="demo" data-medium="art">
       <section class="brand-band brand-band--thoughtpuppet" aria-labelledby="guide-thoughtpuppet-title">
         <div class="band-identity">
-          <a class="band-identity-link" href="/about/legend/?symbol=thoughtpuppet" aria-label="Open ThoughtPuppet in the Legend">
+          <a class="band-identity-link" href="/about/legend/thoughtpuppet/" aria-label="Open ThoughtPuppet in the Legend">
             <img class="band-mark" src="/assets/brand/thoughtpuppet-question-mark.svg" alt="" aria-hidden="true">
           </a>
         </div>
@@ -706,14 +706,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
           </div>
           <p class="band-copy">The identity band names the person or brand, gives concise context, and points toward deeper material.</p>
           <div class="band-actions">
-            <a class="brand-band-link" href="/about/visual-language/" onclick="return false">Learn more</a>
+            <a class="brand-band-link" href="/about/visual-language/" data-copy-id="brand-action-about" onclick="return false">Learn more about ThoughtPuppet</a>
           </div>
         </div>
       </section>
     </div>
 <pre><code>&lt;section class="brand-band brand-band--thoughtpuppet" aria-labelledby="brand-title"&gt;
   &lt;div class="band-identity"&gt;
-    &lt;a class="band-identity-link" href="/about/legend/?symbol=thoughtpuppet" aria-label="Open ThoughtPuppet in the Legend"&gt;
+    &lt;a class="band-identity-link" href="/about/legend/thoughtpuppet/" aria-label="Open ThoughtPuppet in the Legend"&gt;
       &lt;img class="band-mark" src="..." alt="" aria-hidden="true"&gt;
     &lt;/a&gt;
   &lt;/div&gt;
@@ -723,7 +723,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       &lt;h2 class="band-title" id="brand-title"&gt;Brand name&lt;/h2&gt;
     &lt;/div&gt;
     &lt;p class="band-copy"&gt;Concise identity context.&lt;/p&gt;
-    &lt;div class="band-actions"&gt;&lt;a class="brand-band-link" href="/about/..."&gt;Learn more&lt;/a&gt;&lt;/div&gt;
+    &lt;div class="band-actions"&gt;&lt;a class="brand-band-link" href="/about/..." data-copy-id="brand-action-about"&gt;Learn more about Brand&lt;/a&gt;&lt;/div&gt;
   &lt;/div&gt;
 &lt;/section&gt;</code></pre>
 
@@ -987,6 +987,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
 
     <h3>Ecosystem-first principle</h3>
     <p class="lead">Every page is a medium in a living ecosystem. When editing any page ask: what is its primary action? Which other mediums should it point toward? Is the connection conceptual, commercial, archival, experiential, or biographical? Connections should feel like discovery — quiet paths, traces, source threads, optional doors — never banner cross-promotion. A conversion page stays focused but carries at least one subtle reminder of the wider construct.</p>
+    <p class="lead"><strong>Related / Archive rule:</strong> when a canonical entity has a published public Archive dossier, the shared Related area ends with an <strong>Archive</strong> group parallel to “Source for” and “Uses symbol,” containing a card titled “Explore the record of this work.” Its media frame contains a bold serif capital A. Every other Related card uses the connected item’s canonical image; externally managed merchandise resolves its product photography from Shopify. Connection-card metadata names only the item type and its node; publication state is not displayed. The Archive card is supplied by <code>/api/connections/:id</code> and rendered by <code>js/construct-connections.js</code> with <code>css/construct-connections.css</code>; it is a companion view of the same entity, so it is not modeled as a relationship edge or added to Graph view.</p>
 
     <h3>Case conventions</h3>
     <table>

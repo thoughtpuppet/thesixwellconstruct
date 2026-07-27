@@ -227,6 +227,10 @@ async function loadFlashSheetDesigns(database, flashItemIds, { admin = false } =
   return map;
 }
 
+function legendCanonicalRoute(value) {
+  return `/about/legend/${encodeURIComponent(String(value || ""))}/`;
+}
+
 async function publicCatalog(request, env, resource, recordSlug = "") {
   const config = RESOURCE_CONFIG[resource];
   if (!config) return failure("Unknown catalog.", 404);
@@ -281,6 +285,14 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
       })(),
       media: media.get(row.id) || [],
     };
+    if (config.entityType === "visual_symbol") {
+      const canonicalRoute = legendCanonicalRoute(row.slug || row.id);
+      return {
+        ...record,
+        canonicalRoute,
+        canonical_route: canonicalRoute,
+      };
+    }
     if (resource !== "flash") return record;
     const canonicalRoute = `/tattoos/flash/${encodeURIComponent(row.slug || row.id)}/`;
     const sheetDesigns = flashSheetDesigns.get(row.id) || [];
@@ -319,6 +331,35 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
     };
   });
   if (recordSlug && !records[0]) return failure("Not found.", 404);
+  if (isLegendRecord) {
+    const record = records[0];
+    const [category, orderedResult] = await Promise.all([
+      database.prepare(
+        "SELECT id,name,slug,description,state,sort_order,updated_at FROM visual_symbol_categories WHERE id=? AND state='published'",
+      ).bind(record.category_id).first(),
+      database.prepare(
+        "SELECT id,slug,name,sort_order FROM visual_symbols WHERE state='published' ORDER BY sort_order,id",
+      ).all(),
+    ]);
+    const ordered = orderedResult.results || [];
+    const currentIndex = ordered.findIndex((entry) => entry.id === record.id);
+    const navigationRecord = (entry) => entry ? {
+      id: entry.id,
+      slug: entry.slug,
+      name: entry.name,
+      canonicalRoute: legendCanonicalRoute(entry.slug || entry.id),
+    } : null;
+    return json({
+      record,
+      category: category || null,
+      navigation: {
+        previous: currentIndex > 0 ? navigationRecord(ordered[currentIndex - 1]) : null,
+        next: currentIndex >= 0 && currentIndex < ordered.length - 1
+          ? navigationRecord(ordered[currentIndex + 1])
+          : null,
+      },
+    });
+  }
   return json(recordSlug ? { record: records[0] } : { records, count: records.length });
 }
 
@@ -571,7 +612,7 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
       WHEN 'event' THEN '/events/'||ev.slug||'/'
-      WHEN 'visual_symbol' THEN '/about/legend/?symbol='||vs.slug
+      WHEN 'visual_symbol' THEN '/about/legend/'||vs.slug||'/'
       ELSE COALESCE(sd.route,'') END canonical_route,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.year WHEN 'portfolio_item' THEN pi.year
@@ -922,7 +963,7 @@ function searchDocument(resource, row) {
       context.viewer_opening,
       ...(Array.isArray(context.sources) ? context.sources.flatMap((entry) => [entry.title, entry.creator, entry.note]) : []),
     ];
-    return { ...common, summary: row.meaning || "", body: [...influence, ...applications, ...variants, ...appearances].filter(Boolean).join(" "), theme_labels: parseJson(row.themes_json).join(", "), route: `/about/legend/?symbol=${encodeURIComponent(row.slug || row.id)}` };
+    return { ...common, summary: row.meaning || "", body: [...influence, ...applications, ...variants, ...appearances].filter(Boolean).join(" "), theme_labels: parseJson(row.themes_json).join(", "), route: legendCanonicalRoute(row.slug || row.id) };
   }
   return null;
 }
@@ -1402,18 +1443,20 @@ function entityDirectorySql(where="1=1"){
       WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/?work='||aw.slug)
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
       WHEN 'merch_item' THEN mi.route
-      WHEN 'visual_symbol' THEN '/about/legend/?symbol='||vs.slug
+      WHEN 'visual_symbol' THEN '/about/legend/'||vs.slug||'/'
       WHEN 'archive_record' THEN '/archive/?record='||ar.slug
       WHEN 'archive_collection' THEN '/archive/?collection='||ac.slug
       WHEN 'construct_node' THEN own.route WHEN 'construct_pathway' THEN cp.route
       WHEN 'event' THEN '/events/'||ev.slug||'/' ELSE '' END route,
     COALESCE(NULLIF(mi.image_url,''),NULLIF(pi.source_url,''),
+      CASE WHEN ce.entity_type='visual_symbol' THEN NULLIF(vs.image_url,'') ELSE '' END,
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/entity-media/'||m.id) FROM entity_media em JOIN media_assets m ON m.id=em.media_id
        WHERE em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' AND m.privacy='public'
          AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
        ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order LIMIT 1),
       CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(json_extract(vs.examples_json,'$[0].src'),'') ELSE '' END,
       CASE WHEN ce.entity_type='portfolio_item' THEN '/api/portfolio/media/'||pi.id ELSE '' END) image_url,
+    CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(vs.svg_markup,'') ELSE '' END media_markup,
     CASE ce.entity_type
       WHEN 'flash_item' THEN CASE WHEN fi.item_type='sheet' THEN 'Flash sheet' ELSE 'Flash' END
       WHEN 'flash_series' THEN 'Flash series' WHEN 'art_work' THEN 'Painting' WHEN 'portfolio_item' THEN 'Tattoo'
@@ -1457,7 +1500,7 @@ function entityDirectorySql(where="1=1"){
 
 function presentEntity(row){
   if(!row)return null;const nodeId=row.node_resolved_id||canonicalNodeAlias(row.legacy_node_id,row.entity_type);const fallback=nodeFallback(nodeId);
-  return {id:row.id,entityType:row.entity_type,title:row.title||row.id,state:row.state||row.visibility,visibility:row.visibility,route:row.route||"",imageUrl:row.image_url||"",kindLabel:row.kind_label||row.entity_type,detailLabel:row.detail_label||"",claimable:Number(row.claimable||0),shopifyHandle:row.shopify_handle||"",node:{id:nodeId,name:row.node_name||fallback.name,slug:row.node_slug||fallback.slug,color:row.node_color||fallback.color}};
+  return {id:row.id,entityType:row.entity_type,title:row.title||row.id,state:row.state||row.visibility,visibility:row.visibility,route:row.route||"",imageUrl:row.image_url||"",mediaMarkup:row.media_markup||"",kindLabel:row.kind_label||row.entity_type,detailLabel:row.detail_label||"",claimable:Number(row.claimable||0),shopifyHandle:row.shopify_handle||"",node:{id:nodeId,name:row.node_name||fallback.name,slug:row.node_slug||fallback.slug,color:row.node_color||fallback.color}};
 }
 
 async function entityRecords(database,ids){
@@ -1516,11 +1559,45 @@ async function relationshipApi(request,env,relationshipId=""){
   return failure("Method not allowed.",405);
 }
 
+async function publicArchiveCard(database,current){
+  const row=await database.prepare(`SELECT ad.archive_slug,ad.state,
+    COALESCE(cn.id,'') node_id,COALESCE(cn.name,'') node_name,COALESCE(cn.slug,'') node_slug,COALESCE(cn.color,'') node_color
+    FROM archive_dossiers ad
+    JOIN content_entities ce ON ce.id=ad.entity_id
+    LEFT JOIN construct_nodes cn ON cn.id='node-archive'
+    WHERE ad.entity_id=? AND ad.state='published' AND ad.public_visible=1 AND ce.visibility='public'
+    LIMIT 1`).bind(current.id).first();
+  if(!row)return null;
+  const fallback=NODE_FALLBACKS.archive;
+  return {
+    id:`archive-card-${current.id}`,
+    label:"Archive record",
+    related:{
+      id:`archive-dossier-${current.id}`,
+      entityType:"archive_dossier",
+      title:"Explore the record of this work.",
+      state:row.state,
+      visibility:"public",
+      route:`/archive/records/${encodeURIComponent(row.archive_slug)}/`,
+      imageUrl:"",
+      kindLabel:"Archive record",
+      detailLabel:"Process, history, and documentation",
+      claimable:0,
+      shopifyHandle:"",
+      node:{id:row.node_id||fallback.id,name:row.node_name||fallback.name,slug:row.node_slug||fallback.slug,color:row.node_color||fallback.color},
+    },
+  };
+}
+
 async function publicConnections(env,entityId){
   const database=db(env),currentMap=await entityRecords(database,[entityId]),current=currentMap.get(entityId);if(!current||current.visibility!=="public"||!current.route)return failure("Entity not found.",404);
-  const rows=(await database.prepare(`SELECT er.id,er.source_entity_id,er.target_entity_id,er.relationship_type_id,er.sort_order,rt.slug relationshipSlug,rt.forward_label,rt.reverse_label FROM entity_relationships er JOIN relationship_types rt ON rt.id=er.relationship_type_id WHERE er.public_visible=1 AND rt.public_visible=1 AND (er.source_entity_id=? OR er.target_entity_id=?) ORDER BY er.sort_order,er.created_at`).bind(entityId,entityId).all()).results||[];
+  const [relationshipResult,archiveCard]=await Promise.all([
+    database.prepare(`SELECT er.id,er.source_entity_id,er.target_entity_id,er.relationship_type_id,er.sort_order,rt.slug relationshipSlug,rt.forward_label,rt.reverse_label FROM entity_relationships er JOIN relationship_types rt ON rt.id=er.relationship_type_id WHERE er.public_visible=1 AND rt.public_visible=1 AND (er.source_entity_id=? OR er.target_entity_id=?) ORDER BY er.sort_order,er.created_at`).bind(entityId,entityId).all(),
+    publicArchiveCard(database,current),
+  ]);
+  const rows=relationshipResult.results||[];
   const entities=await entityRecords(database,rows.flatMap(row=>[row.source_entity_id,row.target_entity_id]));const records=[];for(const row of rows){const outgoing=row.source_entity_id===entityId,related=entities.get(outgoing?row.target_entity_id:row.source_entity_id);if(!related||related.visibility!=="public"||!related.route)continue;records.push({id:row.id,direction:outgoing?"outgoing":"incoming",label:outgoing?row.forward_label:row.reverse_label,relationshipType:{id:row.relationship_type_id,slug:row.relationshipSlug},related,sortOrder:Number(row.sort_order||0)})}
-  return json({entity:current,records,count:records.length},{cache:"public, max-age=60"});
+  return json({entity:current,records,archiveCard,count:records.length,cardCount:records.length+(archiveCard?1:0)},{cache:"public, max-age=60"});
 }
 
 async function taxonomyApi(request,env){const database=db(env);if(request.method==="GET"){const rows=(await database.prepare("SELECT * FROM taxonomy_terms ORDER BY kind,sort_order,name").all()).results||[];return json({records:rows,count:rows.length});}const b=await readJson(request);const kind=b?.kind==="theme"?"theme":"tag";const name=text(b?.name,160);if(!name)return failure("A term name is required.");const termId=text(b.id,160)||id("term");await database.prepare("INSERT INTO taxonomy_terms(id,kind,name,slug,description,public_visible,sort_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,datetime('now'),datetime('now'))").bind(termId,kind,name,slug(b.slug||name),text(b.description,2000),b.public_visible===false?0:1,Number(b.sort_order)||0).run();return json({record:await database.prepare("SELECT * FROM taxonomy_terms WHERE id=?").bind(termId).first()},{status:201});}

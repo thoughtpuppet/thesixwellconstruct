@@ -8,7 +8,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) => readFile(path.join(ROOT, relativePath), "utf8");
 
 test("identity-band landings share one stylesheet and explicit structure", async () => {
-  const legendSlugs = ["thoughtpuppet", "six-well", "art-pill-tattoo-house"];
+  const legendSlugs = ["thoughtpuppet", "six-well", "art-pill"];
   const pages = await Promise.all([
     read("art/index.html"),
     read("merch/index.html"),
@@ -28,7 +28,7 @@ test("identity-band landings share one stylesheet and explicit structure", async
     assert.match(html, /class="[^"]*\bband-content\b/);
     assert.match(html, /class="[^"]*\bband-actions\b/);
     assert.match(html, /class="[^"]*\bbrand-band-link\b/);
-    assert.match(html, /<div class="band-identity">\s*<a class="band-identity-link" href="\/about\/legend\/\?symbol=[^"]+" aria-label="[^"]+">\s*<img class="band-mark"[^>]*>\s*<\/a>\s*<\/div>\s*<div class="band-content">\s*<div class="band-lockup">\s*<p class="band-kicker"[\s\S]*?<h2 class="band-title"/);
+    assert.match(html, /<div class="band-identity">\s*<a class="band-identity-link" href="\/about\/legend\/[^/?"]+\/" aria-label="[^"]+">\s*<img class="band-mark"[^>]*>\s*<\/a>\s*<\/div>\s*<div class="band-content">\s*<div class="band-lockup">\s*<p class="band-kicker"[\s\S]*?<h2 class="band-title"/);
     assert.doesNotMatch(html, /--band-/);
     for (const legacyClass of ["brand-kicker", "brand-title", "brand-copy", "brand-lockup", "venture-stamp", "brand-link"]) {
       assert.doesNotMatch(html, new RegExp(`(?:class="|\\s)${legacyClass}(?:\\s|")`));
@@ -38,8 +38,23 @@ test("identity-band landings share one stylesheet and explicit structure", async
   }
 
   pages.forEach((html, index) => {
-    assert.match(html, new RegExp(`href="/about/legend/\\?symbol=${legendSlugs[index]}"`));
+    assert.match(html, new RegExp(`href="/about/legend/${legendSlugs[index]}/"`));
+    const actionTags = [...html.matchAll(/<a class="brand-band-link"[^>]*>/g)].map((match) => match[0]);
+    assert.ok(actionTags.length > 0, "identity band must expose at least one action");
+    actionTags.forEach((tag) => {
+      assert.match(tag, /\bdata-copy-id="[^"]+"/, "every editable identity action needs a stable copy ID");
+    });
   });
+
+  assert.match(pages[0], /href="\/about\/visual-language\/" data-copy-id="art-brand-action-about">learn more about thoughtpuppet<\/a>/);
+  assert.match(pages[1], /href="\/about\/six-well\/" data-copy-id="merch-brand-action-about">learn more about six\.well<\/a>/);
+
+  const tattooActionIds = [...pages[2].matchAll(/<a class="brand-band-link"[^>]*\bdata-copy-id="([^"]+)"/g)]
+    .map((match) => match[1]);
+  assert.equal(new Set(tattooActionIds).size, tattooActionIds.length, "Tattoo identity action copy IDs must be unique");
+  assert.match(pages[2], /href="\/about\/artpilltattoohouse\/" data-copy-id="tattoos-brand-action-about">learn more about art\.pill<\/a>/);
+  assert.match(pages[2], /href="\/about\/founder\/" data-copy-id="tattoos-artist-action-about">learn more about saiel<\/a>/);
+  assert.match(pages[2], /href="\/tattoos\/portfolio\/" data-copy-id="tattoos-artist-action-portfolio">view saiel’s tattoo portfolio<\/a>/);
 
   assert.match(
     pages[2],

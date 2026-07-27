@@ -342,6 +342,27 @@
   transition: border-color var(--painting-fast), background var(--painting-fast);
 }
 
+.painting-detail-page .related-item--with-media {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  gap: var(--painting-s3);
+}
+
+.painting-detail-page .related-media {
+  width: 62px;
+  height: 62px;
+  border: 5px solid color-mix(in srgb, var(--item-color) 58%, transparent);
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.painting-detail-page .related-media--archive {
+  display: grid;
+  place-items: center;
+  color: var(--item-color);
+  font: 900 32px/1 var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  text-transform: uppercase;
+}
+
 .painting-detail-page .related-item:hover {
   border-color: var(--item-color, var(--painting-ring-soft));
   background: rgba(0, 0, 0, 0.12);

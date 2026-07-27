@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ART_PAGE = path.join(ROOT, "art", "index.html");
-const BASELINE_HASH = "b03d46c6770d917b5dc8ffe338d90c36b307e25f6114db36f65acf4edf45767d";
+const BASELINE_HASH = "bffe22a857e37dbbbec0f5e9b1b2267d96bbf0ebe2a5ffe4cb37f1dbc5cfe0db";
 
 function cleanText(value) {
   return value

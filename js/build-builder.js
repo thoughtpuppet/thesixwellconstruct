@@ -719,7 +719,7 @@ import { buildCompositionSnapshot, relatedSymbolIds } from "./build-composition.
     drawerNoteInput.disabled = !isSelected;
     drawerNoteHelp.textContent = isSelected ? "Saved with this symbol." : "Add this symbol to enable your description.";
     drawerNoteCount.textContent = `${drawerNoteInput.value.length} / ${NOTE_MAX_LENGTH}`;
-    drawerFullRecord.href = `/about/legend/?symbol=${encodeURIComponent(sym.slug || sym.id)}`;
+    drawerFullRecord.href = sym.canonicalRoute || sym.canonical_route || `/about/legend/${encodeURIComponent(sym.slug || sym.id)}/`;
     const index = SYMBOLS.findIndex((symbol) => symbol.id === sym.id);
     drawerPrevious.disabled = index <= 0;
     drawerNext.disabled = index < 0 || index >= SYMBOLS.length - 1;

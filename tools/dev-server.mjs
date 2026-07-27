@@ -64,6 +64,7 @@ const checkRoutes = [
   ["/page-visibility", 200],
   ["/about/", 200],
   ["/about/visual-language/", 200],
+  ["/about/legend/open-eye/", 200],
   ["/about/breakdown/", 200],
   ["/about/founder/", 200],
   ["/about/mediums/", 200],
@@ -231,6 +232,14 @@ function archiveDynamicRouteFile(urlPath) {
   return path.resolve(root, "archive", parts[1], "index.html");
 }
 
+function legendRecordRouteFile(urlPath) {
+  const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "legend") return null;
+  if (["categories-managed-preview", "detail", "managed-preview"].includes(parts[2])) return null;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(parts[2])) return null;
+  return path.resolve(root, "about", "legend", "detail", "index.html");
+}
+
 function isHiddenByHomeOnlyMode(urlPath) {
   if (!hidePublicPagesExceptHome) return false;
   const decoded = decodeURIComponent(urlPath.split("?")[0].split("#")[0]);
@@ -282,6 +291,8 @@ function safePath(urlPath) {
   if (isHomeRoute(decoded)) return path.resolve(root, "home", "index.html");
   const archiveDynamicFile = archiveDynamicRouteFile(decoded);
   if (archiveDynamicFile) return archiveDynamicFile;
+  const legendRecordFile = legendRecordRouteFile(decoded);
+  if (legendRecordFile) return legendRecordFile;
 
   const clean = decoded === "/" ? "/index.html" : decoded;
   if (isEventDetailRoute(clean)) return eventDetailRouteFile(clean);

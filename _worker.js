@@ -328,6 +328,88 @@ function archiveDynamicAssetPath(pathname) {
   return "";
 }
 
+const LEGEND_RECORD_RESERVED_SLUGS = new Set([
+  "categories-managed-preview",
+  "detail",
+  "managed-preview",
+]);
+
+function legendRecordSlug(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "legend" || hasFileExtension(pathname)) return "";
+  let candidate = "";
+  try {
+    candidate = decodeURIComponent(parts[2]);
+  } catch {
+    return "";
+  }
+  if (
+    LEGEND_RECORD_RESERVED_SLUGS.has(candidate) ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate)
+  ) return "";
+  return candidate;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[character]));
+}
+
+function legendRecordJson(payload) {
+  return JSON.stringify(payload)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+async function serveLegendRecordPage(request, env, slug) {
+  const apiUrl = new URL(`/api/legend/${encodeURIComponent(slug)}`, request.url);
+  const apiResponse = await handleConstructApi(new Request(apiUrl, {
+    method: "GET",
+    headers: { accept: "application/json" },
+  }), env);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+
+  const payload = await apiResponse.json();
+  if (!payload.record || payload.record.slug !== slug) return notFoundPage(request, env);
+
+  const assetResponse = await servePublicAsset(request, env, "/about/legend/detail/index.html");
+  if (request.method === "HEAD") return assetResponse;
+
+  const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
+  const canonicalUrl = `${siteOrigin}${payload.record.canonicalRoute}`;
+  const title = `${payload.record.name} · The Legend · the six.well construct`;
+  const description = payload.record.meaning || "A published symbol record from the living Legend.";
+  const html = (await assetResponse.text())
+    .replace(
+      /<title data-legend-record-title>[\s\S]*?<\/title>/,
+      `<title data-legend-record-title>${escapeHtml(title)}</title>`,
+    )
+    .replace(
+      /<meta data-legend-record-description name="description" content="[^"]*">/,
+      `<meta data-legend-record-description name="description" content="${escapeHtml(description)}">`,
+    )
+    .replace(
+      /<link data-legend-record-canonical rel="canonical" href="[^"]*">/,
+      `<link data-legend-record-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`,
+    )
+    .replace(
+      '<script id="legend-record-data" type="application/json"></script>',
+      `<script id="legend-record-data" type="application/json">${legendRecordJson(payload)}</script>`,
+    );
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "no-store");
+  return new Response(html, { status: assetResponse.status, headers });
+}
+
 function isHiddenByHomeOnlyMode(pathname) {
   if (!HIDE_PUBLIC_PAGES_EXCEPT_HOME) return false;
   const normalizedPath = normalizePath(pathname);
@@ -996,6 +1078,21 @@ export default {
       const redirectUrl = new URL(request.url);
       redirectUrl.pathname = url.pathname === "/legend" ? "/about/legend/" : `/about${url.pathname}`;
       return Response.redirect(redirectUrl, 308);
+    }
+
+    if (normalizePath(url.pathname) === "/about/legend/detail") {
+      return notFoundPage(request, env);
+    }
+
+    const requestedLegendSlug = legendRecordSlug(url.pathname);
+    if (requestedLegendSlug) {
+      if (!url.pathname.endsWith("/")) {
+        const canonicalUrl = new URL(request.url);
+        canonicalUrl.pathname = `${normalizePath(url.pathname)}/`;
+        canonicalUrl.search = "";
+        return Response.redirect(canonicalUrl, 308);
+      }
+      return serveLegendRecordPage(request, env, requestedLegendSlug);
     }
 
     if (isFrontDoorPath(url.pathname)) {

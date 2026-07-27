@@ -13,21 +13,21 @@ const EXPECTED_IDENTITIES = [
     id: "identity-thoughtpuppet",
     slug: "thoughtpuppet",
     name: "ThoughtPuppet",
-    route: "/about/legend/?symbol=thoughtpuppet",
+    route: "/about/legend/thoughtpuppet/",
     sourceRoute: "/art/",
   },
   {
     id: "identity-six-well",
     slug: "six-well",
     name: "Six.Well",
-    route: "/about/legend/?symbol=six-well",
+    route: "/about/legend/six-well/",
     sourceRoute: "/merch/",
   },
   {
     id: "identity-art-pill-tattoo-house",
     slug: "art-pill-tattoo-house",
     name: "Art.Pill Tattoo House",
-    route: "/about/legend/?symbol=art-pill-tattoo-house",
+    route: "/about/legend/art-pill-tattoo-house/",
     sourceRoute: "/tattoos/",
   },
 ];
@@ -95,6 +95,7 @@ test("identity marks are published as managed Legend cards", () => {
 test("bundled Legend fallback mirrors the managed Identity records", () => {
   const fallback = JSON.parse(source("assets/build/symbols.json"));
   const legendCatalog = source("js/legend-catalog.js");
+  const legendView = source("js/legend-record-view.js");
 
   for (const expected of EXPECTED_IDENTITIES) {
     const symbol = fallback.symbols.find((record) => record.id === expected.id);
@@ -105,7 +106,7 @@ test("bundled Legend fallback mirrors the managed Identity records", () => {
     assert.deepEqual(symbol.examples.map((example) => example.href), [expected.sourceRoute]);
   }
 
-  assert.match(legendCatalog, /searchParams\.get\("symbol"\)/);
-  assert.match(legendCatalog, /record\.slug \|\| record\.id/);
-  assert.match(legendCatalog, /openSymbol\(selectedRecord,\s*\{\s*push:\s*false/);
+  assert.match(legendCatalog, /legend\.canonicalRoute\(record\)/);
+  assert.match(legendView, /\/about\/legend\/\$\{encodeURIComponent\(record\?\.slug \|\| record\?\.id \|\| ""\)\}\//);
+  assert.doesNotMatch(legendCatalog, /searchParams|pushState|popstate/);
 });

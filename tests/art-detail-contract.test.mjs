@@ -138,11 +138,41 @@ test("managed original acquisition uses the painting-specific acquire label", ()
   assert.match(source, /\/art\/acquisitioninquiry\.html\?work=/);
 });
 
-test("Lost Marbles keeps its preview, archive fallback, and natural title wrapping", () => {
+test("Lost Marbles keeps its preview, final related archive fallback, and natural title wrapping", () => {
   const html = readFileSync(join(ROOT, "art", "lostmarblespainting.html"), "utf8");
+  const relatedStart = html.indexOf('<section class="related-block" data-legacy-connections>');
+  const hoodie = html.indexOf('href="/merch/lostmarbles-hoodie.html"', relatedStart);
+  const archive = html.indexOf('href="/archive/records/lostmarbles/"', relatedStart);
+
   assert.match(html, /title-preview-fbd19d/);
-  assert.match(html, /Explore the Marbles archive/);
+  assert.match(html, /Explore the record of this work\./);
+  assert.match(html, /apparel · merch/);
+  assert.match(html, /archive record · archive/);
+  assert.match(html, /href="\/archive\/records\/lostmarbles\/"[\s\S]*data-archive-card-fallback/);
+  assert.match(html, /related-media related-media--archive" aria-hidden="true">A</);
+  assert.equal((html.match(/<section class="related-block"/g) || []).length, 1);
+  assert.ok(relatedStart >= 0 && hoodie > relatedStart && archive > hoodie, "Archive fallback must be the final card in Related");
   assert.doesNotMatch(html, /painting-title[^>]*>[\s\S]*?<br/i);
+});
+
+test("shared connections render a published archive dossier as the final Related group, not a graph relationship", () => {
+  const source = readFileSync(join(ROOT, "js", "construct-connections.js"), "utf8");
+
+  assert.match(source, /function legacyArchiveCard\(host\)/);
+  assert.match(source, /archiveFallback=legacyArchiveCard\(host\)/);
+  assert.match(source, /archiveCard=payload\.archiveCard\|\|archiveFallback/);
+  assert.match(source, /if\(!records\.length&&!archiveCard\)return host/);
+  assert.match(source, /archiveGroup=group\("Archive",\[archiveCard\],payload\.entity\.node\.color\)/);
+  assert.match(source, /archiveGroup\.classList\.add\("cc-group--archive"\)/);
+  assert.match(source, /content\.appendChild\(archiveGroup\)/);
+  assert.match(source, /entity\.entityType==="archive_dossier"[\s\S]*cc-card-media--monogram","A"/);
+  assert.match(source, /\/api\/shop\/product\?handle=/);
+  assert.match(source, /\/api\/legend\//);
+  assert.match(source, /function addSymbol\(a,markup\)/);
+  assert.match(source, /meta\.append\(el\("span","cc-badge",entity\.kindLabel\|\|entity\.entityType\.replaceAll\("_"," "\)\),el\("span","cc-badge",entity\.node\.name\)\)/);
+  assert.doesNotMatch(source, /meta\.append\([^;]*entity\.state/);
+  assert.match(source, /const mapView=map\(records,payload\.entity\)/);
+  assert.doesNotMatch(source, /map\(\[\.\.\.records,\s*archiveCard\]/);
 });
 
 test("print state resolver covers intent, Shopify state, and failure fallbacks", async () => {
@@ -203,10 +233,43 @@ test("Art print intent is managed and public connections expose one Shopify prin
     body: { public_visible: true },
   }), env));
   assert.equal(published.response.status, 200);
+  database.exec(`
+    UPDATE entity_relationships SET public_visible=1 WHERE id='connection-marbles-hoodie-art';
+    INSERT OR IGNORE INTO entity_relationships
+      (id,source_entity_id,target_entity_id,relationship_type_id,public_visible,internal_notes,sort_order,created_by,created_at,updated_at)
+    VALUES
+      ('test-marbles-open-eye','art-marbles','fig-eye','rel-uses-symbol',1,'Test fixture.',3,'test',datetime('now'),datetime('now'));
+  `);
 
   const connections = await jsonResponse(await handleConstructApi(request("/api/connections/art-marbles"), env));
   const print = connections.payload.records.find((record) => record.related.id === "merch-marbles-print");
+  const hoodie = connections.payload.records.find((record) => record.related.id === "merch-lostmarbles-hoodie");
+  const eye = connections.payload.records.find((record) => record.related.id === "fig-eye");
   assert.equal(print.related.shopifyHandle, "marbles-print");
+  assert.equal(print.related.imageUrl, "/assets/paintings/am-i-losing-my-marbles-or-hiding-them.jpg");
+  assert.equal(hoodie.related.imageUrl, "");
+  assert.equal(hoodie.related.shopifyHandle, "lostmarbles-hoodie");
+  assert.equal(eye.related.imageUrl, "");
+  assert.match(eye.related.mediaMarkup, /^<svg/);
+  assert.equal(connections.payload.archiveCard.label, "Archive record");
+  assert.equal(connections.payload.archiveCard.related.title, "Explore the record of this work.");
+  assert.equal(connections.payload.archiveCard.related.entityType, "archive_dossier");
+  assert.equal(connections.payload.archiveCard.related.route, "/archive/records/lostmarbles/");
+  assert.equal(connections.payload.archiveCard.related.node.id, "node-archive");
+  assert.equal(connections.payload.cardCount, connections.payload.count + 1);
+  assert.equal(connections.payload.records.some((record) => record.related.entityType === "archive_dossier"), false);
+
+  const archiveOnly = await jsonResponse(await handleConstructApi(request("/api/connections/art-lust"), env));
+  assert.equal(archiveOnly.response.status, 200);
+  assert.equal(archiveOnly.payload.records.length, 0);
+  assert.equal(archiveOnly.payload.archiveCard.related.route, "/archive/records/lust/");
+  assert.equal(archiveOnly.payload.cardCount, 1);
+
+  database.exec("UPDATE archive_dossiers SET public_visible=0 WHERE entity_id='art-lust'");
+  const privateArchive = await jsonResponse(await handleConstructApi(request("/api/connections/art-lust"), env));
+  assert.equal(privateArchive.response.status, 200);
+  assert.equal(privateArchive.payload.archiveCard, null);
+  assert.equal(privateArchive.payload.cardCount, 0);
 
   database.exec(`
     INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at)

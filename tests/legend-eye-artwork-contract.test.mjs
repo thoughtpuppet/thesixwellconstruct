@@ -97,11 +97,12 @@ test("bundled Build data mirrors the canonical SVGs and Watchers variants", () =
 
 test("Legend surfaces render canonical inline SVGs and linked visual variants", () => {
   const legendCatalog = source("js/legend-catalog.js");
+  const legendView = source("js/legend-record-view.js");
   const manager = source("studio/construct-manager.js");
   const home = source("home/index.html");
 
-  assert.match(legendCatalog, /safeSvg\(record\.svg_markup\)/);
-  assert.match(legendCatalog, /variant\.href/);
+  assert.match(legendCatalog, /legend\.safeSvg\(record\.svg_markup\)/);
+  assert.match(legendView, /variant\.href/);
   assert.match(manager, /Related page/);
   assert.match(home, /function drawEyes/);
   assert.match(home, /eyeImg1/);
