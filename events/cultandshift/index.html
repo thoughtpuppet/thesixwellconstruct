@@ -11,17 +11,13 @@
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/venture-pages.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <style>
   :root {
     --venture-color: var(--color-events);
     --venture-accent: var(--color-events);
     --venture-dim: var(--color-events-dim);
     --venture-wash: rgba(0, 93, 37, 0.1);
-  }
-  .cult-hero .venture-title {
-    font-size: clamp(46px, 8.8vw, 136px);
-    line-height: 0.9;
-    white-space: nowrap;
   }
   .event-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,440px); gap:42px; align-items:start; }
   .stack { display:grid; gap:22px; }
@@ -39,7 +35,6 @@
   @media (max-width:900px) {
     .event-grid { grid-template-columns:1fr; }
     .detail-row { grid-template-columns:1fr; gap:4px; }
-    .cult-hero .venture-title { font-size: clamp(30px, 9.4vw, 44px); }
   }
 </style>
 <link rel="stylesheet" href="/css/forms.css">
@@ -47,10 +42,10 @@
 <body class="venture-page" data-venture="events">
   <div class="venture-grain" aria-hidden="true"></div>
   <main class="venture-shell entrance-fade">
-    <section class="venture-hero cult-hero" aria-labelledby="page-title">
+    <section class="venture-hero cult-hero site-hero site-hero--supporting" aria-labelledby="page-title">
       <div>
         <span class="venture-kicker">recurring showcase</span>
-        <h1 class="venture-title" id="page-title">Cult &amp; Shift.</h1>
+        <h1 class="venture-title hero-title" id="page-title">Cult &amp; Shift.</h1>
       </div>
     </section>
 

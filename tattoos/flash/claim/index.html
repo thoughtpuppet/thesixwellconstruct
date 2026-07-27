@@ -28,7 +28,7 @@
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
 main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .layout { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(380px,560px); gap:72px; align-items:start; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(50px,8vw,112px); letter-spacing:-0.05em; line-height:0.88; color:var(--type-hero-color, var(--venture-accent)); text-transform:uppercase; margin-bottom:38px; }
+  .page-title { margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
   .path-list { list-style:none; display:flex; flex-direction:column; max-width:620px; border-top:5px solid var(--ring-faint); margin-top:44px; }
@@ -83,7 +83,6 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
-    .page-title { font-size:clamp(54px,18vw,88px); }
     .form-panel { padding:30px 0; }
     .selected-card { grid-template-columns:1fr; }
     .sheet-option { grid-template-columns:20px 30px minmax(0,1fr); }
@@ -98,6 +97,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
@@ -123,9 +123,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       <span class="breadcrumb-current">Claim</span>
     </nav>
     <div class="layout">
-      <section>
-        <h1 class="page-title">Claim Flash.</h1>
-        <p class="intro-body">Use this path when you already know the flash design you want. The selected title, code, series, size, and pricing note carry into review with your placement, timing, and budget range.</p>
+      <section class="site-hero site-hero--supporting">
+        <h1 class="page-title hero-title">Claim Flash.</h1>
+        <p class="intro-body hero-descriptor">Use this path when you already know the flash design you want. The selected title, code, series, size, and pricing note carry into review with your placement, timing, and budget range.</p>
         <p class="intro-body">Submitting does not book the appointment yet. It begins review for availability, placement, scale, and fit. Approved claims receive a private token booking link for scheduling and deposit.</p>
         <ul class="path-list">
           <li>Choose the available flash design, or arrive here from an individual design page with it already selected.</li>

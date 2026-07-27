@@ -28,7 +28,7 @@
   header.top { position:sticky; top:0; z-index:50; display:flex; align-items:center; justify-content:flex-end; padding:var(--s5) var(--s6); min-height:72px; }
 main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:var(--s8) var(--s6) var(--s7); }
   .layout { display:grid; grid-template-columns:minmax(0,0.72fr) minmax(360px,580px); gap:72px; align-items:start; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(42px,7vw,92px); letter-spacing:-0.05em; line-height:0.9; color:var(--type-hero-color, var(--venture-accent)); margin-bottom:38px; }
+  .page-title { margin-bottom:38px; }
   .intro-body { font-size:16px; line-height:1.8; color:var(--text); max-width:660px; }
   .intro-body + .intro-body { margin-top:20px; }
   .guide-stack { grid-column:1 / -1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:0; max-width:none; }
@@ -78,6 +78,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
@@ -97,9 +98,9 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   </header>
   <main>
     <div class="layout">
-      <section>
-        <h1 class="page-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
-        <p class="intro-body" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash.&nbsp; Submitting starts review; it does not reserve an appointment.</p>
+      <section class="site-hero site-hero--supporting">
+        <h1 class="page-title hero-title" data-copy-id="inquiry-page-title">Project Inquiry.</h1>
+        <p class="intro-body hero-descriptor" data-copy-id="inquiry-intro-primary">Use this form for an original custom tattoo that is not available flash.&nbsp; Submitting starts review; it does not reserve an appointment.</p>
       </section>
       <section class="form-panel" aria-label="Tattoo inquiry form">
         <aside class="portfolio-reference" id="portfolioReference" hidden aria-live="polite"></aside>

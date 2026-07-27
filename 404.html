@@ -54,12 +54,6 @@
   }
   h1 {
     margin:0 0 20px;
-    font-family:var(--sans);
-    font-size:23vw;
-    line-height:0.88;
-    letter-spacing:-0.02em;
-    text-transform:uppercase;
-    color:var(--accent);
   }
   a {
     display:inline-block;
@@ -76,13 +70,15 @@
   }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body>
 <canvas id="bg"></canvas>
-<main>
-  <h1>Nope.</h1>
-  <p>Come back later.</p>
+<main class="site-hero site-hero--supporting">
+  <h1 class="hero-title">Nope.</h1>
+  <p class="hero-descriptor">Come back later.</p>
   <a href="/home/">Return home</a>
 </main>
 <script>

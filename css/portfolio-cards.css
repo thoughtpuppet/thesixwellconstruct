@@ -1,0 +1,196 @@
+/* ============================================================
+   portfolio-cards.css — the six.well construct
+   Shared Art and Tattoo portfolio card grid.
+
+   Required page tokens:
+   --venture-color, --ring-faint, --ring-soft, --bg-raised,
+   --text, --text-mute, --text-ghost, --sans, and --serif.
+============================================================ */
+
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--landing-grid-gap-active, var(--grid-gap, 16px));
+}
+
+.work-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  cursor: pointer;
+  appearance: none;
+  background: var(--bg-raised, #111111);
+  border: 5px solid var(--ring-faint);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition: border-color var(--t-med, 0.35s cubic-bezier(0.2, 0, 0.2, 1));
+}
+
+.work-card:hover,
+.work-card:focus-visible {
+  border-color: var(--venture-color);
+}
+
+.work-card:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.work-card > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: brightness(0.9);
+  transform: scale(1);
+  transition:
+    transform var(--t-slow, 0.5s cubic-bezier(0.22, 1, 0.36, 1)),
+    filter var(--t-slow, 0.5s cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.work-card:hover > img,
+.work-card:focus-visible > img {
+  transform: scale(0.97);
+  filter: brightness(0.45);
+}
+
+.work-badge {
+  position: absolute;
+  z-index: 2;
+  top: var(--s3, 12px);
+  left: var(--s3, 12px);
+  color: var(--venture-color);
+  font-family: var(--serif, Georgia, serif);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-med, 0.35s cubic-bezier(0.2, 0, 0.2, 1));
+}
+
+.work-card:hover .work-badge,
+.work-card:focus-visible .work-badge {
+  opacity: 0.85;
+}
+
+.work-project-badge {
+  position: absolute;
+  z-index: 2;
+  top: var(--s3, 12px);
+  right: var(--s3, 12px);
+  padding: 6px 9px;
+  background: var(--venture-color);
+  color: var(--text);
+  font-family: var(--sans, "Inter", sans-serif);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.work-meta {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: var(--s6, 40px) var(--s4, 16px) var(--s4, 16px);
+  background: linear-gradient(to top, rgba(14, 14, 14, 0.92) 0%, transparent 100%);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity var(--t-med, 0.35s cubic-bezier(0.2, 0, 0.2, 1)),
+    transform var(--t-med, 0.35s cubic-bezier(0.2, 0, 0.2, 1));
+}
+
+.work-card:hover .work-meta,
+.work-card:focus-visible .work-meta {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.work-title {
+  display: block;
+  margin-bottom: var(--s1, 4px);
+  color: var(--body-text, var(--text));
+  font-family: var(--sans, "Inter", sans-serif);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.work-info {
+  display: block;
+  color: var(--text-mute);
+  font-family: var(--serif, Georgia, serif);
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+.work-card.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.work-card.placeholder:hover {
+  border-color: var(--ring-soft);
+}
+
+.work-card.placeholder > img,
+.work-card.placeholder .work-meta,
+.work-card.placeholder .work-badge {
+  display: none;
+}
+
+.placeholder-label {
+  color: var(--text-ghost);
+  font-family: var(--serif, Georgia, serif);
+  font-size: 10px;
+  font-style: italic;
+  letter-spacing: 0.3em;
+  line-height: 2;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.work-card.hidden {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .work-grid {
+    gap: var(--landing-grid-gap-active, var(--grid-gap-tablet, 14px));
+  }
+}
+
+@media (max-width: 700px) {
+  .work-grid {
+    gap: var(--landing-grid-gap-active, var(--grid-gap-mobile, 12px));
+  }
+}
+
+@media (max-width: 380px) {
+  .work-grid {
+    gap: var(--landing-grid-gap-active, var(--grid-gap-compact, 12px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .work-card,
+  .work-card > img,
+  .work-badge,
+  .work-meta {
+    transition: none;
+  }
+}

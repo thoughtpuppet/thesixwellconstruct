@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/booking-calendar.css">
 <style>
@@ -35,7 +36,7 @@
   main{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:var(--s8) var(--s6) var(--s7);}
   .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
 
-  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,96px);letter-spacing:-0.05em;line-height:0.88;color:var(--art);text-transform:uppercase;margin-bottom:var(--s6);}
+  .page-title{margin-bottom:var(--s6);}
   .page-body{font-size:16px;line-height:1.8;color:var(--text-mute);max-width:560px;}
   .page-body+.page-body{margin-top:var(--s4);}
 
@@ -73,7 +74,6 @@
   @media(max-width:640px){
     header.top{padding:var(--s4) var(--s5);}
     main{padding:var(--s6) var(--s5) var(--s7);}
-    .page-title{font-size:clamp(34px,11vw,90px);}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
   }
   @media(max-width:700px){
@@ -81,6 +81,7 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
 <body data-venture="art">
@@ -103,9 +104,9 @@
     <div class="layout">
 
       <!-- LEFT — INFO -->
-      <section>
-        <h1 class="page-title">Studio Visit.</h1>
-        <p class="page-body">Spend time inside the art-making practice. An open studio visit is a scheduled window to see the space, the works in progress, finished paintings, and the process behind the construct.</p>
+      <section class="site-hero site-hero--supporting">
+        <h1 class="page-title hero-title">Studio Visit.</h1>
+        <p class="page-body hero-descriptor">Spend time inside the art-making practice. An open studio visit is a scheduled window to see the space, the works in progress, finished paintings, and the process behind the construct.</p>
         <p class="page-body">Pick a time below. A deposit holds your visit; it can go toward anything you take home, or simply stand as your hold on the date.</p>
 
         <div class="visit-rail">
@@ -202,7 +203,7 @@
 
             <label class="form-check">
               <input class="form-check__input" type="checkbox" name="understand" value="yes" required>
-              <span class="form-check__label">I understand the deposit holds my visit and is settled with the studio. This is an open studio visit, not a tattoo appointment.</span>
+              <span class="form-check__label">I understand the deposit holds my visit and is settled with the studio. This is an open studio visit.</span>
             </label>
 
             <div class="submit-row">

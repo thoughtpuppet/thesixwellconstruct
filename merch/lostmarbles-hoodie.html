@@ -227,13 +227,7 @@
     letter-spacing:0.22em; text-transform:uppercase;
     color:var(--label-ink, var(--bg)); opacity:1;
   }
-  .product-name {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(32px,4vw,56px);
-    letter-spacing:-0.04em; line-height:0.92;
-    color:var(--text);
-    margin-bottom:var(--s5);
-  }
+  .product-name { margin-bottom:var(--s5); }
   .product-price {
     font-family:var(--serif); font-size:20px;
     letter-spacing:0.04em; color:var(--text-mute);
@@ -610,6 +604,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="merch" data-product-handle="lostmarbles-hoodie" data-construct-entity="merch-lostmarbles-hoodie">
 
@@ -645,7 +640,7 @@
   </nav>
 
   <main>
-    <section class="product-hero">
+    <section class="product-hero site-hero site-hero--supporting">
       <div class="product-image">
         <div class="product-gallery-shell">
           <div class="product-image-main">
@@ -664,7 +659,7 @@
           <span class="source-label" id="sourceLabel">thoughtpuppet</span>
         </div>
 
-        <h1 class="product-name" id="productName">LOST MARBLES. HOODIE</h1>
+        <h1 class="product-name hero-title" id="productName">LOST MARBLES. HOODIE</h1>
         <p class="product-price" id="productPrice">$130</p>
         <p class="product-edition" id="productEdition">limited edition &mdash; 30 pieces</p>
 

@@ -66,6 +66,7 @@ body.is-portfolio-detail main { display:none; }
 #work-overlay.open .overlay-details { opacity:1; transform:none; }
 .portfolio-detail-kicker,.portfolio-detail-label { color:var(--venture-color); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:.18em; text-transform:uppercase; }
 .overlay-title { margin:8px 0 12px; }
+.overlay-title:focus { outline:none; }
 .overlay-subtitle { margin:0; }
 .overlay-tags { margin:0; }
 .portfolio-detail-block { display:grid; gap:12px; border-top:5px solid var(--ring-faint); padding-top:20px; }

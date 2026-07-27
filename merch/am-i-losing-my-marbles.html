@@ -234,16 +234,7 @@
     color:var(--label-ink, var(--bg)); opacity:1;
   }
 
-  /* painting title — big, Inter 900 */
-  .product-title {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(28px,4vw,52px);
-    letter-spacing:-0.03em; line-height:0.95;
-    color:var(--text); /* amber */
-    margin-bottom:var(--s5);
-    /* deliberate: title in amber not body-white —
-       same rule as landing page wordmark */
-  }
+  .product-title { margin-bottom:var(--s5); }
 
   /* metadata row — medium · dimensions · year */
   .product-meta {
@@ -569,6 +560,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="merch">
 
@@ -619,7 +611,7 @@
     </div>
 
     <!-- RIGHT: product panel -->
-    <div class="product-col">
+    <div class="product-col site-hero site-hero--supporting">
 
       <!-- source medium tag -->
       <div class="source-tag">
@@ -630,7 +622,7 @@
       <!-- ====================================================
            PRODUCT DATA — edit this block per painting
       ==================================================== -->
-      <h1 class="product-title" data-copy-id="marbles-painting-product-title">AM I LOSING MY MARBLES OR HIDING THEM?</h1>
+      <h1 class="product-title hero-title" data-copy-id="marbles-painting-product-title">AM I LOSING MY MARBLES OR HIDING THEM?</h1>
 
       <!-- medium · dimensions · year -->
       <div class="product-meta">

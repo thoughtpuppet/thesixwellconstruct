@@ -16,8 +16,8 @@
     *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:var(--serif)}a{color:inherit;text-decoration:none}button,input{font:inherit}
     .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
     header{position:sticky;top:0;z-index:10;min-height:72px;padding:24px 40px;display:flex;justify-content:flex-end}.back-link{font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--focus)}
-    main{position:relative;z-index:2;width:min(1180px,calc(100% - 80px));margin:0 auto;padding:72px 0 90px}.state{min-height:50vh;display:grid;align-content:center;gap:16px;color:var(--muted)}.state h1{margin:0;font-family:var(--sans);font-size:clamp(40px,7vw,82px);line-height:.92;color:var(--display)}
-    .detail{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,.82fr);gap:64px;align-items:start}.media-column{position:sticky;top:96px;min-width:0}.media{margin:0;border:5px solid var(--line);background:rgba(110,4,4,.06);min-height:360px;display:grid;place-items:center}.media img{display:block;width:100%;height:auto;max-height:76vh;object-fit:contain}.media-caption{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.media-gallery{display:flex;gap:12px;margin-top:12px;padding:0 0 8px;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity}.media-thumb{flex:0 0 94px;width:94px;height:94px;padding:0;border:5px solid var(--line);background:#090909;cursor:pointer;scroll-snap-align:start}.media-thumb[aria-pressed="true"]{border-color:var(--focus)}.media-thumb img{display:block;width:100%;height:100%;object-fit:cover}.copy{padding-top:12px}.kicker,.meta-label{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:var(--focus)}h1{margin:14px 0 22px;font-family:var(--sans);font-size:clamp(52px,7vw,104px);line-height:.86;letter-spacing:-.045em;color:var(--display)}.description{margin:0 0 30px;max-width:380px;padding-bottom:16px;color:var(--muted);font-family:var(--serif);font-size:12px;font-weight:400;letter-spacing:.22em;line-height:1.6;text-align:left;text-transform:uppercase}.meta{margin:0 0 28px;border-top:5px solid var(--line)}.meta-row{display:grid;grid-template-columns:130px 1fr;gap:16px;padding:14px 0;border-bottom:1px solid rgba(110,4,4,.28)}.meta-value{color:var(--muted);line-height:1.5}.availability{margin:0 0 24px;padding:18px;border-left:5px solid var(--ornament);background:rgba(110,4,4,.1);color:var(--muted);line-height:1.65}.availability strong{display:block;margin-bottom:5px;font-family:var(--sans);color:var(--focus)}
+    main{position:relative;z-index:2;width:min(1180px,calc(100% - 80px));margin:0 auto;padding:72px 0 90px}.state{min-height:50vh;display:grid;align-content:center;gap:16px;color:var(--muted)}.state h1{margin:0}
+    .detail{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,.82fr);gap:64px;align-items:start}.media-column{position:sticky;top:96px;min-width:0}.media{margin:0;border:5px solid var(--line);background:rgba(110,4,4,.06);min-height:360px;display:grid;place-items:center}.media img{display:block;width:100%;height:auto;max-height:76vh;object-fit:contain}.media-caption{margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.5}.media-gallery{display:flex;gap:12px;margin-top:12px;padding:0 0 8px;overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:x proximity}.media-thumb{flex:0 0 94px;width:94px;height:94px;padding:0;border:5px solid var(--line);background:#090909;cursor:pointer;scroll-snap-align:start}.media-thumb[aria-pressed="true"]{border-color:var(--focus)}.media-thumb img{display:block;width:100%;height:100%;object-fit:cover}.copy{padding-top:12px}.kicker,.meta-label{font-family:var(--sans);font-size:10px;font-weight:900;letter-spacing:.2em;text-transform:uppercase;color:var(--focus)}h1{margin:14px 0 22px}.description{margin:0 0 30px}.meta{margin:0 0 28px;border-top:5px solid var(--line)}.meta-row{display:grid;grid-template-columns:130px 1fr;gap:16px;padding:14px 0;border-bottom:1px solid rgba(110,4,4,.28)}.meta-value{color:var(--muted);line-height:1.5}.availability{margin:0 0 24px;padding:18px;border-left:5px solid var(--ornament);background:rgba(110,4,4,.1);color:var(--muted);line-height:1.65}.availability strong{display:block;margin-bottom:5px;font-family:var(--sans);color:var(--focus)}
     .claim-link{min-height:52px;padding:0 24px;display:inline-flex;align-items:center;justify-content:center;border:5px solid var(--ornament);background:var(--ornament);font-family:var(--sans);font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:var(--text)}.claim-link[aria-disabled="true"]{opacity:.42;pointer-events:none}.claim-link:hover{background:var(--display);border-color:var(--display)}:where(a,button,input):focus-visible{outline:2px solid var(--focus);outline-offset:4px}
     .sheet-designs{margin:0 0 28px}.sheet-designs h2{margin:0 0 8px;font-family:var(--sans);font-size:18px;line-height:1;text-transform:uppercase;color:var(--focus)}.sheet-designs>p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.6}.sheet-design-list{display:grid;gap:12px}.sheet-design-row{display:grid;grid-template-columns:22px 36px minmax(0,1fr) auto;gap:10px;align-items:center;padding:13px;border:5px solid var(--line);color:var(--muted)}.sheet-design-row:has(input:checked){border-color:var(--focus);color:var(--text)}.sheet-design-code{font-family:var(--sans);font-weight:900;color:var(--focus)}.sheet-design-state{font-family:var(--sans);font-size:9px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}.sheet-design-row.is-unavailable{opacity:.58}
     footer{position:relative;z-index:2;width:min(1180px,calc(100% - 80px));margin:0 auto;padding:40px 0 56px;border-top:5px solid var(--line);display:flex;justify-content:space-between;gap:20px;color:var(--dim);font-size:10px;letter-spacing:.18em;text-transform:uppercase}
@@ -27,6 +27,7 @@
     @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:1ms!important;animation-iteration-count:1!important;transition-duration:1ms!important}}
   </style>
   <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
@@ -34,8 +35,8 @@
   <div class="grain"></div>
   <header><a class="back-link" href="/tattoos/flash/">&larr; Flash catalog</a></header>
   <main>
-    <section class="state" id="loadingState" role="status" aria-live="polite"><p class="kicker">Flash record</p><h1>Loading design.</h1></section>
-    <section class="detail" id="detail" hidden>
+    <section class="state site-hero site-hero--supporting" id="loadingState" role="status" aria-live="polite"><p class="kicker">Flash record</p><h1 class="hero-title">Loading design.</h1></section>
+    <section class="detail site-hero site-hero--supporting" id="detail" hidden>
       <div class="media-column">
         <figure class="media"><img id="flashImage" src="" alt=""></figure>
         <p class="media-caption" id="flashMediaCaption" hidden></p>
@@ -43,8 +44,8 @@
       </div>
       <div class="copy">
         <p class="kicker" id="flashKicker">Art.Pill flash</p>
-        <h1 id="flashTitle"></h1>
-        <p class="description" id="flashDescription"></p>
+        <h1 class="hero-title" id="flashTitle"></h1>
+        <p class="description hero-descriptor" id="flashDescription"></p>
         <div class="meta" id="flashMeta"></div>
         <section class="sheet-designs" id="sheetDesigns" aria-labelledby="sheetDesignHeading" hidden>
           <h2 id="sheetDesignHeading">Choose sheet designs</h2>
@@ -294,7 +295,7 @@
         render(record, false);
       } catch {
         loading.setAttribute('role','alert');
-        loading.innerHTML = '<p class="kicker">Flash record</p><h1>This design is not available.</h1><p>It may be unpublished, archived, or the address may be incorrect. <a href="/tattoos/flash/" style="color:var(--focus);text-decoration:underline">Return to the flash catalog.</a></p>';
+        loading.innerHTML = '<p class="kicker">Flash record</p><h1 class="hero-title">This design is not available.</h1><p class="hero-descriptor">It may be unpublished, archived, or the address may be incorrect. <a href="/tattoos/flash/" style="color:var(--focus);text-decoration:underline">Return to the flash catalog.</a></p>';
       }
     });
   })();

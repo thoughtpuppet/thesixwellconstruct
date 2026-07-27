@@ -17,6 +17,12 @@ test("tokens expose the complete dual-system responsive contract", async () => {
     }
   }
 
+  for (const suffix of ["", "-tablet", "-mobile", "-compact"]) {
+    assert.match(css, new RegExp(`--type-supporting-hero-size${suffix}\\s*:`));
+    assert.match(css, new RegExp(`--type-supporting-hero-leading${suffix}\\s*:`));
+    assert.match(css, new RegExp(`--type-supporting-hero-tracking${suffix}\\s*:`));
+  }
+
   for (const token of [
     "--page-padding-x-tablet",
     "--page-padding-x-mobile",
@@ -55,6 +61,9 @@ test("the Guide exposes both systems and source libraries without a preview pane
   assert.match(html, /id="responsive-role-list"/);
   assert.match(html, /id="studio-role-list"/);
   assert.match(html, /\/tools\/ui-guide-system\.js/);
+  assert.match(html, /\/css\/hero\.css/);
+  assert.match(html, /site-hero site-hero--supporting/);
+  assert.match(html, /--type-supporting-hero-size-mobile/);
 
   assert.doesNotMatch(systemJs, /preview-stage|renderPreview|previewDocument|data-viewport|mode === "compare"/);
   assert.match(systemJs, /Dual-system foundations/);
@@ -66,6 +75,8 @@ test("the Guide exposes both systems and source libraries without a preview pane
   assert.match(systemJs, /<th>Adoption \/ notes<\/th>/);
   assert.match(systemJs, /adoptionState:\s*record\.adoption \|\| "Not yet migrated"/);
   assert.equal((systemJs.match(/family: "Landing Family"/g) || []).length, 5);
+  assert.match(systemJs, /record\.heroVariant = record\.family === "Landing Family" \? "Medium landing hero" : "Supporting hero"/);
+  assert.match(systemJs, /record\.sources\.push\("css\/hero\.css"\)/);
 
   for (const landing of [
     "Standard venture landing",
@@ -93,7 +104,8 @@ test("the Guide exposes both systems and source libraries without a preview pane
   }
 
   assert.match(systemJs, /id: "venture-landing"[^\n]*routes: \[\][^\n]*reference route not linked/);
-  assert.match(systemJs, /id: "artwork-catalog"[^\n]*css\/landing-family\.css[^\n]*Shared foundation adopted · catalog composition retained/);
+  assert.match(systemJs, /id: "artwork-catalog"[^\n]*css\/landing-family\.css[^\n]*css\/portfolio-cards\.css[^\n]*Shared foundation adopted · catalog composition retained/);
+  assert.match(systemJs, /id: "tattoo-portfolio"[^\n]*css\/portfolio-cards\.css[^\n]*css\/portfolio-detail\.css/);
   assert.match(systemJs, /id: "merch-catalog"[^\n]*css\/landing-family\.css[^\n]*Shared foundation adopted[^"\n]*commerce composition retained/);
   assert.match(systemJs, /id: "tattoo-landing"[^\n]*css\/landing-family\.css[^\n]*Shared foundation adopted[^"\n]*service composition retained/);
   assert.match(systemJs, /id: "event-hub"[^\n]*css\/landing-family\.css[^\n]*Shared foundation adopted[^"\n]*event composition retained/);
@@ -189,18 +201,23 @@ test("Studio consumes shared tokens without changing its operational surface", a
 });
 
 test("public shared styles consume responsive tokens at canonical breakpoints", async () => {
-  const [typography, mobile, venture] = await Promise.all([
+  const [typography, hero, mobile, venture] = await Promise.all([
     read("css/site-typography.css"),
+    read("css/hero.css"),
     read("css/mobile.css"),
     read("css/venture-pages.css"),
   ]);
 
-  for (const css of [typography, mobile, venture]) {
+  for (const css of [typography, hero, mobile, venture]) {
     assert.match(css, /@media \(max-width: 900px\)/);
     assert.match(css, /@media \(max-width: (?:700|380)px\)/);
   }
 
   assert.match(typography, /--type-hero-size-active/);
+  assert.match(hero, /\.site-hero--landing/);
+  assert.match(hero, /\.site-hero--supporting/);
+  assert.match(hero, /--type-supporting-hero-size-mobile/);
+  assert.match(hero, /\.hero-descriptor/);
   assert.match(typography, /--type-section-size-active/);
   assert.match(typography, /--type-control-size-active/);
   assert.match(typography, /Raw buttons remain page-owned/);

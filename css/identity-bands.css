@@ -1,0 +1,319 @@
+/* ============================================================
+   identity-bands.css — shared brand and artist identity bands
+   ============================================================ */
+
+:where(.brand-band, .artist-band) {
+  --band-color: var(--venture-accent, var(--venture-color, var(--color-accent)));
+  --band-title-color: var(--band-color);
+  --band-surface: #171717;
+  --band-identity-column: minmax(160px, 0.26fr);
+  --band-content-column: minmax(0, 0.74fr);
+  --band-column-gap: 12px;
+  --band-block-padding: 36px;
+  --band-inline-padding: 36px;
+  --band-title-size: clamp(28px, 4vw, 56px);
+  --band-copy-color: rgba(252, 184, 103, 0.64);
+  --band-copy-leading: 1.1;
+  --band-copy-size: 14px;
+  --band-kicker-line-height: 12.6px;
+  --band-title-gap: 12px;
+
+  display: grid;
+  grid-template-columns: var(--band-identity-column) var(--band-content-column);
+  column-gap: var(--band-column-gap);
+  row-gap: 18px;
+  align-items: start;
+  padding: var(--band-block-padding) var(--band-inline-padding);
+  margin-bottom: 18px;
+  background: var(--band-surface);
+}
+
+.brand-band {
+  --band-identity-column: minmax(160px, 0.25fr);
+  --band-content-column: minmax(0, 0.75fr);
+  --band-column-gap: 0;
+  --band-inline-padding: 8px;
+  --band-title-size: clamp(34px, 8vw, 112px);
+  margin-top: -40px;
+}
+
+.artist-band {
+  align-items: center;
+}
+
+.brand-band--thoughtpuppet {
+  --band-kicker-color: var(--color-art);
+}
+
+.brand-band--thoughtpuppet .band-title {
+  font-size: clamp(16px, 8vw, var(--band-title-size));
+  font-size: clamp(16px, 10.8cqi, var(--band-title-size));
+  white-space: nowrap;
+}
+
+.brand-band--sixwell {
+  --band-title-color: var(--color-accent);
+}
+
+.brand-band--tattoo-house .band-title {
+  white-space: nowrap;
+}
+
+.band-identity,
+.band-content {
+  min-width: 0;
+}
+
+.band-content {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.brand-band .band-identity {
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+}
+
+.brand-band .band-mark {
+  position: absolute;
+  inset: 0;
+  max-width: none;
+  object-position: right center;
+}
+
+.band-identity-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.band-identity-link:focus-visible {
+  outline: 5px solid var(--band-focus-color, var(--color-accent));
+  outline-offset: -5px;
+}
+
+.band-identity-link .band-mark {
+  pointer-events: none;
+}
+
+.band-lockup {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.band-mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  flex: 0 0 auto;
+  align-self: center;
+  object-fit: contain;
+  opacity: 1;
+}
+
+.band-kicker {
+  color: var(--band-kicker-color, var(--color-accent));
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: 10px;
+  line-height: var(--band-kicker-line-height);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.artist-band .band-kicker {
+  color: var(--color-body) !important;
+  opacity: 1;
+}
+
+.band-kicker *,
+.band-title *,
+.band-copy * {
+  color: inherit !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  letter-spacing: inherit !important;
+  line-height: inherit !important;
+  text-transform: inherit !important;
+}
+
+.band-title {
+  min-width: 0;
+  margin-top: var(--band-title-gap);
+  color: var(--band-title-color);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: var(--band-title-size);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
+}
+
+.band-copy {
+  max-width: 860px;
+  color: var(--band-copy-color);
+  font-family: var(--font-serif, Georgia, "Times New Roman", Times, serif);
+  font-size: var(--band-copy-size);
+  line-height: var(--band-copy-leading);
+  text-wrap: balance;
+}
+
+.band-copy,
+.band-copy * {
+  line-height: var(--band-copy-leading) !important;
+}
+
+.band-copy strong {
+  color: var(--band-color) !important;
+  font-family: var(--font-display, Inter, Arial, sans-serif) !important;
+  font-weight: 900;
+}
+
+.band-portrait {
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 5px solid var(--ring-faint, var(--color-archive-dim));
+}
+
+.band-portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.band-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.brand-band-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 5px solid var(--band-action-fill, var(--band-color));
+  background: var(--band-action-fill, var(--band-color));
+  color: var(--band-action-ink, var(--color-bg));
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1));
+}
+
+.band-actions .brand-band-link {
+  min-height: 48px;
+}
+
+.brand-band-link:hover {
+  opacity: 0.9;
+}
+
+.brand-band-link:focus-visible {
+  outline: 5px solid var(--band-focus-color, var(--color-accent));
+  outline-offset: 4px;
+}
+
+@media (max-width: 1024px) {
+  :where(.brand-band, .artist-band) {
+    --band-block-padding: 24px;
+    --band-inline-padding: 24px;
+  }
+
+  .brand-band {
+    margin-top: -24px;
+  }
+}
+
+@media (max-width: 768px) {
+  :where(.brand-band, .artist-band) {
+    --band-copy-leading: 1.2;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 24px;
+  }
+
+  .brand-band {
+    --band-inline-padding: 16px;
+    --band-column-gap: 4px;
+    grid-template-columns: minmax(88px, min(32%, 200px)) minmax(0, 1fr);
+    align-items: center;
+    padding-inline-start: 8px;
+  }
+
+  .artist-band {
+    --band-inline-padding: 16px;
+    --band-column-gap: 4px;
+    grid-template-columns: minmax(88px, min(32%, 200px)) minmax(0, 1fr);
+    align-items: start;
+    padding-inline-start: 8px;
+  }
+
+  .brand-band .band-identity {
+    justify-items: start;
+    align-self: center;
+  }
+
+  .artist-band .band-identity {
+    align-self: start;
+    margin-top: calc(var(--band-kicker-line-height) + var(--band-title-gap));
+  }
+
+  .brand-band .band-mark {
+    object-position: calc(100% - 20px) center;
+  }
+
+  .brand-band .band-identity,
+  .band-portrait {
+    width: min(100%, 420px);
+  }
+
+  .brand-band .band-identity {
+    width: 100%;
+  }
+
+  .artist-band .band-portrait {
+    width: 100%;
+  }
+
+  .band-title {
+    font-size: 32px;
+  }
+
+  .band-copy { text-wrap: auto; }
+}
+
+@media (max-width: 640px) {
+  .brand-band--tattoo-house .band-title {
+    white-space: normal;
+  }
+
+  .band-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .band-actions .brand-band-link {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-band-link {
+    transition: none;
+  }
+}

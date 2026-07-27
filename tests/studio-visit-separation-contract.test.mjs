@@ -6,6 +6,12 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { handleAdminGetAvailabilityPreview } from "../functions/api/booking/_lib.js";
+import {
+  notifyAdminAppointmentConfirmed,
+  notifyAdminAppointmentRescheduled,
+  notifyAdminSubmissionReceived,
+} from "../functions/api/notifications/_lib.js";
+import { renderClientEmailPreview } from "../functions/api/notifications/_email-templates.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -92,6 +98,7 @@ test("Studio UI and public booking pages keep visits under Art and room booking 
   const studio = source("studio/submissions/index.html");
   const roomBooking = source("booking/studio/index.html");
   const studioVisit = source("booking/studio-visit/index.html");
+  const confirmation = source("booking/confirmed/studio/index.html");
   const bookingApi = source("functions/api/booking/_lib.js");
 
   assert.match(studio, /data-tab="art">Art<\/button>/);
@@ -103,10 +110,103 @@ test("Studio UI and public booking pages keep visits under Art and room booking 
   assert.match(roomBooking, /const STUDIO_TYPE_IDS = \["studio_gathering", "studio_rental"\]/);
   assert.doesNotMatch(roomBooking, /<p class="offering-name">Open Studio Visit<\/p>/);
   assert.match(studioVisit, /const VISIT_TYPE_IDS = \["studio_visit"\]/);
+  assert.match(confirmation, /appointment\?\.bookingTypeId === "studio_visit"/);
+  assert.match(confirmation, /confirmedBadge: "Open Studio Visit Confirmed"/);
+  assert.match(confirmation, /confirmedTitle: "Your Open Studio Visit is reserved\."/);
+  assert.match(confirmation, /cancelledTitle: "This Open Studio Visit has been cancelled\."/);
+  assert.match(confirmation, /rebookUrl: "\/booking\/studio-visit\/\?rebook=1"/);
+  assert.match(confirmation, /confirmedBadge: "Studio Booking Confirmed"/);
+  assert.match(confirmation, /rebookUrl: "\/booking\/studio\/\?rebook=1"/);
+
+  assert.match(studio, /Your Open Studio Visit is confirmed\./);
+  assert.match(studio, /We received your Open Studio Visit request/);
+  assert.match(studio, /studioVisit \? "Open Studio Visit" : "studio booking"/);
+  assert.match(studio, /Your studio booking is confirmed\./);
+  assert.match(studio, /We received your studio booking request/);
 
   assert.match(bookingApi, /art_visit: ART_VISIT_BOOKING_TYPE_IDS/);
   assert.match(bookingApi, /studio_space: STUDIO_SPACE_BOOKING_TYPE_IDS/);
   assert.match(bookingApi, /scope === "art"/);
+});
+
+test("Open Studio Visit notification templates never fall back to studio-booking copy", () => {
+  const lifecycleTemplates = [
+    "studio_booking_confirmed",
+    "appointment_rescheduled",
+    "appointment_cancelled",
+    "appointment_reminder_24h",
+  ];
+
+  for (const templateKey of lifecycleTemplates) {
+    const visit = renderClientEmailPreview(templateKey, "studio_visit");
+    const room = renderClientEmailPreview(templateKey, "studio_space");
+    const visitCopy = `${visit.subject}\n${visit.text}`;
+    const roomCopy = `${room.subject}\n${room.text}`;
+
+    assert.match(visitCopy, /Open Studio Visit/);
+    assert.doesNotMatch(visitCopy, /\bstudio booking\b/i);
+    assert.match(roomCopy, /\bstudio booking\b/i);
+    assert.doesNotMatch(roomCopy, /Open Studio Visit/);
+  }
+});
+
+test("Studio admin alerts name studio_visit even when its stored label is absent", async () => {
+  const sent = [];
+  const env = {
+    ADMIN_NOTIFICATION_EMAIL: "studio@example.test",
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { messageId: `studio-visit-copy-${sent.length}` };
+      },
+    },
+  };
+
+  await notifyAdminSubmissionReceived(env, {
+    id: "visit-submission",
+    type: "studio_booking",
+    contact: { name: "Visitor", email: "visitor@example.test" },
+    payload: { booking_type_id: "studio_visit" },
+  });
+  assert.equal(sent.at(-1).subject, "New submission: Open Studio Visit");
+  assert.match(sent.at(-1).text, /Type: Open Studio Visit/);
+  assert.doesNotMatch(sent.at(-1).text, /\bstudio booking\b/i);
+
+  const visit = {
+    id: "visit-appointment",
+    bookingTypeId: "studio_visit",
+    purpose: "studio",
+    clientName: "Visitor",
+    clientEmail: "visitor@example.test",
+    startAt: "2026-08-08T16:00:00.000Z",
+    endAt: "2026-08-08T17:00:00.000Z",
+    depositCents: 5000,
+    totalDueCents: 5000,
+    currency: "USD",
+  };
+  await notifyAdminAppointmentConfirmed(env, null, visit);
+  assert.equal(sent.at(-1).subject, "Booking confirmed: Open Studio Visit");
+  assert.match(sent.at(-1).text, /Booking type: Open Studio Visit/);
+  assert.doesNotMatch(sent.at(-1).text, /studio_visit|\bstudio booking\b/i);
+
+  await notifyAdminAppointmentRescheduled(env, null, visit, {
+    previousStartAt: "2026-08-07T16:00:00.000Z",
+    previousEndAt: "2026-08-07T17:00:00.000Z",
+  });
+  assert.equal(sent.at(-1).subject, "Booking rescheduled: Open Studio Visit");
+  assert.match(sent.at(-1).text, /Booking type: Open Studio Visit/);
+  assert.doesNotMatch(sent.at(-1).text, /studio_visit|\bstudio booking\b/i);
+
+  await notifyAdminSubmissionReceived(env, {
+    id: "room-submission",
+    type: "studio_booking",
+    contact: { name: "Host", email: "host@example.test" },
+    payload: { booking_type_id: "studio_gathering" },
+  });
+  assert.equal(sent.at(-1).subject, "New submission: Studio Booking");
+  assert.match(sent.at(-1).text, /Type: Studio Booking/);
+  assert.doesNotMatch(sent.at(-1).text, /Open Studio Visit/);
 });
 
 test("availability preview scopes never cross Studio Visits into room bookings", async () => {

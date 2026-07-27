@@ -248,14 +248,7 @@
     color:var(--label-ink, var(--bg)); opacity:1;
   }
 
-  /* title */
-  .product-title {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(28px,4vw,52px);
-    letter-spacing:-0.03em; line-height:0.95;
-    color:var(--text);
-    margin-bottom:var(--s5);
-  }
+  .product-title { margin-bottom:var(--s5); }
 
   /* edition badge — "ed. 06 / 50" */
   .edition-badge {
@@ -663,6 +656,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="merch" data-product-handle="marbles-print" data-construct-entity="merch-marbles-print">
 
@@ -717,7 +711,7 @@
     </div>
 
     <!-- RIGHT: product panel -->
-    <div class="product-col">
+    <div class="product-col site-hero site-hero--supporting">
 
       <!-- source medium tag -->
       <div class="source-tag">
@@ -728,7 +722,7 @@
       <!-- ====================================================
            PRODUCT DATA — edit this block per print
       ==================================================== -->
-      <h1 class="product-title" id="productTitle">MARBLES.<br>PRINT</h1>
+      <h1 class="product-title hero-title" id="productTitle">MARBLES.<br>PRINT</h1>
 
       <!-- edition badge -->
       <div class="edition-badge">
@@ -867,4 +861,3 @@
 
 </body>
 </html>
-

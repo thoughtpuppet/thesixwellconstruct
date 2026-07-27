@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/venture-pages.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <style>
   :root {
     --venture-color: var(--color-events);
@@ -24,11 +25,6 @@
   .signal-hero {
     position: relative;
     overflow: hidden;
-  }
-  .signal-hero .venture-title {
-    font-size: clamp(46px, 8.6vw, 132px);
-    line-height: 0.9;
-    white-space: nowrap;
   }
   .signal-hero::after {
     content: "";
@@ -265,7 +261,6 @@
     .detail-row,
     .session-steps li { grid-template-columns: 1fr; gap: 6px; }
     .signal-hero::after { bottom: 4px; }
-    .signal-hero .venture-title { font-size: clamp(30px, 9.2vw, 42px); }
     .signal-subtitle { font-size: 12px; }
     .signal-panel h2,
     .booking-card h2 { font-size: 26px; }
@@ -276,11 +271,11 @@
 <body class="venture-page" data-venture="events">
   <div class="venture-grain" aria-hidden="true"></div>
   <main class="venture-shell entrance-fade">
-    <section class="venture-hero signal-hero" aria-labelledby="page-title">
+    <section class="venture-hero signal-hero site-hero site-hero--supporting" aria-labelledby="page-title">
       <div>
         <span class="venture-kicker">guided gathering</span>
-        <h1 class="venture-title" id="page-title">Signal &amp; Symbol.</h1>
-        <span class="signal-subtitle">A sensory mark-making gathering.</span>
+        <h1 class="venture-title hero-title" id="page-title">Signal &amp; Symbol.</h1>
+        <p class="signal-subtitle hero-descriptor">A sensory mark-making gathering.</p>
       </div>
     </section>
 

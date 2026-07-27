@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINES = {
-  "merch/index.html": "bf75d9bf74f8de6f70fc0498970e3c934145ac954abbc584c7477e940c05d239",
+  "merch/index.html": "e9ce13a52b78c0a1a3339f3efb8298d2c3e604974fc4b5ace6a593b96d0c646d",
   "events/index.html": "16f334ab618223a7eeeb04c0309b7b4571cb3141c81a5de54fb7feffaa3e874d",
 };
 
@@ -92,10 +92,12 @@ if (process.env.LANDING_INVENTORY_PRINT === "1") {
       const tokenIndex = html.indexOf('href="/css/tokens.css');
       const familyIndex = html.indexOf('href="/css/landing-family.css');
       const typographyIndex = html.indexOf('href="/css/site-typography.css');
+      const heroIndex = html.indexOf('href="/css/hero.css');
 
       assert.ok(tokenIndex >= 0, `${file} does not load tokens.css`);
       assert.ok(familyIndex > tokenIndex, `${file} does not load Landing Family CSS after tokens`);
       assert.ok(typographyIndex > familyIndex, `${file} must keep site typography after Landing Family CSS`);
+      assert.ok(heroIndex > typographyIndex, `${file} must load hero.css after site typography`);
       assert.match(html, new RegExp(`data-landing-family=["']${variant}["']`), `${file} lost ${variant} identity`);
       assert.match(html, /\blanding-hero\b/, `${file} does not expose the shared landing hero region`);
       assert.match(html, /\bhero-title\b|\bventure-title\b/, `${file} does not expose the hero title role`);
@@ -128,10 +130,17 @@ if (process.env.LANDING_INVENTORY_PRINT === "1") {
   });
 
   test("Merch title authority resolves through the shared Merch token", async () => {
-    const html = await page("merch/index.html");
+    const [html, familyCss, heroCss, storefront] = await Promise.all([
+      page("merch/index.html"),
+      page("css/landing-family.css"),
+      page("css/hero.css"),
+      page("js/shop-storefront.js"),
+    ]);
     assert.match(html, /--venture-color:\s*var\(--color-merch\)/);
     assert.match(html, /--venture-accent:\s*var\(--color-merch\)/);
-    assert.match(html, /--title-color:\s*var\(--color-merch\)/);
-    assert.doesNotMatch(html, /--title-color\s*:\s*#F08F00/i);
+    assert.match(familyCss, /data-landing-family="merch-commerce"[\s\S]*--type-hero-color:\s*var\(--color-merch\)/);
+    assert.match(heroCss, /color:\s*var\(--hero-title-color\)\s*!important/);
+    assert.match(storefront, /setProperty\("--hero-title-color",\s*color\)/);
+    assert.doesNotMatch(`${html}\n${storefront}`, /--title-color/);
   });
 }

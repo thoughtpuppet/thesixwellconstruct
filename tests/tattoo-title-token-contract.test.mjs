@@ -17,10 +17,10 @@ const PAGES = {
   "tattoos/flash/ap-standalone-001/index.html": "e4eb92219f6caf0b07e588c87921d20ca5e71a63223d26a7ea4a9d7602806b3f",
   "tattoos/flash/ap-standalone-archive-001/index.html": "ea0cdf32a4f784e17559a0179bcc0e06e09f47a1e32178105e1ab928abc513ed",
   "tattoos/flash/claim/index.html": "30d9594881ddac49e3d3890c66b106afbe2d2c8415b15e83b2fdaccda284654b",
-  "tattoos/flash/detail/index.html": "38645cf97bd224ef76de74da1fe8e7ce9c1b6c63286ccf1437b5c744f8893b30",
+  "tattoos/flash/detail/index.html": "00e39d142e0609c14a8c2f1e2627a55a62fc18da8e16e14b7b045f715c18dd2a",
   "tattoos/flash/index.html": "14240f03e6db18dbdc812d6abb0c4397df6de183838b6b87be6d824cebfc7578",
   "tattoos/flash/maze/index.html": "c64e277f52d32203d26dfcd3d10d323aabfc5907c2f8041f344caefb9c881674",
-  "tattoos/index.html": "3e13712004bec28c04dd0ab305bbbc336193d6305759c84fe423404d6f5582f1",
+  "tattoos/index.html": "fa5bdb44c052c572606006a261a9d64cc1475f7debc73a9e35ba4ace823aec9d",
   "tattoos/inquire/consultation/index.html": "7b9c15b091eff6e688b1c8e7bdf6414bb50cce27323edc0cc85d7299635e0536",
   "tattoos/inquire/custom/index.html": "786b8b31e21fe1518244735ca6a906637e4332aebf07ace1ceef30bec3714710",
   "tattoos/inquire/index.html": "8f17808a958f0e404334521a55794d1627259325ad9efd80e355fd7ea3f72979",
@@ -100,8 +100,11 @@ test("every public Tattoo title surface explicitly consumes the shared token fou
 
     assert.ok(tokenIndex >= 0, `${file} does not load tokens.css`);
     assert.ok(transitionIndex < 0 || tokenIndex < transitionIndex, `${file} must load tokens before transitions`);
+    assert.match(html, /\/css\/hero\.css/, `${file} does not load the shared hero authority`);
     assert.match(html, /data-venture=["']tattooing["']/i, `${file} lost its Tattoo medium identity`);
     assert.match(html, /<h1\b/i, `${file} no longer exposes a top-level title`);
+    assert.match(html, /\bsite-hero--supporting\b|\bsite-hero--landing\b/, `${file} lacks a hero variant`);
+    assert.match(html, /\bhero-title\b/, `${file} lacks the shared hero title role`);
     assert.doesNotMatch(html, /--signal\s*:\s*#6E0404/i, `${file} duplicates the Tattoo signal`);
     assert.doesNotMatch(html, /--venture(?:-color)?\s*:\s*#6E0404/i, `${file} duplicates the Tattoo venture color`);
     assert.doesNotMatch(html, /--title-color\s*:\s*#6E0404/i, `${file} duplicates the Tattoo title color`);
@@ -111,13 +114,17 @@ test("every public Tattoo title surface explicitly consumes the shared token fou
   assert.doesNotMatch(maze, /\/css\/tokens\.css/, "Maze remains owned by its application bundle");
 });
 
-test("shared typography makes the Tattoo node token authoritative for page titles", async () => {
-  const typography = await readFile(path.join(ROOT, "css/site-typography.css"), "utf8");
+test("the shared hero layer makes the Tattoo node token authoritative for page titles", async () => {
+  const [typography, hero] = await Promise.all([
+    readFile(path.join(ROOT, "css/site-typography.css"), "utf8"),
+    readFile(path.join(ROOT, "css/hero.css"), "utf8"),
+  ]);
 
   assert.match(typography, /body\[data-venture="tattooing"\]\s*\{[\s\S]*--venture-color:\s*var\(--color-tattooing\)/);
   assert.match(typography, /--venture-accent:\s*var\(--color-tattooing\)/);
   assert.match(typography, /--type-hero-color:\s*var\(--color-tattooing\)/);
-  assert.match(typography, /body\[data-venture="tattooing"\]\s*:is\([\s\S]*main h1[\s\S]*\.flash-title[\s\S]*color:\s*var\(--type-hero-color,\s*var\(--color-tattooing\)\)\s*!important/);
+  assert.match(hero, /--hero-title-color:\s*var\([\s\S]*--type-hero-color/);
+  assert.match(hero, /\.site-hero \.hero-title\s*\{[\s\S]*color:\s*var\(--hero-title-color\)\s*!important/);
 });
 
 test("managed navigation cannot override semantic top-level node colors", async () => {

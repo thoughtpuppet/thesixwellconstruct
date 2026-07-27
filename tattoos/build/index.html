@@ -39,8 +39,6 @@
 
   /* ── HERO ── */
   .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,420px);gap:48px;align-items:end;margin-bottom:var(--s7);}
-  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(64px,12vw,160px);letter-spacing:-0.05em;line-height:0.88;color:var(--type-hero-color, var(--venture-accent));text-transform:uppercase;}
-  .hero-desc{max-width:380px;padding-bottom:var(--s4);font-family:var(--serif);font-size:12px;font-weight:400;letter-spacing:0.22em;line-height:1.6;color:var(--text-mute);text-align:left;text-transform:uppercase;}
 
   /* ── PROCESS STEPS ── */
   .process{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;border:5px solid var(--ring-faint);margin-bottom:var(--s7);}
@@ -256,7 +254,6 @@
     .builder-wrap{grid-template-columns:1fr;}
     .symbol-col{padding:var(--s5) 0;border-right:none;border-bottom:5px solid var(--ring-faint);}
     .brief-col{position:static;height:auto;border-top:5px solid var(--ring-faint);}
-    .hero-desc{text-align:left;}
     body.has-mobile-selection-tray{padding-bottom:92px;}
     .mobile-selection-tray.visible{position:fixed;z-index:180;left:12px;right:12px;bottom:12px;display:block;border:5px solid var(--signal);background:rgba(14,14,14,0.98);box-shadow:0 16px 54px rgba(0,0,0,0.65);}
     .mobile-tray-toggle{width:100%;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;color:var(--text);font-family:var(--sans);font-weight:900;text-align:left;}
@@ -273,7 +270,6 @@
   @media(max-width:640px){
     header.top{padding:var(--s4) var(--s5);}
     main{padding:var(--s6) var(--s5);}
-    .page-title{font-size:clamp(56px,18vw,90px);}
     .symbol-grid{grid-template-columns:1fr;}
     .filter-select{font-size:16px;}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
@@ -301,6 +297,7 @@
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto !important;animation-duration:1ms !important;animation-iteration-count:1 !important;transition-duration:1ms !important;}}
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
@@ -323,11 +320,11 @@
   <main>
 
     <!-- HERO -->
-    <section class="hero">
+    <section class="hero site-hero site-hero--supporting">
       <div>
-        <h1 class="page-title" data-copy-id="build-page-title">Build Yours.</h1>
+        <h1 class="page-title hero-title" data-copy-id="build-page-title">Build Yours.</h1>
       </div>
-      <p class="hero-desc" data-copy-id="build-hero-desc">Instead of arriving with a folder of references That might not fully Communicate your idea or settling for a concept that has been repeated time and time again, you can draw from the visual language of saiel solehman's work itself. Choose meaningful symbols to build a brief, or draw your own maze, then submit it for review. The result is a design that speaks the same language as the paintings, the tattoos, and the clothing.</p>
+      <p class="hero-desc hero-descriptor" data-copy-id="build-hero-desc">Instead of arriving with a folder of references That might not fully Communicate your idea or settling for a concept that has been repeated time and time again, you can draw from the visual language of saiel solehman's work itself. Choose meaningful symbols to build a brief, or draw your own maze, then submit it for review. The result is a design that speaks the same language as the paintings, the tattoos, and the clothing.</p>
     </section>
 
     <!-- PROCESS -->

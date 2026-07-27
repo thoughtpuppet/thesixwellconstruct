@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
@@ -25,8 +26,8 @@
   .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--ring); padding:5px 12px; margin-bottom:34px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
   .badge.pending { color:var(--signal); }
   .badge-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
-  h1 { max-width:720px; margin:16px 0 28px; font-family:var(--sans); font-size:clamp(42px,7vw,82px); line-height:0.9; letter-spacing:0; color:var(--accent); }
-  .lead { max-width:620px; margin:0 0 44px; color:var(--muted); font-size:16px; line-height:1.8; }
+  h1 { max-width:720px; margin:16px 0 28px; }
+  .lead { margin:0 0 44px; }
   .detail-block { max-width:620px; border-top:5px solid var(--ring-soft); margin:36px 0; }
   .detail-row { display:grid; grid-template-columns:180px 1fr; gap:18px; border-bottom:5px solid var(--ring-faint); padding:16px 0; color:var(--muted); line-height:1.55; }
   .detail-key { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; }
@@ -42,6 +43,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="events">
 <script>
@@ -56,10 +58,10 @@
 </script>
 <div class="grain"></div>
 <header></header>
-<main>
+<main class="site-hero site-hero--supporting">
   <div id="badge" class="badge"><span class="badge-dot"></span><span id="badgeText">Checking Ticket</span></div>
-  <h1 id="title">Reading your ticket.</h1>
-  <p id="lead" class="lead">Give this a moment. We're confirming your seat and Square payment.</p>
+  <h1 class="hero-title" id="title">Reading your ticket.</h1>
+  <p id="lead" class="lead hero-descriptor">Give this a moment. We're confirming your seat and Square payment.</p>
   <div id="details" class="detail-block"></div>
   <div class="cta-row">
     <a class="cta-primary" id="eventBackLink" href="/events/">Back to Events</a>

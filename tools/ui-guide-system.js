@@ -4,13 +4,13 @@
   var PUBLIC_TEMPLATES = [
     { id: "venture-landing", label: "Standard venture landing", family: "Landing Family", variant: "Standard venture", kind: "landing", accent: "about", routes: [], sources: ["css/venture-pages.css"], adoption: "Shared-shell specimen · reference route not linked", variantRegions: ["Descriptive sections", "Pathway cards", "Related routes"], description: "Shared landing foundation for a medium or venture whose page is primarily descriptive rather than operational." },
     { id: "information-page", label: "Information / editorial", kind: "editorial", accent: "about", route: "/about/mediums/", sources: ["about/mediums/index.html", "about/section-page.css"], adoption: "Foundation adopted · centered composition retained", description: "Reading-led information page with a bounded hero, section rhythm, disclosures, and related paths." },
-    { id: "artwork-catalog", label: "Art catalog landing", family: "Landing Family", variant: "Art catalog", kind: "catalog", accent: "art", route: "/art/", routes: ["/art/"], sources: ["art/index.html", "css/landing-family.css"], adoption: "Shared foundation adopted · catalog composition retained", variantRegions: ["Artwork gallery", "Catalog filters", "Availability", "Acquisition path"], description: "Art entry with filtering, artwork records, availability, and an acquisition path." },
+    { id: "artwork-catalog", label: "Art catalog landing", family: "Landing Family", variant: "Art catalog", kind: "catalog", accent: "art", route: "/art/", routes: ["/art/"], sources: ["art/index.html", "css/landing-family.css", "css/portfolio-cards.css"], adoption: "Shared foundation adopted · catalog composition retained", variantRegions: ["Artwork gallery", "Catalog filters", "Availability", "Acquisition path"], description: "Art entry with filtering, artwork records, availability, and an acquisition path." },
     { id: "artwork-detail", label: "Artwork detail", kind: "detail", accent: "art", route: "/art/lostmarblespainting", sources: ["art/lostmarblespainting.html"], description: "Artwork media, title, material metadata, availability, inquiry action, archive thread, and related work." },
     { id: "artwork-inquiry", label: "Acquisition inquiry", kind: "form", accent: "art", route: "/art/acquisitioninquiry", sources: ["art/acquisitioninquiry.html"], description: "Focused artwork inquiry form with contact, work selection, validation, consent, and explicit status." },
     { id: "merch-catalog", label: "Merch commerce landing", family: "Landing Family", variant: "Merch commerce", kind: "commerce-catalog", accent: "merch", route: "/merch/", routes: ["/merch/"], sources: ["merch/index.html", "css/landing-family.css"], adoption: "Shared foundation adopted · commerce composition retained", variantRegions: ["Product catalog", "Inventory", "Variants", "Cart entry"], description: "Commerce entry with product filters, source labels, inventory states, cart entry, and checkout feedback." },
     { id: "merch-product", label: "Merch product detail", kind: "commerce-detail", accent: "merch", route: "/merch/lostmarbles-hoodie", sources: ["merch/lostmarbles-hoodie.html"], description: "Product gallery, price, edition, size/variant selection, availability, purchase action, and origin record." },
     { id: "tattoo-landing", label: "Tattoo service landing", family: "Landing Family", variant: "Tattoo service", kind: "landing", accent: "tattooing", route: "/tattoos/", routes: ["/tattoos/"], sources: ["tattoos/index.html", "css/tattoos.css", "css/landing-family.css"], adoption: "Shared foundation adopted · service composition retained", variantRegions: ["Live walk-in windows", "Collaboration paths", "Booking process", "Rates and policies"], description: "Tattoo service entry with live availability, portfolio, collaboration pathways, booking process, policies, and chooser actions." },
-    { id: "tattoo-portfolio", label: "Tattoo portfolio item", kind: "portfolio", accent: "tattooing", route: "/tattoos/portfolio/", sources: ["tattoos/portfolio/index.html", "css/portfolio-detail.css"], description: "Portfolio grid and item detail with image roles, placement, style, healed/fresh context, and inquiry path." },
+    { id: "tattoo-portfolio", label: "Tattoo portfolio item", kind: "portfolio", accent: "tattooing", route: "/tattoos/portfolio/", sources: ["tattoos/portfolio/index.html", "css/portfolio-cards.css", "css/portfolio-detail.css"], description: "Portfolio grid and item detail with image roles, placement, style, healed/fresh context, and inquiry path." },
     { id: "flash-catalog", label: "Flash catalog", kind: "catalog", accent: "tattooing", route: "/tattoos/flash/", sources: ["tattoos/flash/index.html"], description: "Multi-filter flash catalog with sheet/design grouping, availability, session fit, and claim path." },
     { id: "flash-detail", label: "Flash detail", kind: "detail", accent: "tattooing", route: "/tattoos/flash/:slug/", sources: ["tattoos/flash/detail/index.html"], description: "API-backed flash media, status, size/session metadata, selected-design context, and claim action." },
     { id: "tattoo-intake", label: "Tattoo intake / application", kind: "form-upload", accent: "tattooing", route: "/tattoos/inquire/custom/", sources: ["tattoos/inquire/custom/index.html", "js/submission-form.js"], description: "Long-form project intake with conditional fields, dates, reference uploads, consent, validation, and feedback." },
@@ -31,6 +31,11 @@
     { id: "preferences", label: "Preferences / settings", kind: "preferences", accent: "about", route: "/preferences/", sources: ["preferences/index.html"], description: "Visitor-facing settings, grouped controls, consent choices, save state, and confirmation." },
     { id: "hidden-state", label: "Hidden medium / 404", kind: "error", accent: "film", route: "/404", sources: ["404.html", "film/index.html", "music/index.html", "writings/index.html"], description: "Unavailable-path message with preserved navigation, alternate routes, and no dead end." }
   ];
+
+  PUBLIC_TEMPLATES.forEach(function (record) {
+    record.heroVariant = record.family === "Landing Family" ? "Medium landing hero" : "Supporting hero";
+    if (record.sources.indexOf("css/hero.css") === -1) record.sources.push("css/hero.css");
+  });
 
   var LANDING_SHARED_REGIONS = [
     "Shared navigation",
@@ -126,7 +131,7 @@
       sourceInfo: {
         primaryRoute: "",
         candidateRoutes: ["/about/mediums/", "/art/", "/tattoos/", "/merch/", "/events/", "/studio/submissions/"],
-        ownerFiles: ["css/tokens.css", "css/site-typography.css", "studio/console-system.css"],
+        ownerFiles: ["css/tokens.css", "css/site-typography.css", "css/hero.css", "studio/console-system.css"],
         parentFamily: "Foundations",
         variantOf: "",
         adoptionState: "Shared roles exist",
@@ -176,7 +181,7 @@
       parentFamily: record.family || "",
       variantOf: record.variant ? record.family || "" : "",
       adoptionState: record.adoption || "Not yet migrated",
-      notes: ""
+      notes: record.heroVariant || ""
     };
     return record;
   }
@@ -345,7 +350,8 @@
   }
 
   function hero(record, title) {
-    return '<section class="ui-preview-hero"><div><span class="venture-kicker">' + esc(record.label) + '</span><h1 class="venture-title hero-title">' + esc(title || record.label) + '</h1></div><div class="ui-preview-hero-copy"><p class="hero-descriptor">' + esc(record.description) + '</p><div class="ui-actions"><a class="ui-action primary" href="#">Primary action</a><a class="ui-action" href="#">Related path</a></div></div></section>';
+    var variant = record.heroVariant === "Medium landing hero" ? "site-hero--landing" : "site-hero--supporting";
+    return '<section class="ui-preview-hero site-hero ' + variant + '"><div><span class="venture-kicker">' + esc(record.label) + '</span><h1 class="venture-title hero-title">' + esc(title || record.label) + '</h1></div><div class="ui-preview-hero-copy"><p class="hero-descriptor">' + esc(record.description) + '</p><div class="ui-actions"><a class="ui-action primary" href="#">Primary action</a><a class="ui-action" href="#">Related path</a></div></div></section>';
   }
 
   function cardGrid(prefix, count) {
@@ -430,7 +436,7 @@
       return head + hero(record, "Events") + '<section class="ui-preview-section"><div class="ui-preview-section-head"><h2 class="section-title">Current board</h2><p class="ui-copy">Events use the event feed and registration state rather than the public appointment calendar.</p></div>' + cardGrid("Event", 4) + "</section>" + tail;
     }
     if (record.kind === "confirmation") {
-      return head + '<section class="ui-preview-hero"><div><span class="venture-kicker">Complete</span><h1 class="venture-title hero-title">Received</h1></div><div class="ui-preview-hero-copy"><p class="hero-descriptor">The action completed successfully. The next step and response timing are explicit.</p><p class="ui-status" data-state="success" role="status">Saved successfully.</p></div></section><section class="ui-preview-section">' + cardGrid("Next step", 3) + "</section>" + tail;
+      return head + '<section class="ui-preview-hero site-hero site-hero--supporting"><div><span class="venture-kicker">Complete</span><h1 class="venture-title hero-title">Received</h1></div><div class="ui-preview-hero-copy"><p class="hero-descriptor">The action completed successfully. The next step and response timing are explicit.</p><p class="ui-status" data-state="success" role="status">Saved successfully.</p></div></section><section class="ui-preview-section">' + cardGrid("Next step", 3) + "</section>" + tail;
     }
     if (record.kind === "search" || record.kind === "taxonomy") {
       return head + hero(record, record.kind === "taxonomy" ? "Legend" : "Search") + '<section class="ui-preview-section"><div class="ui-search-layout"><div><label class="ui-field">Find a record<input class="ui-search" type="search" value="symbol"></label><div class="ui-filter-row"><button class="ui-chip" type="button" aria-pressed="true">All</button><button class="ui-chip" type="button" aria-pressed="false">Works</button><button class="ui-chip" type="button" aria-pressed="false">Archive</button></div></div><aside class="ui-status" role="status">6 representative results.</aside></div><div style="height:24px"></div>' + cardGrid(record.kind === "taxonomy" ? "Symbol" : "Result", 6) + "</section>" + tail;
@@ -439,7 +445,7 @@
       return head + hero(record, "Timeline") + '<section class="ui-preview-section"><div class="ui-timeline"><article><span class="ui-meta">2024</span><div><h3>Record opened</h3><p class="ui-copy">A dated milestone with related materials and subject context.</p></div></article><article><span class="ui-meta">2025</span><div><h3>Work developed</h3><p class="ui-copy">The chronology remains readable at every viewport.</p></div></article><article><span class="ui-meta">2026</span><div><h3>Current state</h3><p class="ui-copy">Related records continue the thread.</p></div></article></div></section>' + tail;
     }
     if (record.kind === "error") {
-      return nav(record.accent) + '<main class="ui-preview-main"><section class="ui-preview-hero"><div><span class="venture-kicker">Unavailable</span><h1 class="venture-title hero-title">Not found</h1></div><div class="ui-preview-hero-copy"><p class="hero-descriptor">This path is not currently available. Continue through a valid part of the construct.</p><div class="ui-actions"><a class="ui-action primary" href="#">Return home</a><a class="ui-action" href="#">Open archive</a></div></div></section></main>' + footer();
+      return nav(record.accent) + '<main class="ui-preview-main"><section class="ui-preview-hero site-hero site-hero--supporting"><div><span class="venture-kicker">Unavailable</span><h1 class="venture-title hero-title">Not found</h1></div><div class="ui-preview-hero-copy"><p class="hero-descriptor">This path is not currently available. Continue through a valid part of the construct.</p><div class="ui-actions"><a class="ui-action primary" href="#">Return home</a><a class="ui-action" href="#">Open archive</a></div></div></section></main>' + footer();
     }
     return head + hero(record) + '<section class="ui-preview-section">' + cardGrid("Record", 3) + "</section>" + tail;
   }

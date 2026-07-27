@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <style>
   :root {
@@ -26,8 +27,8 @@
   .badge.pending { color:var(--signal); }
   .badge-dot { width:5px; height:5px; border-radius:50%; background:currentColor; }
   .label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--dim); }
-  h1 { max-width:720px; margin:16px 0 28px; font-family:var(--sans); font-size:clamp(42px,7vw,82px); line-height:0.9; letter-spacing:0; color:var(--accent); }
-  .lead { max-width:620px; margin:0 0 44px; color:var(--muted); font-size:16px; line-height:1.8; }
+  h1 { max-width:720px; margin:16px 0 28px; }
+  .lead { margin:0 0 44px; }
   .note { max-width:620px; margin:0 0 44px; color:var(--muted); font-size:14px; line-height:1.7; padding:18px 20px; border:5px solid var(--ring-faint); }
   .detail-block { max-width:620px; border-top:5px solid var(--ring-soft); margin:36px 0; }
   .detail-row { display:grid; grid-template-columns:180px 1fr; gap:18px; border-bottom:5px solid var(--ring-faint); padding:16px 0; color:var(--muted); line-height:1.55; }
@@ -60,6 +61,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 </head>
 <body class="tattoo-flow" data-venture="about">
@@ -75,14 +77,14 @@
 </script>
 <div class="grain"></div>
 <header></header>
-<main>
+<main class="site-hero site-hero--supporting">
   <div id="badge" class="badge"><span class="badge-dot"></span><span id="badgeText">Checking Reservation</span></div>
-  <h1 id="title">Reading the booking record.</h1>
-  <p id="lead" class="lead" role="status" aria-live="polite">Give this a moment. The system is checking the booking and Square deposit state.</p>
+  <h1 class="hero-title" id="title">Reading the booking record.</h1>
+  <p id="lead" class="lead hero-descriptor" role="status" aria-live="polite">Give this a moment. The system is checking the booking and Square deposit state.</p>
   <div id="details" class="detail-block" aria-live="polite"></div>
   <p class="note">The amount above is your deposit — it holds your date. Any remaining balance is settled with the studio directly.</p>
   <div class="cta-row">
-    <a class="cta-primary" href="/booking/studio/">Book Another Time</a>
+    <a id="rebookLink" class="cta-primary" href="/booking/studio/">Book Another Time</a>
     <a class="cta-ghost" href="/home/">Return to construct</a>
   </div>
   <div id="manageBlock" class="manage-block" style="display:none;" aria-live="polite"></div>
@@ -123,15 +125,44 @@
   }
 
   const manage = document.getElementById("manageBlock");
+  const rebookLink = document.getElementById("rebookLink");
   const DEFAULT_SUPPORT_EMAIL = "saisolehman@artpilltattoohouse.com";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const previewMode = new URLSearchParams(window.location.search).get("preview") === "1";
 
-  function rebookUrl() {
-    return "/booking/studio/?rebook=1";
+  function isOpenStudioVisit(appointment) {
+    return appointment?.bookingTypeId === "studio_visit";
+  }
+
+  function studioBookingCopy(appointment) {
+    if (isOpenStudioVisit(appointment)) {
+      return {
+        name: "Open Studio Visit",
+        cancelledBadge: "Open Studio Visit Cancelled",
+        cancelledTitle: "This Open Studio Visit has been cancelled.",
+        confirmedBadge: "Open Studio Visit Confirmed",
+        confirmedTitle: "Your Open Studio Visit is reserved.",
+        confirmedLead: "Your deposit has been received and your Open Studio Visit is reserved. Keep an eye on your email for any studio follow-up.",
+        pendingTitle: "Your Open Studio Visit is waiting on payment confirmation.",
+        pendingLead: "Square has not returned a paid order yet. If you just paid, refresh this page in a moment. The studio can also see this pending Open Studio Visit.",
+        rebookUrl: "/booking/studio-visit/?rebook=1",
+      };
+    }
+    return {
+      name: "studio booking",
+      cancelledBadge: "Booking Cancelled",
+      cancelledTitle: "This studio booking has been cancelled.",
+      confirmedBadge: "Studio Booking Confirmed",
+      confirmedTitle: "Your time is held.",
+      confirmedLead: "Your deposit has been received and your studio time is held. Keep an eye on your email for any studio follow-up.",
+      pendingTitle: "Your booking is waiting on payment confirmation.",
+      pendingLead: "Square has not returned a paid order yet. If you just paid, refresh this page in a moment. The studio can also see this pending booking.",
+      rebookUrl: "/booking/studio/?rebook=1",
+    };
   }
 
   function renderManageBlock(appointment, payload, paid) {
+    const copy = studioBookingCopy(appointment);
     const supportEmail = payload.supportEmail || DEFAULT_SUPPORT_EMAIL;
     const supportLine = `Email <a href="mailto:${escapeHtml(supportEmail)}" style="color:var(--accent);text-decoration:underline;">${escapeHtml(supportEmail)}</a> with your booking details and we'll help you out.`;
     const isPast = new Date(appointment.startAt).getTime() <= Date.now();
@@ -142,8 +173,8 @@
     if (isCancelled) {
       manage.innerHTML = `
         <p class="label" style="margin-bottom:12px;">Need to make changes?</p>
-        <p>This studio booking has been cancelled. ${supportLine}</p>
-        <a class="cta-primary" href="${rebookUrl()}">Pick a New Time</a>
+        <p>${copy.cancelledTitle} ${supportLine}</p>
+        <a class="cta-primary" href="${copy.rebookUrl}">Pick a New Time</a>
       `;
       return;
     }
@@ -182,6 +213,7 @@
   }
 
   async function doCancel(appointment, payload) {
+    const copy = studioBookingCopy(appointment);
     const emailInput = document.getElementById("manageEmail");
     const errorEl = document.getElementById("manageError");
     const email = (emailInput.value || "").trim();
@@ -192,12 +224,12 @@
       emailInput.focus();
       return;
     }
-    if (!window.confirm("Cancel this studio booking? This is separate from rescheduling and cannot be undone.")) return;
+    if (!window.confirm(`Cancel this ${copy.name}? This is separate from rescheduling and cannot be undone.`)) return;
 
     if (previewMode) {
       badge.classList.add("pending");
-      badgeText.textContent = "Booking Cancelled";
-      title.textContent = "This studio booking has been cancelled.";
+      badgeText.textContent = copy.cancelledBadge;
+      title.textContent = copy.cancelledTitle;
       lead.textContent = "Your time has been released. Email us if you have any questions.";
       renderManageBlock({ ...appointment, status: "cancelled" }, payload, false);
       return;
@@ -212,8 +244,8 @@
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || "Unable to cancel this booking.");
       badge.classList.add("pending");
-      badgeText.textContent = "Booking Cancelled";
-      title.textContent = "This studio booking has been cancelled.";
+      badgeText.textContent = copy.cancelledBadge;
+      title.textContent = copy.cancelledTitle;
       lead.textContent = "Your time has been released. Email us if you have any questions.";
       renderManageBlock(result.appointment, payload, false);
     } catch (error) {
@@ -261,19 +293,22 @@
       if (!response.ok) throw new Error(payload.error || "Unable to confirm this booking.");
     }
     const appointment = payload.appointment;
+    const copy = studioBookingCopy(appointment);
     const isCancelled = appointment.status === "cancelled" || appointment.status === "archived";
     const paid = payload.depositStatus === "paid" || appointment.status === "confirmed";
+    document.title = isOpenStudioVisit(appointment)
+      ? "Open Studio Visit Confirmation - the six.well construct"
+      : "Studio Booking Confirmation - the six.well construct";
+    rebookLink.href = copy.rebookUrl;
     badge.classList.toggle("pending", !paid || isCancelled);
     if (isCancelled) {
-      badgeText.textContent = "Booking Cancelled";
-      title.textContent = "This studio booking has been cancelled.";
+      badgeText.textContent = copy.cancelledBadge;
+      title.textContent = copy.cancelledTitle;
       lead.textContent = "Your time has been released. Email us if you have any questions.";
     } else {
-      badgeText.textContent = paid ? "Studio Booking Confirmed" : "Deposit Pending";
-      title.textContent = paid ? "Your time is held." : "Your booking is waiting on payment confirmation.";
-      lead.textContent = paid
-        ? "Your deposit has been received and your studio time is held. Keep an eye on your email for any studio follow-up."
-        : "Square has not returned a paid order yet. If you just paid, refresh this page in a moment. The studio can also see this pending booking.";
+      badgeText.textContent = paid ? copy.confirmedBadge : "Deposit Pending";
+      title.textContent = paid ? copy.confirmedTitle : copy.pendingTitle;
+      lead.textContent = paid ? copy.confirmedLead : copy.pendingLead;
     }
     details.innerHTML = [
       renderRow("Booked By", appointment.clientName),

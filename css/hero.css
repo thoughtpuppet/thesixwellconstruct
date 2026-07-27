@@ -1,0 +1,198 @@
+/* ============================================================
+   Shared public hero system
+   ============================================================
+   Every active public page marks its primary hero with .site-hero and
+   exactly one size variant. Page-family CSS continues to own outer
+   composition; this file is authoritative for hero title and descriptor
+   typography, color, wrapping, and responsive behavior.
+   ============================================================ */
+
+.site-hero {
+  --hero-title-color: var(
+    --type-hero-color,
+    var(--venture-accent, var(--venture-color, var(--color-accent)))
+  );
+  min-width: 0;
+}
+
+.site-hero--landing {
+  --hero-title-size: var(--type-hero-size-active, var(--type-hero-size));
+  --hero-title-leading: var(--type-hero-leading-active, var(--type-hero-leading));
+  --hero-title-tracking: var(--type-hero-tracking-active, var(--type-hero-tracking));
+}
+
+.site-hero--supporting {
+  --hero-title-size: var(
+    --type-supporting-hero-size-active,
+    var(--type-supporting-hero-size)
+  );
+  --hero-title-leading: var(
+    --type-supporting-hero-leading-active,
+    var(--type-supporting-hero-leading)
+  );
+  --hero-title-tracking: var(
+    --type-supporting-hero-tracking-active,
+    var(--type-supporting-hero-tracking)
+  );
+}
+
+.site-hero .hero-title {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 0;
+  color: var(--hero-title-color) !important;
+  font-family: var(--type-hero-font, var(--font-display)) !important;
+  font-size: var(--hero-title-size) !important;
+  font-weight: var(--type-hero-weight, 900) !important;
+  font-style: var(--type-hero-style, normal) !important;
+  letter-spacing: var(--hero-title-tracking) !important;
+  line-height: var(--hero-title-leading) !important;
+  text-transform: var(--type-hero-transform, uppercase) !important;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-wrap: wrap;
+  transition: color var(--duration-base, 300ms) var(--ease-out, cubic-bezier(0.2, 0, 0.2, 1));
+}
+
+.site-hero .hero-title :where(span, strong, em, b, i, a) {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit;
+  font-style: inherit;
+  letter-spacing: inherit !important;
+  line-height: inherit !important;
+  text-transform: inherit !important;
+}
+
+.site-hero .hero-descriptor {
+  max-width: min(100%, 380px) !important;
+  padding-bottom: var(--s4, 16px) !important;
+  color: var(--type-descriptor-color, rgba(252, 184, 103, 0.55)) !important;
+  font-family: var(
+    --type-descriptor-font,
+    var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif))
+  ) !important;
+  font-size: var(--type-descriptor-size-active, var(--type-descriptor-size, 12px)) !important;
+  font-weight: var(--type-descriptor-weight, 400) !important;
+  font-style: var(--type-descriptor-style, normal) !important;
+  letter-spacing: var(
+    --type-descriptor-tracking-active,
+    var(--type-descriptor-tracking, 0.22em)
+  ) !important;
+  line-height: var(
+    --type-descriptor-leading-active,
+    var(--type-descriptor-leading, 1.6)
+  ) !important;
+  text-align: left !important;
+  text-transform: var(--type-descriptor-transform, uppercase) !important;
+  font-variant-caps: normal !important;
+}
+
+.site-hero .hero-descriptor :where(span, strong, em, b, i, a) {
+  color: inherit !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  letter-spacing: inherit !important;
+  line-height: inherit !important;
+  text-transform: inherit !important;
+  font-variant-caps: inherit !important;
+}
+
+@media (max-width: 900px) {
+  .site-hero--landing {
+    --hero-title-size: var(--type-hero-size-tablet, var(--type-hero-size));
+    --hero-title-leading: var(--type-hero-leading-tablet, var(--type-hero-leading));
+    --hero-title-tracking: var(--type-hero-tracking-tablet, var(--type-hero-tracking));
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    text-align: left !important;
+  }
+
+  .site-hero--landing > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .site-hero--landing .hero-title,
+  .site-hero--landing .hero-descriptor {
+    width: 100%;
+    max-width: 100% !important;
+    text-align: left !important;
+  }
+
+  .site-hero--supporting {
+    --hero-title-size: var(
+      --type-supporting-hero-size-tablet,
+      var(--type-supporting-hero-size)
+    );
+    --hero-title-leading: var(
+      --type-supporting-hero-leading-tablet,
+      var(--type-supporting-hero-leading)
+    );
+    --hero-title-tracking: var(
+      --type-supporting-hero-tracking-tablet,
+      var(--type-supporting-hero-tracking)
+    );
+  }
+}
+
+@media (max-width: 700px) {
+  .site-hero--landing {
+    --hero-title-size: var(--type-hero-size-mobile, var(--type-hero-size-tablet));
+    --hero-title-leading: var(--type-hero-leading-mobile, var(--type-hero-leading-tablet));
+    --hero-title-tracking: var(--type-hero-tracking-mobile, var(--type-hero-tracking-tablet));
+  }
+
+  .site-hero--supporting {
+    --hero-title-size: var(
+      --type-supporting-hero-size-mobile,
+      var(--type-supporting-hero-size-tablet)
+    );
+    --hero-title-leading: var(
+      --type-supporting-hero-leading-mobile,
+      var(--type-supporting-hero-leading-tablet)
+    );
+    --hero-title-tracking: var(
+      --type-supporting-hero-tracking-mobile,
+      var(--type-supporting-hero-tracking-tablet)
+    );
+  }
+
+  .site-hero .hero-title {
+    white-space: normal !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .site-hero--landing {
+    --hero-title-size: var(--type-hero-size-compact, var(--type-hero-size-mobile));
+    --hero-title-leading: var(--type-hero-leading-compact, var(--type-hero-leading-mobile));
+    --hero-title-tracking: var(--type-hero-tracking-compact, var(--type-hero-tracking-mobile));
+  }
+
+  .site-hero--supporting {
+    --hero-title-size: var(
+      --type-supporting-hero-size-compact,
+      var(--type-supporting-hero-size-mobile)
+    );
+    --hero-title-leading: var(
+      --type-supporting-hero-leading-compact,
+      var(--type-supporting-hero-leading-mobile)
+    );
+    --hero-title-tracking: var(
+      --type-supporting-hero-tracking-compact,
+      var(--type-supporting-hero-tracking-mobile)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-hero .hero-title {
+    transition: none;
+  }
+}

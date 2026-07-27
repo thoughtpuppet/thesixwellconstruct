@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="stylesheet" href="/css/booking-calendar.css">
 <style>
@@ -35,7 +36,7 @@
   main{position:relative;z-index:2;max-width:1440px;margin:0 auto;padding:var(--s8) var(--s6) var(--s7);}
   .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
 
-  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,96px);letter-spacing:-0.05em;line-height:0.88;color:var(--accent);text-transform:uppercase;margin-bottom:var(--s6);}
+  .page-title{margin-bottom:var(--s6);}
   .page-body{font-size:16px;line-height:1.8;color:var(--text-mute);max-width:560px;}
   .page-body+.page-body{margin-top:var(--s4);}
 
@@ -68,7 +69,6 @@
   @media(max-width:640px){
     header.top{padding:var(--s4) var(--s5);}
     main{padding:var(--s6) var(--s5) var(--s7);}
-    .page-title{font-size:clamp(30px,11vw,90px);}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
   }
   @media(max-width:700px){
@@ -76,6 +76,7 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
 <body data-venture="about">
@@ -98,9 +99,9 @@
     <div class="layout">
 
       <!-- LEFT — INFO -->
-      <section>
-        <h1 class="page-title">Book the Studio.</h1>
-        <p class="page-body">Reserve the construct for a private gathering or arrange an external event rental for your own group or organization.</p>
+      <section class="site-hero site-hero--supporting">
+        <h1 class="page-title hero-title">Book the Studio.</h1>
+        <p class="page-body hero-descriptor">Reserve the construct for a private gathering or arrange an external event rental for your own group or organization.</p>
         <p class="page-body">Choose a booking type and an available time. A deposit holds your date — any remaining balance is settled with the studio directly.</p>
 
         <div class="offerings-block">

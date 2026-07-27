@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>about - the six.well construct</title>
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -104,28 +105,8 @@
     text-transform: uppercase;
   }
 
-  .wordmark {
-    color: var(--accent);
-    font-family: var(--sans);
-    font-size: clamp(42px, 9vw, 116px);
-    font-weight: 900;
-    letter-spacing: 0;
-    line-height: 0.86;
-    text-transform: uppercase;
-  }
-
   .hero-copy {
-    max-width: 380px;
     margin: 18px auto 0;
-    padding-bottom: 16px;
-    color: var(--base-text);
-    font-family: Georgia, "Times New Roman", Times, serif;
-    font-size: 12px;
-    font-weight: 400;
-    letter-spacing: 0.22em;
-    line-height: 1.6;
-    text-align: left;
-    text-transform: uppercase;
   }
 
   .hero-jump {
@@ -881,6 +862,15 @@
     content: "Colors off";
   }
 
+  @media (min-width: 901px) {
+    .stage-head {
+      width: min(1400px, calc(100vw - 40px));
+      max-width: none;
+      margin-right: 0;
+      margin-left: calc((100% - min(1400px, calc(100vw - 40px))) / 2);
+    }
+  }
+
   @media (max-width: 700px) {
     .term-toggle {
       right: 14px;
@@ -962,6 +952,10 @@
   }
 
   @media (max-width: 520px) {
+    .about-next {
+      overflow-x: clip;
+    }
+
     .stage-head {
       padding-inline: 8px;
     }
@@ -1007,15 +1001,16 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="about">
 <main class="about-next entrance-fade">
   <section class="stage" aria-labelledby="page-title">
     <canvas class="stage-bg" id="eyesBg" aria-hidden="true"></canvas>
     <canvas class="stage-bg" id="particleBg" aria-hidden="true"></canvas>
-    <header class="stage-head">
-      <h1 class="wordmark" id="page-title">THE six.well CONSTRUCT.</h1>
-      <p class="hero-copy">
+    <header class="stage-head site-hero site-hero--landing">
+      <h1 class="wordmark hero-title" id="page-title">THE six.well CONSTRUCT.</h1>
+      <p class="hero-copy hero-descriptor">
         The construct is the system. Nodes are the rooms inside it. Mediums are the
         forms the work moves through. The archive keeps the proof, residue, and
         evolution.

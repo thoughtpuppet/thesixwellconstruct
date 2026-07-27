@@ -62,17 +62,6 @@
   margin-bottom: 16px;
 }
 
-.venture-title {
-  color: var(--type-hero-color, var(--venture-accent));
-  font-family: var(--type-hero-font, var(--font-display));
-  font-size: var(--type-hero-size, clamp(76px, 15vw, 220px));
-  font-weight: var(--type-hero-weight, 900);
-  font-style: var(--type-hero-style, normal);
-  letter-spacing: var(--type-hero-tracking, 0);
-  line-height: var(--type-hero-leading, 0.84);
-  text-transform: var(--type-hero-transform, uppercase);
-}
-
 .venture-title .small-line {
   display: block;
   font-size: 0.42em;
@@ -85,19 +74,11 @@
   align-content: end;
 }
 
-.hero-lede,
 .hero-note {
-  max-width: min(100%, 380px);
-  padding-bottom: 16px;
-  text-align: left;
-  font-family: var(--type-descriptor-font, var(--font-serif));
-  font-size: var(--type-descriptor-size, 12px);
-  font-weight: var(--type-descriptor-weight, 400);
-  font-style: var(--type-descriptor-style, normal);
-  letter-spacing: var(--type-descriptor-tracking, 0.22em);
-  line-height: var(--type-descriptor-leading, 1.6);
-  text-transform: var(--type-descriptor-transform, uppercase);
-  color: var(--type-descriptor-color, rgba(252, 184, 103, 0.55));
+  max-width: 640px;
+  color: var(--type-body-color, var(--color-body));
+  font-size: var(--type-body-size-active, var(--type-body-size, 16px));
+  line-height: var(--type-body-leading-active, var(--type-body-leading, 1.6));
 }
 
 .hero-actions,
@@ -468,12 +449,6 @@
     padding-left: var(--page-padding-x-tablet, 28px);
   }
 
-  .venture-title {
-    font-size: var(--type-hero-size-tablet, var(--type-hero-size));
-    letter-spacing: var(--type-hero-tracking-tablet, var(--type-hero-tracking));
-    line-height: var(--type-hero-leading-tablet, var(--type-hero-leading));
-  }
-
   .section-title {
     font-size: var(--type-section-size-tablet, var(--type-section-size));
     letter-spacing: var(--type-section-tracking-tablet, var(--type-section-tracking));
@@ -499,12 +474,6 @@
 
   .venture-hero {
     min-height: auto;
-  }
-
-  .venture-title {
-    font-size: var(--type-hero-size-mobile, clamp(42px, 14vw, 74px));
-    letter-spacing: var(--type-hero-tracking-mobile, var(--type-hero-tracking));
-    line-height: var(--type-hero-leading-mobile, var(--type-hero-leading));
   }
 
   .section-title {
@@ -558,12 +527,6 @@
     padding-right: var(--page-padding-x-compact, 14px);
     padding-bottom: var(--page-padding-y-compact, 40px);
     padding-left: var(--page-padding-x-compact, 14px);
-  }
-
-  .venture-title {
-    font-size: var(--type-hero-size-compact, var(--type-hero-size-mobile));
-    letter-spacing: var(--type-hero-tracking-compact, var(--type-hero-tracking-mobile));
-    line-height: var(--type-hero-leading-compact, var(--type-hero-leading-mobile));
   }
 
   .section-title {

@@ -38,7 +38,7 @@
 
   /* ─── Hero ─── */
   .hero { margin-bottom:var(--s8); border-bottom:5px solid var(--ring-faint); padding-bottom:var(--s7); }
-  .series-title { font-family:var(--sans); font-weight:900; font-size:clamp(72px,14vw,192px); letter-spacing:-0.05em; line-height:0.85; color:var(--type-hero-color, var(--venture-accent)); text-transform:uppercase; margin-bottom:var(--s6); }
+  .series-title { margin-bottom:var(--s6); }
   .hero-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,480px); gap:var(--s7); align-items:start; }
   .series-statement { max-width:380px; padding-bottom:var(--s4); color:var(--body-text); font-family:var(--serif); font-size:12px; font-weight:400; letter-spacing:0.22em; line-height:1.6; text-align:left; text-transform:uppercase; }
   .series-statement + .series-statement { margin-top:var(--s5); }
@@ -105,7 +105,6 @@
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5) var(--s7); }
-    .series-title { font-size:clamp(64px,22vw,96px); }
     footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); }
   }
   @media (max-width:700px) {
@@ -114,6 +113,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="tattooing">
   <script>
@@ -132,11 +132,11 @@
   </header>
 
   <main>
-    <section class="hero">
-      <h1 class="series-title">MAZE</h1>
+    <section class="hero site-hero site-hero--supporting">
+      <h1 class="series-title hero-title">MAZE</h1>
       <div class="hero-body">
         <div>
-          <p class="series-statement">The MAZE series is a body of flash work built around disorientation, systems, and the act of moving through something that resists direction.</p>
+          <p class="series-statement hero-descriptor">The MAZE series is a body of flash work built around disorientation, systems, and the act of moving through something that resists direction.</p>
           <p class="series-statement">Each piece in the series operates as a study — a fragment of a larger symbolic language that is still being developed. The series connects across flash, merch, and archive.</p>
         </div>
         <div class="series-meta">

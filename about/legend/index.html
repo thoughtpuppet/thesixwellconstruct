@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e0e">
+<meta name="color-scheme" content="dark">
 <title>The Legend &middot; the six.well construct</title>
 <meta name="description" content="The Legend is the living key to the symbols, meanings, variations, and appearances that move across the Six.Well Construct.">
 <link rel="canonical" href="https://thesixwellconstruct.com/about/legend/">
@@ -11,132 +13,63 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/about/section-page.css">
+<link rel="stylesheet" href="/about/legend/legend.css">
+<link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css?v=20260715-breadcrumb-2">
-<style>
-  :root { color-scheme:dark; --bg:#090a09; --paper:var(--color-body); --muted:#aaa397; --accent:var(--color-about); --accent-dim:var(--color-about-dim); --symbol:#6D3D15; --line:rgba(255,231,202,.16); --panel:#0e0f0d; }
-  * { box-sizing:border-box; }
-  html { scroll-behavior:smooth; }
-  body { margin:0; background:var(--bg); color:var(--paper); font-family:Inter,Arial,sans-serif; }
-  a { color:inherit; }
-  button,input { font:inherit; }
-  button:focus-visible,input:focus-visible,a:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
-  .shell { width:min(1220px,calc(100% - 40px)); margin:auto; padding:32px 0 48px; }
-  .topline,.footer { display:flex; justify-content:space-between; gap:24px; font-size:.7rem; font-weight:700; letter-spacing:.13em; text-transform:uppercase; }
-  .hero { display:flex; align-items:flex-end; justify-content:space-between; gap:40px; padding:72px 0 64px; border-bottom:1px solid var(--line); }
-  .kicker,.index,.section-index { color:var(--accent); font-size:.68rem; font-weight:900; letter-spacing:.17em; text-transform:uppercase; }
-  h1 { margin:0; color:var(--accent); font-family:Inter,Arial,sans-serif; font-size:clamp(5rem,14vw,12.5rem); font-weight:900; line-height:.88; letter-spacing:-.05em; text-transform:uppercase; }
-  h2,h3,h4,h5 { color:var(--accent); }
-  .hero-copy { max-width:300px; }
-  .lede { margin:0; padding-bottom:16px; color:var(--accent); font-family:Georgia,"Times New Roman",serif; font-size:.75rem; letter-spacing:.22em; line-height:1.6; text-transform:uppercase; }
-  h2 { margin:12px 0 0; font-size:clamp(2.2rem,6vw,5.2rem); line-height:.9; letter-spacing:-.06em; text-transform:uppercase; }
-  .system-band { display:grid; grid-template-columns:.7fr 1.3fr; gap:42px; padding:38px 0 72px; border-bottom:1px solid var(--line); }
-  .system-band p { margin:0; max-width:49rem; color:var(--muted); line-height:1.7; }
-  .system-uses { display:flex; flex-wrap:wrap; gap:9px; margin-top:20px; }
-  .system-uses span { padding:9px 12px; border:1px solid var(--line); color:#c9c1b4; font-size:.65rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
-  .legend-catalog { padding:72px 0; }
-  .catalog-head { display:grid; grid-template-columns:1fr minmax(260px,.6fr); gap:42px; align-items:end; }
-  .catalog-note { margin:0; color:var(--muted); line-height:1.65; }
-  .legend-tools { display:flex; align-items:center; justify-content:space-between; gap:18px; flex-wrap:wrap; margin:34px 0 22px; padding-bottom:22px; border-bottom:1px solid var(--line); }
-  .legend-filters { display:flex; flex-wrap:wrap; gap:8px; }
-  .legend-filters button { border:1px solid var(--line); background:transparent; color:var(--paper); padding:9px 12px; font:700 .65rem Inter,Arial,sans-serif; letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
-  .legend-filters button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
-  .legend-search { display:flex; align-items:center; min-width:min(100%,280px); border-bottom:1px solid var(--line); }
-  .legend-search span { color:var(--accent); font-size:.62rem; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
-  .legend-search input { width:100%; border:0; background:transparent; color:var(--paper); padding:10px 0 10px 12px; }
-  .legend-search input::placeholder { color:#77736b; }
-  .legend-grid { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--line); border-left:1px solid var(--line); }
-  .legend-card { position:relative; min-height:390px; display:flex; flex-direction:column; width:100%; padding:28px; border:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line); background:transparent; color:var(--paper); text-align:left; cursor:pointer; }
-  .legend-card[aria-current="true"]::after { content:""; position:absolute; inset:8px; border:1px solid var(--accent); pointer-events:none; }
-  .legend-mark { display:grid; place-items:center; width:126px; height:126px; color:var(--symbol); }
-  .legend-mark svg { width:100%; height:100%; display:block; }
-  .legend-card h3 { margin:38px 0 10px; font-size:1.08rem; letter-spacing:.08em; text-transform:uppercase; }
-  .legend-card p { margin:0; color:var(--muted); line-height:1.58; }
-  .card-bottom { display:flex; justify-content:space-between; gap:14px; align-items:end; margin-top:auto; padding-top:26px; }
-  .layer-count { color:#8f897e; font-size:.6rem; font-weight:700; letter-spacing:.11em; line-height:1.6; text-transform:uppercase; }
-  .open-cue { color:var(--accent); font-size:1.4rem; line-height:1; }
-  .legend-empty { grid-column:1/-1; margin:0; padding:34px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--muted); line-height:1.65; }
-  .legend-detail { margin:0 0 36px; border:1px solid var(--accent); background:var(--panel); scroll-margin-top:20px; }
-  .legend-detail[hidden] { display:none; }
-  .detail-topline { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 18px; border-bottom:1px solid var(--line); }
-  .detail-topline button { border:0; background:transparent; color:var(--paper); padding:7px; font-size:.65rem; font-weight:700; letter-spacing:.13em; text-transform:uppercase; cursor:pointer; }
-  .detail-hero { display:grid; grid-template-columns:minmax(250px,.75fr) 1.25fr; min-height:480px; border-bottom:1px solid var(--line); }
-  .detail-mark { display:grid; place-items:center; min-height:360px; padding:50px; color:var(--symbol); border-right:1px solid var(--line); }
-  .detail-mark svg { width:min(80%,320px); height:min(80%,320px); max-height:320px; display:block; }
-  .detail-copy { align-self:end; padding:clamp(30px,5vw,66px); }
-  .detail-copy h3 { margin:16px 0 20px; font-size:clamp(2.8rem,7vw,6rem); line-height:.86; letter-spacing:-.07em; text-transform:uppercase; }
-  .detail-copy h3:focus-visible { outline:1px solid var(--accent); outline-offset:8px; }
-  .core-meaning { margin:0; max-width:39rem; color:#ded6c9; font-family:Georgia,"Times New Roman",serif; font-size:clamp(1.25rem,2vw,1.65rem); line-height:1.5; }
-  .theme-list { display:flex; flex-wrap:wrap; gap:7px; margin-top:26px; }
-  .theme-list span { padding:7px 9px; border:1px solid var(--line); color:var(--accent); font-size:.6rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
-  .detail-layer { padding:clamp(30px,5vw,60px); border-bottom:1px solid var(--line); }
-  .layer-heading { display:grid; grid-template-columns:.55fr 1.45fr; gap:30px; margin-bottom:28px; }
-  .layer-heading h4 { margin:10px 0 0; font-size:clamp(1.5rem,3vw,2.7rem); line-height:.95; letter-spacing:-.04em; text-transform:uppercase; }
-  .layer-heading p { margin:0; max-width:39rem; color:var(--muted); line-height:1.65; }
-  .application-list { display:grid; grid-template-columns:repeat(2,1fr); border-top:1px solid var(--line); border-left:1px solid var(--line); }
-  .application { display:grid; grid-template-columns:110px 1fr; gap:22px; padding:24px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
-  .application--text { grid-template-columns:1fr; }
-  .application-visual { display:grid; place-items:center; width:110px; height:110px; color:var(--symbol); }
-  .application-visual svg { width:100%; height:100%; }
-  .application h5,.variant h5,.appearance h5 { margin:0 0 9px; font-size:.84rem; letter-spacing:.09em; text-transform:uppercase; }
-  .application p,.variant p,.appearance p { margin:0; color:var(--muted); font-size:.86rem; line-height:1.6; }
-  .application .meaning-shift { color:#ded6c9; }
-  .application .context-note { margin-top:8px; font-size:.75rem; }
-  .variant-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
-  .variant { border:1px solid var(--line); background:#0a0b09; }
-  .variant-visual { display:grid; place-items:center; aspect-ratio:1; padding:24px; color:var(--symbol); border-bottom:1px solid var(--line); overflow:hidden; }
-  .variant-visual svg,.variant-visual img { width:100%; height:100%; object-fit:contain; }
-  .variant-copy { padding:18px; }
-  .variant-style,.appearance-medium { display:block; margin-bottom:9px; color:var(--accent); font-size:.58rem; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
-  .appearance-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
-  .appearance { display:flex; min-width:0; flex-direction:column; border:1px solid var(--line); color:inherit; text-decoration:none; }
-  .appearance img { width:100%; aspect-ratio:4/3; object-fit:cover; background:#080808; border-bottom:1px solid var(--line); }
-  .appearance-copy { padding:18px; }
-  .layer-undocumented { margin:0; padding:22px; border:1px dashed var(--line); color:#827d74; font-family:Georgia,"Times New Roman",serif; font-style:italic; }
-  .influence-grid { display:grid; grid-template-columns:repeat(2,1fr); border-top:1px solid var(--line); border-left:1px solid var(--line); }
-  .influence-card { min-height:220px; padding:24px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
-  .influence-card--reoriented { background:rgba(255,231,202,.035); }
-  .influence-label { display:block; color:var(--accent); font-size:.58rem; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
-  .influence-card h5 { margin:42px 0 10px; font-size:.84rem; letter-spacing:.09em; text-transform:uppercase; }
-  .influence-card p { margin:0; color:#d0c8bb; font-family:Georgia,"Times New Roman",serif; font-size:1rem; line-height:1.65; }
-  .influence-sources { margin-top:28px; padding-top:24px; border-top:1px solid var(--line); }
-  .influence-sources ul { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:15px 0 0; padding:0; list-style:none; }
-  .influence-sources li { padding:18px; border:1px solid var(--line); }
-  .influence-sources a { display:grid; gap:6px; color:inherit; text-decoration:none; }
-  .influence-sources strong { font-size:.78rem; line-height:1.45; letter-spacing:.06em; text-transform:uppercase; }
-  .influence-sources a span { color:var(--accent); font-size:.62rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
-  .influence-sources li p { margin:12px 0 0; color:var(--muted); font-size:.78rem; line-height:1.6; }
-  .detail-connections { padding:clamp(30px,5vw,60px); }
-  .detail-connections [data-detail-connections]:empty::before { content:"No connected works have been published for this symbol yet."; display:block; padding:22px; border:1px dashed var(--line); color:#827d74; font-family:Georgia,"Times New Roman",serif; font-style:italic; }
-  .footer { padding-top:28px; align-items:flex-start; border-top:1px solid var(--line); }
-  .footer nav { display:flex; flex-wrap:wrap; gap:20px; }
-  @media(max-width:900px){.legend-grid{grid-template-columns:1fr 1fr}.catalog-head,.system-band{grid-template-columns:1fr}.detail-hero{grid-template-columns:1fr}.detail-mark{border-right:0;border-bottom:1px solid var(--line)}.variant-grid,.appearance-grid{grid-template-columns:1fr 1fr}.application-list{grid-template-columns:1fr}}
-  @media(max-width:620px){.shell{width:calc(100% - 28px);padding-top:22px}.hero{flex-direction:column;align-items:flex-start;padding:64px 0 48px}.hero-copy{max-width:none}.catalog-head{gap:22px}.legend-tools{align-items:stretch}.legend-search{min-width:100%}.legend-grid{grid-template-columns:1fr}.legend-card{min-height:330px}.detail-hero{min-height:auto}.detail-mark{min-height:280px}.detail-copy{padding:28px}.layer-heading{grid-template-columns:1fr;gap:16px}.variant-grid,.appearance-grid,.influence-grid,.influence-sources ul{grid-template-columns:1fr}.application{grid-template-columns:82px 1fr}.application-visual{width:82px;height:82px}.footer{flex-direction:column}}
-</style>
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body data-venture="about">
-<main class="shell entrance-fade">
-  <header class="hero">
-    <h1>Legend.</h1>
-    <div class="hero-copy"><p class="lede">The vocabulary of the construct</p></div>
+<main class="about-section-page legend-page entrance-fade">
+  <nav class="construct-breadcrumb" aria-label="Breadcrumb">
+    <a href="/home/">Construct</a>
+    <span class="construct-breadcrumb-sep" aria-hidden="true">/</span>
+    <a href="/about/">About</a>
+    <span class="construct-breadcrumb-sep" aria-hidden="true">/</span>
+    <span class="construct-breadcrumb-current" aria-current="page">Legend</span>
+  </nav>
+
+  <header class="section-head site-hero site-hero--supporting" aria-labelledby="legend-page-title">
+    <span class="section-kicker">about / legend</span>
+    <h1 class="hero-title" id="legend-page-title">the Legend.</h1>
+    <p class="section-intro hero-descriptor">The vocabulary of this creative ecosystem</p>
+    <nav class="section-nav" aria-label="about sections">
+      <a href="/about/#orientation">ABOUT</a>
+      <a href="/about/visual-language/">Visual language</a>
+      <a href="/about/breakdown/">Breakdown</a>
+      <a href="/about/founder/">Founder</a>
+      <a href="/about/mediums/">Mediums</a>
+      <a href="/about/ways-in/">Ways in</a>
+      <a href="/about/current-state/">Current state</a>
+      <a href="/about/contact-press/">Contact / press</a>
+    </nav>
   </header>
 
   <aside class="system-band" aria-labelledby="system-title">
-    <div><span class="kicker">Shared source</span><h2 id="system-title">The key feeds the construct.</h2></div>
-    <div><p>Legend records are reusable source material. A published edit can clarify symbol selection, connect works across mediums, enrich search and archive memory, and keep the same symbolic identity coherent wherever it appears.</p><div class="system-uses" aria-label="Systems informed by the Legend"><span>Tattoo Build</span><span>Construct Connections</span><span>Archive Memory</span><span>Search + Themes</span><span>Future Works</span></div></div>
+    <div><span class="kicker">Shared source</span><h2 class="band-title section-title" id="system-title">The key feeds the construct.</h2></div>
+    <div><p>Legend records are reusable source material. A published edit can clarify symbol selection, connect works across mediums, enrich search and archive memory, and keep the same symbolic identity coherent wherever it appears.</p></div>
   </aside>
 
   <section class="legend-catalog" aria-labelledby="legend-catalog-title">
-    <div class="catalog-head"><div><span class="kicker">Published from Studio</span><h2 id="legend-catalog-title">The living index.</h2></div><p class="catalog-note">Choose a symbol to open its full record: core meaning, influence and relationship, contextual applications, visual versions, appearances, and connected work.</p></div>
-    <div class="legend-tools"><div class="legend-filters" data-live-legend-filters aria-label="Legend categories"></div><label class="legend-search"><span>Find</span><input type="search" data-live-legend-search placeholder="Name, meaning, or theme" autocomplete="off"></label></div>
+    <div class="catalog-head"><div><span class="kicker">Published from Studio</span><h2 class="band-title section-title" id="legend-catalog-title">The living index.</h2></div><p class="catalog-note">Choose a symbol to open its full record: core meaning, influence and relationship, contextual applications, visual versions, appearances, and connected work.</p></div>
+    <div class="legend-tools"><div class="legend-filters" data-live-legend-filters aria-label="Legend categories"></div><label class="legend-search"><span class="kicker">Find</span><input type="search" data-live-legend-search placeholder="Name, meaning, or theme" autocomplete="off"></label></div>
     <section class="legend-detail" data-live-legend-detail aria-live="polite" hidden></section>
     <div class="legend-grid" data-live-legend aria-live="polite"><p class="legend-empty">Loading the Legend…</p></div>
   </section>
 
-  <footer class="footer"><span>&copy; the six.well construct</span><nav aria-label="Related pages"><a href="/about/visual-language/">Visual language</a><a href="/tattoos/build/">Build with symbols</a><a href="/archive/">Archive</a><a href="/home/">Return to construct</a></nav></footer>
+  <footer class="footer-links legend-footer">
+    <span>&copy; the six.well construct</span>
+    <a href="/about/">About doorway</a>
+    <a href="/about/visual-language/">Visual language</a>
+    <a href="/tattoos/build/">Build with symbols</a>
+    <a href="/archive/">Archive</a>
+    <a href="/home/">Return to construct</a>
+  </footer>
 </main>
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>
 <script src="/js/construct-nav.js?v=20260715-breadcrumb-2"></script>
+<script src="/js/construct-wayfinding.js"></script>
 <script src="/js/legend-catalog.js?v=context"></script>
 </body>
 </html>

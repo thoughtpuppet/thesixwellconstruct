@@ -129,7 +129,7 @@ body.archive-public {
   grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
   gap: clamp(2.25rem, 7vw, 6rem);
   align-items: end;
-  padding-bottom: clamp(3rem, 7vw, 5rem);
+  padding-bottom: clamp(2rem, 5vw, 3.5rem);
   border-bottom: var(--archive-rule) solid var(--venture-color);
 }
 
@@ -162,38 +162,10 @@ body.archive-public {
 .archive-origin-thread-header p { margin: 0 0 1rem; color: var(--archive-muted); }
 .archive-origin-evidence { display: grid; gap: 1rem; }
 
-.archive-hero h1,
-.archive-record-title,
-.archive-timeline-title {
-  color: var(--venture-color);
-  max-width: 12ch;
-  margin: 0.3rem 0 0;
-  font-family: var(--font-display, Inter, Arial, sans-serif);
-  font-size: clamp(3.4rem, 10vw, 8.8rem);
-  font-weight: 900;
-  letter-spacing: -0.067em;
-  line-height: 0.82;
-  text-wrap: balance;
-  text-transform: uppercase;
-}
-
 .archive-hero-copy {
   display: grid;
   gap: 1rem;
   max-width: min(100%, 380px);
-}
-
-.archive-hero-copy > p {
-  margin: 0;
-  padding-bottom: 16px;
-  color: var(--archive-muted);
-  font-family: Georgia, "Times New Roman", Times, serif;
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0.22em;
-  line-height: 1.6;
-  text-align: left;
-  text-transform: uppercase;
 }
 
 .archive-record-intro,
@@ -208,6 +180,12 @@ body.archive-public {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   margin-top: 1rem;
+}
+
+.archive-search-panel {
+  margin-top: clamp(1.5rem, 4vw, 2.5rem);
+  padding-bottom: clamp(1.5rem, 4vw, 2.5rem);
+  border-bottom: var(--archive-rule) solid var(--archive-faint);
 }
 
 .archive-search-form > .archive-label {
@@ -269,7 +247,7 @@ body.archive-public {
   display: grid;
   grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr);
   gap: clamp(2rem, 5vw, 4.25rem);
-  padding-top: clamp(2.75rem, 7vw, 5rem);
+  padding-top: clamp(2rem, 5vw, 3.5rem);
 }
 
 .archive-filter-panel {
@@ -648,12 +626,6 @@ button.archive-chip::after {
   grid-template-columns: minmax(0, 1fr) minmax(17rem, 0.55fr);
   gap: clamp(2.25rem, 6vw, 5rem);
   align-items: end;
-}
-
-.archive-record-title,
-.archive-timeline-title {
-  max-width: 14ch;
-  font-size: clamp(3.15rem, 9vw, 8rem);
 }
 
 .archive-record-orientation {
@@ -1092,12 +1064,6 @@ button.archive-chip::after {
     align-items: start;
   }
 
-  .archive-hero h1,
-  .archive-record-title,
-  .archive-timeline-title {
-    max-width: 10ch;
-  }
-
   .archive-explorer {
     grid-template-columns: 1fr;
   }
@@ -1151,12 +1117,6 @@ button.archive-chip::after {
 
   .archive-app {
     padding-top: 3rem;
-  }
-
-  .archive-hero h1,
-  .archive-record-title,
-  .archive-timeline-title {
-    font-size: clamp(3rem, 18vw, 5.5rem);
   }
 
   .archive-search-form {
@@ -1270,11 +1230,6 @@ button.archive-chip::after {
   letter-spacing: normal !important;
   line-height: 1.65 !important;
   text-transform: uppercase !important;
-}
-
-.archive-public :where(.archive-hero h1, .archive-record-title, .archive-timeline-title) {
-  letter-spacing: -0.067em !important;
-  line-height: 0.82 !important;
 }
 
 .archive-public :where(.archive-section-title, .archive-card h3) {

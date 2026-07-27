@@ -62,14 +62,9 @@
     max-width:760px;
     margin-bottom:72px;
   }
-  .page-title {
-    font-family:var(--sans); font-weight:900; font-size:clamp(52px,8vw,118px);
-    letter-spacing:-0.05em; line-height:0.88; color:var(--type-hero-color, var(--venture-accent));
-    text-transform:uppercase; margin-bottom:14px;
-  }
+  .page-title { margin-bottom:14px; }
   .page-subtitle {
-    font-family:var(--serif); font-size:11px; letter-spacing:0.22em;
-    text-transform:uppercase; color:var(--text-dim); margin-bottom:34px;
+    margin-bottom:34px;
   }
   .intro-body {
     font-family:var(--serif); font-size:16px; line-height:1.8;
@@ -251,10 +246,6 @@
     header.top { padding:var(--s4) var(--s5); }
 main { padding:var(--s6) var(--s5); }
     .intro { margin-bottom:48px; }
-    .page-title {
-      font-size:clamp(42px,14vw,58px);
-      overflow-wrap:break-word;
-    }
     .intro-body,
     .detail-summary,
     .intention-body,
@@ -282,6 +273,7 @@ main { padding:var(--s6) var(--s5); }
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
@@ -309,9 +301,9 @@ main { padding:var(--s6) var(--s5); }
     <a class="nav-inquire" href="/tattoos/inquire/">Inquire</a>
   </header>
   <main>
-    <section class="intro">
-      <h1 class="page-title" data-copy-id="special-projects-page-title">Special Projects</h1>
-      <p class="page-subtitle" data-copy-id="special-projects-page-subtitle">Special Projects by SAIEL DAUHN SOLEHMAN</p>
+    <section class="intro site-hero site-hero--supporting">
+      <h1 class="page-title hero-title" data-copy-id="special-projects-page-title">Special Projects</h1>
+      <p class="page-subtitle hero-descriptor" data-copy-id="special-projects-page-subtitle">Special Projects by SAIEL DAUHN SOLEHMAN</p>
       <p class="intro-body" data-copy-id="special-projects-intro-body">Special Projects are concept-driven tattoo calls opened for a defined body of collaborative work. Apply only to a current open calls. For other commissions, use the Custom inquiry path.</p>
       <div class="intro-actions">
         <a class="cta-primary" href="#project-calls">View current calls</a>

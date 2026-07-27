@@ -47,137 +47,59 @@ body[data-venture="tattooing"] {
   letter-spacing: normal !important;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-.hero-title,
-.page-title,
-.wordmark,
-.site-wordmark,
-.brand-wordmark,
-.logo-wordmark,
-.nav-wordmark,
-.site-title,
-.brand-name,
-.logo-text,
-#wordmark,
-#wm-text,
-.section-title,
-.brand-title,
-.brand-title *,
-.manifest-brand-title,
-.manifest-brand-title *,
-.ledger-title,
-.manifesto-line,
-.path-title,
-.note-title,
-.fit-title,
-.booking-cta-title,
-.flash-title,
-.faq-q,
-[class*="wordmark"],
-[id*="wordmark"],
-[class*="logo"],
-[id*="logo"] {
+:where(
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .wordmark,
+  .site-wordmark,
+  .brand-wordmark,
+  .logo-wordmark,
+  .nav-wordmark,
+  .site-title,
+  .brand-name,
+  .logo-text,
+  #wordmark,
+  #wm-text,
+  .section-title,
+  .band-title,
+  .band-title *,
+  .brand-title,
+  .brand-title *,
+  .manifest-brand-title,
+  .manifest-brand-title *,
+  .ledger-title,
+  .manifesto-line,
+  .path-title,
+  .note-title,
+  .fit-title,
+  .booking-cta-title,
+  .flash-title,
+  .faq-q,
+  [class*="wordmark"],
+  [id*="wordmark"],
+  [class*="logo"],
+  [id*="logo"]
+):not(.hero-title) {
   letter-spacing: -0.015em !important;
   line-height: 0.98 !important;
 }
 
-.hero-title,
-.page-title,
-.wordmark,
-.site-wordmark,
-.brand-wordmark,
-.logo-wordmark,
-.nav-wordmark,
-#wordmark,
-#wm-text,
-[class*="wordmark"],
-[id*="wordmark"] {
+:where(
+  .wordmark,
+  .site-wordmark,
+  .brand-wordmark,
+  .logo-wordmark,
+  .nav-wordmark,
+  #wordmark,
+  #wm-text,
+  [class*="wordmark"],
+  [id*="wordmark"]
+):not(.hero-title) {
   line-height: 0.9 !important;
-}
-
-/* Canonical hero descriptor treatment.
-   Merch and Tattoo established this role: a small Georgia serif paragraph,
-   uppercase with open tracking and compact leading. Legacy selectors remain
-   here so current public pages inherit the same role without page-by-page
-   overrides. Color, alignment, measure, and spacing all belong to this shared
-   treatment. */
-:is(
-  .hero-descriptor,
-  .hero-desc,
-  .intro-desc,
-  .intro > #introDesc,
-  .hero-copy > p,
-  .venture-hero .hero-copy > .hero-lede,
-  .venture-hero .hero-copy > .hero-note,
-  .tattoos-page .hero-copy > .hero-lead,
-  .tattoos-page .hero-copy > .hero-note,
-  .hero .hero-copy > .lede,
-  p.hero-copy,
-  .section-head > .section-intro,
-  .archive-hero-copy > p,
-  .venture-hero .signal-subtitle,
-  .hero .series-statement,
-  main > .lede,
-  .page-title + .intro-body,
-  .page-title + .page-body,
-  .page-title + .page-subtitle,
-  .gate-title + .gate-body,
-  .copy > h1 + .description,
-  main > h1 + .lead
-) {
-  font-family: var(--type-descriptor-font, var(--serif, var(--font-serif, Georgia, "Times New Roman", Times, serif))) !important;
-  font-size: var(--type-descriptor-size-active, var(--type-descriptor-size, 12px)) !important;
-  font-weight: var(--type-descriptor-weight, 400) !important;
-  font-style: var(--type-descriptor-style, normal) !important;
-  letter-spacing: var(--type-descriptor-tracking-active, var(--type-descriptor-tracking, 0.22em)) !important;
-  line-height: var(--type-descriptor-leading-active, var(--type-descriptor-leading, 1.6)) !important;
-  text-transform: var(--type-descriptor-transform, uppercase) !important;
-  font-variant-caps: normal !important;
-  color: var(--type-descriptor-color, rgba(252, 184, 103, 0.55)) !important;
-  max-width: min(100%, 380px) !important;
-  text-align: left !important;
-  padding-bottom: var(--s4, 16px) !important;
-}
-
-/* The live editor can wrap descriptor phrases in nested spans with inline
-   presentation. Keep color and emphasis available, but prevent those wrappers
-   from falling back to the global body tracking and leading. */
-:is(
-  .hero-descriptor,
-  .hero-desc,
-  .intro-desc,
-  .intro > #introDesc,
-  .hero-copy > p,
-  .venture-hero .hero-copy > .hero-lede,
-  .venture-hero .hero-copy > .hero-note,
-  .tattoos-page .hero-copy > .hero-lead,
-  .tattoos-page .hero-copy > .hero-note,
-  .hero .hero-copy > .lede,
-  p.hero-copy,
-  .section-head > .section-intro,
-  .archive-hero-copy > p,
-  .venture-hero .signal-subtitle,
-  .hero .series-statement,
-  main > .lede,
-  .page-title + .intro-body,
-  .page-title + .page-body,
-  .page-title + .page-subtitle,
-  .gate-title + .gate-body,
-  .copy > h1 + .description,
-  main > h1 + .lead
-) :where(span, strong, em, b, i, a) {
-  font-family: inherit !important;
-  font-size: inherit !important;
-  letter-spacing: inherit !important;
-  line-height: inherit !important;
-  text-transform: inherit !important;
-  font-variant-caps: inherit !important;
-  color: inherit !important;
 }
 
 /* Controls opt into the shared role through established text-control classes.
@@ -188,6 +110,7 @@ h6,
   .btn,
   .btn-primary,
   .btn-secondary,
+  .brand-band-link,
   .venture-link
 ) {
   font-family: var(--type-control-font, var(--font-display, Inter, Arial, sans-serif)) !important;
@@ -198,46 +121,6 @@ h6,
   line-height: var(--type-control-leading-active, var(--type-control-leading, 1.2)) !important;
   text-transform: var(--type-control-transform, uppercase) !important;
   min-height: var(--control-min-height, 44px);
-}
-
-.hero-title,
-.page-title,
-.intro h1,
-main > h1 {
-  font-weight: 900 !important;
-}
-
-body[data-venture="tattooing"] :is(
-  main h1,
-  .hero-title,
-  .page-title,
-  .gate-title,
-  .series-title,
-  .flash-title
-) {
-  color: var(--type-hero-color, var(--color-tattooing)) !important;
-}
-
-body[data-venture="tattooing"] main h1,
-body[data-venture="tattooing"] .intro h1,
-body[data-venture="tattooing"] .hero-title,
-body[data-venture="tattooing"] .page-title,
-body[data-venture="tattooing"] .gate-title,
-body[data-venture="tattooing"] .series-title,
-.tattoos-page .hero-copy h1 {
-  max-width: 100%;
-  white-space: nowrap !important;
-  word-break: normal !important;
-  overflow-wrap: normal !important;
-}
-
-body[data-venture="tattooing"] main h1 br,
-body[data-venture="tattooing"] .intro h1 br,
-body[data-venture="tattooing"] .hero-title br,
-body[data-venture="tattooing"] .page-title br,
-body[data-venture="tattooing"] .gate-title br,
-body[data-venture="tattooing"] .series-title br {
-  display: none !important;
 }
 
 #wordmark,
@@ -431,45 +314,6 @@ main > .construct-breadcrumb {
   letter-spacing: var(--type-meta-tracking-active, var(--type-meta-tracking, 0.18em)) !important;
   line-height: var(--type-meta-leading-active, var(--type-meta-leading, 1.42)) !important;
   text-transform: var(--type-meta-transform, uppercase) !important;
-}
-
-/* Shared brand-band action. Venture pages supply their existing colors and
-   keep layout-specific placement in their local brand-band rules. */
-.brand-band-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  color: var(--brand-band-link-color, var(--accent-hot, var(--text, currentColor)));
-  font-family: var(--sans, var(--font-inter, Inter, Arial, sans-serif));
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  line-height: 1;
-  text-transform: uppercase;
-  border-bottom: 2px solid var(--brand-band-link-border, currentColor);
-  transition:
-    color var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1)),
-    border-color var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1)),
-    transform var(--t-fast, 0.18s cubic-bezier(0.2, 0, 0.2, 1));
-}
-
-.brand-band-link:hover,
-.brand-band-link:focus-visible {
-  color: var(--brand-band-link-hover, var(--accent, currentColor));
-  border-color: var(--brand-band-link-hover, var(--accent, currentColor));
-  outline: none;
-  transform: translateY(-1px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .brand-band-link {
-    transition: none;
-  }
-
-  .brand-band-link:hover,
-  .brand-band-link:focus-visible {
-    transform: none;
-  }
 }
 
 @media (max-width: 900px) {

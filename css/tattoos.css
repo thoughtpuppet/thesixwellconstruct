@@ -46,23 +46,6 @@
   margin-bottom: 96px;
 }
 
-.tattoos-page .hero-copy h1,
-.tattoos-page .page-title {
-  margin-bottom: 8px;
-  color: var(--venture-accent);
-  font-family: var(--font-display);
-  font-size: clamp(80px, 14vw, 220px);
-  font-weight: 900;
-  letter-spacing: -0.05em;
-  line-height: 0.88;
-  text-transform: uppercase;
-  max-width: 100%;
-  white-space: nowrap;
-  word-break: normal;
-  overflow-wrap: normal;
-}
-
-.tattoos-page .hero-copy .hero-lead,
 .tattoos-page .page-lead,
 .tattoos-page .hero-copy .hero-note {
   max-width: min(100%, 380px);
@@ -77,7 +60,6 @@
   text-transform: uppercase;
 }
 
-.tattoos-page .hero-copy .hero-lead,
 .tattoos-page .page-lead {
   color: var(--color-body);
 }
@@ -428,11 +410,6 @@
   .tattoos-page .hero {
     gap: 24px;
     margin-bottom: 64px;
-  }
-
-  .tattoos-page .hero-copy h1,
-  .tattoos-page .page-title {
-    font-size: clamp(56px, 18vw, 104px);
   }
 
   .tattoos-page .action-row {

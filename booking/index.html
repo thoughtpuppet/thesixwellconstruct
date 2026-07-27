@@ -32,8 +32,8 @@
   .badge { display:inline-flex; align-items:center; gap:8px; border:5px solid var(--ring-soft); color:var(--ring); padding:5px 12px; margin-bottom:48px; font-size:10px; letter-spacing:0.22em; text-transform:uppercase; }
   .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--ring); }
   .section-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--muted); }
-  h1 { max-width:720px; margin:16px 0 24px; font-family:var(--sans); font-size:clamp(42px,7vw,88px); line-height:0.88; letter-spacing:0; color:var(--signal); }
-  .lead { max-width:600px; margin:0 0 24px; color:var(--color-text-muted, rgba(251,209,157,0.66)); font-size:16px; line-height:1.8; }
+  h1 { max-width:720px; margin:16px 0 24px; }
+  .lead { margin:0 0 24px; }
   .status { max-width:720px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:22px 0; color:var(--muted); line-height:1.7; }
   .pending-checkout-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
   .pending-checkout-link,.pending-checkout-button { display:inline-flex; min-height:44px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--color-body); padding:0 16px; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
@@ -108,6 +108,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
@@ -124,9 +125,9 @@
 </script>
 <div class="grain"></div>
 <header></header>
-<main>
-  <h1 id="bookingTitle" data-copy-id="booking-title">BOOKING.</h1>
-  <p class="lead" id="bookingLead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
+<main class="site-hero site-hero--supporting">
+  <h1 class="hero-title" id="bookingTitle" data-copy-id="booking-title">BOOKING.</h1>
+  <p class="lead hero-descriptor" id="bookingLead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
   <div class="badge"><span class="badge-dot"></span>Private Booking</div>
   <p class="local-edit-note" data-live-edit-ignore="true">Preview editing is local only. Use the toolbar at bottom right, then export the changes for source-file updates.</p>
 

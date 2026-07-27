@@ -25,9 +25,6 @@
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
   }
-  body.tattoos-page #policy-hero-intro {
-    max-width: min(100%, 680px) !important;
-  }
   .resource-list {
     display: grid;
     gap: 14px;
@@ -55,13 +52,14 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body class="tattoos-page tattoo-resource-page" data-venture="tattooing">
   <main class="tattoos-shell">
-    <section class="hero">
+    <section class="hero site-hero site-hero--supporting">
       <div class="hero-copy entrance-fade">
-        <h1 data-fit-width="" style="font-size: 70px; display: inline-block;">Studio &amp; Booking Policies</h1>
-        <p class="hero-lead" id="policy-hero-intro">The studio's&nbsp;<span style="color: rgba(252, 184, 103, 0.55); font-family: Georgia, &quot;Times New Roman&quot;, Times, serif; font-size: 12px; text-transform: uppercase">Terms &amp; Conditions are expressed below.&nbsp;</span>Please read everything carefully before booking your appointment.&nbsp;<span style="color: rgba(232, 228, 220, 0.76); font-family: Georgia, &quot;Times New Roman&quot;, Times, serif; font-size: 13px; text-transform: none">Booking an appointment confirms that you have read and understood the studio policies below</span>.</p>
+        <h1 class="hero-title">Studio &amp; Booking Policies</h1>
+        <p class="hero-lead hero-descriptor" id="policy-hero-intro">The studio's&nbsp;<span>Terms &amp; Conditions are expressed below.&nbsp;</span>Please read everything carefully before booking your appointment.&nbsp;<span>Booking an appointment confirms that you have read and understood the studio policies below</span>.</p>
         <p class="hero-note"><br></p>
       </div>
     </section>

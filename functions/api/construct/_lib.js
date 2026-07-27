@@ -116,6 +116,7 @@ function normalizeLegendLayers(out) {
       note: text(entry?.note, 3000),
       svg_markup: entry?.svg_markup ? sanitizeLegendSvg(entry.svg_markup) : "",
       image_url: safeLegendUrl(entry?.image_url),
+      href: safeLegendUrl(entry?.href),
     })).filter((entry) => entry.name && (entry.svg_markup || entry.image_url));
     out.variants_json = JSON.stringify(variants);
   }
@@ -233,8 +234,11 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
   const acquisitionOnly = resource === "art" && new URL(request.url).searchParams.get("acquisition") === "1";
   const baseWhere = `${publicState(resource)}${acquisitionOnly ? " AND acquisition_eligible=1 AND availability='available'" : ""}`;
   const isFlashRecord = resource === "flash" && Boolean(recordSlug);
+  const isLegendRecord = config.entityType === "visual_symbol" && Boolean(recordSlug);
   const where = isFlashRecord
     ? `${baseWhere} AND (id=? OR slug=? OR legacy_path=? OR legacy_path=?)`
+    : isLegendRecord
+      ? `${baseWhere} AND (slug=? OR id=?)`
     : recordSlug
       ? `${baseWhere} AND slug=?`
       : baseWhere;
@@ -242,6 +246,8 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
   const legacyPath = `/tattoos/flash/${String(recordSlug).replace(/^\/+|\/+$/g, "")}/`;
   const result = isFlashRecord
     ? await statement.bind(recordSlug, recordSlug, recordSlug, legacyPath).all()
+    : isLegendRecord
+      ? await statement.bind(recordSlug, recordSlug).all()
     : recordSlug
       ? await statement.bind(recordSlug).all()
       : await statement.all();

@@ -43,7 +43,7 @@
   .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
 
   /* ── LEFT COLUMN ── */
-  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,140px);letter-spacing:-0.05em;line-height:0.88;color:var(--type-hero-color, var(--venture-accent));text-transform:uppercase;margin-bottom:var(--s6);}
+  .page-title{margin-bottom:var(--s6);}
   .page-body{font-size:16px;line-height:1.8;color:var(--text-mute);max-width:560px;}
   .page-body+.page-body{margin-top:var(--s4);}
 
@@ -86,7 +86,6 @@
   @media(max-width:640px){
     header.top{padding:var(--s4) var(--s5);}
     main{padding:var(--s6) var(--s5) var(--s7);}
-    .page-title{font-size:clamp(52px,17vw,90px);}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
   }
   @media(max-width:700px){
@@ -94,6 +93,7 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
@@ -117,9 +117,9 @@
     <div class="layout">
 
       <!-- LEFT — INFO -->
-      <section>
-        <h1 class="page-title">In-Person.</h1>
-        <p class="page-body">The Build Your Own process can happen in the studio directly. Sit with Legend, talk through what you want to carry, and build the brief together before a session is scheduled.</p>
+      <section class="site-hero site-hero--supporting">
+        <h1 class="page-title hero-title">In-Person.</h1>
+        <p class="page-body hero-descriptor">The Build Your Own process can happen in the studio directly. Sit with Legend, talk through what you want to carry, and build the brief together before a session is scheduled.</p>
         <p class="page-body">This is a longer in-person build session where the tattoo brief is developed with you in the studio. Looking for a shorter planning consultation instead? <a href="/tattoos/inquire/consultation/" style="color:var(--accent);text-decoration:underline;">Book a consultation</a>.</p>
 
         <!-- ADDRESS -->

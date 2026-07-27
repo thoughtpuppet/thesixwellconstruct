@@ -2,7 +2,7 @@
    Landing Family foundation
    ============================================================
    Shared visual contract for public landing variants. This layer owns
-   semantic medium aliases, responsive spacing activation, hero roles,
+   semantic medium aliases, responsive spacing activation,
    structural rhythm, focus visibility, and the mobile control floor.
    Variant composition remains in each landing's existing stylesheet.
    ============================================================ */
@@ -57,28 +57,6 @@ body[data-landing-family] .landing-hero {
 
 body[data-landing-family="events-program"] .landing-hero {
   margin-bottom: 0;
-}
-
-body[data-landing-family] .landing-hero .hero-title {
-  color: var(--type-hero-color, var(--venture-accent));
-  font-family: var(--type-hero-font, var(--font-display));
-  font-size: var(--type-hero-size-active, var(--type-hero-size));
-  font-weight: var(--type-hero-weight, 900);
-  font-style: var(--type-hero-style, normal);
-  letter-spacing: var(--type-hero-tracking-active, var(--type-hero-tracking));
-  line-height: var(--type-hero-leading-active, var(--type-hero-leading));
-  text-transform: var(--type-hero-transform, uppercase);
-}
-
-body[data-landing-family] .landing-hero .hero-descriptor {
-  color: var(--type-descriptor-color);
-  font-family: var(--type-descriptor-font, var(--font-serif));
-  font-size: var(--type-descriptor-size-active, var(--type-descriptor-size));
-  font-weight: var(--type-descriptor-weight, 400);
-  font-style: var(--type-descriptor-style, normal);
-  letter-spacing: var(--type-descriptor-tracking-active, var(--type-descriptor-tracking));
-  line-height: var(--type-descriptor-leading-active, var(--type-descriptor-leading));
-  text-transform: var(--type-descriptor-transform, uppercase);
 }
 
 body[data-landing-family] :where(

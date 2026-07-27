@@ -41,21 +41,6 @@ body {
   text-transform: var(--type-eyebrow-transform, uppercase);
 }
 
-.section-head > .hero-title {
-  margin: 0;
-  color: var(--type-hero-color, var(--about-accent));
-  font-family: var(--type-hero-font, var(--font-display));
-  /* The centered family composition has less horizontal runway than the
-     Guide's split hero. It still follows the shared role at every viewport,
-     with a desktop cap that prevents single-word titles from clipping. */
-  font-size: min(var(--type-hero-size-active, var(--type-hero-size)), 132px);
-  font-weight: var(--type-hero-weight, 900);
-  font-style: var(--type-hero-style, normal);
-  letter-spacing: var(--type-hero-tracking-active, var(--type-hero-tracking, 0));
-  line-height: var(--type-hero-leading-active, var(--type-hero-leading, 0.84));
-  text-transform: var(--type-hero-transform, uppercase);
-}
-
 .band-title {
   margin: 0;
   color: var(--type-section-color, var(--about-accent));

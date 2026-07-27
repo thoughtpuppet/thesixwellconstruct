@@ -54,10 +54,10 @@
   --color-tattooing-dark:   #420202;
 
   /* ART MAKING */
-  --color-art:              #0039BD;
-  --color-art-dim:          rgba(0, 57, 189, 0.25);
-  --color-art-bright:       #0F72DB;
-  --color-art-dark:         #002884;
+  --color-art:              #0034AD;
+  --color-art-dim:          rgba(0, 52, 173, 0.25);
+  --color-art-bright:       #055BDB;
+  --color-art-dark:         #001E57;
 
   /* MERCH */
   --color-merch:            #F08000;
@@ -75,7 +75,7 @@
   --color-events:           #005D25;
   --color-events-dim:       rgba(0, 93, 37, 0.25);
   --color-events-bright:    #397F34;
-  --color-events-dark:      #003816;
+  --color-events-dark:      #003014;
 
   /* MUSIC */
   --color-music:            #A22F8D;
@@ -144,17 +144,30 @@
   --type-hero-weight:     900;
   --type-hero-style:      normal;
   --type-hero-leading:    0.84;
-  --type-hero-tracking:   0em;
+  --type-hero-tracking:   -0.06em;
   --type-hero-transform:  uppercase;
-  --type-hero-size-tablet:     clamp(58px, 12vw, 132px);
+  --type-hero-size-tablet:     clamp(58px, 16vw, 132px);
   --type-hero-leading-tablet:  0.88;
-  --type-hero-tracking-tablet: 0em;
-  --type-hero-size-mobile:     clamp(42px, 14vw, 74px);
+  --type-hero-tracking-tablet: -0.04em;
+  --type-hero-size-mobile:     clamp(36px, 17vw, 112px);
   --type-hero-leading-mobile:  0.9;
-  --type-hero-tracking-mobile: 0em;
-  --type-hero-size-compact:     clamp(38px, 13vw, 62px);
+  --type-hero-tracking-mobile: -0.025em;
+  --type-hero-size-compact:     clamp(36px, 17vw, 112px);
   --type-hero-leading-compact:  0.92;
-  --type-hero-tracking-compact: 0em;
+  --type-hero-tracking-compact: -0.02em;
+
+  --type-supporting-hero-size:       clamp(38px, 7vw, 96px);
+  --type-supporting-hero-leading:    0.88;
+  --type-supporting-hero-tracking:   -0.06em;
+  --type-supporting-hero-size-tablet:     clamp(36px, 8vw, 76px);
+  --type-supporting-hero-leading-tablet:  0.9;
+  --type-supporting-hero-tracking-tablet: -0.04em;
+  --type-supporting-hero-size-mobile:     clamp(30px, 10vw, 58px);
+  --type-supporting-hero-leading-mobile:  0.92;
+  --type-supporting-hero-tracking-mobile: -0.025em;
+  --type-supporting-hero-size-compact:     clamp(28px, 10vw, 52px);
+  --type-supporting-hero-leading-compact:  0.94;
+  --type-supporting-hero-tracking-compact: -0.02em;
 
   --type-section-font:       var(--font-display);
   --type-section-color:      var(--color-body);

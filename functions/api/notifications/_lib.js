@@ -198,6 +198,11 @@ function tattooBookingName(appointment) {
   return "Tattoo Booking";
 }
 
+function studioBookingName(appointment) {
+  if (ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId)) return "Open Studio Visit";
+  return appointment.bookingTypeLabel || appointment.bookingTypeId;
+}
+
 function tattooAdminBookingSubject(appointment, state) {
   return tattooSubject(`${tattooBookingName(appointment)} ${state}`);
 }
@@ -962,7 +967,8 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   if (!normalized.contactEmail) return { ok: false, skipped: true };
 
   const type = normalizedSubmissionType(normalized.type);
-  const studioVisit = type === "studio_booking" && normalized.payload?.booking_type_id === "studio_visit";
+  const studioVisit = type === "studio_booking"
+    && (normalized.payload?.booking_type_id || normalized.payload?.bookingTypeId) === "studio_visit";
   const constructTheme = type === "art_acquisition" || studioVisit
     ? "construct_art"
     : type === "studio_booking"
@@ -1026,7 +1032,9 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
 export async function notifyAdminSubmissionReceived(env, submission, options = {}) {
   const normalized = normalizeSubmission(submission);
   const formName = tattooFormName(normalized.type);
-  const studioVisit = normalized.type === "studio_booking" && normalized.payload?.booking_type_id === "studio_visit";
+  const studioVisit = normalized.type === "studio_booking"
+    && (normalized.payload?.booking_type_id || normalized.payload?.bookingTypeId) === "studio_visit";
+  const submissionTypeLabel = studioVisit ? "Open Studio Visit" : labelFromKey(normalized.type);
   const theme = normalized.type === "art_acquisition" || studioVisit
     ? "construct_art"
     : normalized.type === "studio_booking"
@@ -1036,7 +1044,7 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
   const lines = [
     "New form submission received.",
     "",
-    compactLine("Type", labelFromKey(normalized.type)),
+    compactLine("Type", submissionTypeLabel),
     compactLine("Submission ID", normalized.id),
     compactLine("Source", normalized.sourcePath),
     compactLine("Subject", normalized.subject),
@@ -1055,7 +1063,7 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
     templateVariant: theme,
     subject: formName
       ? tattooSubject(formName)
-      : `New submission: ${labelFromKey(normalized.type)}`,
+      : `New submission: ${submissionTypeLabel}`,
     lines,
     templateKey: "admin_submission_received",
     relatedType: "submission",
@@ -1239,7 +1247,7 @@ async function sendStudioBookingConfirmed(env, request, appointment, options = {
       : "Your studio booking at the six.well construct is confirmed",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: appointment.bookingTypeLabel,
+    session: studioBookingName(appointment),
     feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received - this holds your date; any balance is settled with the studio.`,
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
     calendarUrl: appointmentCalendarUrl(env, request, appointment),
@@ -1283,13 +1291,14 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
   const appointment = normalizeAppointment(appointmentRow);
   const studio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
   const art = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
+  const bookingTypeLabel = studio ? studioBookingName(appointment) : appointment.bookingTypeLabel || appointment.bookingTypeId;
   const when = [formatDate(appointment.startAt), formatDate(appointment.endAt)]
     .filter(Boolean)
     .join(" - ");
   const lines = [
     "Booking payment confirmed.",
     "",
-    compactLine("Booking type", appointment.bookingTypeLabel || appointment.bookingTypeId),
+    compactLine("Booking type", bookingTypeLabel),
     compactLine("Appointment ID", appointment.id),
     compactLine("Submission ID", appointment.submissionId),
     compactLine("When", when),
@@ -1313,7 +1322,7 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
     theme: art ? "construct_art" : studio ? "construct_event" : "tattoo",
     templateVariant: art ? "construct_art" : studio ? "construct_event" : "tattoo",
     subject: studio
-      ? `Booking confirmed: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
+      ? `Booking confirmed: ${bookingTypeLabel}`
       : tattooAdminBookingSubject(appointment, "Confirmed"),
     lines,
     templateKey: "admin_appointment_confirmed",
@@ -1399,7 +1408,7 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
       ? `${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}`
       : "",
     newTime: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: appointment.bookingTypeLabel,
+    session: profile.studio ? studioBookingName(appointment) : appointment.bookingTypeLabel,
     ...extendedDayEmailFields(appointment),
     zoomUrl: profile.virtual ? appointment.meeting?.joinUrl || "" : "",
     zoomStatus: profile.virtual && !appointment.meeting?.joinUrl
@@ -1424,18 +1433,19 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
 export async function notifyAdminAppointmentRescheduled(env, request, appointmentRow, options = {}) {
   const appointment = normalizeAppointment(appointmentRow);
   const profile = rescheduledAppointmentProfile(appointment);
+  const bookingTypeLabel = profile.studio ? studioBookingName(appointment) : appointment.bookingTypeLabel || appointment.bookingTypeId;
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
   return sendAdminNotification(env, request, {
     theme: profile.art ? "construct_art" : profile.studio ? "construct_event" : "tattoo",
     templateVariant: profile.art ? "construct_art" : profile.studio ? "construct_event" : "tattoo",
     subject: profile.studio
-      ? `Booking rescheduled: ${appointment.bookingTypeLabel || appointment.bookingTypeId}`
+      ? `Booking rescheduled: ${bookingTypeLabel}`
       : tattooAdminBookingSubject(appointment, "Rescheduled"),
     lines: [
       "A paid booking was moved without a new charge.",
       "",
-      compactLine("Booking type", appointment.bookingTypeLabel || appointment.bookingTypeId),
+      compactLine("Booking type", bookingTypeLabel),
       compactLine("Purpose", appointment.purpose || profile.label),
       compactLine("Appointment ID", appointment.id),
       compactLine("Submission ID", appointment.submissionId),
@@ -2007,11 +2017,11 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
   const message = buildAppointmentCancelledEmail({
     variant: isArt ? "studio_visit" : isStudio ? "studio_space" : isBuild ? "build" : isPrerequisiteConsultation ? "prerequisite" : isConsultation ? "consultation" : "tattoo",
     kind: isArt ? "studio_visit" : isStudio ? "studio_space" : "tattoo",
-    subject: `Your ${occasion.toLowerCase()} has been cancelled`,
+    subject: `Your ${isArt ? occasion : occasion.toLowerCase()} has been cancelled`,
     clientName: appointment.clientName,
     occasion,
     scheduled: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: appointment.bookingTypeLabel,
+    session: isStudio ? studioBookingName(appointment) : appointment.bookingTypeLabel,
     ...extendedDayEmailFields(appointment),
     policyText,
     rebookUrl,
@@ -2255,7 +2265,7 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
     brand,
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: appointment.bookingTypeLabel,
+    session: isStudio ? studioBookingName(appointment) : appointment.bookingTypeLabel,
     ...extendedDayEmailFields(appointment),
     zoomUrl: isVirtual ? appointment.meeting?.joinUrl || "" : "",
     zoomStatus: isVirtual && !appointment.meeting?.joinUrl

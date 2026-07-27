@@ -885,7 +885,7 @@ export function renderClientEmailPreview(templateKey, variant = "") {
     rendered = buildAppointmentCancelledEmail({
       variant: mode || "tattoo",
       kind: studioVisit ? "studio_visit" : legacy ? "studio" : studio ? "studio_space" : "tattoo",
-      subject: `Your ${occasion.toLowerCase()} has been cancelled`,
+      subject: `Your ${studioVisit ? occasion : occasion.toLowerCase()} has been cancelled`,
       clientName: SAMPLE.clientName,
       occasion,
       scheduled: SAMPLE.when,

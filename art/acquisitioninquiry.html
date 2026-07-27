@@ -33,6 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 
 <style>
@@ -122,18 +123,7 @@
     margin-bottom:var(--s8);
     padding-bottom:var(--s7);
   }
-  .page-head h1 {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(48px,8vw,112px);
-    letter-spacing:-0.05em; line-height:0.88;
-    color:var(--src-color);
-    margin-bottom:var(--s4);
-  }
-  .page-head p {
-    font-family:var(--serif); font-size:15px;
-    line-height:1.65; color:var(--body-mute);
-    max-width:560px;
-  }
+  .page-head h1 { margin-bottom:var(--s4); }
 
   /* ============================================================
      TWO-COLUMN LAYOUT
@@ -334,6 +324,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
 <body data-venture="art">
@@ -352,10 +343,10 @@
     </nav>
 
     <!-- PAGE TITLE -->
-    <div class="page-head">
-      <h1>ACQUISITION.</h1>
+    <div class="page-head site-hero site-hero--supporting">
+      <h1 class="hero-title">ACQUISITION.</h1>
       <!-- REWRITE: your words about how you handle painting sales -->
-      <p>
+      <p class="hero-descriptor">
         Original paintings are available for direct acquisition.
         Local delivery and installation is offered within the area.
         For all other locations, shipping can be arranged.

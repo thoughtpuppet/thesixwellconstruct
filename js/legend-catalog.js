@@ -93,14 +93,14 @@
   function renderInfluence(context) {
     if (!context.authored) return "";
     const cards = [];
-    if (context.cultural_context) cards.push(`<article class="influence-card"><span class="influence-label">Cultural or inherited</span><h5>Inherited and shared associations</h5><p>${escapeHtml(context.cultural_context)}</p></article>`);
-    if (context.personal_relationship) cards.push(`<article class="influence-card"><span class="influence-label">Personal or lived</span><h5>My relationship</h5><p>${escapeHtml(context.personal_relationship)}</p></article>`);
-    if (context.reorientation.statement) cards.push(`<article class="influence-card influence-card--reoriented"><span class="influence-label">Reoriented · ${escapeHtml(REORIENTATION_LABELS[context.reorientation.mode] || context.reorientation.mode)}</span><h5>My interpretive move</h5><p>${escapeHtml(context.reorientation.statement)}</p></article>`);
-    if (context.overlap_or_tension) cards.push(`<article class="influence-card"><span class="influence-label">Overlap and tension</span><h5>Where the meanings meet</h5><p>${escapeHtml(context.overlap_or_tension)}</p></article>`);
-    if (context.viewer_opening) cards.push(`<article class="influence-card"><span class="influence-label">Open reading</span><h5>Room for the viewer</h5><p>${escapeHtml(context.viewer_opening)}</p></article>`);
-    const sources = context.sources.length ? `<div class="influence-sources"><span class="influence-label">Curated sources</span><ul>${context.sources.map((source) => {
+    if (context.cultural_context) cards.push(`<article class="influence-card"><span class="influence-label metadata legend-accent-meta">Cultural or inherited</span><h5 class="legend-item-title">Inherited and shared associations</h5><p>${escapeHtml(context.cultural_context)}</p></article>`);
+    if (context.personal_relationship) cards.push(`<article class="influence-card"><span class="influence-label metadata legend-accent-meta">Personal or lived</span><h5 class="legend-item-title">My relationship</h5><p>${escapeHtml(context.personal_relationship)}</p></article>`);
+    if (context.reorientation.statement) cards.push(`<article class="influence-card influence-card--reoriented"><span class="influence-label metadata legend-accent-meta">Reoriented · ${escapeHtml(REORIENTATION_LABELS[context.reorientation.mode] || context.reorientation.mode)}</span><h5 class="legend-item-title">My interpretive move</h5><p>${escapeHtml(context.reorientation.statement)}</p></article>`);
+    if (context.overlap_or_tension) cards.push(`<article class="influence-card"><span class="influence-label metadata legend-accent-meta">Overlap and tension</span><h5 class="legend-item-title">Where the meanings meet</h5><p>${escapeHtml(context.overlap_or_tension)}</p></article>`);
+    if (context.viewer_opening) cards.push(`<article class="influence-card"><span class="influence-label metadata legend-accent-meta">Open reading</span><h5 class="legend-item-title">Room for the viewer</h5><p>${escapeHtml(context.viewer_opening)}</p></article>`);
+    const sources = context.sources.length ? `<div class="influence-sources"><span class="influence-label metadata legend-accent-meta">Curated sources</span><ul>${context.sources.map((source) => {
       const external = /^https?:/i.test(source.url);
-      return `<li><a href="${escapeHtml(source.url)}"${external ? ' target="_blank" rel="noopener noreferrer"' : ""}><strong>${escapeHtml(source.title)}</strong>${source.creator ? `<span>${escapeHtml(source.creator)}</span>` : ""}</a>${source.note ? `<p>${escapeHtml(source.note)}</p>` : ""}</li>`;
+      return `<li><a href="${escapeHtml(source.url)}"${external ? ' target="_blank" rel="noopener noreferrer"' : ""}><strong class="legend-source-title">${escapeHtml(source.title)}</strong>${source.creator ? `<span class="metadata legend-accent-meta">${escapeHtml(source.creator)}</span>` : ""}</a>${source.note ? `<p>${escapeHtml(source.note)}</p>` : ""}</li>`;
     }).join("")}</ul></div>` : "";
     return `<div class="influence-grid">${cards.join("")}</div>${sources}`;
   }
@@ -113,7 +113,7 @@
     if (!applications.length) return undocumented("Context-dependent readings are still being mapped for this symbol.");
     return `<div class="application-list">${applications.map((application) => {
       const visual = safeSvg(application.svg_markup);
-      return `<article class="application${visual ? "" : " application--text"}">${visual ? `<div class="application-visual">${visual}</div>` : ""}<div><h5>${escapeHtml(application.title)}</h5><p class="meaning-shift">${escapeHtml(application.meaning)}</p>${application.note ? `<p class="context-note">${escapeHtml(application.note)}</p>` : ""}</div></article>`;
+      return `<article class="application${visual ? "" : " application--text"}">${visual ? `<div class="application-visual">${visual}</div>` : ""}<div><h5 class="legend-item-title">${escapeHtml(application.title)}</h5><p class="meaning-shift">${escapeHtml(application.meaning)}</p>${application.note ? `<p class="context-note">${escapeHtml(application.note)}</p>` : ""}</div></article>`;
     }).join("")}</div>`;
   }
 
@@ -122,8 +122,10 @@
     return `<div class="variant-grid">${variants.map((variant) => {
       const visual = safeSvg(variant.svg_markup);
       const image = safeUrl(variant.image_url);
+      const href = safeUrl(variant.href);
       if (!visual && !image) return "";
-      return `<article class="variant"><div class="variant-visual">${visual || `<img src="${escapeHtml(image)}" alt="${escapeHtml(`${variant.name || "Symbol"} variant`)}" loading="lazy">`}</div><div class="variant-copy">${variant.style ? `<span class="variant-style">${escapeHtml(variant.style)}</span>` : ""}<h5>${escapeHtml(variant.name)}</h5>${variant.note ? `<p>${escapeHtml(variant.note)}</p>` : ""}</div></article>`;
+      const tag = href ? "a" : "article";
+      return `<${tag} class="variant"${href ? ` href="${escapeHtml(href)}"` : ""}><div class="variant-visual">${visual || `<img src="${escapeHtml(image)}" alt="${escapeHtml(`${variant.name || "Symbol"} variant`)}" loading="lazy">`}</div><div class="variant-copy">${variant.style ? `<span class="variant-style metadata legend-accent-meta">${escapeHtml(variant.style)}</span>` : ""}<h5 class="legend-item-title">${escapeHtml(variant.name)}</h5>${variant.note ? `<p>${escapeHtml(variant.note)}</p>` : ""}</div></${tag}>`;
     }).join("")}</div>`;
   }
 
@@ -133,7 +135,7 @@
       const src = safeUrl(appearance.src);
       const href = safeUrl(appearance.href);
       const tag = href ? "a" : "article";
-      return `<${tag} class="appearance"${href ? ` href="${escapeHtml(href)}"` : ""}>${src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(appearance.title || "Documented symbol appearance")}" loading="lazy">` : ""}<div class="appearance-copy">${appearance.medium ? `<span class="appearance-medium">${escapeHtml(appearance.medium)}</span>` : ""}<h5>${escapeHtml(appearance.title)}</h5>${appearance.caption ? `<p>${escapeHtml(appearance.caption)}</p>` : ""}</div></${tag}>`;
+      return `<${tag} class="appearance"${href ? ` href="${escapeHtml(href)}"` : ""}>${src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(appearance.title || "Documented symbol appearance")}" loading="lazy">` : ""}<div class="appearance-copy">${appearance.medium ? `<span class="appearance-medium metadata legend-accent-meta">${escapeHtml(appearance.medium)}</span>` : ""}<h5 class="legend-item-title">${escapeHtml(appearance.title)}</h5>${appearance.caption ? `<p>${escapeHtml(appearance.caption)}</p>` : ""}</div></${tag}>`;
     }).join("")}</div>`;
   }
 
@@ -182,12 +184,12 @@
         if (card.dataset.symbol === selectedId) card.setAttribute("aria-current", "true");
         else card.removeAttribute("aria-current");
       });
-      detail.innerHTML = `<div class="detail-topline"><span class="section-index">Symbol record · ${escapeHtml(category)}</span><button type="button" data-close-symbol>Close</button></div><div class="detail-hero"><div class="detail-mark">${canonical}</div><div class="detail-copy"><span class="index">${escapeHtml(category)} · Canonical mark</span><h3 tabindex="-1">${escapeHtml(record.name)}</h3><p class="core-meaning">${escapeHtml(record.meaning)}</p>${layers.themes.length ? `<div class="theme-list" aria-label="Themes">${layers.themes.map((theme) => `<span>${escapeHtml(theme)}</span>`).join("")}</div>` : ""}</div></div>
-        ${layers.context.authored ? `<section class="detail-layer detail-layer--influence"><div class="layer-heading"><div><span class="section-index">01 · Influence</span><h4>Influence &amp; relationship</h4></div><p>Where inherited associations, lived experience, and deliberate reorientation meet. These lenses can overlap without changing the symbol's category.</p></div>${renderInfluence(layers.context)}</section>` : ""}
-        <section class="detail-layer"><div class="layer-heading"><div><span class="section-index">${String(1 + influenceOffset).padStart(2, "0")} · Application</span><h4>Meaning in application</h4></div><p>These readings belong to particular operations or conditions. They extend the core meaning without replacing it.</p></div>${renderApplications(layers.applications)}</section>
-        <section class="detail-layer"><div class="layer-heading"><div><span class="section-index">${String(2 + influenceOffset).padStart(2, "0")} · Form</span><h4>Visual versions</h4></div><p>The identity translated through different styles, dimensions, colors, materials, and systems.</p></div>${renderVariants(layers.variants)}</section>
-        <section class="detail-layer"><div class="layer-heading"><div><span class="section-index">${String(3 + influenceOffset).padStart(2, "0")} · Trace</span><h4>Documented appearances</h4></div><p>Image-led evidence of the mark moving through the work.</p></div>${renderAppearances(layers.appearances)}</section>
-        <section class="detail-connections"><div class="layer-heading"><div><span class="section-index">${String(4 + influenceOffset).padStart(2, "0")} · System</span><h4>Connected work</h4></div><p>Live relationships to tattoos, artworks, archive records, events, objects, and other parts of the Construct.</p></div><div data-detail-connections></div></section>`;
+      detail.innerHTML = `<div class="detail-topline"><span class="kicker">Symbol record · ${escapeHtml(category)}</span><button class="btn legend-close" type="button" data-close-symbol>Close</button></div><div class="detail-hero"><div class="detail-mark">${canonical}</div><div class="detail-copy"><span class="kicker">${escapeHtml(category)} · Canonical mark</span><h3 class="band-title section-title detail-title" tabindex="-1">${escapeHtml(record.name)}</h3><p class="core-meaning">${escapeHtml(record.meaning)}</p>${layers.themes.length ? `<div class="theme-list" aria-label="Themes">${layers.themes.map((theme) => `<span class="metadata legend-accent-meta">${escapeHtml(theme)}</span>`).join("")}</div>` : ""}</div></div>
+        ${layers.context.authored ? `<section class="detail-layer detail-layer--influence"><div class="layer-heading"><div><span class="kicker">01 · Influence</span><h4 class="band-title section-title legend-layer-title">Influence &amp; relationship</h4></div><p>Where inherited associations, lived experience, and deliberate reorientation meet. These lenses can overlap without changing the symbol's category.</p></div>${renderInfluence(layers.context)}</section>` : ""}
+        <section class="detail-layer"><div class="layer-heading"><div><span class="kicker">${String(1 + influenceOffset).padStart(2, "0")} · Application</span><h4 class="band-title section-title legend-layer-title">Meaning in application</h4></div><p>These readings belong to particular operations or conditions. They extend the core meaning without replacing it.</p></div>${renderApplications(layers.applications)}</section>
+        <section class="detail-layer"><div class="layer-heading"><div><span class="kicker">${String(2 + influenceOffset).padStart(2, "0")} · Form</span><h4 class="band-title section-title legend-layer-title">Visual versions</h4></div><p>The identity translated through different styles, dimensions, colors, materials, and systems.</p></div>${renderVariants(layers.variants)}</section>
+        <section class="detail-layer"><div class="layer-heading"><div><span class="kicker">${String(3 + influenceOffset).padStart(2, "0")} · Trace</span><h4 class="band-title section-title legend-layer-title">Documented appearances</h4></div><p>Image-led evidence of the mark moving through the work.</p></div>${renderAppearances(layers.appearances)}</section>
+        <section class="detail-connections"><div class="layer-heading"><div><span class="kicker">${String(4 + influenceOffset).padStart(2, "0")} · System</span><h4 class="band-title section-title legend-layer-title">Connected work</h4></div><p>Live relationships to tattoos, artworks, archive records, events, objects, and other parts of the Construct.</p></div><div data-detail-connections></div></section>`;
       detail.hidden = false;
       detail.querySelector("[data-close-symbol]").addEventListener("click", () => closeSymbol());
       mountConnections(record);
@@ -207,11 +209,11 @@
         const layers = recordsFor(record);
         const layerCount = (layers.context.authored ? 1 : 0) + layers.applications.length + layers.variants.length + layers.appearances.length;
         const symbol = safeSvg(record.svg_markup);
-        return `<button class="legend-card" type="button" data-symbol="${escapeHtml(record.slug || record.id)}"${selectedId === (record.slug || record.id) ? ' aria-current="true"' : ""}><div class="legend-mark" aria-hidden="true">${symbol}</div><span class="index">${escapeHtml(categoryById.get(record.category_id)?.name || record.category_id)}</span><h3>${escapeHtml(record.name)}</h3><p>${escapeHtml(record.meaning)}</p><span class="card-bottom"><span class="layer-count">${layerCount ? `${layerCount} documented layer${layerCount === 1 ? "" : "s"}` : "Core record"}</span><span class="open-cue" aria-hidden="true">↗</span></span></button>`;
+        return `<button class="legend-card" type="button" data-symbol="${escapeHtml(record.slug || record.id)}"${selectedId === (record.slug || record.id) ? ' aria-current="true"' : ""}><div class="legend-mark" aria-hidden="true">${symbol}</div><span class="kicker">${escapeHtml(categoryById.get(record.category_id)?.name || record.category_id)}</span><h3 class="legend-card-title">${escapeHtml(record.name)}</h3><p>${escapeHtml(record.meaning)}</p><span class="card-bottom"><span class="layer-count metadata legend-ghost">${layerCount ? `${layerCount} documented layer${layerCount === 1 ? "" : "s"}` : "Core record"}</span><span class="open-cue" aria-hidden="true">↗</span></span></button>`;
       }).join("") : '<p class="legend-empty">No published symbols match this view.</p>';
     }
 
-    filters.innerHTML = [{ id: "all", name: "All" }, ...categories].map((category) => `<button type="button" data-category="${escapeHtml(category.id)}" aria-pressed="${category.id === activeCategory}">${escapeHtml(category.name)}</button>`).join("");
+    filters.innerHTML = [{ id: "all", name: "All" }, ...categories].map((category) => `<button class="btn legend-filter" type="button" data-category="${escapeHtml(category.id)}" aria-pressed="${category.id === activeCategory}">${escapeHtml(category.name)}</button>`).join("");
     filters.addEventListener("click", (event) => {
       const button = event.target.closest("[data-category]");
       if (!button) return;

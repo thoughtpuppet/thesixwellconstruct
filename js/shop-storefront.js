@@ -494,6 +494,7 @@ export async function initMerchCatalogPage() {
   const grid = document.getElementById("productGrid");
   const introDesc = document.getElementById("introDesc");
   const introAbove = document.getElementById("introAbove");
+  const merchHero = document.querySelector(".site-hero");
   const merchWord = document.getElementById("merchWord");
   const merchDot = document.getElementById("merchDot");
 
@@ -514,7 +515,7 @@ export async function initMerchCatalogPage() {
 
   function setHeroState(key) {
     const color = key === "all" ? MERCH_COLOR : SOURCES[key]?.color || MERCH_COLOR;
-    document.documentElement.style.setProperty("--title-color", color);
+    merchHero?.style.setProperty("--hero-title-color", color);
   }
 
   function setSourceMenuOpen(isOpen) {
@@ -617,11 +618,9 @@ export async function initMerchCatalogPage() {
     if (key === "all") {
       introAbove.classList.remove("visible");
       introDesc.textContent = "everything sellable from the construct";
-      introDesc.style.color = "";
     } else {
       introAbove.classList.add("visible");
       introDesc.textContent = SOURCES[key]?.statement || "";
-      introDesc.style.color = SOURCES[key]?.color || "";
     }
     renderFilters();
     renderTypeFilters();

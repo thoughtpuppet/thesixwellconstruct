@@ -647,10 +647,12 @@ test("tattoo client-resource pages use an opaque solid canvas without the shared
   assert.match(typography, /\.construct-breadcrumb-current \{[\s\S]*color:\s*var\(--color-breadcrumb-current/);
 
   const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");
+  const hero = readFileSync(join(ROOT, "css", "hero.css"), "utf8");
   assert.match(policies, /\.tattoos-page \.hero\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);\s*align-items:\s*start/);
-  assert.match(policies, /body\.tattoos-page #policy-hero-intro\s*\{\s*max-width:\s*min\(100%, 680px\)\s*!important/);
-  assert.match(policies, /<p class="hero-lead" id="policy-hero-intro">/);
-  assert.match(policies, /<h1\b[^>]*\bdata-fit-width\b/);
+  assert.match(hero, /\.site-hero \.hero-descriptor\s*\{[\s\S]*max-width:\s*min\(100%, 380px\)\s*!important/);
+  assert.match(policies, /<p class="hero-lead hero-descriptor" id="policy-hero-intro">/);
+  assert.match(policies, /<h1 class="hero-title">/);
+  assert.doesNotMatch(policies, /\bdata-fit-width\b/);
   assert.doesNotMatch(policies, /<span class="panel-label"><br><\/span>/);
   assert.doesNotMatch(policies, /Before you book/);
 });

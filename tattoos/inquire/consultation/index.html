@@ -42,7 +42,7 @@
   .layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(380px,580px);gap:72px;align-items:start;}
 
   /* ── LEFT COLUMN ── */
-  .page-title{font-family:var(--sans);font-weight:900;font-size:clamp(56px,10vw,96px);letter-spacing:-0.05em;line-height:0.88;color:var(--type-hero-color, var(--venture-accent));text-transform:uppercase;margin-bottom:var(--s6);}
+  .page-title{margin-bottom:var(--s6);}
   .page-body{font-size:16px;line-height:1.8;color:var(--text-mute);max-width:560px;}
   .page-body+.page-body{margin-top:var(--s4);}
 
@@ -86,7 +86,6 @@
     header.top{padding:var(--s4) var(--s5);}
     main{padding:var(--s6) var(--s5) var(--s7);}
     /* "Consultation." is one long word — 11vw keeps it on one line at any phone width */
-    .page-title{font-size:clamp(30px,11vw,90px);}
     footer.bottom{flex-direction:column;gap:12px;align-items:flex-start;padding:40px var(--s5);}
   }
   @media(max-width:700px){
@@ -94,6 +93,7 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
@@ -117,9 +117,9 @@
     <div class="layout">
 
       <!-- LEFT — INFO -->
-      <section>
-        <h1 class="page-title">Consultation.</h1>
-        <p class="page-body">A consultation is a focused session for planning, placement discussion, and cover-up review — useful before or alongside a custom inquiry submission. <strong data-consultation-current aria-live="polite">Loading current price and duration…</strong></p>
+      <section class="site-hero site-hero--supporting">
+        <h1 class="page-title hero-title">Consultation.</h1>
+        <p class="page-body hero-descriptor">A consultation is a focused session for planning, placement discussion, and cover-up review — useful before or alongside a custom inquiry submission. <strong data-consultation-current aria-live="polite">Loading current price and duration…</strong></p>
         <p class="page-body">Choose an in-person session at the studio, or a virtual session over video call. After selecting a time, you'll be taken to Square to hold the slot.</p>
 
         <!-- ADDRESS (in-person only) -->

@@ -31,10 +31,6 @@
     -webkit-font-smoothing:antialiased;
   }
   a { color:inherit; text-decoration:none; }
-  .venture-title {
-    font-size: clamp(40px, 10.8vw, 148px);
-  }
-
   .page { max-width:960px; margin:0 auto; padding:0; }
 
   .hd {
@@ -52,12 +48,6 @@
     letter-spacing:0.22em; color:var(--dim); text-transform:uppercase;
   }
 
-  h1 {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(48px,8vw,96px);
-    letter-spacing:-0.05em; line-height:0.92;
-    margin-bottom:16px;
-  }
   .sub {
     font-family:var(--serif); font-size:15px; line-height:1.65;
     color:var(--mute); max-width:560px; margin-bottom:72px;
@@ -116,17 +106,18 @@
   }
 </style>
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 <body class="venture-page" data-venture="about">
 <div class="venture-grain" aria-hidden="true"></div>
 <main class="venture-shell entrance-fade" id="construct">
-  <section class="venture-hero" aria-labelledby="page-title">
+  <section class="venture-hero site-hero site-hero--supporting" aria-labelledby="page-title">
     <div>
       <span class="venture-kicker" data-copy-id="construct-map-kicker">public system map</span>
-      <h1 class="venture-title" id="page-title" data-copy-id="construct-map-title">Construct Map.</h1>
+      <h1 class="venture-title hero-title" id="page-title" data-copy-id="construct-map-title">Construct Map.</h1>
     </div>
     <div class="hero-copy">
-      <p class="hero-lede" data-copy-id="construct-map-hero-lede">A public architecture page for the nine mediums, the center construct, and the commerce flows that route sellable work into MERCH.</p>
+      <p class="hero-lede hero-descriptor" data-copy-id="construct-map-hero-lede">A public architecture page for the nine mediums, the center construct, and the commerce flows that route sellable work into MERCH.</p>
       <p class="hero-note" data-copy-id="construct-map-hero-note">The diagram keeps the draft's sparse distributed-map language while this page stays governed by the site's shared page shell, navigation, transitions, and typography tokens.</p>
       <div class="hero-actions">
         <a class="venture-link" href="#construct-architecture">architecture</a>

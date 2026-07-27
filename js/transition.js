@@ -170,28 +170,34 @@
   }
 
   function fitHeroTitles() {
-    if (!document.body.matches('[data-venture="tattooing"]')) return;
-
     var titles = document.querySelectorAll(
-      'main h1, .intro h1, .hero-title, .page-title, .gate-title, .series-title, .tattoos-page .hero-copy h1, [data-fit-width]'
+      '.site-hero--landing .hero-title, [data-fit-width]:not(.hero-title)'
     );
 
     titles.forEach(function(title) {
       if (!title || !title.parentElement) return;
+      var isLandingHeroTitle = title.matches('.site-hero--landing .hero-title');
       title.style.transform = '';
       title.style.transformOrigin = '';
       title.style.width = '';
       title.style.removeProperty('font-size');
-      title.style.display = title.style.display || 'inline-block';
+      if (!isLandingHeroTitle) {
+        title.style.display = title.style.display || 'inline-block';
+      }
 
-      var fitOwnWidth = title.hasAttribute('data-fit-width');
+      var fitOwnWidth = !isLandingHeroTitle;
       var parentRect = title.parentElement.getBoundingClientRect();
       var viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-      var availableWidth = fitOwnWidth
-        ? title.clientWidth
-        : (title.parentElement.clientWidth || viewportWidth);
-      if (!fitOwnWidth) {
-        availableWidth = Math.min(availableWidth, viewportWidth - parentRect.left - 8);
+      var availableWidth;
+      if (isLandingHeroTitle) {
+        availableWidth = title.getBoundingClientRect().width;
+      } else {
+        availableWidth = fitOwnWidth
+          ? title.clientWidth
+          : (title.parentElement.clientWidth || viewportWidth);
+        if (!fitOwnWidth) {
+          availableWidth = Math.min(availableWidth, viewportWidth - parentRect.left - 8);
+        }
       }
       var titleWidth = title.scrollWidth;
       if (!availableWidth || !titleWidth || titleWidth <= availableWidth) return;
@@ -199,19 +205,24 @@
       var computedSize = parseFloat(window.getComputedStyle(title).fontSize);
       if (!computedSize) return;
 
-      var minimumScale = fitOwnWidth ? 0.28 : 0.48;
+      var minimumScale = isLandingHeroTitle ? 0.24 : (fitOwnWidth ? 0.28 : 0.48);
       var scale = Math.max(minimumScale, Math.min(1, availableWidth / titleWidth));
       title.style.setProperty('font-size', Math.floor(computedSize * scale) + 'px', 'important');
 
       /* Font rounding and inline live-editor spans can leave a title a few
          pixels wide after the proportional pass. Tighten once more from the
          rendered width so every tattoo route stays inside the phone viewport. */
-      var renderedWidth = title.getBoundingClientRect().width;
+      var renderedWidth = isLandingHeroTitle
+        ? title.scrollWidth
+        : title.getBoundingClientRect().width;
       if (renderedWidth > availableWidth) {
         var correctedSize = parseFloat(window.getComputedStyle(title).fontSize);
         title.style.setProperty(
           'font-size',
-          Math.max(fitOwnWidth ? 16 : 22, Math.floor(correctedSize * (availableWidth / renderedWidth))) + 'px',
+          Math.max(
+            isLandingHeroTitle ? 28 : (fitOwnWidth ? 16 : 22),
+            Math.floor(correctedSize * (availableWidth / renderedWidth))
+          ) + 'px',
           'important'
         );
       }

@@ -10,3 +10,53 @@
 .walkin-card-meta{font-family:var(--sans);font-size:9px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-ghost,var(--dim));margin-top:8px;}
 .walkin-cards-empty{font-family:var(--serif);font-size:14px;line-height:1.75;color:var(--text-dim,var(--dim));padding:18px;border:5px solid var(--ring-faint);}
 .walkin-cards-loading{font-family:var(--serif);font-size:13px;color:var(--text-dim,var(--dim));}
+
+/* Standalone public availability region. The renderer above remains usable
+   independently on booking and consultation pages. */
+.walkin-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(240px, 0.28fr);
+  gap: 14px;
+  align-items: start;
+  padding: 36px;
+  margin-bottom: 18px;
+}
+
+.walkin-section__windows,
+.walkin-section__hours {
+  min-width: 0;
+}
+
+.walkin-section__title {
+  margin-bottom: 22px;
+  color: var(--signal, var(--venture-accent, var(--venture-color, var(--color-accent))));
+  font-size: clamp(28px, 4vw, 56px);
+}
+
+.walkin-section__hours {
+  padding-top: 16px;
+  border-top: 5px solid var(--ring-faint);
+}
+
+.walkin-section__hours-label {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.walkin-section__hours-value {
+  color: var(--text-mute);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+@media (max-width: 768px) {
+  .walkin-section {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px;
+  }
+}

@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=block" rel="stylesheet">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/portfolio-cards.css">
 <style>
   :root {
     --bg:         #0e0e0e;
@@ -37,7 +38,6 @@
     --t-med:  0.35s cubic-bezier(0.2,0,0.2,1);
     --t-slow: 0.5s  cubic-bezier(0.22,1,0.36,1);
 
-    --title-color: var(--type-hero-color, var(--venture-accent));
   }
 
   *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
@@ -87,20 +87,8 @@
   .intro-left {
     display:flex; flex-direction:column; align-items:flex-start;
   }
-  .intro h1 {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(80px,14vw,220px);
-    letter-spacing:-0.05em; line-height:0.88;
-    color:var(--title-color);
-    transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
-  }
   .intro-desc {
-    font-family:var(--serif); font-size:12px;
-    letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-mute); max-width:380px;
-    text-align:left; line-height:1.6;
-    padding-bottom:var(--s4);
-    transition:opacity 0.2s ease, color 0.3s ease;
+    transition:opacity 0.2s ease;
   }
 
   /* ── Filters ──────────────────────────────────────────────── */
@@ -150,105 +138,6 @@
     margin-bottom:var(--s5);
   }
 
-  /* ── Work grid ────────────────────────────────────────────── */
-  .work-grid {
-    display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(260px,1fr));
-    gap:3px;
-  }
-
-  .work-card {
-    position:relative;
-    aspect-ratio:4/5;
-    overflow:hidden;
-    cursor:pointer;
-    background:var(--bg-raised);
-    border:5px solid var(--ring-faint);
-    transition:border-color var(--t-med);
-  }
-  .work-card:hover { border-color:var(--venture-color); }
-  .work-card:focus-visible { outline:3px solid var(--accent); outline-offset:3px; border-color:var(--venture-color); }
-
-  .work-card img {
-    width:100%; height:100%;
-    object-fit:cover; display:block;
-    transition:
-      transform var(--t-slow),
-      filter    var(--t-slow);
-    transform:scale(1);
-    filter:brightness(0.9);
-  }
-  .work-card:hover img {
-    transform:scale(0.97);
-    filter:brightness(0.45);
-  }
-
-  .work-badge {
-    position:absolute; top:var(--s3); left:var(--s3);
-    font-family:var(--serif);
-    font-size:9px; letter-spacing:0.2em;
-    text-transform:uppercase; color:var(--venture-color);
-    opacity:0;
-    transition:opacity var(--t-med);
-    pointer-events:none;
-  }
-  .work-card:hover .work-badge,
-  .work-card:focus-visible .work-badge { opacity:0.85; }
-  .work-project-badge {
-    position:absolute; z-index:1; top:var(--s3); right:var(--s3);
-    padding:6px 9px;
-    background:var(--venture-color); color:var(--text);
-    font-family:var(--sans); font-size:9px; font-weight:900;
-    letter-spacing:0.12em; line-height:1; text-transform:uppercase;
-    pointer-events:none;
-  }
-
-  .work-meta {
-    position:absolute; bottom:0; left:0; right:0;
-    padding:var(--s6) var(--s4) var(--s4);
-    background:linear-gradient(to top, rgba(14,14,14,0.92) 0%, transparent 100%);
-    transform:translateY(6px);
-    opacity:0;
-    transition:
-      opacity   var(--t-med),
-      transform var(--t-med);
-    pointer-events:none;
-  }
-  .work-card:hover .work-meta,
-  .work-card:focus-visible .work-meta { opacity:1; transform:translateY(0); }
-
-  .work-title {
-    display:block;
-    font-family:var(--sans); font-weight:900;
-    font-size:13px; letter-spacing:-0.01em;
-    color:var(--text);
-    margin-bottom:var(--s1);
-  }
-  .work-info {
-    display:block;
-    font-family:var(--serif);
-    font-size:11px; font-style:italic;
-    color:var(--text-mute);
-    letter-spacing:0.03em;
-  }
-
-  /* placeholder card */
-  .work-card.placeholder {
-    cursor:default;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .work-card.placeholder:hover { border-color:var(--ring-soft); }
-  .work-card.placeholder img,
-  .work-card.placeholder .work-meta,
-  .work-card.placeholder .work-badge { display:none; }
-  .placeholder-label {
-    font-family:var(--serif);
-    font-size:10px; letter-spacing:0.3em;
-    text-transform:uppercase; color:var(--text-ghost);
-    font-style:italic; text-align:center; line-height:2;
-  }
-
-  .work-card.hidden { display:none; }
   .catalog-state { border:5px solid var(--ring-faint); padding:var(--s6); color:var(--text-mute); font-family:var(--sans); font-size:12px; line-height:1.7; }
   .catalog-state a { color:var(--accent); text-decoration:underline; text-underline-offset:3px; }
 
@@ -380,10 +269,6 @@
     .overlay-image-wrap {
       height:55vw; min-height:200px; max-height:340px;
     }
-    .work-grid {
-      grid-template-columns:repeat(auto-fill, minmax(160px,1fr));
-      gap:2px;
-    }
   }
   @media (max-width:640px) {
     .intro { flex-direction:column; align-items:flex-start; gap:var(--s4); }
@@ -395,6 +280,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/portfolio-detail.css?v=6">
 </head>
 
@@ -446,11 +332,11 @@
 
   <main>
 
-    <section class="intro">
+    <section class="intro site-hero site-hero--supporting">
       <div class="intro-left">
-        <h1 data-copy-id="portfolio-page-title">PORTFOLIO.</h1>
+        <h1 class="hero-title" data-copy-id="portfolio-page-title">PORTFOLIO.</h1>
       </div>
-      <p class="intro-desc" id="introDesc" data-copy-id="portfolio-intro-desc">tattoo work by Saiel Dauhn Solehman</p>
+      <p class="intro-desc hero-descriptor" id="introDesc" data-copy-id="portfolio-intro-desc">tattoo work by Saiel Dauhn Solehman</p>
     </section>
 
     <nav class="filters" id="filters" aria-label="Filter portfolio">

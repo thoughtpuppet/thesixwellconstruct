@@ -2888,6 +2888,7 @@
   }
 
   function appointmentTypeLabel(appointment) {
+    if (isArtVisitAppointment(appointment)) return "Open Studio Visit";
     return appointment?.bookingTypeLabel || titleize(appointment?.bookingTypeId || "studio booking");
   }
 
@@ -2935,7 +2936,7 @@
 
   function renderStudioAppointmentDetail(appointment) {
     const isArtVisit = activeTab === "art";
-    const bookingLabel = isArtVisit ? "Studio Visit" : "Room Booking";
+    const bookingLabel = isArtVisit ? "Open Studio Visit" : "Room Booking";
     if (!appointment) {
       detailEl.innerHTML = `<p class="empty">Select a ${bookingLabel.toLowerCase()} to manage details.</p>`;
       return;
@@ -3537,11 +3538,16 @@ ${meetingLines}
     );
     const appointment = latestAppointmentFor(submission.id);
     const isStudio = submission.type === "studio_booking" || isStudioAppointment(appointment);
+    const studioVisit = isArtVisitAppointment(appointment) || submissionBookingTypeId(submission) === "studio_visit";
     if (isStudio) {
       if (appointment && appointment.status === "confirmed") {
-        return `Hi ${name}, this is the six.well construct. Your studio booking is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes.`;
+        return studioVisit
+          ? `Hi ${name}, this is the six.well construct. Your Open Studio Visit is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes.`
+          : `Hi ${name}, this is the six.well construct. Your studio booking is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes.`;
       }
-      return `Hi ${name}, this is the six.well construct. We received your studio booking request and will follow up with next steps. Thank you.`;
+      return studioVisit
+        ? `Hi ${name}, this is the six.well construct. We received your Open Studio Visit request and will follow up with next steps. Thank you.`
+        : `Hi ${name}, this is the six.well construct. We received your studio booking request and will follow up with next steps. Thank you.`;
     }
     if (appointment && appointment.status === "confirmed") {
       return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
@@ -3771,6 +3777,11 @@ ${meetingLines}
       || Boolean(submission.briefDocument);
     const historicPrerequisiteAppointment = historicPrerequisiteAppointmentFor(submission.id);
     const hasDirectAppointment = hasAppointment && !TATTOO_PROJECT_TYPES.has(submission.type);
+    const studioVisit = isArtVisitAppointment(latestAppointment) || submissionBookingTypeId(submission) === "studio_visit";
+    const submissionTypeLabel = studioVisit ? "Open Studio Visit" : titleize(submission.type);
+    const directBookingLabel = submission.type === "studio_booking"
+      ? (studioVisit ? "Open Studio Visit" : "studio booking")
+      : "consultation";
     const tattooStage = submission.tattooStage || submission.tattoo_stage || "";
     const lifecycleReviewRequired = Boolean(submission.lifecycleReviewRequired ?? submission.lifecycle_review_required);
     const lifecycleReviewNote = submission.lifecycleReviewNote || submission.lifecycle_review_note || "";
@@ -3791,7 +3802,7 @@ ${meetingLines}
     detailEl.innerHTML = `
       <div class="detail-head">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span class="pill">${escapeHtml(titleize(submission.type))} / ${escapeHtml(submission.status)}</span>
+          <span class="pill">${escapeHtml(submissionTypeLabel)} / ${escapeHtml(submission.status)}</span>
           ${tattooStage ? `<span class="pill">Stage: ${escapeHtml(titleize(tattooStage))}</span>` : ""}
           ${latestAppointment?.purpose ? `<span class="pill">Purpose: ${escapeHtml(titleize(latestAppointment.purpose))}</span>` : ""}
           ${lifecycleReviewRequired ? `<span class="pill" style="color:#EC5E26;border-color:rgba(236,94,38,.72);">Historic Review Required</span>` : ""}
@@ -3842,7 +3853,7 @@ ${meetingLines}
         <div class="field">
           ${isEvent ? eventBlock : hasDirectAppointment ? `
             <p style="font-family:var(--sans);font-size:11px;color:var(--dim);">
-              This ${submission.type === "studio_booking" ? "studio booking" : "consultation"} was booked directly through the public calendar.
+              This ${escapeHtml(directBookingLabel)} was booked directly through the public calendar.
               No booking access link is needed — see Appointment Payment above.
             </p>
             <input id="bookingUrl" type="hidden" value="${escapeHtml(submission.bookingUrl || "")}">

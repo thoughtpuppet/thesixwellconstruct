@@ -36,8 +36,6 @@
   body.modal-open main { z-index:200; }
   .hero { display:flex; align-items:flex-end; justify-content:space-between; gap:48px; margin-bottom:72px; }
   .hero-left { display:flex; flex-direction:column; }
-  .page-title { font-family:var(--sans); font-weight:900; font-size:clamp(64px,12vw,176px); letter-spacing:-0.05em; line-height:0.88; color:var(--type-hero-color, var(--venture-accent)); text-transform:uppercase; }
-  .hero-desc { font-family:var(--serif); font-size:12px; font-weight:400; letter-spacing:0.22em; line-height:1.6; text-align:left; text-transform:uppercase; max-width:380px; padding-bottom:var(--s4); flex-shrink:0; }
   nav.filters { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)) auto; gap:14px; align-items:end; margin-bottom:var(--s6); padding:20px 0 16px; border-top:5px solid var(--ring-faint); border-bottom:5px solid var(--ring-faint); }
   .filter-control { display:grid; gap:8px; min-width:0; }
   .filter-control-label { font-family:var(--sans); font-weight:900; font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-dim); }
@@ -178,7 +176,6 @@
     .ecosystem-band,.node-grid,.selected-piece.is-active { grid-template-columns:1fr; }
     .node-grid { gap:12px; }
     .node-link { border-left:5px solid var(--ring-faint); border-bottom:none; }
-    .hero-desc { text-align:left; max-width:380px; }
     .count-label { text-align:left; }
     .filter-label { padding-top:0; }
     .filter-group { border-right:none; padding-right:0; }
@@ -193,7 +190,6 @@
   @media (max-width:640px) {
     header.top { padding:var(--s4) var(--s5); }
     main { padding:var(--s6) var(--s5); }
-    .page-title { font-size:clamp(58px,18vw,92px); }
     .section { padding:48px 0; }
     .catalog-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .sheet-grid { grid-template-columns:1fr; }
@@ -217,6 +213,7 @@
 </style>
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/tattoos.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing">
@@ -235,11 +232,11 @@
     <a class="nav-inquire" href="/tattoos/flash/claim/">Claim Flash</a>
   </header>
   <main>
-    <section class="hero">
+    <section class="hero site-hero site-hero--supporting">
       <div class="hero-left">
-        <h1 class="page-title" data-copy-id="flash-page-title">Flash.</h1>
+        <h1 class="page-title hero-title" data-copy-id="flash-page-title">Flash.</h1>
       </div>
-      <p class="hero-desc" data-copy-id="flash-hero-desc">Original pre-drawn designs, flash sheets, symbolic alphabets, MAZE studies, and standalone pieces. Browse the archive, open a sheet, then claim the design that resonates with you.</p>
+      <p class="hero-desc hero-descriptor" data-copy-id="flash-hero-desc">Original pre-drawn designs, flash sheets, symbolic alphabets, MAZE studies, and standalone pieces. Browse the archive, open a sheet, then claim the design that resonates with you.</p>
     </section>
 
     <nav class="filters" aria-label="Flash catalog filters">

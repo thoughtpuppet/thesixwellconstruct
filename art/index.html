@@ -75,6 +75,7 @@ statement:    —
 <!-- shared construct transition layer -->
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
+<link rel="stylesheet" href="/css/portfolio-cards.css">
 
 <style>
   /* ============================================================
@@ -115,7 +116,6 @@ statement:    —
 
     /* driven by JS — switches to active filter's color on chip click.
        defaults to ART medium blue for the "all" state. */
-    --title-color: var(--color-art);
   }
 
   /* ============================================================
@@ -162,9 +162,7 @@ statement:    —
   }
 
   /* ============================================================
-     INTRO — matches merch .intro exactly
-     Same scale, alignment, spacing. --accent-hot replaces
-     --title-color from merch (no JS color-swap needed here).
+     INTRO — matches merch .intro composition
   ============================================================ */
   .intro {
     display:flex; align-items:flex-end; justify-content:space-between;
@@ -175,98 +173,12 @@ statement:    —
     display:flex; flex-direction:column; align-items:flex-start;
   }
 
-  /* ART MAKING. — same scale as MERCH. on the merch page
-     color driven by --title-color, set by JS on filter change */
-  .intro h1 {
-    font-family:var(--type-hero-font, var(--sans));
-    font-weight:var(--type-hero-weight, 900);
-    font-size:var(--type-hero-size-active, var(--type-hero-size));
-    letter-spacing:var(--type-hero-tracking-active, var(--type-hero-tracking));
-    line-height:var(--type-hero-leading-active, var(--type-hero-leading));
-    color:var(--title-color);
-    transition:color 0.3s cubic-bezier(0.2,0,0.2,1);
-  }
-
   /* dot inherits h1 color — same medium color as title */
   .art-dot { /* inherits color from h1 — no override needed */ }
 
-  /* descriptor — Times, uppercase, right-aligned — matches merch .intro p */
+  /* Descriptor typography is owned by css/hero.css. */
   .intro-desc {
-    font-family:var(--serif); font-size:12px;
-    letter-spacing:0.22em; text-transform:uppercase;
-    color:var(--text-mute); max-width:260px;
-    text-align:left; line-height:1.6;
-    padding-bottom:var(--s4);
-    transition:opacity 0.2s ease, color 0.3s ease;
-  }
-
-  /* ============================================================
-     THOUGHTPUPPET BRAND BAND
-     Mirrors the Merch structure while keeping Art's established
-     blue and amber palette.
-  ============================================================ */
-  .brand-band {
-    display:grid;
-    grid-template-columns:minmax(180px,0.32fr) minmax(0,0.68fr);
-    column-gap:48px;
-    row-gap:18px;
-    align-items:start;
-    padding:36px;
-    margin-top:-40px;
-    margin-bottom:18px;
-    background:#171717;
-  }
-  .brand-kicker {
-    font-family:var(--serif);
-    font-size:10px;
-    letter-spacing:0.24em;
-    text-transform:uppercase;
-    color:var(--accent-hot);
-    opacity:0.72;
-  }
-  .brand-title {
-    margin-top:12px;
-    color:var(--accent-hot);
-    font-family:var(--sans);
-    font-size:clamp(32px,4vw,56px);
-    font-weight:900;
-    line-height:0.96;
-  }
-  .brand-copy {
-    max-width:860px;
-    color:var(--text-mute);
-    font-family:var(--serif);
-    font-size:clamp(17px,2.2vw,28px);
-    line-height:1.34;
-    text-wrap:balance;
-  }
-  .brand-more {
-    grid-column:2;
-    justify-self:end;
-    align-self:end;
-    --brand-band-link-color:var(--accent-hot);
-    --brand-band-link-hover:var(--accent);
-    --brand-band-link-border:color-mix(in srgb, var(--color-art) 42%, transparent);
-  }
-  @media (max-width:1024px) {
-    .brand-band {
-      grid-template-columns:1fr;
-      gap:24px;
-      margin-top:-24px;
-      padding:24px;
-    }
-    .brand-more { grid-column:1; }
-  }
-  @media (max-width:768px) {
-    .brand-copy {
-      font-size:17px;
-      line-height:1.5;
-      text-wrap:auto;
-    }
-    .brand-more {
-      justify-self:end;
-      max-width:100%;
-    }
+    transition:opacity 0.2s ease;
   }
 
   /* ============================================================
@@ -339,99 +251,6 @@ statement:    —
     padding-top:var(--s6);
     border-top:5px solid var(--ring-faint);
   }
-
-  /* ============================================================
-     WORK GRID — vault layout
-  ============================================================ */
-  .work-grid {
-    display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(260px,1fr));
-    gap:var(--landing-grid-gap-active, var(--grid-gap));
-  }
-
-  .work-card {
-    position:relative;
-    aspect-ratio:4/5;
-    overflow:hidden;
-    cursor:pointer;
-    background:var(--bg-raised);
-    border:5px solid var(--ring-faint);
-    transition:border-color var(--t-med);
-  }
-  .work-card:hover { border-color:var(--text); }    /* amber — same as filter font color */
-
-  .work-card img {
-    width:100%; height:100%;
-    object-fit:cover; display:block;
-    transition:
-      transform var(--t-slow),
-      filter    var(--t-slow);
-    transform:scale(1);
-    filter:brightness(0.9);
-  }
-  .work-card:hover img {
-    transform:scale(0.97);
-    filter:brightness(0.45);
-  }
-
-  .work-badge {
-    position:absolute; top:var(--s3); left:var(--s3);
-    font-family:var(--serif);
-    font-size:9px; letter-spacing:0.2em;
-    text-transform:uppercase; color:var(--accent-hot);
-    opacity:0;
-    transition:opacity var(--t-med);
-    pointer-events:none;
-  }
-  .work-card:hover .work-badge { opacity:0.85; }
-
-  .work-meta {
-    position:absolute; bottom:0; left:0; right:0;
-    padding:var(--s6) var(--s4) var(--s4);
-    background:linear-gradient(to top, rgba(14,14,14,0.92) 0%, transparent 100%);
-    transform:translateY(6px);
-    opacity:0;
-    transition:
-      opacity   var(--t-med),
-      transform var(--t-med);
-    pointer-events:none;
-  }
-  .work-card:hover .work-meta { opacity:1; transform:translateY(0); }
-
-  .work-title {
-    display:block;
-    font-family:var(--sans); font-weight:900;
-    font-size:13px; letter-spacing:-0.01em;
-    color:var(--body-text);
-    margin-bottom:var(--s1);
-  }
-
-  .work-info {
-    display:block;
-    font-family:var(--serif);
-    font-size:11px; font-style:italic;
-    color:var(--text-mute);
-    letter-spacing:0.03em;
-  }
-
-  /* placeholder card — wood works coming later */
-  .work-card.placeholder {
-    cursor:default;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .work-card.placeholder:hover { border-color:var(--ring-soft); }
-  .work-card.placeholder img,
-  .work-card.placeholder .work-meta,
-  .work-card.placeholder .work-badge { display:none; }
-
-  .placeholder-label {
-    font-family:var(--serif);
-    font-size:10px; letter-spacing:0.3em;
-    text-transform:uppercase; color:var(--text-ghost);
-    font-style:italic; text-align:center; line-height:2;
-  }
-
-  .work-card.hidden { display:none; }
 
   .studio-visit-band {
     display:grid;
@@ -637,10 +456,6 @@ statement:    —
     .overlay-image-wrap {
       height:55vw; min-height:200px; max-height:340px;
     }
-    .work-grid {
-      grid-template-columns:repeat(auto-fill, minmax(160px,1fr));
-      gap:var(--landing-grid-gap-active, var(--grid-gap-tablet));
-    }
   }
 
   /* ── CART TOGGLE + DRAWER ─────────────────────────────────
@@ -746,6 +561,8 @@ statement:    —
 <link rel="stylesheet" href="/css/landing-family.css">
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
+<link rel="stylesheet" href="/css/identity-bands.css">
+<link rel="stylesheet" href="/css/hero.css">
 </head>
 
 <body data-venture="art" data-landing-family="art-catalog">
@@ -821,7 +638,7 @@ statement:    —
   <!-- MAIN -->
   <main>
 
-    <section class="landing-hero intro">
+    <section class="landing-hero intro site-hero site-hero--landing">
       <div class="intro-left">
         <h1 class="hero-title" data-copy-id="art-hero-title">ART<span>.</span></h1>
       </div>
@@ -830,13 +647,20 @@ statement:    —
     </section>
 
     <!-- THOUGHTPUPPET BRAND BAND -->
-    <section class="brand-band" aria-labelledby="thoughtpuppet-brand-title">
-      <div>
-        <p class="brand-kicker" data-copy-id="art-brand-kicker">node manifestation / image</p>
-        <h2 class="brand-title" id="thoughtpuppet-brand-title" data-copy-id="art-brand-title">Thought<wbr>Puppet</h2>
+    <section class="brand-band brand-band--thoughtpuppet" id="thoughtpuppet-brand-band" aria-labelledby="thoughtpuppet-brand-title">
+      <div class="band-identity">
+        <a class="band-identity-link" href="/about/legend/?symbol=thoughtpuppet" aria-label="Open ThoughtPuppet in the Legend">
+          <img class="band-mark" src="/assets/brand/thoughtpuppet-question-mark.svg" alt="" aria-hidden="true" loading="eager">
+        </a>
       </div>
-      <p class="brand-copy" data-copy-id="art-brand-copy">The painting and visual-language medium manifests through ThoughtPuppet: the blue-origin image room where symbols, studies, objects, and source material begin talking to the rest of the construct.</p>
-      <a class="brand-more brand-band-link" href="/about/visual-language/">learn more</a>
+      <div class="band-content">
+        <p class="band-kicker" data-copy-id="art-brand-kicker"><br></p>
+        <h2 class="band-title" id="thoughtpuppet-brand-title" data-copy-id="art-brand-title">ThoughtPuppet</h2>
+        <p class="band-copy" data-copy-id="art-brand-copy">The painting and visual-language medium manifests through ThoughtPuppet: the blue-origin image room where symbols, studies, objects, and source material begin talking to the rest of the construct.</p>
+        <div class="band-actions">
+          <a class="brand-band-link" href="/about/visual-language/">learn more</a>
+        </div>
+      </div>
     </section>
 
     <!-- filter rows — row 1: medium, row 2: type (scoped to active medium) -->

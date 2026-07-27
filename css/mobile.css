@@ -230,58 +230,12 @@ select option:checked {
     align-items: center !important;
   }
 
-  /* ── Hero titles — readable mins ──────────────────────── */
-  .intro h1,
-  .hero-title,
-  .page-title,
-  .gate-title,
-  .series-title {
-    font-size: var(--type-hero-size-mobile, clamp(42px, 14vw, 74px)) !important;
-    line-height: var(--type-hero-leading-mobile, 0.9) !important;
-    letter-spacing: var(--type-hero-tracking-mobile, 0) !important;
-    white-space: normal !important;   /* desktop titles often set nowrap */
-    word-break: break-word;
-    overflow-wrap: break-word;
-  }
-
-  body[data-venture="tattooing"] main h1,
-  body[data-venture="tattooing"] .intro h1,
-  body[data-venture="tattooing"] .hero-title,
-  body[data-venture="tattooing"] .page-title,
-  body[data-venture="tattooing"] .gate-title,
-  body[data-venture="tattooing"] .series-title {
-    white-space: nowrap !important;
-    word-break: normal !important;
-    overflow-wrap: normal !important;
-  }
-
-  /* Live-editor copy edits can pin a fixed px size on a span inside a
-     hero title; on phones that overrides the responsive clamp above. */
-  body[data-venture="tattooing"] main h1 span[style*="font-size"],
-  .intro h1 span[style*="font-size"],
-  .hero-title span[style*="font-size"],
-  .page-title span[style*="font-size"],
-  .gate-title span[style*="font-size"],
-  .series-title span[style*="font-size"] {
-    font-size: inherit !important;
-  }
-
   /* ── Intro section stacks ─────────────────────────────── */
   .intro {
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 16px !important;
     margin-bottom: 40px !important;
-  }
-  .intro p,
-  .intro .intro-desc,
-  .intro-desc {
-    text-align: left !important;
-    padding-bottom: 16px !important;
-    max-width: min(100%, 380px) !important;
-    line-height: var(--type-descriptor-leading-mobile, 1.6) !important;
-    font-size: var(--type-descriptor-size-mobile, 11px) !important;
-    letter-spacing: var(--type-descriptor-tracking-mobile, 0.18em) !important;
   }
   .intro-above {
     margin-bottom: 4px !important;
@@ -302,22 +256,11 @@ select option:checked {
     max-width: 100% !important;
     align-items: flex-start !important;
   }
-  .hero-desc,
   .hero-note,
   .hero-label {
     text-align: left !important;
   }
 
-  /* tattoo index — hero stays centered on phones (overrides the left-align above) */
-  body[data-venture="tattooing"] .hero {
-    align-items: center !important;
-  }
-  body[data-venture="tattooing"] .hero-left,
-  body[data-venture="tattooing"] .hero-right {
-    align-items: center !important;
-    text-align: center !important;
-  }
-  body[data-venture="tattooing"] .hero-desc,
   body[data-venture="tattooing"] .hero-note,
   body[data-venture="tattooing"] .hero-label {
     text-align: left !important;
@@ -381,7 +324,7 @@ select option:checked {
   }
 
   /* ── Hero variant titles inside tattoo flash, etc. ────── */
-  .flash-title,
+  .flash-title:not(.hero-title),
   .modal-title,
   .modal-painting-title,
   .selected-title {
@@ -545,16 +488,6 @@ select option:checked {
     padding: var(--page-padding-y-compact, 40px) var(--page-padding-x-compact, 14px) !important;
   }
   header.top { padding: 8px 12px !important; min-height: 56px !important; }
-
-  .intro h1,
-  .hero-title,
-  .page-title,
-  .gate-title,
-  .series-title {
-    font-size: var(--type-hero-size-compact, clamp(38px, 13vw, 62px)) !important;
-    line-height: var(--type-hero-leading-compact, 0.92) !important;
-    letter-spacing: var(--type-hero-tracking-compact, 0) !important;
-  }
 
   .grid,
   .work-grid {
