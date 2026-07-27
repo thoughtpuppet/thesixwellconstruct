@@ -544,7 +544,7 @@
         <h1 class="hero-title" data-copy-id="tattoos-hero-title">TATTOOS.</h1>
       </div>
       <div class="hero-right">
-        <p class="hero-desc hero-descriptor" data-copy-id="tattoos-hero-desc">The ink &amp; skin <span>medium</span> of <span>saiel dauhn solehman</span><span>. <span>Original, collaborative and experimental works that push the boundaries of what it means to be a <span><strong>tattoo</strong></span></span></span> <span><strong>artist</strong></span>.</p>
+        <p class="hero-desc hero-descriptor" data-copy-id="tattoos-hero-desc">The ink &amp; skin <span>medium</span> of <span>saiel dauhn solehman</span><span>. <span>Original, collaborative and experimental works.</span></span></p>
       </div>
     </section>
     <section class="brand-band brand-band--tattoo-house" id="tattoo-house-band" aria-labelledby="tattoo-house-title">
@@ -554,8 +554,10 @@
         </a>
       </div>
       <div class="band-content">
-        <p class="band-kicker" data-copy-id="tattoos-brand-kicker"><br></p>
-        <h2 class="band-title" id="tattoo-house-title" data-copy-id="tattoos-brand-title" data-fit-width>art.pill Tattoo <span style="font-family: Georgia, &quot;Times New Roman&quot;, Times, serif"><span><span><span><span style="font-family: Inter, Arial, sans-serif">House</span></span></span></span></span></h2>
+        <div class="band-lockup">
+          <p class="band-kicker" data-copy-id="tattoos-brand-kicker"><br></p>
+          <h2 class="band-title" id="tattoo-house-title" data-copy-id="tattoos-brand-title" data-fit-width>art.pill Tattoo <span style="font-family: Georgia, &quot;Times New Roman&quot;, Times, serif"><span><span><span><span style="font-family: Inter, Arial, sans-serif">House</span></span></span></span></span></h2>
+        </div>
         <p class="band-copy" data-copy-id="tattoos-brand-copy"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 14px"><span style="font-size: 14px">a private tattoo studio in Atlanta, Georgia, owned and operated by Sai Solehman. The studio specializes in NARRATIVE COMPOSITIONS, FLORAL PIECES, script, and repeatable symbolic patterns, with color work designed thoughtfully for brown skin tones.</span></span></span></p>
         <div class="band-actions">
           <a class="brand-band-link" href="/about/artpilltattoohouse/">learn more</a>
@@ -574,11 +576,15 @@
     </section>
     <section class="artist-band artist-band--founder" id="saiel-artist-band" aria-labelledby="artist-name-title">
       <div class="band-identity band-portrait">
-        <img src="/assets/Sai%20Solehman%20Sunflower%20Scarf.jpg" alt="Portrait of Saiel Solehman">
+        <button class="band-portrait-trigger" type="button" data-band-image-open="saiel-portrait-dialog" aria-controls="saiel-portrait-dialog" aria-haspopup="dialog" aria-label="View a larger portrait of Saiel Solehman">
+          <img src="/assets/Sai%20Solehman%20Sunflower%20Scarf.jpg" alt="Portrait of Saiel Solehman">
+        </button>
       </div>
       <div class="band-content">
-        <p class="band-kicker"><span style="font-size: 16px;"><span style="font-size: 14px;">Owner / <strong><span style="color: rgb(0, 113, 235)">Artist</span></strong></span></span></p>
-        <h2 class="band-title" id="artist-name-title">Saiel Dauhn Solehman</h2>
+        <div class="band-lockup">
+          <p class="band-kicker"><span style="font-size: 16px;"><span style="font-size: 14px;">Owner / <strong><span style="color: rgb(0, 113, 235)">Artist</span></strong></span></span></p>
+          <h2 class="band-title" id="artist-name-title">Saiel Dauhn Solehman</h2>
+        </div>
         <p class="band-copy"><span style="font-size: 14px">an Atlanta-based interdisciplinary artist whose visions move through tattooing, painting, film, apparel, and woodworking. Her practice explores mysticism, introspection, communication &amp; meaning, psychological tension, and cultural systems through layered symbolism and visual conversations set within vivid, surreal environments.</span></p>
         <div class="band-actions">
           <a class="brand-band-link" href="/about/founder/">learn more</a>
@@ -586,6 +592,12 @@
         </div>
       </div>
     </section>
+    <dialog class="band-image-dialog" id="saiel-portrait-dialog" aria-label="Full-size portrait of Saiel Solehman">
+      <div class="band-image-dialog__frame">
+        <button class="band-image-dialog__close" type="button" data-band-image-close aria-label="Close enlarged portrait">&times;</button>
+        <img class="band-image-dialog__image" src="/assets/Sai%20Solehman%20Sunflower%20Scarf.jpg" alt="Portrait of Saiel Solehman">
+      </div>
+    </dialog>
 
     <section class="section" id="ways-to-work">
       <h2 class="section-title" data-copy-id="tattoos-ways-title">Ways to Collaborate:</h2>
@@ -842,6 +854,7 @@
         if (status) status.textContent = "view current calls";
       });
   </script>
+  <script src="/js/identity-band-lightbox.js"></script>
   <script src="/js/transition.js"></script>
   <script src="/js/construct-corner.js"></script>
   <script src="/js/construct-nav.js"></script>

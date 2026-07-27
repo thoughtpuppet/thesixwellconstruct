@@ -691,7 +691,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     </div>
 
     <h3>Identity bands · <code>.brand-band</code> / <code>.artist-band</code></h3>
-    <p class="lead">Brand and artist profiles are owned entirely by <code>css/identity-bands.css</code>; pages provide content and a documented modifier, never local band rules. Every identity band uses the same two-column anatomy above 768px: the first column is a shared 4:5 media footprint containing only its proportionally scaled logo or portrait. Logos use the Legend symbol color <code>#6D3D15</code>, align to the content-facing edge, and link directly to their managed Identity record in <code>/about/legend/</code>. Brand bands use an 8px desktop inline inset, a 25/75 column split, and no artificial logo-to-content gutter. Below 768px, brand and artist bands remain two-column with an 8px leading inset, 16px trailing inset, tight 4px media-to-content gap, and a responsive media track of <code>minmax(88px,min(32%,200px))</code>. Brand artwork retains its 20px optical offset and centers vertically without changing size. Artist portraits keep that same footprint but align their top edge with the artist title through the shared kicker-line and title-gap variables; artist kickers use the full <code>--color-body</code> ink rather than a medium accent. Tattoo House is the brand reference: every brand title uses <code>clamp(34px,8vw,112px)</code>, and every description uses 14px Georgia in <code>rgba(252,184,103,.64)</code>. Proper brand names such as ThoughtPuppet remain unbroken and use a container-relative size guard to fit their actual content column.</p>
+    <p class="lead">Brand and artist profiles are owned entirely by <code>css/identity-bands.css</code>; pages provide content and a documented modifier, never local band rules. Every identity band uses the same two-column anatomy above 768px. Artist portraits retain the shared 4:5 media footprint; brand logos use a mark-fitted first column derived from the artwork's real aspect ratio, preserving logo height without reserving an oversized invisible box. Logos use the Legend symbol color <code>#6D3D15</code>, align to the content-facing edge, and link directly to their managed Identity record in <code>/about/legend/</code>. Brand bands use an 8px desktop inline inset and a 12px structural gutter, with the action aligned to the start of the title and descriptor column. Below 768px, every identity band keeps its logo or portrait in the first column and its title and actions in the second, then lets the description span both columns below. Both use an 8px leading inset, 16px trailing inset, tight 4px media-to-content gap, and a responsive media track of <code>minmax(88px,min(32%,200px))</code>. Brand artwork retains its 20px optical offset and centers vertically against the title-and-action stack without changing size. Artist portraits keep that same footprint but align their top edge with the artist title through the shared kicker-line and title-gap variables; artist kickers use the full <code>--color-body</code> ink rather than a medium accent. A <code>.band-portrait-trigger</code> may open a full-size <code>.band-image-dialog</code>; it follows the Art and Tattoo image-viewer convention with a full-viewport dark overlay, an unframed image constrained to 92vw × 92vh, and an unboxed close mark fixed near the top-right. It must remain keyboard operable and support its close control, Escape, backdrop click, focus return, and scroll restoration through <code>js/identity-band-lightbox.js</code>. Band actions remain filled with their medium color by default, while links into the About node use a transparent fill with muted Construct amber <code>--color-accent-dim</code> for their 5px border and text at rest, becoming full <code>--color-accent</code> on hover or keyboard focus. Tattoo House is the brand reference: every brand title uses <code>clamp(34px,8vw,112px)</code>, and every description uses 14px Georgia in <code>rgba(252,184,103,.64)</code>. Proper brand names such as ThoughtPuppet remain unbroken and use a container-relative size guard to fit their actual content column.</p>
     <div class="demo" data-medium="art">
       <section class="brand-band brand-band--thoughtpuppet" aria-labelledby="guide-thoughtpuppet-title">
         <div class="band-identity">
@@ -700,11 +700,13 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
           </a>
         </div>
         <div class="band-content">
-          <p class="band-kicker">node manifestation / image</p>
-          <h4 class="band-title" id="guide-thoughtpuppet-title">ThoughtPuppet</h4>
+          <div class="band-lockup">
+            <p class="band-kicker">node manifestation / image</p>
+            <h4 class="band-title" id="guide-thoughtpuppet-title">ThoughtPuppet</h4>
+          </div>
           <p class="band-copy">The identity band names the person or brand, gives concise context, and points toward deeper material.</p>
           <div class="band-actions">
-            <a class="brand-band-link" href="#components" onclick="return false">Learn more</a>
+            <a class="brand-band-link" href="/about/visual-language/" onclick="return false">Learn more</a>
           </div>
         </div>
       </section>
@@ -716,10 +718,12 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     &lt;/a&gt;
   &lt;/div&gt;
   &lt;div class="band-content"&gt;
-    &lt;p class="band-kicker"&gt;Identity role&lt;/p&gt;
-    &lt;h2 class="band-title" id="brand-title"&gt;Brand name&lt;/h2&gt;
+    &lt;div class="band-lockup"&gt;
+      &lt;p class="band-kicker"&gt;Identity role&lt;/p&gt;
+      &lt;h2 class="band-title" id="brand-title"&gt;Brand name&lt;/h2&gt;
+    &lt;/div&gt;
     &lt;p class="band-copy"&gt;Concise identity context.&lt;/p&gt;
-    &lt;div class="band-actions"&gt;&lt;a class="brand-band-link" href="..."&gt;Learn more&lt;/a&gt;&lt;/div&gt;
+    &lt;div class="band-actions"&gt;&lt;a class="brand-band-link" href="/about/..."&gt;Learn more&lt;/a&gt;&lt;/div&gt;
   &lt;/div&gt;
 &lt;/section&gt;</code></pre>
 
