@@ -35,16 +35,16 @@ export function mountCalibrationHud(root = document.body) {
         <h3>Shape stream</h3>
         <label>Min size <input type="number" min="0.05" max="0.8" step="0.01" value="0.30" data-stream-control="min-size"></label>
         <label>Max size <input type="number" min="0.05" max="0.8" step="0.01" value="0.30" data-stream-control="max-size"></label>
-        <label>Color 1 <input type="color" value="#d01006" data-stream-color="0"></label>
-        <label>Color 2 <input type="color" value="#f06c00" data-stream-color="1"></label>
-        <label>Color 3 <input type="color" value="#ffbb00" data-stream-color="2"></label>
-        <label>Color 4 <input type="color" value="#008a22" data-stream-color="3"></label>
-        <label>Color 5 <input type="color" value="#00ced1" data-stream-color="4"></label>
-        <label>Color 6 <input type="color" value="#006eff" data-stream-color="5"></label>
-        <label>Color 7 <input type="color" value="#cb5cff" data-stream-color="6"></label>
-        <label>Color 8 <input type="color" value="#ffcb70" data-stream-color="7"></label>
-        <label>Color 9 <input type="color" value="#814812" data-stream-color="8"></label>
-        <label>Color 10 <input type="color" value="#fff1e0" data-stream-color="9"></label>
+        <label class="calibration-color-label">Color 1 <span class="calibration-color-control"><input type="color" value="#d01006" aria-label="Color 1 picker" data-stream-color="0"><input type="text" value="#d01006" aria-label="Color 1 hex" data-stream-color="0" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 2 <span class="calibration-color-control"><input type="color" value="#f06c00" aria-label="Color 2 picker" data-stream-color="1"><input type="text" value="#f06c00" aria-label="Color 2 hex" data-stream-color="1" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 3 <span class="calibration-color-control"><input type="color" value="#ffbb00" aria-label="Color 3 picker" data-stream-color="2"><input type="text" value="#ffbb00" aria-label="Color 3 hex" data-stream-color="2" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 4 <span class="calibration-color-control"><input type="color" value="#008a22" aria-label="Color 4 picker" data-stream-color="3"><input type="text" value="#008a22" aria-label="Color 4 hex" data-stream-color="3" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 5 <span class="calibration-color-control"><input type="color" value="#00ced1" aria-label="Color 5 picker" data-stream-color="4"><input type="text" value="#00ced1" aria-label="Color 5 hex" data-stream-color="4" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 6 <span class="calibration-color-control"><input type="color" value="#006eff" aria-label="Color 6 picker" data-stream-color="5"><input type="text" value="#006eff" aria-label="Color 6 hex" data-stream-color="5" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 7 <span class="calibration-color-control"><input type="color" value="#cb5cff" aria-label="Color 7 picker" data-stream-color="6"><input type="text" value="#cb5cff" aria-label="Color 7 hex" data-stream-color="6" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 8 <span class="calibration-color-control"><input type="color" value="#ffcb70" aria-label="Color 8 picker" data-stream-color="7"><input type="text" value="#ffcb70" aria-label="Color 8 hex" data-stream-color="7" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 9 <span class="calibration-color-control"><input type="color" value="#814812" aria-label="Color 9 picker" data-stream-color="8"><input type="text" value="#814812" aria-label="Color 9 hex" data-stream-color="8" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Color 10 <span class="calibration-color-control"><input type="color" value="#fff1e0" aria-label="Color 10 picker" data-stream-color="9"><input type="text" value="#fff1e0" aria-label="Color 10 hex" data-stream-color="9" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
         <h3>Floor editor - active layout</h3>
         <label>Front left X <input type="number" min="-0.5" max="1.5" step="0.001" data-floor-control="frontLeft.x"></label>
         <label>Front left Y <input type="number" min="-0.5" max="1.5" step="0.001" data-floor-control="frontLeft.y"></label>
@@ -90,8 +90,8 @@ export function mountCalibrationHud(root = document.body) {
         <label>Right W spread <input type="number" min="0.02" max="0.8" step="0.01" data-phase-control="7.widthSpread"></label>
         <label>Right D spread <input type="number" min="0.02" max="0.8" step="0.01" data-phase-control="7.depthSpread"></label>
         <h3>Door channel</h3>
-        <label>Door color <input type="color" value="#dc9b4c" data-lock-control="door-color"></label>
-        <label>Overlay color <input type="color" value="#eea449" data-lock-control="overlay-color"></label>
+        <label class="calibration-color-label">Door color <span class="calibration-color-control"><input type="color" value="#dc9b4c" aria-label="Door color picker" data-lock-control="door-color"><input type="text" value="#dc9b4c" aria-label="Door color hex" data-lock-control="door-color" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
+        <label class="calibration-color-label">Overlay color <span class="calibration-color-control"><input type="color" value="#eea449" aria-label="Door overlay color picker" data-lock-control="overlay-color"><input type="text" value="#eea449" aria-label="Door overlay color hex" data-lock-control="overlay-color" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
         <label>Overlay opacity <input type="number" min="0" max="1" step="0.05" value="0.35" data-lock-control="overlay-opacity"></label>
         <label>Cycle min s <input type="number" min="0.2" max="10" step="0.1" value="3.0" data-lock-control="cycle-min"></label>
         <label>Cycle max s <input type="number" min="0.2" max="10" step="0.1" value="3.0" data-lock-control="cycle-max"></label>
@@ -115,9 +115,9 @@ export function mountCalibrationHud(root = document.body) {
           <button type="button" data-eye-action="preview-transition">Preview Break Transition</button>
           <button type="button" data-eye-action="hide">Hide Eye</button>
         </div>
-        <label>Eye color <input type="color" value="#fcb867" data-eye-control="eye-color"></label>
+        <label class="calibration-color-label">Eye color <span class="calibration-color-control"><input type="color" value="#fcb867" aria-label="Eye color picker" data-eye-control="eye-color"><input type="text" value="#fcb867" aria-label="Eye color hex" data-eye-control="eye-color" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
         <label>Eye opacity <input type="number" min="0" max="1" step="0.05" value="1" data-eye-control="eye-opacity"></label>
-        <label>Overlay color <input type="color" value="#000000" data-eye-control="overlay-color"></label>
+        <label class="calibration-color-label">Overlay color <span class="calibration-color-control"><input type="color" value="#000000" aria-label="Eye overlay color picker" data-eye-control="overlay-color"><input type="text" value="#000000" aria-label="Eye overlay color hex" data-eye-control="overlay-color" data-color-hex maxlength="7" pattern="#?[0-9a-fA-F]{6}" autocomplete="off" autocapitalize="off" spellcheck="false"></span></label>
         <label>Overlay opacity <input type="number" min="0" max="1" step="0.05" value="0.48" data-eye-control="overlay-opacity"></label>
         <label>Closed fade s <input type="number" min="0.05" max="4" step="0.05" value="0.58" data-eye-control="closed-reveal-duration"></label>
         <label>Open fade s <input type="number" min="0.05" max="4" step="0.05" value="0.42" data-eye-control="open-reveal-duration"></label>

@@ -129,6 +129,9 @@ test("shared painting CSS preserves intrinsic media and every managed state", ()
   for (const state of ["available", "sold", "not-for-sale", "unavailable", "coming-soon", "sold-out", "check-availability"]) {
     assert.match(css, new RegExp(`\\.avail-status\\.${state.replace("-", "\\-")}`), `missing ${state} CSS state`);
   }
+  const mobile = css.slice(css.indexOf("@media (max-width: 700px)"), css.indexOf("@media (max-width: 380px)"));
+  assert.match(mobile, /\.painting-detail-page \.avail-row\s*\{[\s\S]*display:\s*grid[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto/);
+  assert.doesNotMatch(mobile, /\.painting-detail-page \.avail-row\s*\{[^}]*flex-direction:\s*column/);
 });
 
 test("managed original acquisition uses the painting-specific acquire label", () => {

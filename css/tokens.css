@@ -48,22 +48,22 @@
   ────────────────────────────────────────────────────────── */
 
   /* TATTOOING */
-  --color-tattooing:        #6E0404;
-  --color-tattooing-dim:    rgba(110, 4, 4, 0.25);
-  --color-tattooing-bright: #C91818;
-  --color-tattooing-dark:   #420202;
+  --color-tattooing:        #750000;
+  --color-tattooing-dim:    rgba(117, 0, 0, 0.25);
+  --color-tattooing-bright: #BE281F;
+  --color-tattooing-dark:   #520000;
 
   /* ART MAKING */
-  --color-art:              #0034AD;
-  --color-art-dim:          rgba(0, 52, 173, 0.25);
-  --color-art-bright:       #055BDB;
-  --color-art-dark:         #001E57;
+  --color-art:              #0000B1;
+  --color-art-dim:          rgba(0, 0, 177, 0.25);
+  --color-art-bright:       #2054FF;
+  --color-art-dark:         #00006D;
 
   /* MERCH */
-  --color-merch:            #F08000;
-  --color-merch-dim:        rgba(240, 128, 0, 0.25);
-  --color-merch-bright:     #FBA613;
-  --color-merch-dark:       #A85A00;
+  --color-merch:            #FF8000;
+  --color-merch-dim:        rgba(255, 128, 0, 0.25);
+  --color-merch-bright:     #FF9933;
+  --color-merch-dark:       #AC5500;
 
   /* ABOUT */
   --color-about:            #FCB467;

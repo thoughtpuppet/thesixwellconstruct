@@ -354,6 +354,17 @@
     gap: 6px;
   }
 
+  #calibration-console .calibration-controls .calibration-color-label {
+    grid-template-columns: 1fr 108px;
+  }
+
+  #calibration-console .calibration-color-control {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 4px;
+    min-width: 0;
+  }
+
   #calibration-console .calibration-controls input,
   #calibration-console .calibration-controls output {
     box-sizing: border-box;
@@ -377,6 +388,10 @@
   #calibration-console .calibration-controls input[type="color"] {
     padding: 2px;
     cursor: pointer;
+  }
+
+  #calibration-console .calibration-controls input[data-color-hex][aria-invalid="true"] {
+    border-color: #ff645c;
   }
 
   #calibration-console .calibration-controls input[type="checkbox"] {

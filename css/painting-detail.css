@@ -646,8 +646,19 @@
   }
 
   .painting-detail-page .avail-row {
-    align-items: flex-start;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--painting-s3);
+  }
+
+  .painting-detail-page .avail-left {
+    min-width: 0;
+  }
+
+  .painting-detail-page .avail-action,
+  .painting-detail-page .avail-location {
+    justify-self: end;
   }
 }
 

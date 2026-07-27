@@ -5994,12 +5994,40 @@ function handleShapeLockAction(action) {
 }
 
 function colorNumber(value, fallback) {
-  const parsed = Number.parseInt(String(value || '').replace('#', ''), 16);
+  const normalized = normalizeHexColor(value);
+  if (!normalized) return fallback;
+  const parsed = Number.parseInt(normalized.slice(1), 16);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function colorHex(value) {
   return `#${Number(value).toString(16).padStart(6, '0')}`;
+}
+
+function normalizeHexColor(value) {
+  const candidate = String(value || '').trim();
+  if (!/^#?[0-9a-f]{6}$/i.test(candidate)) return '';
+  return `#${candidate.replace('#', '').toLowerCase()}`;
+}
+
+function prepareHexColorInput(input) {
+  if (!input?.matches('[data-color-hex]')) return true;
+  const normalized = normalizeHexColor(input.value);
+  if (!normalized) {
+    input.setAttribute('aria-invalid', 'true');
+    return false;
+  }
+  input.value = normalized;
+  input.removeAttribute('aria-invalid');
+  return true;
+}
+
+function syncCalibrationInputs(selector, value) {
+  calibrationConsole?.querySelectorAll(selector).forEach((input) => {
+    if (document.activeElement === input) return;
+    input.value = String(value);
+    input.removeAttribute('aria-invalid');
+  });
 }
 
 function updateShapeStreamDerivedTuning() {
@@ -6040,12 +6068,10 @@ function syncShapeStreamControls() {
     'max-size': SHAPE_STREAM.maxSize
   };
   Object.entries(values).forEach(([name, value]) => {
-    const input = calibrationConsole?.querySelector(`[data-stream-control="${name}"]`);
-    if (input && document.activeElement !== input) input.value = String(value);
+    syncCalibrationInputs(`[data-stream-control="${name}"]`, value);
   });
   SHAPE_STREAM_COLORS.forEach((color, index) => {
-    const input = calibrationConsole?.querySelector(`[data-stream-color="${index}"]`);
-    if (input && document.activeElement !== input) input.value = colorHex(color);
+    syncCalibrationInputs(`[data-stream-color="${index}"]`, colorHex(color));
   });
 }
 
@@ -6089,8 +6115,7 @@ function syncDoorwayEyeControls() {
     'site-fade-duration': SHAPE_STREAM_FINAL_GRID.blackFadeDuration
   };
   Object.entries(values).forEach(([name, value]) => {
-    const input = calibrationConsole?.querySelector(`[data-eye-control="${name}"]`);
-    if (input && document.activeElement !== input) input.value = String(value);
+    syncCalibrationInputs(`[data-eye-control="${name}"]`, value);
   });
 }
 
@@ -6845,8 +6870,7 @@ function syncShapeLockControls() {
     'door-size': lockLayout.sizeN
   };
   Object.entries(values).forEach(([name, value]) => {
-    const input = calibrationConsole?.querySelector(`[data-lock-control="${name}"]`);
-    if (input && document.activeElement !== input) input.value = String(value);
+    syncCalibrationInputs(`[data-lock-control="${name}"]`, value);
   });
 }
 
@@ -8024,6 +8048,8 @@ if (calibrate && calibrationConsole) {
     if (floorButton) handleFloorAction(floorButton.dataset.floorAction);
   });
   calibrationConsole.addEventListener('input', (event) => {
+    const colorHexInput = event.target.closest('[data-color-hex]');
+    if (colorHexInput && !prepareHexColorInput(colorHexInput)) return;
     const streamColor = event.target.closest('[data-stream-color]');
     if (streamColor) {
       handleShapeStreamColor(streamColor);
@@ -8056,6 +8082,10 @@ if (calibrate && calibrationConsole) {
     }
     const input = event.target.closest('[data-lock-control]');
     if (input) handleShapeLockControl(input);
+  });
+  calibrationConsole.addEventListener('focusout', (event) => {
+    const colorHexInput = event.target.closest('[data-color-hex]');
+    if (colorHexInput && !normalizeHexColor(colorHexInput.value)) updateCalibrationConsole();
   });
 }
 
