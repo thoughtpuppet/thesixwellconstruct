@@ -173,6 +173,12 @@
     function imageRole(image) {
       return ["result","before","process","detail"].includes(image?.imageRole) ? image.imageRole : "result";
     }
+    function mediaKind(entry) {
+      return entry?.kind==="video"||String(entry?.mimeType||"").startsWith("video/")?"video":"image";
+    }
+    function mediaUrl(entry) {
+      return entry?.mediaUrl||entry?.imageUrl||"";
+    }
     function imageRoleLabel(role) {
       return {before:"Before / existing tattoo",process:"Process",detail:"Detail"}[role] || "";
     }
@@ -188,23 +194,52 @@
       const note=[imageRoleLabel(role),healingLabel(image.healingState,""),image.timingNote,image.documentationCaption].filter(Boolean).join(" \u00b7 ");
       return note||"Documentation";
     }
-    function documentedFigure(image) {
-      const figure=node("figure","portfolio-documented-image"),photo=node("img");photo.src=image.imageUrl;photo.alt=image.altText||DEFAULT_ALT;photo.loading="lazy";figure.append(photo);
-      const note=imageNote(image);if(note)figure.append(node("figcaption","portfolio-image-note",note));return figure;
+    function mediaElement(entry,item) {
+      if(mediaKind(entry)==="video"){
+        const video=node("video");
+        video.controls=true;
+        video.playsInline=true;
+        video.preload="metadata";
+        video.poster=item?.imageUrl||"";
+        video.setAttribute("aria-label",entry.altText||"Tattoo portfolio video");
+        const source=node("source");
+        source.src=mediaUrl(entry);
+        if(entry.mimeType)source.type=entry.mimeType;
+        video.append(source);
+        return video;
+      }
+      const image=node("img");
+      image.src=mediaUrl(entry);
+      image.alt=entry.altText||DEFAULT_ALT;
+      image.loading="lazy";
+      return image;
+    }
+    function transcriptElement(entry) {
+      if(mediaKind(entry)!=="video"||!entry.transcript)return null;
+      const details=node("details","portfolio-video-transcript"),summary=node("summary","","Transcript");
+      details.append(summary,node("p","",entry.transcript));
+      return details;
+    }
+    function documentedFigure(image,item) {
+      const figure=node("figure","portfolio-documented-image");
+      figure.append(mediaElement(image,item));
+      const note=imageNote(image);if(note)figure.append(node("figcaption","portfolio-image-note",note));
+      const transcript=transcriptElement(image);if(transcript)figure.append(transcript);
+      return figure;
     }
     function standardMedia(item,images,media) {
-      const imageWrap=node("div","overlay-image-wrap"),mainImage=node("img"),note=node("div","portfolio-image-note");
+      const imageWrap=node("div","overlay-image-wrap"),note=node("div","portfolio-image-note"),transcriptHost=node("div","portfolio-transcript-host");
       const cover=images.find((image)=>image.isCover&&imageRole(image)==="result")||images.find((image)=>imageRole(image)==="result")||images[0];let selectedRef=cover.imageRef;
-      function selectImage(image){selectedRef=image.imageRef;mainImage.style.opacity="0";mainImage.src=image.imageUrl;mainImage.alt=image.altText||item.altText||DEFAULT_ALT;note.textContent=imageNote(image);note.hidden=!note.textContent;requestAnimationFrame(()=>{mainImage.style.opacity="1"});media.querySelectorAll(".portfolio-angle-button").forEach((entry)=>entry.setAttribute("aria-pressed",String(entry.dataset.imageRef===image.imageRef)))}
-      mainImage.src=cover.imageUrl;mainImage.alt=cover.altText||item.altText||DEFAULT_ALT;imageWrap.append(mainImage);media.append(imageWrap,note);note.textContent=imageNote(cover);note.hidden=!note.textContent;
-      if(images.length>1){let active="all";const states=[...new Set(images.map((image)=>image.healingState).filter((state)=>state!=="unspecified"))];const strip=node("div","portfolio-angle-strip");strip.setAttribute("aria-label","Tattoo result, process, and detail photographs");function paintStrip(){strip.replaceChildren();const visible=active==="all"?images:images.filter((image)=>image.healingState===active);if(visible.length&&!visible.some((image)=>image.imageRef===selectedRef))selectedRef=visible[0].imageRef;visible.forEach((image)=>{const button=node("button","portfolio-angle-button");button.type="button";button.dataset.imageRef=image.imageRef;button.setAttribute("aria-pressed",String(image.imageRef===selectedRef));button.setAttribute("aria-label",`${imageStageLabel(image)} tattoo photograph${image.timingNote?`, ${image.timingNote}`:""}`);const thumb=node("img");thumb.src=image.imageUrl;thumb.alt="";button.append(thumb,node("span","portfolio-thumb-state",imageStageLabel(image)));button.addEventListener("click",()=>selectImage(image));strip.append(button)});const selected=visible.find((image)=>image.imageRef===selectedRef);if(selected)selectImage(selected)}if(states.includes("fresh")&&states.includes("healed")){const filters=node("div","portfolio-documentation-filters");filters.setAttribute("role","group");filters.setAttribute("aria-label","Filter tattoo photographs by healing stage");[["all","All"],["fresh","Fresh"],["healed","Healed"]].forEach(([value,label])=>{const button=node("button",value==="all"?"active":"",label);button.type="button";button.setAttribute("aria-pressed",String(value==="all"));button.addEventListener("click",()=>{active=value;filters.querySelectorAll("button").forEach((entry)=>{const pressed=entry===button;entry.classList.toggle("active",pressed);entry.setAttribute("aria-pressed",String(pressed))});paintStrip()});filters.append(button)});media.append(filters)}paintStrip();media.append(strip)}
+      function selectImage(image){selectedRef=image.imageRef;imageWrap.querySelector("video")?.pause();imageWrap.replaceChildren(mediaElement(image,item));note.textContent=imageNote(image);note.hidden=!note.textContent;transcriptHost.replaceChildren();const transcript=transcriptElement(image);if(transcript)transcriptHost.append(transcript);media.querySelectorAll(".portfolio-angle-button").forEach((entry)=>entry.setAttribute("aria-pressed",String(entry.dataset.imageRef===image.imageRef)))}
+      media.append(imageWrap,note,transcriptHost);selectImage(cover);
+      if(images.length>1){let active="all";const stillImages=images.filter((image)=>mediaKind(image)==="image"),states=[...new Set(stillImages.map((image)=>image.healingState).filter((state)=>state!=="unspecified"))];const strip=node("div","portfolio-angle-strip");strip.setAttribute("aria-label","Tattoo result, process, detail photographs, and videos");function paintStrip(){strip.replaceChildren();const visible=active==="all"?images:stillImages.filter((image)=>image.healingState===active);if(visible.length&&!visible.some((image)=>image.imageRef===selectedRef))selectedRef=visible[0].imageRef;visible.forEach((image)=>{const video=mediaKind(image)==="video",button=node("button","portfolio-angle-button");button.type="button";button.dataset.imageRef=image.imageRef;button.setAttribute("aria-pressed",String(image.imageRef===selectedRef));button.setAttribute("aria-label",`${imageStageLabel(image)} tattoo ${video?"video":"photograph"}${image.timingNote?`, ${image.timingNote}`:""}`);const thumb=node("img");thumb.src=video?item.imageUrl:mediaUrl(image);thumb.alt="";button.append(thumb);if(video)button.append(node("span","portfolio-thumb-play","Play"));button.append(node("span","portfolio-thumb-state",imageStageLabel(image)));button.addEventListener("click",()=>selectImage(image));strip.append(button)});const selected=visible.find((image)=>image.imageRef===selectedRef);if(selected)selectImage(selected)}if(states.includes("fresh")&&states.includes("healed")){const filters=node("div","portfolio-documentation-filters");filters.setAttribute("role","group");filters.setAttribute("aria-label","Filter tattoo photographs by healing stage");[["all","All"],["fresh","Fresh"],["healed","Healed"]].forEach(([value,label])=>{const button=node("button",value==="all"?"active":"",label);button.type="button";button.setAttribute("aria-pressed",String(value==="all"));button.addEventListener("click",()=>{active=value;filters.querySelectorAll("button").forEach((entry)=>{const pressed=entry===button;entry.classList.toggle("active",pressed);entry.setAttribute("aria-pressed",String(pressed))});paintStrip()});filters.append(button)});media.append(filters)}paintStrip();media.append(strip)}
     }
     function compareMedia(images,media) {
-      const fresh=images.find((image)=>image.healingState==="fresh"),healed=images.find((image)=>image.healingState==="healed");
+      const stillImages=images.filter((image)=>mediaKind(image)==="image"),fresh=stillImages.find((image)=>image.healingState==="fresh"),healed=stillImages.find((image)=>image.healingState==="healed");
       const heading=node("div","portfolio-documentation-heading");heading.append(node("span","portfolio-detail-label","Fresh + healed comparison"),node("p","","The same tattoo documented at different stages."));const comparison=node("div","portfolio-image-comparison");comparison.append(documentedFigure(fresh),documentedFigure(healed));media.append(heading,comparison);
     }
     function viewerControlledMedia(item,images,media) {
-      const resultImages=images.filter((image)=>imageRole(image)==="result");
+      const resultImages=images.filter((image)=>mediaKind(image)==="image"&&imageRole(image)==="result");
       const gallery=node("div","portfolio-media-view"),fresh=resultImages.find((image)=>image.healingState==="fresh"),healed=resultImages.find((image)=>image.healingState==="healed");
       standardMedia(item,images,gallery);
       if(!fresh||!healed){media.append(gallery);return}
@@ -214,7 +249,7 @@
       galleryButton.addEventListener("click",()=>setView("gallery"));compareButton.addEventListener("click",()=>setView("compare"));controls.append(node("span","portfolio-detail-label","View"),galleryButton,compareButton);media.append(controls,gallery,comparison);
     }
     function coverUpDocumentation(images) {
-      const beforeImages=images.filter((image)=>imageRole(image)==="before");
+      const beforeImages=images.filter((image)=>mediaKind(image)==="image"&&imageRole(image)==="before");
       if(!beforeImages.length)return null;
       const section=node("section","portfolio-coverup-documentation");
       section.setAttribute("aria-labelledby","portfolio-coverup-documentation-title");
@@ -231,7 +266,7 @@
       const back=node("button","overlay-close","Back to portfolio"); back.type="button"; back.addEventListener("click",()=>closeDetail());
       const inner=node("div","overlay-inner"),media=node("div","portfolio-detail-media");
       const fallbackImage={id:"primary",imageRef:"primary",imageUrl:item.imageUrl,altText:item.altText||DEFAULT_ALT,healingState:"unspecified",imageRole:"result",isCover:true};
-      const images=[item.primaryImage||fallbackImage,...(item.angles||[])];
+      const images=Array.isArray(item.media)&&item.media.length?item.media:[item.primaryImage||fallbackImage,...(item.angles||[])];
       const mediaPriority={result:0,process:1,detail:2};
       const leadImages=images.filter((image)=>imageRole(image)!=="before").sort((a,b)=>(mediaPriority[imageRole(a)]??3)-(mediaPriority[imageRole(b)]??3));
       if(!leadImages.length)leadImages.push(fallbackImage);

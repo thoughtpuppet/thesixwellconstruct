@@ -6,10 +6,12 @@
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
   }[character]));
 
-  function detailPath(record) {
-    if (record.legacy_path) return record.legacy_path;
-    return `/art/acquisitioninquiry.html?work=${encodeURIComponent(record.slug || record.id)}`;
-  }
+function detailPath(record) {
+  return record.canonicalRoute
+    || record.canonical_route
+    || record.legacy_path
+    || `/art/${encodeURIComponent(record.slug || record.id)}/`;
+}
 
   function updateCard(card, record) {
     const media = Array.isArray(record.media) ? record.media[0] : null;

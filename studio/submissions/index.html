@@ -363,7 +363,8 @@
   .portfolio-angle:hover { border-color:var(--ring); }
   .portfolio-angle:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
   .portfolio-angle[aria-expanded="true"] { border-color:var(--accent); }
-  .portfolio-angle img { width:100%; aspect-ratio:4/5; object-fit:cover; display:block; background:#090909; }
+  .portfolio-angle img,.portfolio-angle video { width:100%; aspect-ratio:4/5; object-fit:cover; display:block; background:#090909; }
+  .portfolio-video-mark { position:absolute; top:7px; right:7px; min-width:28px; padding:5px 7px; background:var(--panel); color:var(--accent); font-family:var(--sans); font-size:8px; font-weight:900; letter-spacing:.12em; text-align:center; text-transform:uppercase; }
   .portfolio-angle-label { position:absolute; left:0; bottom:0; max-width:100%; padding:7px 9px; background:var(--panel); color:var(--accent); font-family:var(--sans); font-size:9px; font-weight:900; letter-spacing:.1em; line-height:1.35; text-transform:uppercase; }
   .portfolio-angle-editor { border:5px solid var(--accent); padding:12px; background:var(--bg); }
   .portfolio-angle-editor[hidden] { display:none; }
@@ -477,6 +478,7 @@
 <script src="/js/select-menu.js?v=2"></script>
 <script src="/studio/admin-collapse.js?v=2"></script>
 <script src="/studio/analytics.js?v=analytics-url-clean"></script>
+<script src="/studio/resumable-media-upload.js?v=1"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -1517,6 +1519,7 @@
   }
 
   function portfolioImagesForItem(item) {
+    if (Array.isArray(item.media) && item.media.length) return item.media;
     const primary = item.primaryImage || {
       id: "primary",
       imageRef: "primary",
@@ -1538,37 +1541,40 @@
 
   function renderPortfolioImageTile(item, image, index) {
     const primary = image.imageRef === "primary";
+    const video = image.kind === "video";
     const editorId = portfolioImageEditorId(item, image, index);
-    const imageName = primary ? "primary image" : `image ${index + 1}`;
+    const imageName = primary ? "primary image" : `${video ? "video" : "image"} ${index + 1}`;
     const imageRole = primary ? "result" : (image.imageRole || "result");
     const roleLabel = PORTFOLIO_IMAGE_ROLES.find(([value]) => value === imageRole)?.[1] || "Result";
     const tileLabel = [primary ? "Primary" : roleLabel, image.isCover ? "Cover" : ""].filter(Boolean).join(" / ");
     const coverName = image.isCover ? ", current cover" : "";
     return `<button class="portfolio-angle" type="button" data-image-editor-toggle aria-expanded="false" aria-controls="${escapeHtml(editorId)}" aria-label="Edit ${escapeHtml(imageName)}, ${escapeHtml(roleLabel)} for ${escapeHtml(portfolioLabel(item))}${coverName}">
-      <img data-secure-src="${escapeHtml(image.imageUrl)}" alt="${escapeHtml(image.altText || `${portfolioLabel(item)} tattoo image`)}" draggable="false">
+      ${video?`<video data-secure-src="${escapeHtml(image.mediaUrl||image.imageUrl)}" aria-label="${escapeHtml(image.altText||`${portfolioLabel(item)} tattoo video`)}" muted playsinline preload="metadata"></video><span class="portfolio-video-mark" aria-hidden="true">Play</span>`:`<img data-secure-src="${escapeHtml(image.imageUrl)}" alt="${escapeHtml(image.altText || `${portfolioLabel(item)} tattoo image`)}" draggable="false">`}
       <span class="portfolio-angle-label" aria-hidden="true">${escapeHtml(tileLabel)}</span>
     </button>`;
   }
 
   function renderPortfolioImageEditor(item, image, index, images) {
     const primary = image.imageRef === "primary";
+    const video = image.kind === "video";
     const imageRole = primary ? "result" : (image.imageRole || "result");
     const consentStatus = image.consentStatus || "unknown";
     const isCoverIneligible = imageRole !== "result";
     const editorId = portfolioImageEditorId(item, image, index);
     return `<div class="portfolio-angle-editor" id="${escapeHtml(editorId)}" data-image-editor-panel hidden>
       <form class="portfolio-image-documentation" data-image-documentation="${escapeHtml(item.id)}" data-image-ref="${escapeHtml(image.imageRef)}">
-        <span class="portfolio-image-state">${primary ? "Primary image" : `Image ${index + 1}`} ${image.isCover ? " / Cover" : ""}</span>
+        <span class="portfolio-image-state">${primary ? "Primary image" : `${video ? "Video" : "Image"} ${index + 1}`} ${image.isCover ? " / Cover" : ""}</span>
         ${primary
           ? `<label>Image role<input value="Result" disabled><input name="imageRole" type="hidden" value="result"></label>`
-          : `<label>Image role<select name="imageRole" data-image-role>${PORTFOLIO_IMAGE_ROLES.map(([value,label]) => `<option value="${value}"${value === imageRole ? " selected" : ""}>${label}</option>`).join("")}</select><span class="portfolio-field-note">Choosing Before / existing tattoo marks this tattoo as a Cover-up when you save.</span></label>`}
+          : `<label>Media role<select name="imageRole" data-image-role>${PORTFOLIO_IMAGE_ROLES.filter(([value])=>!video||value!=="before").map(([value,label]) => `<option value="${value}"${value === imageRole ? " selected" : ""}>${label}</option>`).join("")}</select><span class="portfolio-field-note">${video?"Videos can document the finished result, process, or a detail.":"Choosing Before / existing tattoo marks this tattoo as a Cover-up when you save."}</span></label>`}
         <label>Condition<select name="healingState">${PORTFOLIO_HEALING_STATES.map(([value,label]) => `<option value="${value}"${value === image.healingState ? " selected" : ""}>${label}</option>`).join("")}</select></label>
         <label>Timing note<input name="timingNote" value="${escapeHtml(image.timingNote || "")}" maxlength="160" placeholder="Example: day of, 8 weeks healed"></label>
-        <label>Image caption<textarea name="caption" maxlength="1000">${escapeHtml(image.documentationCaption || "")}</textarea></label>
-        <label>Publication permission<select name="consentStatus">${PORTFOLIO_CONSENT_STATUSES.map(([value,label]) => `<option value="${value}"${value === consentStatus ? " selected" : ""}>${label}</option>`).join("")}</select><span class="portfolio-field-note">Only Permission granted or Permission not required photographs can appear publicly.${primary ? " This result must be eligible before the tattoo can be published." : ""}</span></label>
+        <label>${video?"Video":"Image"} caption<textarea name="caption" maxlength="1000">${escapeHtml(image.documentationCaption || "")}</textarea></label>
+        ${video?`<label>Transcript status<select name="transcriptStatus">${[["not-requested","Not requested"],["pending","Pending"],["ready","Ready"],["failed","Failed"]].map(([value,label])=>`<option value="${value}"${value===(image.transcriptStatus||"not-requested")?" selected":""}>${label}</option>`).join("")}</select></label><label>Transcript language<input name="transcriptLanguage" value="${escapeHtml(image.transcriptLanguage||"en")}" maxlength="40"></label><label class="wide">Transcript<textarea name="transcript" maxlength="100000">${escapeHtml(image.transcript||"")}</textarea></label>`:""}
+        <label>Publication permission<select name="consentStatus">${PORTFOLIO_CONSENT_STATUSES.map(([value,label]) => `<option value="${value}"${value === consentStatus ? " selected" : ""}>${label}</option>`).join("")}</select><span class="portfolio-field-note">Only media marked Permission granted or Permission not required can appear publicly.${primary ? " This result must be eligible before the tattoo can be published." : ""}</span></label>
         <div class="portfolio-angle-actions">
-          <button class="button" type="submit">Save image</button>
-          <button class="button" type="button" data-image-cover ${image.isCover || isCoverIneligible ? "disabled" : ""}>${image.isCover ? "Current cover" : isCoverIneligible ? "Only results can be covers" : "Use as cover"}</button>
+          <button class="button" type="submit">Save ${video ? "video" : "image"}</button>
+          <button class="button" type="button" data-image-cover ${video || image.isCover || isCoverIneligible ? "disabled" : ""}>${video ? "Videos cannot be covers" : image.isCover ? "Current cover" : isCoverIneligible ? "Only results can be covers" : "Use as cover"}</button>
           ${primary ? "" : `<button class="button" type="button" data-angle-move="up" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}" ${index === 1 ? "disabled" : ""}>Up</button><button class="button" type="button" data-angle-move="down" data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}" ${index === images.length - 1 ? "disabled" : ""}>Down</button><button class="button danger-button" type="button" data-angle-delete data-item-id="${escapeHtml(item.id)}" data-media-id="${escapeHtml(image.id)}">Remove</button>`}
         </div>
       </form>
@@ -1645,10 +1651,10 @@
             </form>
           </details>
           <details class="portfolio-angle-manager" data-angle-manager="${escapeHtml(item.id)}">
-            <summary><span>Tattoo images</span><span class="pill">${portfolioImages.length} image${portfolioImages.length === 1 ? "" : "s"}</span></summary>
+            <summary><span>Tattoo media</span><span class="pill">${portfolioImages.length} item${portfolioImages.length === 1 ? "" : "s"}</span></summary>
             <div class="portfolio-angle-content">
               <div class="portfolio-angle-grid">${portfolioImages.map((image, imageIndex, images) => renderPortfolioImageItem(item, image, imageIndex, images)).join("")}</div>
-              <div class="portfolio-angle-head"><div class="portfolio-field-note">Select a photograph to edit its details. Choosing Before / existing tattoo automatically marks this tattoo as a Cover-up.</div><div class="portfolio-angle-upload" data-angle-upload-control><label>Upload these as<select data-angle-upload-role>${PORTFOLIO_IMAGE_ROLES.map(([value,label]) => `<option value="${value}">${label}</option>`).join("")}</select></label><label class="button">Add images<input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden data-angle-upload="${escapeHtml(item.id)}"></label></div></div>
+              <div class="portfolio-angle-head"><div class="portfolio-field-note">Select a photograph or video to edit its details. Still result images remain required for covers. MP4 should use H.264/AAC for broad browser compatibility.</div><div class="portfolio-angle-upload" data-angle-upload-control><label>Upload these as<select data-angle-upload-role>${PORTFOLIO_IMAGE_ROLES.map(([value,label]) => `<option value="${value}">${label}</option>`).join("")}</select></label><label class="button">Add media<input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" multiple hidden data-angle-upload="${escapeHtml(item.id)}"></label><button class="button danger-button" type="button" data-portfolio-upload-cancel hidden>Cancel upload</button></div></div>
             </div>
           </details>
           <div id="portfolio-connections-${escapeHtml(item.id)}" data-portfolio-connections-panel="${escapeHtml(item.id)}" hidden></div>
@@ -1657,15 +1663,17 @@
   }
 
   async function hydratePortfolioImages(root) {
-    for (const image of root.querySelectorAll("img[data-secure-src]")) {
+    for (const image of root.querySelectorAll("[data-secure-src]")) {
       try {
         const response = await fetch(image.dataset.secureSrc, { headers: { authorization: `Bearer ${token}` } });
         if (!response.ok) throw new Error();
         const objectUrl = URL.createObjectURL(await response.blob());
         portfolioObjectUrls.push(objectUrl);
         image.src = objectUrl;
+        if (image.tagName === "VIDEO") image.load();
       } catch {
-        image.alt = "Preview unavailable";
+        if (image.tagName === "IMG") image.alt = "Preview unavailable";
+        else image.setAttribute("aria-label", "Video preview unavailable");
       }
     }
   }
@@ -1741,33 +1749,48 @@
 
   async function uploadPortfolioAngles(itemId, files, imageRole = "result") {
     if (!PORTFOLIO_IMAGE_ROLES.some(([value]) => value === imageRole)) throw new Error("Choose a valid image role before uploading.");
-    const accepted = [...files].filter((file) => ["image/jpeg", "image/png", "image/webp"].includes(file.type) && file.size <= 15 * 1024 * 1024);
+    const imageTypes=new Set(["image/jpeg","image/png","image/webp"]),videoTypes=new Set(["video/mp4","video/webm"]);
+    const accepted = [...files].filter((file) => (imageTypes.has(file.type)&&file.size<=15*1024*1024)||(videoTypes.has(file.type)&&file.size<=2*1024*1024*1024));
+    if(accepted.some(file=>videoTypes.has(file.type))&&imageRole==="before")throw new Error("Video can be Result, Process, or Detail media, but not Before / existing tattoo.");
     let uploadedCount = 0;
     for (let index = 0; index < accepted.length; index += 1) {
       const file = accepted[index];
-      setStatus(`Uploading tattoo image ${index + 1} of ${accepted.length}: ${file.name}`);
-      const upload = new FormData();
-      upload.append("file", file);
-      upload.append("imageRole", imageRole);
-      if (imageRole === "before") upload.append("promoteToCoverUp", "true");
+      setStatus(`Uploading tattoo media ${index + 1} of ${accepted.length}: ${file.name}`);
       try {
-        await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/images`, { method: "POST", body: upload });
+        if(videoTypes.has(file.type)){
+          if(!window.StudioResumableMedia)throw new Error("The resumable uploader is unavailable. Refresh Studio and try again.");
+          const cancel=document.querySelector(`[data-angle-manager="${CSS.escape(itemId)}"] [data-portfolio-upload-cancel]`),controller=new AbortController();let sessionId="";
+          if(cancel){cancel.hidden=false;cancel.onclick=async()=>{controller.abort();if(sessionId)try{await window.StudioResumableMedia.cancel(sessionId,token)}catch{};cancel.hidden=true;setStatus("Video upload cancelled")}}
+          let media;
+          try{
+            media=await window.StudioResumableMedia.upload(file,{token,signal:controller.signal,privacy:"private",consentStatus:"unknown",
+              altText:`Tattoo ${imageRole} video`,onSession:session=>{sessionId=session.id},
+              onStatus:message=>setStatus(message),onProgress:progress=>setStatus(`${progress.resumed?"Resuming":"Uploading"} ${file.name}: ${progress.percent}%`)});
+          }finally{if(cancel){cancel.hidden=true;cancel.onclick=null}}
+          await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/images`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mediaId:media.id,imageRole})});
+        }else{
+          const upload = new FormData();
+          upload.append("file", file);
+          upload.append("imageRole", imageRole);
+          if (imageRole === "before") upload.append("promoteToCoverUp", "true");
+          await api(`/api/admin/portfolio/${encodeURIComponent(itemId)}/images`, { method: "POST", body: upload });
+        }
         uploadedCount += 1;
       } catch (error) {
         if (uploadedCount) await loadPortfolioItems();
         throw new Error(uploadedCount
-          ? `${uploadedCount} image${uploadedCount === 1 ? " was" : "s were"} uploaded before the next file failed: ${error.message}`
+          ? `${uploadedCount} media item${uploadedCount === 1 ? " was" : "s were"} uploaded before the next file failed: ${error.message}`
           : error.message);
       }
     }
     await loadPortfolioItems();
     const roleLabel = PORTFOLIO_IMAGE_ROLES.find(([value]) => value === imageRole)?.[1] || "Result";
-    setStatus(accepted.length ? `${accepted.length} ${roleLabel} image${accepted.length === 1 ? "" : "s"} attached privately; set publication permission before use` : "Use JPEG, PNG, or WebP images up to 15 MB");
+    setStatus(accepted.length ? `${accepted.length} ${roleLabel} media item${accepted.length === 1 ? "" : "s"} attached privately; set publication permission before use` : "Use images up to 15 MB or MP4/WebM video up to 2 GiB");
   }
 
   async function movePortfolioAngle(itemId, mediaId, direction) {
     const item = portfolioItems.find((record) => record.id === itemId);
-    const ids = (item?.angles || []).map((angle) => angle.id);
+    const ids = (item?.media || []).filter((media)=>media.imageRef!=="primary").map((media) => media.id);
     const from = ids.indexOf(mediaId);
     const to = direction === "up" ? from - 1 : from + 1;
     if (from < 0 || to < 0 || to >= ids.length) return;
@@ -1778,7 +1801,7 @@
       body: JSON.stringify({ ids }),
     });
     await loadPortfolioItems();
-    setStatus("Tattoo image order saved");
+    setStatus("Tattoo media order saved");
   }
 
   function portfolioMetadataPayload(form) {
@@ -1962,7 +1985,7 @@
         const uploadControl = angleInput.closest("[data-angle-upload-control]");
         const imageRole = uploadControl?.querySelector("[data-angle-upload-role]")?.value || "result";
         uploadPortfolioAngles(angleInput.dataset.angleUpload, angleInput.files, imageRole)
-          .catch((error) => setStatus(`Could not upload tattoo images: ${error.message}`))
+          .catch((error) => setStatus(`Could not upload tattoo media: ${error.message}`))
           .finally(() => { angleInput.value = ""; });
       }
     });
@@ -2025,10 +2048,10 @@
       if (angleMove) { await movePortfolioAngle(angleMove.dataset.itemId, angleMove.dataset.mediaId, angleMove.dataset.angleMove); return; }
       const angleDelete = event.target.closest("[data-angle-delete]");
       if (angleDelete) {
-        if (!window.confirm("Remove this additional angle and its stored image?")) return;
+        if (!window.confirm("Detach this media from the portfolio item? The original file will remain available in the Media Library.")) return;
         await api(`/api/admin/portfolio/${encodeURIComponent(angleDelete.dataset.itemId)}/angles/${encodeURIComponent(angleDelete.dataset.mediaId)}`, { method: "DELETE" });
         await loadPortfolioItems();
-        setStatus("Tattoo image removed");
+        setStatus("Tattoo media detached");
         return;
       }
       const state = event.target.closest("[data-portfolio-state]");
@@ -6381,7 +6404,7 @@ ${meetingLines}
 })();
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
-<script src="/studio/construct-manager.js?v=managed-flash-sheets"></script>
+<script src="/studio/construct-manager.js?v=resumable-video-1"></script>
 <script src="/studio/people-manager.js?v=11"></script>
 </body>
 </html>

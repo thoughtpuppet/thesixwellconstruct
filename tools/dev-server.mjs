@@ -115,6 +115,8 @@ const checkRoutes = [
   ["/art/homelandsecuritypainting", 200],
   ["/art/thefrustrationsofinnercharospainting", 200],
   ["/art/paranoiafosteredtraumapainting", 200],
+  ["/art/example-managed-work/", 200],
+  ["/studio/art-preview/?work=example", 200],
   ["/js/live-text-editor.js", 200],
 ];
 
@@ -513,6 +515,30 @@ async function handleApiProxy(req, res) {
 function cloneStructured(value) { return JSON.parse(JSON.stringify(value)); }
 
 async function resolveFile(urlPath) {
+  const decodedPath = requestPathname(urlPath);
+  const normalizedPath = normalizeRoute(decodedPath);
+  const artParts = normalizedPath.split("/").filter(Boolean);
+  const legacyArtPages = new Set([
+    "homelandsecuritypainting",
+    "lostmarblespainting",
+    "lustpainting",
+    "paranoiafosteredtraumapainting",
+    "slothpainting",
+    "thefrustrationsofinnercharospainting",
+  ]);
+  if (
+    normalizedPath === "/studio/art-preview" ||
+    (
+      artParts.length === 2 &&
+      artParts[0] === "art" &&
+      !new Set(["acquisitioninquiry", "detail", "index"]).has(artParts[1]) &&
+      !legacyArtPages.has(artParts[1]) &&
+      /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(artParts[1])
+    )
+  ) {
+    return path.join(root, "art", "detail", "index.html");
+  }
+
   let file = safePath(urlPath);
   if (!file) return null;
 

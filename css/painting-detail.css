@@ -178,6 +178,10 @@
   gap: var(--painting-s3);
 }
 
+.painting-detail-page .site-hero--supporting {
+  --type-supporting-hero-size: clamp(38px, 8vw, 84px);
+}
+
 .painting-detail-page .statement-block,
 .painting-detail-page .availability-block,
 .painting-detail-page .related-block {
@@ -583,6 +587,21 @@
 
 .painting-detail-page [hidden] {
   display: none !important;
+}
+
+.painting-detail-page .art-detail-state {
+  min-height: calc(100vh - 128px);
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+  color: var(--color-art);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  line-height: 1.6;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 @media (max-width: 900px) {

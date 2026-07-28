@@ -6,6 +6,7 @@ import {
   tattooStylePayload,
   TattooStyleValidationError,
 } from "../_shared/tattoo-styles.js";
+import { serveR2Media } from "../_shared/r2-media.js";
 
 function safeLegendUrl(value) {
   const url = text(value, 2000);
@@ -231,6 +232,12 @@ function legendCanonicalRoute(value) {
   return `/about/legend/${encodeURIComponent(String(value || ""))}/`;
 }
 
+function artCanonicalRoute(row = {}) {
+  return row.legacy_path || `/art/${encodeURIComponent(String(row.slug || row.id || ""))}/`;
+}
+
+const ART_RESERVED_SLUGS = new Set(["acquisitioninquiry", "detail", "index"]);
+
 async function publicCatalog(request, env, resource, recordSlug = "") {
   const config = RESOURCE_CONFIG[resource];
   if (!config) return failure("Unknown catalog.", 404);
@@ -287,6 +294,14 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
     };
     if (config.entityType === "visual_symbol") {
       const canonicalRoute = legendCanonicalRoute(row.slug || row.id);
+      return {
+        ...record,
+        canonicalRoute,
+        canonical_route: canonicalRoute,
+      };
+    }
+    if (resource === "art") {
+      const canonicalRoute = artCanonicalRoute(row);
       return {
         ...record,
         canonicalRoute,
@@ -570,6 +585,9 @@ const MEDIA_PRIVACIES = new Set(["public","unlisted","internal","private"]);
 const MEDIA_CONSENT_STATUSES = new Set(["not-required","required","granted","denied","unknown"]);
 const MEDIA_TRANSCRIPT_STATUSES = new Set(["not-requested","pending","ready","failed"]);
 const MEDIA_PRESENTATIONS = new Set(["inline","hidden"]);
+const RESUMABLE_VIDEO_MIMES = new Set(["video/mp4","video/webm"]);
+const RESUMABLE_VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+const RESUMABLE_VIDEO_PART_BYTES = 32 * 1024 * 1024;
 
 function archiveFragmentPublicSql(alias="af") {
   return `(
@@ -607,7 +625,7 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'event' THEN ev.description WHEN 'visual_symbol' THEN vs.meaning
       ELSE COALESCE(sd.summary,'') END canonical_summary,
     CASE ce.entity_type
-      WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/?work='||aw.slug)
+      WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/'||aw.slug||'/')
       WHEN 'merch_item' THEN mi.route
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
@@ -625,6 +643,7 @@ function archiveEntitySql(where = "1=1") {
       FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
       WHERE am.dossier_entity_id=ad.entity_id AND am.state='published' AND am.visibility='public'
         AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+        AND m.mime_type LIKE 'image/%' AND am.material_type IN ('final-image','process-photo','sketch','artifact')
       ORDER BY CASE am.material_type WHEN 'final-image' THEN 0 ELSE 1 END,am.sort_order,am.created_at LIMIT 1) primary_image,
     (SELECT group_concat(material_type) FROM (
       SELECT DISTINCT am.material_type material_type FROM archive_materials am
@@ -947,7 +966,7 @@ function searchDocument(resource, row) {
       route: row.legacy_path || "/tattoos/flash/",
     };
   }
-  if (resource === "art") return { ...common, node_id: "art", summary: row.statement || "", date_label: row.year || "", route: row.legacy_path || `/art/?work=${encodeURIComponent(row.slug || row.id)}` };
+  if (resource === "art") return { ...common, node_id: "art", summary: row.statement || "", date_label: row.year || "", route: artCanonicalRoute(row) };
   if (resource === "archive") return { ...common, node_id: "archive", summary: row.summary || "", body: row.body || "", date_label: row.date_or_period || "", route: `/archive/?record=${encodeURIComponent(row.slug || row.id)}` };
   if (resource === "visual-language") {
     const context = parseJson(row.context_json, {});
@@ -1021,6 +1040,10 @@ async function flashHasEligiblePrimary(database, entityId) {
   return Boolean(row);
 }
 
+async function artHasEligiblePrimary(database, entityId) {
+  return flashHasEligiblePrimary(database, entityId);
+}
+
 async function adminEntityMedia(database, entityIds) {
   if (!entityIds.length) return new Map();
   const placeholders = entityIds.map(() => "?").join(",");
@@ -1058,8 +1081,12 @@ async function adminList(env, resource) {
   const database = db(env);
   const rows = (await database.prepare(`SELECT * FROM ${config.table} ORDER BY sort_order,id`).all()).results || [];
   const entityIds = rows.map((row) => row.id);
+  const publicationRows = resource === "art" && entityIds.length
+    ? (await database.prepare(`SELECT id,public_at FROM content_entities WHERE id IN (${entityIds.map(() => "?").join(",")})`).bind(...entityIds).all()).results || []
+    : [];
+  const publicationById = new Map(publicationRows.map((row) => [row.id, row.public_at || ""]));
   const [media, tattooStyles, flashSheetDesigns] = await Promise.all([
-    resource === "flash" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
+    resource === "flash" || resource === "art" ? adminEntityMedia(database, entityIds) : entityMedia(database, entityIds),
     resource === "flash" ? loadTattooStyleAssignments(database, entityIds) : Promise.resolve(new Map()),
     resource === "flash" ? loadFlashSheetDesigns(database, entityIds, { admin: true }) : Promise.resolve(new Map()),
   ]);
@@ -1068,6 +1095,12 @@ async function adminList(env, resource) {
       ...row,
       ...(resource === "flash" ? tattooStylePayload(tattooStyles.get(row.id), { fallbackValue: "unclassified", fallbackLabel: "Unclassified" }) : {}),
       ...(resource === "flash" ? { sheetDesigns: flashSheetDesigns.get(row.id) || [] } : {}),
+      ...(resource === "art" ? {
+        canonicalRoute: artCanonicalRoute(row),
+        canonical_route: artCanonicalRoute(row),
+        public_at: publicationById.get(row.id) || "",
+        published_once: Boolean(publicationById.get(row.id)),
+      } : {}),
       media: media.get(row.id) || [],
     })),
     count: rows.length,
@@ -1079,6 +1112,10 @@ async function adminCreate(request, env, resource) {
   if(resource==="art"&&body.print_intent!==undefined&&!["unavailable","planned"].includes(body.print_intent))return failure("Print plan must be unavailable or planned.");
   const database = db(env); const recordId = text(body.id, 160) || id(config.entityType); const values = normalizeRecord(config, body);
   let styleSelection = [];
+  if (resource === "art") {
+    if ((values.state || "draft") !== "draft") return failure("New artwork must begin as Draft. Attach the primary image before publishing.", 409);
+    values.state = "draft";
+  }
   if (resource === "flash") {
     if ((values.state || "draft") !== "draft") return failure("New Flash records must begin as drafts. Attach the design artwork before publishing.", 409);
     values.state = "draft";
@@ -1117,6 +1154,13 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   const config = RESOURCE_CONFIG[resource]; const body = archive ? { state: "archived" } : await readJson(request); if (!config || !body) return failure("Invalid request.");
   if(resource==="art"&&body.print_intent!==undefined&&!["unavailable","planned"].includes(body.print_intent))return failure("Print plan must be unavailable or planned.");
   const database = db(env); const beforeRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first(); if (!beforeRow) return failure("Not found.",404);
+  if (resource === "art" && Object.prototype.hasOwnProperty.call(body, "slug")) {
+    const publication = await database.prepare("SELECT public_at FROM content_entities WHERE id=?").bind(recordId).first();
+    const requestedSlug = text(body.slug, 8000);
+    if (publication?.public_at && requestedSlug !== beforeRow.slug) {
+      return failure("The artwork slug is permanent after first publication.", 409);
+    }
+  }
   const hasStyleUpdate = resource === "flash" && Object.prototype.hasOwnProperty.call(body, "styles");
   let beforeStyleSelection = [];
   let nextStyleSelection = [];
@@ -1146,6 +1190,18 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   const projected = resource === "flash" ? { ...projectedRow, ...tattooStylePayload(nextStyleSelection) } : projectedRow;
   if (resource === "flash" && PUBLIC_FLASH_STATES.has(projected.state) && !await flashHasEligiblePrimary(database, recordId)) {
     return failure("Attach an eligible primary Flash image before publishing this design.", 409);
+  }
+  if (resource === "art" && projected.state === "published") {
+    const stableSlug = text(projected.slug, 8000);
+    if (!text(projected.title, 8000) || !stableSlug) {
+      return failure("A title and stable slug are required before publishing artwork.", 409);
+    }
+    if (ART_RESERVED_SLUGS.has(stableSlug) || !/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(stableSlug)) {
+      return failure("Choose a URL-safe, non-reserved artwork slug before publishing.", 409);
+    }
+    if (!await artHasEligiblePrimary(database, recordId)) {
+      return failure("Attach an eligible primary artwork image before publishing.", 409);
+    }
   }
   let managedSheetDesigns = [];
   if (resource === "flash") {
@@ -1318,7 +1374,7 @@ async function publishedPortfolioCoverUsingMedia(database, mediaId) {
 }
 
 async function publicMediaApi(request,env,mediaId){
-  if(request.method!=="GET")return failure("Method not allowed.",405);
+  if(!["GET","HEAD"].includes(request.method))return failure("Method not allowed.",405);
   const database=db(env);
   const row=await database.prepare(`SELECT m.* FROM media_assets m
     WHERE m.id=? AND m.state='active' AND m.privacy='public'
@@ -1331,7 +1387,7 @@ async function publicMediaApi(request,env,mediaId){
 }
 
 async function publicEntityMediaApi(request,env,mediaId){
-  if(request.method!=="GET")return failure("Method not allowed.",405);
+  if(!["GET","HEAD"].includes(request.method))return failure("Method not allowed.",405);
   const row=await db(env).prepare(`SELECT m.* FROM media_assets m
     WHERE m.id=? AND m.state='active' AND m.privacy='public'
       AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
@@ -1342,17 +1398,165 @@ async function publicEntityMediaApi(request,env,mediaId){
 }
 
 async function servePublicMedia(row,request,env){
-  if(row.source_url)return new Response(null,{status:302,headers:{location:new URL(row.source_url,request.url).href,"cache-control":"private, no-store"}});
-  const object=await env.SUBMISSION_FILES?.get(row.storage_key);if(!object)return failure("Media unavailable.",404);
-  const filename=String(row.original_filename||"media").replace(/[\r\n"]/g,"-");
-  return new Response(object.body,{headers:{"content-type":row.mime_type||"application/octet-stream","content-disposition":`inline; filename="${filename}"`,"cache-control":"private, no-store","x-content-type-options":"nosniff"}});
+  return serveR2Media(request,env.SUBMISSION_FILES,row,()=>failure("Media unavailable.",404));
 }
 
 async function adminMediaFileApi(request,env,mediaId){
-  if(request.method!=="GET")return failure("Method not allowed.",405);
+  if(!["GET","HEAD"].includes(request.method))return failure("Method not allowed.",405);
   const row=await db(env).prepare("SELECT * FROM media_assets WHERE id=? AND state='active'").bind(mediaId).first();
   if(!row)return failure("Media not found.",404);
   return servePublicMedia(row,request,env);
+}
+
+function resumableUploadFilename(value){
+  return text(value,255).replace(/[^a-zA-Z0-9._ -]/g,"-")||"video";
+}
+
+function presentUploadSession(row,parts=[]){
+  return {
+    id:row.id,
+    uploadId:row.upload_id,
+    mediaId:row.media_id,
+    filename:row.original_filename,
+    mimeType:row.mime_type,
+    byteSize:Number(row.byte_size)||0,
+    partSize:Number(row.part_size)||RESUMABLE_VIDEO_PART_BYTES,
+    partCount:Math.ceil((Number(row.byte_size)||0)/(Number(row.part_size)||RESUMABLE_VIDEO_PART_BYTES)),
+    state:row.state,
+    error:row.error_message||"",
+    expiresAt:row.expires_at,
+    completedAt:row.completed_at||null,
+    parts:parts.map(part=>({partNumber:Number(part.part_number),etag:part.etag,byteSize:Number(part.byte_size)||0})),
+  };
+}
+
+async function uploadSession(database,sessionId){
+  return database.prepare("SELECT * FROM media_upload_sessions WHERE id=?").bind(sessionId).first();
+}
+
+function uploadPartExpectedSize(session,partNumber){
+  const partSize=Number(session.part_size)||RESUMABLE_VIDEO_PART_BYTES,total=Number(session.byte_size)||0,count=Math.ceil(total/partSize);
+  if(!Number.isInteger(partNumber)||partNumber<1||partNumber>count)return 0;
+  return partNumber===count?total-(count-1)*partSize:partSize;
+}
+
+async function mediaUploadsApi(request,env,sessionId="",action="",partNumber=0){
+  const database=db(env);
+  if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
+  if(request.method==="GET"&&!sessionId){
+    const rows=(await database.prepare("SELECT * FROM media_upload_sessions WHERE state='pending' ORDER BY created_at DESC LIMIT 50").all()).results||[];
+    return json({uploads:rows.map(row=>presentUploadSession(row)),count:rows.length});
+  }
+  if(request.method==="POST"&&!sessionId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const mime=text(body.mimeType??body.mime_type,100).toLowerCase(),byteSize=Number(body.byteSize??body.byte_size)||0;
+    if(!RESUMABLE_VIDEO_MIMES.has(mime))return failure("Use an MP4 or WebM video.",415);
+    if(!Number.isSafeInteger(byteSize)||byteSize<=0)return failure("A valid video size is required.");
+    if(byteSize>RESUMABLE_VIDEO_MAX_BYTES)return failure("Videos must be 2 GiB or smaller.",413);
+    const privacy=text(body.privacy,30)||"internal",consent=normalizedConsent(body.consentStatus??body.consent_status),transcriptStatus=text(body.transcriptStatus??body.transcript_status,30)||"not-requested",presentation=text(body.publicPresentation??body.public_presentation,30)||"inline";
+    if(!MEDIA_PRIVACIES.has(privacy))return failure("Invalid media privacy.");
+    if(!MEDIA_CONSENT_STATUSES.has(consent))return failure("Invalid consent status.");
+    if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");
+    if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
+    const sessionNewId=id("media-upload"),mediaId=id("media"),filename=text(body.filename??body.original_filename,255)||"video",storageFilename=resumableUploadFilename(filename);
+    const key=`construct/${mediaId}/${storageFilename}`;
+    const upload=await env.SUBMISSION_FILES.createMultipartUpload(key,{
+      httpMetadata:{contentType:mime,cacheControl:"private, no-store"},
+      customMetadata:{mediaId,sessionId:sessionNewId,originalFilename:filename},
+    });
+    try{
+      await database.prepare(`INSERT INTO media_upload_sessions(
+        id,upload_id,storage_key,original_filename,mime_type,byte_size,part_size,media_id,
+        alt_text,caption,privacy,consent_status,transcript,transcript_status,transcript_language,
+        public_title,public_description,public_presentation,state,error_message,expires_at,
+        created_by,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending','',datetime('now','+24 hours'),'studio',datetime('now'),datetime('now'))`)
+        .bind(sessionNewId,upload.uploadId,key,filename,mime,byteSize,RESUMABLE_VIDEO_PART_BYTES,mediaId,
+          text(body.altText??body.alt_text,1000),text(body.caption,3000),privacy,consent,text(body.transcript,100000),
+          transcriptStatus,text(body.transcriptLanguage??body.transcript_language,40)||"en",text(body.publicTitle??body.public_title,300),
+          text(body.publicDescription??body.public_description,3000),presentation).run();
+    }catch(error){try{await upload.abort();}catch{}throw error;}
+    const created=await uploadSession(database,sessionNewId);
+    return json({upload:presentUploadSession(created)},{status:201});
+  }
+  const session=await uploadSession(database,sessionId);
+  if(!session)return failure("Upload session not found.",404);
+  const parts=async()=>(await database.prepare("SELECT * FROM media_upload_parts WHERE session_id=? ORDER BY part_number").bind(sessionId).all()).results||[];
+  if(request.method==="GET"&&!action)return json({upload:presentUploadSession(session,await parts())});
+  if(request.method==="PUT"&&action==="part"){
+    if(session.state!=="pending")return failure(session.state==="completed"?"This upload is already complete.":"This upload is no longer active.",409);
+    if(Date.parse(`${session.expires_at}Z`)<=Date.now())return failure("This upload session has expired.",410);
+    const expectedSize=uploadPartExpectedSize(session,partNumber);if(!expectedSize)return failure("Invalid upload part.");
+    const suppliedLength=Number(request.headers.get("content-length")||0);
+    if(suppliedLength&&suppliedLength!==expectedSize)return failure(`Part ${partNumber} must contain ${expectedSize} bytes.`,422);
+    if(!request.body)return failure("Upload part data is required.");
+    const upload=env.SUBMISSION_FILES.resumeMultipartUpload(session.storage_key,session.upload_id);
+    let uploaded;
+    try{uploaded=await upload.uploadPart(partNumber,request.body);}catch(error){
+      await database.prepare("UPDATE media_upload_sessions SET error_message=?,updated_at=datetime('now') WHERE id=?").bind(text(error?.message||error,1000),sessionId).run();
+      return failure("The upload part could not be stored. Retry this part.",502);
+    }
+    await database.prepare(`INSERT INTO media_upload_parts(session_id,part_number,etag,byte_size,created_at,updated_at)
+      VALUES(?,?,?,?,datetime('now'),datetime('now'))
+      ON CONFLICT(session_id,part_number) DO UPDATE SET etag=excluded.etag,byte_size=excluded.byte_size,updated_at=datetime('now')`)
+      .bind(sessionId,partNumber,uploaded.etag,expectedSize).run();
+    await database.prepare("UPDATE media_upload_sessions SET error_message='',updated_at=datetime('now') WHERE id=?").bind(sessionId).run();
+    return json({part:{partNumber:Number(uploaded.partNumber||partNumber),etag:uploaded.etag,byteSize:expectedSize}});
+  }
+  if(request.method==="POST"&&action==="complete"){
+    if(session.state==="completed"){
+      const record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(session.media_id).first();
+      return json({record,upload:presentUploadSession(session,await parts()),completed:true});
+    }
+    if(session.state!=="pending")return failure("This upload is no longer active.",409);
+    const uploadedParts=await parts(),count=Math.ceil(Number(session.byte_size)/Number(session.part_size));
+    if(uploadedParts.length!==count||uploadedParts.some((part,index)=>Number(part.part_number)!==index+1||Number(part.byte_size)!==uploadPartExpectedSize(session,index+1)))return failure("Every video part must finish uploading before completion.",409);
+    const upload=env.SUBMISSION_FILES.resumeMultipartUpload(session.storage_key,session.upload_id);
+    let object=null;
+    try{object=await upload.complete(uploadedParts.map(part=>({partNumber:Number(part.part_number),etag:part.etag})));}
+    catch(error){object=await env.SUBMISSION_FILES.head(session.storage_key);if(!object||Number(object.size)!==Number(session.byte_size))return failure("The video could not be finalized. Retry completion.",502);}
+    if(Number(object.size)!==Number(session.byte_size))return failure("The completed video size did not match the selected file.",409);
+    await database.batch([
+      database.prepare(`INSERT OR IGNORE INTO media_assets(
+        id,storage_key,original_filename,mime_type,byte_size,alt_text,caption,privacy,consent_status,state,
+        created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation
+      ) VALUES(?,?,?,?,?,?,?,?,?,'active','studio',datetime('now'),datetime('now'),?,?,?,?,?,?)`)
+        .bind(session.media_id,session.storage_key,session.original_filename,session.mime_type,session.byte_size,session.alt_text,session.caption,session.privacy,session.consent_status,
+          session.transcript,session.transcript_status,session.transcript_language,session.public_title,session.public_description,session.public_presentation),
+      database.prepare("UPDATE media_upload_sessions SET state='completed',completed_at=datetime('now'),error_message='',updated_at=datetime('now') WHERE id=?").bind(sessionId),
+    ]);
+    const completed=await uploadSession(database,sessionId),record=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(session.media_id).first();
+    return json({record,upload:presentUploadSession(completed,uploadedParts),completed:true});
+  }
+  if(request.method==="DELETE"&&!action){
+    if(session.state==="completed")return failure("Completed media cannot be cancelled.",409);
+    if(session.state==="pending"){try{await env.SUBMISSION_FILES.resumeMultipartUpload(session.storage_key,session.upload_id).abort();}catch(error){return failure("The multipart upload could not be cancelled. Retry cancellation.",502)}}
+    await database.batch([
+      database.prepare("DELETE FROM media_upload_parts WHERE session_id=?").bind(sessionId),
+      database.prepare("UPDATE media_upload_sessions SET state='aborted',error_message='',updated_at=datetime('now') WHERE id=?").bind(sessionId),
+    ]);
+    return json({ok:true,aborted:true});
+  }
+  return failure("Method not allowed.",405);
+}
+
+export async function reapStaleMediaUploads(env){
+  if(!env.SUBMISSIONS_DB||!env.SUBMISSION_FILES)return {aborted:0};
+  const database=db(env),rows=(await database.prepare("SELECT * FROM media_upload_sessions WHERE state='pending' AND expires_at<=datetime('now') ORDER BY expires_at LIMIT 50").all()).results||[];
+  let aborted=0;
+  for(const row of rows){
+    try{await env.SUBMISSION_FILES.resumeMultipartUpload(row.storage_key,row.upload_id).abort();}catch(error){
+      await database.prepare("UPDATE media_upload_sessions SET error_message=?,updated_at=datetime('now') WHERE id=? AND state='pending'")
+        .bind(text(error?.message||"R2 abort failed.",1000),row.id).run();
+      continue;
+    }
+    await database.batch([
+      database.prepare("DELETE FROM media_upload_parts WHERE session_id=?").bind(row.id),
+      database.prepare("UPDATE media_upload_sessions SET state='aborted',error_message='Upload expired before completion.',updated_at=datetime('now') WHERE id=? AND state='pending'").bind(row.id),
+    ]);
+    aborted+=1;
+  }
+  return {aborted};
 }
 
 async function mediaApi(request, env, mediaId="") {
@@ -1389,7 +1593,7 @@ async function mediaApi(request, env, mediaId="") {
   }
   if(request.method!=="POST"||mediaId)return failure("Method not allowed.",405);
   const form=await request.formData();const file=form.get("file");if(!(file instanceof File)||!file.size)return failure("A file is required.");
-  const mime=(file.type||"application/octet-stream").toLowerCase();const image=["image/jpeg","image/png","image/webp","image/gif"].includes(mime);const doc=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"].includes(mime);const av=mime.startsWith("audio/")||mime.startsWith("video/");const max=av?50*1024*1024:15*1024*1024;if(!(image||doc||av))return failure("Unsupported media type.",415);if(file.size>max)return failure("File exceeds the allowed size.",413);if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
+  const mime=(file.type||"application/octet-stream").toLowerCase();const image=["image/jpeg","image/png","image/webp","image/gif"].includes(mime);const doc=["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"].includes(mime);const audio=mime.startsWith("audio/"),video=RESUMABLE_VIDEO_MIMES.has(mime);const av=audio||video,max=av?50*1024*1024:15*1024*1024;if(mime.startsWith("video/")&&!video)return failure("Use an MP4 or WebM video.",415);if(!(image||doc||av))return failure("Unsupported media type.",415);if(file.size>max)return failure("File exceeds the allowed size.",413);if(!env.SUBMISSION_FILES)return failure("Media storage is unavailable.",503);
   const privacy=text(form.get("privacy"),30)||"internal",consent=normalizedConsent(form.get("consent_status")),transcriptStatus=text(form.get("transcript_status"),30)||"not-requested",presentation=text(form.get("public_presentation"),30)||"inline";
   if(!MEDIA_PRIVACIES.has(privacy))return failure("Invalid media privacy.");if(!MEDIA_CONSENT_STATUSES.has(consent))return failure("Invalid consent status.");if(!MEDIA_TRANSCRIPT_STATUSES.has(transcriptStatus))return failure("Invalid transcript status.");if(!MEDIA_PRESENTATIONS.has(presentation))return failure("Invalid public presentation.");
   const newId=id("media");const key=`construct/${newId}/${file.name.replace(/[^a-zA-Z0-9._-]/g,"-")}`;await env.SUBMISSION_FILES.put(key,file.stream(),{httpMetadata:{contentType:mime}});
@@ -1440,7 +1644,7 @@ function entityDirectorySql(where="1=1"){
     CASE ce.entity_type
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
       WHEN 'flash_series' THEN '/tattoos/flash/?series='||fs.slug
-      WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/?work='||aw.slug)
+      WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/'||aw.slug||'/')
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
       WHEN 'merch_item' THEN mi.route
       WHEN 'visual_symbol' THEN '/about/legend/'||vs.slug||'/'
@@ -1452,7 +1656,7 @@ function entityDirectorySql(where="1=1"){
       CASE WHEN ce.entity_type='visual_symbol' THEN NULLIF(vs.image_url,'') ELSE '' END,
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/entity-media/'||m.id) FROM entity_media em JOIN media_assets m ON m.id=em.media_id
        WHERE em.entity_id=ce.id AND em.public_visible=1 AND m.state='active' AND m.privacy='public'
-         AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+         AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%'
        ORDER BY CASE em.role WHEN 'primary' THEN 0 ELSE 1 END,em.sort_order LIMIT 1),
       CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(json_extract(vs.examples_json,'$[0].src'),'') ELSE '' END,
       CASE WHEN ce.entity_type='portfolio_item' THEN '/api/portfolio/media/'||pi.id ELSE '' END) image_url,
@@ -1831,6 +2035,10 @@ export async function handleConstructApi(request,env){
   const legendCompositionMatch=path.match(/^\/api\/admin\/legend\/composition-rules(?:\/([^/]+))?$/);if(legendCompositionMatch)return adminCompositionRules(request,env,legendCompositionMatch[1]?decodeURIComponent(legendCompositionMatch[1]):"");
   const legendCategoryMatch=path.match(/^\/api\/admin\/legend\/categories(?:\/([^/]+))?$/);if(legendCategoryMatch)return legendCategoryApi(request,env,legendCategoryMatch[1]?decodeURIComponent(legendCategoryMatch[1]):"");
   const eventMatch=path.match(/^\/api\/admin\/events\/([^/]+)\/create-archive-record$/);if(eventMatch&&request.method==="POST")return eventArchive(request,env,decodeURIComponent(eventMatch[1]));
+  if(path==="/api/admin/media/uploads")return mediaUploadsApi(request,env);
+  const mediaUploadPartMatch=path.match(/^\/api\/admin\/media\/uploads\/([^/]+)\/parts\/(\d+)$/);if(mediaUploadPartMatch)return mediaUploadsApi(request,env,decodeURIComponent(mediaUploadPartMatch[1]),"part",Number(mediaUploadPartMatch[2]));
+  const mediaUploadCompleteMatch=path.match(/^\/api\/admin\/media\/uploads\/([^/]+)\/complete$/);if(mediaUploadCompleteMatch)return mediaUploadsApi(request,env,decodeURIComponent(mediaUploadCompleteMatch[1]),"complete");
+  const mediaUploadSessionMatch=path.match(/^\/api\/admin\/media\/uploads\/([^/]+)$/);if(mediaUploadSessionMatch)return mediaUploadsApi(request,env,decodeURIComponent(mediaUploadSessionMatch[1]));
   const mediaFileMatch=path.match(/^\/api\/admin\/media\/([^/]+)\/file$/);if(mediaFileMatch)return adminMediaFileApi(request,env,decodeURIComponent(mediaFileMatch[1]));
   const mediaMatch=path.match(/^\/api\/admin\/media(?:\/([^/]+))?$/);if(mediaMatch)return mediaApi(request,env,mediaMatch[1]?decodeURIComponent(mediaMatch[1]):"");
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");

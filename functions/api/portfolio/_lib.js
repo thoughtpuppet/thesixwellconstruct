@@ -5,6 +5,7 @@ import {
   tattooStylePayload,
   TattooStyleValidationError,
 } from "../_shared/tattoo-styles.js";
+import { serveR2Media } from "../_shared/r2-media.js";
 
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const MAX_DELETE_ROLLBACK_BYTES = 60 * 1024 * 1024;
@@ -172,16 +173,27 @@ function itemFromRow(row, admin = false, detail = false) {
 }
 
 function mediaItem(row, admin = false) {
+  const mimeType = row.mime_type || "";
+  const kind = mimeType.startsWith("video/") ? "video" : "image";
+  const url = admin
+    ? `/api/admin/media/${encodeURIComponent(row.media_id)}/file`
+    : row.source_url || `/api/construct/entity-media/${encodeURIComponent(row.media_id)}`;
   const item = {
     id: row.media_id,
     role: row.role,
     sortOrder: Number(row.sort_order || 0),
-    imageUrl: admin
-      ? `/api/admin/media/${encodeURIComponent(row.media_id)}/file`
-      : row.source_url || `/api/construct/entity-media/${encodeURIComponent(row.media_id)}`,
+    kind,
+    mimeType,
+    mediaUrl: url,
+    imageUrl: url,
     altText: row.alt_text_override || row.alt_text || "",
     caption: row.caption_override || row.caption || "",
     originalFilename: row.original_filename || "",
+    byteSize: Number(row.byte_size || 0),
+    durationSeconds: row.duration_seconds == null ? null : Number(row.duration_seconds),
+    transcript: admin || row.transcript_status === "ready" ? row.transcript || "" : "",
+    transcriptStatus: row.transcript_status || "not-requested",
+    transcriptLanguage: row.transcript_language || "",
   };
   if (admin) {
     item.consentStatus = row.consent_status || "unknown";
@@ -208,7 +220,9 @@ async function galleryMedia(db, entityIds, admin = false) {
   const result = await db.prepare(`
     SELECT em.entity_id, em.media_id, em.role, em.sort_order, em.alt_text_override,
       em.caption_override, em.public_visible, m.source_url, m.original_filename,
-      m.alt_text, m.caption, m.privacy, m.consent_status, m.public_presentation
+      m.alt_text, m.caption, m.privacy, m.consent_status, m.public_presentation,
+      m.mime_type, m.byte_size, m.duration_seconds, m.transcript, m.transcript_status,
+      m.transcript_language
     FROM entity_media em
     JOIN media_assets m ON m.id = em.media_id
     WHERE em.entity_id IN (${placeholders}) AND em.role = 'gallery' ${visibility}
@@ -251,6 +265,9 @@ function applyImageDocumentation(item, angles, details, options = {}) {
   const primaryConsentStatus = options.primaryConsentStatus || "unknown";
   const primary = documentedImage({
     id: "primary",
+    kind: "image",
+    mimeType: item.contentType || "",
+    mediaUrl: item.imageUrl,
     imageUrl: item.imageUrl,
     altText: item.altText,
     caption: "",
@@ -262,23 +279,24 @@ function applyImageDocumentation(item, angles, details, options = {}) {
     ...(admin || hasPublicConsent(primaryConsentStatus) ? [primary] : []),
     ...documentedAngles,
   ];
-  let cover = images.find((image) => image.isCover && image.imageRole === "result");
+  let cover = images.find((image) => image.kind !== "video" && image.isCover && image.imageRole === "result");
   if (!cover) {
-    cover = images.find((image) => image.imageRole === "result") || images[0] || null;
+    cover = images.find((image) => image.kind !== "video" && image.imageRole === "result") || primary || null;
     if (cover) {
       primary.isCover = cover.imageRef === "primary";
       documentedAngles.forEach((image) => { image.isCover = image.imageRef === cover.imageRef; });
       item.coverImageRef = cover.imageRef;
     }
   }
-  const resultImages = images.filter((image) => image.imageRole === "result");
+  const resultImages = images.filter((image) => image.kind !== "video" && image.imageRole === "result");
   const states = [...new Set(resultImages.map((image) => image.healingState).filter((state) => state !== "unspecified"))];
   if (cover) item.imageUrl = cover.imageUrl;
   item.documentationStates = states;
   item.hasFreshAndHealed = states.includes("fresh") && states.includes("healed");
   if (includeImages) {
     item.primaryImage = admin || hasPublicConsent(primaryConsentStatus) ? primary : null;
-    item.angles = documentedAngles;
+    item.angles = documentedAngles.filter((media) => media.kind !== "video");
+    item.media = images;
   }
   return item;
 }
@@ -386,15 +404,7 @@ async function mediaResponse(request, env, id, admin = false) {
   ).bind(id).first();
   if (!row?.storage_key) return errorResponse("Portfolio image not found.", 404);
   if (!env.SUBMISSION_FILES) return errorResponse("Portfolio storage is not configured.", 503);
-  const object = await env.SUBMISSION_FILES.get(row.storage_key);
-  if (!object) return errorResponse("Portfolio image not found in storage.", 404);
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("content-type", row.content_type || headers.get("content-type") || "application/octet-stream");
-  headers.set("content-disposition", `inline; filename="${String(row.original_filename || "portfolio-image").replace(/["\\]/g, "")}"`);
-  headers.set("cache-control", "private, no-store");
-  if (object.httpEtag) headers.set("etag", object.httpEtag);
-  return new Response(object.body, { headers });
+  return serveR2Media(request,env.SUBMISSION_FILES,row,()=>errorResponse("Portfolio image not found in storage.",404));
 }
 
 async function createUpload(request, env) {
@@ -459,6 +469,52 @@ function defaultAngleAltText(item, imageRole) {
   return cleanText(item.alt_text, 1000) || `Finished tattoo result for ${subject}`;
 }
 
+async function attachStoredPortfolioMedia(request, db, item) {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse("Send a JSON object.");
+  const mediaId = cleanText(body.mediaId ?? body.media_id, 200);
+  if (!mediaId) return errorResponse("mediaId is required.");
+  const media = await db.prepare("SELECT * FROM media_assets WHERE id = ? AND state = 'active'").bind(mediaId).first();
+  if (!media) return errorResponse("Completed media was not found.", 404);
+  const mimeType = String(media.mime_type || "").toLowerCase();
+  const image = ALLOWED_UPLOADS.has(mimeType);
+  const video = ["video/mp4", "video/webm"].includes(mimeType);
+  if (!image && !video) return errorResponse("Portfolio media must be JPEG, PNG, WebP, MP4, or WebM.", 415);
+  const imageRole = cleanText(body.imageRole, 20) || "result";
+  if (!IMAGE_ROLES.has(imageRole)) return errorResponse("Choose Result, Before / existing tattoo, Process, or Detail.", 422);
+  if (video && imageRole === "before") return errorResponse("Video can be Result, Process, or Detail media, but not Before / existing tattoo.", 422);
+  if (imageRole === "before" && (item.project_type || "standard") !== "cover_up" && body.promoteToCoverUp !== true) {
+    return errorResponse("Save the Project type as Cover-up before attaching Before / existing tattoo photographs.", 409);
+  }
+  const existing = await db.prepare("SELECT 1 ok FROM entity_media WHERE entity_id = ? AND media_id = ?").bind(item.id, mediaId).first();
+  if (existing) return errorResponse("This media is already attached to the portfolio item.", 409);
+  const order = await db.prepare("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM entity_media WHERE entity_id = ? AND role = 'gallery'").bind(item.id).first();
+  const publicVisible = media.privacy === "public"
+    && hasPublicConsent(media.consent_status)
+    && (media.public_presentation || "inline") === "inline";
+  const altText = cleanText(body.altText, 1000) || media.alt_text || defaultAngleAltText(item, imageRole);
+  const statements = [
+    db.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
+      VALUES(?,?,'gallery',?,?,?,?,datetime('now'))`).bind(item.id,mediaId,Number(order?.next_order||1),publicVisible?1:0,altText,cleanText(body.caption,3000)),
+    db.prepare(`INSERT INTO portfolio_image_details(portfolio_item_id,image_ref,healing_state,image_role,timing_note,caption,created_at,updated_at)
+      VALUES(?,?,'unspecified',?,'','',datetime('now'),datetime('now'))`).bind(item.id,mediaId,imageRole),
+  ];
+  if (imageRole === "before" && body.promoteToCoverUp === true) {
+    statements.unshift(db.prepare("UPDATE portfolio_items SET project_type='cover_up',updated_at=datetime('now') WHERE id=? AND project_type='standard'").bind(item.id));
+  }
+  await db.batch(statements);
+  const attached = mediaItem({
+    ...media,
+    media_id: media.id,
+    role: "gallery",
+    sort_order: Number(order?.next_order || 1),
+    public_visible: publicVisible ? 1 : 0,
+    alt_text_override: altText,
+    caption_override: cleanText(body.caption,3000),
+  }, true);
+  return json({media:{...attached,imageRef:mediaId,imageRole,healingState:"unspecified",isCover:false},image:attached},{status:201});
+}
+
 async function createAngleUpload(request, env, itemId) {
   const authError = adminError(request, env);
   if (authError) return authError;
@@ -467,6 +523,7 @@ async function createAngleUpload(request, env, itemId) {
   const db = requireDb(env);
   const item = await db.prepare("SELECT id,title,alt_text,project_type FROM portfolio_items WHERE id = ?").bind(itemId).first();
   if (!item) return errorResponse("Portfolio item not found.", 404);
+  if ((request.headers.get("content-type") || "").includes("application/json")) return attachStoredPortfolioMedia(request, db, item);
   const form = await request.formData();
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) return errorResponse("Choose an image to upload.");
@@ -543,6 +600,7 @@ async function portfolioCoverImage(db, item) {
     `).bind(item.id).first();
     return {
       imageRef,
+      kind: "image",
       imageRole: details?.image_role || "result",
       consentStatus: item.primary_consent_status || "unknown",
       publicVisible: true,
@@ -552,7 +610,7 @@ async function portfolioCoverImage(db, item) {
     };
   }
   const row = await db.prepare(`
-    SELECT COALESCE(pid.image_role, 'result') AS image_role,
+    SELECT COALESCE(pid.image_role, 'result') AS image_role,m.mime_type,
       em.public_visible, m.privacy, m.consent_status, m.state,
       COALESCE(m.public_presentation, 'inline') AS public_presentation
     FROM entity_media em
@@ -564,6 +622,7 @@ async function portfolioCoverImage(db, item) {
   if (!row) return null;
   return {
     imageRef,
+    kind: String(row.mime_type||"").startsWith("video/")?"video":"image",
     imageRole: row.image_role || "result",
     consentStatus: row.consent_status || "unknown",
     publicVisible: Number(row.public_visible || 0) === 1,
@@ -579,6 +638,7 @@ async function validatePublishedPortfolioItem(db, item) {
   }
   const cover = await portfolioCoverImage(db, item);
   if (!cover) return "Choose an available result image as the portfolio cover before publishing.";
+  if (cover.kind === "video") return "The portfolio cover must remain a still result image.";
   if (cover.imageRole !== "result") return "The portfolio cover must be a finished result image.";
   if (!hasPublicConsent(cover.consentStatus)) return "Confirm publication permission for the selected cover image before publishing.";
   if (cover.imageRef !== "primary" && (
@@ -743,7 +803,7 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
   let attached = null;
   if (imageRef !== "primary") {
     attached = await db.prepare(`
-      SELECT em.public_visible, m.privacy, m.consent_status, m.state,
+      SELECT em.public_visible, m.privacy, m.consent_status, m.state,m.mime_type,
         COALESCE(m.public_presentation, 'inline') AS public_presentation
       FROM entity_media em JOIN media_assets m ON m.id = em.media_id
       WHERE em.entity_id = ? AND em.media_id = ? AND em.role = 'gallery'
@@ -761,6 +821,8 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
     ? "result"
     : cleanText(body.imageRole ?? currentDetails?.image_role ?? "result", 20);
   if (!IMAGE_ROLES.has(imageRole)) return errorResponse("Choose Result, Before / existing tattoo, Process, or Detail.", 422);
+  const isVideo = imageRef !== "primary" && String(attached?.mime_type||"").startsWith("video/");
+  if (isVideo && imageRole === "before") return errorResponse("Video can be Result, Process, or Detail media, but not Before / existing tattoo.", 422);
   const promoteToCoverUp = body.promoteToCoverUp === true || body.promoteToCoverUp === "true";
   const promotionRequested = imageRole === "before" && promoteToCoverUp;
   if (imageRole === "before" && (item.project_type || "standard") !== "cover_up" && !promotionRequested) {
@@ -776,6 +838,7 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
   const consentStatus = cleanText(body.consentStatus ?? currentConsent, 30) || "unknown";
   if (!CONSENT_STATUSES.has(consentStatus)) return errorResponse("Choose a valid publication-permission status.", 422);
   const isCover = body.isCover === true || body.isCover === "true" || body.isCover === "on";
+  if (isCover && isVideo) return errorResponse("A portfolio cover must be a still result image.", 422);
   if (isCover && imageRole !== "result") return errorResponse("Only a finished result image can be the portfolio cover.", 422);
   if (item.state === "published" && imageRef === "primary" && !hasPublicConsent(consentStatus)) {
     return errorResponse("Unpublish this portfolio item before removing permission from its primary result image.", 409);
@@ -824,6 +887,12 @@ async function patchImageDocumentation(request, env, itemId, imageRef) {
       db.prepare("UPDATE entity_media SET public_visible = ? WHERE entity_id = ? AND media_id = ? AND role = 'gallery'")
         .bind(publicAllowed ? 1 : 0, itemId, imageRef)
     );
+  }
+  if (isVideo && ["transcript","transcriptStatus","transcriptLanguage"].some((field)=>Object.prototype.hasOwnProperty.call(body,field))) {
+    const transcriptStatus=cleanText(body.transcriptStatus,30)||"not-requested";
+    if(!["not-requested","pending","ready","failed"].includes(transcriptStatus))return errorResponse("Choose a valid transcript status.",422);
+    statements.push(db.prepare("UPDATE media_assets SET transcript=?,transcript_status=?,transcript_language=?,updated_at=datetime('now') WHERE id=?")
+      .bind(cleanText(body.transcript,100000),transcriptStatus,cleanText(body.transcriptLanguage,40)||"en",imageRef));
   }
   if (isCover) {
     statements.push(db.prepare("UPDATE portfolio_items SET cover_image_ref = ?, updated_at = datetime('now') WHERE id = ?").bind(imageRef, itemId));
@@ -1037,30 +1106,16 @@ async function deleteAngle(request, env, itemId, mediaId) {
   if (authError) return authError;
   const db = requireDb(env);
   const media = await db.prepare(`
-    SELECT m.* FROM entity_media em JOIN media_assets m ON m.id = em.media_id
+    SELECT m.id FROM entity_media em JOIN media_assets m ON m.id = em.media_id
     WHERE em.entity_id = ? AND em.media_id = ? AND em.role = 'gallery'
   `).bind(itemId, mediaId).first();
-  if (!media) return errorResponse("Portfolio angle not found.", 404);
-  const object = media.storage_key && env.SUBMISSION_FILES
-    ? await env.SUBMISSION_FILES.get(media.storage_key)
-    : null;
-  const rollback = object ? {
-    body: await object.arrayBuffer(),
-    options: { httpMetadata: object.httpMetadata, customMetadata: object.customMetadata },
-  } : null;
-  if (object) await env.SUBMISSION_FILES.delete(media.storage_key);
-  try {
-    await db.batch([
-      db.prepare("DELETE FROM portfolio_image_details WHERE portfolio_item_id = ? AND image_ref = ?").bind(itemId, mediaId),
-      db.prepare("UPDATE portfolio_items SET cover_image_ref = 'primary', updated_at = datetime('now') WHERE id = ? AND cover_image_ref = ?").bind(itemId, mediaId),
-      db.prepare("DELETE FROM entity_media WHERE entity_id = ? AND media_id = ? AND role = 'gallery'").bind(itemId, mediaId),
-      db.prepare("DELETE FROM media_assets WHERE id = ? AND NOT EXISTS (SELECT 1 FROM entity_media WHERE entity_media.media_id = media_assets.id)").bind(mediaId),
-    ]);
-  } catch (error) {
-    if (rollback && media.storage_key) await env.SUBMISSION_FILES.put(media.storage_key, rollback.body, rollback.options);
-    throw error;
-  }
-  return json({ ok: true, deletedMediaId: mediaId });
+  if (!media) return errorResponse("Portfolio media not found.", 404);
+  await db.batch([
+    db.prepare("DELETE FROM portfolio_image_details WHERE portfolio_item_id = ? AND image_ref = ?").bind(itemId, mediaId),
+    db.prepare("UPDATE portfolio_items SET cover_image_ref = 'primary', updated_at = datetime('now') WHERE id = ? AND cover_image_ref = ?").bind(itemId, mediaId),
+    db.prepare("DELETE FROM entity_media WHERE entity_id = ? AND media_id = ? AND role = 'gallery'").bind(itemId, mediaId),
+  ]);
+  return json({ ok: true, detachedMediaId: mediaId });
 }
 
 async function reorderAngles(request, env, itemId) {
@@ -1073,7 +1128,7 @@ async function reorderAngles(request, env, itemId) {
   const current = await db.prepare("SELECT media_id FROM entity_media WHERE entity_id = ? AND role = 'gallery'").bind(itemId).all();
   const expected = (current.results || []).map((row) => row.media_id);
   if (ids.length !== expected.length || expected.some((id) => !ids.includes(id))) {
-    return errorResponse("The image list changed. Refresh before reordering.", 409);
+    return errorResponse("The media list changed. Refresh before reordering.", 409);
   }
   await db.batch(ids.map((mediaId, index) => db.prepare(
     "UPDATE entity_media SET sort_order = ? WHERE entity_id = ? AND media_id = ? AND role = 'gallery'"
@@ -1119,7 +1174,7 @@ export async function handlePortfolioApi(request, env) {
       return listPublic(env);
     }
     if (path.startsWith("/api/portfolio/media/")) {
-      if (method !== "GET") return methodNotAllowed(["GET"]);
+      if (!["GET","HEAD"].includes(method)) return methodNotAllowed(["GET","HEAD"]);
       return mediaResponse(request, env, decodeURIComponent(path.slice("/api/portfolio/media/".length)));
     }
     const publicItemMatch = path.match(/^\/api\/portfolio\/([^/]+)$/);
@@ -1157,7 +1212,7 @@ export async function handlePortfolioApi(request, env) {
       return methodNotAllowed(["PATCH", "DELETE"]);
     }
     if (path.startsWith("/api/admin/portfolio/media/")) {
-      if (method !== "GET") return methodNotAllowed(["GET"]);
+      if (!["GET","HEAD"].includes(method)) return methodNotAllowed(["GET","HEAD"]);
       return mediaResponse(request, env, decodeURIComponent(path.slice("/api/admin/portfolio/media/".length)), true);
     }
     const imageUploadMatch = path.match(/^\/api\/admin\/portfolio\/([^/]+)\/images$/);

@@ -187,36 +187,192 @@
     document.head.appendChild(script);
   }
 
-  async function hydrate() {
-    const currentPath = location.pathname.replace(/\/+$/, "");
+  function embeddedRecord() {
+    const node = document.getElementById("art-record-data");
+    if (!text(node?.textContent)) return null;
     try {
-      const response = await fetch("/api/art", {
+      const payload = JSON.parse(node.textContent);
+      return payload?.record || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function managedTemplate() {
+    return Boolean(document.body?.hasAttribute("data-managed-art-detail"));
+  }
+
+  function previewRequest() {
+    return location.pathname.replace(/\/+$/, "") === "/studio/art-preview";
+  }
+
+  function dynamicSlug() {
+    const match = location.pathname.match(/^\/art\/([^/.]+)\/?$/);
+    if (!match) return "";
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return "";
+    }
+  }
+
+  function studioToken() {
+    return localStorage.getItem("swc_submissions_admin_token") || "";
+  }
+
+  async function fetchPreviewRecord() {
+    const recordId = new URLSearchParams(location.search).get("work") || "";
+    const token = studioToken();
+    if (!recordId) throw new Error("Choose an artwork from Studio to preview.");
+    if (!token) throw new Error("Unlock Studio before previewing this artwork.");
+    const response = await fetch("/api/admin/art", {
+      cache: "no-store",
+      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error(response.status === 401
+      ? "Your Studio session has expired. Unlock Studio and try again."
+      : "The Studio artwork preview is unavailable.");
+    const payload = await response.json();
+    const record = (payload.records || []).find((item) => item.id === recordId);
+    if (!record) throw new Error("That artwork record no longer exists.");
+    return record;
+  }
+
+  async function fetchPublicRecord() {
+    const embedded = embeddedRecord();
+    if (embedded) return embedded;
+    const slug = dynamicSlug();
+    if (slug) {
+      const response = await fetch(`/api/art/${encodeURIComponent(slug)}`, {
         cache: "no-store",
         headers: { accept: "application/json" },
       });
-      if (!response.ok) throw new Error("Managed art unavailable.");
+      if (!response.ok) throw new Error("This artwork is not published.");
       const payload = await response.json();
-      const record = (payload.records || []).find((item) => text(item.legacy_path).replace(/\/+$/, "") === currentPath);
-      if (!record) return;
+      if (!payload.record) throw new Error("This artwork is not published.");
+      return payload.record;
+    }
 
-      mountConnections(record.id);
-      const media = Array.isArray(record.media) ? record.media[0] : null;
-      document.title = `${record.title} · the six.well construct`;
-      const title = document.querySelector("[data-art-field='title'],.painting-title");
-      if (title) title.textContent = record.title || "Untitled work";
-      document.querySelectorAll("[data-art-field='primary-image'],.painting-frame img,.lightbox img,#lightboxImg").forEach((image) => {
-        if (media?.url) image.src = media.url;
-        image.alt = media?.alt || record.title || "Artwork";
-      });
-      renderMeta(record);
-      renderStatement(record);
-      renderOriginalAvailability(record);
-      await loadPrint(record);
-    } catch {
+    const currentPath = location.pathname.replace(/\/+$/, "");
+    const response = await fetch("/api/art", {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) throw new Error("Managed art unavailable.");
+    const payload = await response.json();
+    return (payload.records || []).find((item) => (
+      text(item.legacy_path).replace(/\/+$/, "") === currentPath
+    )) || null;
+  }
+
+  async function previewMediaUrl(media) {
+    const direct = text(media?.adminUrl);
+    if (!direct || !previewRequest()) return text(media?.url);
+    const response = await fetch(direct, {
+      cache: "no-store",
+      headers: { authorization: `Bearer ${studioToken()}` },
+    });
+    if (!response.ok) return text(media?.url);
+    return URL.createObjectURL(await response.blob());
+  }
+
+  function setManagedState(message = "") {
+    const state = document.querySelector("[data-art-detail-state]");
+    const shell = document.querySelector("[data-art-detail-shell]");
+    if (!state || !shell) return;
+    state.hidden = !message;
+    state.textContent = message;
+    shell.hidden = Boolean(message);
+  }
+
+  function bindTemplateControls() {
+    if (!managedTemplate()) return;
+    const lightbox = document.getElementById("lightbox");
+    const closeLightboxButton = document.getElementById("lightboxClose");
+    const image = document.querySelector("[data-art-field='primary-image']");
+    const lightboxImage = document.getElementById("lightboxImg");
+    const closeLightbox = () => {
+      lightbox?.classList.remove("open");
+      document.body.style.overflow = "";
+    };
+    document.querySelector("[data-art-lightbox-trigger]")?.addEventListener("click", () => {
+      if (!image?.src) return;
+      if (lightboxImage) {
+        lightboxImage.src = image.src;
+        lightboxImage.alt = image.alt;
+      }
+      lightbox?.classList.add("open");
+      document.body.style.overflow = "hidden";
+    });
+    closeLightboxButton?.addEventListener("click", closeLightbox);
+    lightbox?.addEventListener("click", (event) => {
+      if (event.target === lightbox) closeLightbox();
+    });
+
+    const drawer = document.getElementById("cartDrawer");
+    const overlay = document.getElementById("cartOverlay");
+    const closeCart = () => {
+      drawer?.classList.remove("open");
+      overlay?.classList.remove("open");
+      drawer?.setAttribute("aria-hidden", "true");
+    };
+    document.getElementById("cartToggle")?.addEventListener("click", () => {
+      drawer?.classList.add("open");
+      overlay?.classList.add("open");
+      drawer?.setAttribute("aria-hidden", "false");
+    });
+    document.getElementById("drawerClose")?.addEventListener("click", closeCart);
+    overlay?.addEventListener("click", closeCart);
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      closeLightbox();
+      closeCart();
+    });
+  }
+
+  async function hydrateRecord(record) {
+    if (!record) return false;
+    const mediaList = Array.isArray(record.media) ? record.media : [];
+    const media = mediaList.find((item) => item.role === "primary") || mediaList[0] || null;
+    const mediaUrl = await previewMediaUrl(media);
+    const titleText = text(record.title) || "Untitled work";
+    document.title = `${titleText} \u00b7 art \u00b7 the six.well construct`;
+    const description = document.querySelector("meta[name='description']");
+    if (description) description.content = text(record.statement) || `Artwork detail for ${titleText}.`;
+    const title = document.querySelector("[data-art-field='title'],.painting-title");
+    if (title) title.textContent = titleText;
+    const breadcrumb = document.querySelector("[data-art-field='breadcrumb'],.breadcrumb-current");
+    if (breadcrumb) breadcrumb.textContent = titleText;
+    document.querySelectorAll("[data-art-field='primary-image'],.painting-frame img,.lightbox img,#lightboxImg").forEach((image) => {
+      if (mediaUrl) image.src = mediaUrl;
+      image.alt = media?.alt || titleText;
+    });
+    const frame = document.querySelector(".split-image");
+    if (frame) frame.hidden = !mediaUrl;
+    renderMeta(record);
+    renderStatement(record);
+    renderOriginalAvailability(record);
+    mountConnections(record.id);
+    setManagedState("");
+    await loadPrint(record);
+    return true;
+  }
+
+  async function hydrate() {
+    try {
+      const record = previewRequest() ? await fetchPreviewRecord() : await fetchPublicRecord();
+      if (!record) {
+        if (managedTemplate()) setManagedState("This artwork is not available.");
+        return;
+      }
+      await hydrateRecord(record);
+    } catch (error) {
       // Bundled detail content remains visible during an API outage.
+      if (managedTemplate()) setManagedState(error?.message || "This artwork is unavailable.");
     }
   }
 
   window.ArtDetailManaged = { resolvePrintState };
+  bindTemplateControls();
   hydrate();
 })();

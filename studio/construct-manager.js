@@ -164,12 +164,17 @@
 
   function bindStyleSelector(form){form?.addEventListener("change",event=>{const changed=event.target.closest("[data-style-primary], [data-style-option]");if(changed)syncStyleSelector(changed.closest("[data-style-selector]"),changed)})}
 
-  function card(record,index,total,sortable,styleOptions=[]){
+  function card(record,index,total,sortable,styleOptions=[],config=null){
     const title=record.title||record.name||record.slug||record.id;
     const hasStyleData=styleOptions.length||Array.isArray(record.styles)||Array.isArray(record.styleLabels)||Boolean(firstValue(record,"primaryStyle","primary_style")),styles=hasStyleData?styleLabelsFor(record,styleOptions):[],meta=[record.id,sortable?`${Number(record.sort_order)||0} / ${total}`:"",styles.join(" + ")].filter(Boolean).join(" / ");
     let symbol="";
     if(record.svg_markup){try{symbol=`<div class="cm-symbol-preview" aria-hidden="true">${safeSvgMarkup(record.svg_markup)}</div>`}catch{symbol=""}}
-    return `<article class="cm-card ${state(record)==="draft"?"is-draft":""}" data-record="${esc(record.id)}">${symbol||image(record)}<div class="cm-card-head"><h3>${esc(title)}</h3><span class="cm-pill">${esc(state(record))}</span></div><div class="cm-meta">${esc(meta)}</div><div class="cm-actions"><button class="button" data-edit="${esc(record.id)}">Edit</button>${sortable?`<button class="button" data-move="up" data-id="${esc(record.id)}" ${index===0?"disabled":""}>Move up</button><button class="button" data-move="down" data-id="${esc(record.id)}" ${index===total-1?"disabled":""}>Move down</button>`:""}<button class="button danger-button" data-archive="${esc(record.id)}">Archive</button></div></article>`
+    const artworkAction=config===configs.works
+      ? record.state==="published"
+        ? `<a class="button" href="${esc(record.canonicalRoute||record.canonical_route||record.legacy_path||`/art/${encodeURIComponent(record.slug||record.id)}/`)}" target="_blank" rel="noopener">View Public Page</a>`
+        : `<a class="button" href="/studio/art-preview/?work=${encodeURIComponent(record.id)}" target="_blank" rel="noopener">Preview</a>`
+      :"";
+    return `<article class="cm-card ${state(record)==="draft"?"is-draft":""}" data-record="${esc(record.id)}">${symbol||image(record)}<div class="cm-card-head"><h3>${esc(title)}</h3><span class="cm-pill">${esc(state(record))}</span></div><div class="cm-meta">${esc(meta)}</div><div class="cm-actions"><button class="button" data-edit="${esc(record.id)}">Edit</button>${artworkAction}${sortable?`<button class="button" data-move="up" data-id="${esc(record.id)}" ${index===0?"disabled":""}>Move up</button><button class="button" data-move="down" data-id="${esc(record.id)}" ${index===total-1?"disabled":""}>Move down</button>`:""}<button class="button danger-button" data-archive="${esc(record.id)}">Archive</button></div></article>`
   }
 
   function field(name,value){
@@ -177,6 +182,13 @@
     const long=/description|statement|meaning|body|notes|note|svg|json|bio/.test(name),numeric=/sort_order|claimable|eligible|enabled|estimated_sessions|estimated_total_minutes/.test(name),label=esc(name==="print_intent"?"Print plan":name.replace(/_/g," "));
     if(choices[name])return `<label>${label}<select name="${name}">${choices[name].map(([option,labelText])=>`<option value="${option}" ${String(value||"unavailable")===option?"selected":""}>${labelText}</option>`).join("")}</select>${name==="print_intent"?'<span class="cm-field-note">This records intent only. A public connected Merch print uses live Shopify availability.</span>':""}</label>`;
     return `<label class="${long?"wide":""}">${label}${long?`<textarea name="${name}">${esc(value)}</textarea>`:`<input name="${name}" ${numeric?'type="number" min="0" step="1" inputmode="numeric"':''} value="${esc(value)}">`}</label>`
+  }
+
+  function artworkField(name,value,record={}){
+    if(name==="state")return `<label>Publishing state<select name="state">${["draft","published","archived"].map(stateValue=>`<option value="${stateValue}" ${String(value||"draft")===stateValue?"selected":""}>${stateValue}</option>`).join("")}</select></label>`;
+    if(name==="slug"&&record.published_once)return `<label>Slug<input value="${esc(value)}" disabled><input type="hidden" name="slug" value="${esc(value)}"><span class="cm-field-note">Permanent after first publication.</span></label>`;
+    if(name==="legacy_path")return `<label>Custom page override<input name="legacy_path" value="${esc(value)}" placeholder="/art/custom-page.html"><span class="cm-field-note">Optional. Leave blank for the automatic /art/{slug}/ detail page.</span></label>`;
+    return field(name,value)
   }
 
   function flashField(name,value,isNew,record={}){
@@ -279,10 +291,10 @@
 
   function editor(config,record={},categories=[],styleOptions=[]){
     if(config.symbolEditor)return symbolEditor(record,categories);
-    const existingMedia=(record.media||[]).map(media=>`<figure><img src="${esc(media.url)}" alt="${esc(media.alt||record.title||"")}"><figcaption>${esc(media.alt||"Attached artwork image")}</figcaption></figure>`).join("");
+    const existingMedia=(record.media||[]).map(media=>`<figure><img data-admin-media-preview="${esc(media.id)}" alt="${esc(media.alt||record.title||"")}"><figcaption>${esc(media.alt||"Attached artwork image")}</figcaption></figure>`).join("");
     const mediaFields=config.mediaUpload?`<div class="cm-artwork-media wide"><strong>Artwork images</strong>${existingMedia?`<div class="cm-artwork-previews">${existingMedia}</div>`:"<p>No images attached yet.</p>"}<label>Upload JPEG, PNG, or WebP<input type="file" name="artwork_files" accept="image/jpeg,image/png,image/webp" multiple></label><label>Image alt text<input name="artwork_alt" value="${esc(record.title||"")}" placeholder="Describe the artwork for screen readers"></label><span class="cm-upload-status" data-artwork-upload-status aria-live="polite"></span></div>`:"";
     const styleFields=config===configs.flash?styleSelector(record,styleOptions):"";
-    const fields=config.fields.map(name=>config.flashEditor?flashField(name,record[name]??(name==="state"?"draft":""),!record.id,record):field(name,record[name]??(name==="state"?"draft":""))).join("");
+    const fields=config.fields.map(name=>config.flashEditor?flashField(name,record[name]??(name==="state"?"draft":""),!record.id,record):config===configs.works?artworkField(name,record[name]??(name==="state"?"draft":""),record):field(name,record[name]??(name==="state"?"draft":""))).join("");
     const flashSheet=config.flashEditor?flashSheetPanel(record):"";
     const flashMedia=config.flashEditor?flashMediaPanel(record):"";
     return `<section class="cm-editor ${config.flashEditor?"cm-flash-editor":""}" aria-label="${record.id?"Edit":"Create"} record"><div class="cm-row"><h3>${record.id?"Edit":"New"} ${esc(config.title)}</h3><button class="button" type="button" data-cancel>Close</button></div><form class="cm-form" data-editor data-id="${esc(record.id||"")}" data-original-state="${esc(record.state||"draft")}" data-original-item-type="${esc(record.item_type||"individual")}" data-media-count="${record.media?.length||0}" data-has-primary="${record.media?.some(media=>media.role==="primary")?"true":"false"}"><div class="cm-form-grid">${fields}${styleFields}${flashSheet}${flashMedia}${mediaFields}</div><div class="cm-actions"><button class="button" type="submit">${config.flashEditor?"Save Flash draft and artwork":config.mediaUpload?"Save artwork":"Save draft"}</button></div></form></section>`
@@ -456,14 +468,14 @@
     try{
       const [payload,categoryPayload,stylePayload]=await Promise.all([api(`/api/admin/${config.endpoint}`),config.symbolEditor?api("/api/admin/legend/categories"):Promise.resolve({records:[]}),view==="flash"?api("/api/admin/portfolio/settings"):Promise.resolve({options:{styles:[]}})]);
       const allRecords=payload.records||[],records=filter?allRecords.filter(filter):allRecords,categories=categoryPayload.records||[],styleOptions=Array.isArray(stylePayload.options?.styles)?stylePayload.options.styles:[],sortable=config.fields.includes("sort_order"),shell=root().querySelector(".construct-manager");
-      shell.innerHTML=`${resourceHeader(config)}<div id="cm-editor"></div>${config.flashEditor?flashBulkPanel():""}<div class="cm-grid">${records.length?records.map((record,index)=>card(record,index,records.length,sortable,styleOptions)).join(""):"<div class='cm-empty'>No matching records.</div>"}</div>`;
+      shell.innerHTML=`${resourceHeader(config)}<div id="cm-editor"></div>${config.flashEditor?flashBulkPanel():""}<div class="cm-grid">${records.length?records.map((record,index)=>card(record,index,records.length,sortable,styleOptions,config)).join(""):"<div class='cm-empty'>No matching records.</div>"}</div>`;
       bindResource(shell,config,records,allRecords,categories,styleOptions);
       hydrateAdminMediaPreviews(shell);
     }catch(error){root().querySelector(".construct-manager").innerHTML=notice(error.message,"error")}
   }
 
   function validateArtworkImages(files){const allowed=new Set(["image/jpeg","image/png","image/webp"]);for(const file of files){if(!allowed.has(file.type))throw new Error(`${file.name}: use JPEG, PNG, or WebP`);if(file.size>15*1024*1024)throw new Error(`${file.name}: exceeds 15 MB`)}}
-  async function uploadEntityImages(entityId,files,altText,existingCount,output){validateArtworkImages(files);for(let index=0;index<files.length;index++){const file=files[index];output.textContent=`Uploading ${index+1} of ${files.length}: ${file.name}`;const upload=new FormData();upload.append("file",file);upload.append("alt_text",altText);upload.append("privacy","public");upload.append("consent_status","granted");const uploaded=await api("/api/admin/media",{method:"POST",body:upload});await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:uploaded.record.id,role:existingCount+index===0?"primary":"gallery",sort_order:existingCount+index+1,public_visible:true,alt_text_override:altText})})}output.textContent=files.length?`${files.length} image${files.length===1?"":"s"} attached.`:""}
+  async function uploadEntityImages(entityId,files,altText,existingCount,output){validateArtworkImages(files);for(let index=0;index<files.length;index++){const file=files[index];output.textContent=`Uploading ${index+1} of ${files.length}: ${file.name}`;const upload=new FormData();upload.append("file",file);upload.append("alt_text",altText);upload.append("privacy","public");upload.append("consent_status","granted");upload.append("public_presentation","inline");const uploaded=await api("/api/admin/media",{method:"POST",body:upload});await api(`/api/admin/entities/${encodeURIComponent(entityId)}/media`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({media_id:uploaded.record.id,role:existingCount+index===0?"primary":"gallery",sort_order:existingCount+index+1,public_visible:true,alt_text_override:altText})})}output.textContent=files.length?`${files.length} image${files.length===1?"":"s"} attached.`:""}
 
   async function uploadLegendVariantImages(form,entityId,output){
     const pending=pendingLegendVariantImages(form);if(!pending.length)return;
@@ -561,6 +573,14 @@
           if(needsStaging)await api(`/api/admin/flash/${encodeURIComponent(entityId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(values)});
           status(flashFiles.length?"Flash draft and artwork saved":recordId?"Flash record saved":"Flash draft created");return renderResource("flash")
         }
+        if(config===configs.works){
+          const desiredState=values.state||"draft",isNew=!entityId,needsMediaStage=desiredState==="published"&&files.length>0&&form.dataset.hasPrimary!=="true";
+          const saved=await api(`/api/admin/art${entityId?`/${encodeURIComponent(entityId)}`:""}`,{method:entityId?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...values,state:isNew||needsMediaStage?"draft":desiredState})});
+          entityId=entityId||saved.record?.id;if(!entityId)throw new Error("Artwork draft was created without an entity ID.");form.dataset.id=entityId;
+          if(files.length)await uploadEntityImages(entityId,files,altText||values.title||"Artwork",Number(form.dataset.mediaCount)||0,output);
+          if((isNew&&desiredState!=="draft")||needsMediaStage)await api(`/api/admin/art/${encodeURIComponent(entityId)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(values)});
+          status(files.length?"Artwork and images saved":recordId?"Artwork saved":"Artwork draft created");return renderResource("works")
+        }
         if(config.symbolEditor&&pendingVariantUploads.length&&!entityId){
           if(output)output.textContent="Creating a draft before uploading variant images…";
           const created=await api(`/api/admin/${config.endpoint}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...values,state:"draft"})});entityId=created.record?.id;
@@ -602,7 +622,7 @@
     let output="";
     if(url&&mime.startsWith("image/"))output=`<img src="${esc(url)}" alt="${esc(firstValue(material,"alt_text","altText")||firstValue(material,"title"))}" loading="lazy">`;
     else if(url&&mime.startsWith("audio/"))output=`<audio controls preload="metadata" src="${esc(url)}"></audio>`;
-    else if(url&&mime.startsWith("video/"))output=`<video controls preload="metadata" src="${esc(url)}"></video>`;
+    else if(url&&mime.startsWith("video/"))output=`<video controls playsinline preload="metadata" src="${esc(url)}"></video>`;
     else if(url)output=`<a class="button" href="${esc(url)}" target="_blank" rel="noopener">Open attached file</a>`;
     else if(mediaId)output=`<div class="cm-secure-media-preview" data-secure-media-preview="${esc(mediaId)}" data-preview-mime="${esc(mime)}" data-preview-alt="${esc(firstValue(material,"alt_text","altText")||firstValue(material,"title"))}"><span class="cm-meta">Loading secure preview…</span></div>`;
     if(inlineText)output+=`<div class="cm-material-text">${esc(inlineText)}</div>`;
@@ -620,7 +640,7 @@
         const objectUrl=URL.createObjectURL(await response.blob());archiveWorkspace.previewUrls.push(objectUrl);
         if(mime.startsWith("image/"))preview.innerHTML=`<img src="${objectUrl}" alt="${esc(alt)}">`;
         else if(mime.startsWith("audio/"))preview.innerHTML=`<audio controls preload="metadata" src="${objectUrl}"></audio>`;
-        else if(mime.startsWith("video/"))preview.innerHTML=`<video controls preload="metadata" src="${objectUrl}"></video>`;
+        else if(mime.startsWith("video/"))preview.innerHTML=`<video controls playsinline preload="metadata" src="${objectUrl}"></video>`;
         else preview.innerHTML=`<a class="button" href="${objectUrl}" target="_blank" rel="noopener">Open secure preview</a>`;
       }catch(error){preview.innerHTML=`<span class="cm-meta">${esc(error.message)}</span>`}
     }))
@@ -638,6 +658,13 @@
 
   function hydrateMaterialMediaControls(shell){
     shell.querySelectorAll("[data-material-form]").forEach(form=>{
+      const fileInput=form.querySelector('[name="material_file"]');
+      if(fileInput){
+        fileInput.accept="image/*,audio/*,video/mp4,video/webm,.pdf,.doc,.docx";
+        if(!fileInput.parentElement.querySelector("[data-video-upload-note]"))fileInput.insertAdjacentHTML("afterend",'<span class="cm-meta" data-video-upload-note>MP4 (H.264/AAC recommended) or WebM video, up to 2 GiB. Interrupted video uploads resume when the same file is selected again.</span>');
+      }
+      const submit=form.querySelector('[type="submit"]');
+      if(submit&&!form.querySelector("[data-media-upload-cancel]"))submit.insertAdjacentHTML("afterend",'<button class="button danger-button" type="button" data-media-upload-cancel hidden>Cancel upload</button>');
       const mediaId=String(form.elements.media_id?.value||"");
       const material=archiveWorkspace.materials.find(item=>String(firstValue(item,"id"))===String(form.dataset.id))||{};
       const media=archiveWorkspace.media.find(item=>String(firstValue(item,"id"))===mediaId)||{};
@@ -687,11 +714,34 @@
     const file=form.querySelector('[name="material_file"]')?.files?.[0]||null;if(!form.dataset.id&&!file&&!payload.media_id&&!payload.body)throw new Error("Attach a file, choose existing media, or add inline text.");return{payload,mediaPayload,file,updateMediaMetadata:formData.has("update_media_metadata")}
   }
 
-  async function uploadArchiveMaterialFile(file,mediaPayload,output){
+  async function uploadArchiveMaterialFileLegacy(file,mediaPayload,output){
     const max=file.type.startsWith("audio/")||file.type.startsWith("video/")?50:15;if(file.size>max*1024*1024)throw new Error(`${file.name} exceeds ${max} MB.`);output.textContent=`Uploading ${file.name}…`;const upload=new FormData();upload.append("file",file);Object.entries(mediaPayload).forEach(([key,value])=>upload.append(key,value));const uploaded=await api(archiveEndpoints.media,{method:"POST",body:upload});return firstValue(uploaded?.record||uploaded,"id","media_id","mediaId")
   }
 
   function serializeActivityForm(form,entityId){const data=new FormData(form),subjects=String(data.get("subject_ids_input")||"").split(",").map(value=>value.trim()).filter(Boolean);return{entity_id:entityId,activity_type:String(data.get("activity_type")||"milestone").trim(),title:String(data.get("title")||"").trim(),summary:String(data.get("summary")||"").trim(),body:String(data.get("body")||"").trim(),date_precision:String(data.get("date_precision")||"undated"),date_label:String(data.get("date_label")||"").trim(),occurred_at:String(data.get("occurred_at")||"")||null,ended_at:String(data.get("ended_at")||"")||null,place_entity_id:String(data.get("place_entity_id")||"").trim()||null,source_note:String(data.get("source_note")||"").trim(),subject_ids:subjects,public_visible:data.has("public_visible"),sort_order:Number(data.get("sort_order"))||0}}
+
+  async function uploadArchiveMaterialFile(file,mediaPayload,output){
+    if(file.type.startsWith("video/")){
+      if(!window.StudioResumableMedia)throw new Error("The resumable uploader is unavailable. Refresh Studio and try again.");
+      const form=output.closest("form"),cancel=form?.querySelector("[data-media-upload-cancel]"),controller=new AbortController();let sessionId="";
+      if(cancel){cancel.hidden=false;cancel.onclick=async()=>{controller.abort();if(sessionId)try{await window.StudioResumableMedia.cancel(sessionId,localStorage.getItem(tokenKey)||"")}catch{};output.textContent="Video upload cancelled.";cancel.hidden=true}}
+      try{
+        const record=await window.StudioResumableMedia.upload(file,{
+          token:localStorage.getItem(tokenKey)||"",signal:controller.signal,
+          altText:mediaPayload.alt_text,caption:mediaPayload.public_description,privacy:mediaPayload.privacy,
+          consentStatus:mediaPayload.consent_status,transcript:mediaPayload.transcript,
+          transcriptStatus:mediaPayload.transcript_status,transcriptLanguage:mediaPayload.transcript_language,
+          publicTitle:mediaPayload.public_title,publicDescription:mediaPayload.public_description,
+          publicPresentation:mediaPayload.public_presentation,
+          onSession:session=>{sessionId=session.id},
+          onStatus:message=>{output.textContent=message},
+          onProgress:progress=>{output.textContent=`${progress.resumed?"Resuming":"Uploading"} ${file.name}: ${progress.percent}%`},
+        });
+        return firstValue(record,"id","media_id","mediaId");
+      }finally{if(cancel){cancel.hidden=true;cancel.onclick=null}}
+    }
+    return uploadArchiveMaterialFileLegacy(file,mediaPayload,output);
+  }
 
   function bindDossierWorkspace(shell){
     const entityId=shell.dataset.entityId;

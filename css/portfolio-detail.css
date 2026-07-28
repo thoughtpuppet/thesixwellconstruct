@@ -31,13 +31,14 @@ body.is-portfolio-detail main { display:none; }
 .overlay-inner { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr); gap:64px; width:100%; max-width:none; max-height:none; align-items:start; }
 .portfolio-detail-media { display:grid; gap:12px; min-width:0; }
 .overlay-image-wrap { height:auto; min-height:420px; max-height:none; border:5px solid var(--ring-faint); background:#090909; }
-.overlay-image-wrap img { width:100%; max-width:100%; height:min(76vh,900px); max-height:none; object-fit:contain; opacity:1; transform:none; transition:opacity var(--t-fast); }
+.overlay-image-wrap img,.overlay-image-wrap video { width:100%; max-width:100%; height:min(76vh,900px); max-height:none; object-fit:contain; opacity:1; transform:none; transition:opacity var(--t-fast); }
 #work-overlay.open .overlay-image-wrap img { opacity:1; transform:none; }
 .portfolio-angle-strip { display:grid; grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:8px; }
 .portfolio-angle-button { aspect-ratio:4/5; border:3px solid var(--ring-faint); overflow:hidden; background:#090909; }
 .portfolio-angle-button[aria-pressed="true"],.portfolio-angle-button:hover,.portfolio-angle-button:focus-visible { border-color:var(--venture-color); outline:none; }
 .portfolio-angle-button img { width:100%; height:100%; object-fit:cover; }
 .portfolio-angle-button { position:relative; }
+.portfolio-thumb-play { position:absolute; top:4px; right:4px; padding:4px 6px; background:rgba(8,8,8,.9); color:var(--venture-color); font-family:var(--sans); font-size:7px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
 .portfolio-thumb-state { position:absolute; left:4px; right:4px; bottom:4px; padding:4px; background:rgba(8,8,8,.88); color:var(--text); font-family:var(--sans); font-size:7px; font-weight:800; letter-spacing:.1em; text-align:center; text-transform:uppercase; }
 .portfolio-documentation-filters { display:flex; gap:6px; flex-wrap:wrap; }
 .portfolio-documentation-filters button { border:2px solid var(--ring-faint); padding:7px 11px; color:var(--text-mute); font-family:var(--sans); font-size:8px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
@@ -51,11 +52,15 @@ body.is-portfolio-detail main { display:none; }
 .portfolio-media-view[hidden] { display:none; }
 .portfolio-image-note { color:var(--text-mute); font-size:11px; line-height:1.55; }
 .portfolio-image-note[hidden] { display:none; }
+.portfolio-transcript-host:empty { display:none; }
+.portfolio-video-transcript { border:5px solid var(--ring-faint); padding:12px; color:var(--text-mute); font-size:12px; line-height:1.65; }
+.portfolio-video-transcript summary { cursor:pointer; color:var(--venture-color); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+.portfolio-video-transcript p { margin-top:10px; white-space:pre-wrap; }
 .portfolio-documentation-heading { display:grid; gap:6px; }
 .portfolio-documentation-heading p { color:var(--text-mute); font-size:12px; }
 .portfolio-image-comparison { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .portfolio-documented-image { display:grid; gap:8px; margin:0; min-width:0; }
-.portfolio-documented-image img { width:100%; aspect-ratio:4/5; object-fit:contain; border:5px solid var(--ring-faint); background:#090909; }
+.portfolio-documented-image img,.portfolio-documented-image video { width:100%; aspect-ratio:4/5; object-fit:contain; border:5px solid var(--ring-faint); background:#090909; }
 .portfolio-image-group { display:grid; gap:10px; }
 .portfolio-image-group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
 .portfolio-documentation-badge { color:var(--venture-color); }
@@ -86,7 +91,7 @@ body.is-portfolio-detail main { display:none; }
   #work-overlay { padding:48px 24px 20px; }
   .overlay-inner { grid-template-columns:1fr; gap:40px; }
   .overlay-image-wrap { height:auto !important; min-height:0 !important; max-height:none !important; }
-  .overlay-image-wrap img { height:auto !important; max-height:70vh !important; }
+  .overlay-image-wrap img,.overlay-image-wrap video { height:auto !important; max-height:70vh !important; }
 }
 @media (max-width:640px) {
   #work-overlay { padding:34px 16px 16px; }

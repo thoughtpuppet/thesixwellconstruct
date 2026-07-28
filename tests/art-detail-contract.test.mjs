@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
+import worker from "../_worker.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -63,6 +64,27 @@ function environment(database) {
   return { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: TOKEN };
 }
 
+function workerEnvironment(database) {
+  return {
+    ...environment(database),
+    PUBLIC_SITE_URL: "https://example.test",
+    ASSETS: {
+      async fetch(assetRequest) {
+        const pathname = new URL(assetRequest.url).pathname;
+        const file = join(ROOT, ...pathname.split("/").filter(Boolean));
+        try {
+          return new Response(readFileSync(file), {
+            status: 200,
+            headers: { "content-type": pathname.endsWith(".html") ? "text/html; charset=utf-8" : "application/octet-stream" },
+          });
+        } catch {
+          return new Response("not found", { status: 404, headers: { "content-type": "text/plain" } });
+        }
+      },
+    },
+  };
+}
+
 function request(path, { method = "GET", body, admin = false } = {}) {
   return new Request(`https://example.test${path}`, {
     method,
@@ -117,6 +139,7 @@ test("all painting detail pages use the shared shell and managed hooks", () => {
 test("shared painting CSS preserves intrinsic media and every managed state", () => {
   const css = readFileSync(join(ROOT, "css", "painting-detail.css"), "utf8");
   assert.match(css, /--painting-frame-max-width:\s*560px/);
+  assert.match(css, /\.painting-detail-page \.site-hero--supporting\s*\{[^}]*--type-supporting-hero-size:\s*clamp\(38px,\s*8vw,\s*84px\)/s);
   assert.match(css, /\.painting-frame img\s*\{[\s\S]*max-height:/);
   assert.doesNotMatch(css, /aspect-ratio:\s*4\s*\/\s*5/);
   assert.match(css, /\.avail-row\s*\{[\s\S]*border-bottom:\s*5px/);
@@ -300,4 +323,140 @@ test("Studio exposes the print plan selector without claiming inventory ownershi
   assert.match(studio, /\["unavailable","Unavailable"\]/);
   assert.match(studio, /\["planned","Future print planned"\]/);
   assert.match(studio, /Shopify availability/);
+});
+
+test("Studio artwork state is a constrained publishing selector", () => {
+  const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
+  assert.match(studio, /function artworkField\(name,value,record=\{\}\)/);
+  assert.match(studio, /name==="state"[\s\S]*<select name="state">[\s\S]*\["draft","published","archived"\]/);
+  assert.match(studio, /config===configs\.works\?artworkField/);
+});
+
+test("managed artwork template, catalog, and Studio share the automatic detail route", () => {
+  const html = readFileSync(join(ROOT, "art", "detail", "index.html"), "utf8");
+  const detail = readFileSync(join(ROOT, "js", "art-detail-managed.js"), "utf8");
+  const catalog = readFileSync(join(ROOT, "js", "art-catalog-order.js"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
+  const workerSource = readFileSync(join(ROOT, "_worker.js"), "utf8");
+
+  assert.match(html, /href="\/css\/painting-detail\.css"/);
+  assert.match(html, /data-art-record-robots name="robots" content="noindex,nofollow"/);
+  assert.match(html, /id="art-record-data"/);
+  assert.match(html, /data-art-detail-shell/);
+  assert.match(detail, /\/api\/art\/\$\{encodeURIComponent\(slug\)\}/);
+  assert.match(detail, /\/api\/admin\/art/);
+  assert.match(detail, /swc_submissions_admin_token/);
+  assert.match(catalog, /record\.canonicalRoute/);
+  assert.doesNotMatch(catalog, /acquisitioninquiry\.html\?work/);
+  assert.match(studio, /View Public Page/);
+  assert.match(studio, /\/studio\/art-preview\/\?work=/);
+  assert.match(studio, /Custom page override/);
+  assert.match(studio, /Permanent after first publication/);
+  assert.match(workerSource, /async function serveArtRecordPage/);
+  assert.match(workerSource, /x-robots-tag", "noindex, nofollow"/);
+});
+
+test("new artwork stages privately, publishes to its canonical route, locks its slug, and archives cleanly", async () => {
+  const database = migratedDatabase();
+  const env = environment(database);
+  const workerEnv = workerEnvironment(database);
+
+  const created = await jsonResponse(await handleConstructApi(request("/api/admin/art", {
+    method: "POST",
+    admin: true,
+    body: {
+      id: "art-indigo-auto",
+      title: "Exorcism: Indigo",
+      availability: "available",
+      acquisition_eligible: 1,
+      state: "draft",
+    },
+  }), env));
+  assert.equal(created.response.status, 201);
+  assert.equal(created.payload.record.slug, "exorcism-indigo");
+  assert.equal(created.payload.record.state, "draft");
+
+  const draftPublic = await jsonResponse(await handleConstructApi(request("/api/art/exorcism-indigo"), env));
+  assert.equal(draftPublic.response.status, 404);
+
+  const earlyPublish = await jsonResponse(await handleConstructApi(request("/api/admin/art/art-indigo-auto", {
+    method: "PATCH",
+    admin: true,
+    body: { state: "published" },
+  }), env));
+  assert.equal(earlyPublish.response.status, 409);
+  assert.match(earlyPublish.payload.error, /primary artwork image/i);
+
+  database.exec(`
+    INSERT INTO media_assets
+      (id,storage_key,original_filename,mime_type,alt_text,privacy,consent_status,state,created_by,created_at,updated_at,public_presentation)
+    VALUES
+      ('media-indigo-auto','art/media-indigo-auto.jpg','indigo.jpg','image/jpeg','Exorcism: Indigo','public','granted','active','test',datetime('now'),datetime('now'),'inline');
+    INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,created_at)
+    VALUES('art-indigo-auto','media-indigo-auto','primary',1,1,datetime('now'));
+  `);
+
+  const adminDraft = await jsonResponse(await handleConstructApi(request("/api/admin/art", { admin: true }), env));
+  const draftRecord = adminDraft.payload.records.find((record) => record.id === "art-indigo-auto");
+  assert.equal(draftRecord.canonicalRoute, "/art/exorcism-indigo/");
+  assert.equal(draftRecord.canonical_route, "/art/exorcism-indigo/");
+  assert.equal(draftRecord.media[0].role, "primary");
+  assert.equal(draftRecord.published_once, false);
+
+  const published = await jsonResponse(await handleConstructApi(request("/api/admin/art/art-indigo-auto", {
+    method: "PATCH",
+    admin: true,
+    body: { state: "published" },
+  }), env));
+  assert.equal(published.response.status, 200);
+
+  const publicRecord = await jsonResponse(await handleConstructApi(request("/api/art/exorcism-indigo"), env));
+  assert.equal(publicRecord.response.status, 200);
+  assert.equal(publicRecord.payload.record.canonicalRoute, "/art/exorcism-indigo/");
+  assert.equal(publicRecord.payload.record.canonical_route, "/art/exorcism-indigo/");
+  assert.equal(publicRecord.payload.record.media[0].url, "/api/construct/entity-media/media-indigo-auto");
+
+  const publicPage = await worker.fetch(new Request("https://example.test/art/exorcism-indigo/"), workerEnv, {});
+  assert.equal(publicPage.status, 200);
+  const publicHtml = await publicPage.text();
+  assert.match(publicHtml, /<title data-art-record-title>Exorcism: Indigo · art · the six\.well construct<\/title>/);
+  assert.match(publicHtml, /content="index,follow"/);
+  assert.match(publicHtml, /href="https:\/\/example\.test\/art\/exorcism-indigo\/"/);
+  assert.match(publicHtml, /"id":"art-indigo-auto"/);
+
+  const canonicalRedirect = await worker.fetch(new Request("https://example.test/art/exorcism-indigo"), workerEnv, {});
+  assert.equal(canonicalRedirect.status, 308);
+  assert.equal(canonicalRedirect.headers.get("location"), "https://example.test/art/exorcism-indigo/");
+
+  const preview = await worker.fetch(new Request("https://example.test/studio/art-preview/?work=art-indigo-auto"), workerEnv, {});
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.match(await preview.text(), /content="noindex,nofollow"/);
+
+  const slugChange = await jsonResponse(await handleConstructApi(request("/api/admin/art/art-indigo-auto", {
+    method: "PATCH",
+    admin: true,
+    body: { slug: "changed-after-publish" },
+  }), env));
+  assert.equal(slugChange.response.status, 409);
+  assert.match(slugChange.payload.error, /permanent after first publication/i);
+
+  const archived = await jsonResponse(await handleConstructApi(request("/api/admin/art/art-indigo-auto", {
+    method: "PATCH",
+    admin: true,
+    body: { state: "archived" },
+  }), env));
+  assert.equal(archived.response.status, 200);
+  const archivedPublic = await worker.fetch(new Request("https://example.test/art/exorcism-indigo/"), workerEnv, {});
+  assert.equal(archivedPublic.status, 404);
+
+  const archivedAdmin = await jsonResponse(await handleConstructApi(request("/api/admin/art", { admin: true }), env));
+  const archivedRecord = archivedAdmin.payload.records.find((record) => record.id === "art-indigo-auto");
+  assert.equal(archivedRecord.published_once, true);
+  assert.ok(archivedRecord.public_at);
+
+  const legacyDynamic = await worker.fetch(new Request("https://example.test/art/lostmarbles/"), workerEnv, {});
+  assert.equal(legacyDynamic.status, 404);
+  const reserved = await worker.fetch(new Request("https://example.test/art/detail/"), workerEnv, {});
+  assert.equal(reserved.status, 404);
 });

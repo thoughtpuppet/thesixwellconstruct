@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-art-record-title>Artwork · art · the six.well construct</title>
+  <meta data-art-record-description name="description" content="A managed artwork from the six.well construct.">
+  <meta data-art-record-robots name="robots" content="noindex,nofollow">
+  <link data-art-record-canonical rel="canonical" href="/art/">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@900&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/transitions.css">
+  <link rel="stylesheet" href="/css/painting-detail.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <link rel="stylesheet" href="/css/site-typography.css">
+  <link rel="stylesheet" href="/css/hero.css">
+</head>
+<body class="painting-detail-page" data-venture="art" data-managed-art-detail style="--painting-frame-max-width:560px">
+  <script>
+    (function () {
+      var overlay = document.createElement("div");
+      overlay.id = "construct-fade";
+      overlay.style.cssText = "position:fixed;inset:0;background:#0e0e0e;z-index:9999;opacity:1;pointer-events:auto;transition:opacity 500ms cubic-bezier(0.45,0,0.55,1);";
+      document.body.appendChild(overlay);
+      function fadeOut() {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            overlay.style.opacity = "0";
+            overlay.style.pointerEvents = "none";
+          });
+        });
+      }
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fadeOut);
+      else fadeOut();
+    })();
+  </script>
+
+  <header class="top">
+    <button class="cart-toggle" id="cartToggle" aria-label="open cart">
+      <span class="cart-label">cart</span>
+      <span class="cart-count">0</span>
+    </button>
+  </header>
+
+  <nav class="breadcrumb" aria-label="breadcrumb">
+    <a href="/home/">construct</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="/art/">art making</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current" data-art-field="breadcrumb">artwork</span>
+  </nav>
+
+  <div class="cart-overlay" id="cartOverlay"></div>
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <span class="drawer-title">cart</span>
+      <button class="drawer-close" id="drawerClose" aria-label="close cart">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <p class="drawer-empty">cart is empty</p>
+    </div>
+    <div class="drawer-footer">
+      <button class="checkout-btn" disabled>proceed to checkout</button>
+    </div>
+  </aside>
+
+  <main class="art-detail-state" data-art-detail-state role="status">Loading artwork…</main>
+
+  <div class="split" data-art-detail-shell hidden>
+    <div class="split-image">
+      <div class="painting-frame" data-art-lightbox-trigger>
+        <img data-art-field="primary-image" alt="" loading="eager">
+        <span class="painting-badge" data-art-field="availability-badge">unavailable</span>
+      </div>
+    </div>
+
+    <div class="split-content">
+      <header class="painting-header site-hero site-hero--supporting">
+        <span class="venture-label">art making</span>
+        <h1 class="painting-title hero-title" data-art-field="title">Untitled work</h1>
+        <div class="painting-meta" data-art-meta></div>
+      </header>
+
+      <section class="statement-block">
+        <p class="block-label">statement</p>
+        <div class="statement-body placeholder" data-art-field="statement"></div>
+      </section>
+
+      <section class="availability-block">
+        <p class="block-label">availability</p>
+        <div class="availability-rows">
+          <div class="avail-row" data-art-original-row data-original-state="unavailable">
+            <div class="avail-left">
+              <span class="avail-label">original</span>
+              <span class="avail-status unavailable" data-art-original-status>unavailable</span>
+            </div>
+            <a class="avail-action disabled" data-art-original-action aria-disabled="true" tabindex="-1">unavailable</a>
+          </div>
+          <div class="avail-row" data-art-print-row data-print-state="unavailable">
+            <div class="avail-left">
+              <span class="avail-label">prints</span>
+              <span class="avail-status unavailable" data-art-print-status>unavailable</span>
+            </div>
+            <a class="avail-action disabled" data-art-print-action aria-disabled="true" tabindex="-1">unavailable</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="related-block" data-legacy-connections></section>
+    </div>
+
+    <footer class="bottom">
+      <p>&copy; the six.well construct</p>
+      <a href="/art/">back to art making</a>
+    </footer>
+  </div>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Full size artwork">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">&times;</button>
+    <img id="lightboxImg" alt="">
+  </div>
+
+  <script id="art-record-data" type="application/json"></script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+  <script src="/js/art-detail-managed.js"></script>
+</body>
+</html>

@@ -90,7 +90,7 @@ import {
   sendDueEventTicketReminders,
 } from "./functions/api/notifications/_lib.js";
 import { handlePortfolioApi } from "./functions/api/portfolio/_lib.js";
-import { handleConstructApi } from "./functions/api/construct/_lib.js";
+import { handleConstructApi, reapStaleMediaUploads } from "./functions/api/construct/_lib.js";
 import { handleAdminCrmApi } from "./functions/api/crm/_lib.js";
 import {
   handleAdminOutreachApi,
@@ -334,6 +334,33 @@ const LEGEND_RECORD_RESERVED_SLUGS = new Set([
   "managed-preview",
 ]);
 
+const ART_RECORD_RESERVED_SLUGS = new Set(["acquisitioninquiry", "detail", "index"]);
+const ART_LEGACY_PAGE_SLUGS = new Set([
+  "homelandsecuritypainting",
+  "lostmarblespainting",
+  "lustpainting",
+  "paranoiafosteredtraumapainting",
+  "slothpainting",
+  "thefrustrationsofinnercharospainting",
+]);
+
+function artRecordSlug(pathname) {
+  const parts = normalizePath(pathname).split("/").filter(Boolean);
+  if (parts.length !== 2 || parts[0] !== "art" || hasFileExtension(pathname)) return "";
+  let candidate = "";
+  try {
+    candidate = decodeURIComponent(parts[1]);
+  } catch {
+    return "";
+  }
+  if (
+    ART_RECORD_RESERVED_SLUGS.has(candidate) ||
+    ART_LEGACY_PAGE_SLUGS.has(candidate) ||
+    !/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/.test(candidate)
+  ) return "";
+  return candidate;
+}
+
 function legendRecordSlug(pathname) {
   const parts = normalizePath(pathname).split("/").filter(Boolean);
   if (parts.length !== 3 || parts[0] !== "about" || parts[1] !== "legend" || hasFileExtension(pathname)) return "";
@@ -408,6 +435,62 @@ async function serveLegendRecordPage(request, env, slug) {
   headers.delete("etag");
   headers.set("cache-control", "no-store");
   return new Response(html, { status: assetResponse.status, headers });
+}
+
+async function serveArtRecordPage(request, env, slug) {
+  const apiUrl = new URL(`/api/art/${encodeURIComponent(slug)}`, request.url);
+  const apiResponse = await handleConstructApi(new Request(apiUrl, {
+    method: "GET",
+    headers: { accept: "application/json" },
+  }), env);
+  if (apiResponse.status === 404) return notFoundPage(request, env);
+  if (!apiResponse.ok) return apiResponse;
+
+  const payload = await apiResponse.json();
+  const record = payload.record;
+  if (!record || record.slug !== slug || record.legacy_path) return notFoundPage(request, env);
+
+  const assetResponse = await servePublicAsset(request, env, "/art/detail/index.html");
+  if (request.method === "HEAD") return assetResponse;
+
+  const siteOrigin = String(env.PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/g, "");
+  const canonicalUrl = `${siteOrigin}${record.canonicalRoute}`;
+  const title = `${record.title} · art · the six.well construct`;
+  const description = record.statement || `Artwork detail for ${record.title}.`;
+  const html = (await assetResponse.text())
+    .replace(
+      /<title data-art-record-title>[\s\S]*?<\/title>/,
+      `<title data-art-record-title>${escapeHtml(title)}</title>`,
+    )
+    .replace(
+      /<meta data-art-record-description name="description" content="[^"]*">/,
+      `<meta data-art-record-description name="description" content="${escapeHtml(description)}">`,
+    )
+    .replace(
+      /<meta data-art-record-robots name="robots" content="[^"]*">/,
+      '<meta data-art-record-robots name="robots" content="index,follow">',
+    )
+    .replace(
+      /<link data-art-record-canonical rel="canonical" href="[^"]*">/,
+      `<link data-art-record-canonical rel="canonical" href="${escapeHtml(canonicalUrl)}">`,
+    )
+    .replace(
+      '<script id="art-record-data" type="application/json"></script>',
+      `<script id="art-record-data" type="application/json">${legendRecordJson(payload)}</script>`,
+    );
+  const headers = new Headers(assetResponse.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  headers.set("cache-control", "no-store");
+  return new Response(html, { status: assetResponse.status, headers });
+}
+
+async function serveArtPreviewPage(request, env) {
+  const response = await servePublicAsset(request, env, "/art/detail/index.html");
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-store");
+  headers.set("x-robots-tag", "noindex, nofollow");
+  return new Response(response.body, { status: response.status, headers });
 }
 
 function isHiddenByHomeOnlyMode(pathname) {
@@ -1095,6 +1178,25 @@ export default {
       return serveLegendRecordPage(request, env, requestedLegendSlug);
     }
 
+    if (normalizePath(url.pathname) === "/studio/art-preview") {
+      return serveArtPreviewPage(request, env);
+    }
+
+    if (normalizePath(url.pathname) === "/art/detail") {
+      return notFoundPage(request, env);
+    }
+
+    const requestedArtSlug = artRecordSlug(url.pathname);
+    if (requestedArtSlug) {
+      if (!url.pathname.endsWith("/")) {
+        const canonicalUrl = new URL(request.url);
+        canonicalUrl.pathname = `${normalizePath(url.pathname)}/`;
+        canonicalUrl.search = "";
+        return Response.redirect(canonicalUrl, 308);
+      }
+      return serveArtRecordPage(request, env, requestedArtSlug);
+    }
+
     if (isFrontDoorPath(url.pathname)) {
       return servePublicAsset(request, env, "/index.html");
     }
@@ -1133,6 +1235,7 @@ export default {
     ctx.waitUntil(reapExpiredBookingHolds(env));
     ctx.waitUntil(reapExpiredTattooRenderingRequests(env));
     ctx.waitUntil(reapExpiredTattooBuildDrafts(env));
+    ctx.waitUntil(reapStaleMediaUploads(env));
     ctx.waitUntil(processDueOutreach(env));
     ctx.waitUntil(rollupSiteAnalytics(env));
   },

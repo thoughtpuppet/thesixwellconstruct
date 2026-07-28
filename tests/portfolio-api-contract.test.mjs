@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
 import { handlePortfolioApi } from "../functions/api/portfolio/_lib.js";
-import { handleConstructApi } from "../functions/api/construct/_lib.js";
+import { handleConstructApi, reapStaleMediaUploads } from "../functions/api/construct/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TOKEN = "portfolio-test-token";
@@ -40,7 +40,7 @@ class LocalD1 {
 }
 
 class MemoryBucket {
-  constructor() { this.objects = new Map(); }
+  constructor() { this.objects = new Map(); this.uploads = new Map(); this.abortedUploads = new Set(); }
   async put(key, value, options = {}) {
     const body = value instanceof ReadableStream
       ? await new Response(value).arrayBuffer()
@@ -49,15 +49,70 @@ class MemoryBucket {
         : await new Response(value).arrayBuffer();
     this.objects.set(key, { body, options });
   }
-  async get(key) {
+  async get(key, options = {}) {
     const object = this.objects.get(key);
     if (!object) return null;
+    const source = new Uint8Array(object.body);
+    const range = options.range;
+    const body = range ? source.slice(range.offset, range.offset + range.length) : source;
     return {
-      body: new Uint8Array(object.body),
+      body,
       httpEtag: `"${key}"`,
+      size: body.byteLength,
+      httpMetadata: object.options.httpMetadata || {},
+      customMetadata: object.options.customMetadata || {},
       writeHttpMetadata(headers) {
         if (object.options.httpMetadata?.contentType) headers.set("content-type", object.options.httpMetadata.contentType);
         if (object.options.httpMetadata?.cacheControl) headers.set("cache-control", object.options.httpMetadata.cacheControl);
+      },
+    };
+  }
+  async head(key) {
+    const object = this.objects.get(key);
+    if (!object) return null;
+    return {
+      size: object.body.byteLength,
+      httpEtag: `"${key}"`,
+      httpMetadata: object.options.httpMetadata || {},
+      customMetadata: object.options.customMetadata || {},
+      writeHttpMetadata(headers) {
+        if (object.options.httpMetadata?.contentType) headers.set("content-type", object.options.httpMetadata.contentType);
+        if (object.options.httpMetadata?.cacheControl) headers.set("cache-control", object.options.httpMetadata.cacheControl);
+      },
+    };
+  }
+  createMultipartUpload(key, options = {}) {
+    const uploadId = `upload-${this.uploads.size + 1}`;
+    this.uploads.set(uploadId, { key, options, parts: new Map() });
+    return this.resumeMultipartUpload(key, uploadId);
+  }
+  resumeMultipartUpload(key, uploadId) {
+    const bucket = this;
+    return {
+      uploadId,
+      async uploadPart(partNumber, value) {
+        const upload = bucket.uploads.get(uploadId);
+        if (!upload || upload.key !== key) throw new Error("Unknown multipart upload");
+        const body = await new Response(value).arrayBuffer();
+        const part = { partNumber, etag: `"${uploadId}-${partNumber}"`, body };
+        upload.parts.set(partNumber, part);
+        return part;
+      },
+      async complete(parts) {
+        const upload = bucket.uploads.get(uploadId);
+        if (!upload || upload.key !== key) throw new Error("Unknown multipart upload");
+        const chunks = parts.map((part) => new Uint8Array(upload.parts.get(part.partNumber).body));
+        const size = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+        const body = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+        bucket.objects.set(key, { body: body.buffer, options: upload.options });
+        bucket.uploads.delete(uploadId);
+        return bucket.head(key);
+      },
+      async abort() {
+        bucket.uploads.delete(uploadId);
+        bucket.abortedUploads.add(uploadId);
       },
     };
   }
@@ -1019,4 +1074,153 @@ test("a new Studio upload can save multi-style metadata and primary permission b
 
   response = await handlePortfolioApi(request(`/api/portfolio/${itemId}`), env(database, bucket));
   assert.equal(response.status, 200);
+});
+
+test("resumable video uploads reject invalid files, resume parts, complete idempotently, and cancel", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const environment = env(database, bucket);
+
+  let response = await handleConstructApi(request("/api/admin/media/uploads", {
+    method: "POST", admin: true, body: { filename: "bad.mov", mimeType: "video/quicktime", byteSize: 10 },
+  }), environment);
+  assert.equal(response.status, 415);
+  response = await handleConstructApi(request("/api/admin/media/uploads", {
+    method: "POST", admin: true, body: { filename: "huge.mp4", mimeType: "video/mp4", byteSize: 2 * 1024 * 1024 * 1024 + 1 },
+  }), environment);
+  assert.equal(response.status, 413);
+
+  response = await handleConstructApi(request("/api/admin/media/uploads", {
+    method: "POST",
+    admin: true,
+    body: { filename: "studio (test).mp4", mimeType: "video/mp4", byteSize: 7, caption: "Process clip" },
+  }), environment);
+  assert.equal(response.status, 201);
+  const session = (await response.json()).upload;
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM media_assets WHERE id=?").get(session.mediaId).count, 0);
+
+  response = await handleConstructApi(new Request(`https://example.test/api/admin/media/uploads/${session.id}/parts/1`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/octet-stream" },
+    body: new Uint8Array([1, 2, 3, 4, 5, 6, 7]),
+  }), environment);
+  assert.equal(response.status, 200);
+  response = await handleConstructApi(request(`/api/admin/media/uploads/${session.id}`, { admin: true }), environment);
+  assert.deepEqual((await response.json()).upload.parts.map((part) => part.partNumber), [1]);
+
+  response = await handleConstructApi(request(`/api/admin/media/uploads/${session.id}/complete`, {
+    method: "POST", admin: true,
+  }), environment);
+  assert.equal(response.status, 200);
+  const completed = await response.json();
+  assert.equal(completed.record.mime_type, "video/mp4");
+  assert.equal(completed.record.byte_size, 7);
+  assert.equal(completed.record.original_filename, "studio (test).mp4");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM media_assets WHERE id=?").get(session.mediaId).count, 1);
+  response = await handleConstructApi(request(`/api/admin/media/uploads/${session.id}/complete`, {
+    method: "POST", admin: true,
+  }), environment);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).record.id, session.mediaId);
+
+  response = await handleConstructApi(request("/api/admin/media/uploads", {
+    method: "POST", admin: true, body: { filename: "cancel.webm", mimeType: "video/webm", byteSize: 4 },
+  }), environment);
+  const cancelled = (await response.json()).upload;
+  response = await handleConstructApi(request(`/api/admin/media/uploads/${cancelled.id}`, {
+    method: "DELETE", admin: true,
+  }), environment);
+  assert.equal(response.status, 200);
+  assert.equal(database.prepare("SELECT state FROM media_upload_sessions WHERE id=?").get(cancelled.id).state, "aborted");
+  assert.ok(bucket.abortedUploads.has(cancelled.uploadId));
+});
+
+test("scheduled cleanup aborts expired multipart sessions without creating media", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const environment = env(database, bucket);
+  const response = await handleConstructApi(request("/api/admin/media/uploads", {
+    method: "POST", admin: true, body: { filename: "expired.mp4", mimeType: "video/mp4", byteSize: 3 },
+  }), environment);
+  const upload = (await response.json()).upload;
+  database.prepare("UPDATE media_upload_sessions SET expires_at=datetime('now','-1 minute') WHERE id=?").run(upload.id);
+  assert.deepEqual(await reapStaleMediaUploads(environment), { aborted: 1 });
+  assert.equal(database.prepare("SELECT state FROM media_upload_sessions WHERE id=?").get(upload.id).state, "aborted");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM media_assets WHERE id=?").get(upload.mediaId).count, 0);
+});
+
+test("stored media supports HEAD and valid full, partial, suffix, and invalid ranges", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  insertPortfolioItem(database, { id: "range-primary", state: "published", consent: "granted" });
+  await bucket.put("portfolio/range-primary.jpg", new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]), {
+    httpMetadata: { contentType: "image/jpeg" },
+  });
+  const environment = env(database, bucket);
+  const mediaUrl = "https://example.test/api/portfolio/media/range-primary";
+
+  let response = await handlePortfolioApi(new Request(mediaUrl, { method: "HEAD" }), environment);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("accept-ranges"), "bytes");
+  assert.equal(response.headers.get("content-length"), "10");
+  response = await handlePortfolioApi(new Request(mediaUrl, { headers: { range: "bytes=2-5" } }), environment);
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-range"), "bytes 2-5/10");
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [2, 3, 4, 5]);
+  response = await handlePortfolioApi(new Request(mediaUrl, { headers: { range: "bytes=-3" } }), environment);
+  assert.equal(response.status, 206);
+  assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [7, 8, 9]);
+  response = await handlePortfolioApi(new Request(mediaUrl, { headers: { range: "bytes=99-100" } }), environment);
+  assert.equal(response.status, 416);
+  assert.equal(response.headers.get("content-range"), "bytes */10");
+});
+
+test("portfolio accepts completed video as mixed media but rejects video Before and cover roles", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  insertPortfolioItem(database, { id: "mixed-media", state: "draft", consent: "granted" });
+  database.prepare(`INSERT INTO media_assets(
+    id,storage_key,original_filename,mime_type,byte_size,alt_text,privacy,consent_status,state,
+    created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_presentation
+  ) VALUES('portfolio-video','construct/portfolio-video/clip.mp4','clip.mp4','video/mp4',7,'Tattoo process video',
+    'public','granted','active','test',datetime('now'),datetime('now'),'Spoken process notes','ready','en','inline')`).run();
+  await bucket.put("construct/portfolio-video/clip.mp4", new Uint8Array([1, 2, 3, 4, 5, 6, 7]), {
+    httpMetadata: { contentType: "video/mp4" },
+  });
+  const environment = env(database, bucket);
+
+  let response = await handlePortfolioApi(request("/api/admin/portfolio/mixed-media/images", {
+    method: "POST", admin: true, body: { mediaId: "portfolio-video", imageRole: "process" },
+  }), environment);
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).media.kind, "video");
+  response = await handlePortfolioApi(request("/api/admin/portfolio/mixed-media/images/portfolio-video", {
+    method: "PATCH", admin: true, body: { imageRole: "before" },
+  }), environment);
+  assert.equal(response.status, 422);
+  response = await handlePortfolioApi(request("/api/admin/portfolio/mixed-media/images/portfolio-video", {
+    method: "PATCH", admin: true, body: { imageRole: "result", isCover: true },
+  }), environment);
+  assert.equal(response.status, 422);
+
+  response = await handlePortfolioApi(request("/api/admin/portfolio/mixed-media", {
+    method: "PATCH", admin: true, body: { state: "published" },
+  }), environment);
+  assert.equal(response.status, 200);
+  response = await handlePortfolioApi(request("/api/portfolio/mixed-media"), environment);
+  const item = (await response.json()).item;
+  const video = item.media.find((entry) => entry.id === "portfolio-video");
+  assert.equal(video.kind, "video");
+  assert.equal(video.transcript, "Spoken process notes");
+  assert.equal(item.coverImageRef, "primary");
+});
+
+test("Studio resumable client retries parts three times and exposes resume and cancel controls", () => {
+  const client = readFileSync(join(ROOT, "studio", "resumable-media-upload.js"), "utf8");
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(client, /attempt<4/);
+  assert.match(client, /matchingSession/);
+  assert.match(client, /method:"DELETE"/);
+  assert.match(studio, /data-portfolio-upload-cancel/);
+  assert.match(studio, /H\.264\/AAC/);
 });
