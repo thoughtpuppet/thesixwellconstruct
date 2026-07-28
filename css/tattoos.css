@@ -486,10 +486,10 @@
 
   body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-row > div:last-child {
     justify-content: flex-end;
+    padding: 10px 12px;
   }
 
-  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-status,
-  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-action {
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-status {
     font-size: 9px;
     letter-spacing: 0.1em;
   }
@@ -499,7 +499,16 @@
   }
 
   body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-action {
-    margin-top: 12px;
+    min-width: 0;
+    min-height: 0;
+    margin-top: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+  }
+
+  body[data-venture="tattooing"][data-landing-family="tattoo-service"] #ways-to-work .ledger-status:has(> br:only-child) + .ledger-action {
+    margin-top: 0;
   }
 }
 

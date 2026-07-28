@@ -540,12 +540,24 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
   }
 });
 
-test("public tattoo Rates keeps its approved copy and presents every session length as one list", () => {
+test("public tattoo rates and session lengths keep their approved copy and peer section hierarchy", () => {
   const source = readFileSync(join(ROOT, "tattoos", "index.html"), "utf8");
-  assert.match(source, />Rates &amp; Sessions</);
+  const siteTypography = readFileSync(join(ROOT, "css", "site-typography.css"), "utf8");
+  assert.match(source, /<section class="section" id="project-fit">[\s\S]*?<h2 class="section-title"[^>]*>Hourly Rates<\/h2>[\s\S]*?<\/section>\s*<section class="section session-offerings" id="session-lengths"/);
+  assert.match(source, /<h2 class="section-title" id="sessionOfferingsTitle">Session Lengths<\/h2>/);
+  assert.doesNotMatch(source, /The Review Process:|Ways to Collaborate:/);
+  assert.match(siteTypography, /\.section-title\s*\{[\s\S]*?color:\s*var\(--type-section-color,[\s\S]*?font-size:\s*var\(--type-section-size-active,/);
+  assert.match(source, /\.section-title\s*\{\s*margin-bottom:24px;\s*\}/);
+  assert.match(source, /\.section-label:empty,\s*\.section-label:has\(> br:only-child\)\s*\{\s*display:none;\s*\}/);
   assert.doesNotMatch(source, /Rates &amp; Project Scope|rates-intro/);
   assert.match(source, /Original flash pieces are offered at a lower rate/);
-  assert.match(source, /All sessions require a deposit, applied toward the total cost/);
+  assert.match(source, /class="section-body section-body--ghost"[^>]*>All sessions require a deposit, applied toward the total cost/);
+  assert.match(source, /\.section-body--ghost,\s*\.section-body--ghost \*\s*\{\s*color:var\(--text-ghost\) !important;\s*\}/);
+  assert.match(source, /line-height:1\.8; color:var\(--text-mute\); max-width:620px/);
+  assert.match(source, /class="section-body path-body"/);
+  assert.match(source, /class="section-body ledger-body"/);
+  assert.match(source, /class="section-body fit-body"/);
+  assert.match(source, /class="section-body session-description"/);
 
   const sessionIds = ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
   const positions = sessionIds.map((id) => source.indexOf(`data-booking-type="${id}"`));

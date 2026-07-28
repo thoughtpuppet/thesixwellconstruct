@@ -154,7 +154,7 @@ test("shared identity actions are filled, accessible, responsive controls", asyn
   assert.match(identityCss, /\.brand-band-link\s*\{[\s\S]*color:\s*var\(--band-action-ink,\s*var\(--color-bg\)\)/);
   assert.match(
     identityCss,
-    /\.band-actions \.brand-band-link\[href\^="\/about\/"\]\s*\{[\s\S]*border-color:\s*var\(--color-accent-dim\)[\s\S]*background:\s*transparent[\s\S]*color:\s*var\(--color-accent-dim\)/,
+    /\.band-actions \.brand-band-link\[href\^="\/about\/"\]\s*\{[\s\S]*border-color:\s*var\(--band-copy-color\)[\s\S]*background:\s*transparent[\s\S]*color:\s*var\(--band-copy-color\)/,
   );
   assert.match(
     identityCss,
@@ -180,7 +180,7 @@ test("shared identity actions are filled, accessible, responsive controls", asyn
   );
   assert.match(
     identityCss,
-    /\.brand-band--tattoo-house\s*\{[\s\S]*--band-logo-aspect:\s*0\.5523[\s\S]*--band-identity-column:\s*minmax\(160px,\s*0\.175fr\)[\s\S]*--band-content-column:\s*minmax\(0,\s*0\.825fr\)/,
+    /\.brand-band--tattoo-house\s*\{[\s\S]*--band-logo-aspect:\s*0\.5523[\s\S]*--band-logo-shift-x:\s*-4px[\s\S]*--band-identity-column:\s*minmax\(160px,\s*0\.175fr\)[\s\S]*--band-content-column:\s*minmax\(0,\s*0\.825fr\)/,
   );
   assert.match(
     identityCss,
@@ -192,7 +192,7 @@ test("shared identity actions are filled, accessible, responsive controls", asyn
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-mark\s*\{[\s\S]*object-position:\s*calc\(100%\s*-\s*20px\)\s+center/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-mark\s*\{[\s\S]*object-position:\s*calc\(100%\s*-\s*20px\)\s+center[\s\S]*transform:\s*scale\(0\.8\)/,
   );
   assert.match(
     identityCss,
@@ -204,7 +204,7 @@ test("shared identity actions are filled, accessible, responsive controls", asyn
   );
   assert.match(
     identityCss,
-    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-lockup\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*1/,
+    /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-lockup\s*\{[\s\S]*grid-column:\s*2[\s\S]*grid-row:\s*1[\s\S]*align-self:\s*start[\s\S]*padding-top:\s*10px/,
   );
   assert.match(
     identityCss,
@@ -243,7 +243,10 @@ test("shared identity actions are filled, accessible, responsive controls", asyn
   assert.doesNotMatch(identityCss, /--band-mark-height/);
   assert.match(identityCss, /\.brand-band \.band-identity\s*\{[\s\S]*aspect-ratio:\s*var\(--band-logo-aspect\)/);
   assert.match(identityCss, /@media \(max-width:\s*768px\)[\s\S]*\.brand-band \.band-identity\s*\{[\s\S]*aspect-ratio:\s*4\s*\/\s*5/);
-  assert.match(identityCss, /\.brand-band \.band-mark\s*\{[\s\S]*position:\s*absolute[\s\S]*inset:\s*0[\s\S]*object-position:\s*right center/);
+  assert.match(identityCss, /\.brand-band \.band-mark\s*\{[\s\S]*position:\s*absolute[\s\S]*inset:\s*0[\s\S]*object-position:\s*center[\s\S]*translate:\s*var\(--band-logo-shift-x\)\s+0/);
+  assert.match(identityCss, /\.band-kicker:empty,\s*\.band-kicker:has\(> br:only-child\)\s*\{\s*display:\s*none/);
+  assert.match(identityCss, /\.band-kicker:empty \+ \.band-title,\s*\.band-kicker:has\(> br:only-child\) \+ \.band-title\s*\{\s*margin-top:\s*0/);
+  assert.match(identityCss, /\.brand-band:has\(\.band-kicker:empty\) \.band-identity,\s*\.brand-band:has\(\.band-kicker > br:only-child\) \.band-identity\s*\{\s*margin-top:\s*0/);
   assert.match(identityCss, /\.band-mark\s*\{[\s\S]*width:\s*100%[\s\S]*height:\s*100%[\s\S]*object-fit:\s*contain[\s\S]*opacity:\s*1/);
   assert.match(identityCss, /\.band-portrait\s*\{[\s\S]*aspect-ratio:\s*4\s*\/\s*5/);
   assert.match(identityCss, /\.brand-band--thoughtpuppet \.band-title\s*\{[\s\S]*font-size:\s*clamp\(16px,\s*10\.8cqi,\s*var\(--band-title-size\)\)[\s\S]*white-space:\s*nowrap/);
@@ -261,8 +264,10 @@ test("shared identity actions are filled, accessible, responsive controls", asyn
 
   assert.match(walkinCss, /\.walkin-section\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*0\.72fr\)\s*minmax\(240px,\s*0\.28fr\)/);
   assert.doesNotMatch(walkinCss, /\.walkin-section\s*\{[^}]*background\s*:/);
+  assert.match(walkinCss, /\.walkin-card:hover\s*\{[^}]*border-color:var\(--signal/);
+  assert.match(walkinCss, /\.walkin-section__title\s*\{[^}]*white-space:\s*nowrap/);
   assert.match(walkinCss, /\.walkin-section__hours\s*\{[\s\S]*border-top:\s*5px solid/);
-  assert.match(walkinCss, /@media \(max-width:\s*768px\)[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(walkinCss, /@media \(max-width:\s*768px\)[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)[\s\S]*padding:\s*24px 0[\s\S]*\.walkin-card\s*\{[\s\S]*border-color:\s*var\(--signal/);
 
   assert.match(guide, /css\/identity-bands\.css/);
   assert.match(guide, /Standalone availability/);

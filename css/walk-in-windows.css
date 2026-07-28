@@ -2,7 +2,7 @@
    Relies on the host page's :root tokens (--ring-faint, --accent, --signal, --text/--text-mute, --text-dim, --sans, --serif, --t-fast). */
 .walkin-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
 .walkin-card{border:5px solid var(--ring-faint);padding:18px;display:flex;flex-direction:column;gap:4px;transition:border-color var(--t-fast),background var(--t-fast);}
-.walkin-card:hover{border-color:var(--accent);background:rgba(252,184,103,0.045);}
+.walkin-card:hover{border-color:var(--signal,var(--venture-accent,var(--venture-color,var(--color-accent))));background:rgba(252,184,103,0.045);}
 .walkin-card-day{font-family:var(--sans);font-weight:900;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);}
 .walkin-card-date{font-family:var(--serif);font-size:12px;color:var(--text-dim,var(--dim));margin-top:-2px;}
 .walkin-card-time{font-family:var(--serif);font-size:18px;color:var(--text);margin-top:8px;}
@@ -29,8 +29,7 @@
 
 .walkin-section__title {
   margin-bottom: 22px;
-  color: var(--signal, var(--venture-accent, var(--venture-color, var(--color-accent))));
-  font-size: clamp(28px, 4vw, 56px);
+  white-space: nowrap;
 }
 
 .walkin-section__hours {
@@ -57,6 +56,10 @@
 @media (max-width: 768px) {
   .walkin-section {
     grid-template-columns: minmax(0, 1fr);
-    padding: 24px;
+    padding: 24px 0;
+  }
+
+  .walkin-card {
+    border-color: var(--signal, var(--venture-accent, var(--venture-color, var(--color-accent))));
   }
 }

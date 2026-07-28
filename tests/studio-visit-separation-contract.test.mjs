@@ -110,6 +110,12 @@ test("Studio UI and public booking pages keep visits under Art and room booking 
   assert.match(roomBooking, /const STUDIO_TYPE_IDS = \["studio_gathering", "studio_rental"\]/);
   assert.doesNotMatch(roomBooking, /<p class="offering-name">Open Studio Visit<\/p>/);
   assert.match(studioVisit, /const VISIT_TYPE_IDS = \["studio_visit"\]/);
+  assert.match(studioVisit, /--art:var\(--color-art\)/);
+  assert.match(studioVisit, /--art-bright:var\(--color-art-bright\)/);
+  assert.match(studioVisit, /\.nav-inquire\{[^}]*color:var\(--art-bright\)/);
+  assert.match(studioVisit, /\.block-kicker\{[^}]*color:var\(--art-bright\)/);
+  assert.match(studioVisit, /\.cal-next-tag,\.booking-next-tag,\.slot-item-num,\.time-add-btn\{color:var\(--art-bright\);\}/);
+  assert.doesNotMatch(studioVisit, /#0071EB|rgba\(0,113,235/i);
   assert.match(confirmation, /appointment\?\.bookingTypeId === "studio_visit"/);
   assert.match(confirmation, /confirmedBadge: "Open Studio Visit Confirmed"/);
   assert.match(confirmation, /confirmedTitle: "Your Open Studio Visit is reserved\."/);

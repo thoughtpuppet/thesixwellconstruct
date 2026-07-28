@@ -30,6 +30,7 @@
 
 .brand-band {
   --band-logo-aspect: 0.642857;
+  --band-logo-shift-x: 0px;
   --band-identity-column: minmax(160px, 0.2fr);
   --band-content-column: minmax(0, 0.8fr);
   --band-column-gap: 12px;
@@ -58,6 +59,7 @@
 
 .brand-band--tattoo-house {
   --band-logo-aspect: 0.5523;
+  --band-logo-shift-x: -4px;
   --band-identity-column: minmax(160px, 0.175fr);
   --band-content-column: minmax(0, 0.825fr);
 }
@@ -92,6 +94,11 @@
     margin-top: calc(var(--band-kicker-line-height) + var(--band-title-gap));
     aspect-ratio: auto;
   }
+
+  .brand-band:has(.band-kicker:empty) .band-identity,
+  .brand-band:has(.band-kicker > br:only-child) .band-identity {
+    margin-top: 0;
+  }
 }
 
 .brand-band .band-mark {
@@ -99,6 +106,7 @@
   inset: 0;
   max-width: none;
   object-position: center;
+  translate: var(--band-logo-shift-x) 0;
 }
 
 .band-identity-link {
@@ -172,6 +180,16 @@
   font-weight: 900;
   letter-spacing: -0.03em;
   line-height: 0.98;
+}
+
+.band-kicker:empty,
+.band-kicker:has(> br:only-child) {
+  display: none;
+}
+
+.band-kicker:empty + .band-title,
+.band-kicker:has(> br:only-child) + .band-title {
+  margin-top: 0;
 }
 
 .band-copy {
@@ -407,7 +425,8 @@
   .brand-band .band-lockup {
     grid-column: 2;
     grid-row: 1;
-    align-self: end;
+    align-self: start;
+    padding-top: 10px;
   }
 
   .brand-band .band-actions {
@@ -459,7 +478,7 @@
 
   .brand-band .band-mark {
     object-position: calc(100% - 20px) center;
-    transform: translateY(12px) scale(0.8);
+    transform: scale(0.8);
     transform-origin: calc(100% - 20px) center;
   }
 

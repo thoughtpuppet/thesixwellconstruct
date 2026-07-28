@@ -97,9 +97,6 @@
      `:where(body *){ line-height:1.42 !important }` in site-typography.css. */
   .section-body, .section-body *,
   .note-body, .note-body *,
-  .ledger-body, .ledger-body *,
-  .path-body, .path-body *,
-  .fit-body, .fit-body *,
   .fine-print, .fine-print *,
   .booking-cta-body, .booking-cta-body *,
   .booking-cta-note, .booking-cta-note * {
@@ -117,9 +114,6 @@
   @media (min-width:769px) {
     .section-body, .section-body *,
     .note-body, .note-body *,
-    .ledger-body, .ledger-body *,
-    .path-body, .path-body *,
-    .fit-body, .fit-body *,
     .fine-print, .fine-print *,
     .booking-cta-body, .booking-cta-body *,
     .booking-cta-note, .booking-cta-note *,
@@ -139,15 +133,20 @@
     letter-spacing:0.22em; text-transform:uppercase;
     color:var(--signal); opacity:0.6; margin-bottom:16px;
   }
+  .section-label:empty,
+  .section-label:has(> br:only-child) {
+    display:none;
+  }
   .section-title {
-    font-family:var(--sans); font-weight:900;
-    font-size:clamp(28px,4vw,52px);
-    letter-spacing:-0.03em; line-height:0.94;
-    color:var(--accent); margin-bottom:24px;
+    margin-bottom:24px;
   }
   .section-body {
     font-family:var(--serif); font-size:16px;
-    line-height:1.8; color:var(--text); max-width:620px;
+    line-height:1.8; color:var(--text-mute); max-width:620px;
+  }
+  .section-body--ghost,
+  .section-body--ghost * {
+    color:var(--text-ghost) !important;
   }
   .section-body + .section-body { margin-top:16px; }
   .editorial-field {
@@ -182,7 +181,7 @@
     font-weight:900; font-size:13px; letter-spacing:0.1em; text-transform:uppercase;
     color:var(--signal); margin-bottom:14px;
   }
-  .note-body,.ledger-body,.path-body,.fit-body,.booking-cta-body {
+  .note-body,.booking-cta-body {
     font-family:var(--serif); font-size:13px; line-height:1.75; color:var(--text-mute);
   }
   .ledger {
@@ -192,7 +191,7 @@
   .ledger-row:last-child { border-bottom:none; }
   .ledger-row {
     display:grid;
-    grid-template-columns:minmax(230px,0.44fr) minmax(0,1fr) minmax(160px,0.22fr);
+    grid-template-columns:minmax(230px,0.44fr) minmax(0,1fr) minmax(190px,0.22fr);
     gap:0;
     align-items:center;
     border-bottom:5px solid var(--ring-faint);
@@ -220,7 +219,7 @@
   }
   .ledger-title {
     font-weight:900;
-    font-size:clamp(34px,4.8vw,72px);
+    font-size:clamp(28px,3.6vw,48px);
     letter-spacing:-0.05em;
     line-height:0.88;
     color:var(--signal);
@@ -235,12 +234,13 @@
     color:var(--text-dim);
   }
   .ledger-action {
-    display:inline-block; margin-top:22px;
-    font-family:var(--sans); font-weight:700; font-size:10px;
-    letter-spacing:0.16em; text-transform:uppercase;
-    color:var(--text-dim);
+    display:inline-flex; align-items:center; align-self:flex-start; margin-top:22px;
+    font-family:var(--sans); font-weight:700; font-size:12px;
+    letter-spacing:0.16em; text-transform:uppercase; white-space:nowrap;
+    color:var(--color-accent);
     transition:color var(--t-fast);
   }
+  .ledger-action, .ledger-action * { color:var(--color-accent) !important; }
   .ledger-action:hover { color:var(--accent); }
   .trace-row {
     display:flex;
@@ -262,7 +262,7 @@
     border-color:var(--ring-soft);
   }
   .ritual {
-    margin-top:96px;
+    margin-top:0;
     display:grid;
     grid-template-columns:minmax(220px,0.38fr) minmax(0,1fr);
     gap:72px;
@@ -285,7 +285,7 @@
     bottom:16px;
     left:35px;
     width:1px;
-    background:var(--ring-faint);
+    background:var(--signal);
   }
   .path-step {
     position:relative;
@@ -303,7 +303,7 @@
     display:grid;
     place-items:center;
     background:var(--bg);
-    border:5px solid var(--ring-faint);
+    border:5px solid var(--signal);
     color:var(--signal);
     font-family:var(--serif);
     font-size:22px;
@@ -322,7 +322,7 @@
     display:grid;
     grid-template-columns:minmax(0,1fr);
     gap:0;
-    padding:42px 0;
+    padding:0;
   }
   .rate-list,.fit-list {
     list-style:none;
@@ -368,20 +368,8 @@
     color:var(--accent);
     margin-bottom:8px;
   }
-  .fine-print {
-    margin-top:24px; font-family:var(--serif); font-size:12px;
-    letter-spacing:0.04em; color:var(--text-dim); line-height:1.7; max-width:600px;
-  }
-  .session-offerings { margin-top:48px; max-width:900px; }
-  .session-offerings-title {
-    margin:8px 0 24px;
-    color:var(--text);
-    font-family:var(--sans);
-    font-size:clamp(26px,4vw,42px);
-    font-weight:900;
-    letter-spacing:-0.03em;
-  }
-  .session-list { list-style:none; display:grid; }
+  .session-list { list-style:none; display:grid; max-width:900px; }
+  .session-offerings > .section-body { margin-top:24px; }
   .session-list > li {
     display:grid;
     grid-template-columns:minmax(150px,0.28fr) minmax(0,1fr);
@@ -390,7 +378,6 @@
     padding:22px 0;
     border-bottom:5px solid rgba(252,184,103,0.14);
   }
-  .session-list > li:first-child { border-top:5px solid rgba(252,184,103,0.14); }
   .session-duration {
     color:var(--type-hero-color, var(--venture-accent));
     font-family:var(--sans);
@@ -400,7 +387,7 @@
     line-height:0.95 !important;
   }
   .session-description,
-  .session-policy,
+  .session-policy { margin:0; }
   .session-deposit { margin:0; color:var(--text-mute); font-family:var(--serif); font-size:13px; line-height:1.7; }
   .session-policy { margin-top:12px; }
   .session-deposit { margin-top:10px; color:var(--text-dim); }
@@ -465,7 +452,7 @@
     main { padding:var(--s7) var(--s5) var(--s6); }
     .editorial-field,.ritual,.price-fit { grid-template-columns:1fr; gap:44px; }
     .ritual-intro { position:static; }
-    .ledger-row { grid-template-columns:minmax(210px,0.42fr) minmax(0,1fr) minmax(150px,0.24fr); }
+    .ledger-row { grid-template-columns:minmax(210px,0.42fr) minmax(0,1fr) minmax(180px,0.24fr); }
     .ledger-status,.ledger-action { grid-column:auto; }
     footer.bottom { padding:48px var(--s5); }
   }
@@ -602,33 +589,33 @@
     <section class="section" id="booking-process">
       <div class="ritual">
         <div class="ritual-intro">
-          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-process-label"><span style="font-size: 14px"><span style="color: var(--color-body, #FBD19D)">How It Works</span></span></p>
-          <h2 class="section-title" data-copy-id="tattoos-process-title">the review process:</h2>
-          <p class="section-body" data-copy-id="tattoos-process-body"><span style="color: rgba(252, 184, 103, 0.64)">Every path begins with review. Flash claims, custom inquiries, and Special Projects are reviewed then once approved, a token booking link is sent.</span></p>
+          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-process-label"><br></p>
+          <h2 class="section-title" data-copy-id="tattoos-process-title">the booking process</h2>
+          <p class="section-body" data-copy-id="tattoos-process-body">Every path begins with a review process. Flash claims, custom inquiries, and Special Projects are reviewed, then once approved, a&nbsp; booking link is sent.</p>
         </div>
         <div class="path-list" aria-label="Booking process">
           <article class="path-step">
             <span class="path-mark">I</span>
-            <div><h3 class="path-title" data-copy-id="tattoos-process-step-1-title">Choose a COLLABORATION path</h3><p class="path-body" data-copy-id="tattoos-process-step-1-body"><span style="color: rgba(252, 184, 103, 0.64)">Claim available flash, submit a custom inquiry, build your own design online or in-person, or apply to participate in a&nbsp; Special Project.</span></p></div>
+            <div><h3 class="path-title" data-copy-id="tattoos-process-step-1-title">Choose a COLLABORATION path</h3><p class="section-body path-body" data-copy-id="tattoos-process-step-1-body">Claim available flash, submit a custom inquiry, build your own design online or in-person, or apply to participate in a&nbsp; Special Project.</p></div>
           </article>
           <article class="path-step">
             <span class="path-mark">II</span>
-            <div><h3 class="path-title" data-copy-id="tattoos-process-step-2-title">Project review</h3><p class="path-body" data-copy-id="tattoos-process-step-2-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="color: rgba(252, 184, 103, 0.64)">The request is reviewed for placement, scale, timing, concept, and feasibility.</span></span></p></div>
+            <div><h3 class="path-title" data-copy-id="tattoos-process-step-2-title">Project review</h3><p class="section-body path-body" data-copy-id="tattoos-process-step-2-body">The request is reviewed for placement, scale, timing, concept, and feasibility.</p></div>
           </article>
           <article class="path-step">
             <span class="path-mark">III</span>
-            <div><h3 class="path-title" data-copy-id="tattoos-process-step-3-title">Private booking</h3><p class="path-body" data-copy-id="tattoos-process-step-3-body"><span style="color: rgba(252, 184, 103, 0.64)">Approved clients receive a token booking link for scheduling and deposit.</span></p></div>
+            <div><h3 class="path-title" data-copy-id="tattoos-process-step-3-title">Private booking</h3><p class="section-body path-body" data-copy-id="tattoos-process-step-3-body">Approved clients receive a booking link with a proposed session plan to schedule their session(s) and pay the deposit.</p></div>
           </article>
           <article class="path-step">
             <span class="path-mark">IV</span>
-            <div><h3 class="path-title" data-copy-id="tattoos-process-step-4-title">Session</h3><p class="path-body" data-copy-id="tattoos-process-step-4-body"><span style="color: rgba(252, 184, 103, 0.64)">The design is finalized and the work begins.</span></p></div>
+            <div><h3 class="path-title" data-copy-id="tattoos-process-step-4-title">Session</h3><p class="section-body path-body" data-copy-id="tattoos-process-step-4-body">The design is finalized and the work begins.</p></div>
           </article>
         </div>
       </div>
     </section>
 
     <section class="section" id="ways-to-work">
-      <h2 class="section-title" data-copy-id="tattoos-ways-title">Ways to Collaborate:</h2>
+      <h2 class="section-title" data-copy-id="tattoos-ways-title">Ways to Collaborate</h2>
       <div class="ledger" aria-label="Tattoo entry paths">
         <article class="ledger-row is-primary">
           <div>
@@ -636,7 +623,7 @@
             <h3 class="ledger-title" data-copy-id="tattoos-flash-ledger-title">Flash</h3>
           </div>
           <div>
-            <p class="ledger-body" data-copy-id="tattoos-flash-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 18px"><span style="font-size: 16px">Pre-drawn designs. <br>Open a flash item, learn about the design, then claim it if it resonates.</span></span></span></p>
+            <p class="section-body ledger-body" data-copy-id="tattoos-flash-ledger-body">Pre-drawn designs. <br>Open a flash item, learn about the design, then claim it if it resonates.</p>
           </div>
           <div>
             <p class="ledger-status" style="color: var(--color-body, #FBD19D); opacity: 1;"><br></p>
@@ -649,10 +636,10 @@
             <h3 class="ledger-title" data-copy-id="tattoos-custom-ledger-title">Custom</h3>
           </div>
           <div>
-            <p class="ledger-body" data-copy-id="tattoos-custom-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 16px">Original work built around your concept, story, placement, and our collaborative vision of the project.</span></span></p>
+            <p class="section-body ledger-body" data-copy-id="tattoos-custom-ledger-body">Original work built around your concept, story, placement, and our collaborative vision of the project.</p>
           </div>
           <div>
-            <p class="ledger-status" data-copy-id="tattoos-custom-ledger-status">selective review</p>
+            <p class="ledger-status" data-copy-id="tattoos-custom-ledger-status"><br></p>
             <a class="ledger-action" href="/tattoos/inquire/custom/"><span style="color: var(--color-body, #FBD19D);">Start inquiry →</span></a>
           </div>
         </article>
@@ -662,7 +649,7 @@
             <h3 class="ledger-title" data-copy-id="tattoos-build-ledger-title">Build Your Own</h3>
           </div>
           <div>
-            <p class="ledger-body" data-copy-id="tattoos-build-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 16px">Select symbols, marks, and elements from my visual language to build your own concept. Your choices form a brief that goes into review where i approve and create the design.&nbsp;</span></span><span style="color: rgba(252, 184, 103, 0.64); font-size: 16px">or design your own maze tattoo using the maze builder</span></p>
+            <p class="section-body ledger-body" data-copy-id="tattoos-build-ledger-body">Select symbols, marks, and elements from my visual language to build your own concept. Your choices form a brief that goes into review where i approve and create the design.&nbsp;or design your own maze tattoo using the maze builder</p>
           </div>
           <div>
             <p class="ledger-status" data-copy-id="tattoos-build-ledger-status"><br></p>
@@ -675,10 +662,10 @@
             <h3 class="ledger-title" data-copy-id="tattoos-special-ledger-title">Special Projects</h3>
           </div>
           <div>
-            <p class="ledger-body" data-copy-id="tattoos-special-ledger-body"><span style="color: rgba(252, 184, 103, 0.64)"><span style="font-size: 16px">Long-form symbolic, communal, collaborative, or experimental work that needs deeper concept, trust, time, or scale.</span></span></p>
+            <p class="section-body ledger-body" data-copy-id="tattoos-special-ledger-body">Long-form symbolic, communal, collaborative, or experimental work that needs deeper concept, trust, time, or scale.</p>
           </div>
           <div>
-            <p class="ledger-status" id="specialProjectsStatus" data-copy-id="tattoos-special-ledger-status" aria-live="polite">checking current calls</p>
+            <p class="ledger-status" id="specialProjectsStatus" data-copy-id="tattoos-special-ledger-status" aria-live="polite"><br></p>
             <a class="ledger-action" href="/tattoos/special-projects/"><span style="color: rgb(252, 184, 103);"><span style="color: var(--color-body, #FBD19D);">View calls →</span></span></a>
           </div>
         </article>
@@ -688,36 +675,39 @@
     <section class="section" id="project-fit">
       <div class="price-fit">
         <div>
-          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-rates-label"><span style="color: var(--color-body, #FBD19D)"><span style="font-size: 14px">Rates</span></span></p>
-          <h2 class="section-title" data-copy-id="tattoos-rates-title">Rates &amp; Sessions</h2>
+          <p class="section-label" style="opacity: 1;" data-copy-id="tattoos-rates-label"><br></p>
+          <h2 class="section-title" data-copy-id="tattoos-rates-title">Hourly Rates</h2>
           <ul class="rate-list" id="tattooRateList" aria-live="polite">
-            <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-flash-body"><span style="color: rgba(252, 184, 103, 0.64)">Original flash pieces are offered at a lower rate.</span></p></div></li>
-            <li data-rate-service="custom"><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom &amp; Story-Driven &amp; Built Sessions</p><p class="fit-body" data-copy-id="tattoos-rate-custom-body"><span style="color: rgba(252, 184, 103, 0.64)">Custom work, complex symbolic compositions, and narrative pieces. Build your own concept/maze designs are also subjected to this rate.</span></p></div></li>
-            <li data-rate-service="special"><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="fit-body" data-copy-id="tattoos-rate-special-body"><span style="color: rgba(252, 184, 103, 0.64)">communal, collaborative or experimental work. Starting rate is to incentivize participation and also reflects the appreciation of the extended commitment that is required and the possible depth of these sessions.</span></p></div></li>
+            <li data-rate-service="flash"><span class="rate-figure">$150<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-flash-label">Flash Sessions</p><p class="section-body fit-body" data-copy-id="tattoos-rate-flash-body">Original flash pieces are offered at a lower rate.</p></div></li>
+            <li data-rate-service="custom"><span class="rate-figure">$200<span class="rate-unit">/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-custom-label">Custom &amp; Story-Driven &amp; Built Sessions</p><p class="section-body fit-body" data-copy-id="tattoos-rate-custom-body">Custom work, complex symbolic compositions, and narrative pieces. Build your own concept/maze designs are also subjected to this rate.</p></div></li>
+            <li data-rate-service="special"><span class="rate-figure">$100<span class="rate-unit">+/hr</span></span><div><p class="rate-label" data-copy-id="tattoos-rate-special-label">Special Projects</p><p class="section-body fit-body" data-copy-id="tattoos-rate-special-body">communal, collaborative or experimental work. Starting rate is to incentivize participation and also reflects the appreciation of the extended commitment that is required and the possible depth of these sessions.</p></div></li>
           </ul>
-          <div class="session-offerings" aria-labelledby="sessionOfferingsTitle">
-            <p class="section-label">Session Options</p>
-            <h3 class="session-offerings-title" id="sessionOfferingsTitle">Session Lengths</h3>
-            <ul class="session-list" id="tattooSessionList" aria-live="polite">
+        </div>
+      </div>
+    </section>
+
+    <section class="section session-offerings" id="session-lengths" aria-labelledby="sessionOfferingsTitle">
+      <p class="section-label"><br></p>
+      <h2 class="section-title" id="sessionOfferingsTitle">Session Lengths</h2>
+      <ul class="session-list" id="tattooSessionList" aria-live="polite">
               <li data-booking-type="tattoo_quarter">
                 <span class="session-duration">1h 30m</span>
-                <div><p class="rate-label session-name">Quarter Day Session</p><p class="session-description">Approx. 1.5 hours for small approved projects, flash, or focused work.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$50</strong></p></div>
+                <div><p class="rate-label session-name">Quarter Day Session</p><p class="section-body session-description">Approx. 1.5 hours for small approved projects, flash, or focused work.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$50</strong></p></div>
               </li>
               <li data-booking-type="tattoo_half">
                 <span class="session-duration">3 hours</span>
-                <div><p class="rate-label session-name">Half Day Session</p><p class="session-description">Approx. 3 hours for medium approved projects or developed symbolic work.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$100</strong></p></div>
+                <div><p class="rate-label session-name">Half Day Session</p><p class="section-body session-description">Approx. 3 hours for medium approved projects or developed symbolic work.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$100</strong></p></div>
               </li>
               <li data-booking-type="tattoo_full">
                 <span class="session-duration">6 hours</span>
-                <div><p class="rate-label session-name">Full Day Session</p><p class="session-description">Up to 6 hours for large approved work, special projects, or deeper sessions.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$200</strong></p></div>
+                <div><p class="rate-label session-name">Full Day Session</p><p class="section-body session-description">Up to 6 hours for large approved work, special projects, or deeper sessions.</p><p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$200</strong></p></div>
               </li>
               <li data-booking-type="tattoo_extended">
                 <span class="session-duration">8–10 hours</span>
                 <div>
                   <p class="rate-label session-name">Extended Day Session</p>
-                  <p class="session-description">Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.</p>
-                  <p class="session-policy"><br></p>
-                  <p class="session-policy">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
+                  <p class="section-body session-description">Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.</p>
+                  <p class="section-body session-policy">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
                   <p class="session-deposit">Booking deposit: <strong class="session-deposit-value">$350</strong></p>
                   <div>
                     <p class="rate-label">10-hour Custom example</p>
@@ -731,15 +721,12 @@
                   </div>
                 </div>
               </li>
-            </ul>
-          </div>
-          <p class="fine-print" data-copy-id="tattoos-rates-fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
-        </div>
-      </div>
+      </ul>
+      <p class="section-body section-body--ghost" data-copy-id="tattoos-rates-fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
     </section>
     <div class="booking-cta">
       <div class="booking-cta-left">
-        <p class="booking-cta-label" data-copy-id="tattoos-cta-label">Ready to Begin</p>
+        <p class="booking-cta-label" data-copy-id="tattoos-cta-label">Ready to Begin?</p>
         <h2 class="booking-cta-title" data-copy-id="tattoos-cta-title">Choose a Path.</h2>
         <p class="booking-cta-body" data-copy-id="tattoos-cta-body">Submit a project, book planning time, or check a current walk-in window. The chooser explains which path fits before you start.</p>
       </div>
@@ -819,7 +806,7 @@
             label.className = "rate-label";
             label.textContent = publicCopy.label;
             var body = document.createElement("p");
-            body.className = "fit-body";
+            body.className = "section-body fit-body";
             body.textContent = publicCopy.body;
             copy.append(label, body);
             item.append(rate, copy);

@@ -88,6 +88,18 @@ body[data-venture="tattooing"] {
   line-height: 0.98 !important;
 }
 
+/* Shared section-heading role. Tokens own the values; this layer applies
+   their active responsive state across public surfaces. Page CSS may still
+   provide layout spacing or intentionally override the role through tokens. */
+.section-title {
+  color: var(--type-section-color, var(--color-body));
+  font-family: var(--type-section-font, var(--font-display, Inter, Arial, sans-serif));
+  font-size: var(--type-section-size-active, var(--type-section-size, clamp(34px, 6vw, 82px)));
+  font-weight: var(--type-section-weight, 900);
+  font-style: var(--type-section-style, normal);
+  text-transform: var(--type-section-transform, uppercase);
+}
+
 :where(
   .wordmark,
   .site-wordmark,
