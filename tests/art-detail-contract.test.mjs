@@ -139,7 +139,7 @@ test("all painting detail pages use the shared shell and managed hooks", () => {
 test("shared painting CSS preserves intrinsic media and every managed state", () => {
   const css = readFileSync(join(ROOT, "css", "painting-detail.css"), "utf8");
   assert.match(css, /--painting-frame-max-width:\s*560px/);
-  assert.match(css, /\.painting-detail-page \.site-hero--supporting\s*\{[^}]*--type-supporting-hero-size:\s*clamp\(38px,\s*8vw,\s*84px\)/s);
+  assert.match(css, /\.painting-detail-page \.site-hero--supporting\s*\{[^}]*--type-supporting-hero-size:\s*clamp\(38px,\s*7vw,\s*64px\)[^}]*--type-supporting-hero-size-tablet:\s*clamp\(36px,\s*7vw,\s*64px\)/s);
   assert.match(css, /\.painting-frame img\s*\{[\s\S]*max-height:/);
   assert.doesNotMatch(css, /aspect-ratio:\s*4\s*\/\s*5/);
   assert.match(css, /\.avail-row\s*\{[\s\S]*border-bottom:\s*5px/);

@@ -179,7 +179,8 @@
 }
 
 .painting-detail-page .site-hero--supporting {
-  --type-supporting-hero-size: clamp(38px, 8vw, 84px);
+  --type-supporting-hero-size: clamp(38px, 7vw, 64px);
+  --type-supporting-hero-size-tablet: clamp(36px, 7vw, 64px);
 }
 
 .painting-detail-page .statement-block,
