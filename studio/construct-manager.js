@@ -672,7 +672,13 @@
       if(!form.elements.media_privacy){
         const presentation=form.elements.public_presentation?.closest("label");
         presentation?.insertAdjacentHTML("afterend",`<label>Shared media privacy<select name="media_privacy">${[["internal","Internal"],["public","Public"],["unlisted","Unlisted"],["private","Private"]].map(([value,label])=>option(value,label,privacy)).join("")}</select></label>`);
-        form.querySelector(".cm-form-grid")?.insertAdjacentHTML("beforeend",'<label class="cm-check-field wide"><input type="checkbox" name="update_media_metadata">Update this shared media record (affects every attachment)</label>');
+        form.elements.media_privacy?.closest("label")?.insertAdjacentHTML("afterend",'<label class="cm-check-field wide"><input type="checkbox" name="update_media_metadata"><span>Save changes to this shared media record <span class="cm-meta">(affects every attachment)</span></span></label>');
+        const markMediaChanged=event=>{
+          if(!["alt_text","public_presentation","media_privacy","consent_status","transcript_status","transcript_language","transcript"].includes(event.target?.name))return;
+          if(form.elements.update_media_metadata)form.elements.update_media_metadata.checked=true;
+        };
+        form.addEventListener("input",markMediaChanged);
+        form.addEventListener("change",markMediaChanged);
       }
     })
   }
@@ -711,7 +717,9 @@
   function serializeMaterialForm(form,entityId){
     const formData=new FormData(form),payload={entity_id:entityId,dossier_entity_id:entityId,material_type:String(formData.get("material_type")||"note"),role:String(formData.get("role")||"notebook").trim()||"notebook",process_phase:String(formData.get("process_phase")||"").trim(),title:String(formData.get("title")||"").trim(),caption:String(formData.get("caption")||"").trim(),body:String(formData.get("body")||"").trim(),media_id:String(formData.get("media_id")||"").trim()||null,date_precision:String(formData.get("date_precision")||"undated"),date_label:String(formData.get("date_label")||"").trim(),occurred_at:String(formData.get("occurred_at")||"")||null,ended_at:String(formData.get("ended_at")||"")||null,visibility:String(formData.get("visibility")||"internal"),state:String(formData.get("state")||"draft"),sort_order:Number(formData.get("sort_order"))||0,origin_thread_ids:formData.getAll("origin_thread_ids").map(String)},mediaPayload={state:"active",alt_text:String(formData.get("alt_text")||"").trim(),privacy:String(formData.get("media_privacy")||"internal"),consent_status:String(formData.get("consent_status")||"not-required"),transcript_status:String(formData.get("transcript_status")||"not-requested"),transcript_language:String(formData.get("transcript_language")||"en").trim(),transcript:String(formData.get("transcript")||"").trim(),public_title:String(formData.get("title")||"").trim(),public_description:String(formData.get("caption")||"").trim(),public_presentation:String(formData.get("public_presentation")||"inline")};
     if(payload.state==="published"&&(payload.visibility!=="public"||!["not-required","granted"].includes(mediaPayload.consent_status)))throw new Error("Public material must use Public visibility and consent must be Not required or Granted.");
-    const file=form.querySelector('[name="material_file"]')?.files?.[0]||null;if(!form.dataset.id&&!file&&!payload.media_id&&!payload.body)throw new Error("Attach a file, choose existing media, or add inline text.");return{payload,mediaPayload,file,updateMediaMetadata:formData.has("update_media_metadata")}
+    const publishingAttachedMedia=Boolean(payload.media_id&&payload.state==="published"&&payload.visibility==="public");
+    if(publishingAttachedMedia&&(mediaPayload.privacy!=="public"||mediaPayload.public_presentation!=="inline"))throw new Error("Published attached media must use Public shared-media privacy and Show inline presentation.");
+    const file=form.querySelector('[name="material_file"]')?.files?.[0]||null;if(!form.dataset.id&&!file&&!payload.media_id&&!payload.body)throw new Error("Attach a file, choose existing media, or add inline text.");return{payload,mediaPayload,file,updateMediaMetadata:formData.has("update_media_metadata")||publishingAttachedMedia}
   }
 
   async function uploadArchiveMaterialFileLegacy(file,mediaPayload,output){

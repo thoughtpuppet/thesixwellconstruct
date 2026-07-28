@@ -207,7 +207,7 @@
     app.innerHTML = `
       <section class="archive-hero site-hero ${collectionsView ? "site-hero--supporting" : "site-hero--landing"}" aria-labelledby="archive-title">
         <div><span class="archive-kicker">Public living archive</span><h1 class="hero-title" id="archive-title">${collectionsView ? "Collections." : "Archive."}</h1></div>
-        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p></div>
+        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a></div>'}</div>
       </section>
       <section class="archive-origin-thread" data-origin-thread hidden></section>
       <form class="archive-search-form archive-search-panel" role="search" data-archive-search>

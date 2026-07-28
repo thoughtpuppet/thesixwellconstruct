@@ -28,6 +28,7 @@ const routes = [
   { route: "/about/ways-in/", file: "about/ways-in/index.html", variant: "supporting", descriptor: true },
 
   { route: "/archive/about/", file: "archive/about/index.html", variant: "supporting", descriptor: true },
+  { route: "/archive/guide/", file: "archive/guide/index.html", variant: "supporting", descriptor: true },
   { route: "/archive/art/", file: "archive/art/index.html", variant: "supporting", descriptor: true },
   { route: "/archive/collections/", file: "archive/collections/index.html", heroSource: "js/archive-public.js", variant: "supporting", descriptor: true, dynamic: true },
   { route: "/archive/events/", file: "archive/events/index.html", variant: "supporting", descriptor: true },

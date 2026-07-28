@@ -61,6 +61,14 @@ function request(path, { method = "GET", body, admin = false } = {}) {
   });
 }
 
+test("Studio saves attached media eligibility before publishing an Archive material", () => {
+  const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
+  assert.match(studio, /const publishingAttachedMedia=Boolean\(payload\.media_id&&payload\.state==="published"&&payload\.visibility==="public"\)/);
+  assert.match(studio, /updateMediaMetadata:formData\.has\("update_media_metadata"\)\|\|publishingAttachedMedia/);
+  assert.match(studio, /else if\(payload\.media_id&&updateMediaMetadata\)await archiveJson\(archiveEndpoints\.mediaItem\(payload\.media_id\),"PATCH",mediaPayload\);[\s\S]*await archiveJson\(id\?archiveEndpoints\.material/);
+  assert.match(studio, /form\.elements\.media_privacy\?\.closest\("label"\)\?\.insertAdjacentHTML\("afterend"/);
+});
+
 test("Lost Marbles origin thread returns its curated records and only approved evidence", async () => {
   const db = database();
   db.exec(`INSERT INTO archive_materials(id,dossier_entity_id,role,material_type,title,body,visibility,state,created_at,updated_at)

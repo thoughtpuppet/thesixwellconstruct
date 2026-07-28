@@ -1,0 +1,460 @@
+.archive-guide {
+  --guide-grid-gap: clamp(1.5rem, 4vw, 4rem);
+}
+
+.archive-guide-hero {
+  margin-bottom: 0;
+}
+
+.archive-guide-notice {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.35fr) minmax(0, 1fr);
+  gap: var(--guide-grid-gap);
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: var(--archive-rule) solid var(--archive-signal);
+  border-top: 0;
+  background: var(--archive-panel);
+}
+
+.archive-guide-notice h2,
+.archive-guide-closing h2 {
+  margin: 0;
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.archive-guide-notice p,
+.archive-guide-closing p {
+  max-width: 50rem;
+  margin: 0.8rem 0 0;
+  color: var(--archive-muted);
+  line-height: 1.65;
+}
+
+.archive-guide-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--archive-record-gap);
+  padding-block: clamp(1.5rem, 4vw, 3rem);
+  border-bottom: var(--archive-rule) solid var(--archive-faint);
+}
+
+.archive-guide-nav a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  min-height: 3.5rem;
+  padding: 0.85rem;
+  border: var(--archive-rule) solid var(--archive-faint);
+  color: var(--archive-muted);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.archive-guide-nav a:hover,
+.archive-guide-nav a:focus-visible {
+  border-color: var(--archive-signal);
+  background: var(--archive-panel-raised);
+  color: var(--archive-ink);
+}
+
+.archive-guide-nav span {
+  color: var(--archive-signal-soft);
+}
+
+.archive-guide-section {
+  display: grid;
+  grid-template-columns: minmax(13rem, 0.38fr) minmax(0, 1fr);
+  gap: var(--guide-grid-gap);
+  scroll-margin-top: 2rem;
+  padding-block: clamp(3rem, 7vw, 6rem);
+  border-bottom: var(--archive-rule) solid var(--archive-faint);
+}
+
+.archive-guide-section-head {
+  align-self: start;
+  position: sticky;
+  top: 1rem;
+}
+
+.archive-guide-section-head .archive-section-title {
+  margin-top: 0.7rem;
+  font-size: clamp(1.8rem, 4vw, 3.5rem);
+  line-height: 0.94;
+  text-transform: uppercase;
+}
+
+.archive-guide-section-body {
+  display: grid;
+  gap: clamp(1.5rem, 4vw, 3rem);
+}
+
+.archive-guide-lede {
+  max-width: 52rem;
+  margin: 0;
+  color: var(--archive-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.15rem, 2.25vw, 1.65rem);
+  line-height: 1.55;
+}
+
+.archive-guide-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--archive-record-gap);
+}
+
+.archive-guide-card-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.archive-guide-card {
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  border: var(--archive-rule) solid var(--archive-line);
+  background: var(--archive-panel);
+}
+
+.archive-guide-card h3 {
+  margin: 1.25rem 0 0.75rem;
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.archive-guide-card p {
+  margin: 0;
+  color: var(--archive-muted);
+  line-height: 1.6;
+}
+
+.archive-guide-sequence {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border-top: var(--archive-rule) solid var(--archive-line);
+  list-style: none;
+}
+
+.archive-guide-sequence li {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 1rem;
+  padding-block: 1.25rem;
+  border-bottom: var(--archive-rule) solid var(--archive-line);
+}
+
+.archive-guide-sequence > li > span {
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.archive-guide-sequence strong {
+  display: block;
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 1rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.archive-guide-sequence p {
+  margin: 0.45rem 0 0;
+  color: var(--archive-muted);
+  line-height: 1.55;
+}
+
+.archive-guide-term-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--archive-record-gap);
+  margin: 0;
+}
+
+.archive-guide-term-grid > div {
+  min-width: 0;
+  padding: 1.15rem;
+  border: var(--archive-rule) solid var(--archive-line);
+  background: var(--archive-panel);
+}
+
+.archive-guide-term-grid dt {
+  color: var(--archive-ink);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.archive-guide-term-grid dd {
+  margin: 0.65rem 0 0;
+  color: var(--archive-muted);
+  line-height: 1.55;
+}
+
+.archive-guide-status,
+.archive-guide-principle {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1rem 1.15rem;
+  border-left: var(--archive-rule) solid var(--archive-signal);
+  background: var(--archive-panel);
+}
+
+.archive-guide-status p,
+.archive-guide-principle p {
+  max-width: 52rem;
+  margin: 0;
+  color: var(--archive-muted);
+  line-height: 1.6;
+}
+
+.archive-catalogue-example {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  border: var(--archive-rule) solid var(--archive-line);
+  background: var(--archive-paper);
+}
+
+.archive-catalogue-number {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  color: var(--archive-ink);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: clamp(2.4rem, 8vw, 6.5rem);
+  font-weight: 900;
+  letter-spacing: -0.065em;
+  line-height: 0.88;
+}
+
+.catalogue-version {
+  color: var(--archive-signal-soft);
+}
+
+.catalogue-state {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+}
+
+.catalogue-mark {
+  color: var(--archive-muted);
+}
+
+.archive-catalogue-example figcaption {
+  color: var(--archive-muted);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.archive-catalogue-key {
+  display: grid;
+  margin: 0;
+  border-top: var(--archive-rule) solid var(--archive-line);
+}
+
+.archive-catalogue-key > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.3fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding-block: 1.1rem;
+  border-bottom: var(--archive-rule) solid var(--archive-line);
+}
+
+.archive-catalogue-key dt,
+.archive-catalogue-key dd {
+  margin: 0;
+}
+
+.archive-catalogue-key code {
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.archive-catalogue-key dd {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.archive-catalogue-key strong {
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.archive-catalogue-key span {
+  color: var(--archive-muted);
+  line-height: 1.55;
+}
+
+.archive-lineage-example {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.35fr) var(--archive-rule) minmax(0, 1fr);
+  gap: clamp(1rem, 3vw, 2rem);
+  align-items: stretch;
+}
+
+.archive-lineage-source,
+.archive-lineage-branches > div {
+  display: grid;
+  align-content: center;
+  gap: 0.75rem;
+  min-height: 7rem;
+  padding: 1rem;
+  border: var(--archive-rule) solid var(--archive-line);
+  background: var(--archive-panel);
+}
+
+.archive-lineage-source {
+  border-color: var(--archive-signal);
+}
+
+.archive-lineage-rail {
+  width: var(--archive-rule);
+  background: var(--archive-signal);
+}
+
+.archive-lineage-branches {
+  display: grid;
+  gap: var(--archive-record-gap);
+}
+
+.archive-lineage-example strong {
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 1rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.archive-access-table-wrap {
+  overflow-x: auto;
+}
+
+.archive-access-table {
+  width: 100%;
+  min-width: 42rem;
+  border-collapse: collapse;
+  border: var(--archive-rule) solid var(--archive-line);
+}
+
+.archive-access-table th,
+.archive-access-table td {
+  padding: 1rem;
+  border-bottom: var(--archive-rule) solid var(--archive-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.archive-access-table thead th {
+  background: var(--archive-panel-raised);
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.archive-access-table tbody th {
+  color: var(--archive-ink);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.archive-access-table td {
+  color: var(--archive-muted);
+  line-height: 1.5;
+}
+
+.archive-guide-closing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.65fr);
+  gap: var(--guide-grid-gap);
+  align-items: end;
+  margin-top: clamp(3rem, 7vw, 6rem);
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  border: var(--archive-rule) solid var(--archive-signal);
+  background: var(--archive-panel);
+}
+
+.archive-guide-closing .archive-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.25rem;
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .archive-guide-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .archive-guide-section {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-guide-section-head {
+    position: static;
+  }
+
+  .archive-guide-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-guide-card-grid--two,
+  .archive-guide-term-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .archive-guide-notice,
+  .archive-guide-closing {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-guide-nav,
+  .archive-guide-card-grid--two,
+  .archive-guide-term-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-catalogue-key > div {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .archive-lineage-example {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-lineage-rail {
+    width: 100%;
+    height: var(--archive-rule);
+  }
+}
