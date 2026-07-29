@@ -266,6 +266,31 @@
   text-transform: uppercase;
 }
 
+.archive-catalogue-flow {
+  overflow-x: auto;
+  margin: 0.7rem 0 0;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: var(--archive-rule) solid var(--archive-line);
+  background: var(--archive-panel);
+  color: var(--archive-ink);
+  font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(0.78rem, 1.8vw, 1rem);
+  font-weight: 700;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+.archive-catalogue-flow--lineage {
+  border-color: var(--archive-signal);
+}
+
+.archive-guide-supporting {
+  max-width: 52rem;
+  margin: 0.85rem 0 0;
+  color: var(--archive-muted);
+  line-height: 1.6;
+}
+
 .archive-catalogue-key {
   display: grid;
   margin: 0;
@@ -357,6 +382,15 @@
   min-width: 42rem;
   border-collapse: collapse;
   border: var(--archive-rule) solid var(--archive-line);
+}
+
+.archive-identifier-key {
+  min-width: 48rem;
+}
+
+.archive-identifier-key th:first-child,
+.archive-identifier-key td:last-child {
+  white-space: nowrap;
 }
 
 .archive-access-table th,

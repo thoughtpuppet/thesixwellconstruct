@@ -1,0 +1,114 @@
+.cm-catalogue-preview {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 5px solid var(--accent);
+  background: var(--bg);
+}
+
+.cm-catalogue-preview strong {
+  color: var(--text);
+  font: 900 clamp(1.35rem, 3vw, 2.4rem)/1 var(--sans);
+  letter-spacing: -0.035em;
+}
+
+.cm-catalogue-preview small {
+  color: var(--dim);
+  font: 800 10px/1.5 var(--sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cm-context-groups,
+.cm-context-group,
+.cm-context-group > div,
+.cm-evolution-list,
+.cm-evolution-version,
+.cm-evolution-states {
+  display: grid;
+  gap: 14px;
+}
+
+.cm-context-groups {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cm-context-group {
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 5px solid var(--ring-faint);
+}
+
+.cm-context-group legend {
+  padding-inline: 7px;
+  color: var(--accent);
+  font: 900 9px/1 var(--sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.cm-context-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 5px solid var(--ring-faint);
+  background: var(--bg);
+}
+
+.cm-evolution-version {
+  padding: 16px;
+  border: 5px solid var(--ring-faint);
+  background: var(--bg);
+}
+
+.cm-evolution-version h4,
+.cm-evolution-state h5 {
+  margin: 5px 0 0;
+  font-family: var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cm-evolution-state {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.75fr);
+  gap: 14px;
+  padding: 14px;
+  border-left: 5px solid var(--accent);
+  background: var(--panel);
+}
+
+.cm-evolution-state p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font: 12px/1.65 var(--sans);
+}
+
+.cm-material-catalogue-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border: 5px solid var(--ring-faint);
+  background: var(--panel);
+}
+
+@media (max-width: 800px) {
+  .cm-context-groups,
+  .cm-evolution-state,
+  .cm-material-catalogue-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .cm-context-row {
+    grid-template-columns: 1fr;
+  }
+
+  .cm-context-row .button {
+    justify-self: start;
+  }
+}

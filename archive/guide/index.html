@@ -94,6 +94,10 @@
       </header>
       <div class="archive-guide-section-body">
         <p class="archive-guide-lede">A record is the stable public identity of a work, person, place, event, symbol, product, or other part of the Construct. Its documentation can grow without creating a second identity for the same thing.</p>
+        <aside class="archive-guide-principle">
+          <span class="archive-label">Cultural object</span>
+          <p>Paintings, drawings, garments, tattoo designs, individual tattoo executions, books, recordings, and other authored artifacts may be catalogued as cultural objects. The dossier documents a cultural object; an uploaded file represents or documents it. People, organizations, places, concepts, and activities remain related entities rather than being mislabeled as objects.</p>
+        </aside>
         <ol class="archive-guide-sequence">
           <li><span>01</span><div><strong>Overview</strong><p>The identifying title, orientation, date, medium, status, and primary image.</p></div></li>
           <li><span>02</span><div><strong>Story</strong><p>The public context of the record, along with subjects and collections that help locate it.</p></div></li>
@@ -150,6 +154,75 @@
           <span class="archive-label">Important distinction</span>
           <p>A process photograph is not automatically a new state. Materials attach to the state they document. The Roman numeral advances only when the work itself has undergone a meaningful documented change.</p>
         </aside>
+        <div class="archive-access-table-wrap">
+          <table class="archive-access-table archive-identifier-key">
+            <thead><tr><th>Abbreviation</th><th>Meaning</th><th>Record class</th><th>Example</th></tr></thead>
+            <tbody>
+              <tr><th scope="row"><code>ART</code></th><td>Art</td><td>Cultural object</td><td><code>ART-042</code></td></tr>
+              <tr><th scope="row"><code>MER</code></th><td>Merch</td><td>Cultural object</td><td><code>MER-017</code></td></tr>
+              <tr><th scope="row"><code>TAT-DES</code></th><td>Tattoo design</td><td>Cultural object</td><td><code>TAT-DES-012</code></td></tr>
+              <tr><th scope="row"><code>TAT-EXE</code></th><td>Tattoo execution</td><td>Cultural object</td><td><code>TAT-EXE-031</code></td></tr>
+              <tr><th scope="row"><code>FLM</code></th><td>Film</td><td>Cultural object</td><td><code>FLM-001</code></td></tr>
+              <tr><th scope="row"><code>MUS</code></th><td>Music</td><td>Cultural object</td><td><code>MUS-001</code></td></tr>
+              <tr><th scope="row"><code>WRI</code></th><td>Writing</td><td>Cultural object</td><td><code>WRI-001</code></td></tr>
+              <tr><th scope="row"><code>LEG</code></th><td>Legend symbol</td><td>Cultural object</td><td><code>LEG-001</code></td></tr>
+              <tr><th scope="row"><code>OBJ</code></th><td>Other cultural object</td><td>Cultural object</td><td><code>OBJ-001</code></td></tr>
+              <tr><th scope="row"><code>EVT</code></th><td>Event</td><td>Contextual Archive record</td><td><code>EVT-001</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="archive-guide-supporting">Object types such as painting, woodworking, hoodie, shirt, stencil, or film do not create additional identifier families. <code>EVT-###</code> identifies an archived Event record, but it is not a cultural-object catalogue family and does not carry object versions or creative states. An independently retained artifact from an event belongs to <code>OBJ-###</code>.</p>
+        <div class="archive-guide-card-grid archive-guide-card-grid--two">
+          <article class="archive-guide-card">
+            <span class="archive-label">Version</span>
+            <h3>A substantial re-realization.</h3>
+            <p>A version records a restart, new support, reformatting, construction change, or other material branch that retains the cultural object’s core identity.</p>
+          </article>
+          <article class="archive-guide-card">
+            <span class="archive-label">State</span>
+            <h3>A condition within a version.</h3>
+            <p>A state records a meaningful documented change inside one version. Its name follows the actual medium: a painting condition, Merch prototype, tattoo drawing revision, or tattoo session.</p>
+          </article>
+        </div>
+        <div class="archive-access-table-wrap">
+          <table class="archive-access-table">
+            <thead><tr><th scope="col">Cultural object</th><th scope="col">Version means</th><th scope="col">State means</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">Art</th><td>A substantial re-realization or new support</td><td>A meaningful visual condition</td></tr>
+              <tr><th scope="row">Merch</th><td>A substantial product or construction redesign</td><td>Concept, prototype, sample revision, or production approval</td></tr>
+              <tr><th scope="row">Tattoo design</th><td>A recomposed or placement-adapted design</td><td>Drawing, revision, final design, or stencil-ready condition</td></tr>
+              <tr><th scope="row">Tattoo execution</th><td>A significant reworking of one execution</td><td>Progress across sessions, completion, or later touch-up</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <span class="archive-label">Materials attached to a state</span>
+          <pre class="archive-catalogue-flow" aria-label="Materials attached to Art catalogue state ART-042 version 1 state II">ART-042.1/II
+├── M01 — process photograph
+├── M02 — studio video
+├── N01 — inline note
+└── D01 — document</pre>
+        </div>
+        <div>
+          <span class="archive-label">Optional Merch sample</span>
+          <pre class="archive-catalogue-flow" aria-label="Materials and sample attached to Merch catalogue state MER-017 version 1 state II">MER-017.1/II
+├── S01 — physical sample
+├── M01 — sample photograph
+├── N01 — revision note
+└── D01 — production document</pre>
+          <p class="archive-guide-supporting">A sample is evidence within the product’s evolution, not an inventory SKU. Editions and production runs remain separate from creative states.</p>
+        </div>
+        <div>
+          <span class="archive-label">Notation and subordinate-reference key</span>
+          <dl class="archive-catalogue-key">
+            <div><dt><code>.1</code></dt><dd><strong>Version 1</strong><span>The first materially distinct realization of a cultural object.</span></dd></div>
+            <div><dt><code>/II</code></dt><dd><strong>State II</strong><span>The second documented creative condition within that version, expressed with a Roman numeral.</span></dd></div>
+            <div><dt><code>M01</code></dt><dd><strong>Media 01</strong><span>The first photograph, video, audio file, or other media item attached to that state.</span></dd></div>
+            <div><dt><code>N01</code></dt><dd><strong>Note 01</strong><span>The first inline note attached to that state.</span></dd></div>
+            <div><dt><code>D01</code></dt><dd><strong>Document 01</strong><span>The first document attached to that state.</span></dd></div>
+            <div><dt><code>S01</code></dt><dd><strong>Sample 01</strong><span>The first optional physical Merch sample retained as evidence of its evolution.</span></dd></div>
+          </dl>
+        </div>
       </div>
     </section>
 
@@ -160,6 +233,22 @@
       </header>
       <div class="archive-guide-section-body">
         <p class="archive-guide-lede">The Archive treats connection as evidence. A painting can become a source for a print, garment, tattoo, writing, or event without those later forms becoming the same record.</p>
+        <aside class="archive-guide-principle">
+          <span class="archive-label">Identity and lineage</span>
+          <p>The catalogue number identifies the cultural object. Relationships connect independently catalogued objects across the ecosystem. A Merch object does not place its source painting’s number inside its own identity, and a tattoo execution remains distinct from the design it executes.</p>
+        </aside>
+        <pre class="archive-catalogue-flow archive-catalogue-flow--lineage" aria-label="Cross-node catalogue relationships">ART-042  ──source for──▶  MER-017
+    │
+    └────source for──▶  TAT-DES-012  ──executed as──▶  TAT-EXE-031</pre>
+        <pre class="archive-catalogue-flow archive-catalogue-flow--lineage" aria-label="Lost Marbles cross-node catalogue example">ART-042 — Lost Marbles painting
+├── source for → MER-017 — Lost Marbles Hoodie
+│   ├── Version 1, States I–III
+│   └── Edition 1
+│
+└── source for → TAT-DES-012 — Lost Marbles tattoo design
+    ├── Version 1, States I–III
+    ├── executed as → TAT-EXE-031
+    └── executed as → TAT-EXE-032</pre>
         <div class="archive-lineage-example" aria-label="Example origin thread">
           <div class="archive-lineage-source"><span class="archive-label">Source record</span><strong>Painting</strong></div>
           <div class="archive-lineage-rail" aria-hidden="true"></div>
@@ -181,6 +270,14 @@
             <p>An origin thread gathers source records, related outcomes, and public process evidence around the same point of origin.</p>
           </article>
         </div>
+        <dl class="archive-guide-term-grid">
+          <div><dt>Person</dt><dd>An artist, wearer, collaborator, printer, photographer, or other person connected by a named role.</dd></div>
+          <div><dt>Organization</dt><dd>Six.Well, a manufacturer, gallery, publisher, printer, retailer, or other organization.</dd></div>
+          <div><dt>Place</dt><dd>A studio, venue, exhibition location, production location, or tattoo location.</dd></div>
+          <div><dt>Event or activity</dt><dd>An exhibition, tattoo session, production run, publication, installation, release, or other milestone.</dd></div>
+          <div><dt>Concept or theme</dt><dd>A reusable controlled idea such as Lost Marbles, transformation, or memory.</dd></div>
+          <div><dt>Relationship</dt><dd>A precise reciprocal edge such as source for / derived from or executed as / execution of.</dd></div>
+        </dl>
       </div>
     </section>
 
@@ -218,12 +315,14 @@
       <div class="archive-guide-section-body">
         <dl class="archive-guide-term-grid">
           <div><dt>Canonical record</dt><dd>The single stable identity used across the Construct for one work or subject.</dd></div>
+          <div><dt>Cultural object</dt><dd>An authored work or artifact with its own catalogue identity, history, and relationships.</dd></div>
           <div><dt>Dossier</dt><dd>The archive-facing documentation attached to a canonical record.</dd></div>
           <div><dt>Composition</dt><dd>The conceptual and visual work family represented by the base catalogue number.</dd></div>
           <div><dt>Version</dt><dd>A materially distinct realization or branch of a composition.</dd></div>
           <div><dt>State</dt><dd>A meaningful documented stage within a version.</dd></div>
           <div><dt>Variant</dt><dd>A related alternative that should not be forced into a false chronology.</dd></div>
           <div><dt>Material</dt><dd>An image, video, note, audio file, sketch, document, or artifact that documents a record.</dd></div>
+          <div><dt>Sample</dt><dd>An optional Merch prototype or physical sample documented inside a product’s evolution.</dd></div>
           <div><dt>Activity</dt><dd>A dated or honestly undated event in the life of a record.</dd></div>
           <div><dt>Collection</dt><dd>A curated grouping built around a body of work, period, place, or question.</dd></div>
           <div><dt>Facet</dt><dd>A controlled term used to filter or discover records.</dd></div>

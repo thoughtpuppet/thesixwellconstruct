@@ -555,6 +555,7 @@ const ARCHIVE_DATE_PRECISIONS = new Set(["exact","approximate","year","range","u
 const ARCHIVE_VISIBILITIES = new Set(["public","unlisted","internal","private"]);
 const ARCHIVE_STATES = new Set(["draft","published","archived"]);
 const ARCHIVE_TIMELINE_STATES = new Set(["draft","published","archived"]);
+const ARCHIVE_CONTEXT_TYPES = new Set(["person","organization","place","event"]);
 
 function originThreadIds(value){
   const source=Array.isArray(value)?value:String(value||"").split(",");
@@ -592,6 +593,9 @@ const RESUMABLE_VIDEO_PART_BYTES = 32 * 1024 * 1024;
 function archiveFragmentPublicSql(alias="af") {
   return `(
     (${alias}.fragment_type='dossier') OR
+    (${alias}.fragment_type='catalogue' AND EXISTS(SELECT 1 FROM archive_catalogue_entries ace WHERE ace.entity_id=${alias}.dossier_entity_id AND ace.entity_id=${alias}.source_id)) OR
+    (${alias}.fragment_type='event-identifier' AND EXISTS(SELECT 1 FROM archive_event_identifiers aei WHERE aei.entity_id=${alias}.dossier_entity_id AND aei.entity_id=${alias}.source_id)) OR
+    (${alias}.fragment_type='theme' AND EXISTS(SELECT 1 FROM entity_terms et JOIN taxonomy_terms tt ON tt.id=et.term_id AND tt.kind='theme' AND tt.public_visible=1 WHERE et.entity_id=${alias}.dossier_entity_id AND et.term_id=${alias}.source_id)) OR
     (${alias}.fragment_type='material' AND EXISTS(SELECT 1 FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE am.id=${alias}.source_id AND am.dossier_entity_id=${alias}.dossier_entity_id AND am.state='published' AND am.visibility='public' AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline')))) OR
     (${alias}.fragment_type='activity' AND EXISTS(SELECT 1 FROM entity_activity ea WHERE ea.id=${alias}.source_id AND ea.entity_id=${alias}.dossier_entity_id AND ea.public_visible=1)) OR
     (${alias}.fragment_type='subject' AND EXISTS(SELECT 1 FROM archive_dossier_subjects ads JOIN content_entities subject ON subject.id=ads.subject_entity_id AND subject.visibility='public' LEFT JOIN people p ON p.id=subject.id LEFT JOIN places pl ON pl.id=subject.id LEFT JOIN organizations o ON o.id=subject.id WHERE ads.dossier_entity_id=${alias}.dossier_entity_id AND ${alias}.source_id=ads.subject_entity_id||':'||ads.role AND ads.public_visible=1 AND (p.id IS NULL OR (p.state='published' AND p.privacy='public')) AND (pl.id IS NULL OR (pl.state='published' AND pl.privacy='public')) AND (o.id IS NULL OR o.state='published'))) OR
@@ -614,6 +618,10 @@ function plainTextFtsQuery(value) {
 
 function archiveEntitySql(where = "1=1") {
   return `SELECT ad.*,ce.entity_type,ce.node_id,
+    ace.catalogue_id,ace.catalogue_prefix,ace.catalogue_number,ace.current_version,ace.current_state,ace.variant_label catalogue_variant,
+    ace.medium_id catalogue_medium,cot.label cultural_object_type,cot.id cultural_object_type_id,cot.state_guidance,
+    acm.label catalogue_medium_label,
+    aei.event_id,aei.event_number,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.title WHEN 'merch_item' THEN mi.title
       WHEN 'portfolio_item' THEN COALESCE(NULLIF(pi.title,''),'Untitled tattoo')
@@ -660,7 +668,19 @@ function archiveEntitySql(where = "1=1") {
   LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
   LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
   LEFT JOIN search_documents sd ON sd.entity_id=ce.id
+  LEFT JOIN archive_catalogue_entries ace ON ace.entity_id=ad.entity_id
+  LEFT JOIN archive_cultural_object_types cot ON cot.id=ace.object_type_id
+  LEFT JOIN archive_catalogue_media acm ON acm.id=ace.medium_id
+  LEFT JOIN archive_event_identifiers aei ON aei.entity_id=ad.entity_id
   WHERE ${where}`;
+}
+
+function archiveCatalogueLabel(row) {
+  if (!row?.catalogue_id) return "";
+  const version = Math.max(1, Number(row.current_version || 1));
+  const state = text(row.current_state, 20).toUpperCase() || "I";
+  const variant = text(row.catalogue_variant || row.variant_label, 120);
+  return `${row.catalogue_id}.${version}/${state}${variant ? `, ${variant}` : ""}`;
 }
 
 function presentArchiveItem(row) {
@@ -687,6 +707,28 @@ function presentArchiveItem(row) {
     date_label: row.canonical_date || "",
     dateLabel: row.canonical_date || "",
     medium: row.medium || "",
+    catalogue_id: row.catalogue_id || "",
+    catalogueId: row.catalogue_id || "",
+    catalogue_label: archiveCatalogueLabel(row),
+    catalogueLabel: archiveCatalogueLabel(row),
+    catalogue_prefix: row.catalogue_prefix || "",
+    catalogue_number: Number(row.catalogue_number || 0),
+    catalogue_medium: row.catalogue_medium || "",
+    catalogueMedium: row.catalogue_medium || "",
+    catalogue_medium_label: row.catalogue_medium_label || "",
+    cultural_object_type: row.cultural_object_type || "",
+    culturalObjectType: row.cultural_object_type || "",
+    cultural_object_type_id: row.cultural_object_type_id || "",
+    current_version: Number(row.current_version || 1),
+    current_state: row.current_state || "I",
+    catalogue_variant: row.catalogue_variant || "",
+    state_guidance: row.state_guidance || "",
+    event_id: row.event_id || "",
+    eventId: row.event_id || "",
+    event_number: Number(row.event_number || 0),
+    eventNumber: Number(row.event_number || 0),
+    record_identifier: row.catalogue_id ? archiveCatalogueLabel(row) : row.event_id || "",
+    recordIdentifier: row.catalogue_id ? archiveCatalogueLabel(row) : row.event_id || "",
     canonical_route: row.canonical_route || "",
     canonicalRoute: row.canonical_route || "",
     active_url: row.canonical_route || "",
@@ -815,7 +857,7 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const row=await database.prepare(archiveEntitySql("ce.visibility='public' AND ad.state='published' AND ad.public_visible=1 AND (ad.archive_slug=? OR ad.entity_id=?)")).bind(archiveSlug,archiveSlug).first();
   if(!row)return failure("Archive item not found.",404);
   const item=presentArchiveItem(row),entityId=row.entity_id;
-  const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult,originThreadsResult]=await database.batch([
+  const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult,originThreadsResult,versionsResult,statesResult,termsResult]=await database.batch([
     database.prepare(`SELECT am.*,m.mime_type,m.duration_seconds,m.alt_text,m.public_title,m.public_description,
         CASE WHEN m.transcript_status='ready' THEN m.transcript ELSE '' END transcript,m.transcript_status,m.transcript_language,m.public_presentation,
         CASE WHEN m.public_presentation='inline' THEN COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END) ELSE '' END media_url
@@ -827,11 +869,13 @@ async function publicArchiveDetail(request,env,archiveSlug){
       WHERE ea.entity_id=? AND ea.public_visible=1
       ORDER BY CASE WHEN ea.occurred_at IS NULL THEN 1 ELSE 0 END,ea.occurred_at,ea.sort_order,ea.created_at`).bind(entityId),
     database.prepare(`SELECT ads.subject_entity_id entity_id,ads.role,ads.sort_order,ce.entity_type,
-        COALESCE(o.name,p.name,n.name,ce.id) name,
-        COALESCE(o.slug,p.slug,n.slug,'') slug
+        COALESCE(o.name,p.name,pl.name,ev.title,n.name,ce.id) name,
+        COALESCE(o.slug,p.slug,pl.slug,ev.slug,n.slug,'') slug
       FROM archive_dossier_subjects ads JOIN content_entities ce ON ce.id=ads.subject_entity_id AND ce.visibility='public'
       LEFT JOIN organizations o ON o.id=ce.id AND o.state='published'
       LEFT JOIN people p ON p.id=ce.id AND p.state='published' AND p.privacy='public'
+      LEFT JOIN places pl ON pl.id=ce.id AND pl.state='published' AND pl.privacy='public'
+      LEFT JOIN events ev ON ev.id=ce.id AND ev.status<>'archived'
       LEFT JOIN construct_nodes n ON n.id=ce.id AND n.state='published'
       WHERE ads.dossier_entity_id=? AND ads.public_visible=1
         AND (ce.entity_type<>'person' OR p.id IS NOT NULL) AND (ce.entity_type<>'place' OR EXISTS(SELECT 1 FROM places visible_place WHERE visible_place.id=ce.id AND visible_place.state='published' AND visible_place.privacy='public'))
@@ -848,17 +892,28 @@ async function publicArchiveDetail(request,env,archiveSlug){
       FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id
       WHERE otd.dossier_entity_id=? AND ot.state='published' AND ot.public_visible=1
       ORDER BY otd.is_primary DESC,otd.sort_order,ot.sort_order,ot.title`).bind(entityId),
+    database.prepare(`SELECT * FROM archive_object_versions WHERE entity_id=? ORDER BY sort_order,version_number`).bind(entityId),
+    database.prepare(`SELECT aos.* FROM archive_object_states aos
+      JOIN archive_object_versions aov ON aov.id=aos.version_id
+      WHERE aov.entity_id=? ORDER BY aov.sort_order,aov.version_number,aos.sort_order,aos.state_order,aos.variant_label`).bind(entityId),
+    database.prepare(`SELECT tt.id,tt.kind,tt.name,tt.slug,tt.description
+      FROM entity_terms et JOIN taxonomy_terms tt ON tt.id=et.term_id
+      WHERE et.entity_id=? AND tt.public_visible=1 ORDER BY tt.kind,tt.sort_order,tt.name`).bind(entityId),
   ]);
   const relationshipRows=relationshipsResult.results||[];
   const relatedIds=relationshipRows.map(r=>r.source_entity_id===entityId?r.target_entity_id:r.source_entity_id);
   const relatedMap=await entityRecords(database,relatedIds);
   const relatedDossiers=relatedIds.length?(await database.prepare(`SELECT entity_id,archive_slug FROM archive_dossiers WHERE state='published' AND public_visible=1 AND entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
+  const relatedCatalogue=relatedIds.length?(await database.prepare(`SELECT entity_id,catalogue_id,current_version,current_state,variant_label catalogue_variant FROM archive_catalogue_entries WHERE entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
+  const relatedEvents=relatedIds.length?(await database.prepare(`SELECT entity_id,event_id,event_number FROM archive_event_identifiers WHERE entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
   const relatedSlugs=new Map(relatedDossiers.map(d=>[d.entity_id,d.archive_slug]));
-  const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const archive_slug=relatedSlugs.get(relatedId)||"";relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,imageUrl:"",archive_slug,archiveRoute:archive_slug?`/archive/records/${encodeURIComponent(archive_slug)}/`:""}});}
+  const relatedCatalogueMap=new Map(relatedCatalogue.map(record=>[record.entity_id,{...record,catalogue_label:archiveCatalogueLabel(record)}]));
+  const relatedEventMap=new Map(relatedEvents.map(record=>[record.entity_id,{...record,record_identifier:record.event_id}]));
+  const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const archive_slug=relatedSlugs.get(relatedId)||"",catalogue=relatedCatalogueMap.get(relatedId)||{},eventIdentity=relatedEventMap.get(relatedId)||{};relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,...catalogue,...eventIdentity,imageUrl:"",archive_slug,archiveRoute:archive_slug?`/archive/records/${encodeURIComponent(archive_slug)}/`:""}});}
   const materials=(materialsResult.results||[]).map(material=>({...material,anchor:`material-${material.id}`,url:material.media_url||"",inline_text:material.body||""}));
   const activities=activitiesResult.results||[];
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
-  return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
+  return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states:statesResult.results||[],terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
 }
 
 function timelineSubjectName(row){return row.organization_name||row.person_name||row.node_name||row.title||row.slug;}
@@ -1908,12 +1963,235 @@ function archiveShellStatement(database,entityId,entityType,preferredSlug,record
       updated_by='studio',updated_at=datetime('now')`).bind(base,prefixed,base,recordType,entityId);
 }
 
+function archiveRoman(value){
+  const roman=text(value,20).toUpperCase();
+  return /^[IVXLCDM]+$/.test(roman)?roman:"";
+}
+
+function archiveContextAssignments(value){
+  if(!Array.isArray(value))return null;
+  const seen=new Set(),output=[];
+  for(const item of value.slice(0,100)){
+    const entityId=text(item?.entity_id??item?.entityId??item?.id,200),role=text(item?.role,100)||"related";
+    if(!entityId)continue;
+    const key=`${entityId}:${role.toLowerCase()}`;if(seen.has(key))continue;seen.add(key);
+    output.push({entity_id:entityId,role,public_visible:item?.public_visible===undefined&&item?.publicVisible===undefined?1:(truthy(item.public_visible??item.publicVisible)?1:0)});
+  }
+  return output;
+}
+
+async function replaceArchiveContext(database,entityId,assignments){
+  if(assignments===null)return;
+  const targetIds=[...new Set(assignments.map(item=>item.entity_id))];
+  if(targetIds.length){
+    const rows=(await database.prepare(`SELECT id,entity_type FROM content_entities WHERE id IN (${targetIds.map(()=>"?").join(",")})`).bind(...targetIds).all()).results||[];
+    const types=new Map(rows.map(row=>[row.id,row.entity_type]));
+    if(rows.length!==targetIds.length||targetIds.some(id=>!ARCHIVE_CONTEXT_TYPES.has(types.get(id))))throw new Error("Choose existing people, organizations, places, or events for record context.");
+  }
+  const statements=[database.prepare("DELETE FROM archive_dossier_subjects WHERE dossier_entity_id=?").bind(entityId)];
+  assignments.forEach((item,index)=>statements.push(database.prepare("INSERT INTO archive_dossier_subjects(dossier_entity_id,subject_entity_id,role,public_visible,sort_order,created_at) VALUES(?,?,?,?,?,datetime('now'))").bind(entityId,item.entity_id,item.role,item.public_visible,index+1)));
+  await database.batch(statements);
+}
+
+async function replaceArchiveThemes(database,entityId,value){
+  if(!Array.isArray(value))return;
+  const names=[...new Set(value.map(item=>text(typeof item==="object"?(item.name||item.label):item,160)).filter(Boolean))].slice(0,60),termIds=[];
+  for(const name of names){
+    const termSlug=slug(name);if(!termSlug)continue;
+    let term=await database.prepare("SELECT id FROM taxonomy_terms WHERE kind='theme' AND slug=?").bind(termSlug).first();
+    if(!term){
+      await database.prepare("INSERT OR IGNORE INTO taxonomy_terms(id,kind,name,slug,description,public_visible,sort_order,created_at,updated_at) VALUES(?,'theme',?,?, '',1,0,datetime('now'),datetime('now'))").bind(`theme-${termSlug}`,name,termSlug).run();
+      term=await database.prepare("SELECT id FROM taxonomy_terms WHERE kind='theme' AND slug=?").bind(termSlug).first();
+    }
+    if(term?.id)termIds.push(term.id);
+  }
+  const statements=[
+    database.prepare("DELETE FROM archive_search_fragments WHERE dossier_entity_id=? AND fragment_type='theme'").bind(entityId),
+    database.prepare("DELETE FROM entity_terms WHERE entity_id=? AND term_id IN (SELECT id FROM taxonomy_terms WHERE kind='theme')").bind(entityId),
+  ];
+  termIds.forEach(termId=>statements.push(database.prepare("INSERT OR IGNORE INTO entity_terms(entity_id,term_id,created_at) VALUES(?,?,datetime('now'))").bind(entityId,termId)));
+  termIds.forEach(termId=>statements.push(database.prepare(`INSERT OR REPLACE INTO archive_search_fragments(id,dossier_entity_id,fragment_type,source_id,label,body,anchor,public_visible,updated_at)
+    SELECT ?,?,'theme',tt.id,tt.name,tt.description,'story',tt.public_visible,datetime('now') FROM taxonomy_terms tt WHERE tt.id=?`).bind(`archive-fragment-theme-${entityId}-${termId}`,entityId,termId)));
+  await database.batch(statements);
+}
+
+async function ensureArchiveCatalogueEntry(database,owner){
+  if(owner.entity_type==="event")return;
+  if(await database.prepare("SELECT entity_id FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first())return;
+  let objectTypeId="other-cultural-object";
+  if(owner.entity_type==="art_work")objectTypeId="art-other";
+  else if(owner.entity_type==="merch_item")objectTypeId="merch-other";
+  else if(owner.entity_type==="portfolio_item")objectTypeId="tattoo-execution";
+  else if(owner.entity_type==="flash_item")objectTypeId="tattoo-flash-design";
+  else if(owner.entity_type==="visual_symbol")objectTypeId="legend-symbol";
+  else if(owner.node_id==="film")objectTypeId="film-work";
+  else if(owner.node_id==="music")objectTypeId="music-work";
+  else if(owner.node_id==="writings")objectTypeId="writing-work";
+  const type=await database.prepare("SELECT medium_id,catalogue_prefix FROM archive_cultural_object_types WHERE id=?").bind(objectTypeId).first();
+  if(!type)throw new Error("The catalogue vocabulary is unavailable.");
+  const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();
+  const number=Number(maximum?.maximum||0)+1,catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
+  const versionId=id("archive-version"),stateId=id("archive-state");
+  await database.batch([
+    database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,1,'I','','studio','studio',datetime('now'),datetime('now'))`).bind(owner.id,type.medium_id,objectTypeId,type.catalogue_prefix,number,catalogueId),
+    database.prepare(`INSERT INTO archive_object_versions(id,entity_id,version_number,title,description,date_precision,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,1,'Version 1','','undated',1,'studio','studio',datetime('now'),datetime('now'))`).bind(versionId,owner.id),
+    database.prepare(`INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,variant_label,date_precision,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,'I',1,'First documented state','','','undated',1,'studio','studio',datetime('now'),datetime('now'))`).bind(stateId,versionId),
+  ]);
+}
+
+async function archiveCatalogueAdminApi(request,env,entityId=""){
+  const database=db(env);
+  if(request.method==="GET"&&!entityId){
+    const [mediaResult,typeResult]=await database.batch([
+      database.prepare("SELECT * FROM archive_catalogue_media ORDER BY sort_order,label"),
+      database.prepare("SELECT * FROM archive_cultural_object_types ORDER BY medium_id,sort_order,label"),
+    ]);
+    return json({media:mediaResult.results||[],object_types:typeResult.results||[]});
+  }
+  if(request.method==="GET"&&entityId){
+    const record=await database.prepare(`SELECT ace.*,acm.label medium_label,cot.label object_type_label,cot.state_guidance
+      FROM archive_catalogue_entries ace JOIN archive_catalogue_media acm ON acm.id=ace.medium_id
+      JOIN archive_cultural_object_types cot ON cot.id=ace.object_type_id WHERE ace.entity_id=?`).bind(entityId).first();
+    return record?json({record}):failure("Catalogue entry not found.",404);
+  }
+  if(request.method==="PATCH"&&entityId){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const before=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(entityId).first();
+    const owner=await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!owner)return failure("Dossier not found.",404);
+    const mediumId=text(body.medium_id??body.mediumId??before?.medium_id,80),objectTypeId=text(body.object_type_id??body.objectTypeId??before?.object_type_id,120);
+    const type=await database.prepare("SELECT * FROM archive_cultural_object_types WHERE id=? AND medium_id=?").bind(objectTypeId,mediumId).first();
+    if(!type)return failure("Choose a cultural object type that belongs to the selected medium.",409);
+    let catalogueNumber=Math.floor(Number(body.catalogue_number??body.catalogueNumber??before?.catalogue_number));
+    if(!catalogueNumber||catalogueNumber<1){const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();catalogueNumber=Number(maximum?.maximum||0)+1}
+    const currentVersion=Math.floor(Number(body.current_version??body.currentVersion??before?.current_version??1)),currentState=archiveRoman(body.current_state??body.currentState??before?.current_state??"I"),variantLabel=text(body.variant_label??body.variantLabel??before?.variant_label,120);
+    if(currentVersion<1||!currentState)return failure("Version must be positive and state must use Roman numerals.",409);
+    const catalogueId=`${type.catalogue_prefix}-${String(catalogueNumber).padStart(3,"0")}`;
+    try{
+      if(before)await database.prepare(`UPDATE archive_catalogue_entries SET medium_id=?,object_type_id=?,catalogue_prefix=?,catalogue_number=?,catalogue_id=?,current_version=?,current_state=?,variant_label=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,entityId).run();
+      else await database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(entityId,mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel).run();
+    }catch(error){const duplicate=/UNIQUE constraint failed/i.test(error.message);return failure(duplicate?"That catalogue number is already assigned.":error.message,duplicate?409:400)}
+    return archiveCatalogueAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
+  }
+  return failure("Method not allowed.",405);
+}
+
+async function archiveEventIdentifierAdminApi(request,env,entityId=""){
+  const database=db(env);
+  if(!entityId)return failure("Event entity ID is required.");
+  const owner=await database.prepare(`SELECT ce.id,ce.entity_type
+    FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id
+    WHERE ad.entity_id=?`).bind(entityId).first();
+  if(!owner)return failure("Event dossier not found.",404);
+  if(owner.entity_type!=="event")return failure("Event identifiers are available only for Event records.",409);
+  if(request.method==="GET"){
+    const record=await database.prepare("SELECT * FROM archive_event_identifiers WHERE entity_id=?").bind(entityId).first();
+    return record?json({record}):failure("Event identifier not found.",404);
+  }
+  if(request.method==="PATCH"){
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+    const before=await database.prepare("SELECT * FROM archive_event_identifiers WHERE entity_id=?").bind(entityId).first();
+    let eventNumber=Math.floor(Number(body.event_number??body.eventNumber??before?.event_number));
+    if(!eventNumber||eventNumber<1){const maximum=await database.prepare("SELECT COALESCE(MAX(event_number),0) maximum FROM archive_event_identifiers").first();eventNumber=Number(maximum?.maximum||0)+1}
+    const eventId=`EVT-${String(eventNumber).padStart(3,"0")}`;
+    try{
+      if(before)await database.prepare("UPDATE archive_event_identifiers SET event_number=?,event_id=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(eventNumber,eventId,entityId).run();
+      else await database.prepare(`INSERT INTO archive_event_identifiers(entity_id,event_number,event_id,created_by,updated_by,created_at,updated_at)
+        VALUES(?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(entityId,eventNumber,eventId).run();
+    }catch(error){const duplicate=/UNIQUE constraint failed/i.test(error.message);return failure(duplicate?"That Event number is already assigned.":error.message,duplicate?409:400)}
+    return archiveEventIdentifierAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
+  }
+  return failure("Method not allowed.",405);
+}
+
+function normalizeArchiveVersion(body,existing={}){
+  return {entity_id:text(body.entity_id??body.entityId??existing.entity_id,200),version_number:Math.floor(Number(body.version_number??body.versionNumber??existing.version_number??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};
+}
+
+async function archiveVersionsAdminApi(request,env,versionId=""){
+  const database=db(env);
+  if(request.method==="GET"&&!versionId){
+    const entityId=text(new URL(request.url).searchParams.get("entity_id"),200),where=entityId?" WHERE entity_id=?":"";
+    const statement=database.prepare(`SELECT * FROM archive_object_versions${where} ORDER BY entity_id,sort_order,version_number`),result=entityId?await statement.bind(entityId).all():await statement.all();
+    return json({records:result.results||[]});
+  }
+  if(request.method==="POST"&&!versionId){
+    const body=await readJson(request),record=normalizeArchiveVersion(body||{});
+    if(!record.entity_id||record.version_number<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("A cultural object, positive version number, and valid date precision are required.",409);
+    if(!await database.prepare("SELECT entity_id FROM archive_catalogue_entries WHERE entity_id=?").bind(record.entity_id).first())return failure("Catalogue entry not found.",404);
+    const newId=text(body?.id,200)||id("archive-version");
+    try{await database.prepare(`INSERT INTO archive_object_versions(id,entity_id,version_number,title,description,occurred_at,date_precision,date_label,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,record.entity_id,record.version_number,record.title,record.description,record.occurred_at,record.date_precision,record.date_label,record.sort_order).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That version number already exists.":error.message,409)}
+    return json({record:await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(newId).first()},{status:201});
+  }
+  const before=versionId?await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(versionId).first():null;if(versionId&&!before)return failure("Version not found.",404);
+  if(request.method==="PATCH"&&versionId){
+    const body=await readJson(request),record=normalizeArchiveVersion(body||{},before);if(record.version_number<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("Invalid version.",409);
+    try{await database.prepare(`UPDATE archive_object_versions SET version_number=?,title=?,description=?,occurred_at=?,date_precision=?,date_label=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(record.version_number,record.title,record.description,record.occurred_at,record.date_precision,record.date_label,record.sort_order,versionId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That version number already exists.":error.message,409)}
+    return json({record:await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(versionId).first()});
+  }
+  if(request.method==="DELETE"&&versionId){
+    const used=await database.prepare("SELECT COUNT(*) count FROM archive_object_states aos JOIN archive_materials am ON am.state_id=aos.id WHERE aos.version_id=?").bind(versionId).first();if(Number(used?.count||0))return failure("Move materials out of this version before removing it.",409);
+    const count=await database.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE entity_id=?").bind(before.entity_id).first();if(Number(count?.count||0)<=1)return failure("Every cultural object needs at least one version.",409);
+    await database.prepare("DELETE FROM archive_object_versions WHERE id=?").bind(versionId).run();return json({ok:true});
+  }
+  return failure("Method not allowed.",405);
+}
+
+function normalizeArchiveObjectState(body,existing={}){
+  return {version_id:text(body.version_id??body.versionId??existing.version_id,200),state_roman:archiveRoman(body.state_roman??body.stateRoman??existing.state_roman),state_order:Math.floor(Number(body.state_order??body.stateOrder??existing.state_order??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),variant_label:text(body.variant_label??body.variantLabel??existing.variant_label,120),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};
+}
+
+async function archiveStatesAdminApi(request,env,stateId=""){
+  const database=db(env);
+  if(request.method==="GET"&&!stateId){
+    const url=new URL(request.url),entityId=text(url.searchParams.get("entity_id"),200),versionId=text(url.searchParams.get("version_id"),200),conditions=[],values=[];
+    if(entityId){conditions.push("aov.entity_id=?");values.push(entityId)}if(versionId){conditions.push("aos.version_id=?");values.push(versionId)}
+    const where=conditions.length?` WHERE ${conditions.join(" AND ")}`:"",result=await database.prepare(`SELECT aos.*,aov.entity_id,aov.version_number FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id${where} ORDER BY aov.version_number,aos.sort_order,aos.state_order,aos.variant_label`).bind(...values).all();
+    return json({records:result.results||[]});
+  }
+  if(request.method==="POST"&&!stateId){
+    const body=await readJson(request),record=normalizeArchiveObjectState(body||{});
+    if(!record.version_id||!record.state_roman||record.state_order<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("A version, Roman numeral, positive order, and valid date precision are required.",409);
+    if(!await database.prepare("SELECT id FROM archive_object_versions WHERE id=?").bind(record.version_id).first())return failure("Version not found.",404);
+    const newId=text(body?.id,200)||id("archive-state");
+    try{await database.prepare(`INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,variant_label,occurred_at,date_precision,date_label,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,record.version_id,record.state_roman,record.state_order,record.title,record.description,record.variant_label,record.occurred_at,record.date_precision,record.date_label,record.sort_order).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That state order and variant already exist in this version.":error.message,409)}
+    return json({record:await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(newId).first()},{status:201});
+  }
+  const before=stateId?await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(stateId).first():null;if(stateId&&!before)return failure("State not found.",404);
+  if(request.method==="PATCH"&&stateId){
+    const body=await readJson(request),record=normalizeArchiveObjectState(body||{},before);if(!record.state_roman||record.state_order<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("Invalid state.",409);
+    try{await database.prepare(`UPDATE archive_object_states SET state_roman=?,state_order=?,title=?,description=?,variant_label=?,occurred_at=?,date_precision=?,date_label=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(record.state_roman,record.state_order,record.title,record.description,record.variant_label,record.occurred_at,record.date_precision,record.date_label,record.sort_order,stateId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That state order and variant already exist in this version.":error.message,409)}
+    return json({record:await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(stateId).first()});
+  }
+  if(request.method==="DELETE"&&stateId){
+    const used=await database.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id=?").bind(stateId).first();if(Number(used?.count||0))return failure("Move materials out of this state before removing it.",409);
+    const count=await database.prepare("SELECT COUNT(*) count FROM archive_object_states WHERE version_id=?").bind(before.version_id).first();if(Number(count?.count||0)<=1)return failure("Every version needs at least one state.",409);
+    await database.prepare("DELETE FROM archive_object_states WHERE id=?").bind(stateId).run();return json({ok:true});
+  }
+  return failure("Method not allowed.",405);
+}
+
 async function archiveDossiersAdminApi(request,env,entityId=""){
   const database=db(env);
   if(request.method==="GET"){
     const where=entityId?"ad.entity_id=?":"1=1";const statement=database.prepare(`${archiveEntitySql(where)} ORDER BY ad.updated_at DESC,ad.entity_id`);const result=entityId?await statement.bind(entityId).all():await statement.all();const records=(result.results||[]).map(row=>({...row,...presentArchiveItem(row)}));
     if(entityId&&!records[0])return failure("Dossier not found.",404);
-    if(entityId){const originThreads=(await database.prepare(`SELECT ot.*,otd.is_primary,otd.sort_order assignment_sort_order FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=? ORDER BY otd.is_primary DESC,otd.sort_order,ot.title`).bind(entityId).all()).results||[];const enriched={...records[0],origin_threads:originThreads,origin_thread_ids:originThreads.map(thread=>thread.id),primary_origin_thread_id:originThreads.find(thread=>Number(thread.is_primary))?.id||""};return json({record:enriched,dossier:enriched,origin_threads:originThreads});}
+    if(entityId){
+      const [originResult,contextResult,themeResult,versionResult,stateResult]=await database.batch([
+        database.prepare(`SELECT ot.*,otd.is_primary,otd.sort_order assignment_sort_order FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=? ORDER BY otd.is_primary DESC,otd.sort_order,ot.title`).bind(entityId),
+        database.prepare(`SELECT ads.subject_entity_id entity_id,ads.role,ads.public_visible,ads.sort_order,ce.entity_type,
+          COALESCE(p.name,o.name,pl.name,ev.title,ce.id) name
+          FROM archive_dossier_subjects ads JOIN content_entities ce ON ce.id=ads.subject_entity_id
+          LEFT JOIN people p ON p.id=ce.id LEFT JOIN organizations o ON o.id=ce.id
+          LEFT JOIN places pl ON pl.id=ce.id LEFT JOIN events ev ON ev.id=ce.id
+          WHERE ads.dossier_entity_id=? ORDER BY ads.sort_order,name`).bind(entityId),
+        database.prepare(`SELECT tt.id,tt.name,tt.slug,tt.description FROM entity_terms et JOIN taxonomy_terms tt ON tt.id=et.term_id WHERE et.entity_id=? AND tt.kind='theme' ORDER BY tt.sort_order,tt.name`).bind(entityId),
+        database.prepare("SELECT * FROM archive_object_versions WHERE entity_id=? ORDER BY sort_order,version_number").bind(entityId),
+        database.prepare(`SELECT aos.*,aov.entity_id,aov.version_number FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id WHERE aov.entity_id=? ORDER BY aov.version_number,aos.sort_order,aos.state_order,aos.variant_label`).bind(entityId),
+      ]);
+      const originThreads=originResult.results||[],contextAssignments=contextResult.results||[],themes=themeResult.results||[],versions=versionResult.results||[],states=stateResult.results||[];
+      const enriched={...records[0],origin_threads:originThreads,origin_thread_ids:originThreads.map(thread=>thread.id),primary_origin_thread_id:originThreads.find(thread=>Number(thread.is_primary))?.id||"",context_assignments:contextAssignments,themes,theme_names:themes.map(theme=>theme.name),versions,states};
+      return json({record:enriched,dossier:enriched,origin_threads:originThreads,context_assignments:contextAssignments,themes,versions,states});
+    }
     return json({records,count:records.length});
   }
   if(request.method==="POST"&&!entityId){
@@ -1922,6 +2200,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     const archiveSlug=slug(body.archive_slug||body.archiveSlug||body.slug||ownerId);if(!archiveSlug)return failure("archive_slug is required.");const state=text(body.state,30)||"draft",publicVisible=truthy(body.public_visible??body.publicVisible)?1:0;if(!ARCHIVE_STATES.has(state))return failure("Invalid dossier state.");if(state==="published"&&publicVisible&&owner.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
     await database.prepare(`INSERT INTO archive_dossiers(entity_id,archive_slug,orientation,story,story_html,empty_materials_note,record_type,state,public_visible,featured,sort_order,published_at,created_by,updated_by,created_at,updated_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='published' AND ?=1 THEN datetime('now') ELSE NULL END,'studio','studio',datetime('now'),datetime('now'))`).bind(ownerId,archiveSlug,text(body.orientation,8000),text(body.story,50000),text(body.story_html,50000),text(body.empty_materials_note,3000)||"No process materials are public yet.",text(body.record_type,100)||archiveRecordType(owner.entity_type),state,publicVisible,truthy(body.featured)?1:0,Number(body.sort_order)||0,state,publicVisible).run();
+    try{await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
     return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,ownerId);
   }
   if(request.method==="PATCH"&&entityId){
@@ -1932,6 +2211,10 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     if(hasOriginUpdate&&(primaryOriginId&&!assignmentIds.includes(primaryOriginId)||!await validateOriginThreadIds(database,assignmentIds)))return failure("Choose valid origin threads and make the primary thread part of the dossier assignment.",409);
     await database.prepare(`UPDATE archive_dossiers SET archive_slug=?,orientation=?,story=?,story_html=?,empty_materials_note=?,record_type=?,state=?,public_visible=?,featured=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(next.archive_slug,next.orientation,next.story,next.story_html,next.empty_materials_note,next.record_type,next.state,next.public_visible,next.featured,next.sort_order,next.state,next.public_visible,entityId).run();
     if(hasOriginUpdate)await replaceDossierOriginThreads(database,entityId,assignmentIds,primaryOriginId);
+    try{
+      await replaceArchiveContext(database,entityId,archiveContextAssignments(body.context_assignments??body.contextAssignments));
+      await replaceArchiveThemes(database,entityId,body.theme_names??body.themeNames);
+    }catch(error){return failure(error.message,409)}
     const after=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();await nextRevision(database,entityId,"archive-dossier-update",before,after);return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
   }
   if(request.method==="DELETE"&&entityId){await database.prepare("UPDATE archive_dossiers SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(entityId).run();return json({ok:true});}
@@ -1945,12 +2228,15 @@ function normalizeArchiveMaterial(body,existing={}){
   const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null;
   const endedAt=text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null;
   const datePrecision=text(body.date_precision??body.datePrecision??existing.date_precision,30).toLowerCase()||(occurredAt?"exact":"undated");
-  return {dossier_entity_id:text(body.dossier_entity_id??body.entity_id??body.entityId??existing.dossier_entity_id,200),media_id:text(body.media_id??body.mediaId??existing.media_id,200)||null,role:text(body.role??existing.role,80)||"notebook",material_type:materialType,title:text(body.title??existing.title,300),caption:text(body.caption??existing.caption,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,100000),process_phase:text(body.process_phase??body.processPhase??existing.process_phase,120),occurred_at:occurredAt,ended_at:endedAt,date_precision:datePrecision,date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),visibility,state,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};
+  return {dossier_entity_id:text(body.dossier_entity_id??body.entity_id??body.entityId??existing.dossier_entity_id,200),media_id:text(body.media_id??body.mediaId??existing.media_id,200)||null,role:text(body.role??existing.role,80)||"notebook",material_type:materialType,title:text(body.title??existing.title,300),caption:text(body.caption??existing.caption,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,100000),process_phase:text(body.process_phase??body.processPhase??existing.process_phase,120),occurred_at:occurredAt,ended_at:endedAt,date_precision:datePrecision,date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),visibility,state,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,state_id:text(body.state_id??body.stateId??existing.state_id,200)||null,material_reference:text(body.material_reference??body.materialReference??existing.material_reference,30).toUpperCase(),is_sample:body.is_sample===undefined&&body.isSample===undefined?Number(existing.is_sample||0):(truthy(body.is_sample??body.isSample)?1:0)};
 }
 
 async function validateArchiveMaterial(database,material){
   if(!material.dossier_entity_id)return failure("entity_id is required.");if(!ARCHIVE_MATERIAL_TYPES.has(material.material_type))return failure("Invalid material type.");if(!ARCHIVE_VISIBILITIES.has(material.visibility))return failure("Invalid material visibility.");if(!ARCHIVE_STATES.has(material.state))return failure("Invalid material state.");if(!ARCHIVE_DATE_PRECISIONS.has(material.date_precision))return failure("Invalid date precision.");if(!material.media_id&&!material.body)return failure("A material needs media_id or inline_text.");
   const dossier=await database.prepare("SELECT ad.*,ce.visibility canonical_visibility FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ad.entity_id=?").bind(material.dossier_entity_id).first();if(!dossier)return failure("Dossier not found.",404);
+  if(material.state_id){const state=await database.prepare("SELECT aos.id FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id WHERE aos.id=? AND aov.entity_id=?").bind(material.state_id,material.dossier_entity_id).first();if(!state)return failure("Choose a state that belongs to this cultural object.",409)}
+  if(material.material_reference&&!/^[MNDS]\d{2,4}$/.test(material.material_reference))return failure("Material references use M, N, D, or S followed by at least two digits.",409);
+  if(material.is_sample){const catalogue=await database.prepare("SELECT medium_id FROM archive_catalogue_entries WHERE entity_id=?").bind(material.dossier_entity_id).first();if(catalogue?.medium_id!=="merch")return failure("Samples are available only for Merch cultural objects.",409)}
   let media=null;if(material.media_id){media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(material.media_id).first();if(!media)return failure("Media not found.",404)}
   if(material.state==="published"&&material.visibility==="public"){
     if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the canonical entity and dossier before publishing this material.",409);
@@ -1967,8 +2253,8 @@ async function archiveMaterialsAdminApi(request,env,materialId=""){
       FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id ${where}
       ORDER BY am.dossier_entity_id,am.sort_order,am.created_at`);const result=entityId?await statement.bind(entityId).all():await statement.all();const rows=result.results||[],ids=rows.map(row=>row.id),assignmentRows=ids.length?(await database.prepare(`SELECT material_id,thread_id FROM archive_origin_thread_materials WHERE material_id IN (${ids.map(()=>"?").join(",")}) ORDER BY sort_order`).bind(...ids).all()).results||[]:[],byMaterial=new Map();assignmentRows.forEach(row=>{if(!byMaterial.has(row.material_id))byMaterial.set(row.material_id,[]);byMaterial.get(row.material_id).push(row.thread_id)});const records=rows.map(row=>({...row,origin_thread_ids:byMaterial.get(row.id)||[]}));return json({records,materials:records,count:records.length});}
   if(request.method==="POST"&&materialId==="reorder"){const body=await readJson(request);const entityId=text(body?.entity_id||body?.entityId,200),ids=body?.ids;if(!entityId||!Array.isArray(ids))return failure("entity_id and ids are required.");const current=(await database.prepare("SELECT id FROM archive_materials WHERE dossier_entity_id=? ORDER BY sort_order,id").bind(entityId).all()).results||[];const set=new Set(ids);if(ids.length!==current.length||set.size!==current.length||current.some(row=>!set.has(row.id)))return failure("The material list changed. Refresh before reordering.",409);await database.batch(ids.map((recordId,index)=>database.prepare("UPDATE archive_materials SET sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND dossier_entity_id=?").bind(index+1,recordId,entityId)));return json({ok:true});}
-  if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409);const materialIdNew=text(body.id,200)||id("archive-material");await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,"studio").run();await replaceMaterialOriginThreads(database,materialIdNew,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialIdNew).first(),origin_thread_ids:ids}},{status:201});}
-  if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;let ids=null;if(Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds")){ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409)}await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,materialId).run();if(ids)await replaceMaterialOriginThreads(database,materialId,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first(),...(ids?{origin_thread_ids:ids}:{})}});}
+  if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409);if(!material.material_reference){const prefix=material.is_sample?"S":material.material_type==="note"?"N":material.material_type==="document"?"D":"M",count=await database.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id IS ? AND material_reference LIKE ?").bind(material.state_id,`${prefix}%`).first();material.material_reference=`${prefix}${String(Number(count?.count||0)+1).padStart(2,"0")}`}const materialIdNew=text(body.id,200)||id("archive-material");try{await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,state_id,material_reference,is_sample,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}await replaceMaterialOriginThreads(database,materialIdNew,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialIdNew).first(),origin_thread_ids:ids}},{status:201});}
+  if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;let ids=null;if(Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds")){ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409)}try{await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,state_id=?,material_reference=?,is_sample=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample,materialId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}if(ids)await replaceMaterialOriginThreads(database,materialId,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first(),...(ids?{origin_thread_ids:ids}:{})}});}
   if(request.method==="DELETE"&&materialId){const before=await database.prepare("SELECT id FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);await database.prepare("UPDATE archive_materials SET state='archived',visibility='internal',updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(materialId).run();return json({ok:true,archived:true});}
   return failure("Method not allowed.",405);
 }
@@ -2041,6 +2327,10 @@ export async function handleConstructApi(request,env){
   const mediaUploadSessionMatch=path.match(/^\/api\/admin\/media\/uploads\/([^/]+)$/);if(mediaUploadSessionMatch)return mediaUploadsApi(request,env,decodeURIComponent(mediaUploadSessionMatch[1]));
   const mediaFileMatch=path.match(/^\/api\/admin\/media\/([^/]+)\/file$/);if(mediaFileMatch)return adminMediaFileApi(request,env,decodeURIComponent(mediaFileMatch[1]));
   const mediaMatch=path.match(/^\/api\/admin\/media(?:\/([^/]+))?$/);if(mediaMatch)return mediaApi(request,env,mediaMatch[1]?decodeURIComponent(mediaMatch[1]):"");
+  const catalogueMatch=path.match(/^\/api\/admin\/archive-catalogue(?:\/([^/]+))?$/);if(catalogueMatch)return archiveCatalogueAdminApi(request,env,catalogueMatch[1]?decodeURIComponent(catalogueMatch[1]):"");
+  const eventIdentifierMatch=path.match(/^\/api\/admin\/archive-event-identifiers\/([^/]+)$/);if(eventIdentifierMatch)return archiveEventIdentifierAdminApi(request,env,decodeURIComponent(eventIdentifierMatch[1]));
+  const versionMatch=path.match(/^\/api\/admin\/archive-versions(?:\/([^/]+))?$/);if(versionMatch)return archiveVersionsAdminApi(request,env,versionMatch[1]?decodeURIComponent(versionMatch[1]):"");
+  const stateMatch=path.match(/^\/api\/admin\/archive-states(?:\/([^/]+))?$/);if(stateMatch)return archiveStatesAdminApi(request,env,stateMatch[1]?decodeURIComponent(stateMatch[1]):"");
   const dossierMatch=path.match(/^\/api\/admin\/archive-dossiers(?:\/([^/]+))?$/);if(dossierMatch)return archiveDossiersAdminApi(request,env,dossierMatch[1]?decodeURIComponent(dossierMatch[1]):"");
   const materialMatch=path.match(/^\/api\/admin\/archive-materials(?:\/([^/]+))?$/);if(materialMatch)return archiveMaterialsAdminApi(request,env,materialMatch[1]?decodeURIComponent(materialMatch[1]):"");
   const activityMatch=path.match(/^\/api\/admin\/archive-activities(?:\/([^/]+))?$/);if(activityMatch)return archiveActivitiesAdminApi(request,env,activityMatch[1]?decodeURIComponent(activityMatch[1]):"");
