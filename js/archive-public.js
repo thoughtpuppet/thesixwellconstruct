@@ -156,6 +156,23 @@
     return [...new Set(values)];
   }
 
+  function archiveRecordCardMarkup(record) {
+    const media = mediaObject(record);
+    const image = mediaUrl(media);
+    const symbolMarkup = text(media && (media.svg_markup || media.svgMarkup));
+    const match = record._matches && record._matches[0];
+    const matchText = text(match && (match.snippet || match.excerpt || match.text || match.value));
+    const title = text(record.title, record.name, recordSlug(record), "Untitled record");
+    const catalogue = catalogueLabel(record);
+    const recordType = titleCase(text(record.record_type_label, record.record_type, record.entity_type, record.type, "Archive record"));
+    const medium = text(record.medium_label, record.medium, record.catalogue_medium, record.brand_name, record.brand);
+    return `<a class="archive-record-card" href="${escapeHtml(recordHref(record, match))}">
+      <span class="archive-record-card-media">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(text(media.alt, media.alt_text, title))}" loading="lazy" decoding="async">` : symbolMarkup ? `<span class="archive-record-card-symbol" aria-hidden="true">${symbolMarkup}</span>` : `<span class="archive-record-card-placeholder" aria-hidden="true">${escapeHtml(title.slice(0, 2))}</span>`}</span>
+      <span class="archive-record-card-badges"><span class="archive-record-card-catalogue">${escapeHtml(catalogue || "Archive record")}</span><span class="archive-record-card-type">${escapeHtml(recordType)}</span>${record.is_current ? `<span class="archive-record-card-current">Current</span>` : ""}</span>
+      <span class="archive-record-card-meta"><span class="archive-record-card-date">${escapeHtml(dateLabel(record))}</span><h3>${escapeHtml(title)}</h3>${medium ? `<span class="archive-record-card-medium">${escapeHtml(medium)}</span>` : ""}${matchText ? `<span class="archive-record-card-match"><strong>Matched in ${escapeHtml(titleCase(text(match.type, match.kind, match.field, "record")))}</strong><span>${escapeHtml(truncate(matchText, 150))}</span></span>` : ""}</span>
+    </a>`;
+  }
+
   function normalizeItems(payload) {
     if (!payload || typeof payload !== "object") return [];
     const candidates = first(payload.items, payload.records, payload.results, payload.dossiers, payload.groups, []);
@@ -281,20 +298,6 @@
       });
     }
 
-    function card(record) {
-      const media = mediaObject(record);
-      const image = mediaUrl(media);
-      const match = record._matches && record._matches[0];
-      const matchText = text(match && (match.snippet || match.excerpt || match.text || match.value));
-      const title = text(record.title, record.name, recordSlug(record), "Untitled record");
-      const summary = text(record.summary, record.orientation, record.description, record.statement, record.why_it_matters);
-      const meta = metadata(record);
-      return `<a class="archive-card" href="${escapeHtml(recordHref(record, match))}">
-        <span class="archive-card-media">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(text(media.alt, media.alt_text, title))}" loading="lazy" decoding="async">` : `<span class="archive-card-placeholder" aria-hidden="true">${escapeHtml(title.slice(0, 2))}</span>`}</span>
-        <span class="archive-card-copy"><span class="archive-meta">${record.is_current?"<span>Current record</span>":""}${meta.map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</span><h3>${escapeHtml(title)}</h3>${summary ? `<p>${escapeHtml(truncate(summary, 190))}</p>` : ""}${matchText ? `<p class="archive-match"><strong>Matched in ${escapeHtml(titleCase(text(match.type, match.kind, match.field, "record")))}</strong><br>${escapeHtml(truncate(matchText, 180))}</p>` : ""}</span>
-      </a>`;
-    }
-
     function renderOriginThread(payload) {
       const thread = first(payload.origin_thread, payload.originThread);
       if (!thread) {
@@ -345,7 +348,7 @@
         renderOriginThread(itemPayload);
         renderFacets(itemPayload);
         count.textContent = `${total} ${total === 1 ? "record" : "records"}`;
-        results.innerHTML = records.length ? `<div class="archive-card-grid">${records.map(card).join("")}</div>` : `<section class="archive-empty"><span class="archive-kicker">No match</span><h2>Nothing public here yet.</h2><p>Try a broader term or clear one of the filters. Internal and unreviewed materials never appear in this index.</p><p><button class="archive-button" type="button" data-empty-clear>Clear filters</button></p></section>`;
+        results.innerHTML = records.length ? `<div class="archive-record-card-grid">${records.map(archiveRecordCardMarkup).join("")}</div>` : `<section class="archive-empty"><span class="archive-kicker">No match</span><h2>Nothing public here yet.</h2><p>Try a broader term or clear one of the filters. Internal and unreviewed materials never appear in this index.</p><p><button class="archive-button" type="button" data-empty-clear>Clear filters</button></p></section>`;
         results.setAttribute("aria-busy", "false");
         renderPagination(searchPayload || itemPayload, total);
       } catch (error) {
@@ -388,7 +391,7 @@
       }
     });
     results.addEventListener("click", (event) => {
-      const record = event.target.closest(".archive-card");
+      const record = event.target.closest(".archive-record-card");
       if (record) window.SixWellAnalytics?.track("item_open", { action: "archive-record", itemId: new URL(record.href, location.href).pathname });
       if (event.target.closest("[data-empty-clear]")) app.querySelector("[data-clear-filters]").click();
       if (event.target.closest("[data-archive-retry]")) load();
@@ -473,36 +476,158 @@
     return `<div class="archive-context">${groupMarkup}${themes}</div>`;
   }
 
-  function materialMarkup(material, index, posterFallback = "") {
+  function materialPresentation(material, index, posterFallback = "") {
     const type = slugify(first(material.material_type, material.type, material.kind, "note"));
     const title = text(material.title, material.name, `${titleCase(type)} ${index + 1}`);
     const id = `material-${slugify(first(material.slug, material.id, `${type}-${index + 1}`))}`;
     const digitalAsset = first(material.digital_asset, material.digitalAsset, null);
-    const media = first(digitalAsset, material.media, material.file, mediaObject(material), {});
+    const digitalAssetRecord = digitalAsset && typeof digitalAsset === "object" ? digitalAsset : null;
+    const media = first(digitalAssetRecord, material.media, material.file, mediaObject(material), {});
     const url = mediaUrl(typeof media === "string" ? { url: media } : media);
     const caption = text(material.caption, media.caption, material.description);
     const body = text(material.inline_text, material.body, material.text, material.note);
     const transcript = text(material.transcript, media.transcript, material.transcript_text);
-    let viewer = "";
-    if (["image", "photo", "process-photo", "sketch", "final-image", "artifact"].includes(type) && url) {
-      viewer = `<figure class="archive-material-viewer"><img src="${escapeHtml(url)}" alt="${escapeHtml(text(media.alt, media.alt_text, title))}" loading="lazy" decoding="async">${caption ? `<figcaption><span>${escapeHtml(caption)}</span></figcaption>` : ""}</figure>`;
-    } else if (["audio", "voice-memo", "voice-note"].includes(type) && url) {
-      viewer = `<div class="archive-material-viewer"><audio controls preload="metadata" src="${escapeHtml(url)}">Your browser cannot play this audio.</audio>${transcript ? `<details class="archive-transcript"><summary>Read transcript</summary><p>${escapeHtml(transcript)}</p></details>` : ""}</div>`;
-    } else if (type === "video" && url) {
-      const poster = safeUrl(first(media.poster, material.poster, posterFallback));
-      viewer = `<div class="archive-material-viewer"><video controls playsinline preload="metadata"${poster ? ` poster="${escapeHtml(poster)}"` : ""}><source src="${escapeHtml(url)}"${media.mime_type ? ` type="${escapeHtml(media.mime_type)}"` : ""}>Your browser cannot play this video.</video>${transcript ? `<details class="archive-transcript"><summary>Read transcript</summary><p>${escapeHtml(transcript)}</p></details>` : ""}</div>`;
-    } else if (["document", "pdf"].includes(type) && url) {
-      viewer = `<div class="archive-material-viewer"><object class="archive-material-document" data="${escapeHtml(url)}" type="application/pdf" aria-label="${escapeHtml(title)}"><p class="archive-inline-note">This document cannot be shown inline. <a href="${escapeHtml(url)}">Open it in a new view</a>.</p></object></div>`;
-    } else if (body) {
-      viewer = `<div class="archive-material-viewer archive-inline-note">${escapeHtml(body)}</div>`;
-    }
     const sourceRoute = safeUrl(first(material.archive_route, material.archiveRoute));
     const reference = text(material.material_reference, material.materialReference);
     const state = text(material.state_label, material.stateLabel);
     const isSample = Number(first(material.is_sample, material.isSample, 0)) === 1;
-    const hasDigitalAsset=Boolean(digitalAsset||text(material.media_id,material.mediaId)||url);
-    const digitalAssetType=titleCase(text(digitalAsset&&digitalAsset.asset_type,digitalAsset&&digitalAsset.assetType,media.mime_type&&String(media.mime_type).split("/")[0],"file"));
-    return `<article class="archive-material" id="${id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(reference || titleCase(type))}</span><div class="archive-date">${escapeHtml(dateLabel(material))}</div>${isSample ? `<span class="archive-material-badge">Sample</span>` : ""}</div><div class="archive-material-copy">${reference ? `<span class="archive-label">${escapeHtml(titleCase(type))}${state ? ` · ${escapeHtml(state)}` : ""}</span>` : ""}${hasDigitalAsset?`<span class="archive-digital-asset-label">Digital asset · ${escapeHtml(digitalAssetType)}</span>`:""}<h3>${escapeHtml(title)}</h3>${caption && !viewer.includes("figcaption") ? `<p>${escapeHtml(caption)}</p>` : ""}${sourceRoute?`<p><a href="${escapeHtml(sourceRoute)}">Open source dossier</a></p>`:""}</div></div>${viewer}</article>`;
+    const mimeType = text(media.mime_type, media.mimeType);
+    const hasDigitalAsset = Boolean(digitalAssetRecord || text(material.media_id, material.mediaId) || url);
+    const digitalAssetType = titleCase(text(digitalAssetRecord && digitalAssetRecord.asset_type, digitalAssetRecord && digitalAssetRecord.assetType, mimeType && mimeType.split("/")[0], "file"));
+    const poster = safeUrl(first(media.poster, material.poster, posterFallback));
+    const imageType = ["image", "photo", "process-photo", "sketch", "final-image", "artifact"].includes(type);
+    return {
+      body,
+      caption,
+      date: dateLabel(material),
+      digitalAssetType,
+      hasDigitalAsset,
+      id,
+      imageType,
+      isSample,
+      media,
+      mimeType,
+      poster,
+      reference,
+      sourceRoute,
+      state,
+      title,
+      transcript,
+      type,
+      url,
+    };
+  }
+
+  function materialViewerMarkup(material) {
+    if (material.imageType && material.url) {
+      return `<figure class="archive-material-viewer"><img src="${escapeHtml(material.url)}" alt="${escapeHtml(text(material.media.alt, material.media.alt_text, material.title))}" loading="lazy" decoding="async"></figure>`;
+    }
+    if (["audio", "voice-memo", "voice-note"].includes(material.type) && material.url) {
+      return `<div class="archive-material-viewer"><audio controls preload="metadata" src="${escapeHtml(material.url)}">Your browser cannot play this audio.</audio>${material.transcript ? `<details class="archive-transcript"><summary>Read transcript</summary><p>${escapeHtml(material.transcript)}</p></details>` : ""}</div>`;
+    }
+    if (material.type === "video" && material.url) {
+      return `<div class="archive-material-viewer"><video controls playsinline preload="metadata"${material.poster ? ` poster="${escapeHtml(material.poster)}"` : ""}><source src="${escapeHtml(material.url)}"${material.mimeType ? ` type="${escapeHtml(material.mimeType)}"` : ""}>Your browser cannot play this video.</video>${material.transcript ? `<details class="archive-transcript"><summary>Read transcript</summary><p>${escapeHtml(material.transcript)}</p></details>` : ""}</div>`;
+    }
+    if (["document", "pdf"].includes(material.type) && material.url) {
+      return `<div class="archive-material-viewer"><object class="archive-material-document" data="${escapeHtml(material.url)}" type="application/pdf" aria-label="${escapeHtml(material.title)}"><p class="archive-inline-note">This document cannot be shown inline. <a href="${escapeHtml(material.url)}">Open it in a new view</a>.</p></object></div>`;
+    }
+    if (material.body) {
+      return `<div class="archive-material-viewer archive-inline-note">${escapeHtml(material.body)}</div>`;
+    }
+    return `<div class="archive-material-viewer archive-material-viewer-empty"><span>No public preview is available for this material.</span></div>`;
+  }
+
+  function materialMarkup(material, index, posterFallback = "") {
+    const presentation = materialPresentation(material, index, posterFallback);
+    return `<article class="archive-material" id="${presentation.id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(presentation.reference || titleCase(presentation.type))}</span><div class="archive-date">${escapeHtml(presentation.date)}</div>${presentation.isSample ? `<span class="archive-material-badge">Sample</span>` : ""}</div><div class="archive-material-copy">${presentation.reference ? `<span class="archive-label">${escapeHtml(titleCase(presentation.type))}${presentation.state ? ` · ${escapeHtml(presentation.state)}` : ""}</span>` : ""}${presentation.hasDigitalAsset ? `<span class="archive-digital-asset-label">Digital asset · ${escapeHtml(presentation.digitalAssetType)}</span>` : ""}<h3>${escapeHtml(presentation.title)}</h3>${presentation.caption ? `<p>${escapeHtml(presentation.caption)}</p>` : ""}${presentation.sourceRoute ? `<p><a href="${escapeHtml(presentation.sourceRoute)}">Open source dossier</a></p>` : ""}</div></div>${materialViewerMarkup(presentation)}</article>`;
+  }
+
+  function materialThumbnailMarkup(material, index, posterFallback = "") {
+    const presentation = materialPresentation(material, index, posterFallback);
+    const previewImage = presentation.imageType ? presentation.url : presentation.type === "video" ? presentation.poster : "";
+    const placeholder = titleCase(["voice-memo", "voice-note"].includes(presentation.type) ? "Audio" : presentation.type);
+    return `<article class="archive-notebook-item" id="${presentation.id}">
+      <button class="archive-notebook-trigger" type="button" data-archive-material-trigger data-material-index="${index}" aria-haspopup="dialog" aria-controls="archive-material-dialog" aria-label="Open ${escapeHtml(presentation.title)} details">
+        <span class="archive-notebook-preview">${previewImage ? `<img src="${escapeHtml(previewImage)}" alt="" loading="lazy" decoding="async">` : `<span class="archive-notebook-placeholder" aria-hidden="true">${escapeHtml(placeholder || "Material")}</span>`}</span>
+        <span class="archive-notebook-badges"><span>${escapeHtml(presentation.reference || titleCase(presentation.type))}</span><span>${escapeHtml(titleCase(presentation.type))}</span>${presentation.isSample ? `<span>Sample</span>` : ""}</span>
+        <span class="archive-notebook-meta"><span class="archive-date">${escapeHtml(presentation.date)}</span><strong>${escapeHtml(presentation.title)}</strong></span>
+      </button>
+    </article>`;
+  }
+
+  function materialDialogContentMarkup(material, index, posterFallback = "") {
+    const presentation = materialPresentation(material, index, posterFallback);
+    return `<div class="archive-material-dialog-layout">
+      ${materialViewerMarkup(presentation)}
+      <div class="archive-material-dialog-copy">
+        <span class="archive-label">${escapeHtml(titleCase(presentation.type))}${presentation.state ? ` · ${escapeHtml(presentation.state)}` : ""}</span>
+        ${presentation.reference ? `<span class="archive-material-type">${escapeHtml(presentation.reference)}</span>` : ""}
+        ${presentation.hasDigitalAsset ? `<span class="archive-digital-asset-label">Digital asset · ${escapeHtml(presentation.digitalAssetType)}</span>` : ""}
+        <h2 id="archive-material-dialog-title">${escapeHtml(presentation.title)}</h2>
+        <div class="archive-date">${escapeHtml(presentation.date)}</div>
+        ${presentation.caption ? `<p>${escapeHtml(presentation.caption)}</p>` : ""}
+        ${presentation.isSample ? `<span class="archive-material-badge">Sample</span>` : ""}
+        ${presentation.sourceRoute ? `<p><a class="archive-button" href="${escapeHtml(presentation.sourceRoute)}">Open source dossier</a></p>` : ""}
+      </div>
+    </div>`;
+  }
+
+  function materialDialogShellMarkup() {
+    return `<dialog class="archive-material-dialog" id="archive-material-dialog" aria-labelledby="archive-material-dialog-title">
+      <div class="archive-material-dialog-shell">
+        <header class="archive-material-dialog-header"><span class="archive-kicker">Notebook material</span><button class="archive-material-dialog-close" type="button" data-archive-material-close aria-label="Close material details">Close</button></header>
+        <div data-archive-material-dialog-content></div>
+      </div>
+    </dialog>`;
+  }
+
+  function setupMaterialQuickView(materials, posterFallback = "") {
+    const dialog = app.querySelector("#archive-material-dialog");
+    if (!dialog) return;
+    const content = dialog.querySelector("[data-archive-material-dialog-content]");
+    const closeButton = dialog.querySelector("[data-archive-material-close]");
+    const triggers = [...app.querySelectorAll("[data-archive-material-trigger]")];
+    let lastTrigger = null;
+
+    function openMaterial(index, trigger) {
+      const material = materials[index];
+      if (!material) return;
+      lastTrigger = trigger || triggers[index] || null;
+      content.innerHTML = materialDialogContentMarkup(material, index, posterFallback);
+      if (!dialog.open) dialog.showModal();
+      document.body.classList.add("archive-material-dialog-open");
+      window.SixWellAnalytics?.track("item_open", { action: "archive-material", itemId: text(material.material_reference, material.materialReference, material.id, index) });
+      requestAnimationFrame(() => closeButton.focus());
+    }
+
+    function openHashTarget() {
+      let id = "";
+      try {
+        id = decodeURIComponent(location.hash.slice(1));
+      } catch {
+        return;
+      }
+      if (!id.startsWith("material-")) return;
+      const item = document.getElementById(id);
+      const trigger = item && item.querySelector("[data-archive-material-trigger]");
+      if (!trigger) return;
+      item.scrollIntoView({ block: "center" });
+      openMaterial(Number(trigger.dataset.materialIndex), trigger);
+    }
+
+    triggers.forEach((trigger) => {
+      trigger.addEventListener("click", () => openMaterial(Number(trigger.dataset.materialIndex), trigger));
+    });
+    closeButton.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener("close", () => {
+      document.body.classList.remove("archive-material-dialog-open");
+      if (lastTrigger && lastTrigger.isConnected) lastTrigger.focus({ preventScroll: true });
+    });
+    window.addEventListener("hashchange", openHashTarget);
+    requestAnimationFrame(openHashTarget);
   }
 
   function historyMarkup(activity, index) {
@@ -567,6 +692,7 @@
       const media = first(payload.primary_media, data.dossier.primary_media, mediaObject(primaryMaterial), mediaObject(item));
       const image = mediaObject({ primary_media: media });
       const imageUrl = mediaUrl(image);
+      const imageMarkup = text(image && (image.svg_markup || image.svgMarkup));
       const primaryMaterialAnchor = primaryMaterial ? `material-${slugify(first(primaryMaterial.slug, primaryMaterial.id, "final-image"))}` : "";
       const activities = data.activities.slice().sort((a, b) => text(a.sort_date, a.occurred_at, a.date_start, a.date, "9999").localeCompare(text(b.sort_date, b.occurred_at, b.date_start, b.date, "9999")));
       const relationships = data.relationships;
@@ -576,14 +702,16 @@
       document.title = `${title} · Archive · the six.well construct`;
       app.innerHTML = `
         <article>
-          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.cultural_object_type, item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadata(item).map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${primaryOriginThread?`<a class="archive-button" href="/archive/?origin=${encodeURIComponent(text(primaryOriginThread.slug))}&from=${encodeURIComponent(text(item.entity_id,item.entityId,item.archive_slug,item.slug))}">Find related records</a>`:`<a class="archive-button" href="/archive/?${encodeURIComponent(text(item.catalogue_medium, item.medium) ? "medium" : "record_type")}=${encodeURIComponent(text(item.catalogue_medium, item.medium, item.record_type))}">Browse same ${escapeHtml(text(item.catalogue_medium, item.medium)?"medium":"record type")}</a>`}</div></div></div>${imageUrl ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}"><figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
+          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.cultural_object_type, item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadata(item).map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${primaryOriginThread?`<a class="archive-button" href="/archive/?origin=${encodeURIComponent(text(primaryOriginThread.slug))}&from=${encodeURIComponent(text(item.entity_id,item.entityId,item.archive_slug,item.slug))}">Find related records</a>`:`<a class="archive-button" href="/archive/?${encodeURIComponent(text(item.catalogue_medium, item.medium) ? "medium" : "record_type")}=${encodeURIComponent(text(item.catalogue_medium, item.medium, item.record_type))}">Browse same ${escapeHtml(text(item.catalogue_medium, item.medium)?"medium":"record type")}</a>`}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
           <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
           <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">02 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials)}</div></section>` : ""}
-          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">03 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${notebookMaterials.length ? `<div class="archive-notebook">${notebookMaterials.map((material,index)=>materialMarkup(material,index,imageUrl)).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
+          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">03 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${notebookMaterials.length ? `<div class="archive-notebook-grid">${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
           <section class="archive-document-section" id="history"><header class="archive-section-heading"><span class="archive-section-index">04 / Time</span><h2 class="archive-section-title">Item history</h2></header><div>${activities.length ? `<div class="archive-history">${activities.map(historyMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>No dated history entries are public yet.</p></div>`}</div></section>
           <section class="archive-document-section" id="connections"><header class="archive-section-heading"><span class="archive-section-index">05 / Field</span><h2 class="archive-section-title">Connections</h2></header><div>${relationships.length ? `<div class="archive-connection-grid">${relationships.map(connectionMarkup).join("")}</div>${relationshipGraph(title, relationships)}` : `<div class="archive-note-empty"><p>No public relationships have been attached to this dossier yet.</p></div>`}</div></section>
-        </article>`;
+        </article>
+        ${notebookMaterials.length ? materialDialogShellMarkup() : ""}`;
+      setupMaterialQuickView(notebookMaterials, imageUrl);
     } catch (error) {
       app.innerHTML = error.status === 404
         ? errorState("This dossier is not public.", "It may be unpublished, unlisted, or no longer available under this address.")

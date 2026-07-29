@@ -434,91 +434,6 @@ button.archive-chip::after {
   color: var(--archive-ink);
 }
 
-.archive-card-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--archive-record-gap);
-}
-
-.archive-card {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  min-width: 0;
-  border: var(--archive-rule) solid var(--archive-line);
-  background: rgba(17, 16, 14, 0.87);
-  color: inherit;
-  text-decoration: none;
-}
-
-.archive-card:hover,
-.archive-card:focus-visible {
-  z-index: 1;
-  background: var(--archive-panel-raised);
-  box-shadow: inset 0 0 0 var(--archive-rule) var(--archive-signal);
-}
-
-.archive-card-media {
-  position: relative;
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-  border-bottom: var(--archive-rule) solid var(--archive-line);
-  background:
-    linear-gradient(135deg, rgba(184, 122, 50, 0.12), transparent),
-    #090807;
-}
-
-.archive-card-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 420ms var(--ease-out, ease);
-}
-
-.archive-card:hover .archive-card-media img {
-  transform: scale(1.025);
-}
-
-.archive-card-placeholder {
-  display: grid;
-  place-items: end start;
-  width: 100%;
-  height: 100%;
-  padding: 1rem;
-  color: var(--archive-signal-soft);
-  font-family: var(--font-display, Inter, Arial, sans-serif);
-  font-size: clamp(2.2rem, 5vw, 4.3rem);
-  font-weight: 900;
-  letter-spacing: -0.06em;
-  line-height: 0.8;
-  text-transform: uppercase;
-}
-
-.archive-card-copy {
-  display: grid;
-  align-content: start;
-  gap: 0.8rem;
-  min-height: 15rem;
-  padding: 1.35rem;
-}
-
-.archive-card h3 {
-  margin: 0;
-  font-family: var(--font-display, Inter, Arial, sans-serif);
-  font-size: clamp(1.35rem, 2.8vw, 2rem);
-  font-weight: 900;
-  letter-spacing: -0.045em;
-  line-height: 0.98;
-  text-wrap: balance;
-  text-transform: uppercase;
-}
-
-.archive-card p {
-  margin: 0;
-  color: var(--archive-muted);
-  line-height: 1.55;
-}
-
 .archive-meta {
   display: flex;
   flex-wrap: wrap;
@@ -528,22 +443,6 @@ button.archive-chip::after {
   font-weight: 800;
   letter-spacing: 0.1em;
   line-height: 1.45;
-  text-transform: uppercase;
-}
-
-.archive-match {
-  margin-top: auto !important;
-  padding-top: 0.85rem;
-  border-top: var(--archive-rule) solid var(--archive-faint);
-  color: var(--archive-ink) !important;
-  font-size: 0.9rem;
-}
-
-.archive-match strong {
-  color: var(--archive-signal-soft);
-  font-family: var(--font-display, Inter, Arial, sans-serif);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -1318,7 +1217,6 @@ button.archive-chip::after {
   }
 
   .archive-facets,
-  .archive-card-grid,
   .archive-connection-grid,
   .archive-room-list,
   .archive-context,
@@ -1345,10 +1243,6 @@ button.archive-chip::after {
   .archive-material figcaption {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .archive-card-copy {
-    min-height: 0;
   }
 
   .archive-material-header,
@@ -1404,7 +1298,6 @@ button.archive-chip::after {
 }
 
 @media (forced-colors: active) {
-  .archive-card,
   .archive-material-viewer,
   .archive-record-figure,
   .archive-connection-card {
@@ -1423,8 +1316,7 @@ button.archive-chip::after {
   figcaption,
   .archive-prose,
   .archive-inline-note,
-  .archive-transcript,
-  .archive-match
+  .archive-transcript
 ) {
   color: var(--archive-ink) !important;
   letter-spacing: normal !important;
@@ -1432,7 +1324,7 @@ button.archive-chip::after {
   text-transform: uppercase !important;
 }
 
-.archive-public :where(.archive-section-title, .archive-card h3) {
+.archive-public .archive-section-title {
   letter-spacing: -0.045em !important;
   line-height: 0.96 !important;
 }

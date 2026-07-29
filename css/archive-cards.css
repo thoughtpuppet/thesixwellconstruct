@@ -1,0 +1,549 @@
+/* Shared public Archive cards and dossier notebook quick views. */
+
+.archive-record-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--archive-record-gap, 16px);
+}
+
+.archive-record-card {
+  position: relative;
+  display: block;
+  min-width: 0;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: var(--archive-rule, 5px) solid var(--archive-line);
+  background: var(--archive-panel, #171411);
+  color: var(--archive-ink);
+  text-decoration: none;
+}
+
+.archive-record-card:hover,
+.archive-record-card:focus-visible {
+  z-index: 1;
+  border-color: var(--archive-signal);
+}
+
+.archive-record-card-media,
+.archive-record-card-media img,
+.archive-record-card-symbol,
+.archive-record-card-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.archive-record-card-media {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #090807;
+}
+
+.archive-record-card-media img {
+  object-fit: cover;
+  transition:
+    filter 320ms var(--ease-out, ease),
+    transform 420ms var(--ease-out, ease);
+}
+
+.archive-record-card:hover .archive-record-card-media img,
+.archive-record-card:focus-visible .archive-record-card-media img {
+  filter: brightness(0.45);
+  transform: scale(0.97);
+}
+
+.archive-record-card-symbol {
+  display: grid;
+  place-items: center;
+  padding: clamp(2rem, 6vw, 4rem);
+  color: var(--archive-signal-soft);
+  transition:
+    filter 320ms var(--ease-out, ease),
+    transform 420ms var(--ease-out, ease);
+}
+
+.archive-record-card-symbol svg {
+  width: min(72%, 14rem);
+  height: min(72%, 14rem);
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.archive-record-card:hover .archive-record-card-symbol,
+.archive-record-card:focus-visible .archive-record-card-symbol {
+  filter: brightness(0.55);
+  transform: scale(0.97);
+}
+
+.archive-record-card-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: clamp(3.5rem, 8vw, 6.5rem);
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  line-height: 0.8;
+  text-transform: uppercase;
+  transition:
+    filter 320ms var(--ease-out, ease),
+    transform 420ms var(--ease-out, ease);
+}
+
+.archive-record-card:hover .archive-record-card-placeholder,
+.archive-record-card:focus-visible .archive-record-card-placeholder {
+  filter: brightness(0.55);
+  transform: scale(0.97);
+}
+
+.archive-record-card-badges {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+
+.archive-record-card-badges > span,
+.archive-record-card-date,
+.archive-record-card-medium,
+.archive-record-card-match strong {
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.archive-record-card-badges > span {
+  display: inline-block;
+  padding: 0.42rem 0.52rem;
+  background: var(--archive-paper);
+  color: var(--archive-signal-soft);
+}
+
+.archive-record-card-badges .archive-record-card-catalogue {
+  background: var(--archive-signal);
+  color: var(--archive-paper);
+}
+
+.archive-record-card-badges .archive-record-card-type {
+  color: var(--archive-signal-soft);
+}
+
+.archive-record-card-badges .archive-record-card-current {
+  margin-left: auto;
+  background: var(--archive-focus);
+  color: var(--archive-paper);
+}
+
+.archive-record-card-meta {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  gap: 0.55rem;
+  padding: clamp(3.75rem, 10vw, 7rem) 1rem 1rem;
+  background: linear-gradient(to bottom, transparent, rgba(9, 8, 7, 0.96) 48%);
+  color: var(--archive-ink);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.75rem);
+  transition:
+    opacity 260ms var(--ease-out, ease),
+    transform 320ms var(--ease-out, ease);
+}
+
+.archive-record-card:hover .archive-record-card-meta,
+.archive-record-card:focus-visible .archive-record-card-meta {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.archive-record-card-meta h3 {
+  margin: 0;
+  color: var(--archive-ink);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: clamp(1.45rem, 3vw, 2.1rem);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.96;
+  text-transform: uppercase;
+}
+
+.archive-record-card-date,
+.archive-record-card-medium {
+  color: var(--archive-signal-soft);
+}
+
+.archive-record-card-match {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+  padding-top: 0.7rem;
+  border-top: var(--archive-rule, 5px) solid var(--archive-faint);
+  color: var(--archive-ink);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.archive-record-card-match strong {
+  color: var(--archive-focus);
+}
+
+.archive-record-symbol {
+  display: grid;
+  min-height: min(62vh, 42rem);
+  place-items: center;
+  padding: clamp(2rem, 8vw, 7rem);
+  background: #090807;
+  color: var(--archive-signal-soft);
+}
+
+.archive-record-symbol svg {
+  width: min(65%, 28rem);
+  height: min(65%, 28rem);
+  max-width: 100%;
+  max-height: 32rem;
+}
+
+.archive-notebook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--archive-record-gap, 16px);
+}
+
+.archive-notebook-item {
+  min-width: 0;
+  scroll-margin-top: 7rem;
+}
+
+.archive-notebook-trigger {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: var(--archive-rule, 5px) solid var(--archive-line);
+  border-radius: 0;
+  padding: 0;
+  background: #090807;
+  color: var(--archive-ink);
+  text-align: left;
+}
+
+.archive-notebook-trigger:hover,
+.archive-notebook-trigger:focus-visible {
+  border-color: var(--archive-signal);
+}
+
+.archive-notebook-preview,
+.archive-notebook-preview img,
+.archive-notebook-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.archive-notebook-preview {
+  position: absolute;
+  inset: 0;
+}
+
+.archive-notebook-preview img {
+  object-fit: cover;
+  transition:
+    filter 320ms var(--ease-out, ease),
+    transform 420ms var(--ease-out, ease);
+}
+
+.archive-notebook-trigger:hover .archive-notebook-preview img,
+.archive-notebook-trigger:focus-visible .archive-notebook-preview img {
+  filter: brightness(0.58);
+  transform: scale(0.97);
+}
+
+.archive-notebook-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: clamp(1.4rem, 4vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.archive-notebook-badges {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  left: 0.55rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.archive-notebook-badges > span {
+  padding: 0.36rem 0.44rem;
+  background: var(--archive-paper);
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.archive-notebook-badges > span:first-child {
+  background: var(--archive-signal);
+  color: var(--archive-paper);
+}
+
+.archive-notebook-meta {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  gap: 0.25rem;
+  padding: 2.5rem 0.75rem 0.7rem;
+  background: linear-gradient(to bottom, transparent, rgba(9, 8, 7, 0.96) 42%);
+}
+
+.archive-notebook-meta strong {
+  color: var(--archive-ink);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+body.archive-material-dialog-open {
+  overflow: hidden;
+}
+
+.archive-material-dialog {
+  width: min(calc(100% - 2rem), 68rem);
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  margin: auto;
+  border: var(--archive-rule, 5px) solid var(--archive-signal);
+  border-radius: 0;
+  padding: 0;
+  background: var(--color-bg, #0e0e0e);
+  color: var(--archive-ink);
+}
+
+.archive-material-dialog:not([open]) {
+  display: none;
+}
+
+.archive-material-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.86);
+}
+
+.archive-material-dialog-shell {
+  min-width: 0;
+}
+
+.archive-material-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.7rem;
+  border-bottom: var(--archive-rule, 5px) solid var(--archive-line);
+  background: var(--color-bg, #0e0e0e);
+}
+
+.archive-material-dialog-close {
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0.65rem 0.8rem;
+  background: var(--archive-signal);
+  color: var(--archive-paper);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.archive-material-dialog-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(16rem, 0.65fr);
+  gap: clamp(1rem, 3vw, 2rem);
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.archive-material-dialog .archive-material-viewer {
+  min-width: 0;
+  margin: 0;
+  align-self: start;
+}
+
+.archive-material-dialog .archive-material-viewer img,
+.archive-material-dialog .archive-material-viewer video {
+  max-height: calc(100dvh - 10rem);
+}
+
+.archive-material-dialog-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  align-self: start;
+}
+
+.archive-material-dialog-copy h2 {
+  margin: 0;
+  color: var(--archive-ink);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: clamp(1.65rem, 3vw, 2.5rem);
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
+.archive-material-dialog-copy p {
+  margin: 0;
+  color: var(--archive-ink);
+  line-height: 1.65;
+}
+
+.archive-material-dialog-copy .archive-material-badge {
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+.archive-material-dialog-copy .archive-button {
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.archive-material-viewer-empty {
+  display: grid;
+  min-height: 18rem;
+  place-items: center;
+  padding: 2rem;
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .archive-record-card-meta {
+    opacity: 1;
+    transform: none;
+  }
+
+  .archive-record-card-media img {
+    filter: brightness(0.72);
+  }
+
+  .archive-record-card-symbol {
+    filter: brightness(0.78);
+  }
+}
+
+@media (max-width: 820px) {
+  .archive-material-dialog-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-material-dialog .archive-material-viewer img,
+  .archive-material-dialog .archive-material-viewer video {
+    max-height: 58dvh;
+  }
+}
+
+@media (max-width: 700px) {
+  .archive-record-card-grid {
+    gap: 12px;
+  }
+
+  .archive-record-card-meta {
+    opacity: 1;
+    transform: none;
+  }
+
+  .archive-record-card-media img {
+    filter: brightness(0.72);
+  }
+
+  .archive-record-card-symbol {
+    filter: brightness(0.78);
+  }
+
+  .archive-record-symbol {
+    min-height: 24rem;
+    padding: 3rem;
+  }
+
+  .archive-notebook-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .archive-material-dialog {
+    width: calc(100% - 1.25rem);
+    max-height: calc(100dvh - 1.25rem);
+  }
+}
+
+@media (max-width: 380px) {
+  .archive-record-card-grid,
+  .archive-notebook-grid {
+    gap: 12px;
+  }
+
+  .archive-notebook-badges > span:nth-child(2) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .archive-record-card-media img,
+  .archive-record-card-symbol,
+  .archive-record-card-placeholder,
+  .archive-record-card-meta,
+  .archive-notebook-preview img {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .archive-record-card,
+  .archive-notebook-trigger,
+  .archive-material-dialog {
+    border: var(--archive-rule, 5px) solid CanvasText;
+  }
+}

@@ -647,12 +647,38 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'art_work' THEN aw.medium WHEN 'portfolio_item' THEN pi.primary_style
       WHEN 'flash_item' THEN fi.item_type WHEN 'merch_item' THEN mi.product_type
       WHEN 'event' THEN 'event' WHEN 'visual_symbol' THEN 'symbol' ELSE '' END medium,
-    (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
-      FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
-      WHERE am.dossier_entity_id=ad.entity_id AND am.state='published' AND am.visibility='public'
-        AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
-        AND m.mime_type LIKE 'image/%' AND am.material_type IN ('final-image','process-photo','sketch','artifact')
-      ORDER BY CASE am.material_type WHEN 'final-image' THEN 0 ELSE 1 END,am.sort_order,am.created_at LIMIT 1) primary_image,
+    COALESCE(
+      (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
+        FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
+        WHERE am.dossier_entity_id=ad.entity_id AND am.state='published' AND am.visibility='public'
+          AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+          AND m.mime_type LIKE 'image/%' AND am.material_type IN ('final-image','process-photo','sketch','artifact')
+        ORDER BY CASE am.material_type WHEN 'final-image' THEN 0 ELSE 1 END,am.sort_order,am.created_at LIMIT 1),
+      CASE WHEN ce.entity_type='portfolio_item' AND pi.state='published' THEN
+        CASE WHEN COALESCE(NULLIF(pi.cover_image_ref,''),'primary')='primary'
+          AND pi.primary_consent_status IN ('not-required','granted')
+          THEN COALESCE(NULLIF(pi.source_url,''),CASE WHEN pi.storage_key<>'' THEN '/api/portfolio/media/'||pi.id END)
+        ELSE (SELECT COALESCE(NULLIF(cover.source_url,''),'/api/construct/entity-media/'||cover.id)
+          FROM entity_media cover_attachment JOIN media_assets cover ON cover.id=cover_attachment.media_id
+          LEFT JOIN portfolio_image_details cover_details ON cover_details.portfolio_item_id=cover_attachment.entity_id AND cover_details.image_ref=cover_attachment.media_id
+          WHERE cover_attachment.entity_id=pi.id AND cover_attachment.media_id=pi.cover_image_ref
+            AND cover_attachment.role='gallery' AND cover_attachment.public_visible=1
+            AND cover.state='active' AND cover.privacy='public' AND cover.consent_status IN ('not-required','granted')
+            AND cover.public_presentation='inline' AND cover.mime_type LIKE 'image/%'
+            AND COALESCE(cover_details.image_role,'result')='result'
+          LIMIT 1) END END,
+      CASE WHEN ce.entity_type='merch_item' THEN NULLIF(mi.image_url,'') END,
+      CASE WHEN ce.entity_type='event' THEN NULLIF(ev.image_url,'') END,
+      CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(NULLIF(vs.image_url,''),NULLIF(json_extract(vs.examples_json,'$[0].src'),'')) END,
+      (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/entity-media/'||m.id)
+        FROM entity_media em JOIN media_assets m ON m.id=em.media_id
+        WHERE em.entity_id=ce.id AND em.public_visible=1
+          AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted')
+          AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%'
+        ORDER BY CASE em.role WHEN 'primary' THEN 0 WHEN 'gallery' THEN 1 ELSE 2 END,em.sort_order,em.created_at LIMIT 1),
+      ''
+    ) primary_image,
+    CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(vs.svg_markup,'') ELSE '' END primary_svg_markup,
     (SELECT group_concat(material_type) FROM (
       SELECT DISTINCT am.material_type material_type FROM archive_materials am
       LEFT JOIN media_assets m ON m.id=am.media_id
@@ -727,6 +753,12 @@ function presentArchiveItem(row) {
   const materialTypes = String(row.material_types || "").split(",").filter(Boolean);
   const summary = row.orientation || row.canonical_summary || "";
   const archiveRoute = `/archive/records/${encodeURIComponent(row.archive_slug)}/`;
+  const primarySvgMarkup = row.primary_svg_markup ? sanitizeLegendSvg(row.primary_svg_markup) : "";
+  const primaryMedia = row.primary_image
+    ? { url: row.primary_image, kind: "image" }
+    : primarySvgMarkup
+      ? { svg_markup: primarySvgMarkup, svgMarkup: primarySvgMarkup, kind: "symbol" }
+      : null;
   return {
     entity_id: row.entity_id,
     entityId: row.entity_id,
@@ -780,7 +812,9 @@ function presentArchiveItem(row) {
     primaryImage: row.primary_image || "",
     image_url: row.primary_image || "",
     imageUrl: row.primary_image || "",
-    primary_media: row.primary_image ? { url: row.primary_image } : null,
+    primary_svg_markup: primarySvgMarkup,
+    primarySvgMarkup,
+    primary_media: primaryMedia,
     material_types: materialTypes,
     materialTypes,
     featured: Number(row.featured || 0),

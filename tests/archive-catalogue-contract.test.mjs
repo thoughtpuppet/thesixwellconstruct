@@ -304,10 +304,55 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   assert.ok(eventSearch.items.some((item) => item.entity_id === "event-context-only"));
 });
 
+test("public Archive media prefers explicit evidence, then approved canonical covers and symbols", async () => {
+  const db = database();
+  const runtime = env(db);
+
+  db.exec(`INSERT INTO content_entities
+      (id,entity_type,node_id,visibility,search_visibility,public_at,created_by,updated_by,created_at,updated_at)
+    VALUES
+      ('portfolio-archive-cover-test','portfolio_item','node-tattoos','public',1,datetime('now'),'test','test',datetime('now'),datetime('now'));
+    INSERT INTO portfolio_items
+      (id,source_url,storage_key,original_filename,content_type,title,alt_text,year,placement,primary_style,collection,caption,state,sort_order,created_at,updated_at,primary_consent_status)
+    VALUES
+      ('portfolio-archive-cover-test','https://cdn.example.test/canonical-tattoo.jpg','','canonical-tattoo.jpg','image/jpeg',
+       'Canonical tattoo cover','A documented tattoo','2026','arm','blackwork','','','published',1,datetime('now'),datetime('now'),'granted');`);
+
+  const canonicalResponse = await handleConstructApi(request("/api/archive/items/portfolio-archive-cover-test"), runtime);
+  assert.equal(canonicalResponse.status, 200);
+  const canonicalRecord = await canonicalResponse.json();
+  assert.equal(canonicalRecord.item.primary_media.url, "https://cdn.example.test/canonical-tattoo.jpg");
+  assert.equal(canonicalRecord.item.primary_media.kind, "image");
+
+  db.exec(`INSERT INTO media_assets
+      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+    VALUES
+      ('media-archive-cover-test','https://cdn.example.test/archive-final.jpg','archive-final.jpg','image/jpeg',
+       'Archive final image','public','granted','active','inline','test',datetime('now'),datetime('now'));
+    INSERT INTO archive_materials
+      (id,dossier_entity_id,media_id,role,material_type,title,visibility,state,sort_order,material_reference,created_by,updated_by,created_at,updated_at)
+    VALUES
+      ('material-archive-cover-test','portfolio-archive-cover-test','media-archive-cover-test','notebook','final-image',
+       'Archive final image','public','published',1,'M01','test','test',datetime('now'),datetime('now'));`);
+
+  const explicitResponse = await handleConstructApi(request("/api/archive/items/portfolio-archive-cover-test"), runtime);
+  assert.equal(explicitResponse.status, 200);
+  const explicitRecord = await explicitResponse.json();
+  assert.equal(explicitRecord.item.primary_media.url, "https://cdn.example.test/archive-final.jpg");
+
+  const symbolResponse = await handleConstructApi(request("/api/archive/items/maze-room"), runtime);
+  assert.equal(symbolResponse.status, 200);
+  const symbolRecord = await symbolResponse.json();
+  assert.equal(symbolRecord.item.primary_media.kind, "symbol");
+  assert.match(symbolRecord.item.primary_media.svg_markup, /^<svg\b/);
+  assert.equal(symbolRecord.item.primary_image, "");
+});
+
 test("Studio and public Archive surfaces expose the catalogue system", () => {
   const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
   const publicScript = readFileSync(join(ROOT, "js", "archive-public.js"), "utf8");
   const publicCss = readFileSync(join(ROOT, "css", "archive-public.css"), "utf8");
+  const archiveCardsCss = readFileSync(join(ROOT, "css", "archive-cards.css"), "utf8");
   assert.match(studio, /Cultural object identity/);
   assert.match(studio, /Versions and states/);
   assert.match(studio, /Event authority identity/);
@@ -320,5 +365,14 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(publicScript, /archive-digital-asset-label/);
   assert.match(publicScript, /Version \$\{versionNumber\}, State/);
   assert.match(publicScript, /Concept or theme/);
+  assert.match(publicScript, /archive-record-card-catalogue/);
+  assert.match(publicScript, /archive-record-card-symbol/);
+  assert.match(publicScript, /archive-record-symbol/);
+  assert.match(publicScript, /archive-notebook-item/);
+  assert.match(publicScript, /archive-material-dialog/);
   assert.match(publicCss, /\.archive-state-roman/);
+  assert.match(archiveCardsCss, /\.archive-record-card/);
+  assert.match(archiveCardsCss, /\.archive-record-card-symbol/);
+  assert.match(archiveCardsCss, /\.archive-record-symbol/);
+  assert.match(archiveCardsCss, /\.archive-material-dialog/);
 });
