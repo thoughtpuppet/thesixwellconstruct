@@ -24,6 +24,9 @@ test("Archive Guide explains current use and developing catalogue language", asy
   assert.match(html, /Ways into the Archive/);
   assert.match(html, /Anatomy of a record/);
   assert.match(html, /Materials and documentation/);
+  assert.match(html, /Archive dossier/);
+  assert.match(html, /Digital asset/);
+  assert.match(html, /separate privacy, consent, public-presentation, and transcript controls/);
   assert.match(html, /ART-042/);
   assert.match(html, /Roman numerals/);
   assert.match(html, /Cultural object/);

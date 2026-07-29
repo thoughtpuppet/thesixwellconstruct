@@ -683,6 +683,45 @@ function archiveCatalogueLabel(row) {
   return `${row.catalogue_id}.${version}/${state}${variant ? `, ${variant}` : ""}`;
 }
 
+function archiveDigitalAssetType(mimeType="") {
+  const mime=String(mimeType||"").toLowerCase();
+  if(mime.startsWith("image/"))return "image";
+  if(mime.startsWith("video/"))return "video";
+  if(mime.startsWith("audio/"))return "audio";
+  if(mime==="application/pdf"||mime.includes("document")||mime.includes("word"))return "document";
+  return "file";
+}
+
+function presentArchiveMaterial(row,admin=false) {
+  if(!row)return null;
+  const digitalAsset=row.media_id?{
+    id:row.media_id,
+    kind:"digital-asset",
+    asset_type:archiveDigitalAssetType(row.mime_type),
+    mime_type:row.mime_type||"",
+    width:Number(row.width||0)||null,
+    height:Number(row.height||0)||null,
+    duration_seconds:Number(row.duration_seconds||0)||null,
+    alt_text:row.alt_text||"",
+    title:row.public_title||row.title||"",
+    description:row.public_description||row.media_caption||row.caption||"",
+    presentation:row.public_presentation||"inline",
+    transcript:row.transcript_status==="ready"?(row.transcript||""):"",
+    transcript_language:row.transcript_status==="ready"?(row.transcript_language||""):"",
+    url:row.media_url||row.url||"",
+    ...(admin?{
+      original_filename:row.original_filename||"",
+      byte_size:Number(row.byte_size||0),
+      privacy:row.media_privacy||"internal",
+      consent_status:row.consent_status||"not-required",
+      state:row.media_state||"active",
+      transcript_status:row.transcript_status||"not-requested",
+      transcript_language:row.transcript_language||"",
+    }:{})
+  }:null;
+  return {...row,digital_asset:digitalAsset,digitalAsset};
+}
+
 function presentArchiveItem(row) {
   if (!row) return null;
   const materialTypes = String(row.material_types || "").split(",").filter(Boolean);
@@ -835,7 +874,8 @@ async function publicArchiveItems(request, env) {
     const currentItem=items.find(item=>item.is_current);if(currentItem)currentRecordPosition=currentItem.origin_position;
     const evidenceRows=(await database.prepare(`SELECT am.*,otm.sort_order origin_sort_order,ad.archive_slug,
         COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END) media_url,
-        m.mime_type,m.alt_text,m.public_title,m.public_description,m.transcript,m.transcript_status
+        m.mime_type,m.width,m.height,m.duration_seconds,m.alt_text,m.public_title,m.public_description,
+        m.transcript,m.transcript_status,m.transcript_language,m.public_presentation
       FROM archive_origin_thread_materials otm
       JOIN archive_materials am ON am.id=otm.material_id AND am.state='published' AND am.visibility='public'
       JOIN archive_dossiers ad ON ad.entity_id=am.dossier_entity_id AND ad.state='published' AND ad.public_visible=1
@@ -843,7 +883,7 @@ async function publicArchiveItems(request, env) {
       LEFT JOIN media_assets m ON m.id=am.media_id
       WHERE otm.thread_id=? AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
       ORDER BY CASE WHEN am.occurred_at IS NULL THEN 1 ELSE 0 END,am.occurred_at,otm.sort_order,am.sort_order,am.created_at`).bind(originThread.id).all()).results||[];
-    evidence=evidenceRows.map((row,index)=>({...row,url:row.media_url||"",archive_route:`/archive/records/${encodeURIComponent(row.archive_slug)}/#material-${encodeURIComponent(row.id)}`,origin_position:index+1}));
+    evidence=evidenceRows.map((row,index)=>presentArchiveMaterial({...row,url:row.media_url||"",archive_route:`/archive/records/${encodeURIComponent(row.archive_slug)}/#material-${encodeURIComponent(row.id)}`,origin_position:index+1}));
   }
   const facets={medium:[],brand:[],person:[],era:[],collection:collectionFacetResult.results||[],record_type:[],material_type:materialFacetResult.results||[]};
   for(const facet of facetResult.results||[]){if(facets[facet.kind])facets[facet.kind].push({name:facet.name,slug:facet.slug,count:Number(facet.count||0)});}
@@ -858,7 +898,7 @@ async function publicArchiveDetail(request,env,archiveSlug){
   if(!row)return failure("Archive item not found.",404);
   const item=presentArchiveItem(row),entityId=row.entity_id;
   const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult,originThreadsResult,versionsResult,statesResult,termsResult]=await database.batch([
-    database.prepare(`SELECT am.*,m.mime_type,m.duration_seconds,m.alt_text,m.public_title,m.public_description,
+    database.prepare(`SELECT am.*,m.mime_type,m.width,m.height,m.duration_seconds,m.alt_text,m.public_title,m.public_description,
         CASE WHEN m.transcript_status='ready' THEN m.transcript ELSE '' END transcript,m.transcript_status,m.transcript_language,m.public_presentation,
         CASE WHEN m.public_presentation='inline' THEN COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END) ELSE '' END media_url
       FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id
@@ -910,7 +950,7 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const relatedCatalogueMap=new Map(relatedCatalogue.map(record=>[record.entity_id,{...record,catalogue_label:archiveCatalogueLabel(record)}]));
   const relatedEventMap=new Map(relatedEvents.map(record=>[record.entity_id,{...record,record_identifier:record.event_id}]));
   const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const archive_slug=relatedSlugs.get(relatedId)||"",catalogue=relatedCatalogueMap.get(relatedId)||{},eventIdentity=relatedEventMap.get(relatedId)||{};relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,...catalogue,...eventIdentity,imageUrl:"",archive_slug,archiveRoute:archive_slug?`/archive/records/${encodeURIComponent(archive_slug)}/`:""}});}
-  const materials=(materialsResult.results||[]).map(material=>({...material,anchor:`material-${material.id}`,url:material.media_url||"",inline_text:material.body||""}));
+  const materials=(materialsResult.results||[]).map(material=>presentArchiveMaterial({...material,anchor:`material-${material.id}`,url:material.media_url||"",inline_text:material.body||""}));
   const activities=activitiesResult.results||[];
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
   return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states:statesResult.results||[],terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
@@ -2240,21 +2280,28 @@ async function validateArchiveMaterial(database,material){
   let media=null;if(material.media_id){media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(material.media_id).first();if(!media)return failure("Media not found.",404)}
   if(material.state==="published"&&material.visibility==="public"){
     if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the canonical entity and dossier before publishing this material.",409);
-    if(media&&(media.state!=="active"||media.privacy!=="public"||!["not-required","granted"].includes(media.consent_status)||media.public_presentation!=="inline"))return failure("Public media must be active, public, inline, and have granted or not-required consent.",409);
+    if(media&&(media.state!=="active"||media.privacy!=="public"||!["not-required","granted"].includes(media.consent_status)||media.public_presentation!=="inline"))return failure("The attached Digital asset must be active, public, shown inline, and have granted or not-required consent.",409);
   }
   return {dossier,media};
 }
 
+function archiveMaterialAdminSql(where="1=1"){
+  return `SELECT am.*,m.original_filename,m.mime_type,m.byte_size,m.width,m.height,m.duration_seconds,m.source_url,m.storage_key,
+    m.alt_text,m.caption media_caption,m.privacy media_privacy,m.consent_status,m.state media_state,
+    m.transcript,m.transcript_status,m.transcript_language,m.public_title,m.public_description,m.public_presentation
+    FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE ${where}`;
+}
+
+async function archiveMaterialAdminRecord(database,materialId){
+  return presentArchiveMaterial(await database.prepare(archiveMaterialAdminSql("am.id=?")).bind(materialId).first(),true);
+}
+
 async function archiveMaterialsAdminApi(request,env,materialId=""){
   const database=db(env);
-  if(request.method==="GET"&&!materialId){const url=new URL(request.url),entityId=text(url.searchParams.get("entity_id")||url.searchParams.get("entityId"),200);const where=entityId?"WHERE am.dossier_entity_id=?":"";const statement=database.prepare(`SELECT am.*,m.original_filename,m.mime_type,m.byte_size,m.duration_seconds,m.source_url,m.storage_key,
-      m.alt_text,m.caption media_caption,m.privacy media_privacy,m.consent_status,m.state media_state,
-      m.transcript,m.transcript_status,m.transcript_language,m.public_title,m.public_description,m.public_presentation
-      FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id ${where}
-      ORDER BY am.dossier_entity_id,am.sort_order,am.created_at`);const result=entityId?await statement.bind(entityId).all():await statement.all();const rows=result.results||[],ids=rows.map(row=>row.id),assignmentRows=ids.length?(await database.prepare(`SELECT material_id,thread_id FROM archive_origin_thread_materials WHERE material_id IN (${ids.map(()=>"?").join(",")}) ORDER BY sort_order`).bind(...ids).all()).results||[]:[],byMaterial=new Map();assignmentRows.forEach(row=>{if(!byMaterial.has(row.material_id))byMaterial.set(row.material_id,[]);byMaterial.get(row.material_id).push(row.thread_id)});const records=rows.map(row=>({...row,origin_thread_ids:byMaterial.get(row.id)||[]}));return json({records,materials:records,count:records.length});}
+  if(request.method==="GET"&&!materialId){const url=new URL(request.url),entityId=text(url.searchParams.get("entity_id")||url.searchParams.get("entityId"),200);const statement=database.prepare(`${archiveMaterialAdminSql(entityId?"am.dossier_entity_id=?":"1=1")} ORDER BY am.dossier_entity_id,am.sort_order,am.created_at`);const result=entityId?await statement.bind(entityId).all():await statement.all();const rows=result.results||[],ids=rows.map(row=>row.id),assignmentRows=ids.length?(await database.prepare(`SELECT material_id,thread_id FROM archive_origin_thread_materials WHERE material_id IN (${ids.map(()=>"?").join(",")}) ORDER BY sort_order`).bind(...ids).all()).results||[]:[],byMaterial=new Map();assignmentRows.forEach(row=>{if(!byMaterial.has(row.material_id))byMaterial.set(row.material_id,[]);byMaterial.get(row.material_id).push(row.thread_id)});const records=rows.map(row=>({...presentArchiveMaterial(row,true),origin_thread_ids:byMaterial.get(row.id)||[]}));return json({records,materials:records,count:records.length});}
   if(request.method==="POST"&&materialId==="reorder"){const body=await readJson(request);const entityId=text(body?.entity_id||body?.entityId,200),ids=body?.ids;if(!entityId||!Array.isArray(ids))return failure("entity_id and ids are required.");const current=(await database.prepare("SELECT id FROM archive_materials WHERE dossier_entity_id=? ORDER BY sort_order,id").bind(entityId).all()).results||[];const set=new Set(ids);if(ids.length!==current.length||set.size!==current.length||current.some(row=>!set.has(row.id)))return failure("The material list changed. Refresh before reordering.",409);await database.batch(ids.map((recordId,index)=>database.prepare("UPDATE archive_materials SET sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND dossier_entity_id=?").bind(index+1,recordId,entityId)));return json({ok:true});}
-  if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409);if(!material.material_reference){const prefix=material.is_sample?"S":material.material_type==="note"?"N":material.material_type==="document"?"D":"M",count=await database.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id IS ? AND material_reference LIKE ?").bind(material.state_id,`${prefix}%`).first();material.material_reference=`${prefix}${String(Number(count?.count||0)+1).padStart(2,"0")}`}const materialIdNew=text(body.id,200)||id("archive-material");try{await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,state_id,material_reference,is_sample,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}await replaceMaterialOriginThreads(database,materialIdNew,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialIdNew).first(),origin_thread_ids:ids}},{status:201});}
-  if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;let ids=null;if(Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds")){ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409)}try{await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,state_id=?,material_reference=?,is_sample=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample,materialId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}if(ids)await replaceMaterialOriginThreads(database,materialId,ids);return json({record:{...await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first(),...(ids?{origin_thread_ids:ids}:{})}});}
+  if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409);if(!material.material_reference){const prefix=material.is_sample?"S":material.material_type==="note"?"N":material.material_type==="document"?"D":"M",count=await database.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id IS ? AND material_reference LIKE ?").bind(material.state_id,`${prefix}%`).first();material.material_reference=`${prefix}${String(Number(count?.count||0)+1).padStart(2,"0")}`}const materialIdNew=text(body.id,200)||id("archive-material");try{await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,state_id,material_reference,is_sample,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}await replaceMaterialOriginThreads(database,materialIdNew,ids);return json({record:{...await archiveMaterialAdminRecord(database,materialIdNew),origin_thread_ids:ids}},{status:201});}
+  if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;let ids=null;if(Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds")){ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409)}try{await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,state_id=?,material_reference=?,is_sample=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample,materialId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}if(ids)await replaceMaterialOriginThreads(database,materialId,ids);return json({record:{...await archiveMaterialAdminRecord(database,materialId),...(ids?{origin_thread_ids:ids}:{})}});}
   if(request.method==="DELETE"&&materialId){const before=await database.prepare("SELECT id FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);await database.prepare("UPDATE archive_materials SET state='archived',visibility='internal',updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(materialId).run();return json({ok:true,archived:true});}
   return failure("Method not allowed.",405);
 }

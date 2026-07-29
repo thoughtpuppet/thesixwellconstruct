@@ -245,7 +245,44 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   assert.ok(publicRecord.versions.some((item) => Number(item.version_number) === 2));
   assert.ok(publicRecord.states.some((item) => item.title === "Revised composition"));
   assert.ok(publicRecord.materials.some((item) => item.material_reference === "N01"));
+  const publicDigitalAssetMaterial = publicRecord.materials.find((item) => item.media_id);
+  assert.ok(publicDigitalAssetMaterial?.digital_asset);
+  assert.equal(publicDigitalAssetMaterial.digital_asset.kind, "digital-asset");
+  assert.match(publicDigitalAssetMaterial.digital_asset.mime_type, /^[a-z]+\/[a-z0-9.+-]+$/i);
+  assert.equal("privacy" in publicDigitalAssetMaterial.digital_asset, false);
   assert.deepEqual(new Set(publicRecord.terms.filter((term) => term.kind === "theme").map((term) => term.name)), new Set(["Lost Marbles", "memory", "transformation"]));
+
+  const adminMaterialsResponse = await handleConstructApi(request("/api/admin/archive-materials?entity_id=art-marbles", { admin: true }), runtime);
+  assert.equal(adminMaterialsResponse.status, 200);
+  const adminMaterials = await adminMaterialsResponse.json();
+  const adminDigitalAssetMaterial = adminMaterials.records.find((item) => item.media_id);
+  assert.equal(adminDigitalAssetMaterial.digital_asset.kind, "digital-asset");
+  assert.equal(adminDigitalAssetMaterial.digital_asset.privacy, "public");
+  assert.ok(adminDigitalAssetMaterial.digital_asset.original_filename);
+
+  db.prepare("UPDATE archive_materials SET state='draft',visibility='internal' WHERE id=?").run(adminDigitalAssetMaterial.id);
+  db.prepare("UPDATE media_assets SET privacy='internal' WHERE id=?").run(adminDigitalAssetMaterial.media_id);
+  const blockedDigitalAssetPublish = await handleConstructApi(request(`/api/admin/archive-materials/${encodeURIComponent(adminDigitalAssetMaterial.id)}`, {
+    method: "PATCH",
+    admin: true,
+    body: { state: "published", visibility: "public" },
+  }), runtime);
+  assert.equal(blockedDigitalAssetPublish.status, 409);
+  assert.match((await blockedDigitalAssetPublish.json()).error, /attached Digital asset/);
+
+  const digitalAssetUpdate = await handleConstructApi(request(`/api/admin/media/${encodeURIComponent(adminDigitalAssetMaterial.media_id)}`, {
+    method: "PATCH",
+    admin: true,
+    body: { state: "active", privacy: "public", consent_status: "not-required", public_presentation: "inline" },
+  }), runtime);
+  assert.equal(digitalAssetUpdate.status, 200);
+  const publishedDigitalAssetMaterial = await handleConstructApi(request(`/api/admin/archive-materials/${encodeURIComponent(adminDigitalAssetMaterial.id)}`, {
+    method: "PATCH",
+    admin: true,
+    body: { state: "published", visibility: "public" },
+  }), runtime);
+  assert.equal(publishedDigitalAssetMaterial.status, 200);
+  assert.equal((await publishedDigitalAssetMaterial.json()).record.digital_asset.privacy, "public");
 
   db.exec(`UPDATE archive_dossiers
     SET state='published',public_visible=1,updated_at=datetime('now')
@@ -277,7 +314,10 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(studio, /Contextual Archive record · no object versions or creative states/);
   assert.match(studio, /People, organizations, places, events, and themes/);
   assert.match(studio, /Merch sample \/ prototype/);
+  assert.match(studio, /The uploaded file that represents or documents this material/);
+  assert.match(studio, /Shared Digital asset privacy/);
   assert.match(publicScript, /archive-catalogue-identifier/);
+  assert.match(publicScript, /archive-digital-asset-label/);
   assert.match(publicScript, /Version \$\{versionNumber\}, State/);
   assert.match(publicScript, /Concept or theme/);
   assert.match(publicCss, /\.archive-state-roman/);

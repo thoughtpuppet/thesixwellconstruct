@@ -66,7 +66,9 @@ test("Studio saves attached media eligibility before publishing an Archive mater
   assert.match(studio, /const publishingAttachedMedia=Boolean\(payload\.media_id&&payload\.state==="published"&&payload\.visibility==="public"\)/);
   assert.match(studio, /updateMediaMetadata:formData\.has\("update_media_metadata"\)\|\|publishingAttachedMedia/);
   assert.match(studio, /else if\(payload\.media_id&&updateMediaMetadata\)await archiveJson\(archiveEndpoints\.mediaItem\(payload\.media_id\),"PATCH",mediaPayload\);[\s\S]*await archiveJson\(id\?archiveEndpoints\.material/);
-  assert.match(studio, /form\.elements\.media_privacy\?\.closest\("label"\)\?\.insertAdjacentHTML\("afterend"/);
+  assert.match(studio, /Shared Digital asset privacy<select name="media_privacy"/);
+  assert.match(studio, /name="update_media_metadata"/);
+  assert.match(studio, /form\.dataset\.digitalAssetControlsBound="true"/);
 });
 
 test("Lost Marbles origin thread returns its curated records and only approved evidence", async () => {

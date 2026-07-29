@@ -477,7 +477,8 @@
     const type = slugify(first(material.material_type, material.type, material.kind, "note"));
     const title = text(material.title, material.name, `${titleCase(type)} ${index + 1}`);
     const id = `material-${slugify(first(material.slug, material.id, `${type}-${index + 1}`))}`;
-    const media = first(material.media, material.file, mediaObject(material), {});
+    const digitalAsset = first(material.digital_asset, material.digitalAsset, null);
+    const media = first(digitalAsset, material.media, material.file, mediaObject(material), {});
     const url = mediaUrl(typeof media === "string" ? { url: media } : media);
     const caption = text(material.caption, media.caption, material.description);
     const body = text(material.inline_text, material.body, material.text, material.note);
@@ -499,7 +500,9 @@
     const reference = text(material.material_reference, material.materialReference);
     const state = text(material.state_label, material.stateLabel);
     const isSample = Number(first(material.is_sample, material.isSample, 0)) === 1;
-    return `<article class="archive-material" id="${id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(reference || titleCase(type))}</span><div class="archive-date">${escapeHtml(dateLabel(material))}</div>${isSample ? `<span class="archive-material-badge">Sample</span>` : ""}</div><div class="archive-material-copy">${reference ? `<span class="archive-label">${escapeHtml(titleCase(type))}${state ? ` · ${escapeHtml(state)}` : ""}</span>` : ""}<h3>${escapeHtml(title)}</h3>${caption && !viewer.includes("figcaption") ? `<p>${escapeHtml(caption)}</p>` : ""}${sourceRoute?`<p><a href="${escapeHtml(sourceRoute)}">Open source dossier</a></p>`:""}</div></div>${viewer}</article>`;
+    const hasDigitalAsset=Boolean(digitalAsset||text(material.media_id,material.mediaId)||url);
+    const digitalAssetType=titleCase(text(digitalAsset&&digitalAsset.asset_type,digitalAsset&&digitalAsset.assetType,media.mime_type&&String(media.mime_type).split("/")[0],"file"));
+    return `<article class="archive-material" id="${id}"><div class="archive-material-header"><div><span class="archive-material-type">${escapeHtml(reference || titleCase(type))}</span><div class="archive-date">${escapeHtml(dateLabel(material))}</div>${isSample ? `<span class="archive-material-badge">Sample</span>` : ""}</div><div class="archive-material-copy">${reference ? `<span class="archive-label">${escapeHtml(titleCase(type))}${state ? ` · ${escapeHtml(state)}` : ""}</span>` : ""}${hasDigitalAsset?`<span class="archive-digital-asset-label">Digital asset · ${escapeHtml(digitalAssetType)}</span>`:""}<h3>${escapeHtml(title)}</h3>${caption && !viewer.includes("figcaption") ? `<p>${escapeHtml(caption)}</p>` : ""}${sourceRoute?`<p><a href="${escapeHtml(sourceRoute)}">Open source dossier</a></p>`:""}</div></div>${viewer}</article>`;
   }
 
   function historyMarkup(activity, index) {

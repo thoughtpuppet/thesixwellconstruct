@@ -98,6 +98,10 @@
   gap: clamp(1.5rem, 4vw, 3rem);
 }
 
+#materials-title {
+  font-size: clamp(2.2rem, 3vw, 3rem);
+}
+
 .archive-guide-lede {
   max-width: 52rem;
   margin: 0;

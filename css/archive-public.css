@@ -900,6 +900,7 @@ button.archive-chip::after {
 .archive-state-materials strong,
 .archive-state-materials em,
 .archive-material-badge,
+.archive-digital-asset-label,
 .archive-connection-catalogue {
   font-family: var(--font-display, Inter, Arial, sans-serif);
   font-size: 0.65rem;
@@ -912,6 +913,10 @@ button.archive-chip::after {
 .archive-state-materials strong,
 .archive-connection-catalogue {
   color: var(--archive-focus);
+}
+
+.archive-digital-asset-label {
+  color: var(--archive-signal-soft);
 }
 
 .archive-state-materials em,
