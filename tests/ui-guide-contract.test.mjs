@@ -122,7 +122,9 @@ test("the Guide exposes both systems and source libraries without a preview pane
     "tattoo-intake",
     "booking-flow",
     "event-registration",
+    "archive-guide",
     "archive-record",
+    "archive-compare",
     "legend-catalog",
     "construct-search",
     "preferences",
@@ -133,6 +135,7 @@ test("the Guide exposes both systems and source libraries without a preview pane
     "component-uploads",
     "component-commerce",
     "component-data",
+    "component-archive-catalogue",
     "component-overlays",
     "component-feedback",
     "studio-list-detail",
@@ -147,6 +150,14 @@ test("the Guide exposes both systems and source libraries without a preview pane
   ]) {
     assert.match(systemJs, new RegExp(`id: "${id}"`), `missing ${id}`);
   }
+
+  assert.match(systemJs, /id: "archive-compare"[^\n]*route: "\/archive\/compare\/"[^\n]*js\/archive-compare\.js/);
+  assert.match(systemJs, /id: "component-archive-catalogue"[^\n]*5px state rails[^\n]*top-level comparison workspace/);
+  assert.match(systemJs, /id: "component-archive-catalogue"[^\n]*Compare records hero action[^\n]*Individual cards carry no comparison controls/);
+  assert.match(systemJs, /id: "studio-dossier"[^\n]*studio\/archive-catalogue\.css[^\n]*read-only permanent identity/);
+  assert.match(html, /\/api\/archive\/compare/);
+  assert.match(html, /Archive publication layers/);
+  assert.doesNotMatch(html, /assets\/archive\/records\.json/);
 });
 
 test("token synchronization keeps direct-write and both fallbacks", async () => {

@@ -82,18 +82,51 @@
     return rows.filter(([, leftValue, rightValue]) => list(leftValue).some(Boolean) || list(rightValue).some(Boolean));
   }
 
+  function recordOption(record) {
+    const slug = text(record.archive_slug, record.archiveSlug, record.slug);
+    const title = text(record.title, record.name, slug, "Untitled record");
+    const catalogue = text(record.catalogue_label, record.catalogueLabel, record.catalogue_id, record.catalogueId);
+    return slug ? `<option value="${escapeHtml(slug)}">${escapeHtml([catalogue, title].filter(Boolean).join(" · "))}</option>` : "";
+  }
+
+  async function renderChooser() {
+    try {
+      const response = await fetch("/api/archive/items?limit=100", { cache: "no-store", headers: { accept: "application/json" } });
+      if (!response.ok) throw new Error(String(response.status));
+      const payload = await response.json();
+      const records = list(payload.items, payload.records, payload.results).flat().filter(Boolean);
+      const options = records.map(recordOption).join("");
+      app.innerHTML = `<header class="archive-compare-hero site-hero site-hero--supporting"><div><span class="archive-kicker">Comparison workspace</span><h1 class="hero-title">Compare.</h1></div><div><p class="hero-descriptor">Choose two public Archive records. The resulting comparison receives a shareable URL.</p><a class="archive-button" href="/archive/">Return to the Archive</a></div></header><form class="archive-compare-chooser" data-compare-chooser><label><span>Left subject</span><select name="left" required><option value="">Choose a public record</option>${options}</select></label><label><span>Right subject</span><select name="right" required><option value="">Choose a public record</option>${options}</select></label><div class="archive-compare-chooser-actions"><p class="archive-compare-chooser-status" data-compare-status role="status" aria-live="polite">Select two different public records.</p><button class="archive-button" type="submit">Open comparison</button></div></form>`;
+      const form = app.querySelector("[data-compare-chooser]");
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const data = new FormData(form);
+        const left = text(data.get("left"));
+        const right = text(data.get("right"));
+        const status = form.querySelector("[data-compare-status]");
+        if (!left || !right || left === right) {
+          status.textContent = "Choose two different public records.";
+          return;
+        }
+        location.href = `/archive/compare/?left=${encodeURIComponent(left)}&right=${encodeURIComponent(right)}`;
+      });
+    } catch {
+      app.innerHTML = '<section class="archive-error" role="alert"><span class="archive-kicker">Comparison unavailable</span><h2>The public record list could not be loaded.</h2><p><a class="archive-button" href="/archive/">Return to the Archive</a></p></section>';
+    }
+  }
+
   function render(payload) {
     const left = payload.left || payload.subjects && payload.subjects[0];
     const right = payload.right || payload.subjects && payload.subjects[1];
     const rows = comparisonRows(left, right);
     document.title = `${text(left.subject_title, left.title)} and ${text(right.subject_title, right.title)} · Archive comparison`;
-    app.innerHTML = `<header class="archive-compare-hero site-hero site-hero--supporting"><div><span class="archive-kicker">Two-subject catalogue view</span><h1 class="hero-title">Compare.</h1></div><div><p class="hero-descriptor">A direct reading of two public cultural objects or documented states. Undocumented values remain visible as an em dash.</p><a class="archive-button" href="/archive/">Choose different records</a></div></header><section class="archive-compare-subjects" aria-label="Compared subjects">${subjectHeader(left, "left")}${subjectHeader(right, "right")}</section><section class="archive-compare-table" aria-label="Catalogue comparison">${rows.map(([label, leftValue, rightValue]) => `<div class="archive-compare-row"><h3>${escapeHtml(label)}</h3><div>${valueMarkup(leftValue)}</div><div>${valueMarkup(rightValue)}</div></div>`).join("")}</section>`;
+    app.innerHTML = `<header class="archive-compare-hero site-hero site-hero--supporting"><div><span class="archive-kicker">Two-subject catalogue view</span><h1 class="hero-title">Compare.</h1></div><div><p class="hero-descriptor">A direct reading of two public cultural objects or documented states. Undocumented values remain visible as an em dash.</p><a class="archive-button" href="/archive/compare/">Choose different records</a></div></header><section class="archive-compare-subjects" aria-label="Compared subjects">${subjectHeader(left, "left")}${subjectHeader(right, "right")}</section><section class="archive-compare-table" aria-label="Catalogue comparison">${rows.map(([label, leftValue, rightValue]) => `<div class="archive-compare-row"><h3>${escapeHtml(label)}</h3><div>${valueMarkup(leftValue)}</div><div>${valueMarkup(rightValue)}</div></div>`).join("")}</section>`;
   }
 
   async function load() {
     const params = new URL(location.href).searchParams;
     if (!params.get("left") || !params.get("right")) {
-      app.innerHTML = '<section class="archive-error" role="alert"><span class="archive-kicker">Two subjects required</span><h2>Choose a left and right subject.</h2><p>The compare tray on public Archive cards builds the shareable URL for you.</p><p><a class="archive-button" href="/archive/">Return to the Archive</a></p></section>';
+      await renderChooser();
       return;
     }
     try {
@@ -106,7 +139,7 @@
       if (!response.ok) throw new Error(String(response.status));
       render(await response.json());
     } catch {
-      app.innerHTML = '<section class="archive-error" role="alert"><span class="archive-kicker">Comparison unavailable</span><h2>One or both subjects are not public.</h2><p>A private, archived, invalid, or unpublished state cannot appear in a public comparison.</p><p><a class="archive-button" href="/archive/">Return to the Archive</a></p></section>';
+      app.innerHTML = '<section class="archive-error" role="alert"><span class="archive-kicker">Comparison unavailable</span><h2>One or both subjects are not public.</h2><p>A private, archived, invalid, or unpublished state cannot appear in a public comparison.</p><p><a class="archive-button" href="/archive/compare/">Choose other records</a></p></section>';
     }
   }
 

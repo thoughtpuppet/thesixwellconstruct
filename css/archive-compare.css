@@ -73,6 +73,60 @@
   border-top: var(--archive-rule) solid var(--archive-line);
 }
 
+.archive-compare-chooser {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--archive-record-gap);
+  margin-top: var(--archive-section-gap);
+  border: var(--archive-rule) solid var(--archive-line);
+  padding: clamp(1rem, 3vw, 2rem);
+  background: var(--archive-panel);
+}
+
+.archive-compare-chooser label {
+  display: grid;
+  gap: 0.55rem;
+  color: var(--archive-signal-soft);
+  font: 900 0.62rem/1.2 var(--font-display, Inter, Arial, sans-serif);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.archive-compare-chooser select {
+  width: 100%;
+  min-height: 3rem;
+  border: var(--archive-rule) solid var(--archive-line);
+  border-radius: 0;
+  padding: 0.65rem 0.75rem;
+  background: var(--archive-paper);
+  color: var(--archive-ink);
+  font: 800 0.75rem/1.3 var(--font-display, Inter, Arial, sans-serif);
+}
+
+.archive-compare-chooser select:focus-visible {
+  border-color: var(--archive-focus);
+  outline: var(--archive-rule) solid var(--archive-focus);
+  outline-offset: 2px;
+}
+
+.archive-compare-chooser-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.archive-compare-chooser-status {
+  margin: 0;
+  color: var(--archive-muted);
+  font-size: 0.78rem;
+}
+
+.archive-compare-chooser .archive-button {
+  cursor: pointer;
+}
+
 .archive-compare-row {
   display: grid;
   grid-template-columns: minmax(9rem, 0.25fr) repeat(2, minmax(0, 0.375fr));
@@ -106,8 +160,14 @@
 
 @media (max-width: 700px) {
   .archive-compare-hero,
-  .archive-compare-subjects {
+  .archive-compare-subjects,
+  .archive-compare-chooser {
     grid-template-columns: 1fr;
+  }
+
+  .archive-compare-chooser-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .archive-compare-row {

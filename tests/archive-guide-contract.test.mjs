@@ -17,7 +17,7 @@ test("Archive index exposes the guide at the top of the explorer", async () => {
   assert.ok(guideLink > heroStart && guideLink < heroEnd, "Archive Guide link must appear inside the top hero");
 });
 
-test("Archive Guide explains current use and developing catalogue language", async () => {
+test("Archive Guide explains the live catalogue and comparison system", async () => {
   const html = await read("archive/guide/index.html");
 
   assert.match(html, /class="archive-guide-masthead"/);
@@ -30,14 +30,15 @@ test("Archive Guide explains current use and developing catalogue language", asy
   assert.match(html, /Archive dossier/);
   assert.match(html, /Digital asset/);
   assert.match(html, /separate privacy, consent, public-presentation, and transcript controls/);
-  assert.match(html, /ART-042/);
+  assert.match(html, /ART-004/);
   assert.match(html, /Roman numerals/);
   assert.match(html, /Cultural object/);
-  assert.match(html, /ART-042\.1\/II/);
-  assert.match(html, /M01 — process photograph/);
+  assert.match(html, /ART-004\.1\/I/);
+  assert.match(html, /current public condition/);
+  assert.match(html, /state lead/);
   assert.match(html, /S01 — physical sample/);
-  assert.match(html, /TAT-DES-012/);
-  assert.match(html, /TAT-EXE-031/);
+  assert.match(html, /TAT-DES-001/);
+  assert.match(html, /TAT-EXE-001/);
   assert.match(html, /FLM-001/);
   assert.match(html, /MUS-001/);
   assert.match(html, /WRI-001/);
@@ -52,8 +53,22 @@ test("Archive Guide explains current use and developing catalogue language", asy
   assert.match(html, /Sample 01/);
   assert.match(html, /Lost Marbles Hoodie/);
   assert.match(html, /Concept or theme/);
-  assert.match(html, /Framework in development/);
+  assert.match(html, /Live system/);
+  assert.match(html, /Adaptive documentation/);
+  assert.match(html, /Physical object/);
+  assert.match(html, /Institutional history/);
   assert.match(html, /Relationships and origin threads/);
+  assert.match(html, /Comparing public records and states/);
+  assert.match(html, /Comparison workspace/);
+  assert.match(html, /Compare records action at the top of the Archive explorer/);
+  assert.match(html, /individual record, state, and related-work cards do not carry comparison buttons/);
+  assert.doesNotMatch(html, /c\|c/);
+  assert.match(html, /\/archive\/compare\//);
+  assert.match(html, /left_state/);
+  assert.match(html, /right_state/);
+  assert.match(html, /one public-record selector for each side/);
+  assert.match(html, /em dash/);
+  assert.match(html, /at least two evidence-backed public states/);
   assert.match(html, /What becomes public/);
   assert.match(html, /Working glossary/);
 });
@@ -81,8 +96,13 @@ test("Archive Guide keeps creative state separate from publication controls", as
 
   assert.match(html, /Creative state/);
   assert.match(html, /Record publication/);
+  assert.match(html, /Version publication/);
+  assert.match(html, /State publication/);
   assert.match(html, /Material visibility/);
+  assert.match(html, /Documentation visibility/);
   assert.match(html, /Presentation/);
   assert.match(html, /Consent/);
   assert.match(html, /Inline note text is visible/);
+  assert.match(html, /Contextual Event records are exempt/);
+  assert.match(html, /omitted from public APIs/);
 });

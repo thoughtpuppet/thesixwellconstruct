@@ -11,26 +11,6 @@
   min-width: 0;
 }
 
-.archive-record-card-shell > .archive-compare-add {
-  position: absolute;
-  right: 0.75rem;
-  bottom: 0.75rem;
-  z-index: 4;
-  opacity: 0;
-  transition: opacity 220ms var(--ease-out, ease);
-}
-
-.archive-record-card-shell:hover > .archive-compare-add,
-.archive-record-card-shell:focus-within > .archive-compare-add {
-  opacity: 1;
-}
-
-@media (hover: none) {
-  .archive-record-card-shell > .archive-compare-add {
-    opacity: 1;
-  }
-}
-
 .archive-record-card {
   position: relative;
   display: block;

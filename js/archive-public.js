@@ -40,8 +40,6 @@
   const slugify = (value) => text(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const titleCase = (value) => text(value).replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const truncate = (value, length) => text(value).length > length ? `${text(value).slice(0, length - 1).trim()}…` : text(value);
-  const compareStorageKey = "swc_archive_compare_tray_v1";
-  let pendingCompareSubject = null;
 
   function safeUrl(value) {
     if (!value) return "";
@@ -158,120 +156,6 @@
     return [...new Set(values)];
   }
 
-  function readCompareTray() {
-    try {
-      const value = JSON.parse(sessionStorage.getItem(compareStorageKey) || "{}");
-      return { left: value.left || null, right: value.right || null };
-    } catch {
-      return { left: null, right: null };
-    }
-  }
-
-  function writeCompareTray(tray) {
-    try { sessionStorage.setItem(compareStorageKey, JSON.stringify(tray)); } catch {}
-    renderCompareTray();
-  }
-
-  function compareSubjectFromButton(button) {
-    return {
-      slug: text(button.dataset.compareSlug),
-      stateId: text(button.dataset.compareState),
-      title: text(button.dataset.compareTitle, "Archive subject"),
-      label: text(button.dataset.compareLabel),
-    };
-  }
-
-  function sameCompareSubject(left, right) {
-    return Boolean(left && right && left.slug === right.slug && text(left.stateId) === text(right.stateId));
-  }
-
-  function compareUrl(tray) {
-    if (!tray.left || !tray.right) return "";
-    const query = new URLSearchParams({ left: tray.left.slug, right: tray.right.slug });
-    if (tray.left.stateId) query.set("left_state", tray.left.stateId);
-    if (tray.right.stateId) query.set("right_state", tray.right.stateId);
-    return `/archive/compare/?${query}`;
-  }
-
-  function compareSlotMarkup(name, subject) {
-    return `<section class="archive-compare-slot ${subject ? "is-filled" : ""}"><span class="archive-label">${escapeHtml(titleCase(name))}</span>${subject ? `<strong>${escapeHtml(subject.title)}</strong>${subject.label ? `<small>${escapeHtml(subject.label)}</small>` : ""}<button type="button" data-compare-remove="${name}">Remove</button>` : "<p>Choose a public record or state.</p>"}</section>`;
-  }
-
-  function renderCompareTray() {
-    const tray = readCompareTray();
-    let host = document.querySelector("[data-archive-compare-tray]");
-    if (!host) {
-      host = document.createElement("aside");
-      host.className = "archive-compare-tray";
-      host.dataset.archiveCompareTray = "";
-      host.setAttribute("aria-label", "Archive comparison tray");
-      document.body.append(host);
-    }
-    const replacement = pendingCompareSubject ? `<div class="archive-compare-replacement" role="status"><span><strong>${escapeHtml(pendingCompareSubject.title)}</strong> needs a slot.</span><button type="button" data-compare-replace="left">Replace left</button><button type="button" data-compare-replace="right">Replace right</button><button type="button" data-compare-cancel>Cancel</button></div>` : "";
-    host.innerHTML = `<header><span class="archive-kicker">Compare tray</span><strong>${[tray.left, tray.right].filter(Boolean).length} / 2 subjects</strong></header><div class="archive-compare-slots">${compareSlotMarkup("left", tray.left)}${compareSlotMarkup("right", tray.right)}</div>${replacement}<div class="archive-compare-tray-actions">${compareUrl(tray) ? `<a class="archive-button" href="${escapeHtml(compareUrl(tray))}">Open comparison</a>` : '<span class="archive-label">Choose two public subjects</span>'}</div>`;
-    host.hidden = !tray.left && !tray.right && !pendingCompareSubject;
-  }
-
-  function addCompareSubject(subject) {
-    if (!subject.slug) return;
-    const tray = readCompareTray();
-    if (sameCompareSubject(tray.left, subject) || sameCompareSubject(tray.right, subject)) {
-      pendingCompareSubject = null;
-      renderCompareTray();
-      return;
-    }
-    if (!tray.left) tray.left = subject;
-    else if (!tray.right) tray.right = subject;
-    else {
-      pendingCompareSubject = subject;
-      renderCompareTray();
-      return;
-    }
-    pendingCompareSubject = null;
-    writeCompareTray(tray);
-  }
-
-  function compareButtonMarkup(record, state = null, options = {}) {
-    const slug = recordSlug(record);
-    if (!slug || options.hidden) return "";
-    const title = text(state && state.title, record.title, record.name, slug);
-    const label = state ? text(state.catalogue_label, state.catalogueLabel, stateLabel(state, options.version)) : catalogueLabel(record);
-    return `<button class="archive-compare-add" type="button" data-archive-compare-add data-compare-slug="${escapeHtml(slug)}" data-compare-state="${escapeHtml(text(state && state.id))}" data-compare-title="${escapeHtml(title)}" data-compare-label="${escapeHtml(label)}">Add to compare</button>`;
-  }
-
-  function installCompareTray() {
-    renderCompareTray();
-    document.addEventListener("click", (event) => {
-      const add = event.target.closest("[data-archive-compare-add]");
-      if (add) {
-        event.preventDefault();
-        event.stopPropagation();
-        addCompareSubject(compareSubjectFromButton(add));
-        return;
-      }
-      const remove = event.target.closest("[data-compare-remove]");
-      if (remove) {
-        const tray = readCompareTray();
-        tray[remove.dataset.compareRemove] = null;
-        pendingCompareSubject = null;
-        writeCompareTray(tray);
-        return;
-      }
-      const replace = event.target.closest("[data-compare-replace]");
-      if (replace && pendingCompareSubject) {
-        const tray = readCompareTray();
-        tray[replace.dataset.compareReplace] = pendingCompareSubject;
-        pendingCompareSubject = null;
-        writeCompareTray(tray);
-        return;
-      }
-      if (event.target.closest("[data-compare-cancel]")) {
-        pendingCompareSubject = null;
-        renderCompareTray();
-      }
-    });
-  }
-
   function archiveRecordCardMarkup(record) {
     const media = mediaObject(record);
     const image = mediaUrl(media);
@@ -282,12 +166,11 @@
     const catalogue = catalogueLabel(record);
     const recordType = titleCase(text(record.record_type_label, record.record_type, record.entity_type, record.type, "Archive record"));
     const medium = text(record.medium_label, record.medium, record.catalogue_medium, record.brand_name, record.brand);
-    const pilotBlocked = text(record.entity_id, record.entityId) === "art-marbles" && Number(first(record.public_state_count, record.publicStateCount, 0)) < 2;
     return `<article class="archive-record-card-shell"><a class="archive-record-card" href="${escapeHtml(recordHref(record, match))}">
       <span class="archive-record-card-media">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(text(media.alt, media.alt_text, title))}" loading="lazy" decoding="async">` : symbolMarkup ? `<span class="archive-record-card-symbol" aria-hidden="true">${symbolMarkup}</span>` : `<span class="archive-record-card-placeholder" aria-hidden="true">${escapeHtml(title.slice(0, 2))}</span>`}</span>
       <span class="archive-record-card-badges"><span class="archive-record-card-catalogue">${escapeHtml(catalogue || "Archive record")}</span><span class="archive-record-card-type">${escapeHtml(recordType)}</span>${record.is_current ? `<span class="archive-record-card-current">Current</span>` : ""}</span>
       <span class="archive-record-card-meta"><span class="archive-record-card-date">${escapeHtml(dateLabel(record))}</span><h3>${escapeHtml(title)}</h3>${medium ? `<span class="archive-record-card-medium">${escapeHtml(medium)}</span>` : ""}${matchText ? `<span class="archive-record-card-match"><strong>Matched in ${escapeHtml(titleCase(text(match.type, match.kind, match.field, "record")))}</strong><span>${escapeHtml(truncate(matchText, 150))}</span></span>` : ""}</span>
-    </a>${compareButtonMarkup(record, null, { hidden: pilotBlocked })}</article>`;
+    </a></article>`;
   }
 
   function normalizeItems(payload) {
@@ -341,7 +224,7 @@
     app.innerHTML = `
       <section class="archive-hero site-hero ${collectionsView ? "site-hero--supporting" : "site-hero--landing"}" aria-labelledby="archive-title">
         <div><span class="archive-kicker">Public living archive</span><h1 class="hero-title" id="archive-title">${collectionsView ? "Collections." : "Archive."}</h1></div>
-        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a></div>'}</div>
+        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/compare/">Compare records</a></div>'}</div>
       </section>
       <section class="archive-origin-thread" data-origin-thread hidden></section>
       <form class="archive-search-form archive-search-panel" role="search" data-archive-search>
@@ -579,7 +462,7 @@
         const anchor = text(state.anchor, `state-${slugify(state.id)}`);
         const current = Boolean(first(state.is_current, state.isCurrent, false));
         const leadMarkup = leadUrl ? (leadMime.startsWith("video/") ? `<video controls playsinline preload="metadata" src="${escapeHtml(leadUrl)}" aria-label="${escapeHtml(leadAlt)}"></video>` : `<img src="${escapeHtml(leadUrl)}" alt="${escapeHtml(leadAlt)}" loading="lazy">`) : `<div class="archive-state-lead-empty"><span>No public lead image</span></div>`;
-        return `<section class="archive-state-card ${current ? "is-current" : ""}" id="${escapeHtml(anchor)}"><div class="archive-state-lead">${leadMarkup}${lead ? `<span>${escapeHtml(text(lead.material_reference, lead.materialReference, "Lead material"))}</span>` : ""}</div><div class="archive-state-heading"><div class="archive-state-identifiers"><span class="archive-state-roman">${escapeHtml(text(state.state_roman, state.stateRoman, "I").toUpperCase())}</span><span class="archive-label">${escapeHtml(text(state.catalogue_label, state.catalogueLabel, stateLabel(state, version)))}</span>${current ? '<span class="archive-state-current">You are here · current condition</span>' : ""}</div><h4>${escapeHtml(text(state.title, "Documented state"))}</h4><div class="archive-state-facts"><span>${escapeHtml(dateLabel(state))}</span><span>${Number(first(state.material_count, state.materialCount, linked.length))} material${Number(first(state.material_count, state.materialCount, linked.length)) === 1 ? "" : "s"}</span>${text(state.variant_label, state.variantLabel) ? `<span>Variant ${escapeHtml(text(state.variant_label, state.variantLabel))}</span>` : ""}</div>${text(state.description) ? `<p>${escapeHtml(text(state.description))}</p>` : ""}${data.states.length >= 2 ? compareButtonMarkup(item, state, { version }) : ""}</div>${linked.length ? `<ol class="archive-state-materials">${linked.map((material, index) => {
+        return `<section class="archive-state-card ${current ? "is-current" : ""}" id="${escapeHtml(anchor)}"><div class="archive-state-lead">${leadMarkup}${lead ? `<span>${escapeHtml(text(lead.material_reference, lead.materialReference, "Lead material"))}</span>` : ""}</div><div class="archive-state-heading"><div class="archive-state-identifiers"><span class="archive-state-roman">${escapeHtml(text(state.state_roman, state.stateRoman, "I").toUpperCase())}</span><span class="archive-label">${escapeHtml(text(state.catalogue_label, state.catalogueLabel, stateLabel(state, version)))}</span>${current ? '<span class="archive-state-current">You are here · current condition</span>' : ""}</div><h4>${escapeHtml(text(state.title, "Documented state"))}</h4><div class="archive-state-facts"><span>${escapeHtml(dateLabel(state))}</span><span>${Number(first(state.material_count, state.materialCount, linked.length))} material${Number(first(state.material_count, state.materialCount, linked.length)) === 1 ? "" : "s"}</span>${text(state.variant_label, state.variantLabel) ? `<span>Variant ${escapeHtml(text(state.variant_label, state.variantLabel))}</span>` : ""}</div>${text(state.description) ? `<p>${escapeHtml(text(state.description))}</p>` : ""}</div>${linked.length ? `<ol class="archive-state-materials">${linked.map((material, index) => {
           const reference = text(material.material_reference, material.materialReference, `M${String(index + 1).padStart(2, "0")}`);
           const materialAnchor = `material-${slugify(first(material.slug, material.id, `${reference}-${index + 1}`))}`;
           return `<li><a href="#${escapeHtml(materialAnchor)}"><strong>${escapeHtml(reference)}</strong><span>${escapeHtml(text(material.title, titleCase(first(material.material_type, material.type, "material"))))}</span>${Number(first(material.is_sample, material.isSample, 0)) ? `<em>Sample</em>` : ""}</a></li>`;
@@ -794,8 +677,7 @@
     const summary = text(connection.description, connection.note, target.summary, target.description);
     const href = recordHref(target);
     const catalogue = catalogueLabel(target);
-    const pilotBlocked = text(target.entity_id, target.entityId) === "art-marbles" && Number(first(target.public_state_count, target.publicStateCount, 0)) < 2;
-    return `<article class="archive-connection-card-shell"><a class="archive-connection-card" href="${escapeHtml(href)}"><span class="archive-label">${escapeHtml(titleCase(relation))}</span><h3>${escapeHtml(title)}</h3>${catalogue ? `<strong class="archive-connection-catalogue">${escapeHtml(catalogue)}</strong>` : ""}${summary ? `<p>${escapeHtml(truncate(summary, 170))}</p>` : ""}</a>${compareButtonMarkup(target, null, { hidden: pilotBlocked })}</article>`;
+    return `<article class="archive-connection-card-shell"><a class="archive-connection-card" href="${escapeHtml(href)}"><span class="archive-label">${escapeHtml(titleCase(relation))}</span><h3>${escapeHtml(title)}</h3>${catalogue ? `<strong class="archive-connection-catalogue">${escapeHtml(catalogue)}</strong>` : ""}${summary ? `<p>${escapeHtml(truncate(summary, 170))}</p>` : ""}</a></article>`;
   }
 
   function groupedConnectionsMarkup(item, relationships, originThreads) {
@@ -862,13 +744,12 @@
       const activities = data.activities.slice().sort((a, b) => text(a.sort_date, a.occurred_at, a.date_start, a.date, "9999").localeCompare(text(b.sort_date, b.occurred_at, b.date_start, b.date, "9999")));
       const relationships = data.relationships;
       const primaryOriginThread = data.primaryOriginThread;
-      const pilotCompareBlocked = text(item.entity_id, item.entityId) === "art-marbles" && data.states.length < 2;
       const breadcrumbCurrent = document.querySelector("[data-archive-breadcrumb-current]");
       if (breadcrumbCurrent) breadcrumbCurrent.textContent = title;
       document.title = `${title} · Archive · the six.well construct`;
       app.innerHTML = `
         <article>
-          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.cultural_object_type, item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadata(item).map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${primaryOriginThread?`<a class="archive-button" href="/archive/?origin=${encodeURIComponent(text(primaryOriginThread.slug))}&from=${encodeURIComponent(text(item.entity_id,item.entityId,item.archive_slug,item.slug))}">Find related records</a>`:`<a class="archive-button" href="/archive/?${encodeURIComponent(text(item.catalogue_medium, item.medium) ? "medium" : "record_type")}=${encodeURIComponent(text(item.catalogue_medium, item.medium, item.record_type))}">Browse same ${escapeHtml(text(item.catalogue_medium, item.medium)?"medium":"record type")}</a>`}${compareButtonMarkup(item, null, { hidden: pilotCompareBlocked })}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
+          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.cultural_object_type, item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadata(item).map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${primaryOriginThread?`<a class="archive-button" href="/archive/?origin=${encodeURIComponent(text(primaryOriginThread.slug))}&from=${encodeURIComponent(text(item.entity_id,item.entityId,item.archive_slug,item.slug))}">Find related records</a>`:`<a class="archive-button" href="/archive/?${encodeURIComponent(text(item.catalogue_medium, item.medium) ? "medium" : "record_type")}=${encodeURIComponent(text(item.catalogue_medium, item.medium, item.record_type))}">Browse same ${escapeHtml(text(item.catalogue_medium, item.medium)?"medium":"record type")}</a>`}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
           <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
           <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
@@ -975,7 +856,6 @@
     }
   }
 
-  installCompareTray();
   if (view === "explorer") explorer();
   if (view === "record") dossier();
   if (view === "timeline") timeline();

@@ -924,6 +924,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <li><strong>Ecosystem-first:</strong> every page points to at least one other medium — a related-medium band, source lineage, or a quiet next action (inquire, claim, read, attend, collect, listen, revisit, enter the archive). Subtle; discovery, not promotion.</li>
       <li><strong>Mobile pass:</strong> collapse grids with <code>minmax(0,1fr)</code>; verify at 390px; confirm <code>css/hero.css</code> neutralizes editor-injected title sizing through inherited hero styles.</li>
       <li><strong>Forms:</strong> ordinary visitor data-entry uses <code>.public-form</code> and the interfaces owned by <code>css/forms.css</code>. Tattoo/acquisition submissions POST <code>multipart/form-data</code> to <code>/api/submissions</code> and include the <code>_gotcha</code> honeypot.</li>
+      <li><strong>Archive catalogue:</strong> keep the permanent base ID read-only; derive the current public condition from a real published/public state; use Roman state labels, stable in-dossier anchors, eligible lead materials, and 5px evolution rails. Adaptive documentation augments canonical title, date, medium, people, organizations, states, and digital-asset permissions rather than duplicating them. Comparison state belongs in the shareable <code>/archive/compare/</code> URL.</li>
       <li><strong>Never push</strong> — commits are fine; the user always pushes manually. Work directly on main in the main repo (no worktrees).</li>
     </ul>
   </section>
@@ -954,7 +955,11 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
     <div class="map-medium" data-medium="music"><div class="head"><span class="dot"></span><span class="label">Music</span><span class="url">/music/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
     <div class="map-medium" data-medium="writings"><div class="head"><span class="dot"></span><span class="label">Writings</span><span class="url">/writings/</span></div><ul><li>Long-form — uses <code>--leading-relaxed</code> (1.8)</li></ul></div>
     <div class="map-medium" data-medium="archive"><div class="head"><span class="dot"></span><span class="label">Archive</span><span class="url">/archive/</span></div>
-      <ul><li>Generated from Obsidian vault via <code>node tools/build-archive.mjs</code> → <code>assets/archive/records.json</code> (only <code>archive_publish: true</code> + <code>visibility: public</code>)</li></ul></div>
+      <ul>
+        <li>Managed D1 catalogue and explorer via <code>/api/archive/items</code>; canonical dossiers use <code>/archive/records/:slug/</code> and <code>/api/archive/items/:slug</code>.</li>
+        <li>Public catalogue guide <code>/archive/guide/</code>, two-subject comparison <code>/archive/compare/</code> via <code>/api/archive/compare</code>, collections, and timelines.</li>
+        <li>Studio dossier management lives at <code>/studio/submissions/#archive/dossiers</code>; internal versions, states, documentation, and materials are omitted from public APIs.</li>
+      </ul></div>
     <div class="map-medium" data-medium="film"><div class="head"><span class="dot"></span><span class="label">Film</span><span class="url">/film/</span></div><ul><li>Hidden variant exists in <code>.hidden-pages/</code></li></ul></div>
 
     <h3>Non-public surfaces</h3>
@@ -1014,6 +1019,7 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><td>Hidden pages</td><td>Hiding/showing is done through <code>/tools/page-visibility.html</code>, which edits <code>_worker.js</code> and moves files to <code>.hidden-pages/</code>. Don't hand-move page files.</td></tr>
       <tr><td>Token sync</td><td><code>css/tokens.css</code> is the palette source. The guide, homepage canvas, and injected dot nav read those variables when served locally. Refresh open pages after saving; use a literal search only for older one-off hardcoded surfaces.</td></tr>
       <tr><td>UI Guide working URL</td><td>Use <code>http://localhost:4173/tools/ui-guide.html</code> as the canonical working surface. A direct <code>file://</code> view is not authoritative: root-relative styles, token reloads, and source-backed tool endpoints require the local HTTP server and can look stale or incomplete without it.</td></tr>
+      <tr><td>Archive publication layers</td><td>Record, version, state, material, and documentation visibility are independent gates. A public state lead must belong to that state and its Digital asset must already be active, public, inline, and consent-granted or consent-not-required. Save shared asset eligibility before publishing the material.</td></tr>
       <tr><td>Tiny colored labels</td><td>A saturated source color is not automatically legible as small type. Use a solid badge for merch/source labels, with the token color as fill and a computed or chosen readable ink color.</td></tr>
       <tr><td>Push policy</td><td>Never push. The user pushes manually. Work directly on main.</td></tr>
     </table>
