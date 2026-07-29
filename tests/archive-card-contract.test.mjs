@@ -96,3 +96,19 @@ test("Notebook thumbnails open one accessible type-aware quick view", async () =
   assert.ok(!publicCss.includes(".archive-record-card"), "Archive record-card styles leaked into archive-public.css");
   assert.ok(!publicCss.includes(".archive-notebook-grid"), "Notebook quick-view styles leaked into archive-public.css");
 });
+
+test("record dossiers remove UI box frames without flattening hover or artifact frames", async () => {
+  const cardsCss = await source("css/archive-cards.css");
+  const publicCss = await source("css/archive-public.css");
+
+  assert.match(publicCss, /body\[data-archive-view="record"\]\s+:where\([\s\S]*\.archive-context-group,[\s\S]*\.archive-state-card,[\s\S]*\.archive-connection-card-shell[\s\S]*\)\s*\{[\s\S]*border:\s*0/);
+  assert.match(publicCss, /body\[data-archive-view="record"\]\s+\.archive-state-card\.is-current\s*\{[\s\S]*box-shadow:\s*none/);
+  assert.match(cardsCss, /body\[data-archive-view="record"\]\s+\.archive-notebook-trigger\s*\{[\s\S]*border:\s*0/);
+
+  assert.match(cardsCss, /\.archive-notebook-trigger:hover[\s\S]*\.archive-notebook-trigger:focus-visible/);
+  assert.match(cardsCss, /\.archive-notebook-trigger:hover\s+\.archive-notebook-preview img,[\s\S]*transform:\s*scale\(0\.97\)/);
+  assert.match(publicCss, /\.archive-context-entry:hover,[\s\S]*background:\s*var\(--archive-panel-raised\)/);
+  assert.match(publicCss, /\.archive-connection-card:hover\s*\{[\s\S]*background:\s*var\(--archive-panel-raised\)/);
+  assert.match(publicCss, /\.archive-record-figure\s*\{[\s\S]*border:\s*var\(--archive-rule\)\s*solid/);
+  assert.match(publicCss, /\.archive-material-viewer\s*\{[\s\S]*border:\s*var\(--archive-rule\)\s*solid/);
+});

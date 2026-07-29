@@ -1231,6 +1231,24 @@ button.archive-chip::after {
   text-anchor: middle;
 }
 
+/* Record dossiers use open editorial groupings. Keep structural rules and
+   documentary artifact frames, but do not box the surrounding UI. */
+body[data-archive-view="record"] :where(
+  .archive-context-group,
+  .archive-version,
+  .archive-state-card,
+  .archive-documentation-group,
+  .archive-state-materials a,
+  .archive-note-empty,
+  .archive-connection-card-shell
+) {
+  border: 0;
+}
+
+body[data-archive-view="record"] .archive-state-card.is-current {
+  box-shadow: none;
+}
+
 /* Timeline */
 .archive-timeline-header {
   display: grid;

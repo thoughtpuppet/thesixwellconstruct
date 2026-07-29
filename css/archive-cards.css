@@ -250,6 +250,10 @@
   border-color: var(--archive-signal);
 }
 
+body[data-archive-view="record"] .archive-notebook-trigger {
+  border: 0;
+}
+
 .archive-notebook-preview,
 .archive-notebook-preview img,
 .archive-notebook-placeholder {
