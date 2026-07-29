@@ -1,0 +1,216 @@
+.archive-blackboards-page {
+  background: var(--color-bg);
+}
+
+.archive-blackboards-hero {
+  padding: clamp(72px, 11vw, 144px) 0 44px;
+  border-bottom: 5px solid var(--color-archive, #fcb867);
+}
+
+.archive-blackboards-hero h1 {
+  max-width: 12ch;
+  margin: 0 0 20px;
+}
+
+.archive-blackboards-hero .hero-descriptor {
+  margin: 0;
+}
+
+.archive-blackboards-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 24px;
+}
+
+.archive-blackboards-actions a,
+.blackboard-contexts a,
+.blackboard-card-copy > a {
+  color: inherit;
+  text-underline-offset: 4px;
+}
+
+.blackboards-section {
+  padding: 52px 0 20px;
+}
+
+.blackboards-section + .blackboards-section {
+  margin-top: 36px;
+  border-top: 5px solid var(--color-archive, #fcb867);
+}
+
+.blackboards-section-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 380px);
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 24px;
+}
+
+.blackboards-section-heading h2 {
+  margin: 0;
+  font-size: clamp(32px, 5vw, 64px);
+}
+
+.blackboards-section-heading p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.blackboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.blackboard-fragment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.blackboard-card,
+.blackboard-fragment {
+  min-width: 0;
+  border: 5px solid currentColor;
+  background: var(--color-bg);
+}
+
+.blackboard-scan-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-bottom: 5px solid currentColor;
+  background: #111;
+  color: inherit;
+  cursor: zoom-in;
+}
+
+.blackboard-scan-button img,
+.blackboard-fragment img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 72vh;
+  object-fit: contain;
+  background: #111;
+}
+
+.blackboard-card-copy,
+.blackboard-fragment-copy {
+  padding: 18px;
+}
+
+.blackboard-card-meta,
+.blackboard-fragment-board {
+  margin: 0 0 10px;
+  color: var(--color-archive, #fcb867);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.blackboard-card h3,
+.blackboard-fragment h3 {
+  margin: 0 0 10px;
+  font-size: clamp(24px, 3vw, 40px);
+}
+
+.blackboard-card-copy > p,
+.blackboard-fragment-copy > p {
+  line-height: 1.55;
+}
+
+.blackboard-contexts {
+  margin: 18px 0 0;
+  padding: 16px 0 0;
+  border-top: 5px solid currentColor;
+}
+
+.blackboard-contexts dt {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.blackboard-contexts dd {
+  margin: 0 0 8px;
+}
+
+.blackboards-empty,
+.blackboards-error {
+  padding: 24px;
+  border: 5px solid currentColor;
+}
+
+.blackboard-zoom {
+  width: min(96vw, 1500px);
+  max-width: none;
+  height: min(94vh, 1000px);
+  padding: 0;
+  border: 5px solid var(--color-archive, #fcb867);
+  background: var(--color-bg);
+  color: inherit;
+}
+
+.blackboard-zoom::backdrop {
+  background: rgba(0, 0, 0, .86);
+}
+
+.blackboard-zoom-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 5px solid var(--color-archive, #fcb867);
+}
+
+.blackboard-zoom-toolbar h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.blackboard-zoom-toolbar button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.blackboard-zoom-stage {
+  height: calc(100% - 58px);
+  overflow: auto;
+  background: #111;
+}
+
+.blackboard-zoom-stage img {
+  display: block;
+  min-width: 100%;
+  max-width: none;
+  height: auto;
+}
+
+@media (max-width: 720px) {
+  .blackboards-section-heading,
+  .blackboard-grid,
+  .blackboard-fragment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-blackboards-hero {
+    padding-top: 64px;
+  }
+
+  .blackboard-card-copy,
+  .blackboard-fragment-copy {
+    padding: 14px;
+  }
+}

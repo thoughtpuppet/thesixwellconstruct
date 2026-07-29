@@ -112,3 +112,79 @@ test("record dossiers remove UI box frames without flattening hover or artifact 
   assert.match(publicCss, /\.archive-record-figure\s*\{[\s\S]*border:\s*var\(--archive-rule\)\s*solid/);
   assert.match(publicCss, /\.archive-material-viewer\s*\{[\s\S]*border:\s*var\(--archive-rule\)\s*solid/);
 });
+
+test("Archive medium context uses one alias system and role-aware node tokens", async () => {
+  const script = await source("js/archive-public.js");
+  const css = await source("css/archive-public.css");
+
+  assert.ok(script.includes("const archiveMediumAliases = new Map"));
+  for (const alias of [
+    'artwork: "art"',
+    'tattoo: "tattoos"',
+    'flash: "tattoos"',
+    'merchandise: "merch"',
+    'symbols: "legend"',
+    'event: "events"',
+    'music: "music"',
+    'writings: "writings"',
+    'film: "film"',
+    'other: "archive"',
+  ]) {
+    assert.ok(script.includes(alias), `Archive medium aliases are missing ${alias}`);
+  }
+
+  assert.ok(script.includes("function filteredMediumKey(searchParams)"));
+  assert.ok(script.includes('searchParams.get("medium")'));
+  assert.ok(script.includes('searchParams.get("record_type")'));
+  assert.ok(script.includes("return unique.length === 1 ? unique[0] :"));
+  assert.ok(script.includes("resultsHeading.dataset.archiveMedium = mediumKey"));
+  assert.ok(script.includes("delete resultsHeading.dataset.archiveMedium"));
+
+  for (const [medium, base, bright] of [
+    ["art", "--color-art", "--color-art-bright"],
+    ["tattoos", "--color-tattooing", "--color-tattooing-bright"],
+    ["merch", "--color-merch", "--color-merch-bright"],
+    ["legend", "--color-about", "--color-about-bright"],
+    ["events", "--color-events", "--color-events-bright"],
+    ["music", "--color-music", "--color-music-bright"],
+    ["writings", "--color-writings", "--color-writings-bright"],
+    ["film", "--color-film", "--color-film-bright"],
+    ["archive", "--color-archive", "--color-archive-bright"],
+  ]) {
+    const block = new RegExp(`\\[data-archive-medium="${medium}"\\]\\s*\\{[\\s\\S]*?--archive-medium-color:\\s*var\\(${base}\\);[\\s\\S]*?--archive-medium-bright:\\s*var\\(${bright}\\);`);
+    assert.match(css, block);
+  }
+
+  assert.match(css, /\.archive-results-heading\[data-archive-medium\]\s+h2\s*\{[\s\S]*color:\s*var\(--archive-medium-color\)/);
+  assert.match(css, /body\[data-archive-view="record"\][\s\S]*\.archive-medium-mention\s*\{[\s\S]*color:\s*var\(--archive-medium-bright\)/);
+  assert.ok(script.includes('data-archive-medium="${escapeHtml(mediumKey)}"'));
+  assert.ok(script.includes('class="archive-medium-mention"'));
+  assert.ok(script.includes('" archive-medium-mention"'));
+});
+
+test("Archive brands resolve to their own medium colors across filters and dossiers", async () => {
+  const script = await source("js/archive-public.js");
+  const css = await source("css/archive-public.css");
+
+  assert.ok(script.includes("const archiveBrandMediumAliases = new Map"));
+  for (const alias of [
+    'thoughtpuppet: "art"',
+    '"six-well": "merch"',
+    '"art-pill-tattoo-house": "tattoos"',
+    '"cult-shift": "events"',
+    'milowalksonwater: "music"',
+    '"mindful-darkness": "writings"',
+    'sloth99: "film"',
+  ]) {
+    assert.ok(script.includes(alias), `Archive brand aliases are missing ${alias}`);
+  }
+
+  assert.ok(script.includes("function archiveBrandMediumKey(...values)"));
+  assert.ok(script.includes('[searchParams.get("brand"), archiveBrandMediumKey]'));
+  assert.ok(script.includes('entry.role === "brand" ? archiveBrandMediumKey(entry.value)'));
+  assert.ok(script.includes('role === "brand" ? archiveBrandMediumKey(subject.entity_id, subject.slug, subject.name, subject.title)'));
+  assert.ok(script.includes("archive-brand-mention"));
+  assert.ok(script.includes('data-archive-medium="${escapeHtml(brandMediumKey)}"'));
+  assert.match(css, /\.archive-brand-mention\[data-archive-medium\]\s*\{[\s\S]*color:\s*var\(--archive-medium-bright\)/);
+  assert.match(css, /\.archive-context-entry\.archive-brand-mention\[data-archive-medium\]\s+strong,[\s\S]*color:\s*var\(--archive-medium-bright\)/);
+});

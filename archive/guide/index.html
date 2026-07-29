@@ -124,8 +124,8 @@
       <div class="archive-guide-section-body">
         <p class="archive-guide-lede">Materials document a record; they do not replace it. Several photographs, videos, and notes can belong to the same work and the same moment in its development. A material describes the evidence; its optional Digital asset is the uploaded file that carries it.</p>
         <aside class="archive-guide-principle">
-          <span class="archive-label">Two documentation layers</span>
-          <p><strong>State materials</strong> are evidence attached to a particular creative condition. <strong>Catalogue documentation</strong> records applicable facts about the cultural object as a whole. Canonical title, date, medium, artist, organizations, production roles, state changes, and Digital-asset permissions remain authoritative in their existing records instead of being copied into documentation entries.</p>
+          <span class="archive-label">Three documentary roles</span>
+          <p><strong>State materials</strong> are direct evidence attached to one creative condition. <strong>Source-material sets</strong> preserve an ordered exchange or group of references that informed one or more states. <strong>Catalogue documentation</strong> records applicable facts about the cultural object as a whole. Canonical title, date, medium, artist, organizations, production roles, state changes, and Digital-asset permissions remain authoritative in their existing records instead of being copied into documentation entries.</p>
         </aside>
         <dl class="archive-guide-term-grid">
           <div><dt>Digital asset</dt><dd>The uploaded image, audio, video, or document file representing or documenting a material. It retains separate privacy, consent, public-presentation, and transcript controls.</dd></div>
@@ -137,6 +137,8 @@
           <div><dt>Voice memo</dt><dd>Recorded reflection or oral documentation, with a transcript when available.</dd></div>
           <div><dt>Document</dt><dd>A PDF or other written source that belongs with the record.</dd></div>
           <div><dt>Artifact</dt><dd>A physical remainder, reference object, tool, or other piece of material evidence.</dd></div>
+          <div><dt>Source material</dt><dd>Evidence supplied, exchanged, or consulted during development. A source set belongs to the dossier and may document more than one creative state.</dd></div>
+          <div><dt>Client correspondence</dt><dd>One ordered source-material set containing scrubbed correspondence pages, pasted text, documents, and client-supplied reference photographs. Public attribution is always “Client.”</dd></div>
         </dl>
         <div class="archive-guide-card-grid archive-guide-card-grid--two">
           <article class="archive-guide-card">
@@ -148,6 +150,26 @@
             <span class="archive-label">Repeatable entries</span>
             <h3>One field can hold several sources.</h3>
             <p>Alternate titles, inscriptions, bibliography, remarks, identifiers, collections, and rights notes may repeat. Each entry keeps its own order, citation or URL, and public visibility.</p>
+          </article>
+          <article class="archive-guide-card">
+            <span class="archive-label">Client source workflow</span>
+            <h3>Draft first, publish deliberately.</h3>
+            <p>A new correspondence set begins as internal and draft. Its ordered entries may be individually excluded from public view. Publishing requires a public dossier, at least one linked public state, and eligible included Digital assets.</p>
+          </article>
+          <article class="archive-guide-card">
+            <span class="archive-label">Redacted-upload assumption</span>
+            <h3>Only scrubbed evidence is uploaded.</h3>
+            <p>Correspondence and reference files are assumed to have all personal information removed, faces blurred where needed, and publication clearance completed before upload. The Archive does not retain an unredacted original or run an automated PII check, and original filenames are never shown publicly.</p>
+          </article>
+          <article class="archive-guide-card">
+            <span class="archive-label">Blackboard lens</span>
+            <h3>One complete state, many contextual details.</h3>
+            <p>Each complete captured blackboard is its own OBJ record. Close-up sketches and ideas remain attached to the paintings or records they informed, appear once by Digital asset, and link back to every public context. A fragment does not need a complete-board match to remain valid evidence.</p>
+          </article>
+          <article class="archive-guide-card">
+            <span class="archive-label">Scan preservation</span>
+            <h3>The master stays private.</h3>
+            <p>A complete board requires a paired archival master and prepared web derivative. The internal master is available only in authenticated Studio; public pages and APIs expose only the eligible JPEG, PNG, or WebP derivative.</p>
           </article>
         </div>
         <div>
@@ -266,7 +288,7 @@
             <div><dt><code>/II</code></dt><dd><strong>State II</strong><span>The second documented creative condition within that version, expressed with a Roman numeral.</span></dd></div>
             <div><dt><code>M01</code></dt><dd><strong>Media 01</strong><span>The first photograph, video, audio file, or other media item attached to that state.</span></dd></div>
             <div><dt><code>N01</code></dt><dd><strong>Note 01</strong><span>The first inline note attached to that state.</span></dd></div>
-            <div><dt><code>D01</code></dt><dd><strong>Document 01</strong><span>The first document attached to that state.</span></dd></div>
+            <div><dt><code>D01</code></dt><dd><strong>Document or source set 01</strong><span>The first document reference within that state. A correspondence source set linked to several states receives the next available D-number independently in each state, while appearing only once in the dossier notebook.</span></dd></div>
             <div><dt><code>S01</code></dt><dd><strong>Sample 01</strong><span>The first optional physical Merch sample retained as evidence of its evolution.</span></dd></div>
           </dl>
         </div>
@@ -383,6 +405,7 @@
               <tr><th scope="row">Version publication</th><td>Whether a version participates in public evolution</td><td>Draft, published, archived + public/internal</td></tr>
               <tr><th scope="row">State publication</th><td>Whether a state and its stable anchor are public</td><td>Draft, published, archived + public/internal</td></tr>
               <tr><th scope="row">Material visibility</th><td>Who may encounter a material</td><td>Public, unlisted, internal, private</td></tr>
+              <tr><th scope="row">Source-material publication</th><td>Whether one grouped source set and its included entries appear publicly</td><td>Draft, published, archived + public/internal</td></tr>
               <tr><th scope="row">Documentation visibility</th><td>Whether one catalogue entry appears publicly</td><td>Public, internal</td></tr>
               <tr><th scope="row">Presentation</th><td>Whether approved media appears on the page</td><td>Inline, hidden</td></tr>
               <tr><th scope="row">Consent</th><td>Whether public use has been cleared</td><td>Granted, not required, required, unknown, denied</td></tr>
@@ -392,6 +415,10 @@
         <aside class="archive-guide-principle">
           <span class="archive-label">Public media rule</span>
           <p>For a cultural object, an uploaded file appears publicly only when its record, version, state, and material are published and public; the material belongs to that state; its presentation is inline; the Digital asset is active and public; and consent is granted or not required. Inline note text is visible when the note material itself is public, published, and assigned to a public state. Contextual Event records are exempt from state assignment because events do not have creative states.</p>
+        </aside>
+        <aside class="archive-guide-principle">
+          <span class="archive-label">Public client correspondence rule</span>
+          <p>A client correspondence set is public only after an explicit publication action. The dossier and canonical record must be public, at least one linked version and state must be published and public, permission must be granted or not required, and every included Digital asset must be active, public, inline, and eligible. Internal state links and individually excluded entries remain absent from public output.</p>
         </aside>
         <aside class="archive-guide-principle">
           <span class="archive-label">Internal means absent</span>
@@ -419,6 +446,8 @@
           <div><dt>State anchor</dt><dd>The stable shareable fragment that opens a public state inside its canonical dossier.</dd></div>
           <div><dt>Catalogue documentation</dt><dd>Ordered, repeatable object facts that augment authoritative identity, production, state, and permission data.</dd></div>
           <div><dt>Material</dt><dd>An image, video, note, audio file, sketch, document, or artifact that documents a record.</dd></div>
+          <div><dt>Source material</dt><dd>An ordered body of evidence supplied, exchanged, or consulted during development and linked to one or more states.</dd></div>
+          <div><dt>Client correspondence set</dt><dd>A scrubbed sequence of correspondence, documents, pasted text, and client reference photographs attributed publicly as “Client.”</dd></div>
           <div><dt>Sample</dt><dd>An optional Merch prototype or physical sample documented inside a product’s evolution.</dd></div>
           <div><dt>Activity</dt><dd>A dated or honestly undated event in the life of a record.</dd></div>
           <div><dt>Collection</dt><dd>A curated grouping built around a body of work, period, place, or question.</dd></div>

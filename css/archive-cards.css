@@ -344,6 +344,16 @@ body[data-archive-view="record"] .archive-notebook-trigger {
   text-transform: uppercase;
 }
 
+.archive-source-material-attribution {
+  color: var(--archive-signal-soft);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 body.archive-material-dialog-open {
   overflow: hidden;
 }
@@ -454,6 +464,157 @@ body.archive-material-dialog-open {
   text-decoration: none;
 }
 
+.archive-source-material-dialog-content {
+  display: grid;
+}
+
+.archive-source-material-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(15rem, 0.85fr);
+  gap: clamp(1.25rem, 4vw, 3rem);
+  padding: clamp(1rem, 3vw, 2rem);
+  border-bottom: var(--archive-rule, 5px) solid var(--archive-line);
+}
+
+.archive-source-material-summary > div {
+  display: grid;
+  gap: 0.7rem;
+  align-content: start;
+}
+
+.archive-source-material-summary h2,
+.archive-source-entry h3 {
+  margin: 0;
+  color: var(--archive-ink);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  text-transform: uppercase;
+}
+
+.archive-source-material-summary h2 {
+  font-size: clamp(1.75rem, 4vw, 3.5rem);
+}
+
+.archive-source-material-summary p,
+.archive-source-entry header p,
+.archive-source-entry-text p {
+  margin: 0;
+  color: var(--archive-muted);
+  line-height: 1.7;
+}
+
+.archive-source-state-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 12px;
+  padding: clamp(1rem, 3vw, 2rem);
+  border-bottom: var(--archive-rule, 5px) solid var(--archive-line);
+}
+
+.archive-source-state-links a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+  border: var(--archive-rule, 5px) solid var(--archive-line);
+  padding: 0.8rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.archive-source-state-links a:hover,
+.archive-source-state-links a:focus-visible {
+  border-color: var(--archive-signal);
+}
+
+.archive-source-state-links strong {
+  color: var(--archive-signal-soft);
+}
+
+.archive-source-entry-list {
+  display: grid;
+  gap: clamp(2rem, 6vw, 4rem);
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.archive-source-entry {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.archive-source-entry + .archive-source-entry {
+  padding-top: clamp(2rem, 6vw, 4rem);
+  border-top: var(--archive-rule, 5px) solid var(--archive-line);
+}
+
+.archive-source-entry header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.archive-source-entry header > div {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.archive-source-entry-index {
+  display: grid;
+  min-width: 3rem;
+  min-height: 3rem;
+  place-items: center;
+  background: var(--archive-signal);
+  color: var(--archive-paper);
+  font-family: var(--font-display, Inter, Arial, sans-serif);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.archive-source-entry h3 {
+  font-size: clamp(1.25rem, 3vw, 2rem);
+}
+
+.archive-source-entry-viewer {
+  min-width: 0;
+  overflow: hidden;
+  border: var(--archive-rule, 5px) solid var(--archive-line);
+  background: #090807;
+}
+
+.archive-source-entry-viewer img {
+  display: block;
+  width: 100%;
+  max-height: 78dvh;
+  object-fit: contain;
+}
+
+.archive-source-entry-text {
+  border: var(--archive-rule, 5px) solid var(--archive-line);
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  background: var(--archive-paper);
+}
+
+.archive-source-entry-text {
+  display: grid;
+  gap: 1rem;
+}
+
+.archive-source-entry-download {
+  border: var(--archive-rule, 5px) solid var(--archive-line);
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  background: var(--archive-paper);
+}
+
+.archive-source-entry-download .archive-button {
+  display: inline-flex;
+  text-decoration: none;
+}
+
 .archive-material-viewer-empty {
   display: grid;
   min-height: 18rem;
@@ -484,7 +645,8 @@ body.archive-material-dialog-open {
 }
 
 @media (max-width: 820px) {
-  .archive-material-dialog-layout {
+  .archive-material-dialog-layout,
+  .archive-source-material-summary {
     grid-template-columns: 1fr;
   }
 

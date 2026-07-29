@@ -49,8 +49,14 @@ test("Archive Guide explains the live catalogue and comparison system", async ()
   assert.match(html, /not a cultural-object catalogue family/);
   assert.match(html, /Media 01/);
   assert.match(html, /Note 01/);
-  assert.match(html, /Document 01/);
+  assert.match(html, /Document or source set 01/);
   assert.match(html, /Sample 01/);
+  assert.match(html, /Three documentary roles/);
+  assert.match(html, /Source material/);
+  assert.match(html, /Client correspondence/);
+  assert.match(html, /Public attribution is always “Client.”/);
+  assert.match(html, /original filenames are never shown publicly/);
+  assert.match(html, /linked to several states receives the next available D-number independently in each state/);
   assert.match(html, /Lost Marbles Hoodie/);
   assert.match(html, /Concept or theme/);
   assert.match(html, /Live system/);
@@ -99,10 +105,12 @@ test("Archive Guide keeps creative state separate from publication controls", as
   assert.match(html, /Version publication/);
   assert.match(html, /State publication/);
   assert.match(html, /Material visibility/);
+  assert.match(html, /Source-material publication/);
   assert.match(html, /Documentation visibility/);
   assert.match(html, /Presentation/);
   assert.match(html, /Consent/);
   assert.match(html, /Inline note text is visible/);
+  assert.match(html, /Public client correspondence rule/);
   assert.match(html, /Contextual Event records are exempt/);
   assert.match(html, /omitted from public APIs/);
 });

@@ -581,6 +581,8 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(studio, /Merch sample \/ prototype/);
   assert.match(studio, /The uploaded file that represents or documents this material/);
   assert.match(studio, /Shared Digital asset privacy/);
+  assert.match(studio, /Source materials/);
+  assert.match(studio, /Add client correspondence/);
   assert.match(publicScript, /archive-catalogue-identifier/);
   assert.match(publicScript, /archive-digital-asset-label/);
   assert.match(publicScript, /Version \$\{versionNumber\}, State/);
@@ -590,6 +592,8 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(publicScript, /archive-record-symbol/);
   assert.match(publicScript, /archive-notebook-item/);
   assert.match(publicScript, /archive-material-dialog/);
+  assert.match(publicScript, /archive-source-material-dialog/);
+  assert.match(publicScript, /Client correspondence/);
   assert.match(publicScript, /archive-state-card/);
   assert.match(publicScript, /You are here · current condition/);
   assert.match(publicScript, /archive-documentation-groups/);
@@ -611,4 +615,5 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(archiveCardsCss, /\.archive-record-card-symbol/);
   assert.match(archiveCardsCss, /\.archive-record-symbol/);
   assert.match(archiveCardsCss, /\.archive-material-dialog/);
+  assert.match(archiveCardsCss, /\.archive-source-material-summary/);
 });

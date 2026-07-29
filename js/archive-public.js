@@ -26,6 +26,74 @@
     ["sixwell-construct", "The Construct", "/archive/sixwell-construct/"],
   ];
 
+  const archiveMediumAliases = new Map(Object.entries({
+    art: "art",
+    artwork: "art",
+    "art-work": "art",
+    painting: "art",
+    drawing: "art",
+    print: "art",
+    sculpture: "art",
+    photograph: "art",
+    photography: "art",
+    installation: "art",
+    "mixed-media": "art",
+    "digital-work": "art",
+    tattoo: "tattoos",
+    tattoos: "tattoos",
+    tattooing: "tattoos",
+    "tattoo-design": "tattoos",
+    "tattoo-execution": "tattoos",
+    flash: "tattoos",
+    "flash-item": "tattoos",
+    "flash-design": "tattoos",
+    "portfolio-item": "tattoos",
+    merch: "merch",
+    merchandise: "merch",
+    "merch-item": "merch",
+    legend: "legend",
+    legends: "legend",
+    symbol: "legend",
+    symbols: "legend",
+    "visual-symbol": "legend",
+    event: "events",
+    events: "events",
+    music: "music",
+    "music-work": "music",
+    writing: "writings",
+    writings: "writings",
+    "writing-work": "writings",
+    film: "film",
+    "film-work": "film",
+    archive: "archive",
+    other: "archive",
+    "other-cultural-object": "archive",
+  }));
+
+  const archiveBrandMediumAliases = new Map(Object.entries({
+    thoughtpuppet: "art",
+    "thought-puppet": "art",
+    "org-thoughtpuppet": "art",
+    "six-well": "merch",
+    sixwell: "merch",
+    "six-well-clothing": "merch",
+    "art-pill": "tattoos",
+    artpill: "tattoos",
+    "art-pill-tattoo-house": "tattoos",
+    "artpill-tattoo-house": "tattoos",
+    "cult-shift": "events",
+    "cult-and-shift": "events",
+    cultandshift: "events",
+    cultiv: "events",
+    "the-seventh-room": "events",
+    "seventh-room": "events",
+    milowalksonwater: "music",
+    "mindful-darkness": "writings",
+    "the-solehman-letters": "writings",
+    "solehman-letters": "writings",
+    sloth99: "film",
+  }));
+
   const escapeHtml = (value) => String(value == null ? "" : value).replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
     "<": "&lt;",
@@ -40,6 +108,48 @@
   const slugify = (value) => text(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const titleCase = (value) => text(value).replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const truncate = (value, length) => text(value).length > length ? `${text(value).slice(0, length - 1).trim()}…` : text(value);
+
+  function archiveMediumKey(...values) {
+    for (const value of values) {
+      const key = archiveMediumAliases.get(slugify(value));
+      if (key) return key;
+    }
+    return "";
+  }
+
+  function archiveBrandMediumKey(...values) {
+    for (const value of values) {
+      const key = archiveBrandMediumAliases.get(slugify(value));
+      if (key) return key;
+    }
+    return "";
+  }
+
+  function recordMediumKey(record) {
+    return archiveMediumKey(
+      record && record.catalogue_medium,
+      record && record.catalogueMedium,
+      record && record.medium_label,
+      record && record.medium,
+      record && record.record_type,
+      record && record.recordType,
+      record && record.entity_type,
+      record && record.entityType
+    );
+  }
+
+  function filteredMediumKey(searchParams) {
+    const selected = [
+      [searchParams.get("medium"), archiveMediumKey],
+      [first(searchParams.get("record_type"), searchParams.get("recordType")), archiveMediumKey],
+      [searchParams.get("brand"), archiveBrandMediumKey],
+    ].filter(([value]) => value);
+    if (!selected.length) return "";
+    const resolved = selected.map(([value, resolve]) => resolve(value));
+    if (resolved.some((value) => !value)) return "";
+    const unique = [...new Set(resolved)];
+    return unique.length === 1 ? unique[0] : "";
+  }
 
   function safeUrl(value) {
     if (!value) return "";
@@ -147,13 +257,18 @@
   }
 
   function metadata(record) {
-    const values = [
-      first(record.medium_label, record.medium),
-      first(record.record_type_label, record.record_type, record.entity_type, record.type),
-      first(record.brand_name, record.brand),
-      first(record.year, record.date_or_period),
-    ].map(text).filter(Boolean);
-    return [...new Set(values)];
+    const entries = [
+      { value: text(first(record.medium_label, record.medium)), role: "medium" },
+      { value: text(first(record.record_type_label, record.record_type, record.entity_type, record.type)), role: "record-type" },
+      { value: text(first(record.brand_name, record.brand)), role: "brand" },
+      { value: text(first(record.year, record.date_or_period)), role: "date" },
+    ].filter((entry) => entry.value);
+    const seen = new Set();
+    return entries.filter((entry) => {
+      if (seen.has(entry.value)) return false;
+      seen.add(entry.value);
+      return true;
+    });
   }
 
   function archiveRecordCardMarkup(record) {
@@ -224,7 +339,7 @@
     app.innerHTML = `
       <section class="archive-hero site-hero ${collectionsView ? "site-hero--supporting" : "site-hero--landing"}" aria-labelledby="archive-title">
         <div><span class="archive-kicker">Public living archive</span><h1 class="hero-title" id="archive-title">${collectionsView ? "Collections." : "Archive."}</h1></div>
-        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/compare/">Compare records</a></div>'}</div>
+        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></div>'}</div>
       </section>
       <section class="archive-origin-thread" data-origin-thread hidden></section>
       <form class="archive-search-form archive-search-panel" role="search" data-archive-search>
@@ -250,6 +365,7 @@
     const queryInput = searchForm.elements.q;
     const facets = app.querySelector("[data-archive-facets]");
     const results = app.querySelector("[data-archive-results]");
+    const resultsHeading = app.querySelector(".archive-results-heading");
     const count = app.querySelector("[data-archive-count]");
     const activeFilters = app.querySelector("[data-active-filters]");
     const pagination = app.querySelector("[data-archive-pagination]");
@@ -264,6 +380,9 @@
 
     function syncControls() {
       const current = params();
+      const mediumKey = collectionsView ? "" : filteredMediumKey(current);
+      if (mediumKey) resultsHeading.dataset.archiveMedium = mediumKey;
+      else delete resultsHeading.dataset.archiveMedium;
       queryInput.value = current.get("q") || "";
       facetDefinitions.forEach(([key]) => {
         const select = facets.querySelector(`[name="${key}"]`);
@@ -417,6 +536,7 @@
       versions: list(first(payload && payload.versions, dossier.versions, item.versions, [])),
       states: list(first(payload && payload.states, dossier.states, item.states, [])),
       documentation: list(first(payload && payload.documentation, dossier.documentation, item.documentation, [])),
+      sourceMaterials: list(first(payload && payload.source_materials, payload && payload.sourceMaterials, payload && payload.evidence_sets, payload && payload.evidenceSets, dossier.source_materials, dossier.sourceMaterials, [])),
       terms: list(first(payload && payload.terms, dossier.terms, item.terms, [])),
     };
   }
@@ -448,12 +568,22 @@
       if (!materialMap.has(stateId)) materialMap.set(stateId, []);
       materialMap.get(stateId).push(material);
     });
+    const sourceMaterialMap = new Map();
+    data.sourceMaterials.forEach((sourceMaterial) => {
+      list(first(sourceMaterial.state_links, sourceMaterial.stateLinks, [])).forEach((link) => {
+        const stateId = text(link.state_id, link.stateId);
+        if (!stateId) return;
+        if (!sourceMaterialMap.has(stateId)) sourceMaterialMap.set(stateId, []);
+        sourceMaterialMap.get(stateId).push({ sourceMaterial, link });
+      });
+    });
     return `<div class="archive-evolution">${data.versions.map((version) => {
       const versionId = text(version.id);
       const states = data.states.filter((state) => text(state.version_id, state.versionId) === versionId);
       const versionNumber = Number(first(version.version_number, version.versionNumber, 1));
       return `<article class="archive-version"><header><div><span class="archive-label">Version ${versionNumber}</span><h3>${escapeHtml(text(version.title, `Version ${versionNumber}`))}</h3>${text(version.description) ? `<p>${escapeHtml(text(version.description))}</p>` : ""}</div><span class="archive-version-count">${states.length} state${states.length === 1 ? "" : "s"}</span></header><div class="archive-state-list">${states.map((state) => {
         const linked = materialMap.get(text(state.id)) || [];
+        const linkedSources = sourceMaterialMap.get(text(state.id)) || [];
         const lead = first(state.lead_material, state.leadMaterial, null);
         const leadAsset = first(lead && lead.digital_asset, lead && lead.digitalAsset, null);
         const leadUrl = mediaUrl(leadAsset || {});
@@ -462,11 +592,17 @@
         const anchor = text(state.anchor, `state-${slugify(state.id)}`);
         const current = Boolean(first(state.is_current, state.isCurrent, false));
         const leadMarkup = leadUrl ? (leadMime.startsWith("video/") ? `<video controls playsinline preload="metadata" src="${escapeHtml(leadUrl)}" aria-label="${escapeHtml(leadAlt)}"></video>` : `<img src="${escapeHtml(leadUrl)}" alt="${escapeHtml(leadAlt)}" loading="lazy">`) : `<div class="archive-state-lead-empty"><span>No public lead image</span></div>`;
-        return `<section class="archive-state-card ${current ? "is-current" : ""}" id="${escapeHtml(anchor)}"><div class="archive-state-lead">${leadMarkup}${lead ? `<span>${escapeHtml(text(lead.material_reference, lead.materialReference, "Lead material"))}</span>` : ""}</div><div class="archive-state-heading"><div class="archive-state-identifiers"><span class="archive-state-roman">${escapeHtml(text(state.state_roman, state.stateRoman, "I").toUpperCase())}</span><span class="archive-label">${escapeHtml(text(state.catalogue_label, state.catalogueLabel, stateLabel(state, version)))}</span>${current ? '<span class="archive-state-current">You are here · current condition</span>' : ""}</div><h4>${escapeHtml(text(state.title, "Documented state"))}</h4><div class="archive-state-facts"><span>${escapeHtml(dateLabel(state))}</span><span>${Number(first(state.material_count, state.materialCount, linked.length))} material${Number(first(state.material_count, state.materialCount, linked.length)) === 1 ? "" : "s"}</span>${text(state.variant_label, state.variantLabel) ? `<span>Variant ${escapeHtml(text(state.variant_label, state.variantLabel))}</span>` : ""}</div>${text(state.description) ? `<p>${escapeHtml(text(state.description))}</p>` : ""}</div>${linked.length ? `<ol class="archive-state-materials">${linked.map((material, index) => {
+        const directEvidence = linked.map((material, index) => {
           const reference = text(material.material_reference, material.materialReference, `M${String(index + 1).padStart(2, "0")}`);
           const materialAnchor = `material-${slugify(first(material.slug, material.id, `${reference}-${index + 1}`))}`;
           return `<li><a href="#${escapeHtml(materialAnchor)}"><strong>${escapeHtml(reference)}</strong><span>${escapeHtml(text(material.title, titleCase(first(material.material_type, material.type, "material"))))}</span>${Number(first(material.is_sample, material.isSample, 0)) ? `<em>Sample</em>` : ""}</a></li>`;
-        }).join("")}</ol>` : `<p class="archive-state-empty">No public supporting materials are attached to this state.</p>`}</section>`;
+        });
+        const sourceEvidence = linkedSources.map(({ sourceMaterial, link }) => `<li><a href="#${escapeHtml(text(sourceMaterial.anchor, `source-material-${slugify(sourceMaterial.id)}`))}"><strong>${escapeHtml(text(link.document_reference, link.documentReference, "D"))}</strong><span>${escapeHtml(text(sourceMaterial.title, "Client correspondence"))}</span><em>Source</em></a></li>`);
+        const evidenceMarkup = directEvidence.length || sourceEvidence.length
+          ? `<ol class="archive-state-materials">${directEvidence.join("")}${sourceEvidence.join("")}</ol>`
+          : `<p class="archive-state-empty">No public supporting materials are attached to this state.</p>`;
+        const evidenceCount = Number(first(state.material_count, state.materialCount, linked.length + linkedSources.length));
+        return `<section class="archive-state-card ${current ? "is-current" : ""}" id="${escapeHtml(anchor)}"><div class="archive-state-lead">${leadMarkup}${lead ? `<span>${escapeHtml(text(lead.material_reference, lead.materialReference, "Lead material"))}</span>` : ""}</div><div class="archive-state-heading"><div class="archive-state-identifiers"><span class="archive-state-roman">${escapeHtml(text(state.state_roman, state.stateRoman, "I").toUpperCase())}</span><span class="archive-label">${escapeHtml(text(state.catalogue_label, state.catalogueLabel, stateLabel(state, version)))}</span>${current ? '<span class="archive-state-current">You are here · current condition</span>' : ""}</div><h4>${escapeHtml(text(state.title, "Documented state"))}</h4><div class="archive-state-facts"><span>${escapeHtml(dateLabel(state))}</span><span>${evidenceCount} material${evidenceCount === 1 ? "" : "s"}</span>${text(state.variant_label, state.variantLabel) ? `<span>Variant ${escapeHtml(text(state.variant_label, state.variantLabel))}</span>` : ""}</div>${text(state.description) ? `<p>${escapeHtml(text(state.description))}</p>` : ""}</div>${evidenceMarkup}</section>`;
       }).join("")}</div></article>`;
     }).join("")}</div>`;
   }
@@ -480,7 +616,15 @@
     });
     const themeTerms = terms.filter((term) => text(term.kind).toLowerCase() === "theme");
     if (!groups.size && !themeTerms.length) return "";
-    const groupMarkup = [...groups].map(([type, records]) => `<section class="archive-context-group"><span class="archive-label">${escapeHtml(titleCase(type === "event" ? "Event or activity" : type))}</span><div>${records.map((subject) => `<a class="archive-context-entry" href="${escapeHtml(subjectExplorerUrl(subject))}"><strong>${escapeHtml(text(subject.name, subject.title, subject.slug, subject.entity_id))}</strong><span>${escapeHtml(titleCase(text(subject.role, "related")))}</span></a>`).join("")}</div></section>`).join("");
+    const groupMarkup = [...groups].map(([type, records]) => `<section class="archive-context-group"><span class="archive-label">${escapeHtml(titleCase(type === "event" ? "Event or activity" : type))}</span><div>${records.map((subject) => {
+      const role = text(subject.role).toLowerCase();
+      const entityType = text(subject.entity_type, subject.entityType).toLowerCase();
+      const mediumClass = role === "medium" || entityType === "construct_node" ? " archive-medium-mention" : "";
+      const brandMediumKey = role === "brand" ? archiveBrandMediumKey(subject.entity_id, subject.slug, subject.name, subject.title) : "";
+      const brandClass = brandMediumKey ? " archive-brand-mention" : "";
+      const brandData = brandMediumKey ? ` data-archive-medium="${escapeHtml(brandMediumKey)}"` : "";
+      return `<a class="archive-context-entry${mediumClass}${brandClass}"${brandData} href="${escapeHtml(subjectExplorerUrl(subject))}"><strong>${escapeHtml(text(subject.name, subject.title, subject.slug, subject.entity_id))}</strong><span>${escapeHtml(titleCase(text(subject.role, "related")))}</span></a>`;
+    }).join("")}</div></section>`).join("");
     const themes = themeTerms.length ? `<section class="archive-context-group"><span class="archive-label">Concept or theme</span><div>${themeTerms.map((term) => `<a class="archive-context-entry" href="/archive/?q=${encodeURIComponent(text(term.name, term.slug))}"><strong>${escapeHtml(text(term.name, term.slug))}</strong><span>Theme</span></a>`).join("")}</div></section>` : "";
     return `<div class="archive-context">${groupMarkup}${themes}</div>`;
   }
@@ -659,6 +803,147 @@
     requestAnimationFrame(openHashTarget);
   }
 
+  function sourceMaterialPresentation(sourceMaterial, index) {
+    const entries = list(first(sourceMaterial.entries, []));
+    const stateLinks = list(first(sourceMaterial.state_links, sourceMaterial.stateLinks, []));
+    const references = list(first(sourceMaterial.references, [])).filter(Boolean);
+    const firstImage = entries.find((entry) => {
+      const asset = first(entry.digital_asset, entry.digitalAsset, {});
+      return text(asset && (asset.mime_type || asset.mimeType)).startsWith("image/") && mediaUrl(asset);
+    });
+    const firstImageAsset = firstImage ? first(firstImage.digital_asset, firstImage.digitalAsset, {}) : {};
+    return {
+      anchor: text(sourceMaterial.anchor, `source-material-${slugify(first(sourceMaterial.id, index + 1))}`),
+      caption: text(sourceMaterial.caption),
+      date: dateLabel(sourceMaterial),
+      entries,
+      firstImageUrl: mediaUrl(firstImageAsset),
+      firstImageAlt: text(firstImageAsset && (firstImageAsset.alt_text || firstImageAsset.altText), firstImage && firstImage.title, "Client source material"),
+      id: text(sourceMaterial.id, index + 1),
+      label: text(sourceMaterial.label, "Client correspondence"),
+      participant: text(sourceMaterial.participant_label, sourceMaterial.participantLabel, "Client"),
+      references,
+      stateLinks,
+      title: text(sourceMaterial.title, "Client correspondence"),
+    };
+  }
+
+  function sourceMaterialThumbnailMarkup(sourceMaterial, index) {
+    const presentation = sourceMaterialPresentation(sourceMaterial, index);
+    const badges = [...presentation.references, presentation.label].map((label) => `<span>${escapeHtml(label)}</span>`).join("");
+    return `<article class="archive-notebook-item archive-source-material-card" id="${escapeHtml(presentation.anchor)}">
+      <button class="archive-notebook-trigger" type="button" data-archive-source-material-trigger data-source-material-index="${index}" aria-haspopup="dialog" aria-controls="archive-source-material-dialog" aria-label="Open ${escapeHtml(presentation.title)} source material">
+        <span class="archive-notebook-preview">${presentation.firstImageUrl ? `<img src="${escapeHtml(presentation.firstImageUrl)}" alt="" loading="lazy" decoding="async">` : `<span class="archive-notebook-placeholder" aria-hidden="true">Source material</span>`}</span>
+        <span class="archive-notebook-badges">${badges}</span>
+        <span class="archive-notebook-meta"><span class="archive-date">${escapeHtml(presentation.date)}</span><strong>${escapeHtml(presentation.title)}</strong><span class="archive-source-material-attribution">${escapeHtml(presentation.participant)}</span></span>
+      </button>
+    </article>`;
+  }
+
+  function sourceMaterialEntryMarkup(entry, index) {
+    const type = text(entry.entry_type, entry.entryType, "correspondence-page");
+    const title = text(entry.title, titleCase(type));
+    const caption = text(entry.caption);
+    const body = text(entry.body);
+    const asset = first(entry.digital_asset, entry.digitalAsset, {});
+    const mimeType = text(asset && (asset.mime_type || asset.mimeType));
+    const url = mediaUrl(asset);
+    let viewer = "";
+    if (url && mimeType.startsWith("image/")) {
+      viewer = `<figure class="archive-source-entry-viewer"><img src="${escapeHtml(url)}" alt="${escapeHtml(text(asset.alt_text, asset.altText, title))}" loading="lazy" decoding="async"></figure>`;
+    } else if (url && mimeType === "application/pdf") {
+      viewer = `<div class="archive-source-entry-viewer"><object class="archive-material-document" data="${escapeHtml(url)}" type="application/pdf" aria-label="${escapeHtml(title)}"><p class="archive-inline-note">This document cannot be shown inline. <a href="${escapeHtml(url)}">Open it in a new view</a>.</p></object></div>`;
+    } else if (url) {
+      viewer = `<div class="archive-source-entry-download"><a class="archive-button" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open document</a></div>`;
+    } else if (body) {
+      viewer = `<div class="archive-source-entry-text">${paragraphMarkup(body)}</div>`;
+    } else {
+      viewer = `<div class="archive-material-viewer-empty"><span>No public preview is available for this entry.</span></div>`;
+    }
+    return `<article class="archive-source-entry">
+      <header><span class="archive-source-entry-index">${String(index + 1).padStart(2, "0")}</span><div><span class="archive-label">${escapeHtml(titleCase(type))}</span><h3>${escapeHtml(title)}</h3>${caption ? `<p>${escapeHtml(caption)}</p>` : ""}</div></header>
+      ${viewer}
+    </article>`;
+  }
+
+  function sourceMaterialDialogContentMarkup(sourceMaterial, index) {
+    const presentation = sourceMaterialPresentation(sourceMaterial, index);
+    return `<div class="archive-source-material-dialog-content">
+      <div class="archive-source-material-summary">
+        <div>
+          <span class="archive-label">${escapeHtml(presentation.label)}</span>
+          <h2 id="archive-source-material-dialog-title">${escapeHtml(presentation.title)}</h2>
+          <div class="archive-date">${escapeHtml(presentation.date)}</div>
+        </div>
+        <div>
+          <span class="archive-label">Participant</span>
+          <strong>${escapeHtml(presentation.participant)}</strong>
+          ${presentation.caption ? `<p>${escapeHtml(presentation.caption)}</p>` : ""}
+        </div>
+      </div>
+      ${presentation.stateLinks.length ? `<nav class="archive-source-state-links" aria-label="Documented states">${presentation.stateLinks.map((link) => `<a href="#${escapeHtml(text(link.anchor, `state-${slugify(first(link.state_id, link.stateId))}`))}"><strong>${escapeHtml(text(link.document_reference, link.documentReference, "D"))}</strong><span>${escapeHtml(text(link.state_label, link.stateLabel, link.title, "Documented state"))}</span></a>`).join("")}</nav>` : ""}
+      <div class="archive-source-entry-list">${presentation.entries.map(sourceMaterialEntryMarkup).join("")}</div>
+    </div>`;
+  }
+
+  function sourceMaterialDialogShellMarkup() {
+    return `<dialog class="archive-material-dialog archive-source-material-dialog" id="archive-source-material-dialog" aria-labelledby="archive-source-material-dialog-title">
+      <div class="archive-material-dialog-shell">
+        <header class="archive-material-dialog-header"><span class="archive-kicker">Source material · Client correspondence</span><button class="archive-material-dialog-close" type="button" data-archive-source-material-close aria-label="Close source material">Close</button></header>
+        <div data-archive-source-material-dialog-content></div>
+      </div>
+    </dialog>`;
+  }
+
+  function setupSourceMaterialQuickView(sourceMaterials) {
+    const dialog = app.querySelector("#archive-source-material-dialog");
+    if (!dialog) return;
+    const content = dialog.querySelector("[data-archive-source-material-dialog-content]");
+    const closeButton = dialog.querySelector("[data-archive-source-material-close]");
+    const triggers = [...app.querySelectorAll("[data-archive-source-material-trigger]")];
+    let lastTrigger = null;
+
+    function openSourceMaterial(index, trigger) {
+      const sourceMaterial = sourceMaterials[index];
+      if (!sourceMaterial) return;
+      lastTrigger = trigger || triggers[index] || null;
+      content.innerHTML = sourceMaterialDialogContentMarkup(sourceMaterial, index);
+      if (!dialog.open) dialog.showModal();
+      document.body.classList.add("archive-material-dialog-open");
+      window.SixWellAnalytics?.track("item_open", { action: "archive-source-material", itemId: text(sourceMaterial.id, index) });
+      requestAnimationFrame(() => closeButton.focus());
+    }
+
+    function openHashTarget() {
+      let id = "";
+      try {
+        id = decodeURIComponent(location.hash.slice(1));
+      } catch {
+        return;
+      }
+      if (!id.startsWith("source-material-")) return;
+      const item = document.getElementById(id);
+      const trigger = item && item.querySelector("[data-archive-source-material-trigger]");
+      if (!trigger) return;
+      item.scrollIntoView({ block: "center" });
+      openSourceMaterial(Number(trigger.dataset.sourceMaterialIndex), trigger);
+    }
+
+    triggers.forEach((trigger) => {
+      trigger.addEventListener("click", () => openSourceMaterial(Number(trigger.dataset.sourceMaterialIndex), trigger));
+    });
+    closeButton.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener("close", () => {
+      document.body.classList.remove("archive-material-dialog-open");
+      if (lastTrigger && lastTrigger.isConnected) lastTrigger.focus({ preventScroll: true });
+    });
+    window.addEventListener("hashchange", openHashTarget);
+    requestAnimationFrame(openHashTarget);
+  }
+
   function historyMarkup(activity, index) {
     const id = `history-${slugify(first(activity.slug, activity.id, `entry-${index + 1}`))}`;
     const title = text(activity.title, activity.label, activity.activity_type, activity.type, "History entry");
@@ -736,6 +1021,8 @@
       }).sort((a, b) => Number(first(a.sort_order, 9999)) - Number(first(b.sort_order, 9999)) || text(a.sort_date, a.occurred_at, a.date).localeCompare(text(b.sort_date, b.occurred_at, b.date)));
       const primaryMaterial = materials.find((material) => slugify(first(material.material_type, material.type, material.kind)) === "final-image");
       const notebookMaterials = materials.filter((material) => slugify(first(material.material_type, material.type, material.kind)) !== "final-image");
+      const sourceMaterials = data.sourceMaterials.slice().sort((a, b) => Number(first(a.sort_order, a.sortOrder, 9999)) - Number(first(b.sort_order, b.sortOrder, 9999)) || text(a.occurred_at, a.occurredAt, a.id).localeCompare(text(b.occurred_at, b.occurredAt, b.id)));
+      const hasNotebookEvidence = notebookMaterials.length > 0 || sourceMaterials.length > 0;
       const media = first(payload.primary_media, data.dossier.primary_media, mediaObject(primaryMaterial), mediaObject(item));
       const image = mediaObject({ primary_media: media });
       const imageUrl = mediaUrl(image);
@@ -744,22 +1031,34 @@
       const activities = data.activities.slice().sort((a, b) => text(a.sort_date, a.occurred_at, a.date_start, a.date, "9999").localeCompare(text(b.sort_date, b.occurred_at, b.date_start, b.date, "9999")));
       const relationships = data.relationships;
       const primaryOriginThread = data.primaryOriginThread;
+      const mediumKey = recordMediumKey(item);
+      const browseMediumValue = text(item.catalogue_medium, item.catalogueMedium, item.medium);
+      const metadataHtml = metadata(item).map((entry) => {
+        if (entry.role === "medium") return `<span class="archive-medium-mention">${escapeHtml(entry.value)}</span>`;
+        const brandMediumKey = entry.role === "brand" ? archiveBrandMediumKey(entry.value) : "";
+        return `<span${brandMediumKey ? ` class="archive-brand-mention" data-archive-medium="${escapeHtml(brandMediumKey)}"` : ""}>${escapeHtml(entry.value)}</span>`;
+      }).join("");
+      const relatedActionMarkup = primaryOriginThread
+        ? `<a class="archive-button" href="/archive/?origin=${encodeURIComponent(text(primaryOriginThread.slug))}&from=${encodeURIComponent(text(item.entity_id, item.entityId, item.archive_slug, item.slug))}">Find related records</a>`
+        : `<a class="archive-button${browseMediumValue ? " archive-medium-mention" : ""}" href="/archive/?${encodeURIComponent(browseMediumValue ? "medium" : "record_type")}=${encodeURIComponent(text(browseMediumValue, item.record_type))}">Browse same ${browseMediumValue ? "medium" : "record type"}</a>`;
       const breadcrumbCurrent = document.querySelector("[data-archive-breadcrumb-current]");
       if (breadcrumbCurrent) breadcrumbCurrent.textContent = title;
       document.title = `${title} · Archive · the six.well construct`;
       app.innerHTML = `
-        <article>
-          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.cultural_object_type, item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadata(item).map((value) => `<span>${escapeHtml(value)}</span>`).join("")}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${primaryOriginThread?`<a class="archive-button" href="/archive/?origin=${encodeURIComponent(text(primaryOriginThread.slug))}&from=${encodeURIComponent(text(item.entity_id,item.entityId,item.archive_slug,item.slug))}">Find related records</a>`:`<a class="archive-button" href="/archive/?${encodeURIComponent(text(item.catalogue_medium, item.medium) ? "medium" : "record_type")}=${encodeURIComponent(text(item.catalogue_medium, item.medium, item.record_type))}">Browse same ${escapeHtml(text(item.catalogue_medium, item.medium)?"medium":"record type")}</a>`}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
+        <article${mediumKey ? ` data-archive-medium="${escapeHtml(mediumKey)}"` : ""}>
+          <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.cultural_object_type, item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
           <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
           <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">03 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials, item)}</div></section>` : ""}
-          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${notebookMaterials.length ? `<div class="archive-notebook-grid">${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
+          <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${hasNotebookEvidence ? `<div class="archive-notebook-grid">${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}${sourceMaterials.map(sourceMaterialThumbnailMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
           <section class="archive-document-section" id="history"><header class="archive-section-heading"><span class="archive-section-index">05 / Time</span><h2 class="archive-section-title">Item history</h2></header><div>${activities.length ? `<div class="archive-history">${activities.map(historyMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>No dated history entries are public yet.</p></div>`}</div></section>
           <section class="archive-document-section" id="connections"><header class="archive-section-heading"><span class="archive-section-index">06 / Field</span><h2 class="archive-section-title">Connections</h2></header><div>${relationships.length || data.originThreads.length ? `${groupedConnectionsMarkup(item, relationships, data.originThreads)}${relationshipGraph(title, relationships)}` : `<div class="archive-note-empty"><p>No public relationships have been attached to this dossier yet.</p></div>`}</div></section>
         </article>
-        ${notebookMaterials.length ? materialDialogShellMarkup() : ""}`;
+        ${notebookMaterials.length ? materialDialogShellMarkup() : ""}
+        ${sourceMaterials.length ? sourceMaterialDialogShellMarkup() : ""}`;
       setupMaterialQuickView(notebookMaterials, imageUrl);
+      setupSourceMaterialQuickView(sourceMaterials);
     } catch (error) {
       app.innerHTML = error.status === 404
         ? errorState("This dossier is not public.", "It may be unpublished, unlisted, or no longer available under this address.")

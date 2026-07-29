@@ -16,6 +16,51 @@
   --archive-record-gap: clamp(0.75rem, 1.5vw, 1rem);
 }
 
+[data-archive-medium="art"] {
+  --archive-medium-color: var(--color-art);
+  --archive-medium-bright: var(--color-art-bright);
+}
+
+[data-archive-medium="tattoos"] {
+  --archive-medium-color: var(--color-tattooing);
+  --archive-medium-bright: var(--color-tattooing-bright);
+}
+
+[data-archive-medium="merch"] {
+  --archive-medium-color: var(--color-merch);
+  --archive-medium-bright: var(--color-merch-bright);
+}
+
+[data-archive-medium="legend"] {
+  --archive-medium-color: var(--color-about);
+  --archive-medium-bright: var(--color-about-bright);
+}
+
+[data-archive-medium="events"] {
+  --archive-medium-color: var(--color-events);
+  --archive-medium-bright: var(--color-events-bright);
+}
+
+[data-archive-medium="music"] {
+  --archive-medium-color: var(--color-music);
+  --archive-medium-bright: var(--color-music-bright);
+}
+
+[data-archive-medium="writings"] {
+  --archive-medium-color: var(--color-writings);
+  --archive-medium-bright: var(--color-writings-bright);
+}
+
+[data-archive-medium="film"] {
+  --archive-medium-color: var(--color-film);
+  --archive-medium-bright: var(--color-film-bright);
+}
+
+[data-archive-medium="archive"] {
+  --archive-medium-color: var(--color-archive);
+  --archive-medium-bright: var(--color-archive-bright);
+}
+
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 6.5rem;
@@ -382,7 +427,13 @@ body.archive-public {
 }
 
 .archive-results-heading h2 {
+  color: var(--archive-ink);
   font-size: clamp(1.6rem, 3vw, 2.35rem);
+  transition: color 180ms var(--ease-out, ease);
+}
+
+.archive-results-heading[data-archive-medium] h2 {
+  color: var(--archive-medium-color);
 }
 
 .archive-count {
@@ -707,6 +758,36 @@ button.archive-chip::after {
   letter-spacing: 0.1em;
   text-align: right;
   text-transform: uppercase;
+}
+
+body[data-archive-view="record"] [data-archive-medium] .archive-medium-mention {
+  color: var(--archive-medium-bright);
+}
+
+body[data-archive-view="record"] .archive-brand-mention[data-archive-medium] {
+  color: var(--archive-medium-bright);
+}
+
+body[data-archive-view="record"] [data-archive-medium] .archive-context-entry.archive-medium-mention strong,
+body[data-archive-view="record"] [data-archive-medium] .archive-context-entry.archive-medium-mention span {
+  color: var(--archive-medium-bright);
+}
+
+body[data-archive-view="record"] .archive-context-entry.archive-brand-mention[data-archive-medium] strong,
+body[data-archive-view="record"] .archive-context-entry.archive-brand-mention[data-archive-medium] span {
+  color: var(--archive-medium-bright);
+}
+
+body[data-archive-view="record"] [data-archive-medium] a.archive-button.archive-medium-mention {
+  border-color: var(--archive-medium-color);
+  color: var(--archive-medium-bright);
+}
+
+body[data-archive-view="record"] [data-archive-medium] a.archive-button.archive-medium-mention:hover,
+body[data-archive-view="record"] [data-archive-medium] a.archive-button.archive-medium-mention:focus-visible {
+  border-color: var(--archive-medium-bright);
+  background: var(--archive-medium-bright);
+  color: #100b07;
 }
 
 .archive-evolution,

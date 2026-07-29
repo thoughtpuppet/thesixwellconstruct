@@ -1353,7 +1353,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = [["dossiers","Dossiers"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["dossiers","Dossiers"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
