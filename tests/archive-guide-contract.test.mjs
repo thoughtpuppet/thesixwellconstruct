@@ -70,7 +70,7 @@ test("Archive Guide keeps its editorial layer scoped and authoritative", async (
   );
   assert.match(css, /\.archive-guide-page \.archive-guide-notice p::first-letter/);
   assert.match(css, /--guide-reading-measure:\s*43rem/);
-  assert.match(css, /--guide-body-ink:\s*color-mix\(in srgb, var\(--archive-ink\) 90%, transparent\)/);
+  assert.match(css, /--guide-body-ink:\s*color-mix\(in srgb, var\(--color-archive-bright\) 72%, transparent\)/);
   assert.match(css, /\.archive-guide-page \.archive-guide-nav-links/);
   assert.match(css, /text-transform:\s*none !important/);
   assert.doesNotMatch(css, /body:not\(\.archive-guide-page\)/);

@@ -3,7 +3,7 @@
   --guide-reading-measure: 43rem;
   --guide-column-gap: clamp(2rem, 6vw, 5rem);
   --guide-section-space: clamp(4rem, 8vw, 7rem);
-  --guide-body-ink: color-mix(in srgb, var(--archive-ink) 90%, transparent);
+  --guide-body-ink: color-mix(in srgb, var(--color-archive-bright) 72%, transparent);
 }
 
 .archive-guide-page .archive-guide p:not(.hero-descriptor),
@@ -337,11 +337,10 @@
   background: transparent;
 }
 
-.archive-guide-page .archive-guide-status p,
-.archive-guide-page .archive-guide-principle p {
+.archive-guide-page .archive-guide .archive-guide-status p,
+.archive-guide-page .archive-guide .archive-guide-principle p {
   max-width: 36rem;
   margin: 0;
-  color: var(--archive-muted);
 }
 
 .archive-guide-page .archive-catalogue-example {
