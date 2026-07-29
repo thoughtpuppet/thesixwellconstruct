@@ -20,6 +20,9 @@ test("Archive index exposes the guide at the top of the explorer", async () => {
 test("Archive Guide explains current use and developing catalogue language", async () => {
   const html = await read("archive/guide/index.html");
 
+  assert.match(html, /class="archive-guide-masthead"/);
+  assert.match(html, /class="archive-guide-notice-copy"/);
+  assert.match(html, /class="archive-guide-nav-label">Contents/);
   assert.match(html, /The guide changes with the Archive\./);
   assert.match(html, /Ways into the Archive/);
   assert.match(html, /Anatomy of a record/);
@@ -53,6 +56,24 @@ test("Archive Guide explains current use and developing catalogue language", asy
   assert.match(html, /Relationships and origin threads/);
   assert.match(html, /What becomes public/);
   assert.match(html, /Working glossary/);
+});
+
+test("Archive Guide keeps its editorial layer scoped and authoritative", async () => {
+  const [html, css] = await Promise.all([
+    read("archive/guide/index.html"),
+    read("css/archive-guide.css"),
+  ]);
+
+  assert.ok(
+    html.indexOf("/css/archive-guide.css") > html.indexOf("/css/hero.css"),
+    "guide-specific editorial CSS must load after the shared typography and hero layers",
+  );
+  assert.match(css, /\.archive-guide-page \.archive-guide-notice p::first-letter/);
+  assert.match(css, /--guide-reading-measure:\s*43rem/);
+  assert.match(css, /--guide-body-ink:\s*color-mix\(in srgb, var\(--archive-ink\) 90%, transparent\)/);
+  assert.match(css, /\.archive-guide-page \.archive-guide-nav-links/);
+  assert.match(css, /text-transform:\s*none !important/);
+  assert.doesNotMatch(css, /body:not\(\.archive-guide-page\)/);
 });
 
 test("Archive Guide keeps creative state separate from publication controls", async () => {
