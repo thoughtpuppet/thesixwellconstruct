@@ -89,6 +89,8 @@ test("migration assigns every existing cultural object an identity from the exac
   const painting = db.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id='art-marbles'").get();
   const hoodie = db.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id='merch-lostmarbles-hoodie'").get();
   assert.match(painting.catalogue_id, /^ART-\d{3}$/);
+  assert.equal(painting.catalogue_id, "ART-004");
+  assert.ok(painting.current_state_id);
   assert.equal(painting.medium_id, "art");
   assert.match(hoodie.catalogue_id, /^MER-\d{3}$/);
   assert.equal(hoodie.object_type_id, "merch-hoodie");
@@ -99,6 +101,13 @@ test("migration assigns every existing cultural object an identity from the exac
 
   const unassigned = db.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id IS NULL OR material_reference=''").get();
   assert.equal(unassigned.count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_states WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='archive_catalogue_documentation'").get());
+  assert.equal(db.prepare(`SELECT COUNT(*) count FROM archive_object_states aos
+    JOIN archive_materials am ON am.id=aos.lead_material_id
+    JOIN media_assets m ON m.id=am.media_id
+    WHERE am.state_id<>aos.id OR (m.mime_type NOT LIKE 'image/%' AND m.mime_type NOT LIKE 'video/%')`).get().count, 0);
   assert.ok(db.prepare("SELECT id FROM relationship_types WHERE slug='executed-as'").get());
 });
 
@@ -113,6 +122,8 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   assert.ok(!vocabulary.media.some((medium) => medium.id === "events"));
   assert.ok(vocabulary.object_types.some((type) => type.id === "tattoo-execution"));
   assert.ok(!vocabulary.object_types.some((type) => type.catalogue_prefix === "TAT" || type.catalogue_prefix === "EVT"));
+  assert.ok(vocabulary.documentation_fields.some((field) => field.field_key === "object-description"));
+  assert.ok(vocabulary.documentation_fields.some((field) => field.field_key === "rights-permissions"));
 
   db.exec(`INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at)
     VALUES('event-context-only','event','node-events','public',0,'test','test',datetime('now'),datetime('now'));
@@ -132,18 +143,35 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   assert.equal((await eventIdentityResponse.json()).record.event_id, "EVT-077");
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_entries WHERE entity_id='event-context-only'").get().count, 0);
 
-  const identityResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles", {
+  const initialCatalogueId = db.prepare("SELECT catalogue_id FROM archive_catalogue_entries WHERE entity_id='art-marbles'").get().catalogue_id;
+  assert.equal(initialCatalogueId, "ART-004");
+  const rejectedRenumber = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles", {
     method: "PATCH",
     admin: true,
     body: { medium_id: "art", object_type_id: "art-painting", catalogue_number: 42, current_version: 1, current_state: "II" },
   }), runtime);
+  assert.equal(rejectedRenumber.status, 409);
+
+  const identityResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles", {
+    method: "PATCH",
+    admin: true,
+    body: { medium_id: "art", object_type_id: "art-painting" },
+  }), runtime);
   assert.equal(identityResponse.status, 200);
-  assert.equal((await identityResponse.json()).record.catalogue_id, "ART-042");
+  assert.equal((await identityResponse.json()).record.catalogue_id, "ART-004");
 
   const versionResponse = await handleConstructApi(request("/api/admin/archive-versions", {
     method: "POST",
     admin: true,
-    body: { entity_id: "art-marbles", version_number: 2, title: "Version 2", date_precision: "undated", sort_order: 2 },
+    body: {
+      entity_id: "art-marbles",
+      version_number: 2,
+      title: "Version 2",
+      date_precision: "undated",
+      sort_order: 2,
+      publication_state: "published",
+      public_visible: true,
+    },
   }), runtime);
   assert.equal(versionResponse.status, 201);
   const version = (await versionResponse.json()).record;
@@ -151,10 +179,102 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   const stateResponse = await handleConstructApi(request("/api/admin/archive-states", {
     method: "POST",
     admin: true,
-    body: { version_id: version.id, state_roman: "I", state_order: 1, title: "Revised composition", date_precision: "undated", sort_order: 1 },
+    body: {
+      version_id: version.id,
+      state_roman: "I",
+      state_order: 1,
+      title: "Revised composition",
+      date_precision: "undated",
+      sort_order: 1,
+      publication_state: "draft",
+      public_visible: false,
+    },
   }), runtime);
   assert.equal(stateResponse.status, 201);
   const state = (await stateResponse.json()).record;
+
+  db.exec(`INSERT INTO media_assets
+      (id,source_url,original_filename,mime_type,alt_text,privacy,consent_status,state,public_presentation,created_by,created_at,updated_at)
+    VALUES
+      ('media-art-marbles-v2-lead','https://cdn.example.test/art-marbles-v2.jpg','art-marbles-v2.jpg','image/jpeg',
+       'Revised Lost Marbles composition','public','granted','active','inline','test',datetime('now'),datetime('now'));`);
+  const leadResponse = await handleConstructApi(request("/api/admin/archive-materials", {
+    method: "POST",
+    admin: true,
+    body: {
+      entity_id: "art-marbles",
+      state_id: state.id,
+      media_id: "media-art-marbles-v2-lead",
+      material_type: "process-photo",
+      title: "Revised composition image",
+      visibility: "public",
+      state: "published",
+      date_precision: "undated",
+    },
+  }), runtime);
+  assert.equal(leadResponse.status, 201);
+  const lead = (await leadResponse.json()).record;
+
+  const publishStateResponse = await handleConstructApi(request(`/api/admin/archive-states/${encodeURIComponent(state.id)}`, {
+    method: "PATCH",
+    admin: true,
+    body: {
+      publication_state: "published",
+      public_visible: true,
+      lead_material_id: lead.id,
+    },
+  }), runtime);
+  assert.equal(publishStateResponse.status, 200);
+
+  const currentStateResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles", {
+    method: "PATCH",
+    admin: true,
+    body: { current_state_id: state.id },
+  }), runtime);
+  assert.equal(currentStateResponse.status, 200);
+  assert.equal((await currentStateResponse.json()).record.catalogue_label, "ART-004.2/I");
+
+  const publicDocumentationResponse = await handleConstructApi(request("/api/admin/archive-documentation", {
+    method: "POST",
+    admin: true,
+    body: {
+      entity_id: "art-marbles",
+      field_key: "object-description",
+      value: "A painted cultural object documented through successive material states.",
+      citation: "Studio catalogue review",
+      url: "https://example.test/lost-marbles",
+      public_visible: true,
+      sort_order: 1,
+    },
+  }), runtime);
+  assert.equal(publicDocumentationResponse.status, 201);
+  const publicDocumentation = (await publicDocumentationResponse.json()).record;
+
+  const privateDocumentationResponse = await handleConstructApi(request("/api/admin/archive-documentation", {
+    method: "POST",
+    admin: true,
+    body: {
+      entity_id: "art-marbles",
+      field_key: "rights-permissions",
+      value: "Internal rights review note.",
+      public_visible: false,
+      sort_order: 2,
+    },
+  }), runtime);
+  assert.equal(privateDocumentationResponse.status, 201);
+  const privateDocumentation = (await privateDocumentationResponse.json()).record;
+
+  const documentationUpdateResponse = await handleConstructApi(request(`/api/admin/archive-documentation/${encodeURIComponent(publicDocumentation.id)}`, {
+    method: "PATCH",
+    admin: true,
+    body: { label: "Object description", sort_order: 3 },
+  }), runtime);
+  assert.equal(documentationUpdateResponse.status, 200);
+  assert.equal((await documentationUpdateResponse.json()).record.sort_order, 3);
+
+  const adminDocumentationResponse = await handleConstructApi(request("/api/admin/archive-documentation?entity_id=art-marbles", { admin: true }), runtime);
+  assert.equal(adminDocumentationResponse.status, 200);
+  assert.equal((await adminDocumentationResponse.json()).records.length, 2);
 
   const noteResponse = await handleConstructApi(request("/api/admin/archive-materials", {
     method: "POST",
@@ -241,10 +361,14 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   const publicResponse = await handleConstructApi(request(`/api/archive/items/${encodeURIComponent(archiveSlug)}`), runtime);
   assert.equal(publicResponse.status, 200);
   const publicRecord = await publicResponse.json();
-  assert.equal(publicRecord.item.catalogue_id, "ART-042");
+  assert.equal(publicRecord.item.catalogue_id, "ART-004");
+  assert.equal(publicRecord.item.catalogue_label, "ART-004.2/I");
   assert.ok(publicRecord.versions.some((item) => Number(item.version_number) === 2));
   assert.ok(publicRecord.states.some((item) => item.title === "Revised composition"));
   assert.ok(publicRecord.materials.some((item) => item.material_reference === "N01"));
+  assert.equal(publicRecord.documentation.length, 1);
+  assert.equal(publicRecord.documentation[0].field_key, "object-description");
+  assert.ok(!JSON.stringify(publicRecord).includes("Internal rights review note."));
   const publicDigitalAssetMaterial = publicRecord.materials.find((item) => item.media_id);
   assert.ok(publicDigitalAssetMaterial?.digital_asset);
   assert.equal(publicDigitalAssetMaterial.digital_asset.kind, "digital-asset");
@@ -252,23 +376,103 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   assert.equal("privacy" in publicDigitalAssetMaterial.digital_asset, false);
   assert.deepEqual(new Set(publicRecord.terms.filter((term) => term.kind === "theme").map((term) => term.name)), new Set(["Lost Marbles", "memory", "transformation"]));
 
+  const earlierState = publicRecord.states.find((item) => item.id !== state.id);
+  assert.ok(earlierState);
+  const stateCompareResponse = await handleConstructApi(request(
+    `/api/archive/compare?left=${encodeURIComponent(archiveSlug)}&left_state=${encodeURIComponent(earlierState.id)}&right=${encodeURIComponent(archiveSlug)}&right_state=${encodeURIComponent(state.id)}`
+  ), runtime);
+  assert.equal(stateCompareResponse.status, 200);
+  const stateCompare = await stateCompareResponse.json();
+  assert.equal(stateCompare.left.kind, "state");
+  assert.equal(stateCompare.right.kind, "state");
+  assert.equal(stateCompare.right.catalogue_label, "ART-004.2/I");
+
+  const hoodieSlug = db.prepare("SELECT archive_slug FROM archive_dossiers WHERE entity_id='merch-lostmarbles-hoodie'").get().archive_slug;
+  const crossMediumCompareResponse = await handleConstructApi(request(
+    `/api/archive/compare?left=${encodeURIComponent(archiveSlug)}&right=${encodeURIComponent(hoodieSlug)}`
+  ), runtime);
+  assert.equal(crossMediumCompareResponse.status, 200);
+  const crossMediumCompare = await crossMediumCompareResponse.json();
+  assert.equal(crossMediumCompare.left.catalogue_medium, "art");
+  assert.equal(crossMediumCompare.right.catalogue_medium, "merch");
+
+  const blockedCurrentStateDelete = await handleConstructApi(request(`/api/admin/archive-states/${encodeURIComponent(state.id)}`, {
+    method: "DELETE",
+    admin: true,
+  }), runtime);
+  assert.equal(blockedCurrentStateDelete.status, 409);
+  const blockedLeadDelete = await handleConstructApi(request(`/api/admin/archive-materials/${encodeURIComponent(lead.id)}`, {
+    method: "DELETE",
+    admin: true,
+  }), runtime);
+  assert.equal(blockedLeadDelete.status, 409);
+  const blockedVersionDelete = await handleConstructApi(request(`/api/admin/archive-versions/${encodeURIComponent(version.id)}`, {
+    method: "DELETE",
+    admin: true,
+  }), runtime);
+  assert.equal(blockedVersionDelete.status, 409);
+
+  const unassignedPublishedMaterialResponse = await handleConstructApi(request("/api/admin/archive-materials", {
+    method: "POST",
+    admin: true,
+    body: {
+      entity_id: "art-marbles",
+      material_type: "note",
+      title: "Unassigned public note",
+      inline_text: "This must be assigned to a creative state.",
+      visibility: "public",
+      state: "published",
+      date_precision: "undated",
+    },
+  }), runtime);
+  assert.equal(unassignedPublishedMaterialResponse.status, 409);
+
+  const privateStateResponse = await handleConstructApi(request("/api/admin/archive-states", {
+    method: "POST",
+    admin: true,
+    body: {
+      version_id: version.id,
+      state_roman: "II",
+      state_order: 2,
+      title: "Internal review state",
+      date_precision: "undated",
+    },
+  }), runtime);
+  assert.equal(privateStateResponse.status, 201);
+  const privateState = (await privateStateResponse.json()).record;
+  const privateCompareResponse = await handleConstructApi(request(
+    `/api/archive/compare?left=${encodeURIComponent(archiveSlug)}&left_state=${encodeURIComponent(privateState.id)}&right=${encodeURIComponent(hoodieSlug)}`
+  ), runtime);
+  assert.equal(privateCompareResponse.status, 404);
+
+  const documentationDeleteResponse = await handleConstructApi(request(`/api/admin/archive-documentation/${encodeURIComponent(privateDocumentation.id)}`, {
+    method: "DELETE",
+    admin: true,
+  }), runtime);
+  assert.equal(documentationDeleteResponse.status, 200);
+
   const adminMaterialsResponse = await handleConstructApi(request("/api/admin/archive-materials?entity_id=art-marbles", { admin: true }), runtime);
   assert.equal(adminMaterialsResponse.status, 200);
   const adminMaterials = await adminMaterialsResponse.json();
-  const adminDigitalAssetMaterial = adminMaterials.records.find((item) => item.media_id);
+  const adminDigitalAssetMaterial = adminMaterials.records.find((item) => item.id === lead.id);
   assert.equal(adminDigitalAssetMaterial.digital_asset.kind, "digital-asset");
   assert.equal(adminDigitalAssetMaterial.digital_asset.privacy, "public");
   assert.ok(adminDigitalAssetMaterial.digital_asset.original_filename);
 
-  db.prepare("UPDATE archive_materials SET state='draft',visibility='internal' WHERE id=?").run(adminDigitalAssetMaterial.id);
   db.prepare("UPDATE media_assets SET privacy='internal' WHERE id=?").run(adminDigitalAssetMaterial.media_id);
+  const gatedPublicResponse = await handleConstructApi(request(`/api/archive/items/${encodeURIComponent(archiveSlug)}`), runtime);
+  assert.equal(gatedPublicResponse.status, 200);
+  const gatedPublicRecord = await gatedPublicResponse.json();
+  const gatedCurrentState = gatedPublicRecord.states.find((item) => item.id === state.id);
+  assert.equal(gatedCurrentState.lead_material, null);
+  assert.equal(gatedCurrentState.material_count, 1);
   const blockedDigitalAssetPublish = await handleConstructApi(request(`/api/admin/archive-materials/${encodeURIComponent(adminDigitalAssetMaterial.id)}`, {
     method: "PATCH",
     admin: true,
     body: { state: "published", visibility: "public" },
   }), runtime);
   assert.equal(blockedDigitalAssetPublish.status, 409);
-  assert.match((await blockedDigitalAssetPublish.json()).error, /attached Digital asset/);
+  assert.match((await blockedDigitalAssetPublish.json()).error, /Digital asset|state lead/);
 
   const digitalAssetUpdate = await handleConstructApi(request(`/api/admin/media/${encodeURIComponent(adminDigitalAssetMaterial.media_id)}`, {
     method: "PATCH",
@@ -283,6 +487,15 @@ test("Studio edits identity, versions, states, contextual entities, themes, and 
   }), runtime);
   assert.equal(publishedDigitalAssetMaterial.status, 200);
   assert.equal((await publishedDigitalAssetMaterial.json()).record.digital_asset.privacy, "public");
+
+  db.prepare("UPDATE archive_object_states SET lead_material_id=NULL WHERE id=?").run(state.id);
+  const unchangedLegacyPointerResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles", {
+    method: "PATCH",
+    admin: true,
+    body: { medium_id: "art", object_type_id: "art-painting", current_state_id: state.id },
+  }), runtime);
+  assert.equal(unchangedLegacyPointerResponse.status, 200);
+  db.prepare("UPDATE archive_object_states SET lead_material_id=? WHERE id=?").run(lead.id, state.id);
 
   db.exec(`UPDATE archive_dossiers
     SET state='published',public_visible=1,updated_at=datetime('now')
@@ -353,8 +566,14 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   const publicScript = readFileSync(join(ROOT, "js", "archive-public.js"), "utf8");
   const publicCss = readFileSync(join(ROOT, "css", "archive-public.css"), "utf8");
   const archiveCardsCss = readFileSync(join(ROOT, "css", "archive-cards.css"), "utf8");
+  const compareScript = readFileSync(join(ROOT, "js", "archive-compare.js"), "utf8");
+  const comparePage = readFileSync(join(ROOT, "archive", "compare", "index.html"), "utf8");
   assert.match(studio, /Cultural object identity/);
   assert.match(studio, /Versions and states/);
+  assert.match(studio, /Current public condition/);
+  assert.match(studio, /Adaptive catalogue documentation/);
+  assert.match(studio, /Lead material/);
+  assert.match(studio, /Visible in the public evolution/);
   assert.match(studio, /Event authority identity/);
   assert.match(studio, /Contextual Archive record · no object versions or creative states/);
   assert.match(studio, /People, organizations, places, events, and themes/);
@@ -370,7 +589,16 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(publicScript, /archive-record-symbol/);
   assert.match(publicScript, /archive-notebook-item/);
   assert.match(publicScript, /archive-material-dialog/);
+  assert.match(publicScript, /archive-state-card/);
+  assert.match(publicScript, /You are here · current condition/);
+  assert.match(publicScript, /archive-documentation-groups/);
+  assert.match(publicScript, /Replace left/);
+  assert.match(publicScript, /left_state/);
   assert.match(publicCss, /\.archive-state-roman/);
+  assert.match(compareScript, /Catalogue identity/);
+  assert.match(compareScript, /State information/);
+  assert.match(compareScript, /Undocumented/);
+  assert.match(comparePage, /data-archive-compare-app/);
   assert.match(archiveCardsCss, /\.archive-record-card/);
   assert.match(archiveCardsCss, /\.archive-record-card-symbol/);
   assert.match(archiveCardsCss, /\.archive-record-symbol/);

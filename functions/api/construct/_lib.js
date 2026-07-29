@@ -556,6 +556,33 @@ const ARCHIVE_VISIBILITIES = new Set(["public","unlisted","internal","private"])
 const ARCHIVE_STATES = new Set(["draft","published","archived"]);
 const ARCHIVE_TIMELINE_STATES = new Set(["draft","published","archived"]);
 const ARCHIVE_CONTEXT_TYPES = new Set(["person","organization","place","event"]);
+const ARCHIVE_DOCUMENTATION_FIELDS = new Set([
+  "alternate-title","object-description","technique","support","dimensions","inscription",
+  "edition","edition-information","background","artist-remark","installation-remark",
+  "curatorial-remark","other-remark","bibliography","former-catalogue-number",
+  "institutional-identifier","credit-line","other-collection","rights-permissions",
+]);
+const ARCHIVE_DOCUMENTATION_LABELS = {
+  "alternate-title":"Alternate title",
+  "object-description":"Description",
+  technique:"Technique",
+  support:"Support",
+  dimensions:"Dimensions",
+  inscription:"Inscription",
+  edition:"Edition",
+  "edition-information":"Edition information",
+  background:"Background",
+  "artist-remark":"Artist remark",
+  "installation-remark":"Installation remark",
+  "curatorial-remark":"Curatorial remark",
+  "other-remark":"Other remark",
+  bibliography:"Bibliography",
+  "former-catalogue-number":"Former catalogue number",
+  "institutional-identifier":"Institutional identifier",
+  "credit-line":"Credit line",
+  "other-collection":"Other collection",
+  "rights-permissions":"Rights and permissions",
+};
 
 function originThreadIds(value){
   const source=Array.isArray(value)?value:String(value||"").split(",");
@@ -594,6 +621,7 @@ function archiveFragmentPublicSql(alias="af") {
   return `(
     (${alias}.fragment_type='dossier') OR
     (${alias}.fragment_type='catalogue' AND EXISTS(SELECT 1 FROM archive_catalogue_entries ace WHERE ace.entity_id=${alias}.dossier_entity_id AND ace.entity_id=${alias}.source_id)) OR
+    (${alias}.fragment_type='catalogue-documentation' AND EXISTS(SELECT 1 FROM archive_catalogue_documentation acd WHERE acd.id=${alias}.source_id AND acd.dossier_entity_id=${alias}.dossier_entity_id AND acd.public_visible=1)) OR
     (${alias}.fragment_type='event-identifier' AND EXISTS(SELECT 1 FROM archive_event_identifiers aei WHERE aei.entity_id=${alias}.dossier_entity_id AND aei.entity_id=${alias}.source_id)) OR
     (${alias}.fragment_type='theme' AND EXISTS(SELECT 1 FROM entity_terms et JOIN taxonomy_terms tt ON tt.id=et.term_id AND tt.kind='theme' AND tt.public_visible=1 WHERE et.entity_id=${alias}.dossier_entity_id AND et.term_id=${alias}.source_id)) OR
     (${alias}.fragment_type='material' AND EXISTS(SELECT 1 FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE am.id=${alias}.source_id AND am.dossier_entity_id=${alias}.dossier_entity_id AND am.state='published' AND am.visibility='public' AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline')))) OR
@@ -618,7 +646,12 @@ function plainTextFtsQuery(value) {
 
 function archiveEntitySql(where = "1=1") {
   return `SELECT ad.*,ce.entity_type,ce.node_id,
-    ace.catalogue_id,ace.catalogue_prefix,ace.catalogue_number,ace.current_version,ace.current_state,ace.variant_label catalogue_variant,
+    ace.catalogue_id,ace.catalogue_prefix,ace.catalogue_number,ace.current_state_id,
+    COALESCE(current_version_row.version_number,ace.current_version) current_version,
+    COALESCE(current_state_row.state_roman,ace.current_state) current_state,
+    COALESCE(current_state_row.variant_label,ace.variant_label) catalogue_variant,
+    current_state_row.publication_state current_state_publication,
+    current_state_row.public_visible current_state_public_visible,
     ace.medium_id catalogue_medium,cot.label cultural_object_type,cot.id cultural_object_type_id,cot.state_guidance,
     acm.label catalogue_medium_label,
     aei.event_id,aei.event_number,
@@ -648,6 +681,13 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'flash_item' THEN fi.item_type WHEN 'merch_item' THEN mi.product_type
       WHEN 'event' THEN 'event' WHEN 'visual_symbol' THEN 'symbol' ELSE '' END medium,
     COALESCE(
+      (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
+        FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
+        WHERE am.id=current_state_row.lead_material_id
+          AND am.state='published' AND am.visibility='public'
+          AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted')
+          AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%'
+        LIMIT 1),
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
         FROM archive_materials am JOIN media_assets m ON m.id=am.media_id
         WHERE am.dossier_entity_id=ad.entity_id AND am.state='published' AND am.visibility='public'
@@ -684,7 +724,12 @@ function archiveEntitySql(where = "1=1") {
       LEFT JOIN media_assets m ON m.id=am.media_id
       WHERE am.dossier_entity_id=ad.entity_id AND am.state='published' AND am.visibility='public'
         AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
-      ORDER BY am.material_type)) material_types
+      ORDER BY am.material_type)) material_types,
+    (SELECT COUNT(*) FROM archive_object_states public_state_counted
+      JOIN archive_object_versions public_version_counted ON public_version_counted.id=public_state_counted.version_id
+      WHERE public_version_counted.entity_id=ad.entity_id
+        AND public_version_counted.publication_state='published' AND public_version_counted.public_visible=1
+        AND public_state_counted.publication_state='published' AND public_state_counted.public_visible=1) public_state_count
   FROM archive_dossiers ad
   JOIN content_entities ce ON ce.id=ad.entity_id
   LEFT JOIN art_works aw ON ce.entity_type='art_work' AND aw.id=ce.id
@@ -695,6 +740,8 @@ function archiveEntitySql(where = "1=1") {
   LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
   LEFT JOIN search_documents sd ON sd.entity_id=ce.id
   LEFT JOIN archive_catalogue_entries ace ON ace.entity_id=ad.entity_id
+  LEFT JOIN archive_object_states current_state_row ON current_state_row.id=ace.current_state_id
+  LEFT JOIN archive_object_versions current_version_row ON current_version_row.id=current_state_row.version_id
   LEFT JOIN archive_cultural_object_types cot ON cot.id=ace.object_type_id
   LEFT JOIN archive_catalogue_media acm ON acm.id=ace.medium_id
   LEFT JOIN archive_event_identifiers aei ON aei.entity_id=ad.entity_id
@@ -703,6 +750,7 @@ function archiveEntitySql(where = "1=1") {
 
 function archiveCatalogueLabel(row) {
   if (!row?.catalogue_id) return "";
+  if (!row.current_state_id) return row.catalogue_id;
   const version = Math.max(1, Number(row.current_version || 1));
   const state = text(row.current_state, 20).toUpperCase() || "I";
   const variant = text(row.catalogue_variant || row.variant_label, 120);
@@ -746,6 +794,77 @@ function presentArchiveMaterial(row,admin=false) {
     }:{})
   }:null;
   return {...row,digital_asset:digitalAsset,digitalAsset};
+}
+
+function archiveStateAnchor(stateId="") {
+  return `state-${String(stateId||"").replace(/[^a-zA-Z0-9_-]+/g,"-")}`;
+}
+
+function presentArchiveState(row,item=null) {
+  if(!row)return null;
+  const versionNumber=Number(row.version_number||1);
+  const roman=text(row.state_roman,20).toUpperCase()||"I";
+  const variant=text(row.variant_label,120);
+  const base=item?.catalogue_id||row.catalogue_id||"";
+  const catalogueLabel=base?`${base}.${versionNumber}/${roman}${variant?`, ${variant}`:""}`:`Version ${versionNumber}, State ${roman}${variant?`, ${variant}`:""}`;
+  let leadMaterial=null;
+  if(row.lead_id){
+    leadMaterial=presentArchiveMaterial({
+      id:row.lead_id,
+      dossier_entity_id:row.entity_id,
+      media_id:row.lead_media_id,
+      material_reference:row.lead_material_reference,
+      material_type:row.lead_material_type,
+      title:row.lead_title,
+      caption:row.lead_caption,
+      body:row.lead_body,
+      mime_type:row.lead_mime_type,
+      width:row.lead_width,
+      height:row.lead_height,
+      duration_seconds:row.lead_duration_seconds,
+      alt_text:row.lead_alt_text,
+      public_title:row.lead_public_title,
+      public_description:row.lead_public_description,
+      public_presentation:row.lead_public_presentation,
+      transcript:row.lead_transcript,
+      transcript_status:row.lead_transcript_status,
+      transcript_language:row.lead_transcript_language,
+      media_url:row.lead_media_url||"",
+      url:row.lead_media_url||"",
+    });
+  }
+  return {
+    ...row,
+    anchor:archiveStateAnchor(row.id),
+    catalogue_label:catalogueLabel,
+    catalogueLabel,
+    is_current:Boolean(item?.current_state_id&&item.current_state_id===row.id),
+    isCurrent:Boolean(item?.current_state_id&&item.current_state_id===row.id),
+    lead_material:leadMaterial,
+    leadMaterial,
+  };
+}
+
+function presentArchiveDocumentation(row) {
+  if(!row)return null;
+  const fieldKey=text(row.field_key,80);
+  return {
+    id:row.id,
+    dossier_entity_id:row.dossier_entity_id,
+    dossierEntityId:row.dossier_entity_id,
+    field_key:fieldKey,
+    fieldKey,
+    default_label:ARCHIVE_DOCUMENTATION_LABELS[fieldKey]||fieldKey.replace(/-/g," "),
+    defaultLabel:ARCHIVE_DOCUMENTATION_LABELS[fieldKey]||fieldKey.replace(/-/g," "),
+    label:row.label||"",
+    value:row.value||"",
+    citation:row.citation||"",
+    url:row.url||"",
+    public_visible:Boolean(Number(row.public_visible)),
+    publicVisible:Boolean(Number(row.public_visible)),
+    sort_order:Number(row.sort_order||0),
+    sortOrder:Number(row.sort_order||0),
+  };
 }
 
 function presentArchiveItem(row) {
@@ -792,6 +911,8 @@ function presentArchiveItem(row) {
     cultural_object_type_id: row.cultural_object_type_id || "",
     current_version: Number(row.current_version || 1),
     current_state: row.current_state || "I",
+    current_state_id: row.current_state_id || "",
+    currentStateId: row.current_state_id || "",
     catalogue_variant: row.catalogue_variant || "",
     state_guidance: row.state_guidance || "",
     event_id: row.event_id || "",
@@ -931,13 +1052,23 @@ async function publicArchiveDetail(request,env,archiveSlug){
   const row=await database.prepare(archiveEntitySql("ce.visibility='public' AND ad.state='published' AND ad.public_visible=1 AND (ad.archive_slug=? OR ad.entity_id=?)")).bind(archiveSlug,archiveSlug).first();
   if(!row)return failure("Archive item not found.",404);
   const item=presentArchiveItem(row),entityId=row.entity_id;
-  const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult,originThreadsResult,versionsResult,statesResult,termsResult]=await database.batch([
+  const [materialsResult,activitiesResult,subjectsResult,collectionsResult,relationshipsResult,originThreadsResult,versionsResult,statesResult,termsResult,documentationResult]=await database.batch([
     database.prepare(`SELECT am.*,m.mime_type,m.width,m.height,m.duration_seconds,m.alt_text,m.public_title,m.public_description,
         CASE WHEN m.transcript_status='ready' THEN m.transcript ELSE '' END transcript,m.transcript_status,m.transcript_language,m.public_presentation,
         CASE WHEN m.public_presentation='inline' THEN COALESCE(NULLIF(m.source_url,''),CASE WHEN m.storage_key<>'' THEN '/api/construct/media/'||m.id ELSE '' END) ELSE '' END media_url
       FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id
       WHERE am.dossier_entity_id=? AND am.state='published' AND am.visibility='public'
         AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'))
+        AND (
+          NOT EXISTS(SELECT 1 FROM archive_catalogue_entries ace WHERE ace.entity_id=am.dossier_entity_id)
+          OR EXISTS(
+            SELECT 1 FROM archive_object_states public_state
+            JOIN archive_object_versions public_version ON public_version.id=public_state.version_id
+            WHERE public_state.id=am.state_id
+              AND public_state.publication_state='published' AND public_state.public_visible=1
+              AND public_version.publication_state='published' AND public_version.public_visible=1
+          )
+        )
       ORDER BY CASE WHEN am.occurred_at IS NULL THEN 1 ELSE 0 END,am.occurred_at,am.sort_order,am.created_at`).bind(entityId),
     database.prepare(`SELECT ea.*,('history-'||ea.id) anchor FROM entity_activity ea
       WHERE ea.entity_id=? AND ea.public_visible=1
@@ -966,28 +1097,152 @@ async function publicArchiveDetail(request,env,archiveSlug){
       FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id
       WHERE otd.dossier_entity_id=? AND ot.state='published' AND ot.public_visible=1
       ORDER BY otd.is_primary DESC,otd.sort_order,ot.sort_order,ot.title`).bind(entityId),
-    database.prepare(`SELECT * FROM archive_object_versions WHERE entity_id=? ORDER BY sort_order,version_number`).bind(entityId),
-    database.prepare(`SELECT aos.* FROM archive_object_states aos
+    database.prepare(`SELECT * FROM archive_object_versions aov
+      WHERE aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
+        AND EXISTS(SELECT 1 FROM archive_object_states aos WHERE aos.version_id=aov.id AND aos.publication_state='published' AND aos.public_visible=1)
+      ORDER BY aov.sort_order,aov.version_number`).bind(entityId),
+    database.prepare(`SELECT aos.*,aov.entity_id,aov.version_number,
+        CASE WHEN lead_media.id IS NOT NULL THEN lead.id END lead_id,
+        lead.media_id lead_media_id,lead.material_reference lead_material_reference,
+        lead.material_type lead_material_type,lead.title lead_title,lead.caption lead_caption,lead.body lead_body,
+        lead_media.mime_type lead_mime_type,lead_media.width lead_width,lead_media.height lead_height,
+        lead_media.duration_seconds lead_duration_seconds,lead_media.alt_text lead_alt_text,
+        lead_media.public_title lead_public_title,lead_media.public_description lead_public_description,
+        lead_media.public_presentation lead_public_presentation,
+        CASE WHEN lead_media.transcript_status='ready' THEN lead_media.transcript ELSE '' END lead_transcript,
+        lead_media.transcript_status lead_transcript_status,lead_media.transcript_language lead_transcript_language,
+        CASE WHEN lead_media.id IS NOT NULL THEN COALESCE(NULLIF(lead_media.source_url,''),CASE WHEN lead_media.storage_key<>'' THEN '/api/construct/media/'||lead_media.id ELSE '' END) ELSE '' END lead_media_url,
+        (SELECT COUNT(*) FROM archive_materials counted
+          LEFT JOIN media_assets counted_media ON counted_media.id=counted.media_id
+          WHERE counted.state_id=aos.id AND counted.state='published' AND counted.visibility='public'
+            AND (counted.media_id IS NULL OR (
+              counted_media.state='active' AND counted_media.privacy='public'
+              AND counted_media.consent_status IN ('not-required','granted')
+              AND counted_media.public_presentation='inline'
+            ))) material_count
+      FROM archive_object_states aos
       JOIN archive_object_versions aov ON aov.id=aos.version_id
-      WHERE aov.entity_id=? ORDER BY aov.sort_order,aov.version_number,aos.sort_order,aos.state_order,aos.variant_label`).bind(entityId),
+      LEFT JOIN archive_materials lead ON lead.id=aos.lead_material_id
+        AND lead.state_id=aos.id AND lead.state='published' AND lead.visibility='public'
+      LEFT JOIN media_assets lead_media ON lead_media.id=lead.media_id
+        AND lead_media.state='active' AND lead_media.privacy='public'
+        AND lead_media.consent_status IN ('not-required','granted')
+        AND lead_media.public_presentation='inline'
+        AND (lead_media.mime_type LIKE 'image/%' OR lead_media.mime_type LIKE 'video/%')
+      WHERE aov.entity_id=?
+        AND aov.publication_state='published' AND aov.public_visible=1
+        AND aos.publication_state='published' AND aos.public_visible=1
+      ORDER BY aov.sort_order,aov.version_number,aos.sort_order,aos.state_order,aos.variant_label`).bind(entityId),
     database.prepare(`SELECT tt.id,tt.kind,tt.name,tt.slug,tt.description
       FROM entity_terms et JOIN taxonomy_terms tt ON tt.id=et.term_id
       WHERE et.entity_id=? AND tt.public_visible=1 ORDER BY tt.kind,tt.sort_order,tt.name`).bind(entityId),
+    database.prepare(`SELECT * FROM archive_catalogue_documentation
+      WHERE dossier_entity_id=? AND public_visible=1
+      ORDER BY sort_order,field_key,created_at,id`).bind(entityId),
   ]);
   const relationshipRows=relationshipsResult.results||[];
   const relatedIds=relationshipRows.map(r=>r.source_entity_id===entityId?r.target_entity_id:r.source_entity_id);
   const relatedMap=await entityRecords(database,relatedIds);
   const relatedDossiers=relatedIds.length?(await database.prepare(`SELECT entity_id,archive_slug FROM archive_dossiers WHERE state='published' AND public_visible=1 AND entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
-  const relatedCatalogue=relatedIds.length?(await database.prepare(`SELECT entity_id,catalogue_id,current_version,current_state,variant_label catalogue_variant FROM archive_catalogue_entries WHERE entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
+  const relatedCatalogue=relatedIds.length?(await database.prepare(`SELECT ace.entity_id,ace.catalogue_id,ace.current_state_id,ace.medium_id catalogue_medium,
+      COALESCE(aov.version_number,ace.current_version) current_version,
+      COALESCE(aos.state_roman,ace.current_state) current_state,
+      COALESCE(aos.variant_label,ace.variant_label) catalogue_variant,
+      (SELECT COUNT(*) FROM archive_object_states counted_state
+        JOIN archive_object_versions counted_version ON counted_version.id=counted_state.version_id
+        WHERE counted_version.entity_id=ace.entity_id
+          AND counted_version.publication_state='published' AND counted_version.public_visible=1
+          AND counted_state.publication_state='published' AND counted_state.public_visible=1) public_state_count
+      FROM archive_catalogue_entries ace
+      LEFT JOIN archive_object_states aos ON aos.id=ace.current_state_id
+      LEFT JOIN archive_object_versions aov ON aov.id=aos.version_id
+      WHERE ace.entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
   const relatedEvents=relatedIds.length?(await database.prepare(`SELECT entity_id,event_id,event_number FROM archive_event_identifiers WHERE entity_id IN (${relatedIds.map(()=>"?").join(",")})`).bind(...relatedIds).all()).results||[]:[];
   const relatedSlugs=new Map(relatedDossiers.map(d=>[d.entity_id,d.archive_slug]));
   const relatedCatalogueMap=new Map(relatedCatalogue.map(record=>[record.entity_id,{...record,catalogue_label:archiveCatalogueLabel(record)}]));
   const relatedEventMap=new Map(relatedEvents.map(record=>[record.entity_id,{...record,record_identifier:record.event_id}]));
   const relationships=[];for(const relation of relationshipRows){const outgoing=relation.source_entity_id===entityId;const relatedId=outgoing?relation.target_entity_id:relation.source_entity_id;const related=relatedMap.get(relatedId);if(!related||related.visibility!=="public")continue;const archive_slug=relatedSlugs.get(relatedId)||"",catalogue=relatedCatalogueMap.get(relatedId)||{},eventIdentity=relatedEventMap.get(relatedId)||{};relationships.push({id:relation.id,direction:outgoing?"outgoing":"incoming",label:outgoing?relation.forward_label:relation.reverse_label,relationship_type:relation.relationship_slug,related:{...related,...catalogue,...eventIdentity,imageUrl:"",archive_slug,archiveRoute:archive_slug?`/archive/records/${encodeURIComponent(archive_slug)}/`:""}});}
   const materials=(materialsResult.results||[]).map(material=>presentArchiveMaterial({...material,anchor:`material-${material.id}`,url:material.media_url||"",inline_text:material.body||""}));
+  const states=(statesResult.results||[]).map(state=>presentArchiveState(state,item));
+  const documentation=(documentationResult.results||[]).map(presentArchiveDocumentation);
   const activities=activitiesResult.results||[];
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
-  return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states:statesResult.results||[],terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
+  return json({item,dossier:item,materials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
+}
+
+function archiveComparisonSubject(payload,stateId=""){
+  const item=payload.item||{},states=payload.states||[],documentation=payload.documentation||[];
+  const selectedState=stateId?states.find(state=>state.id===stateId):null;
+  if(stateId&&!selectedState)return null;
+  const currentState=states.find(state=>state.id===item.current_state_id)||null;
+  const displayState=selectedState||currentState;
+  const documentationValues={};
+  for(const entry of documentation){
+    if(!documentationValues[entry.field_key])documentationValues[entry.field_key]=[];
+    documentationValues[entry.field_key].push(entry);
+  }
+  const firstDocumentation=(key)=>documentationValues[key]?.[0]?.value||"";
+  const media=displayState?.lead_material?.digital_asset
+    ? {
+        ...displayState.lead_material.digital_asset,
+        material_reference:displayState.lead_material.material_reference||"",
+        title:displayState.lead_material.title||displayState.lead_material.digital_asset.title||"",
+      }
+    : item.primary_media||null;
+  return {
+    kind:selectedState?"state":"record",
+    archive_slug:item.archive_slug,
+    archiveSlug:item.archive_slug,
+    entity_id:item.entity_id,
+    entityId:item.entity_id,
+    state_id:selectedState?.id||"",
+    stateId:selectedState?.id||"",
+    route:`${item.archive_route}${selectedState?`#${selectedState.anchor}`:""}`,
+    title:item.title,
+    subject_title:selectedState?.title||item.title,
+    subjectTitle:selectedState?.title||item.title,
+    catalogue_id:item.catalogue_id,
+    catalogueId:item.catalogue_id,
+    catalogue_label:selectedState?.catalogue_label||item.catalogue_label,
+    catalogueLabel:selectedState?.catalogue_label||item.catalogue_label,
+    medium:item.medium||item.catalogue_medium_label||"",
+    catalogue_medium:item.catalogue_medium||"",
+    cultural_object_type:item.cultural_object_type||"",
+    date_label:selectedState?.date_label||item.date_label||"",
+    dateLabel:selectedState?.date_label||item.date_label||"",
+    state:selectedState||displayState,
+    summary:firstDocumentation("object-description")||selectedState?.description||item.summary||"",
+    technique:firstDocumentation("technique"),
+    support:firstDocumentation("support"),
+    dimensions:firstDocumentation("dimensions"),
+    inscriptions:(documentationValues.inscription||[]).map(entry=>entry.value),
+    edition:firstDocumentation("edition"),
+    credit_line:firstDocumentation("credit-line"),
+    themes:(payload.terms||[]).filter(term=>term.kind==="theme").map(term=>term.name),
+    relationships:(payload.relationships||[]).map(relation=>({
+      label:relation.label,
+      title:relation.related?.title||relation.related?.name||"",
+      catalogue_label:relation.related?.catalogue_label||relation.related?.record_identifier||"",
+    })),
+    media,
+  };
+}
+
+async function publicArchiveCompare(request,env){
+  if(request.method!=="GET")return failure("Method not allowed.",405);
+  const url=new URL(request.url);
+  const leftSlug=text(url.searchParams.get("left"),200),rightSlug=text(url.searchParams.get("right"),200);
+  const leftState=text(url.searchParams.get("left_state")||url.searchParams.get("leftState"),200);
+  const rightState=text(url.searchParams.get("right_state")||url.searchParams.get("rightState"),200);
+  if(!leftSlug||!rightSlug)return failure("Choose exactly two public Archive subjects.",400);
+  const detailRequest=new Request(request.url,{method:"GET",headers:request.headers});
+  const leftResponse=await publicArchiveDetail(detailRequest,env,leftSlug);
+  const rightResponse=await publicArchiveDetail(detailRequest,env,rightSlug);
+  if(!leftResponse.ok||!rightResponse.ok)return failure("One or both comparison subjects are unavailable.",404);
+  const [leftPayload,rightPayload]=await Promise.all([leftResponse.json(),rightResponse.json()]);
+  const left=archiveComparisonSubject(leftPayload,leftState),right=archiveComparisonSubject(rightPayload,rightState);
+  if(!left||!right)return failure("One or both comparison states are unavailable.",404);
+  return json({subjects:[left,right],left,right},{cache:"public, max-age=30"});
 }
 
 function timelineSubjectName(row){return row.organization_name||row.person_name||row.node_name||row.title||row.slug;}
@@ -2120,13 +2375,17 @@ async function archiveCatalogueAdminApi(request,env,entityId=""){
       database.prepare("SELECT * FROM archive_catalogue_media ORDER BY sort_order,label"),
       database.prepare("SELECT * FROM archive_cultural_object_types ORDER BY medium_id,sort_order,label"),
     ]);
-    return json({media:mediaResult.results||[],object_types:typeResult.results||[]});
+    return json({
+      media:mediaResult.results||[],
+      object_types:typeResult.results||[],
+      documentation_fields:[...ARCHIVE_DOCUMENTATION_FIELDS].map((field_key,sort_order)=>({field_key,label:ARCHIVE_DOCUMENTATION_LABELS[field_key],sort_order:sort_order+1})),
+    });
   }
   if(request.method==="GET"&&entityId){
     const record=await database.prepare(`SELECT ace.*,acm.label medium_label,cot.label object_type_label,cot.state_guidance
       FROM archive_catalogue_entries ace JOIN archive_catalogue_media acm ON acm.id=ace.medium_id
       JOIN archive_cultural_object_types cot ON cot.id=ace.object_type_id WHERE ace.entity_id=?`).bind(entityId).first();
-    return record?json({record}):failure("Catalogue entry not found.",404);
+    return record?json({record:{...record,catalogue_label:archiveCatalogueLabel(record),catalogueLabel:archiveCatalogueLabel(record)}}):failure("Catalogue entry not found.",404);
   }
   if(request.method==="PATCH"&&entityId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");
@@ -2137,14 +2396,82 @@ async function archiveCatalogueAdminApi(request,env,entityId=""){
     if(!type)return failure("Choose a cultural object type that belongs to the selected medium.",409);
     let catalogueNumber=Math.floor(Number(body.catalogue_number??body.catalogueNumber??before?.catalogue_number));
     if(!catalogueNumber||catalogueNumber<1){const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();catalogueNumber=Number(maximum?.maximum||0)+1}
-    const currentVersion=Math.floor(Number(body.current_version??body.currentVersion??before?.current_version??1)),currentState=archiveRoman(body.current_state??body.currentState??before?.current_state??"I"),variantLabel=text(body.variant_label??body.variantLabel??before?.variant_label,120);
-    if(currentVersion<1||!currentState)return failure("Version must be positive and state must use Roman numerals.",409);
+    if(before&&(catalogueNumber!==Number(before.catalogue_number)||type.catalogue_prefix!==before.catalogue_prefix))return failure("Permanent catalogue prefixes and sequence numbers cannot be changed in Studio.",409);
+    const hasCurrentState=Object.prototype.hasOwnProperty.call(body,"current_state_id")||Object.prototype.hasOwnProperty.call(body,"currentStateId");
+    let currentStateId=hasCurrentState?text(body.current_state_id??body.currentStateId,200):text(before?.current_state_id,200);
+    let currentVersion=Number(before?.current_version||1),currentState=archiveRoman(before?.current_state||"I")||"I",variantLabel=text(before?.variant_label,120);
+    if(currentStateId){
+      const selected=await database.prepare(`SELECT aos.id,aos.state_roman,aos.variant_label,aos.publication_state,aos.public_visible,aos.lead_material_id,
+          aov.entity_id,aov.version_number,aov.publication_state version_publication,aov.public_visible version_public_visible,
+          lead.state lead_state,lead.visibility lead_visibility,
+          lead_media.state lead_media_state,lead_media.privacy lead_media_privacy,lead_media.consent_status lead_consent_status,
+          lead_media.public_presentation lead_public_presentation,lead_media.mime_type lead_mime_type
+        FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id
+        LEFT JOIN archive_materials lead ON lead.id=aos.lead_material_id AND lead.state_id=aos.id
+        LEFT JOIN media_assets lead_media ON lead_media.id=lead.media_id
+        WHERE aos.id=? AND aov.entity_id=?`).bind(currentStateId,entityId).first();
+      if(!selected)return failure("Choose a state that belongs to this cultural object.",409);
+      if(selected.publication_state!=="published"||!Number(selected.public_visible)||selected.version_publication!=="published"||!Number(selected.version_public_visible))return failure("The current public condition must be a published, public version and state.",409);
+      const currentSelectionChanged=hasCurrentState&&String(currentStateId||"")!==String(before?.current_state_id||"");
+      if(currentSelectionChanged&&(!selected.lead_material_id||selected.lead_state!=="published"||selected.lead_visibility!=="public"||selected.lead_media_state!=="active"||selected.lead_media_privacy!=="public"||!["not-required","granted"].includes(selected.lead_consent_status)||selected.lead_public_presentation!=="inline"||!/^(image|video)\//i.test(selected.lead_mime_type||"")))return failure("The current public condition needs an eligible public image or video lead.",409);
+      currentVersion=Number(selected.version_number);currentState=archiveRoman(selected.state_roman);variantLabel=text(selected.variant_label,120);
+    }else if(hasCurrentState){
+      currentStateId=null;currentVersion=1;currentState="I";variantLabel="";
+    }
     const catalogueId=`${type.catalogue_prefix}-${String(catalogueNumber).padStart(3,"0")}`;
     try{
-      if(before)await database.prepare(`UPDATE archive_catalogue_entries SET medium_id=?,object_type_id=?,catalogue_prefix=?,catalogue_number=?,catalogue_id=?,current_version=?,current_state=?,variant_label=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,entityId).run();
-      else await database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(entityId,mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel).run();
+      if(before)await database.prepare(`UPDATE archive_catalogue_entries SET medium_id=?,object_type_id=?,catalogue_prefix=?,catalogue_number=?,catalogue_id=?,current_version=?,current_state=?,variant_label=?,current_state_id=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,currentStateId,entityId).run();
+      else await database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,current_state_id,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(entityId,mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,currentStateId).run();
     }catch(error){const duplicate=/UNIQUE constraint failed/i.test(error.message);return failure(duplicate?"That catalogue number is already assigned.":error.message,duplicate?409:400)}
     return archiveCatalogueAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
+  }
+  return failure("Method not allowed.",405);
+}
+
+function normalizeArchiveDocumentation(body,existing={}){
+  return {
+    dossier_entity_id:text(body.dossier_entity_id??body.entity_id??body.entityId??existing.dossier_entity_id,200),
+    field_key:text(body.field_key??body.fieldKey??existing.field_key,80).toLowerCase(),
+    label:text(body.label??existing.label,160),
+    value:text(body.value??existing.value,50000),
+    citation:text(body.citation??existing.citation,5000),
+    url:text(body.url??existing.url,2000),
+    public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):(truthy(body.public_visible??body.publicVisible)?1:0),
+    sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,
+  };
+}
+
+async function archiveDocumentationAdminApi(request,env,entryId=""){
+  const database=db(env);
+  if(request.method==="GET"&&!entryId){
+    const entityId=text(new URL(request.url).searchParams.get("entity_id"),200),where=entityId?" WHERE dossier_entity_id=?":"";
+    const statement=database.prepare(`SELECT * FROM archive_catalogue_documentation${where} ORDER BY dossier_entity_id,sort_order,field_key,created_at,id`);
+    const result=entityId?await statement.bind(entityId).all():await statement.all();
+    return json({records:(result.results||[]).map(presentArchiveDocumentation),documentation:(result.results||[]).map(presentArchiveDocumentation)});
+  }
+  const before=entryId?await database.prepare("SELECT * FROM archive_catalogue_documentation WHERE id=?").bind(entryId).first():null;
+  if(entryId&&!before)return failure("Documentation entry not found.",404);
+  if(request.method==="POST"&&!entryId){
+    const body=await readJson(request),record=normalizeArchiveDocumentation(body||{});
+    if(!record.dossier_entity_id||!ARCHIVE_DOCUMENTATION_FIELDS.has(record.field_key)||!record.value)return failure("Choose a valid documentation field and enter a value.",409);
+    if(!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(record.dossier_entity_id).first())return failure("Dossier not found.",404);
+    if(record.url&&!/^https?:\/\//i.test(record.url))return failure("Documentation URLs must begin with http:// or https://.",409);
+    const newId=text(body?.id,200)||id("archive-documentation");
+    await database.prepare(`INSERT INTO archive_catalogue_documentation(id,dossier_entity_id,field_key,label,value,citation,url,public_visible,sort_order,created_by,updated_by,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,record.dossier_entity_id,record.field_key,record.label,record.value,record.citation,record.url,record.public_visible,record.sort_order).run();
+    return json({record:presentArchiveDocumentation(await database.prepare("SELECT * FROM archive_catalogue_documentation WHERE id=?").bind(newId).first())},{status:201});
+  }
+  if(request.method==="PATCH"&&entryId){
+    const body=await readJson(request),record=normalizeArchiveDocumentation(body||{},before);
+    if(!ARCHIVE_DOCUMENTATION_FIELDS.has(record.field_key)||!record.value)return failure("Choose a valid documentation field and enter a value.",409);
+    if(record.dossier_entity_id!==before.dossier_entity_id)return failure("Documentation entries cannot move between dossiers.",409);
+    if(record.url&&!/^https?:\/\//i.test(record.url))return failure("Documentation URLs must begin with http:// or https://.",409);
+    await database.prepare(`UPDATE archive_catalogue_documentation SET field_key=?,label=?,value=?,citation=?,url=?,public_visible=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(record.field_key,record.label,record.value,record.citation,record.url,record.public_visible,record.sort_order,entryId).run();
+    return json({record:presentArchiveDocumentation(await database.prepare("SELECT * FROM archive_catalogue_documentation WHERE id=?").bind(entryId).first())});
+  }
+  if(request.method==="DELETE"&&entryId){
+    await database.prepare("DELETE FROM archive_catalogue_documentation WHERE id=?").bind(entryId).run();
+    return json({ok:true});
   }
   return failure("Method not allowed.",405);
 }
@@ -2178,7 +2505,7 @@ async function archiveEventIdentifierAdminApi(request,env,entityId=""){
 }
 
 function normalizeArchiveVersion(body,existing={}){
-  return {entity_id:text(body.entity_id??body.entityId??existing.entity_id,200),version_number:Math.floor(Number(body.version_number??body.versionNumber??existing.version_number??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};
+  return {entity_id:text(body.entity_id??body.entityId??existing.entity_id,200),version_number:Math.floor(Number(body.version_number??body.versionNumber??existing.version_number??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,publication_state:text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):(truthy(body.public_visible??body.publicVisible)?1:0)};
 }
 
 async function archiveVersionsAdminApi(request,env,versionId=""){
@@ -2190,19 +2517,21 @@ async function archiveVersionsAdminApi(request,env,versionId=""){
   }
   if(request.method==="POST"&&!versionId){
     const body=await readJson(request),record=normalizeArchiveVersion(body||{});
-    if(!record.entity_id||record.version_number<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("A cultural object, positive version number, and valid date precision are required.",409);
+    if(!record.entity_id||record.version_number<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision)||!ARCHIVE_STATES.has(record.publication_state))return failure("A cultural object, positive version number, valid date precision, and publication state are required.",409);
     if(!await database.prepare("SELECT entity_id FROM archive_catalogue_entries WHERE entity_id=?").bind(record.entity_id).first())return failure("Catalogue entry not found.",404);
     const newId=text(body?.id,200)||id("archive-version");
-    try{await database.prepare(`INSERT INTO archive_object_versions(id,entity_id,version_number,title,description,occurred_at,date_precision,date_label,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,record.entity_id,record.version_number,record.title,record.description,record.occurred_at,record.date_precision,record.date_label,record.sort_order).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That version number already exists.":error.message,409)}
+    try{await database.prepare(`INSERT INTO archive_object_versions(id,entity_id,version_number,title,description,occurred_at,date_precision,date_label,sort_order,publication_state,public_visible,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,record.entity_id,record.version_number,record.title,record.description,record.occurred_at,record.date_precision,record.date_label,record.sort_order,record.publication_state,record.public_visible).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That version number already exists.":error.message,409)}
     return json({record:await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(newId).first()},{status:201});
   }
   const before=versionId?await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(versionId).first():null;if(versionId&&!before)return failure("Version not found.",404);
   if(request.method==="PATCH"&&versionId){
-    const body=await readJson(request),record=normalizeArchiveVersion(body||{},before);if(record.version_number<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("Invalid version.",409);
-    try{await database.prepare(`UPDATE archive_object_versions SET version_number=?,title=?,description=?,occurred_at=?,date_precision=?,date_label=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(record.version_number,record.title,record.description,record.occurred_at,record.date_precision,record.date_label,record.sort_order,versionId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That version number already exists.":error.message,409)}
+    const body=await readJson(request),record=normalizeArchiveVersion(body||{},before);if(record.version_number<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision)||!ARCHIVE_STATES.has(record.publication_state))return failure("Invalid version.",409);
+    if((record.publication_state!=="published"||!record.public_visible)&&await database.prepare(`SELECT ace.entity_id FROM archive_catalogue_entries ace JOIN archive_object_states aos ON aos.id=ace.current_state_id WHERE aos.version_id=?`).bind(versionId).first())return failure("Choose another current public condition before hiding this version.",409);
+    try{await database.prepare(`UPDATE archive_object_versions SET version_number=?,title=?,description=?,occurred_at=?,date_precision=?,date_label=?,sort_order=?,publication_state=?,public_visible=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(record.version_number,record.title,record.description,record.occurred_at,record.date_precision,record.date_label,record.sort_order,record.publication_state,record.public_visible,versionId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That version number already exists.":error.message,409)}
     return json({record:await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(versionId).first()});
   }
   if(request.method==="DELETE"&&versionId){
+    const current=await database.prepare(`SELECT ace.entity_id FROM archive_catalogue_entries ace JOIN archive_object_states aos ON aos.id=ace.current_state_id WHERE aos.version_id=?`).bind(versionId).first();if(current)return failure("Choose another current public condition before removing this version.",409);
     const used=await database.prepare("SELECT COUNT(*) count FROM archive_object_states aos JOIN archive_materials am ON am.state_id=aos.id WHERE aos.version_id=?").bind(versionId).first();if(Number(used?.count||0))return failure("Move materials out of this version before removing it.",409);
     const count=await database.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE entity_id=?").bind(before.entity_id).first();if(Number(count?.count||0)<=1)return failure("Every cultural object needs at least one version.",409);
     await database.prepare("DELETE FROM archive_object_versions WHERE id=?").bind(versionId).run();return json({ok:true});
@@ -2211,7 +2540,25 @@ async function archiveVersionsAdminApi(request,env,versionId=""){
 }
 
 function normalizeArchiveObjectState(body,existing={}){
-  return {version_id:text(body.version_id??body.versionId??existing.version_id,200),state_roman:archiveRoman(body.state_roman??body.stateRoman??existing.state_roman),state_order:Math.floor(Number(body.state_order??body.stateOrder??existing.state_order??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),variant_label:text(body.variant_label??body.variantLabel??existing.variant_label,120),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0};
+  return {version_id:text(body.version_id??body.versionId??existing.version_id,200),state_roman:archiveRoman(body.state_roman??body.stateRoman??existing.state_roman),state_order:Math.floor(Number(body.state_order??body.stateOrder??existing.state_order??1)),title:text(body.title??existing.title,300),description:text(body.description??existing.description,5000),variant_label:text(body.variant_label??body.variantLabel??existing.variant_label,120),occurred_at:text(body.occurred_at??body.occurredAt??existing.occurred_at,80)||null,date_precision:text(body.date_precision??body.datePrecision??existing.date_precision,30)||"undated",date_label:text(body.date_label??body.dateLabel??existing.date_label,160),sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,publication_state:text(body.publication_state??body.publicationState??existing.publication_state,30)||"draft",public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(existing.public_visible||0):(truthy(body.public_visible??body.publicVisible)?1:0),lead_material_id:text(body.lead_material_id??body.leadMaterialId??existing.lead_material_id,200)||null};
+}
+
+async function validateArchiveObjectState(database,record,stateId=""){
+  if(!record.version_id||!record.state_roman||record.state_order<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision)||!ARCHIVE_STATES.has(record.publication_state))return failure("A version, Roman numeral, positive order, valid date precision, and publication state are required.",409);
+  const version=await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(record.version_id).first();if(!version)return failure("Version not found.",404);
+  let lead=null;
+  if(record.lead_material_id){
+    lead=await database.prepare(`SELECT am.*,m.state media_state,m.privacy media_privacy,m.consent_status,m.public_presentation,m.mime_type
+      FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE am.id=?`).bind(record.lead_material_id).first();
+    if(!lead||!stateId||lead.state_id!==stateId)return failure("The lead material must belong to this state.",409);
+    if(!/^(image|video)\//i.test(lead.mime_type||""))return failure("A state lead must be an image or video Digital asset.",409);
+  }
+  if(record.publication_state==="published"&&record.public_visible){
+    if(version.publication_state!=="published"||!Number(version.public_visible))return failure("Publish the parent version before publishing this state.",409);
+    if(!stateId||!lead)return failure("Save the state as an internal draft, attach an eligible visual material, and choose it as the lead before publishing.",409);
+    if(lead&&(lead.state!=="published"||lead.visibility!=="public"||lead.media_state!=="active"||lead.media_privacy!=="public"||!["not-required","granted"].includes(lead.consent_status)||lead.public_presentation!=="inline"))return failure("A public state lead must be a published public material with an eligible Digital asset.",409);
+  }
+  return {version,lead};
 }
 
 async function archiveStatesAdminApi(request,env,stateId=""){
@@ -2224,19 +2571,22 @@ async function archiveStatesAdminApi(request,env,stateId=""){
   }
   if(request.method==="POST"&&!stateId){
     const body=await readJson(request),record=normalizeArchiveObjectState(body||{});
-    if(!record.version_id||!record.state_roman||record.state_order<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("A version, Roman numeral, positive order, and valid date precision are required.",409);
-    if(!await database.prepare("SELECT id FROM archive_object_versions WHERE id=?").bind(record.version_id).first())return failure("Version not found.",404);
+    const valid=await validateArchiveObjectState(database,record);if(valid instanceof Response)return valid;
     const newId=text(body?.id,200)||id("archive-state");
-    try{await database.prepare(`INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,variant_label,occurred_at,date_precision,date_label,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,record.version_id,record.state_roman,record.state_order,record.title,record.description,record.variant_label,record.occurred_at,record.date_precision,record.date_label,record.sort_order).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That state order and variant already exist in this version.":error.message,409)}
+    try{await database.prepare(`INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,variant_label,occurred_at,date_precision,date_label,sort_order,publication_state,public_visible,lead_material_id,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(newId,record.version_id,record.state_roman,record.state_order,record.title,record.description,record.variant_label,record.occurred_at,record.date_precision,record.date_label,record.sort_order,record.publication_state,record.public_visible,null).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That state order and variant already exist in this version.":error.message,409)}
     return json({record:await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(newId).first()},{status:201});
   }
   const before=stateId?await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(stateId).first():null;if(stateId&&!before)return failure("State not found.",404);
   if(request.method==="PATCH"&&stateId){
-    const body=await readJson(request),record=normalizeArchiveObjectState(body||{},before);if(!record.state_roman||record.state_order<1||!ARCHIVE_DATE_PRECISIONS.has(record.date_precision))return failure("Invalid state.",409);
-    try{await database.prepare(`UPDATE archive_object_states SET state_roman=?,state_order=?,title=?,description=?,variant_label=?,occurred_at=?,date_precision=?,date_label=?,sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(record.state_roman,record.state_order,record.title,record.description,record.variant_label,record.occurred_at,record.date_precision,record.date_label,record.sort_order,stateId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That state order and variant already exist in this version.":error.message,409)}
+    const body=await readJson(request),record=normalizeArchiveObjectState(body||{},before);const valid=await validateArchiveObjectState(database,record,stateId);if(valid instanceof Response)return valid;
+    const current=await database.prepare("SELECT entity_id FROM archive_catalogue_entries WHERE current_state_id=?").bind(stateId).first();
+    if(current&&(record.publication_state!=="published"||!record.public_visible))return failure("Choose another current public condition before hiding this state.",409);
+    try{await database.prepare(`UPDATE archive_object_states SET state_roman=?,state_order=?,title=?,description=?,variant_label=?,occurred_at=?,date_precision=?,date_label=?,sort_order=?,publication_state=?,public_visible=?,lead_material_id=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(record.state_roman,record.state_order,record.title,record.description,record.variant_label,record.occurred_at,record.date_precision,record.date_label,record.sort_order,record.publication_state,record.public_visible,record.lead_material_id,stateId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That state order and variant already exist in this version.":error.message,409)}
+    if(current)await database.prepare(`UPDATE archive_catalogue_entries SET current_version=(SELECT version_number FROM archive_object_versions WHERE id=?),current_state=?,variant_label=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(record.version_id,record.state_roman,record.variant_label,current.entity_id).run();
     return json({record:await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(stateId).first()});
   }
   if(request.method==="DELETE"&&stateId){
+    if(await database.prepare("SELECT entity_id FROM archive_catalogue_entries WHERE current_state_id=?").bind(stateId).first())return failure("Choose another current public condition before removing this state.",409);
     const used=await database.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id=?").bind(stateId).first();if(Number(used?.count||0))return failure("Move materials out of this state before removing it.",409);
     const count=await database.prepare("SELECT COUNT(*) count FROM archive_object_states WHERE version_id=?").bind(before.version_id).first();if(Number(count?.count||0)<=1)return failure("Every version needs at least one state.",409);
     await database.prepare("DELETE FROM archive_object_states WHERE id=?").bind(stateId).run();return json({ok:true});
@@ -2250,7 +2600,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     const where=entityId?"ad.entity_id=?":"1=1";const statement=database.prepare(`${archiveEntitySql(where)} ORDER BY ad.updated_at DESC,ad.entity_id`);const result=entityId?await statement.bind(entityId).all():await statement.all();const records=(result.results||[]).map(row=>({...row,...presentArchiveItem(row)}));
     if(entityId&&!records[0])return failure("Dossier not found.",404);
     if(entityId){
-      const [originResult,contextResult,themeResult,versionResult,stateResult]=await database.batch([
+      const [originResult,contextResult,themeResult,versionResult,stateResult,documentationResult]=await database.batch([
         database.prepare(`SELECT ot.*,otd.is_primary,otd.sort_order assignment_sort_order FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=? ORDER BY otd.is_primary DESC,otd.sort_order,ot.title`).bind(entityId),
         database.prepare(`SELECT ads.subject_entity_id entity_id,ads.role,ads.public_visible,ads.sort_order,ce.entity_type,
           COALESCE(p.name,o.name,pl.name,ev.title,ce.id) name
@@ -2261,10 +2611,11 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
         database.prepare(`SELECT tt.id,tt.name,tt.slug,tt.description FROM entity_terms et JOIN taxonomy_terms tt ON tt.id=et.term_id WHERE et.entity_id=? AND tt.kind='theme' ORDER BY tt.sort_order,tt.name`).bind(entityId),
         database.prepare("SELECT * FROM archive_object_versions WHERE entity_id=? ORDER BY sort_order,version_number").bind(entityId),
         database.prepare(`SELECT aos.*,aov.entity_id,aov.version_number FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id WHERE aov.entity_id=? ORDER BY aov.version_number,aos.sort_order,aos.state_order,aos.variant_label`).bind(entityId),
+        database.prepare("SELECT * FROM archive_catalogue_documentation WHERE dossier_entity_id=? ORDER BY sort_order,field_key,created_at,id").bind(entityId),
       ]);
-      const originThreads=originResult.results||[],contextAssignments=contextResult.results||[],themes=themeResult.results||[],versions=versionResult.results||[],states=stateResult.results||[];
-      const enriched={...records[0],origin_threads:originThreads,origin_thread_ids:originThreads.map(thread=>thread.id),primary_origin_thread_id:originThreads.find(thread=>Number(thread.is_primary))?.id||"",context_assignments:contextAssignments,themes,theme_names:themes.map(theme=>theme.name),versions,states};
-      return json({record:enriched,dossier:enriched,origin_threads:originThreads,context_assignments:contextAssignments,themes,versions,states});
+      const originThreads=originResult.results||[],contextAssignments=contextResult.results||[],themes=themeResult.results||[],versions=versionResult.results||[],states=stateResult.results||[],documentation=(documentationResult.results||[]).map(presentArchiveDocumentation);
+      const enriched={...records[0],origin_threads:originThreads,origin_thread_ids:originThreads.map(thread=>thread.id),primary_origin_thread_id:originThreads.find(thread=>Number(thread.is_primary))?.id||"",context_assignments:contextAssignments,themes,theme_names:themes.map(theme=>theme.name),versions,states,documentation};
+      return json({record:enriched,dossier:enriched,origin_threads:originThreads,context_assignments:contextAssignments,themes,versions,states,documentation});
     }
     return json({records,count:records.length});
   }
@@ -2302,16 +2653,24 @@ function normalizeArchiveMaterial(body,existing={}){
   const occurredAt=text(body.occurred_at??body.start_date??body.start??existing.occurred_at,80)||null;
   const endedAt=text(body.ended_at??body.end_date??body.end??existing.ended_at,80)||null;
   const datePrecision=text(body.date_precision??body.datePrecision??existing.date_precision,30).toLowerCase()||(occurredAt?"exact":"undated");
-  return {dossier_entity_id:text(body.dossier_entity_id??body.entity_id??body.entityId??existing.dossier_entity_id,200),media_id:text(body.media_id??body.mediaId??existing.media_id,200)||null,role:text(body.role??existing.role,80)||"notebook",material_type:materialType,title:text(body.title??existing.title,300),caption:text(body.caption??existing.caption,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,100000),process_phase:text(body.process_phase??body.processPhase??existing.process_phase,120),occurred_at:occurredAt,ended_at:endedAt,date_precision:datePrecision,date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),visibility,state,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,state_id:text(body.state_id??body.stateId??existing.state_id,200)||null,material_reference:text(body.material_reference??body.materialReference??existing.material_reference,30).toUpperCase(),is_sample:body.is_sample===undefined&&body.isSample===undefined?Number(existing.is_sample||0):(truthy(body.is_sample??body.isSample)?1:0)};
+  return {id:text(existing.id??body.id,200),dossier_entity_id:text(body.dossier_entity_id??body.entity_id??body.entityId??existing.dossier_entity_id,200),media_id:text(body.media_id??body.mediaId??existing.media_id,200)||null,role:text(body.role??existing.role,80)||"notebook",material_type:materialType,title:text(body.title??existing.title,300),caption:text(body.caption??existing.caption,5000),body:text(body.body??body.inline_text??body.inlineText??existing.body,100000),process_phase:text(body.process_phase??body.processPhase??existing.process_phase,120),occurred_at:occurredAt,ended_at:endedAt,date_precision:datePrecision,date_label:text(body.date_label??body.display_date??body.displayDate??existing.date_label,160),visibility,state,sort_order:Number(body.sort_order??body.sortOrder??existing.sort_order)||0,state_id:text(body.state_id??body.stateId??existing.state_id,200)||null,material_reference:text(body.material_reference??body.materialReference??existing.material_reference,30).toUpperCase(),is_sample:body.is_sample===undefined&&body.isSample===undefined?Number(existing.is_sample||0):(truthy(body.is_sample??body.isSample)?1:0)};
 }
 
 async function validateArchiveMaterial(database,material){
   if(!material.dossier_entity_id)return failure("entity_id is required.");if(!ARCHIVE_MATERIAL_TYPES.has(material.material_type))return failure("Invalid material type.");if(!ARCHIVE_VISIBILITIES.has(material.visibility))return failure("Invalid material visibility.");if(!ARCHIVE_STATES.has(material.state))return failure("Invalid material state.");if(!ARCHIVE_DATE_PRECISIONS.has(material.date_precision))return failure("Invalid date precision.");if(!material.media_id&&!material.body)return failure("A material needs media_id or inline_text.");
   const dossier=await database.prepare("SELECT ad.*,ce.visibility canonical_visibility FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ad.entity_id=?").bind(material.dossier_entity_id).first();if(!dossier)return failure("Dossier not found.",404);
+  const catalogue=await database.prepare("SELECT entity_id FROM archive_catalogue_entries WHERE entity_id=?").bind(material.dossier_entity_id).first();
   if(material.state_id){const state=await database.prepare("SELECT aos.id FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id WHERE aos.id=? AND aov.entity_id=?").bind(material.state_id,material.dossier_entity_id).first();if(!state)return failure("Choose a state that belongs to this cultural object.",409)}
+  if(catalogue&&material.state==="published"&&material.visibility==="public"&&!material.state_id)return failure("Published cultural-object materials must document a version and state.",409);
   if(material.material_reference&&!/^[MNDS]\d{2,4}$/.test(material.material_reference))return failure("Material references use M, N, D, or S followed by at least two digits.",409);
   if(material.is_sample){const catalogue=await database.prepare("SELECT medium_id FROM archive_catalogue_entries WHERE entity_id=?").bind(material.dossier_entity_id).first();if(catalogue?.medium_id!=="merch")return failure("Samples are available only for Merch cultural objects.",409)}
   let media=null;if(material.media_id){media=await database.prepare("SELECT * FROM media_assets WHERE id=?").bind(material.media_id).first();if(!media)return failure("Media not found.",404)}
+  const leadState=await database.prepare("SELECT * FROM archive_object_states WHERE lead_material_id=?").bind(material.id||"").first();
+  if(leadState){
+    if(material.state_id!==leadState.id)return failure("Choose another state lead before moving this material.",409);
+    if(!media||!/^(image|video)\//i.test(media.mime_type||""))return failure("Choose another state lead before replacing its visual Digital asset.",409);
+    if(leadState.publication_state==="published"&&Number(leadState.public_visible)&&(material.state!=="published"||material.visibility!=="public"||!media||media.state!=="active"||media.privacy!=="public"||!["not-required","granted"].includes(media.consent_status)||media.public_presentation!=="inline"))return failure("Choose another state lead before hiding or archiving this public material.",409);
+  }
   if(material.state==="published"&&material.visibility==="public"){
     if(dossier.state!=="published"||!Number(dossier.public_visible)||dossier.canonical_visibility!=="public")return failure("Publish the canonical entity and dossier before publishing this material.",409);
     if(media&&(media.state!=="active"||media.privacy!=="public"||!["not-required","granted"].includes(media.consent_status)||media.public_presentation!=="inline"))return failure("The attached Digital asset must be active, public, shown inline, and have granted or not-required consent.",409);
@@ -2336,7 +2695,14 @@ async function archiveMaterialsAdminApi(request,env,materialId=""){
   if(request.method==="POST"&&materialId==="reorder"){const body=await readJson(request);const entityId=text(body?.entity_id||body?.entityId,200),ids=body?.ids;if(!entityId||!Array.isArray(ids))return failure("entity_id and ids are required.");const current=(await database.prepare("SELECT id FROM archive_materials WHERE dossier_entity_id=? ORDER BY sort_order,id").bind(entityId).all()).results||[];const set=new Set(ids);if(ids.length!==current.length||set.size!==current.length||current.some(row=>!set.has(row.id)))return failure("The material list changed. Refresh before reordering.",409);await database.batch(ids.map((recordId,index)=>database.prepare("UPDATE archive_materials SET sort_order=?,updated_by='studio',updated_at=datetime('now') WHERE id=? AND dossier_entity_id=?").bind(index+1,recordId,entityId)));return json({ok:true});}
   if(request.method==="POST"&&!materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const material=normalizeArchiveMaterial(body);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;const ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409);if(!material.material_reference){const prefix=material.is_sample?"S":material.material_type==="note"?"N":material.material_type==="document"?"D":"M",count=await database.prepare("SELECT COUNT(*) count FROM archive_materials WHERE state_id IS ? AND material_reference LIKE ?").bind(material.state_id,`${prefix}%`).first();material.material_reference=`${prefix}${String(Number(count?.count||0)+1).padStart(2,"0")}`}const materialIdNew=text(body.id,200)||id("archive-material");try{await database.prepare(`INSERT INTO archive_materials(id,dossier_entity_id,media_id,role,material_type,title,caption,body,process_phase,occurred_at,ended_at,date_precision,date_label,visibility,state,sort_order,state_id,material_reference,is_sample,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(materialIdNew,material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}await replaceMaterialOriginThreads(database,materialIdNew,ids);return json({record:{...await archiveMaterialAdminRecord(database,materialIdNew),origin_thread_ids:ids}},{status:201});}
   if(request.method==="PATCH"&&materialId){const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);const material=normalizeArchiveMaterial(body,before);const valid=await validateArchiveMaterial(database,material);if(valid instanceof Response)return valid;let ids=null;if(Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds")){ids=originThreadIds(body.origin_thread_ids??body.originThreadIds);if(!await validateOriginThreadIds(database,ids))return failure("Choose valid origin threads.",409)}try{await database.prepare(`UPDATE archive_materials SET dossier_entity_id=?,media_id=?,role=?,material_type=?,title=?,caption=?,body=?,process_phase=?,occurred_at=?,ended_at=?,date_precision=?,date_label=?,visibility=?,state=?,sort_order=?,state_id=?,material_reference=?,is_sample=?,updated_by='studio',updated_at=datetime('now') WHERE id=?`).bind(material.dossier_entity_id,material.media_id,material.role,material.material_type,material.title,material.caption,material.body,material.process_phase,material.occurred_at,material.ended_at,material.date_precision,material.date_label,material.visibility,material.state,material.sort_order,material.state_id,material.material_reference,material.is_sample,materialId).run()}catch(error){return failure(/UNIQUE constraint failed/i.test(error.message)?"That material reference already exists in this state.":error.message,409)}if(ids)await replaceMaterialOriginThreads(database,materialId,ids);return json({record:{...await archiveMaterialAdminRecord(database,materialId),...(ids?{origin_thread_ids:ids}:{})}});}
-  if(request.method==="DELETE"&&materialId){const before=await database.prepare("SELECT id FROM archive_materials WHERE id=?").bind(materialId).first();if(!before)return failure("Material not found.",404);await database.prepare("UPDATE archive_materials SET state='archived',visibility='internal',updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(materialId).run();return json({ok:true,archived:true});}
+  if(request.method==="DELETE"&&materialId){
+    const before=await database.prepare("SELECT id FROM archive_materials WHERE id=?").bind(materialId).first();
+    if(!before)return failure("Material not found.",404);
+    const leadState=await database.prepare("SELECT id FROM archive_object_states WHERE lead_material_id=? LIMIT 1").bind(materialId).first();
+    if(leadState)return failure("Choose another state lead before archiving this material.",409);
+    await database.prepare("UPDATE archive_materials SET state='archived',visibility='internal',updated_by='studio',updated_at=datetime('now') WHERE id=?").bind(materialId).run();
+    return json({ok:true,archived:true});
+  }
   return failure("Method not allowed.",405);
 }
 
@@ -2390,6 +2756,7 @@ export async function handleConstructApi(request,env){
   if(path==="/api/site/navigation")return publicNavigation(env);
   if(path==="/api/search")return publicSearch(request,env);
   if(path==="/api/archive/items")return publicArchiveItems(request,env);
+  if(path==="/api/archive/compare")return publicArchiveCompare(request,env);
   const archiveItemMatch=path.match(/^\/api\/archive\/items\/([^/]+)$/);if(archiveItemMatch)return publicArchiveDetail(request,env,decodeURIComponent(archiveItemMatch[1]));
   const archiveTimelinePublicMatch=path.match(/^\/api\/archive\/timelines\/([^/]+)$/);if(archiveTimelinePublicMatch)return publicArchiveTimeline(request,env,decodeURIComponent(archiveTimelinePublicMatch[1]));
   const connectionsMatch=path.match(/^\/api\/connections\/([^/]+)$/);if(connectionsMatch&&request.method==="GET")return publicConnections(env,decodeURIComponent(connectionsMatch[1]));
@@ -2409,6 +2776,7 @@ export async function handleConstructApi(request,env){
   const mediaFileMatch=path.match(/^\/api\/admin\/media\/([^/]+)\/file$/);if(mediaFileMatch)return adminMediaFileApi(request,env,decodeURIComponent(mediaFileMatch[1]));
   const mediaMatch=path.match(/^\/api\/admin\/media(?:\/([^/]+))?$/);if(mediaMatch)return mediaApi(request,env,mediaMatch[1]?decodeURIComponent(mediaMatch[1]):"");
   const catalogueMatch=path.match(/^\/api\/admin\/archive-catalogue(?:\/([^/]+))?$/);if(catalogueMatch)return archiveCatalogueAdminApi(request,env,catalogueMatch[1]?decodeURIComponent(catalogueMatch[1]):"");
+  const documentationMatch=path.match(/^\/api\/admin\/archive-documentation(?:\/([^/]+))?$/);if(documentationMatch)return archiveDocumentationAdminApi(request,env,documentationMatch[1]?decodeURIComponent(documentationMatch[1]):"");
   const eventIdentifierMatch=path.match(/^\/api\/admin\/archive-event-identifiers\/([^/]+)$/);if(eventIdentifierMatch)return archiveEventIdentifierAdminApi(request,env,decodeURIComponent(eventIdentifierMatch[1]));
   const versionMatch=path.match(/^\/api\/admin\/archive-versions(?:\/([^/]+))?$/);if(versionMatch)return archiveVersionsAdminApi(request,env,versionMatch[1]?decodeURIComponent(versionMatch[1]):"");
   const stateMatch=path.match(/^\/api\/admin\/archive-states(?:\/([^/]+))?$/);if(stateMatch)return archiveStatesAdminApi(request,env,stateMatch[1]?decodeURIComponent(stateMatch[1]):"");
