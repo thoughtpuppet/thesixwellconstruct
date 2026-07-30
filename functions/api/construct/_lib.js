@@ -1,4 +1,5 @@
 import { db, entityMedia, failure, id, json, nextRevision, parseJson, readJson, requireStudioAdmin, RESOURCE_CONFIG, slug, text } from "../_shared/construct.js";
+import { handleArchiveColorMaterialsAdmin, handleArchiveColorMaterialsPublic } from "./_colors-materials.js";
 import {
   loadTattooStyleAssignments,
   replaceTattooStyleAssignmentStatements,
@@ -636,6 +637,26 @@ function archiveFragmentPublicSql(alias="af") {
     (${alias}.fragment_type='catalogue-documentation' AND EXISTS(SELECT 1 FROM archive_catalogue_documentation acd WHERE acd.id=${alias}.source_id AND acd.dossier_entity_id=${alias}.dossier_entity_id AND acd.public_visible=1)) OR
     (${alias}.fragment_type='event-identifier' AND EXISTS(SELECT 1 FROM archive_event_identifiers aei WHERE aei.entity_id=${alias}.dossier_entity_id AND aei.entity_id=${alias}.source_id)) OR
     (${alias}.fragment_type='theme' AND EXISTS(SELECT 1 FROM entity_terms et JOIN taxonomy_terms tt ON tt.id=et.term_id AND tt.kind='theme' AND tt.public_visible=1 WHERE et.entity_id=${alias}.dossier_entity_id AND et.term_id=${alias}.source_id)) OR
+    (${alias}.fragment_type='palette-color' AND EXISTS(
+      SELECT 1 FROM archive_color_usages cu
+      JOIN archive_object_states aos ON aos.id=cu.state_id
+      JOIN archive_object_versions aov ON aov.id=aos.version_id
+      WHERE cu.id=${alias}.source_id AND aov.entity_id=${alias}.dossier_entity_id
+        AND cu.publication_state='published' AND cu.public_visible=1
+        AND aos.publication_state='published' AND aos.public_visible=1
+        AND aov.publication_state='published' AND aov.public_visible=1
+    )) OR
+    (${alias}.fragment_type='palette-material' AND EXISTS(
+      SELECT 1 FROM archive_general_material_usages gu
+      JOIN archive_material_definitions md ON md.id=gu.material_id
+      JOIN archive_object_states aos ON aos.id=gu.state_id
+      JOIN archive_object_versions aov ON aov.id=aos.version_id
+      WHERE gu.id=${alias}.source_id AND aov.entity_id=${alias}.dossier_entity_id
+        AND gu.publication_state='published' AND gu.public_visible=1
+        AND md.publication_state='published' AND md.public_visible=1
+        AND aos.publication_state='published' AND aos.public_visible=1
+        AND aov.publication_state='published' AND aov.public_visible=1
+    )) OR
     (${alias}.fragment_type='material' AND EXISTS(SELECT 1 FROM archive_materials am LEFT JOIN media_assets m ON m.id=am.media_id WHERE am.id=${alias}.source_id AND am.dossier_entity_id=${alias}.dossier_entity_id AND am.state='published' AND am.visibility='public' AND (am.media_id IS NULL OR (m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline')))) OR
     (${alias}.fragment_type='source-material' AND EXISTS(
       SELECT 1 FROM archive_source_material_sets sms
@@ -699,11 +720,12 @@ function archiveEntitySql(where = "1=1") {
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.title WHEN 'merch_item' THEN mi.title
       WHEN 'portfolio_item' THEN COALESCE(NULLIF(pi.title,''),'Untitled tattoo')
-      WHEN 'flash_item' THEN fi.title WHEN 'event' THEN ev.title
+      WHEN 'flash_item' THEN fi.title WHEN 'tattoo_design' THEN td.title WHEN 'event' THEN ev.title
       WHEN 'visual_symbol' THEN vs.name ELSE COALESCE(sd.title,ad.archive_slug) END title,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.statement WHEN 'merch_item' THEN mi.product_type
       WHEN 'portfolio_item' THEN pi.caption WHEN 'flash_item' THEN fi.description
+      WHEN 'tattoo_design' THEN td.description
       WHEN 'event' THEN ev.description WHEN 'visual_symbol' THEN vs.meaning
       ELSE COALESCE(sd.summary,'') END canonical_summary,
     CASE ce.entity_type
@@ -711,6 +733,7 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'merch_item' THEN mi.route
       WHEN 'portfolio_item' THEN '/tattoos/portfolio/?work='||pi.id
       WHEN 'flash_item' THEN COALESCE(NULLIF(fi.legacy_path,''),'/tattoos/flash/'||fi.slug||'/')
+      WHEN 'tattoo_design' THEN ''
       WHEN 'event' THEN '/events/'||ev.slug||'/'
       WHEN 'visual_symbol' THEN '/about/legend/'||vs.slug||'/'
       ELSE COALESCE(sd.route,'') END canonical_route,
@@ -720,6 +743,7 @@ function archiveEntitySql(where = "1=1") {
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.medium WHEN 'portfolio_item' THEN pi.primary_style
       WHEN 'flash_item' THEN fi.item_type WHEN 'merch_item' THEN mi.product_type
+      WHEN 'tattoo_design' THEN td.design_type
       WHEN 'event' THEN 'event' WHEN 'visual_symbol' THEN 'symbol' ELSE '' END medium,
     COALESCE(
       (SELECT COALESCE(NULLIF(m.source_url,''),'/api/construct/media/'||m.id)
@@ -777,6 +801,7 @@ function archiveEntitySql(where = "1=1") {
   LEFT JOIN merch_items mi ON ce.entity_type='merch_item' AND mi.id=ce.id
   LEFT JOIN portfolio_items pi ON ce.entity_type='portfolio_item' AND pi.id=ce.id
   LEFT JOIN flash_items fi ON ce.entity_type='flash_item' AND fi.id=ce.id
+  LEFT JOIN tattoo_designs td ON ce.entity_type='tattoo_design' AND td.id=ce.id
   LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
   LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
   LEFT JOIN search_documents sd ON sd.entity_id=ce.id
@@ -1074,6 +1099,26 @@ function presentArchiveItem(row) {
   };
 }
 
+function archivePublicColorUsageSourceSql(alias = "cu") {
+  return `((
+    ${alias}.recipe_version_id IS NOT NULL AND EXISTS(
+      SELECT 1 FROM archive_color_recipe_versions eligible_rv
+      JOIN archive_color_recipes eligible_r ON eligible_r.id=eligible_rv.recipe_id
+      WHERE eligible_rv.id=${alias}.recipe_version_id
+        AND eligible_rv.publication_state='published' AND eligible_rv.public_visible=1
+        AND eligible_r.publication_state='published' AND eligible_r.public_visible=1
+    )
+  ) OR (
+    ${alias}.formulation_id IS NOT NULL AND EXISTS(
+      SELECT 1 FROM archive_material_formulations eligible_mf
+      JOIN archive_material_definitions eligible_md ON eligible_md.id=eligible_mf.material_id
+      WHERE eligible_mf.id=${alias}.formulation_id
+        AND eligible_mf.publication_state='published' AND eligible_mf.public_visible=1
+        AND eligible_md.publication_state='published' AND eligible_md.public_visible=1
+    )
+  ))`;
+}
+
 function archivePublicConditions(url, alias = "ad") {
   const conditions = ["ce.visibility='public'", `${alias}.state='published'`, `${alias}.public_visible=1`];
   const values = [];
@@ -1112,7 +1157,211 @@ function archivePublicConditions(url, alias = "ad") {
     conditions.push(`EXISTS (SELECT 1 FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=${alias}.entity_id AND ot.slug=? AND ot.state='published' AND ot.public_visible=1)`);
     values.push(origin);
   }
+  const color=text(url.searchParams.get("color"),160).toLowerCase();
+  const colorMatch=["exact","lineage","similar"].includes(url.searchParams.get("match"))?url.searchParams.get("match"):"exact";
+  if(color){
+    const requestedVersion=`SELECT rv_target.id
+      FROM archive_color_recipes r_target
+      JOIN archive_color_recipe_versions rv_target ON rv_target.recipe_id=r_target.id
+      WHERE r_target.slug=? AND r_target.publication_state='published' AND r_target.public_visible=1
+        AND rv_target.publication_state='published' AND rv_target.public_visible=1
+      ORDER BY rv_target.version_number DESC LIMIT 1`;
+    if(colorMatch==="exact"){
+      conditions.push(`EXISTS(
+        SELECT 1 FROM archive_color_usages cu
+        JOIN archive_object_states aos ON aos.id=cu.state_id
+        JOIN archive_object_versions aov ON aov.id=aos.version_id
+        WHERE aov.entity_id=${alias}.entity_id AND cu.recipe_version_id=(${requestedVersion})
+          AND cu.publication_state='published' AND cu.public_visible=1
+          AND ${archivePublicColorUsageSourceSql("cu")}
+          AND aos.publication_state='published' AND aos.public_visible=1
+          AND aov.publication_state='published' AND aov.public_visible=1
+      )`);
+      values.push(color);
+    }else if(colorMatch==="lineage"){
+      conditions.push(`EXISTS(
+        SELECT 1 FROM archive_color_usages cu
+        JOIN archive_object_states aos ON aos.id=cu.state_id
+        JOIN archive_object_versions aov ON aov.id=aos.version_id
+        JOIN archive_color_recipe_versions rv ON rv.id=cu.recipe_version_id
+        JOIN archive_color_recipes r ON r.id=rv.recipe_id
+        WHERE aov.entity_id=${alias}.entity_id AND r.slug=?
+          AND rv.publication_state='published' AND rv.public_visible=1
+          AND r.publication_state='published' AND r.public_visible=1
+          AND cu.publication_state='published' AND cu.public_visible=1
+          AND ${archivePublicColorUsageSourceSql("cu")}
+          AND aos.publication_state='published' AND aos.public_visible=1
+          AND aov.publication_state='published' AND aov.public_visible=1
+      )`);
+      values.push(color);
+    }else{
+      conditions.push(`EXISTS(
+        SELECT 1 FROM archive_color_usages cu
+        JOIN archive_object_states aos ON aos.id=cu.state_id
+        JOIN archive_object_versions aov ON aov.id=aos.version_id
+        JOIN archive_color_profiles used_profile ON
+          (used_profile.source_type='recipe-version' AND used_profile.source_id=cu.recipe_version_id)
+          OR (used_profile.source_type='material-formulation' AND used_profile.source_id=cu.formulation_id)
+        JOIN archive_color_profiles target_profile ON target_profile.source_type='recipe-version'
+          AND target_profile.source_id=(${requestedVersion})
+        JOIN archive_color_neighbors neighbor ON neighbor.profile_id=target_profile.id
+          AND neighbor.neighbor_profile_id=used_profile.id AND neighbor.delta_e<=10
+        WHERE aov.entity_id=${alias}.entity_id
+          AND cu.publication_state='published' AND cu.public_visible=1
+          AND ${archivePublicColorUsageSourceSql("cu")}
+          AND aos.publication_state='published' AND aos.public_visible=1
+          AND aov.publication_state='published' AND aov.public_visible=1
+      )`);
+      values.push(color);
+    }
+  }
+  const colorFamily=text(url.searchParams.get("color_family"),160).toLowerCase();
+  if(colorFamily){
+    conditions.push(`EXISTS(
+      SELECT 1 FROM archive_color_usages cu
+      JOIN archive_object_states aos ON aos.id=cu.state_id
+      JOIN archive_object_versions aov ON aov.id=aos.version_id
+      JOIN archive_color_profiles cp ON
+        (cp.source_type='recipe-version' AND cp.source_id=cu.recipe_version_id)
+        OR (cp.source_type='material-formulation' AND cp.source_id=cu.formulation_id)
+      JOIN archive_color_profile_families cpf ON cpf.profile_id=cp.id
+      JOIN archive_color_families cf ON cf.id=cpf.family_id
+      WHERE aov.entity_id=${alias}.entity_id AND cf.slug=?
+        AND cf.publication_state='published' AND cf.public_visible=1
+        AND cu.publication_state='published' AND cu.public_visible=1
+        AND ${archivePublicColorUsageSourceSql("cu")}
+        AND aos.publication_state='published' AND aos.public_visible=1
+        AND aov.publication_state='published' AND aov.public_visible=1
+    )`);
+    values.push(colorFamily);
+  }
+  const pigment=text(url.searchParams.get("pigment"),120).toUpperCase();
+  const pigmentPresence=["direct","declared","any"].includes(url.searchParams.get("presence"))?url.searchParams.get("presence"):"any";
+  if(pigment){
+    const directSql=`EXISTS(
+      SELECT 1 FROM archive_color_usages cu
+      JOIN archive_object_states aos ON aos.id=cu.state_id
+      JOIN archive_object_versions aov ON aov.id=aos.version_id
+      JOIN archive_color_recipe_components rc ON rc.recipe_version_id=cu.recipe_version_id
+      JOIN archive_material_definitions pigment_material ON pigment_material.id=rc.raw_pigment_material_id
+      WHERE aov.entity_id=${alias}.entity_id AND upper(pigment_material.pigment_code)=?
+        AND cu.publication_state='published' AND cu.public_visible=1
+        AND ${archivePublicColorUsageSourceSql("cu")}
+        AND aos.publication_state='published' AND aos.public_visible=1
+        AND aov.publication_state='published' AND aov.public_visible=1
+    )`;
+    const declaredSql=`EXISTS(
+      SELECT 1 FROM archive_color_usages cu
+      JOIN archive_object_states aos ON aos.id=cu.state_id
+      JOIN archive_object_versions aov ON aov.id=aos.version_id
+      LEFT JOIN archive_color_recipe_components rc ON rc.recipe_version_id=cu.recipe_version_id
+      JOIN archive_material_declared_pigments dp ON dp.formulation_id=COALESCE(cu.formulation_id,rc.formulation_id)
+      WHERE aov.entity_id=${alias}.entity_id AND upper(dp.normalized_pigment_code)=?
+        AND cu.publication_state='published' AND cu.public_visible=1
+        AND ${archivePublicColorUsageSourceSql("cu")}
+        AND aos.publication_state='published' AND aos.public_visible=1
+        AND aov.publication_state='published' AND aov.public_visible=1
+    )`;
+    if(pigmentPresence==="direct"){conditions.push(directSql);values.push(pigment)}
+    else if(pigmentPresence==="declared"){conditions.push(declaredSql);values.push(pigment)}
+    else{conditions.push(`(${directSql} OR ${declaredSql})`);values.push(pigment,pigment)}
+  }
+  const material=text(url.searchParams.get("material"),160).toLowerCase();
+  if(material){
+    conditions.push(`(
+      EXISTS(
+        SELECT 1 FROM archive_general_material_usages gu
+        JOIN archive_object_states aos ON aos.id=gu.state_id
+        JOIN archive_object_versions aov ON aov.id=aos.version_id
+        JOIN archive_material_definitions md ON md.id=gu.material_id
+        WHERE aov.entity_id=${alias}.entity_id AND md.slug=?
+          AND gu.publication_state='published' AND gu.public_visible=1
+          AND md.publication_state='published' AND md.public_visible=1
+          AND aos.publication_state='published' AND aos.public_visible=1
+          AND aov.publication_state='published' AND aov.public_visible=1
+      )
+      OR EXISTS(
+        SELECT 1 FROM archive_color_usages cu
+        JOIN archive_object_states aos ON aos.id=cu.state_id
+        JOIN archive_object_versions aov ON aov.id=aos.version_id
+        LEFT JOIN archive_color_recipe_components rc ON rc.recipe_version_id=cu.recipe_version_id
+        LEFT JOIN archive_material_formulations mf ON mf.id=COALESCE(cu.formulation_id,rc.formulation_id)
+        LEFT JOIN archive_material_definitions md ON md.id=COALESCE(mf.material_id,rc.raw_pigment_material_id)
+        WHERE aov.entity_id=${alias}.entity_id AND md.slug=?
+          AND cu.publication_state='published' AND cu.public_visible=1
+          AND ${archivePublicColorUsageSourceSql("cu")}
+          AND aos.publication_state='published' AND aos.public_visible=1
+          AND aov.publication_state='published' AND aov.public_visible=1
+      )
+    )`);
+    values.push(material,material);
+  }
   return { conditions, values, q };
+}
+
+async function archiveUsageMatchProvenance(database,items,url){
+  const byEntity=new Map(items.map(item=>[item.entity_id,[]])),ids=[...byEntity.keys()];
+  if(!ids.length)return byEntity;
+  const color=text(url.searchParams.get("color"),160).toLowerCase(),match=["exact","lineage","similar"].includes(url.searchParams.get("match"))?url.searchParams.get("match"):"exact";
+  if(color){
+    const target=await database.prepare(`SELECT r.name,rv.id version_id,rv.version_number,cp.id profile_id
+      FROM archive_color_recipes r JOIN archive_color_recipe_versions rv ON rv.recipe_id=r.id
+      LEFT JOIN archive_color_profiles cp ON cp.source_type='recipe-version' AND cp.source_id=rv.id
+      WHERE r.slug=? AND r.publication_state='published' AND r.public_visible=1
+        AND rv.publication_state='published' AND rv.public_visible=1
+      ORDER BY rv.version_number DESC LIMIT 1`).bind(color).first();
+    if(target){
+      if(match==="similar"){
+        const rows=(await database.prepare(`SELECT aov.entity_id,MIN(n.delta_e) distance
+          FROM archive_color_usages cu
+          JOIN archive_object_states aos ON aos.id=cu.state_id
+          JOIN archive_object_versions aov ON aov.id=aos.version_id
+          JOIN archive_color_profiles cp ON
+            (cp.source_type='recipe-version' AND cp.source_id=cu.recipe_version_id)
+            OR (cp.source_type='material-formulation' AND cp.source_id=cu.formulation_id)
+          JOIN archive_color_neighbors n ON n.profile_id=? AND n.neighbor_profile_id=cp.id
+          WHERE aov.entity_id IN (${ids.map(()=>"?").join(",")}) AND n.delta_e<=10
+            AND cu.publication_state='published' AND cu.public_visible=1
+            AND ${archivePublicColorUsageSourceSql("cu")}
+            AND aos.publication_state='published' AND aos.public_visible=1
+            AND aov.publication_state='published' AND aov.public_visible=1
+          GROUP BY aov.entity_id`).bind(target.profile_id,...ids).all()).results||[];
+        rows.forEach(row=>byEntity.get(row.entity_id)?.push({type:"perceptually-similar",color_slug:color,color_name:target.name,distance:Number(Number(row.distance).toFixed(3)),metric:"CIEDE2000"}));
+      }else{
+        items.forEach(item=>byEntity.get(item.entity_id)?.push({type:match==="exact"?"exact-recipe-version":"same-named-recipe",color_slug:color,color_name:target.name,version:match==="exact"?Number(target.version_number):undefined}));
+      }
+    }
+  }
+  const family=text(url.searchParams.get("color_family"),160).toLowerCase();
+  if(family){const found=await database.prepare("SELECT name FROM archive_color_families WHERE slug=? AND publication_state='published' AND public_visible=1").bind(family).first();items.forEach(item=>byEntity.get(item.entity_id)?.push({type:"curated-family",family_slug:family,family_name:found?.name||family,human_confirmed:true}))}
+  const pigment=text(url.searchParams.get("pigment"),120).toUpperCase(),presence=["direct","declared","any"].includes(url.searchParams.get("presence"))?url.searchParams.get("presence"):"any";
+  if(pigment){
+    const direct=(await database.prepare(`SELECT DISTINCT aov.entity_id
+      FROM archive_color_usages cu
+      JOIN archive_object_states aos ON aos.id=cu.state_id JOIN archive_object_versions aov ON aov.id=aos.version_id
+      JOIN archive_color_recipe_components rc ON rc.recipe_version_id=cu.recipe_version_id
+      JOIN archive_material_definitions md ON md.id=rc.raw_pigment_material_id
+      WHERE aov.entity_id IN (${ids.map(()=>"?").join(",")}) AND upper(md.pigment_code)=?
+        AND cu.publication_state='published' AND cu.public_visible=1
+        AND ${archivePublicColorUsageSourceSql("cu")}
+        AND aos.publication_state='published' AND aos.public_visible=1
+        AND aov.publication_state='published' AND aov.public_visible=1`).bind(...ids,pigment).all()).results||[];
+    const declared=(await database.prepare(`SELECT DISTINCT aov.entity_id
+      FROM archive_color_usages cu
+      JOIN archive_object_states aos ON aos.id=cu.state_id JOIN archive_object_versions aov ON aov.id=aos.version_id
+      LEFT JOIN archive_color_recipe_components rc ON rc.recipe_version_id=cu.recipe_version_id
+      JOIN archive_material_declared_pigments dp ON dp.formulation_id=COALESCE(cu.formulation_id,rc.formulation_id)
+      WHERE aov.entity_id IN (${ids.map(()=>"?").join(",")}) AND upper(dp.normalized_pigment_code)=?
+        AND cu.publication_state='published' AND cu.public_visible=1
+        AND ${archivePublicColorUsageSourceSql("cu")}
+        AND aos.publication_state='published' AND aos.public_visible=1
+        AND aov.publication_state='published' AND aov.public_visible=1`).bind(...ids,pigment).all()).results||[];
+    if(presence!=="declared")direct.forEach(row=>byEntity.get(row.entity_id)?.push({type:"direct-raw-pigment",pigment_code:pigment,provenance:"artist-added"}));
+    if(presence!=="direct")declared.forEach(row=>byEntity.get(row.entity_id)?.push({type:"manufacturer-declared-pigment",pigment_code:pigment,provenance:"product-metadata"}));
+  }
+  const material=text(url.searchParams.get("material"),160).toLowerCase();
+  if(material){const found=await database.prepare("SELECT name,material_kind FROM archive_material_definitions WHERE slug=? AND publication_state='published' AND public_visible=1").bind(material).first();items.forEach(item=>byEntity.get(item.entity_id)?.push({type:"material-usage",material_slug:material,material_name:found?.name||material,material_kind:found?.material_kind||""}))}
+  return byEntity;
 }
 
 async function publicArchiveItems(request, env) {
@@ -1151,6 +1400,8 @@ async function publicArchiveItems(request, env) {
       GROUP BY ac.id ORDER BY ac.sort_order,ac.name`),
   ]);
   let items=(itemsResult.results||[]).map(presentArchiveItem);const total=Number(countResult.results?.[0]?.total||0);
+  const usageMatches=await archiveUsageMatchProvenance(database,items,url);
+  items=items.map(item=>({...item,matches:usageMatches.get(item.entity_id)||[]}));
   let evidence=[],currentRecordPosition=null;
   if(originThread){
     const assignments=items.length?(await database.prepare(`SELECT dossier_entity_id,is_primary,sort_order FROM archive_origin_thread_dossiers WHERE thread_id=? AND dossier_entity_id IN (${items.map(()=>"?").join(",")})`).bind(originThread.id,...items.map(item=>item.entity_id)).all()).results||[]:[];
@@ -1174,7 +1425,13 @@ async function publicArchiveItems(request, env) {
   const facets={medium:[],brand:[],person:[],era:[],collection:collectionFacetResult.results||[],record_type:[],material_type:materialFacetResult.results||[]};
   for(const facet of facetResult.results||[]){if(facets[facet.kind])facets[facet.kind].push({name:facet.name,slug:facet.slug,count:Number(facet.count||0)});}
   const pagination={page,limit,total,total_pages:Math.max(1,Math.ceil(total/limit)),totalPages:Math.max(1,Math.ceil(total/limit))};
-  return json({items,records:items,facets,pagination,count:items.length,query:q,origin_thread:originThread,originThread,evidence,current_record_position:currentRecordPosition,currentRecordPosition},{cache:"public, max-age=30"});
+  const groups={
+    paintings:items.filter(item=>item.entity_type==="art_work"),
+    tattoo_designs:items.filter(item=>item.entity_type==="tattoo_design"||item.entity_type==="flash_item"),
+    tattoo_executions:items.filter(item=>item.entity_type==="portfolio_item"),
+    other:items.filter(item=>!["art_work","tattoo_design","flash_item","portfolio_item"].includes(item.entity_type)),
+  };
+  return json({items,records:items,groups,facets,pagination,count:items.length,query:q,origin_thread:originThread,originThread,evidence,current_record_position:currentRecordPosition,currentRecordPosition},{cache:"public, max-age=30"});
 }
 
 async function publicArchiveDetail(request,env,archiveSlug){
@@ -1421,9 +1678,71 @@ async function publicArchiveDetail(request,env,archiveSlug){
     sourceEntriesBySet.get(record.id)||[],
     sourceStatesBySet.get(record.id)||[],
   ));
+  const [colorUsageResult,generalMaterialUsageResult,paletteMapResult]=await database.batch([
+    database.prepare(`SELECT cu.*,aos.state_roman,aos.variant_label,aov.version_number,
+        r.name recipe_name,r.slug recipe_slug,rv.version_number recipe_version_number,
+        md.name material_name,md.slug material_slug,md.brand,md.product_line,md.color_name,md.product_code,
+        mf.version_number formulation_version,cp.srgb_hex
+      FROM archive_color_usages cu
+      JOIN archive_object_states aos ON aos.id=cu.state_id AND aos.publication_state='published' AND aos.public_visible=1
+      JOIN archive_object_versions aov ON aov.id=aos.version_id AND aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
+      LEFT JOIN archive_color_recipe_versions rv ON rv.id=cu.recipe_version_id
+        AND rv.publication_state='published' AND rv.public_visible=1
+      LEFT JOIN archive_color_recipes r ON r.id=rv.recipe_id
+        AND r.publication_state='published' AND r.public_visible=1
+      LEFT JOIN archive_material_formulations mf ON mf.id=cu.formulation_id
+        AND mf.publication_state='published' AND mf.public_visible=1
+      LEFT JOIN archive_material_definitions md ON md.id=mf.material_id
+        AND md.publication_state='published' AND md.public_visible=1
+      LEFT JOIN archive_color_profiles cp ON
+        (rv.id IS NOT NULL AND cp.source_type='recipe-version' AND cp.source_id=rv.id)
+        OR (mf.id IS NOT NULL AND cp.source_type='material-formulation' AND cp.source_id=mf.id)
+      WHERE cu.publication_state='published' AND cu.public_visible=1
+      ORDER BY aov.sort_order,aos.sort_order,cu.layer_order,cu.created_at`).bind(entityId),
+    database.prepare(`SELECT gu.id,gu.state_id,gu.usage_role,gu.technique,gu.quantity_note,gu.notes,
+        aos.state_roman,aos.variant_label,aov.version_number,
+        m.slug material_slug,m.name material_name,m.material_kind,m.brand,m.product_line,m.product_name,m.model_name,m.product_code,
+        f.version_number formulation_version,f.normalized_finish,f.finish_label
+      FROM archive_general_material_usages gu
+      JOIN archive_object_states aos ON aos.id=gu.state_id AND aos.publication_state='published' AND aos.public_visible=1
+      JOIN archive_object_versions aov ON aov.id=aos.version_id AND aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
+      JOIN archive_material_definitions m ON m.id=gu.material_id AND m.publication_state='published' AND m.public_visible=1
+      LEFT JOIN archive_material_formulations f ON f.id=gu.formulation_id AND f.publication_state='published' AND f.public_visible=1
+      WHERE gu.publication_state='published' AND gu.public_visible=1
+      ORDER BY aov.sort_order,aos.sort_order,gu.created_at`).bind(entityId),
+    database.prepare(`SELECT pm.id,pm.state_id,pm.title,pm.overlay_opacity,pm.reviewed_at,
+        aos.state_roman,aos.variant_label,aov.version_number,
+        (SELECT COUNT(*) FROM archive_palette_regions pr
+          JOIN archive_color_usages cu ON cu.id=pr.color_usage_id
+          WHERE pr.map_id=pm.id AND cu.publication_state='published' AND cu.public_visible=1) region_count
+      FROM archive_palette_maps pm
+      JOIN archive_object_states aos ON aos.id=pm.state_id AND aos.publication_state='published' AND aos.public_visible=1
+      JOIN archive_object_versions aov ON aov.id=aos.version_id AND aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
+      JOIN media_assets m ON m.id=pm.source_media_id AND m.state='active' AND m.privacy='public'
+        AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
+      WHERE pm.publication_state='published' AND pm.public_visible=1
+      ORDER BY aov.sort_order,aos.sort_order,pm.created_at`).bind(entityId),
+  ]);
+  const colorUsages=(colorUsageResult.results||[]).map(usage=>({
+    id:usage.id,state_id:usage.state_id,state_label:`${item.catalogue_id||""}.${Number(usage.version_number||1)}/${usage.state_roman||"I"}${usage.variant_label?`, ${usage.variant_label}`:""}`,
+    label:usage.public_label||usage.recipe_name||usage.color_name||usage.material_name||"Documented color",
+    swatch:usage.public_swatch_hex||usage.srgb_hex||"",
+    usage_status:usage.usage_status,technique:usage.technique||"",layer_order:Number(usage.layer_order||0),quantity_note:usage.quantity_note||"",notes:usage.notes||"",
+    recipe:usage.recipe_slug&&usage.recipe_version_id&&usage.recipe_name?{slug:usage.recipe_slug,name:usage.recipe_name,version:Number(usage.recipe_version_number||0),route:`/archive/colors/${encodeURIComponent(usage.recipe_slug)}/`}:null,
+    product:usage.material_slug&&usage.material_name?{slug:usage.material_slug,name:usage.material_name,brand:usage.brand||"",line:usage.product_line||"",color_name:usage.color_name||"",product_code:usage.product_code||"",version:Number(usage.formulation_version||0),route:`/archive/materials/${encodeURIComponent(usage.material_slug)}/`}:null,
+  }));
+  const materialUsages=(generalMaterialUsageResult.results||[]).map(usage=>({
+    id:usage.id,state_id:usage.state_id,state_label:`${item.catalogue_id||""}.${Number(usage.version_number||1)}/${usage.state_roman||"I"}${usage.variant_label?`, ${usage.variant_label}`:""}`,
+    usage_role:usage.usage_role||"",technique:usage.technique||"",quantity_note:usage.quantity_note||"",notes:usage.notes||"",
+    material:{slug:usage.material_slug,name:usage.material_name,kind:usage.material_kind,brand:usage.brand||"",line:usage.product_line||"",product_name:usage.product_name||"",model_name:usage.model_name||"",product_code:usage.product_code||"",formulation_version:usage.formulation_version?Number(usage.formulation_version):null,finish:usage.normalized_finish||"",finish_label:usage.finish_label||"",route:`/archive/materials/${encodeURIComponent(usage.material_slug)}/`},
+  }));
+  const paletteMaps=(paletteMapResult.results||[]).map(map=>({
+    id:map.id,state_id:map.state_id,title:map.title||"Palette placement map",state_label:`${item.catalogue_id||""}.${Number(map.version_number||1)}/${map.state_roman||"I"}${map.variant_label?`, ${map.variant_label}`:""}`,region_count:Number(map.region_count||0),reviewed_at:map.reviewed_at,
+    data_url:`/api/archive/palette-maps/${encodeURIComponent(map.id)}`,svg_download:`/api/archive/palette-maps/${encodeURIComponent(map.id)}.svg`,
+  }));
   const activities=activitiesResult.results||[];
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
-  return json({item,dossier:item,materials,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
+  return json({item,dossier:item,materials,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});
 }
 
 function archiveComparisonSubject(payload,stateId=""){
@@ -2051,6 +2370,18 @@ async function publicMediaApi(request,env,mediaId){
                 AND aov.publication_state='published' AND aov.public_visible=1
             )
         )
+        OR EXISTS(
+          SELECT 1 FROM archive_palette_maps pm
+          JOIN archive_object_states aos ON aos.id=pm.state_id
+          JOIN archive_object_versions aov ON aov.id=aos.version_id
+          JOIN archive_dossiers ad ON ad.entity_id=aov.entity_id
+          JOIN content_entities ce ON ce.id=ad.entity_id
+          WHERE pm.source_media_id=m.id
+            AND pm.publication_state='published' AND pm.public_visible=1
+            AND aos.publication_state='published' AND aos.public_visible=1
+            AND aov.publication_state='published' AND aov.public_visible=1
+            AND ad.state='published' AND ad.public_visible=1 AND ce.visibility='public'
+        )
       )`).bind(mediaId).first();
   if(!row)return failure("Not found.",404);
   return servePublicMedia(row,request,env);
@@ -2299,7 +2630,7 @@ const NODE_FALLBACKS={
 function canonicalNodeAlias(value,entityType=""){
   const raw=String(value||"").toLowerCase();
   if(["legend","visual-language","visual_language","node-legend"].includes(raw)||entityType==="visual_symbol")return"node-legend";
-  if(["tattooing","tattoo","tattoos","node-tattoos"].includes(raw)||["flash_item","flash_series","portfolio_item"].includes(entityType))return"node-tattoos";
+  if(["tattooing","tattoo","tattoos","node-tattoos"].includes(raw)||["flash_item","flash_series","portfolio_item","tattoo_design"].includes(entityType))return"node-tattoos";
   if(["art","art-making","node-art"].includes(raw)||entityType==="art_work")return"node-art";
   if(["merch","node-merch"].includes(raw)||entityType==="merch_item")return"node-merch";
   if(["event","events","node-events"].includes(raw)||entityType==="event")return"node-events";
@@ -2573,9 +2904,9 @@ async function entityMediaApi(request,env,entityId,mediaId=""){
   return failure("Method not allowed.",405);
 }
 
-function archiveRecordType(entityType){return {art_work:"artwork",merch_item:"merchandise",portfolio_item:"tattoo",flash_item:"flash",event:"event",visual_symbol:"symbol"}[entityType]||String(entityType||"").replace(/_/g,"-");}
+function archiveRecordType(entityType){return {art_work:"artwork",merch_item:"merchandise",portfolio_item:"tattoo",flash_item:"flash",tattoo_design:"tattoo-design",event:"event",visual_symbol:"symbol"}[entityType]||String(entityType||"").replace(/_/g,"-");}
 function archivePreferredSlug(entityType,row){return slug(row?.archive_slug||row?.slug||row?.shopify_handle||row?.id)||String(row?.id||"");}
-function archiveEligibleEntityType(entityType){return ["art_work","merch_item","portfolio_item","flash_item","event","visual_symbol","writing_work","film_work","music_work"].includes(entityType);}
+function archiveEligibleEntityType(entityType){return ["art_work","merch_item","portfolio_item","flash_item","tattoo_design","event","visual_symbol","writing_work","film_work","music_work"].includes(entityType);}
 
 async function archiveDossierEligibleOwner(database,owner){
   if(archiveEligibleEntityType(owner?.entity_type))return true;
@@ -2584,15 +2915,15 @@ async function archiveDossierEligibleOwner(database,owner){
 }
 
 function archiveShellStatement(database,entityId,entityType,preferredSlug,recordType){
-  const base=slug(preferredSlug)||entityId,prefixed=`${String(entityType||"item").replace(/_/g,"-")}-${base}`;
+  const base=slug(preferredSlug)||entityId,prefixed=`${String(entityType||"item").replace(/_/g,"-")}-${base}`,designOnly=entityType==="tattoo_design";
   return database.prepare(`INSERT INTO archive_dossiers(entity_id,archive_slug,record_type,state,public_visible,published_at,created_by,updated_by,created_at,updated_at)
     SELECT ce.id,CASE WHEN EXISTS(SELECT 1 FROM archive_dossiers other WHERE other.archive_slug=? AND other.entity_id<>ce.id) THEN ? ELSE ? END,
-      ?,'published',1,COALESCE(ce.public_at,datetime('now')),'studio','studio',datetime('now'),datetime('now')
+      ?,?,?,CASE WHEN ?=1 THEN NULL ELSE COALESCE(ce.public_at,datetime('now')) END,'studio','studio',datetime('now'),datetime('now')
     FROM content_entities ce WHERE ce.id=? AND ce.visibility='public'
     ON CONFLICT(entity_id) DO UPDATE SET
       archive_slug=CASE WHEN archive_dossiers.archive_slug=archive_dossiers.entity_id THEN excluded.archive_slug ELSE archive_dossiers.archive_slug END,
       record_type=CASE WHEN archive_dossiers.record_type='' THEN excluded.record_type ELSE archive_dossiers.record_type END,
-      updated_by='studio',updated_at=datetime('now')`).bind(base,prefixed,base,recordType,entityId);
+      updated_by='studio',updated_at=datetime('now')`).bind(base,prefixed,base,recordType,designOnly?"draft":"published",designOnly?0:1,designOnly?1:0,entityId);
 }
 
 function archiveRoman(value){
@@ -2655,6 +2986,7 @@ async function ensureArchiveCatalogueEntry(database,owner){
   else if(owner.entity_type==="merch_item")objectTypeId="merch-other";
   else if(owner.entity_type==="portfolio_item")objectTypeId="tattoo-execution";
   else if(owner.entity_type==="flash_item")objectTypeId="tattoo-flash-design";
+  else if(owner.entity_type==="tattoo_design")objectTypeId="tattoo-design";
   else if(owner.entity_type==="visual_symbol")objectTypeId="legend-symbol";
   else if(owner.node_id==="film")objectTypeId="film-work";
   else if(owner.node_id==="music")objectTypeId="music-work";
@@ -3758,6 +4090,7 @@ async function eventArchive(request,env,eventId){const database=db(env);const ex
 
 export async function handleConstructApi(request,env){
   const url=new URL(request.url);const path=url.pathname;
+  const colorMaterialsPublic=await handleArchiveColorMaterialsPublic(request,env,path);if(colorMaterialsPublic)return colorMaterialsPublic;
   if(path==="/api/site/navigation")return publicNavigation(env);
   if(path==="/api/search")return publicSearch(request,env);
   if(path==="/api/archive/blackboards")return publicArchiveBlackboards(request,env);
@@ -3772,6 +4105,7 @@ export async function handleConstructApi(request,env){
   if(path==="/api/legend/composition-rules")return publicCompositionRules(request,env);
   const publicMatch=path.match(/^\/api\/(flash|legend|visual-language|art|archive|archive-collections)(?:\/([^/]+))?$/);if(publicMatch)return publicCatalog(request,env,canonicalResource(publicMatch[1]),publicMatch[2]?decodeURIComponent(publicMatch[2]):"");
   const auth=requireStudioAdmin(request,env);if(auth)return auth;
+  const colorMaterialsAdmin=await handleArchiveColorMaterialsAdmin(request,env,path);if(colorMaterialsAdmin)return colorMaterialsAdmin;
   const legendCompositionMatch=path.match(/^\/api\/admin\/legend\/composition-rules(?:\/([^/]+))?$/);if(legendCompositionMatch)return adminCompositionRules(request,env,legendCompositionMatch[1]?decodeURIComponent(legendCompositionMatch[1]):"");
   const legendCategoryMatch=path.match(/^\/api\/admin\/legend\/categories(?:\/([^/]+))?$/);if(legendCategoryMatch)return legendCategoryApi(request,env,legendCategoryMatch[1]?decodeURIComponent(legendCategoryMatch[1]):"");
   const eventMatch=path.match(/^\/api\/admin\/events\/([^/]+)\/create-archive-record$/);if(eventMatch&&request.method==="POST")return eventArchive(request,env,decodeURIComponent(eventMatch[1]));

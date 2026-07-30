@@ -238,7 +238,7 @@ function eventDetailRouteFile(urlPath) {
 
 function archiveDynamicRouteFile(urlPath) {
   const parts = normalizeRoute(urlPath).split("/").filter(Boolean);
-  if (parts.length !== 3 || parts[0] !== "archive" || !["records", "timelines"].includes(parts[1])) return null;
+  if (parts.length !== 3 || parts[0] !== "archive" || !["records", "timelines", "colors", "materials"].includes(parts[1])) return null;
   return path.resolve(root, "archive", parts[1], "index.html");
 }
 
@@ -259,7 +259,7 @@ function isHiddenByHomeOnlyMode(urlPath) {
   if (publicHomePaths.has(decoded)) return false;
   if (publicErrorPaths.has(decoded) || publicErrorPaths.has(normalized)) return false;
   if (publicArchivePaths.has(decoded) || normalized === "/archive") return false;
-  if (normalized.startsWith("/archive/records/") || normalized.startsWith("/archive/timelines/")) return false;
+  if (normalized.startsWith("/archive/records/") || normalized.startsWith("/archive/timelines/") || normalized.startsWith("/archive/colors/") || normalized.startsWith("/archive/materials/")) return false;
   if (publicConstructMapPaths.has(decoded) || normalized === "/construct-map") return false;
   if (decoded.startsWith("/api/")) return false;
   if (isLocalOnlyRoute(urlPath)) return false;

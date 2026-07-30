@@ -331,6 +331,8 @@ function archiveDynamicAssetPath(pathname) {
   if (parts.length !== 3 || parts[0] !== "archive" || hasFileExtension(pathname)) return "";
   if (parts[1] === "records") return "/archive/records/index.html";
   if (parts[1] === "timelines") return "/archive/timelines/index.html";
+  if (parts[1] === "colors") return "/archive/colors/index.html";
+  if (parts[1] === "materials") return "/archive/materials/index.html";
   return "";
 }
 

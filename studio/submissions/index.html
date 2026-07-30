@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="/studio/console-system.css?v=dual-system-contract">
 <link rel="stylesheet" href="/studio/construct-manager.css?v=multi-styles">
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
+<link rel="stylesheet" href="/studio/archive-colors-materials.css?v=1">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
 <link rel="stylesheet" href="/studio/analytics.css?v=2">
@@ -1329,6 +1330,7 @@
         <button class="subnav-btn ${subView === "portfolio" ? "is-active" : ""}" type="button" data-subview="portfolio">Portfolio</button>
         <button class="subnav-btn ${subView === "portfolio-settings" ? "is-active" : ""}" type="button" data-subview="portfolio-settings">Portfolio Settings</button>
         <button class="subnav-btn ${subView === "flash" ? "is-active" : ""}" type="button" data-subview="flash">Flash</button>
+        <button class="subnav-btn ${subView === "designs" ? "is-active" : ""}" type="button" data-subview="designs">Designs</button>
         <button class="subnav-btn ${subView === "tattoo-settings" ? "is-active" : ""}" type="button" data-subview="tattoo-settings">Tattoo Settings</button>`;
     } else if (activeTab === "studio") {
       html = `
@@ -1353,7 +1355,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = [["dossiers","Dossiers"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["dossiers","Dossiers"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
@@ -6405,6 +6407,7 @@ ${meetingLines}
 })();
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
+<script src="/studio/archive-colors-materials.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=resumable-video-1"></script>
 <script src="/studio/people-manager.js?v=11"></script>
 </body>

@@ -14,6 +14,7 @@
     ["record_type", "Record type"],
     ["material_type", "Material type"],
   ];
+  const discoveryParams = ["color","match","color_family","pigment","presence","material"];
 
   const roomLinks = [
     ["art", "Art", "/archive/art/"],
@@ -276,7 +277,9 @@
     const image = mediaUrl(media);
     const symbolMarkup = text(media && (media.svg_markup || media.svgMarkup));
     const match = record._matches && record._matches[0];
-    const matchText = text(match && (match.snippet || match.excerpt || match.text || match.value));
+    const matchText = text(match && (match.snippet || match.excerpt || match.text || match.value),
+      match && match.distance !== undefined ? `${match.color_name || "Color"} · CIEDE2000 distance ${match.distance}` : "",
+      match && (match.color_name || match.family_name || match.material_name || match.pigment_code));
     const title = text(record.title, record.name, recordSlug(record), "Untitled record");
     const catalogue = catalogueLabel(record);
     const recordType = titleCase(text(record.record_type_label, record.record_type, record.entity_type, record.type, "Archive record"));
@@ -339,7 +342,7 @@
     app.innerHTML = `
       <section class="archive-hero site-hero ${collectionsView ? "site-hero--supporting" : "site-hero--landing"}" aria-labelledby="archive-title">
         <div><span class="archive-kicker">Public living archive</span><h1 class="hero-title" id="archive-title">${collectionsView ? "Collections." : "Archive."}</h1></div>
-        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></div>'}</div>
+        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></div>'}</div>
       </section>
       <section class="archive-origin-thread" data-origin-thread hidden></section>
       <form class="archive-search-form archive-search-panel" role="search" data-archive-search>
@@ -389,7 +392,7 @@
         if (select) select.value = current.get(key) || "";
       });
       activeFilters.innerHTML = [...current.entries()]
-        .filter(([key, value]) => value && (key === "q" || facetDefinitions.some(([facet]) => facet === key)))
+        .filter(([key, value]) => value && (key === "q" || discoveryParams.includes(key) || facetDefinitions.some(([facet]) => facet === key)))
         .map(([key, value]) => `<button class="archive-chip" type="button" data-remove-filter="${escapeHtml(key)}"><span>${escapeHtml(key === "q" ? `Search: ${value}` : `${titleCase(key)}: ${titleCase(value)}`)}</span></button>`)
         .join("");
     }
@@ -450,14 +453,15 @@
       pagination.hidden = true;
       const current = params();
       const request = new URLSearchParams();
-      ["q", "origin", "from", ...facetDefinitions.map(([key]) => key), "page"].forEach((key) => {
+      ["q", "origin", "from", ...facetDefinitions.map(([key]) => key), ...discoveryParams, "page"].forEach((key) => {
         const value = current.get(key);
         if (value) request.set(key, value);
       });
       request.set("limit", "24");
       try {
         const itemPromise = getJson(`/api/archive/items?${request}`, controller.signal);
-        const searchPromise = current.get("q") ? getJson(`/api/search?${request}`, controller.signal).catch(() => null) : Promise.resolve(null);
+        const hasDiscoveryFilter = discoveryParams.some((key) => current.get(key));
+        const searchPromise = current.get("q") && !hasDiscoveryFilter ? getJson(`/api/search?${request}`, controller.signal).catch(() => null) : Promise.resolve(null);
         const [itemPayload, searchPayload] = await Promise.all([itemPromise, searchPromise]);
         const itemResults = normalizeItems(itemPayload);
         const searched = normalizeItems(searchPayload);
@@ -493,7 +497,7 @@
     });
     app.querySelector("[data-clear-filters]").addEventListener("click", () => {
       const url = new URL(location.href);
-      ["q", "origin", "from", ...facetDefinitions.map(([key]) => key), "page"].forEach((key) => url.searchParams.delete(key));
+      ["q", "origin", "from", ...facetDefinitions.map(([key]) => key), ...discoveryParams, "page"].forEach((key) => url.searchParams.delete(key));
       history.pushState({}, "", url);
       syncControls();
       load();
@@ -537,6 +541,9 @@
       states: list(first(payload && payload.states, dossier.states, item.states, [])),
       documentation: list(first(payload && payload.documentation, dossier.documentation, item.documentation, [])),
       sourceMaterials: list(first(payload && payload.source_materials, payload && payload.sourceMaterials, payload && payload.evidence_sets, payload && payload.evidenceSets, dossier.source_materials, dossier.sourceMaterials, [])),
+      colorUsages: list(first(payload && payload.color_usages, payload && payload.colorUsages, dossier.color_usages, item.color_usages, [])),
+      materialUsages: list(first(payload && payload.material_usages, payload && payload.materialUsages, dossier.material_usages, item.material_usages, [])),
+      paletteMaps: list(first(payload && payload.palette_maps, payload && payload.paletteMaps, dossier.palette_maps, item.palette_maps, [])),
       terms: list(first(payload && payload.terms, dossier.terms, item.terms, [])),
     };
   }
@@ -997,6 +1004,67 @@
     return `<details class="archive-graph"><summary>View relationship map</summary><svg viewBox="0 0 640 360" role="img" aria-label="A visual map of ${escapeHtml(title)} and ${nodes.length} related records"><g aria-hidden="true">${points.map((point) => `<line x1="${centerX}" y1="${centerY}" x2="${point.x.toFixed(1)}" y2="${point.y.toFixed(1)}"></line>`).join("")}<circle class="archive-graph-center" cx="${centerX}" cy="${centerY}" r="38"></circle><text x="${centerX}" y="${centerY + 4}">${escapeHtml(truncate(title, 16))}</text>${points.map((point) => `<circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="29"></circle><text x="${point.x.toFixed(1)}" y="${(point.y + 4).toFixed(1)}">${escapeHtml(truncate(text(point.node.title, point.node.name, point.node.slug), 15))}</text>`).join("")}</g></svg></details>`;
   }
 
+  function paletteUsageMarkup(usage,index) {
+    const recipe=usage.recipe,product=usage.product;
+    const reference=recipe?`<a href="${escapeHtml(recipe.route)}">${escapeHtml(recipe.name)} · v${Number(recipe.version||0)}</a>`:product?`<a href="${escapeHtml(product.route)}">${escapeHtml([product.brand,product.name,product.color_name].filter(Boolean).join(" · "))}</a>`:"Internal formula";
+    return `<li><button type="button" data-palette-usage="${escapeHtml(usage.id)}"><span class="archive-palette-number">${index+1}</span><span class="archive-palette-swatch" style="--palette-color:${escapeHtml(usage.swatch||"#777")}" aria-hidden="true"></span><span><strong>${escapeHtml(usage.label)}</strong><small>${escapeHtml(titleCase(usage.usage_status))}${usage.technique?` · ${escapeHtml(usage.technique)}`:""}</small></span></button><span class="archive-palette-reference">${reference}</span></li>`;
+  }
+
+  function paletteMaterialMarkup(usage) {
+    const material=usage.material||{};
+    return `<li><a href="${escapeHtml(material.route||"#")}"><strong>${escapeHtml(material.name||"Material")}</strong><span>${escapeHtml([titleCase(material.kind),material.brand,material.model_name,usage.usage_role].filter(Boolean).join(" · "))}</span></a></li>`;
+  }
+
+  function paletteMapShellMarkup(map,index) {
+    return `<section class="archive-palette-map" data-palette-map data-map-url="${escapeHtml(map.data_url)}"><header><div><span class="archive-label">${escapeHtml(map.state_label||"Documented state")}</span><h3>${escapeHtml(map.title||`Palette map ${index+1}`)}</h3></div><div class="archive-actions"><button class="archive-button" type="button" data-palette-isolate aria-pressed="false">Isolate diagram</button><a class="archive-button" href="${escapeHtml(map.svg_download)}">Download SVG</a><button class="archive-button" type="button" data-palette-png>Download PNG</button></div></header><div class="archive-palette-map-host" data-palette-map-host aria-live="polite">${loading("Opening reviewed geometry…")}</div></section>`;
+  }
+
+  function geometryMarkup(region,index) {
+    const geometry=region.geometry||{},common=`data-palette-region="${escapeHtml(region.id)}" data-palette-usage-id="${escapeHtml(region.usage.id)}" tabindex="0" role="button" aria-label="${escapeHtml(`${index+1}. ${region.usage.label}`)}"`;
+    let shape="";
+    if(region.geometry_type==="polygon"||region.geometry_type==="polyline")shape=`<${region.geometry_type} points="${escapeHtml(geometry.points||"")}"></${region.geometry_type}>`;
+    else if(region.geometry_type==="path")shape=`<path d="${escapeHtml(geometry.d||"")}"></path>`;
+    else if(region.geometry_type==="rect")shape=`<rect x="${Number(geometry.x)||0}" y="${Number(geometry.y)||0}" width="${Math.max(0,Number(geometry.width)||0)}" height="${Math.max(0,Number(geometry.height)||0)}"></rect>`;
+    else if(region.geometry_type==="circle")shape=`<circle cx="${Number(geometry.cx)||0}" cy="${Number(geometry.cy)||0}" r="${Math.max(0,Number(geometry.r)||0)}"></circle>`;
+    else shape=`<ellipse cx="${Number(geometry.cx)||0}" cy="${Number(geometry.cy)||0}" rx="${Math.max(0,Number(geometry.rx)||0)}" ry="${Math.max(0,Number(geometry.ry)||0)}"></ellipse>`;
+    let x=Number(geometry.label_x),y=Number(geometry.label_y);
+    if(!Number.isFinite(x)||!Number.isFinite(y)){
+      if(region.geometry_type==="rect"){x=Number(geometry.x)+Number(geometry.width)/2;y=Number(geometry.y)+Number(geometry.height)/2}
+      else if(region.geometry_type==="circle"||region.geometry_type==="ellipse"){x=Number(geometry.cx);y=Number(geometry.cy)}
+      else{const pairs=String(geometry.points||geometry.d||"").match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)||[];x=Number(pairs[0])||20;y=Number(pairs[1])||20}
+    }
+    return `<g ${common} style="--palette-color:${escapeHtml(region.usage.swatch||"#777")}"><title>${escapeHtml(`${index+1}. ${region.usage.label}`)}</title>${shape}<text class="archive-palette-region-number" x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central">${index+1}</text></g>`;
+  }
+
+  async function setupPaletteMaps() {
+    for(const shell of app.querySelectorAll("[data-palette-map]")){
+      const host=shell.querySelector("[data-palette-map-host]");
+      try{
+        const payload=await getJson(shell.dataset.mapUrl),map=payload.map||{},regions=list(map.regions);
+        host.innerHTML=`<figure class="archive-palette-figure"><div class="archive-palette-stage"><img src="${escapeHtml(map.source_url)}" alt=""><svg viewBox="${(map.viewBox||[0,0,map.width,map.height]).map(Number).join(" ")}" role="img" aria-label="${escapeHtml(map.title||"Reviewed palette placement map")}">${regions.map(geometryMarkup).join("")}</svg></div><figcaption>Numbered regions may overlap to document layered color. Select a region or use the equivalent list.</figcaption></figure><ol class="archive-palette-region-list">${regions.map((region,index)=>paletteUsageMarkup(region.usage,index)).join("")}</ol>`;
+        const select=(usageId)=>{
+          host.querySelectorAll("[data-palette-region]").forEach(node=>node.classList.toggle("is-selected",node.dataset.paletteUsageId===usageId));
+          host.querySelectorAll("[data-palette-usage]").forEach(node=>{const selected=node.dataset.paletteUsage===usageId;node.classList.toggle("is-selected",selected);node.setAttribute("aria-pressed",String(selected))});
+        };
+        host.addEventListener("click",event=>{const target=event.target.closest("[data-palette-region],[data-palette-usage]");if(target)select(target.dataset.paletteUsageId||target.dataset.paletteUsage)});
+        host.addEventListener("keydown",event=>{const target=event.target.closest("[data-palette-region]");if(target&&(event.key==="Enter"||event.key===" ")){event.preventDefault();select(target.dataset.paletteUsageId)}});
+        shell.querySelector("[data-palette-isolate]").addEventListener("click",event=>{const pressed=event.currentTarget.getAttribute("aria-pressed")!=="true";event.currentTarget.setAttribute("aria-pressed",String(pressed));event.currentTarget.textContent=pressed?"Show work image":"Isolate diagram";host.classList.toggle("is-isolated",pressed)});
+        shell.querySelector("[data-palette-png]").addEventListener("click",async event=>{
+          const button=event.currentTarget;button.disabled=true;button.textContent="Preparing PNG…";
+          try{
+            const stage=host.querySelector(".archive-palette-stage"),source=stage.querySelector("img"),svg=stage.querySelector("svg"),canvas=document.createElement("canvas"),width=Math.max(1,Math.round(Number(map.width)||source.naturalWidth)),height=Math.max(1,Math.round(Number(map.height)||source.naturalHeight));
+            canvas.width=width;canvas.height=height;const context=canvas.getContext("2d");
+            if(!host.classList.contains("is-isolated"))context.drawImage(source,0,0,width,height);
+            const svgImage=new Image(),markup=new XMLSerializer().serializeToString(svg),blob=new Blob([markup],{type:"image/svg+xml"}),objectUrl=URL.createObjectURL(blob);
+            await new Promise((resolve,reject)=>{svgImage.onload=resolve;svgImage.onerror=reject;svgImage.src=objectUrl});context.drawImage(svgImage,0,0,width,height);URL.revokeObjectURL(objectUrl);
+            const link=document.createElement("a");link.download=`${slugify(map.title||"palette-map")}.png`;link.href=canvas.toDataURL("image/png");link.click();
+          }catch{button.textContent="PNG unavailable";return}
+          button.disabled=false;button.textContent="Download PNG";
+        });
+      }catch(error){host.innerHTML=`<div class="archive-note-empty"><p>${escapeHtml(error.message||"This reviewed map could not be opened.")}</p></div>`}
+    }
+  }
+
   async function dossier() {
     const slug = slugFromPath("records");
     if (!slug) {
@@ -1047,10 +1115,11 @@
       app.innerHTML = `
         <article${mediumKey ? ` data-archive-medium="${escapeHtml(mediumKey)}"` : ""}>
           <header class="archive-record-header site-hero site-hero--supporting" id="overview"><div class="archive-record-heading"><div><span class="archive-kicker">${escapeHtml(titleCase(text(item.cultural_object_type, item.record_type, item.entity_type, "Cultural object")))}</span>${catalogueLabel(item) ? `<span class="archive-catalogue-identifier">${escapeHtml(catalogueLabel(item))}</span>` : ""}<h1 class="archive-record-title hero-title">${escapeHtml(title)}</h1></div><div class="archive-record-orientation">${summary ? `<p class="archive-record-intro hero-descriptor">${escapeHtml(summary)}</p>` : ""}<div class="archive-meta">${metadataHtml}</div><div class="archive-actions">${activeUrl ? `<a class="archive-button" href="${escapeHtml(activeUrl)}">View active item</a>` : ""}${relatedActionMarkup}</div></div></div>${imageUrl || imageMarkup ? `<figure class="archive-record-figure"${primaryMaterialAnchor ? ` id="${escapeHtml(primaryMaterialAnchor)}"` : ""}>${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(text(primaryMaterial && primaryMaterial.alt_text, image.alt, image.alt_text, primaryMaterial && primaryMaterial.title, title))}">` : `<div class="archive-record-symbol" role="img" aria-label="${escapeHtml(title)}">${imageMarkup}</div>`}<figcaption><span>${escapeHtml(text(primaryMaterial && primaryMaterial.caption, image.caption, title))}</span><span>${escapeHtml(dateLabel(item))}</span></figcaption></figure>` : ""}</header>
-          <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
+          <nav class="archive-jump-nav" aria-label="On this record"><a href="#overview">Overview</a><a href="#story">Story</a>${data.documentation.length ? `<a href="#documentation">Documentation</a>` : ""}${data.versions.length ? `<a href="#evolution">Evolution</a>` : ""}${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<a href="#palette-materials">Palette &amp; Materials</a>`:""}<a href="#notebook">Notebook</a><a href="#history">History</a><a href="#connections">Connections</a></nav>
           <section class="archive-document-section" id="story"><header class="archive-section-heading"><span class="archive-section-index">01 / Context</span><h2 class="archive-section-title">The story</h2></header><div><div class="archive-prose">${story ? paragraphMarkup(story) : "<p>This dossier currently holds the public facts of the work. Its fuller story has not been published yet.</p>"}${data.collections.length ? `<div class="archive-link-chips">${data.collections.map((collection) => `<a class="archive-chip" href="/archive/?collection=${encodeURIComponent(text(collection.slug, collection.id, collection.name))}">${escapeHtml(text(collection.name, collection.title, collection.slug))}</a>`).join("")}</div>` : ""}</div>${contextMarkup(data.subjects, data.terms)}</div></section>
           ${data.documentation.length ? `<section class="archive-document-section" id="documentation"><header class="archive-section-heading"><span class="archive-section-index">02 / Catalogue</span><h2 class="archive-section-title">Documentation</h2></header><div>${documentationMarkup(data.documentation)}</div></section>` : ""}
           ${data.versions.length ? `<section class="archive-document-section" id="evolution"><header class="archive-section-heading"><span class="archive-section-index">03 / Evolution</span><h2 class="archive-section-title">Versions and states</h2></header><div>${evolutionMarkup(data, materials, item)}</div></section>` : ""}
+          ${data.colorUsages.length||data.materialUsages.length||data.paletteMaps.length?`<section class="archive-document-section" id="palette-materials"><header class="archive-section-heading"><span class="archive-section-index">04 / Material record</span><h2 class="archive-section-title">Palette &amp; Materials</h2></header><div class="archive-palette-document">${data.colorUsages.length?`<section><h3>Documented colors</h3><ol class="archive-palette-region-list archive-palette-usage-list">${data.colorUsages.map(paletteUsageMarkup).join("")}</ol></section>`:""}${data.materialUsages.length?`<section><h3>Materials, tools &amp; equipment</h3><ul class="archive-material-usage-list">${data.materialUsages.map(paletteMaterialMarkup).join("")}</ul></section>`:""}${data.paletteMaps.map(paletteMapShellMarkup).join("")}</div></section>`:""}
           <section class="archive-document-section" id="notebook"><header class="archive-section-heading"><span class="archive-section-index">04 / Evidence</span><h2 class="archive-section-title">Open notebook</h2></header><div>${hasNotebookEvidence ? `<div class="archive-notebook-grid">${notebookMaterials.map((material,index)=>materialThumbnailMarkup(material,index,imageUrl)).join("")}${sourceMaterials.map(sourceMaterialThumbnailMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>${escapeHtml(text(data.dossier.empty_materials_note, "No process materials are public yet. The completed work and known history remain available here while sketches, notes, audio, and process images are reviewed."))}</p></div>`}</div></section>
           <section class="archive-document-section" id="history"><header class="archive-section-heading"><span class="archive-section-index">05 / Time</span><h2 class="archive-section-title">Item history</h2></header><div>${activities.length ? `<div class="archive-history">${activities.map(historyMarkup).join("")}</div>` : `<div class="archive-note-empty"><p>No dated history entries are public yet.</p></div>`}</div></section>
           <section class="archive-document-section" id="connections"><header class="archive-section-heading"><span class="archive-section-index">06 / Field</span><h2 class="archive-section-title">Connections</h2></header><div>${relationships.length || data.originThreads.length ? `${groupedConnectionsMarkup(item, relationships, data.originThreads)}${relationshipGraph(title, relationships)}` : `<div class="archive-note-empty"><p>No public relationships have been attached to this dossier yet.</p></div>`}</div></section>
@@ -1059,6 +1128,7 @@
         ${sourceMaterials.length ? sourceMaterialDialogShellMarkup() : ""}`;
       setupMaterialQuickView(notebookMaterials, imageUrl);
       setupSourceMaterialQuickView(sourceMaterials);
+      setupPaletteMaps();
     } catch (error) {
       app.innerHTML = error.status === 404
         ? errorState("This dossier is not public.", "It may be unpublished, unlisted, or no longer available under this address.")
