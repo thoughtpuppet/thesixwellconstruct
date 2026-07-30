@@ -16,6 +16,8 @@ node_modules/
 **/node_modules/
 .wrangler/
 **/.wrangler/
+.cloudflare-backups/
+**/.cloudflare-backups/
 .DS_Store
 **/.DS_Store
 Sequence 01_1.gif

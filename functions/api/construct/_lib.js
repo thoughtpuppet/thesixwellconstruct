@@ -1,5 +1,5 @@
 import { db, entityMedia, failure, id, json, nextRevision, parseJson, readJson, requireStudioAdmin, RESOURCE_CONFIG, slug, text } from "../_shared/construct.js";
-import { handleArchiveColorMaterialsAdmin, handleArchiveColorMaterialsPublic } from "./_colors-materials.js";
+import { handleArchiveColorMaterialsAdmin, handleArchiveColorMaterialsPublic, projectPublicPalette } from "./_colors-materials.js";
 import {
   loadTattooStyleAssignments,
   replaceTattooStyleAssignmentStatements,
@@ -1678,68 +1678,10 @@ async function publicArchiveDetail(request,env,archiveSlug){
     sourceEntriesBySet.get(record.id)||[],
     sourceStatesBySet.get(record.id)||[],
   ));
-  const [colorUsageResult,generalMaterialUsageResult,paletteMapResult]=await database.batch([
-    database.prepare(`SELECT cu.*,aos.state_roman,aos.variant_label,aov.version_number,
-        r.name recipe_name,r.slug recipe_slug,rv.version_number recipe_version_number,
-        md.name material_name,md.slug material_slug,md.brand,md.product_line,md.color_name,md.product_code,
-        mf.version_number formulation_version,cp.srgb_hex
-      FROM archive_color_usages cu
-      JOIN archive_object_states aos ON aos.id=cu.state_id AND aos.publication_state='published' AND aos.public_visible=1
-      JOIN archive_object_versions aov ON aov.id=aos.version_id AND aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
-      LEFT JOIN archive_color_recipe_versions rv ON rv.id=cu.recipe_version_id
-        AND rv.publication_state='published' AND rv.public_visible=1
-      LEFT JOIN archive_color_recipes r ON r.id=rv.recipe_id
-        AND r.publication_state='published' AND r.public_visible=1
-      LEFT JOIN archive_material_formulations mf ON mf.id=cu.formulation_id
-        AND mf.publication_state='published' AND mf.public_visible=1
-      LEFT JOIN archive_material_definitions md ON md.id=mf.material_id
-        AND md.publication_state='published' AND md.public_visible=1
-      LEFT JOIN archive_color_profiles cp ON
-        (rv.id IS NOT NULL AND cp.source_type='recipe-version' AND cp.source_id=rv.id)
-        OR (mf.id IS NOT NULL AND cp.source_type='material-formulation' AND cp.source_id=mf.id)
-      WHERE cu.publication_state='published' AND cu.public_visible=1
-      ORDER BY aov.sort_order,aos.sort_order,cu.layer_order,cu.created_at`).bind(entityId),
-    database.prepare(`SELECT gu.id,gu.state_id,gu.usage_role,gu.technique,gu.quantity_note,gu.notes,
-        aos.state_roman,aos.variant_label,aov.version_number,
-        m.slug material_slug,m.name material_name,m.material_kind,m.brand,m.product_line,m.product_name,m.model_name,m.product_code,
-        f.version_number formulation_version,f.normalized_finish,f.finish_label
-      FROM archive_general_material_usages gu
-      JOIN archive_object_states aos ON aos.id=gu.state_id AND aos.publication_state='published' AND aos.public_visible=1
-      JOIN archive_object_versions aov ON aov.id=aos.version_id AND aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
-      JOIN archive_material_definitions m ON m.id=gu.material_id AND m.publication_state='published' AND m.public_visible=1
-      LEFT JOIN archive_material_formulations f ON f.id=gu.formulation_id AND f.publication_state='published' AND f.public_visible=1
-      WHERE gu.publication_state='published' AND gu.public_visible=1
-      ORDER BY aov.sort_order,aos.sort_order,gu.created_at`).bind(entityId),
-    database.prepare(`SELECT pm.id,pm.state_id,pm.title,pm.overlay_opacity,pm.reviewed_at,
-        aos.state_roman,aos.variant_label,aov.version_number,
-        (SELECT COUNT(*) FROM archive_palette_regions pr
-          JOIN archive_color_usages cu ON cu.id=pr.color_usage_id
-          WHERE pr.map_id=pm.id AND cu.publication_state='published' AND cu.public_visible=1) region_count
-      FROM archive_palette_maps pm
-      JOIN archive_object_states aos ON aos.id=pm.state_id AND aos.publication_state='published' AND aos.public_visible=1
-      JOIN archive_object_versions aov ON aov.id=aos.version_id AND aov.entity_id=? AND aov.publication_state='published' AND aov.public_visible=1
-      JOIN media_assets m ON m.id=pm.source_media_id AND m.state='active' AND m.privacy='public'
-        AND m.consent_status IN ('not-required','granted') AND m.public_presentation='inline'
-      WHERE pm.publication_state='published' AND pm.public_visible=1
-      ORDER BY aov.sort_order,aos.sort_order,pm.created_at`).bind(entityId),
-  ]);
-  const colorUsages=(colorUsageResult.results||[]).map(usage=>({
-    id:usage.id,state_id:usage.state_id,state_label:`${item.catalogue_id||""}.${Number(usage.version_number||1)}/${usage.state_roman||"I"}${usage.variant_label?`, ${usage.variant_label}`:""}`,
-    label:usage.public_label||usage.recipe_name||usage.color_name||usage.material_name||"Documented color",
-    swatch:usage.public_swatch_hex||usage.srgb_hex||"",
-    usage_status:usage.usage_status,technique:usage.technique||"",layer_order:Number(usage.layer_order||0),quantity_note:usage.quantity_note||"",notes:usage.notes||"",
-    recipe:usage.recipe_slug&&usage.recipe_version_id&&usage.recipe_name?{slug:usage.recipe_slug,name:usage.recipe_name,version:Number(usage.recipe_version_number||0),route:`/archive/colors/${encodeURIComponent(usage.recipe_slug)}/`}:null,
-    product:usage.material_slug&&usage.material_name?{slug:usage.material_slug,name:usage.material_name,brand:usage.brand||"",line:usage.product_line||"",color_name:usage.color_name||"",product_code:usage.product_code||"",version:Number(usage.formulation_version||0),route:`/archive/materials/${encodeURIComponent(usage.material_slug)}/`}:null,
-  }));
-  const materialUsages=(generalMaterialUsageResult.results||[]).map(usage=>({
-    id:usage.id,state_id:usage.state_id,state_label:`${item.catalogue_id||""}.${Number(usage.version_number||1)}/${usage.state_roman||"I"}${usage.variant_label?`, ${usage.variant_label}`:""}`,
-    usage_role:usage.usage_role||"",technique:usage.technique||"",quantity_note:usage.quantity_note||"",notes:usage.notes||"",
-    material:{slug:usage.material_slug,name:usage.material_name,kind:usage.material_kind,brand:usage.brand||"",line:usage.product_line||"",product_name:usage.product_name||"",model_name:usage.model_name||"",product_code:usage.product_code||"",formulation_version:usage.formulation_version?Number(usage.formulation_version):null,finish:usage.normalized_finish||"",finish_label:usage.finish_label||"",route:`/archive/materials/${encodeURIComponent(usage.material_slug)}/`},
-  }));
-  const paletteMaps=(paletteMapResult.results||[]).map(map=>({
-    id:map.id,state_id:map.state_id,title:map.title||"Palette placement map",state_label:`${item.catalogue_id||""}.${Number(map.version_number||1)}/${map.state_roman||"I"}${map.variant_label?`, ${map.variant_label}`:""}`,region_count:Number(map.region_count||0),reviewed_at:map.reviewed_at,
-    data_url:`/api/archive/palette-maps/${encodeURIComponent(map.id)}`,svg_download:`/api/archive/palette-maps/${encodeURIComponent(map.id)}.svg`,
-  }));
+  const paletteProjection=await projectPublicPalette(database,{entityId,catalogueId:item.catalogue_id||""});
+  const colorUsages=paletteProjection.color_usages;
+  const materialUsages=paletteProjection.material_usages;
+  const paletteMaps=paletteProjection.palette_maps;
   const activities=activitiesResult.results||[];
   const originThreads=originThreadsResult.results||[],primaryOriginThread=originThreads.find(thread=>Number(thread.is_primary))||null;
   return json({item,dossier:item,materials,color_usages:colorUsages,colorUsages,material_usages:materialUsages,materialUsages,palette_maps:paletteMaps,paletteMaps,source_materials:sourceMaterials,sourceMaterials,evidence_sets:sourceMaterials,evidenceSets:sourceMaterials,activities,subjects:subjectsResult.results||[],collections:collectionsResult.results||[],relationships,versions:versionsResult.results||[],states,documentation,terms:termsResult.results||[],origin_threads:originThreads,originThreads,primary_origin_thread:primaryOriginThread,primaryOriginThread},{cache:"public, max-age=30"});

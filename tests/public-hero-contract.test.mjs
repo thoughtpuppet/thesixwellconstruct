@@ -43,6 +43,7 @@ const routes = [
   { route: "/archive/writings/", file: "archive/writings/index.html", variant: "supporting", descriptor: true },
 
   { route: "/art/acquisitioninquiry", file: "art/acquisitioninquiry.html", variant: "supporting", descriptor: true },
+  { route: "/art/:slug/", file: "art/detail/index.html", variant: "supporting", dynamic: true },
   { route: "/art/homelandsecuritypainting", file: "art/homelandsecuritypainting.html", variant: "supporting" },
   { route: "/art/lostmarblespainting", file: "art/lostmarblespainting.html", variant: "supporting" },
   { route: "/art/lustpainting", file: "art/lustpainting.html", variant: "supporting" },
@@ -105,7 +106,7 @@ const excludedActiveSource = /(?:managed-preview|about-next|construct-connection
 async function walkHtml(entry) {
   const absolute = path.join(root, entry);
   const info = await stat(absolute);
-  if (info.isFile()) return entry.endsWith(".html") ? [entry] : [];
+  if (info.isFile()) return entry.endsWith(".html") ? [entry.split(path.sep).join("/")] : [];
   const children = await readdir(absolute);
   const nested = await Promise.all(children.map((child) => walkHtml(path.join(entry, child))));
   return nested.flat();
@@ -249,19 +250,23 @@ test("shared landing heroes stack full-width with a larger mobile scale", async 
   );
 });
 
-test("Archive keeps search utility outside the shared landing hero", async () => {
+test("Archive keeps search utility and resource links outside the shared landing hero", async () => {
   const source = await read("js/archive-public.js");
   const templateStart = source.indexOf("app.innerHTML = `");
   const templateEnd = source.indexOf("`;", templateStart);
   const template = source.slice(templateStart, templateEnd);
   const heroEnd = template.indexOf("</section>");
-  const search = template.indexOf('class="archive-search-form archive-search-panel"');
+  const hero = template.slice(0, heroEnd);
+  const search = template.indexOf('class="archive-search-form"');
+  const resources = template.indexOf('class="archive-actions archive-search-actions"');
   const explorer = template.indexOf('class="archive-explorer"');
 
   assert.ok(templateStart >= 0 && templateEnd > templateStart, "archive explorer template must exist");
   assert.ok(heroEnd >= 0, "archive hero must close before utility regions");
+  assert.doesNotMatch(hero, /archive-actions/, "archive resource links must not remain in the hero");
   assert.ok(search > heroEnd, "archive search must sit outside the shared hero");
-  assert.ok(explorer > search, "archive search must lead into the archive explorer tools");
+  assert.ok(resources > search, "archive resource links must follow the search bar");
+  assert.ok(explorer > resources, "archive resources must lead into the archive explorer tools");
 });
 
 test("Tattoo landing keeps the path chooser out of its hero", async () => {

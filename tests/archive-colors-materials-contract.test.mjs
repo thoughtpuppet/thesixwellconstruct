@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 import { ciede2000 } from "../functions/api/construct/_colors-materials.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
@@ -34,6 +35,13 @@ function request(path,{method="GET",body,admin=false}={}){
 }
 async function payload(response){const body=await response.json();return{status:response.status,body}}
 async function admin(runtime,path,body,method="POST"){return payload(await handleConstructApi(request(path,{method,body,admin:true}),runtime))}
+async function addProfile(runtime,sourceType,sourceId,srgbHex="#315A7A"){
+  return admin(runtime,"/api/admin/archive-color-materials/profiles",{
+    source_type:sourceType,source_id:sourceId,srgb_hex:srgbHex,
+    lab_l:38,lab_a:2,lab_b:-24,oklch_l:.48,oklch_c:.09,oklch_h:250,
+    reference_method:"manual-digital",
+  });
+}
 
 test("CIEDE2000 uses the published reference calculation",()=>{
   const distance=ciede2000([50,2.6772,-79.7751],[50,0,-82.7485]);
@@ -98,10 +106,21 @@ test("products, formulations, recipes, and nested components preserve authored p
     source_url:"https://manufacturer.example/label",observed_at:"2026-07-29",
   });
   assert.equal(declaration.status,201,declaration.body.error);
+  const blockedFormulation=await admin(runtime,`/api/admin/archive-color-materials/formulations/${formulation.body.record.id}`,{
+    publication_state:"published",public_visible:true,
+  },"PATCH");
+  assert.equal(blockedFormulation.status,409);
+  assert.match(blockedFormulation.body.error,/sourced color profile/i);
+  const formulationProfile=await addProfile(runtime,"material-formulation",formulation.body.record.id,"#315A7A");
+  assert.equal(formulationProfile.status,201,formulationProfile.body.error);
   const publishedFormulation=await admin(runtime,`/api/admin/archive-color-materials/formulations/${formulation.body.record.id}`,{
     publication_state:"published",public_visible:true,
   },"PATCH");
   assert.equal(publishedFormulation.status,200,publishedFormulation.body.error);
+  const frozenFormulationProfile=await admin(runtime,`/api/admin/archive-color-materials/profiles/${formulationProfile.body.record.id}`,{
+    srgb_hex:"#000000",
+  },"PATCH");
+  assert.equal(frozenFormulationProfile.status,409);
   const frozen=await admin(runtime,`/api/admin/archive-color-materials/formulations/${formulation.body.record.id}`,{finish_label:"Changed later"},"PATCH");
   assert.equal(frozen.status,409);
 
@@ -134,10 +153,21 @@ test("products, formulations, recipes, and nested components preserve authored p
     quantity_value:1,quantity_unit:"parts",
   });
   assert.equal(rejectedCycle.status,409);
+  const blockedVersion=await admin(runtime,`/api/admin/archive-color-materials/recipe-versions/${version.body.record.id}`,{
+    publication_state:"published",public_visible:true,
+  },"PATCH");
+  assert.equal(blockedVersion.status,409);
+  assert.match(blockedVersion.body.error,/sourced color profile/i);
+  const recipeProfile=await addProfile(runtime,"recipe-version",version.body.record.id,"#183F78");
+  assert.equal(recipeProfile.status,201,recipeProfile.body.error);
   const publishedVersion=await admin(runtime,`/api/admin/archive-color-materials/recipe-versions/${version.body.record.id}`,{
     publication_state:"published",public_visible:true,
   },"PATCH");
   assert.equal(publishedVersion.status,200,publishedVersion.body.error);
+  const frozenRecipeProfile=await admin(runtime,`/api/admin/archive-color-materials/profiles/${recipeProfile.body.record.id}`,{
+    srgb_hex:"#000000",
+  },"PATCH");
+  assert.equal(frozenRecipeProfile.status,409);
   const frozenComponent=await handleConstructApi(request(`/api/admin/archive-color-materials/recipe-components/${paintComponent.body.record.id}`,{method:"DELETE",admin:true}),runtime);
   assert.equal(frozenComponent.status,409);
 
@@ -212,9 +242,14 @@ test("state usages support public overrides while private batches and equipment 
     medium_scope:"tattoo",publication_state:"published",public_visible:true,
   });
   const formulation=await admin(runtime,"/api/admin/archive-color-materials/formulations",{
-    material_id:paint.body.record.id,normalized_finish:"unspecified",publication_state:"published",public_visible:true,
+    material_id:paint.body.record.id,normalized_finish:"unspecified",
   });
   assert.equal(formulation.status,201,formulation.body.error);
+  assert.equal((await addProfile(runtime,"material-formulation",formulation.body.record.id,"#174A70")).status,201);
+  const publishedFormulation=await admin(runtime,`/api/admin/archive-color-materials/formulations/${formulation.body.record.id}`,{
+    publication_state:"published",public_visible:true,
+  },"PATCH");
+  assert.equal(publishedFormulation.status,200,publishedFormulation.body.error);
   const batch=await admin(runtime,"/api/admin/archive-color-materials/batches",{
     formulation_id:formulation.body.record.id,lot_number:"LOT-PRIVATE-77",expiration_date:"2028-01-01",opened_date:"2026-07-01",private_notes:"cabinet two",
   });
@@ -261,7 +296,10 @@ test("reviewed placement maps store owned geometry and export inert accessible S
       AND public_presentation='inline' AND mime_type LIKE 'image/%' AND width>0 AND height>0 LIMIT 1`).get();
   assert.ok(state&&media);
   const paint=await admin(runtime,"/api/admin/archive-color-materials/materials",{name:"Map paint",slug:"map-paint",material_kind:"art-paint",medium_scope:"art",publication_state:"published",public_visible:true});
-  const formulation=await admin(runtime,"/api/admin/archive-color-materials/formulations",{material_id:paint.body.record.id,publication_state:"published",public_visible:true});
+  const formulation=await admin(runtime,"/api/admin/archive-color-materials/formulations",{material_id:paint.body.record.id});
+  assert.equal(formulation.status,201,formulation.body.error);
+  assert.equal((await addProfile(runtime,"material-formulation",formulation.body.record.id,"#194A76")).status,201);
+  assert.equal((await admin(runtime,`/api/admin/archive-color-materials/formulations/${formulation.body.record.id}`,{publication_state:"published",public_visible:true},"PATCH")).status,200);
   const usage=await admin(runtime,`/api/admin/archive-dossiers/${state.state_id}/palette-materials/colors`,{
     formulation_id:formulation.body.record.id,public_label:"Mapped blue",public_swatch_hex:"#194A76",publication_state:"published",public_visible:true,
   });
@@ -276,17 +314,121 @@ test("reviewed placement maps store owned geometry and export inert accessible S
   assert.equal(rejected.status,409);
   const region=await admin(runtime,`/api/admin/archive-dossiers/${state.state_id}/palette-materials/regions`,{
     map_id:map.body.record.id,color_usage_id:usage.body.record.id,label:"Upper field",geometry_type:"polygon",
-    geometry:{points:"10,10 120,15 90,140 12,100"},layer_order:2,
+    geometry:{points:"10,10 120,15 90,140 12,100",matrix:[1,0,0,1,12,18]},layer_order:2,
   });
   assert.equal(region.status,201,region.body.error);
   const publicMap=await payload(await handleConstructApi(request(`/api/archive/palette-maps/${map.body.record.id}`),runtime));
   assert.equal(publicMap.status,200,publicMap.body.error);
   assert.equal(publicMap.body.map.regions[0].usage.label,"Mapped blue");
+  assert.equal(publicMap.body.map.regions[0].usage.product.slug,"map-paint");
+  assert.deepEqual(publicMap.body.map.regions[0].geometry.matrix,[1,0,0,1,12,18]);
   const svg=await handleConstructApi(request(`/api/archive/palette-maps/${map.body.record.id}.svg`),runtime);
   assert.equal(svg.status,200);
   const markup=await svg.text();
   assert.match(markup,/role="img"/);
   assert.match(markup,/1\. Mapped blue/);
+  assert.match(markup,/transform="matrix\(1 0 0 1 12 18\)"/);
   assert.equal(markup.includes("<script"),false);
   assert.equal(svg.headers.get("content-security-policy"),"default-src 'none'; style-src 'none'; sandbox");
+});
+
+test("finish-aware duplicate checks require an intentional formulation version",async()=>{
+  const sql=database(),runtime=env(sql);
+  const paint=await admin(runtime,"/api/admin/archive-color-materials/materials",{
+    name:"Duplicate finish paint",slug:"duplicate-finish-paint",material_kind:"art-paint",
+    brand:"Example",product_line:"Studio",product_name:"Acrylic",color_name:"Blue",product_code:"B-1",
+  });
+  const first=await admin(runtime,"/api/admin/archive-color-materials/formulations",{
+    material_id:paint.body.record.id,normalized_finish:"satin",finish_label:"Low sheen",
+  });
+  assert.equal(first.status,201,first.body.error);
+  const blocked=await admin(runtime,"/api/admin/archive-color-materials/formulations",{
+    material_id:paint.body.record.id,normalized_finish:"satin",finish_label:" low sheen ",
+  });
+  assert.equal(blocked.status,409);
+  assert.equal(blocked.body.duplicate_candidate.id,first.body.record.id);
+  const intentional=await admin(runtime,"/api/admin/archive-color-materials/formulations",{
+    material_id:paint.body.record.id,normalized_finish:"satin",finish_label:"Low sheen",
+    confirm_distinct_version:true,
+  });
+  assert.equal(intentional.status,201,intentional.body.error);
+  assert.equal(intentional.body.record.version_number,2);
+});
+
+test("Tattoo session evidence is state-scoped, privately inspectable, and publicly redacted",async()=>{
+  const sql=database(),runtime=env(sql);
+  const states=sql.prepare(`SELECT aos.id state_id,aov.entity_id,ad.archive_slug
+    FROM archive_object_states aos
+    JOIN archive_object_versions aov ON aov.id=aos.version_id
+    JOIN archive_dossiers ad ON ad.entity_id=aov.entity_id
+    JOIN content_entities ce ON ce.id=ad.entity_id
+    WHERE aos.publication_state='published' AND aos.public_visible=1
+      AND aov.publication_state='published' AND aov.public_visible=1
+      AND ad.state='published' AND ad.public_visible=1 AND ce.visibility='public'
+    ORDER BY aos.id LIMIT 2`).all();
+  assert.equal(states.length,2);
+  sql.prepare(`INSERT INTO appointments(
+    id,booking_type_id,status,client_name,client_email,client_phone,start_at,end_at,
+    deposit_cents,currency,created_at,updated_at
+  ) VALUES(?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))`).run(
+    "archive-session-private","tattoo_quarter","confirmed","Private Session Client",
+    "private-session@example.test","555-0100","2026-08-10T14:00:00Z","2026-08-10T15:30:00Z",5000,"USD",
+  );
+  const linked=await admin(runtime,`/api/admin/archive-dossiers/${states[0].state_id}/palette-materials/sessions`,{
+    appointment_id:"archive-session-private",session_order:1,studio_label:"Session 1 · linework",notes:"Private session note",
+  });
+  assert.equal(linked.status,201,linked.body.error);
+  const tool=await admin(runtime,"/api/admin/archive-color-materials/materials",{
+    name:"Session tool",slug:"session-tool",material_kind:"tool",publication_state:"published",public_visible:true,
+  });
+  const usage=await admin(runtime,`/api/admin/archive-dossiers/${states[0].state_id}/palette-materials/materials`,{
+    material_id:tool.body.record.id,tattoo_session_ref_id:linked.body.record.id,
+    usage_role:"linework setup",publication_state:"published",public_visible:true,
+  });
+  assert.equal(usage.status,201,usage.body.error);
+  const wrongState=await admin(runtime,`/api/admin/archive-dossiers/${states[1].state_id}/palette-materials/materials`,{
+    material_id:tool.body.record.id,tattoo_session_ref_id:linked.body.record.id,
+  });
+  assert.equal(wrongState.status,409);
+
+  const adminState=await payload(await handleConstructApi(request(`/api/admin/archive-dossiers/${states[0].state_id}/palette-materials`,{admin:true}),runtime));
+  assert.equal(adminState.body.tattoo_sessions[0].client_name,"Private Session Client");
+  const preview=await payload(await handleConstructApi(request(`/api/admin/archive-dossiers/${states[0].state_id}/palette-materials/preview`,{admin:true}),runtime));
+  assert.equal(preview.status,200,preview.body.error);
+  assert.equal(preview.body.eligible,true);
+  const publicDetail=await payload(await handleConstructApi(request(`/api/archive/items/${states[0].archive_slug}`),runtime));
+  assert.deepEqual(
+    preview.body.payload.material_usages,
+    publicDetail.body.material_usages.filter(entry=>entry.state_id===states[0].state_id),
+  );
+  const serialized=JSON.stringify(preview.body);
+  for(const privateValue of ["Private Session Client","private-session@example.test","archive-session-private","Private session note","tattoo_session_ref_id"]){
+    assert.equal(serialized.includes(privateValue),false);
+  }
+});
+
+test("Studio SVG import owns transforms and public map interactions use privacy-safe analytics",()=>{
+  const studioSource=readFileSync(join(ROOT,"studio/archive-colors-materials.js"),"utf8");
+  const publicSource=readFileSync(join(ROOT,"js/archive-public.js"),"utf8");
+  const referenceCss=readFileSync(join(ROOT,"css/archive-colors-materials.css"),"utf8");
+  const archiveCss=readFileSync(join(ROOT,"css/archive-public.css"),"utf8");
+  const context={window:{},console};
+  runInNewContext(studioSource,context);
+  const {transformMatrix,matrixMultiply}=context.window.ArchiveColorMaterialsStudio;
+  assert.deepEqual(Array.from(transformMatrix("translate(10 20) scale(2)")),[2,0,0,2,10,20]);
+  assert.deepEqual(Array.from(matrixMultiply([1,0,0,1,5,6],[1,0,0,1,7,8])),[1,0,0,1,12,14]);
+  assert.match(studioSource,/Review every imported region/);
+  assert.match(studioSource,/preserveAspectRatio/);
+  assert.match(studioSource,/querySelectorAll\("path,polygon,polyline,rect,circle,ellipse"\)/);
+  assert.doesNotMatch(studioSource,/innerHTML\s*=\s*await file\.text/);
+  assert.match(publicSource,/data-palette-usage=.*aria-pressed="false"/);
+  assert.match(publicSource,/node\.setAttribute\("aria-pressed",String\(selected\)\)/);
+  for(const action of ["palette-map-open","palette-region","palette-isolate","palette-svg-download","palette-png-download"]){
+    assert.match(publicSource,new RegExp(action));
+  }
+  assert.doesNotMatch(referenceCss,/var\(--(?:ring-faint|muted|sans|color-text)\b/);
+  const paletteCss=archiveCss.slice(archiveCss.indexOf(".archive-palette-document"));
+  assert.doesNotMatch(paletteCss,/var\(--(?:ring-faint|muted|sans|color-text)\b/);
+  assert.match(referenceCss,/border:5px solid var\(--archive-faint\)/);
+  assert.match(paletteCss,/stroke:var\(--archive-focus\)/);
 });

@@ -342,14 +342,17 @@
     app.innerHTML = `
       <section class="archive-hero site-hero ${collectionsView ? "site-hero--supporting" : "site-hero--landing"}" aria-labelledby="archive-title">
         <div><span class="archive-kicker">Public living archive</span><h1 class="hero-title" id="archive-title">${collectionsView ? "Collections." : "Archive."}</h1></div>
-        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "Search the work through its process, materials, people, places, and changing history."}</p>${collectionsView ? "" : '<div class="archive-actions"><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></div>'}</div>
+        <div class="archive-hero-copy"><p class="hero-descriptor">${collectionsView ? "Move through records gathered around a shared body of work, period, place, or question." : "A dynamic process documenting this creative ecosystem as its history unfolds."}</p></div>
       </section>
       <section class="archive-origin-thread" data-origin-thread hidden></section>
-      <form class="archive-search-form archive-search-panel" role="search" data-archive-search>
-        <label class="archive-label" for="archive-query">Search the archive</label>
-        <input id="archive-query" name="q" type="search" autocomplete="off" placeholder="Try a piece, material, person, symbol, or year">
-        <button class="archive-search-button" type="submit">Search</button>
-      </form>
+      <section class="archive-search-panel" aria-label="Archive search and resources">
+        <form class="archive-search-form" role="search" data-archive-search>
+          <label class="archive-label" for="archive-query">Search the archive</label>
+          <input id="archive-query" name="q" type="search" autocomplete="off" placeholder="Try a piece, material, person, symbol, or year">
+          <button class="archive-search-button" type="submit">Search</button>
+        </form>
+        ${collectionsView ? "" : '<nav class="archive-actions archive-search-actions" aria-label="Archive resources"><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></nav>'}
+      </section>
       <section class="archive-explorer" aria-label="Archive explorer">
         <aside class="archive-filter-panel" aria-labelledby="archive-filter-title">
           <div class="archive-filter-heading"><h2 id="archive-filter-title">Refine</h2><button class="archive-clear" type="button" data-clear-filters>Clear all</button></div>
@@ -1007,7 +1010,7 @@
   function paletteUsageMarkup(usage,index) {
     const recipe=usage.recipe,product=usage.product;
     const reference=recipe?`<a href="${escapeHtml(recipe.route)}">${escapeHtml(recipe.name)} · v${Number(recipe.version||0)}</a>`:product?`<a href="${escapeHtml(product.route)}">${escapeHtml([product.brand,product.name,product.color_name].filter(Boolean).join(" · "))}</a>`:"Internal formula";
-    return `<li><button type="button" data-palette-usage="${escapeHtml(usage.id)}"><span class="archive-palette-number">${index+1}</span><span class="archive-palette-swatch" style="--palette-color:${escapeHtml(usage.swatch||"#777")}" aria-hidden="true"></span><span><strong>${escapeHtml(usage.label)}</strong><small>${escapeHtml(titleCase(usage.usage_status))}${usage.technique?` · ${escapeHtml(usage.technique)}`:""}</small></span></button><span class="archive-palette-reference">${reference}</span></li>`;
+    return `<li><button type="button" data-palette-usage="${escapeHtml(usage.id)}" aria-pressed="false"><span class="archive-palette-number">${index+1}</span><span class="archive-palette-swatch" style="--palette-color:${escapeHtml(usage.swatch||"#777")}" aria-hidden="true"></span><span><strong>${escapeHtml(usage.label)}</strong><small>${escapeHtml(titleCase(usage.usage_status))}${usage.technique?` · ${escapeHtml(usage.technique)}`:""}</small></span></button><span class="archive-palette-reference">${reference}</span></li>`;
   }
 
   function paletteMaterialMarkup(usage) {
@@ -1016,11 +1019,11 @@
   }
 
   function paletteMapShellMarkup(map,index) {
-    return `<section class="archive-palette-map" data-palette-map data-map-url="${escapeHtml(map.data_url)}"><header><div><span class="archive-label">${escapeHtml(map.state_label||"Documented state")}</span><h3>${escapeHtml(map.title||`Palette map ${index+1}`)}</h3></div><div class="archive-actions"><button class="archive-button" type="button" data-palette-isolate aria-pressed="false">Isolate diagram</button><a class="archive-button" href="${escapeHtml(map.svg_download)}">Download SVG</a><button class="archive-button" type="button" data-palette-png>Download PNG</button></div></header><div class="archive-palette-map-host" data-palette-map-host aria-live="polite">${loading("Opening reviewed geometry…")}</div></section>`;
+    return `<section class="archive-palette-map" data-palette-map data-map-id="${escapeHtml(map.id)}" data-map-url="${escapeHtml(map.data_url)}"><header><div><span class="archive-label">${escapeHtml(map.state_label||"Documented state")}</span><h3>${escapeHtml(map.title||`Palette map ${index+1}`)}</h3></div><div class="archive-actions"><button class="archive-button" type="button" data-palette-isolate aria-pressed="false">Isolate diagram</button><a class="archive-button" href="${escapeHtml(map.svg_download)}" data-palette-svg>Download SVG</a><button class="archive-button" type="button" data-palette-png>Download PNG</button></div></header><div class="archive-palette-map-host" data-palette-map-host aria-live="polite">${loading("Opening reviewed geometry…")}</div></section>`;
   }
 
   function geometryMarkup(region,index) {
-    const geometry=region.geometry||{},common=`data-palette-region="${escapeHtml(region.id)}" data-palette-usage-id="${escapeHtml(region.usage.id)}" tabindex="0" role="button" aria-label="${escapeHtml(`${index+1}. ${region.usage.label}`)}"`;
+    const geometry=region.geometry||{},matrix=Array.isArray(geometry.matrix)&&geometry.matrix.length===6&&geometry.matrix.every(value=>Number.isFinite(Number(value)))?` transform="matrix(${geometry.matrix.map(value=>Number(value)).join(" ")})"`:"",common=`data-palette-region="${escapeHtml(region.id)}" data-palette-usage-id="${escapeHtml(region.usage.id)}" tabindex="0" role="button" aria-pressed="false" aria-label="${escapeHtml(`${index+1}. ${region.usage.label}`)}"${matrix}`;
     let shape="";
     if(region.geometry_type==="polygon"||region.geometry_type==="polyline")shape=`<${region.geometry_type} points="${escapeHtml(geometry.points||"")}"></${region.geometry_type}>`;
     else if(region.geometry_type==="path")shape=`<path d="${escapeHtml(geometry.d||"")}"></path>`;
@@ -1038,17 +1041,20 @@
 
   async function setupPaletteMaps() {
     for(const shell of app.querySelectorAll("[data-palette-map]")){
-      const host=shell.querySelector("[data-palette-map-host]");
+      const host=shell.querySelector("[data-palette-map-host]"),mapId=shell.dataset.mapId||"palette-map";
       try{
         const payload=await getJson(shell.dataset.mapUrl),map=payload.map||{},regions=list(map.regions);
         host.innerHTML=`<figure class="archive-palette-figure"><div class="archive-palette-stage"><img src="${escapeHtml(map.source_url)}" alt=""><svg viewBox="${(map.viewBox||[0,0,map.width,map.height]).map(Number).join(" ")}" role="img" aria-label="${escapeHtml(map.title||"Reviewed palette placement map")}">${regions.map(geometryMarkup).join("")}</svg></div><figcaption>Numbered regions may overlap to document layered color. Select a region or use the equivalent list.</figcaption></figure><ol class="archive-palette-region-list">${regions.map((region,index)=>paletteUsageMarkup(region.usage,index)).join("")}</ol>`;
+        window.SixWellAnalytics?.track("interactive_start",{action:"palette-map-open",itemId:mapId,count:regions.length});
         const select=(usageId)=>{
-          host.querySelectorAll("[data-palette-region]").forEach(node=>node.classList.toggle("is-selected",node.dataset.paletteUsageId===usageId));
+          host.querySelectorAll("[data-palette-region]").forEach(node=>{const selected=node.dataset.paletteUsageId===usageId;node.classList.toggle("is-selected",selected);node.setAttribute("aria-pressed",String(selected))});
           host.querySelectorAll("[data-palette-usage]").forEach(node=>{const selected=node.dataset.paletteUsage===usageId;node.classList.toggle("is-selected",selected);node.setAttribute("aria-pressed",String(selected))});
+          window.SixWellAnalytics?.track("item_open",{action:"palette-region",itemId:usageId});
         };
         host.addEventListener("click",event=>{const target=event.target.closest("[data-palette-region],[data-palette-usage]");if(target)select(target.dataset.paletteUsageId||target.dataset.paletteUsage)});
         host.addEventListener("keydown",event=>{const target=event.target.closest("[data-palette-region]");if(target&&(event.key==="Enter"||event.key===" ")){event.preventDefault();select(target.dataset.paletteUsageId)}});
-        shell.querySelector("[data-palette-isolate]").addEventListener("click",event=>{const pressed=event.currentTarget.getAttribute("aria-pressed")!=="true";event.currentTarget.setAttribute("aria-pressed",String(pressed));event.currentTarget.textContent=pressed?"Show work image":"Isolate diagram";host.classList.toggle("is-isolated",pressed)});
+        shell.querySelector("[data-palette-isolate]").addEventListener("click",event=>{const pressed=event.currentTarget.getAttribute("aria-pressed")!=="true";event.currentTarget.setAttribute("aria-pressed",String(pressed));event.currentTarget.textContent=pressed?"Show work image":"Isolate diagram";host.classList.toggle("is-isolated",pressed);window.SixWellAnalytics?.track("filter_change",{action:"palette-isolate",itemId:pressed?"enabled":"disabled"})});
+        shell.querySelector("[data-palette-svg]").addEventListener("click",()=>window.SixWellAnalytics?.track("interactive_complete",{action:"palette-svg-download",itemId:mapId,progress:100}));
         shell.querySelector("[data-palette-png]").addEventListener("click",async event=>{
           const button=event.currentTarget;button.disabled=true;button.textContent="Preparing PNG…";
           try{
@@ -1057,7 +1063,7 @@
             if(!host.classList.contains("is-isolated"))context.drawImage(source,0,0,width,height);
             const svgImage=new Image(),markup=new XMLSerializer().serializeToString(svg),blob=new Blob([markup],{type:"image/svg+xml"}),objectUrl=URL.createObjectURL(blob);
             await new Promise((resolve,reject)=>{svgImage.onload=resolve;svgImage.onerror=reject;svgImage.src=objectUrl});context.drawImage(svgImage,0,0,width,height);URL.revokeObjectURL(objectUrl);
-            const link=document.createElement("a");link.download=`${slugify(map.title||"palette-map")}.png`;link.href=canvas.toDataURL("image/png");link.click();
+            const link=document.createElement("a");link.download=`${slugify(map.title||"palette-map")}.png`;link.href=canvas.toDataURL("image/png");link.click();window.SixWellAnalytics?.track("interactive_complete",{action:"palette-png-download",itemId:mapId,progress:100});
           }catch{button.textContent="PNG unavailable";return}
           button.disabled=false;button.textContent="Download PNG";
         });
