@@ -239,6 +239,10 @@ function artCanonicalRoute(row = {}) {
 
 const ART_RESERVED_SLUGS = new Set(["acquisitioninquiry", "detail", "index"]);
 
+function catalogOrderBy(config) {
+  return config.fields.includes("sort_order") ? "sort_order,id" : "name COLLATE NOCASE,id";
+}
+
 async function publicCatalog(request, env, resource, recordSlug = "") {
   const config = RESOURCE_CONFIG[resource];
   if (!config) return failure("Unknown catalog.", 404);
@@ -254,7 +258,7 @@ async function publicCatalog(request, env, resource, recordSlug = "") {
     : recordSlug
       ? `${baseWhere} AND slug=?`
       : baseWhere;
-  const statement = database.prepare(`SELECT * FROM ${config.table} WHERE ${where} ORDER BY sort_order,id`);
+  const statement = database.prepare(`SELECT * FROM ${config.table} WHERE ${where} ORDER BY ${catalogOrderBy(config)}`);
   const legacyPath = `/tattoos/flash/${String(recordSlug).replace(/^\/+|\/+$/g, "")}/`;
   const result = isFlashRecord
     ? await statement.bind(recordSlug, recordSlug, recordSlug, legacyPath).all()
@@ -1980,7 +1984,7 @@ async function adminEntityMedia(database, entityIds) {
 async function adminList(env, resource) {
   const config = RESOURCE_CONFIG[resource]; if (!config) return failure("Unknown resource.", 404);
   const database = db(env);
-  const rows = (await database.prepare(`SELECT * FROM ${config.table} ORDER BY sort_order,id`).all()).results || [];
+  const rows = (await database.prepare(`SELECT * FROM ${config.table} ORDER BY ${catalogOrderBy(config)}`).all()).results || [];
   const entityIds = rows.map((row) => row.id);
   const publicationRows = resource === "art" && entityIds.length
     ? (await database.prepare(`SELECT id,public_at FROM content_entities WHERE id IN (${entityIds.map(() => "?").join(",")})`).bind(...entityIds).all()).results || []
@@ -2048,6 +2052,7 @@ async function adminCreate(request, env, resource) {
   const publishStatements=[entityVisibilityStatement(database, resource, created),searchSyncStatement(database, resource, created)];
   if(archiveEligibleEntityType(config.entityType))publishStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,created),archiveRecordType(config.entityType)));
   await database.batch(publishStatements);
+  if(archiveEligibleEntityType(config.entityType))await ensureArchiveCatalogueEntry(database,await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(recordId).first());
   await nextRevision(database,recordId,"create",null,created); return json({ record: created },{status:201});
 }
 
@@ -2149,6 +2154,7 @@ async function adminUpdate(request, env, resource, recordId, archive = false) {
   );
   if(archiveEligibleEntityType(config.entityType))updateStatements.push(archiveShellStatement(database,recordId,config.entityType,archivePreferredSlug(config.entityType,projected),archiveRecordType(config.entityType)));
   await database.batch(updateStatements);
+  if(archiveEligibleEntityType(config.entityType))await ensureArchiveCatalogueEntry(database,await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(recordId).first());
   const afterRow = await database.prepare(`SELECT * FROM ${config.table} WHERE id=?`).bind(recordId).first();
   const after = resource === "flash" ? { ...afterRow, ...tattooStylePayload(nextStyleSelection) } : afterRow;
   await nextRevision(database,recordId,archive?"archive":"update",before,after); return json({record:after});
@@ -2920,9 +2926,7 @@ async function replaceArchiveThemes(database,entityId,value){
   await database.batch(statements);
 }
 
-async function ensureArchiveCatalogueEntry(database,owner){
-  if(owner.entity_type==="event")return;
-  if(await database.prepare("SELECT entity_id FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first())return;
+async function archiveCatalogueObjectTypeId(database,owner){
   let objectTypeId="other-cultural-object";
   if(owner.entity_type==="art_work")objectTypeId="art-other";
   else if(owner.entity_type==="merch_item")objectTypeId="merch-other";
@@ -2930,20 +2934,47 @@ async function ensureArchiveCatalogueEntry(database,owner){
   else if(owner.entity_type==="flash_item")objectTypeId="tattoo-flash-design";
   else if(owner.entity_type==="tattoo_design")objectTypeId="tattoo-design";
   else if(owner.entity_type==="visual_symbol")objectTypeId="legend-symbol";
-  else if(owner.node_id==="film")objectTypeId="film-work";
-  else if(owner.node_id==="music")objectTypeId="music-work";
-  else if(owner.node_id==="writings")objectTypeId="writing-work";
+  else if(owner.entity_type==="film_work"||owner.node_id==="film"||owner.node_id==="node-film")objectTypeId="film-work";
+  else if(owner.entity_type==="music_work"||owner.node_id==="music"||owner.node_id==="node-music")objectTypeId="music-work";
+  else if(owner.entity_type==="writing_work"||owner.node_id==="writings"||owner.node_id==="node-writings")objectTypeId="writing-work";
   if(owner.entity_type==="archive_record"&&await database.prepare("SELECT id FROM archive_records WHERE id=? AND record_type='blackboard'").bind(owner.id).first())objectTypeId="other-blackboard";
-  const type=await database.prepare("SELECT medium_id,catalogue_prefix FROM archive_cultural_object_types WHERE id=?").bind(objectTypeId).first();
-  if(!type)throw new Error("The catalogue vocabulary is unavailable.");
-  const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();
-  const number=Number(maximum?.maximum||0)+1,catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
-  const versionId=id("archive-version"),stateId=id("archive-state");
-  await database.batch([
-    database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,1,'I','','studio','studio',datetime('now'),datetime('now'))`).bind(owner.id,type.medium_id,objectTypeId,type.catalogue_prefix,number,catalogueId),
-    database.prepare(`INSERT INTO archive_object_versions(id,entity_id,version_number,title,description,date_precision,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,1,'Version 1','','undated',1,'studio','studio',datetime('now'),datetime('now'))`).bind(versionId,owner.id),
-    database.prepare(`INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,variant_label,date_precision,sort_order,created_by,updated_by,created_at,updated_at) VALUES(?,?,'I',1,'First documented state','','','undated',1,'studio','studio',datetime('now'),datetime('now'))`).bind(stateId,versionId),
-  ]);
+  return objectTypeId;
+}
+
+async function ensureArchiveCatalogueEntry(database,owner){
+  if(!owner?.id||owner.entity_type==="event")return null;
+  if(!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(owner.id).first())return null;
+  let catalogue=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first();
+  if(!catalogue){
+    const objectTypeId=await archiveCatalogueObjectTypeId(database,owner);
+    const type=await database.prepare("SELECT medium_id,catalogue_prefix FROM archive_cultural_object_types WHERE id=?").bind(objectTypeId).first();
+    if(!type)throw new Error("The catalogue vocabulary is unavailable.");
+    for(let attempt=0;attempt<3&&!catalogue;attempt++){
+      const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();
+      const number=Number(maximum?.maximum||0)+1,catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
+      try{
+        await database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,1,'I','','studio','studio',datetime('now'),datetime('now'))`).bind(owner.id,type.medium_id,objectTypeId,type.catalogue_prefix,number,catalogueId).run();
+      }catch(error){
+        catalogue=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first();
+        if(!catalogue&&!/UNIQUE constraint failed/i.test(String(error?.message||error)))throw error;
+      }
+      catalogue=catalogue||await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(owner.id).first();
+    }
+    if(!catalogue)throw new Error("A unique catalogue number could not be allocated. Try again.");
+  }
+  let version=await database.prepare("SELECT * FROM archive_object_versions WHERE entity_id=? ORDER BY sort_order,version_number,id LIMIT 1").bind(owner.id).first();
+  if(!version){
+    const versionId=id("archive-version");
+    await database.prepare(`INSERT INTO archive_object_versions(id,entity_id,version_number,title,description,date_precision,sort_order,publication_state,public_visible,created_by,updated_by,created_at,updated_at) VALUES(?,?,1,'Version 1','','undated',1,'draft',0,'studio','studio',datetime('now'),datetime('now'))`).bind(versionId,owner.id).run();
+    version=await database.prepare("SELECT * FROM archive_object_versions WHERE id=?").bind(versionId).first();
+  }
+  let state=await database.prepare("SELECT * FROM archive_object_states WHERE version_id=? ORDER BY sort_order,state_order,variant_label,id LIMIT 1").bind(version.id).first();
+  if(!state){
+    const stateId=id("archive-state");
+    await database.prepare(`INSERT INTO archive_object_states(id,version_id,state_roman,state_order,title,description,variant_label,date_precision,sort_order,publication_state,public_visible,created_by,updated_by,created_at,updated_at) VALUES(?,?,'I',1,'First documented state','','','undated',1,'draft',0,'studio','studio',datetime('now'),datetime('now'))`).bind(stateId,version.id).run();
+    state=await database.prepare("SELECT * FROM archive_object_states WHERE id=?").bind(stateId).first();
+  }
+  return {catalogue,version,state};
 }
 
 async function archiveCatalogueAdminApi(request,env,entityId=""){
@@ -2968,13 +2999,14 @@ async function archiveCatalogueAdminApi(request,env,entityId=""){
   if(request.method==="PATCH"&&entityId){
     const body=await readJson(request);if(!body)return failure("Send a JSON object.");
     const before=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(entityId).first();
-    const owner=await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!owner)return failure("Dossier not found.",404);
+    const owner=await database.prepare(`SELECT ce.* FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ad.entity_id=?`).bind(entityId).first();if(!owner)return failure("Dossier not found.",404);
     const mediumId=text(body.medium_id??body.mediumId??before?.medium_id,80),objectTypeId=text(body.object_type_id??body.objectTypeId??before?.object_type_id,120);
     const type=await database.prepare("SELECT * FROM archive_cultural_object_types WHERE id=? AND medium_id=?").bind(objectTypeId,mediumId).first();
     if(!type)return failure("Choose a cultural object type that belongs to the selected medium.",409);
-    let catalogueNumber=Math.floor(Number(body.catalogue_number??body.catalogueNumber??before?.catalogue_number));
-    if(!catalogueNumber||catalogueNumber<1){const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();catalogueNumber=Number(maximum?.maximum||0)+1}
-    if(before&&(catalogueNumber!==Number(before.catalogue_number)||type.catalogue_prefix!==before.catalogue_prefix))return failure("Permanent catalogue prefixes and sequence numbers cannot be changed in Studio.",409);
+    const requestedCatalogueNumber=Math.floor(Number(body.catalogue_number??body.catalogueNumber));
+    let catalogueNumber=Number(before?.catalogue_number)||0;
+    if(!before){const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();catalogueNumber=Number(maximum?.maximum||0)+1}
+    if(before&&((requestedCatalogueNumber>0&&requestedCatalogueNumber!==Number(before.catalogue_number))||type.catalogue_prefix!==before.catalogue_prefix))return failure("Permanent catalogue prefixes and sequence numbers cannot be changed in Studio.",409);
     const hasCurrentState=Object.prototype.hasOwnProperty.call(body,"current_state_id")||Object.prototype.hasOwnProperty.call(body,"currentStateId");
     let currentStateId=hasCurrentState?text(body.current_state_id??body.currentStateId,200):text(before?.current_state_id,200);
     let currentVersion=Number(before?.current_version||1),currentState=archiveRoman(before?.current_state||"I")||"I",variantLabel=text(before?.variant_label,120);
@@ -3000,7 +3032,8 @@ async function archiveCatalogueAdminApi(request,env,entityId=""){
     try{
       if(before)await database.prepare(`UPDATE archive_catalogue_entries SET medium_id=?,object_type_id=?,catalogue_prefix=?,catalogue_number=?,catalogue_id=?,current_version=?,current_state=?,variant_label=?,current_state_id=?,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,currentStateId,entityId).run();
       else await database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,current_state_id,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,'studio','studio',datetime('now'),datetime('now'))`).bind(entityId,mediumId,objectTypeId,type.catalogue_prefix,catalogueNumber,catalogueId,currentVersion,currentState,variantLabel,currentStateId).run();
-    }catch(error){const duplicate=/UNIQUE constraint failed/i.test(error.message);return failure(duplicate?"That catalogue number is already assigned.":error.message,duplicate?409:400)}
+    }catch(error){const duplicate=/UNIQUE constraint failed/i.test(error.message);return failure(duplicate?"A catalogue number was assigned at the same time. Save again to allocate the next number.":error.message,duplicate?409:400)}
+    try{await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
     return archiveCatalogueAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
   }
   return failure("Method not allowed.",405);
@@ -3211,7 +3244,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,ownerId);
   }
   if(request.method==="PATCH"&&entityId){
-    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!before)return failure("Dossier not found.",404);const owner=await database.prepare("SELECT visibility FROM content_entities WHERE id=?").bind(entityId).first();
+    const body=await readJson(request);if(!body)return failure("Send a JSON object.");const before=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();if(!before)return failure("Dossier not found.",404);const owner=await database.prepare("SELECT * FROM content_entities WHERE id=?").bind(entityId).first();
     const next={archive_slug:slug(body.archive_slug??body.archiveSlug??body.slug??before.archive_slug),orientation:text(body.orientation??before.orientation,8000),story:text(body.story??before.story,50000),story_html:text(body.story_html??before.story_html,50000),empty_materials_note:text(body.empty_materials_note??before.empty_materials_note,3000),record_type:text(body.record_type??body.recordType??before.record_type,100),state:text(body.state??before.state,30),public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible)?1:0,featured:body.featured===undefined?Number(before.featured):truthy(body.featured)?1:0,sort_order:Number(body.sort_order??before.sort_order)||0};
     if(!next.archive_slug)return failure("archive_slug is required.");if(!ARCHIVE_STATES.has(next.state))return failure("Invalid dossier state.");if(next.state==="published"&&next.public_visible&&owner?.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
     const hasOriginUpdate=Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds"),assignmentIds=hasOriginUpdate?originThreadIds(body.origin_thread_ids??body.originThreadIds):[],primaryOriginId=hasOriginUpdate?text(body.primary_origin_thread_id??body.primaryOriginThreadId,200):"";
@@ -3222,6 +3255,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
       await replaceArchiveContext(database,entityId,archiveContextAssignments(body.context_assignments??body.contextAssignments));
       await replaceArchiveThemes(database,entityId,body.theme_names??body.themeNames);
     }catch(error){return failure(error.message,409)}
+    try{await ensureArchiveCatalogueEntry(database,owner)}catch(error){return failure(error.message,409)}
     const after=await database.prepare("SELECT * FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();await nextRevision(database,entityId,"archive-dossier-update",before,after);return archiveDossiersAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
   }
   if(request.method==="DELETE"&&entityId){await database.prepare("UPDATE archive_dossiers SET state='archived',public_visible=0,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?").bind(entityId).run();return json({ok:true});}

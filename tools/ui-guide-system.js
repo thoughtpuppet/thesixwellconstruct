@@ -458,7 +458,7 @@
   }
 
   function studioFrame(record, content) {
-    return '<div class="studio-preview-shell"><header><div><span class="ui-meta">The Six.Well Construct</span><h1>Studio Console</h1></div><span class="status" role="status">Saved</span></header><nav class="tabs" aria-label="Console sections"><button class="tab is-active" type="button">Home</button><button class="tab" type="button">People</button><button class="tab" type="button">Tattoo booking</button><button class="tab" type="button">Archive</button></nav><nav class="subnav" aria-label="Manager sections"><button class="subnav-btn is-active" type="button">' + esc(record.label) + '</button><button class="subnav-btn" type="button">Settings</button><button class="subnav-btn" type="button">History</button></nav>' + content + "</div>";
+    return '<div class="studio-preview-shell"><header><div><span class="ui-meta">The Six.Well Construct</span><h1>Studio Console</h1></div><span class="status" role="status">Saved</span></header><nav class="tabs" aria-label="Console sections"><button class="tab is-active" type="button">Home</button><button class="tab" type="button">People</button><button class="tab" type="button">Tattoos</button><button class="tab" type="button">Archive</button></nav><nav class="subnav" aria-label="Manager sections"><button class="subnav-btn is-active" type="button">' + esc(record.label) + '</button><button class="subnav-btn" type="button">Settings</button><button class="subnav-btn" type="button">History</button></nav>' + content + "</div>";
   }
 
   function studioMarkup(record) {

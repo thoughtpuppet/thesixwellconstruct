@@ -111,6 +111,65 @@ test("migration assigns every existing cultural object an identity from the exac
   assert.ok(db.prepare("SELECT id FROM relationship_types WHERE slug='executed-as'").get());
 });
 
+test("future tattoo dossier shells automatically receive a catalogue version and state", () => {
+  const db = database();
+  const previousMaximum = Number(db.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-EXE'").get().maximum);
+
+  db.prepare(`INSERT INTO content_entities(
+      id,entity_type,node_id,visibility,search_visibility,public_at,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES('portfolio-future-structure','portfolio_item','node-tattoos','public',1,datetime('now'),
+      'test','test',datetime('now'),datetime('now'))`).run();
+
+  const dossier = db.prepare("SELECT * FROM archive_dossiers WHERE entity_id='portfolio-future-structure'").get();
+  const catalogue = db.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id='portfolio-future-structure'").get();
+  const version = db.prepare("SELECT * FROM archive_object_versions WHERE entity_id='portfolio-future-structure'").get();
+  const state = db.prepare("SELECT * FROM archive_object_states WHERE version_id=?").get(version.id);
+
+  assert.ok(dossier);
+  assert.equal(catalogue.object_type_id, "tattoo-execution");
+  assert.equal(catalogue.catalogue_prefix, "TAT-EXE");
+  assert.equal(catalogue.catalogue_number, previousMaximum + 1);
+  assert.equal(version.version_number, 1);
+  assert.equal(version.publication_state, "draft");
+  assert.equal(version.public_visible, 0);
+  assert.equal(state.state_roman, "I");
+  assert.equal(state.publication_state, "draft");
+  assert.equal(state.public_visible, 0);
+});
+
+test("Studio catalogue initialization repairs a legacy shell and ignores a stale sequence number", async () => {
+  const db = database();
+  const runtime = env(db);
+  db.prepare(`INSERT INTO content_entities(
+      id,entity_type,node_id,visibility,search_visibility,public_at,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES('portfolio-legacy-shell','portfolio_item','node-tattoos','public',1,datetime('now'),
+      'test','test',datetime('now'),datetime('now'))`).run();
+
+  db.prepare("DELETE FROM archive_catalogue_entries WHERE entity_id='portfolio-legacy-shell'").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE entity_id='portfolio-legacy-shell'").get().count, 0);
+  const previousMaximum = Number(db.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-EXE'").get().maximum);
+
+  const response = await handleConstructApi(request("/api/admin/archive-catalogue/portfolio-legacy-shell", {
+    method: "PATCH",
+    admin: true,
+    body: {
+      medium_id: "tattoos",
+      object_type_id: "tattoo-execution",
+      catalogue_number: 1,
+      current_state_id: null,
+    },
+  }), runtime);
+  assert.equal(response.status, 200);
+  const catalogue = (await response.json()).record;
+  assert.equal(catalogue.catalogue_number, previousMaximum + 1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE entity_id='portfolio-legacy-shell'").get().count, 1);
+  assert.equal(db.prepare(`SELECT COUNT(*) count FROM archive_object_states state
+    JOIN archive_object_versions version ON version.id=state.version_id
+    WHERE version.entity_id='portfolio-legacy-shell'`).get().count, 1);
+});
+
 test("Studio edits identity, versions, states, contextual entities, themes, and subordinate material references", async () => {
   const db = database();
   const runtime = env(db);
@@ -561,6 +620,34 @@ test("public Archive media prefers explicit evidence, then approved canonical co
   assert.equal(symbolRecord.item.primary_image, "");
 });
 
+test("Studio lists Archive People and Places without requiring sortable columns", async () => {
+  const db = database();
+  const runtime = env(db);
+  db.exec(`
+    INSERT INTO content_entities(id,entity_type,node_id,created_at,updated_at) VALUES
+      ('person-alpha-list-test','person','archive',datetime('now'),datetime('now')),
+      ('person-zulu-list-test','person','archive',datetime('now'),datetime('now')),
+      ('place-alpha-list-test','place','archive',datetime('now'),datetime('now')),
+      ('place-zulu-list-test','place','archive',datetime('now'),datetime('now'));
+    INSERT INTO people(id,name,slug,created_at,updated_at) VALUES
+      ('person-zulu-list-test','Zulu Person','zulu-person-list-test',datetime('now'),datetime('now')),
+      ('person-alpha-list-test','Alpha Person','alpha-person-list-test',datetime('now'),datetime('now'));
+    INSERT INTO places(id,name,slug,created_at,updated_at) VALUES
+      ('place-zulu-list-test','Zulu Place','zulu-place-list-test',datetime('now'),datetime('now')),
+      ('place-alpha-list-test','Alpha Place','alpha-place-list-test',datetime('now'),datetime('now'));
+  `);
+
+  const peopleResponse = await handleConstructApi(request("/api/admin/people", { admin: true }), runtime);
+  assert.equal(peopleResponse.status, 200);
+  const people = (await peopleResponse.json()).records;
+  assert.deepEqual(people.map((record) => record.name), ["Alpha Person", "Saiel Dauhn Solehman", "Zulu Person"]);
+
+  const placesResponse = await handleConstructApi(request("/api/admin/places", { admin: true }), runtime);
+  assert.equal(placesResponse.status, 200);
+  const places = (await placesResponse.json()).records;
+  assert.deepEqual(places.map((record) => record.name), ["Alpha Place", "Zulu Place"]);
+});
+
 test("Studio and public Archive surfaces expose the catalogue system", () => {
   const studio = readFileSync(join(ROOT, "studio", "construct-manager.js"), "utf8");
   const publicScript = readFileSync(join(ROOT, "js", "archive-public.js"), "utf8");
@@ -571,6 +658,10 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   const comparePage = readFileSync(join(ROOT, "archive", "compare", "index.html"), "utf8");
   assert.match(studio, /Cultural object identity/);
   assert.match(studio, /Versions and states/);
+  assert.match(studio, /Initialize catalogue, version, and state/);
+  assert.match(studio, /Assigned automatically/);
+  assert.match(studio, /Do not add a version separately/);
+  assert.match(studio, /portfolio_item:\["tattoos","tattoo-execution"\]/);
   assert.match(studio, /Current public condition/);
   assert.match(studio, /Adaptive catalogue documentation/);
   assert.match(studio, /Lead material/);
