@@ -113,7 +113,79 @@ test("Realized as only connects Tattoo Designs or Flash to executed Portfolio ta
   );
 });
 
-test("products, formulations, recipes, and nested components preserve authored provenance",async()=>{
+test("the practice workflow treats premade products as ingredients without exposing product versions",async()=>{
+  const sql=database(),runtime=env(sql);
+  const pigment=await admin(runtime,"/api/admin/archive-color-materials/materials",{
+    name:"Carbon Black",material_kind:"raw-pigment",pigment_code:"PBK7",
+    cas_number:"1333-86-4",color_index_name:"77266",medium_scope:"shared",
+    publication_state:"published",public_visible:true,
+  });
+  assert.equal(pigment.status,201,pigment.body.error);
+
+  const ink=await admin(runtime,"/api/admin/archive-color-materials/products",{
+    name:"Zuper Black",material_kind:"tattoo-ink",brand:"Intenze",
+    product_name:"Zuper Black",color_name:"Black",medium_scope:"tattoo",
+    normalized_finish:"matte",opacity:"opaque",srgb_hex:"#151515",
+    lab_l:7.1,lab_a:0,lab_b:0,oklch_l:.19,oklch_c:0,oklch_h:null,
+    pigment_material_id:pigment.body.record.id,normalized_pigment_code:"PBk7",
+    bottle_wording:"Carbon Black (CI 77266)",source_type:"bottle-label",
+    publication_state:"published",
+  });
+  assert.equal(ink.status,201,ink.body.error);
+  assert.equal(ink.body.record.slug,"zuper-black");
+  assert.equal(ink.body.record.material_kind,"tattoo-ink");
+  assert.equal("version_number" in ink.body.record,false);
+
+  const snapshot=await payload(await handleConstructApi(request("/api/admin/archive-color-materials",{admin:true}),runtime));
+  const product=snapshot.body.products.find(record=>record.id===ink.body.record.id);
+  assert.ok(product);
+  assert.equal("version_number" in product,false);
+  const declaration=snapshot.body.declared_pigments.find(record=>record.material_id===ink.body.record.id);
+  assert.equal(declaration.pigment_material_id,pigment.body.record.id);
+  assert.equal(declaration.normalized_pigment_code,"PBK7");
+  const laterEvidence=await admin(runtime,"/api/admin/archive-color-materials/declared-pigments",{
+    material_id:ink.body.record.id,pigment_material_id:pigment.body.record.id,
+    normalized_pigment_code:"CI 77266",bottle_wording:"CI 77266",
+    source_type:"safety-data-sheet",observed_at:"2026-07-31",
+  });
+  assert.equal(laterEvidence.status,201,laterEvidence.body.error);
+
+  const mixed=await admin(runtime,"/api/admin/archive-color-materials/mixed-colors",{
+    name:"Soft Carbon Wash",medium_scope:"tattoo",resulting_finish:"matte",
+    instructions:"Mix until even.",srgb_hex:"#565656",lab_l:36,lab_a:0,lab_b:0,
+    oklch_l:.45,oklch_c:0,oklch_h:null,
+  });
+  assert.equal(mixed.status,201,mixed.body.error);
+  assert.equal(mixed.body.record.slug,"soft-carbon-wash");
+  const ingredient=await admin(runtime,"/api/admin/archive-color-materials/recipe-components",{
+    recipe_version_id:mixed.body.record.recipe_version_id,material_id:ink.body.record.id,
+    quantity_value:1,quantity_unit:"parts",
+  });
+  assert.equal(ingredient.status,201,ingredient.body.error);
+  const refreshed=await payload(await handleConstructApi(request("/api/admin/archive-color-materials",{admin:true}),runtime));
+  const savedIngredient=refreshed.body.recipe_components.find(record=>record.id===ingredient.body.record.id);
+  assert.equal(savedIngredient.material_id,ink.body.record.id);
+  assert.equal(savedIngredient.material_name,"Zuper Black");
+
+  const state=sql.prepare("SELECT id FROM archive_object_states LIMIT 1").get();
+  const usage=await admin(runtime,`/api/admin/archive-dossiers/${state.id}/palette-materials/colors`,{
+    material_id:ink.body.record.id,usage_status:"applied",technique:"greywash",
+  });
+  assert.equal(usage.status,201,usage.body.error);
+  const batch=await admin(runtime,"/api/admin/archive-color-materials/batches",{
+    material_id:ink.body.record.id,lot_number:"LOT-22",expiration_date:"2028-09-01",
+  });
+  assert.equal(batch.status,201,batch.body.error);
+  assert.equal(batch.body.record.material_id,ink.body.record.id);
+
+  const publicProduct=await payload(await handleConstructApi(request("/api/archive/materials/zuper-black"),runtime));
+  assert.equal(publicProduct.status,200,publicProduct.body.error);
+  assert.equal(publicProduct.body.material.declared_pigments[0].pigment.slug,"carbon-black");
+  assert.equal("formulations" in publicProduct.body.material,false);
+  assert.equal(JSON.stringify(publicProduct.body).includes("version_number"),false);
+});
+
+test("premade products, pigments, recipes, and nested components preserve authored provenance",async()=>{
   const sql=database(),runtime=env(sql);
   const pigment=await admin(runtime,"/api/admin/archive-color-materials/materials",{
     name:"Ultramarine pigment",slug:"ultramarine-pigment",material_kind:"raw-pigment",pigment_code:"PB29",
@@ -215,8 +287,9 @@ test("products, formulations, recipes, and nested components preserve authored p
   assert.equal(color.body.color.versions[0].components.length,2);
   const material=await payload(await handleConstructApi(request("/api/archive/materials/heavy-body-ultramarine"),runtime));
   assert.equal(material.status,200,material.body.error);
-  assert.equal(material.body.material.formulations[0].declared_pigments[0].provenance,"manufacturer-declared");
-  assert.equal(material.body.material.formulations[0].declared_pigments[0].bottle_wording,"Pigment: PB29");
+  assert.equal(material.body.material.declared_pigments[0].provenance,"manufacturer-declared");
+  assert.equal(material.body.material.declared_pigments[0].bottle_wording,"Pigment: PB29");
+  assert.equal("formulations" in material.body.material,false);
   const publicState=sql.prepare(`SELECT aos.id state_id,aov.entity_id
     FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id
     JOIN archive_dossiers ad ON ad.entity_id=aov.entity_id JOIN content_entities ce ON ce.id=ad.entity_id
@@ -489,6 +562,7 @@ test("Tattoo session evidence is state-scoped, privately inspectable, and public
 test("Studio SVG import owns transforms and public map interactions use privacy-safe analytics",()=>{
   const studioSource=readFileSync(join(ROOT,"studio/archive-colors-materials.js"),"utf8");
   const publicSource=readFileSync(join(ROOT,"js/archive-public.js"),"utf8");
+  const publicReferenceSource=readFileSync(join(ROOT,"js/archive-colors-materials.js"),"utf8");
   const referenceCss=readFileSync(join(ROOT,"css/archive-colors-materials.css"),"utf8");
   const archiveCss=readFileSync(join(ROOT,"css/archive-public.css"),"utf8");
   const context={window:{},console};
@@ -507,6 +581,11 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   assert.ok(Math.abs(red.oklch_c-.257683)<.000002);
   assert.ok(Math.abs(red.oklch_h-29.234)<.002);
   assert.match(studioSource,/Calculate Lab and OKLCH from sRGB/);
+  assert.match(studioSource,/mount:mountSimple/);
+  assert.match(studioSource,/Add premade paint or ink/);
+  assert.match(studioSource,/Create mixed color/);
+  assert.match(studioSource,/No second visibility control is required/);
+  assert.match(studioSource,/Shared raw pigments/);
   assert.match(studioSource,/Add a color profile to unlock publication/);
   assert.match(studioSource,/required readonly/);
   assert.match(studioSource,/Review every imported region/);
@@ -519,6 +598,8 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   assert.match(studioSource,/data-archive-material/);
   assert.match(studioSource,/querySelectorAll\("path,polygon,polyline,rect,circle,ellipse"\)/);
   assert.doesNotMatch(studioSource,/innerHTML\s*=\s*await file\.text/);
+  assert.doesNotMatch(publicReferenceSource,/material\.formulations/);
+  assert.doesNotMatch(publicReferenceSource,/Commercial formulation/);
   assert.match(publicSource,/data-palette-usage=.*aria-pressed="false"/);
   assert.match(publicSource,/node\.setAttribute\("aria-pressed",String\(selected\)\)/);
   for(const action of ["palette-map-open","palette-region","palette-isolate","palette-svg-download","palette-png-download"]){

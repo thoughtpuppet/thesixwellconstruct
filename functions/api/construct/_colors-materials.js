@@ -166,7 +166,6 @@ async function publicColors(request, env, slug = "") {
   const versionIds = versions.map((row) => row.id);
   const components = versionIds.length ? (await database.prepare(`SELECT c.*,
       m.slug material_slug,m.name material_name,m.material_kind,m.brand,m.product_line,m.color_name,m.product_code,
-      f.version_number formulation_version,
       nr.slug nested_recipe_slug,nr.name nested_recipe_name,nv.version_number nested_recipe_version
     FROM archive_color_recipe_components c
     LEFT JOIN archive_material_formulations f ON f.id=c.formulation_id
@@ -200,7 +199,6 @@ async function publicColors(request, env, slug = "") {
         line: component.product_line || "",
         color_name: component.color_name || "",
         product_code: component.product_code || "",
-        formulation_version: component.formulation_version || null,
         route: `/archive/materials/${encodeURIComponent(component.material_slug)}/`,
       } : null,
       nested_recipe: component.nested_recipe_slug ? {
@@ -255,30 +253,35 @@ async function publicMaterials(request, env, slug = "") {
     values.push(medium);
   }
   const rows = (await database.prepare(`SELECT m.*,
-      (SELECT COUNT(*) FROM archive_material_formulations f WHERE f.material_id=m.id AND ${publicSql("f")}) formulation_count
+      f.id product_record_id,f.normalized_finish,f.finish_label,f.opacity,f.optical_effects_json,f.manufacturer_wording,
+      cp.id profile_id,cp.srgb_hex,cp.lab_l,cp.lab_a,cp.lab_b,cp.oklch_l,cp.oklch_c,cp.oklch_h,cp.reference_method,cp.reviewed_at
     FROM archive_material_definitions m
+    LEFT JOIN archive_material_formulations f ON f.id=(
+      SELECT latest.id FROM archive_material_formulations latest
+      WHERE latest.material_id=m.id AND ${publicSql("latest")}
+      ORDER BY latest.version_number DESC,latest.created_at DESC LIMIT 1
+    )
+    LEFT JOIN archive_color_profiles cp ON cp.source_type='material-formulation' AND cp.source_id=f.id
     WHERE ${conditions.join(" AND ")}
+      AND (m.material_kind NOT IN ('art-paint','tattoo-ink') OR f.id IS NOT NULL)
     ORDER BY m.material_kind,m.name`).bind(...values).all()).results || [];
   if (slug && !rows.length) return failure("Material not found.", 404);
-  if (!slug) return json({ materials: rows.map((row) => ({ ...publicMaterial(row), formulation_count: Number(row.formulation_count || 0) })), count: rows.length }, { cache: "public, max-age=60" });
+  if (!slug) return json({ materials: rows.map((row) => ({
+    ...publicMaterial(row),
+    normalized_finish:row.normalized_finish||"unspecified",
+    finish_label:row.finish_label||"",
+    opacity:row.opacity||"unspecified",
+    optical_effects:opticalEffects(row.optical_effects_json),
+    color_profile:publicProfile(row),
+  })), count: rows.length }, { cache: "public, max-age=60" });
   const material = rows[0];
-  const formulations = (await database.prepare(`SELECT f.*,cp.id profile_id,cp.srgb_hex,cp.lab_l,cp.lab_a,cp.lab_b,
-      cp.oklch_l,cp.oklch_c,cp.oklch_h,cp.reference_method,cp.reviewed_at
-    FROM archive_material_formulations f
-    LEFT JOIN archive_color_profiles cp ON cp.source_type='material-formulation' AND cp.source_id=f.id
-    WHERE f.material_id=? AND ${publicSql("f")}
-    ORDER BY f.version_number DESC`).bind(material.id).all()).results || [];
-  const formulationIds = formulations.map((row) => row.id);
-  const declarations = formulationIds.length ? (await database.prepare(`SELECT d.formulation_id,d.normalized_pigment_code,d.bottle_wording,d.source_type,d.source_url,d.observed_at,
+  const declarations = material.product_record_id ? (await database.prepare(`SELECT d.normalized_pigment_code,d.bottle_wording,d.source_type,d.source_url,d.observed_at,
       p.slug pigment_slug,p.name pigment_name
     FROM archive_material_declared_pigments d
     LEFT JOIN archive_material_definitions p ON p.id=d.pigment_material_id AND ${publicSql("p")}
-    WHERE d.formulation_id IN (${formulationIds.map(() => "?").join(",")})
-    ORDER BY d.formulation_id,d.sort_order,d.created_at`).bind(...formulationIds).all()).results || [] : [];
-  const declarationMap = new Map();
-  for (const declaration of declarations) {
-    if (!declarationMap.has(declaration.formulation_id)) declarationMap.set(declaration.formulation_id, []);
-    declarationMap.get(declaration.formulation_id).push({
+    WHERE d.formulation_id=?
+    ORDER BY d.sort_order,d.created_at`).bind(material.product_record_id).all()).results || [] : [];
+  const declaredPigments=declarations.map((declaration) => ({
       code: declaration.normalized_pigment_code,
       bottle_wording: declaration.bottle_wording,
       source_type: declaration.source_type,
@@ -290,23 +293,17 @@ async function publicMaterials(request, env, slug = "") {
         route: `/archive/materials/${encodeURIComponent(declaration.pigment_slug)}/`,
       } : null,
       provenance: "manufacturer-declared",
-    });
-  }
+    }));
   return json({
     material: {
       ...publicMaterial(material),
-      formulations: formulations.map((formulation) => ({
-        id: formulation.id,
-        version_number: Number(formulation.version_number),
-        version_label: formulation.version_label,
-        normalized_finish: formulation.normalized_finish,
-        finish_label: formulation.finish_label,
-        opacity: formulation.opacity,
-        optical_effects: opticalEffects(formulation.optical_effects_json),
-        manufacturer_wording: formulation.manufacturer_wording,
-        color_profile: publicProfile(formulation),
-        declared_pigments: declarationMap.get(formulation.id) || [],
-      })),
+      normalized_finish:material.normalized_finish||"unspecified",
+      finish_label:material.finish_label||"",
+      opacity:material.opacity||"unspecified",
+      optical_effects:opticalEffects(material.optical_effects_json),
+      manufacturer_wording:material.manufacturer_wording||"",
+      color_profile:publicProfile(material),
+      declared_pigments:declaredPigments,
     },
   }, { cache: "public, max-age=60" });
 }
@@ -329,7 +326,6 @@ function mapRegion(row, index = 0) {
     line: row.material_product_line || "",
     color_name: row.material_color_name || "",
     product_code: row.material_product_code || "",
-    version: Number(row.formulation_version_number || 0),
     route: `/archive/materials/${encodeURIComponent(row.material_slug)}/`,
   } : null;
   return {
@@ -454,7 +450,7 @@ export async function projectPublicPalette(database,{entityId="",stateId="",cata
     }:null,
     product:usage.material_slug&&usage.material_name?{
       slug:usage.material_slug,name:usage.material_name,brand:usage.brand||"",line:usage.product_line||"",
-      color_name:usage.color_name||"",product_code:usage.product_code||"",version:Number(usage.formulation_version||0),
+      color_name:usage.color_name||"",product_code:usage.product_code||"",
       route:`/archive/materials/${encodeURIComponent(usage.material_slug)}/`,
     }:null,
   }));
@@ -469,7 +465,7 @@ export async function projectPublicPalette(database,{entityId="",stateId="",cata
     material:{
       slug:usage.material_slug,name:usage.material_name,kind:usage.material_kind,brand:usage.brand||"",
       line:usage.product_line||"",product_name:usage.product_name||"",model_name:usage.model_name||"",
-      product_code:usage.product_code||"",formulation_version:usage.formulation_version?Number(usage.formulation_version):null,
+      product_code:usage.product_code||"",
       finish:usage.normalized_finish||"",finish_label:usage.finish_label||"",
       route:`/archive/materials/${encodeURIComponent(usage.material_slug)}/`,
     },
@@ -619,6 +615,69 @@ function normalizeRecipe(body, before = {}) {
   };
 }
 
+function productDetails(body = {}, before = {}) {
+  return {
+    normalized_finish: ["matte","satin","gloss","unspecified"].includes(body.normalized_finish) ? body.normalized_finish : (before.normalized_finish || "unspecified"),
+    finish_label: text(body.finish_label ?? before.finish_label,240),
+    opacity: ["opaque","semi-opaque","transparent","unspecified"].includes(body.opacity) ? body.opacity : (before.opacity || "unspecified"),
+    optical_effects_json: JSON.stringify(opticalEffects(body.optical_effects ?? body.optical_effects_text ?? before.optical_effects_json)),
+    manufacturer_wording: text(body.manufacturer_wording ?? before.manufacturer_wording,4000),
+    notes: text(body.product_notes ?? before.product_notes ?? before.formulation_notes,8000),
+  };
+}
+
+function sourcedProfileValues(body = {}, before = {}) {
+  const srgbHex=text(body.srgb_hex ?? before.srgb_hex,20).toUpperCase();
+  if(!/^#[0-9A-F]{6}$/.test(srgbHex))throw new Error("Choose a six-digit sRGB display swatch.");
+  const numeric={};
+  for(const field of ["lab_l","lab_a","lab_b","oklch_l","oklch_c"]){
+    const value=nullableNumber(body[field] ?? before[field]);
+    if(value===null)throw new Error("The display swatch needs its calculated Lab and OKLCH values.");
+    numeric[field]=value;
+  }
+  return {
+    srgb_hex:srgbHex,
+    ...numeric,
+    oklch_h:nullableNumber(body.oklch_h ?? before.oklch_h),
+    reference_method:["manual-digital","measured-physical","reviewed-image"].includes(body.reference_method)?body.reference_method:(before.reference_method||"manual-digital"),
+    source_media_id:text(body.source_media_id ?? before.source_media_id,200)||null,
+    notes:text(body.profile_notes ?? before.profile_notes,4000),
+    reviewed_at:text(body.reviewed_at ?? before.reviewed_at,80)||new Date().toISOString(),
+  };
+}
+
+async function productRows(database, recordId="") {
+  const rows=(await database.prepare(`SELECT m.*,
+      f.id product_record_id,f.normalized_finish,f.finish_label,f.opacity,
+      f.optical_effects_json,f.manufacturer_wording,f.notes formulation_notes,
+      f.publication_state product_record_state,f.public_visible product_record_visible,
+      cp.id profile_id,cp.srgb_hex,cp.lab_l,cp.lab_a,cp.lab_b,
+      cp.oklch_l,cp.oklch_c,cp.oklch_h,cp.reference_method,cp.source_media_id profile_source_media_id,
+      cp.notes profile_notes,cp.reviewed_at
+    FROM archive_material_definitions m
+    LEFT JOIN archive_material_formulations f ON f.id=(
+      SELECT latest.id FROM archive_material_formulations latest
+      WHERE latest.material_id=m.id AND latest.publication_state<>'archived'
+      ORDER BY latest.version_number DESC,latest.created_at DESC LIMIT 1
+    )
+    LEFT JOIN archive_color_profiles cp ON cp.source_type='material-formulation' AND cp.source_id=f.id
+    WHERE m.material_kind IN ('art-paint','tattoo-ink')
+      ${recordId?"AND (m.id=? OR m.slug=? OR f.id=?)":""}
+    ORDER BY m.name`).bind(...(recordId?[recordId,recordId,recordId]:[])).all()).results||[];
+  return rows;
+}
+
+async function resolveProductRecord(database, materialId) {
+  return database.prepare(`SELECT f.*,m.material_kind,m.name material_name,m.slug material_slug
+    FROM archive_material_definitions m
+    JOIN archive_material_formulations f ON f.id=(
+      SELECT latest.id FROM archive_material_formulations latest
+      WHERE latest.material_id=m.id AND latest.publication_state<>'archived'
+      ORDER BY latest.version_number DESC,latest.created_at DESC LIMIT 1
+    )
+    WHERE m.id=? AND m.material_kind IN ('art-paint','tattoo-ink')`).bind(materialId).first();
+}
+
 async function completeRecipeVersion(database, versionId, seen = new Set()) {
   if (seen.has(versionId)) return { ok: false, error: "Recipe versions cannot contain circular recipe chains." };
   const nextSeen = new Set(seen);
@@ -735,19 +794,30 @@ async function librarySnapshot(database) {
   const [materials,formulations,declarations,recipes,versions,components,profiles,families,familyAssignments] = await database.batch([
     database.prepare("SELECT * FROM archive_material_definitions ORDER BY material_kind,name"),
     database.prepare("SELECT f.*,m.name material_name,m.slug material_slug,m.material_kind FROM archive_material_formulations f JOIN archive_material_definitions m ON m.id=f.material_id ORDER BY m.name,f.version_number DESC"),
-    database.prepare(`SELECT d.*,m.name pigment_name,m.slug pigment_slug
+    database.prepare(`SELECT d.*,f.material_id,m.name pigment_name,m.slug pigment_slug
       FROM archive_material_declared_pigments d
+      JOIN archive_material_formulations f ON f.id=d.formulation_id
       LEFT JOIN archive_material_definitions m ON m.id=d.pigment_material_id
-      ORDER BY d.formulation_id,d.sort_order,d.created_at`),
+      ORDER BY f.material_id,d.sort_order,d.created_at`),
     database.prepare("SELECT * FROM archive_color_recipes ORDER BY name"),
     database.prepare("SELECT v.*,r.name recipe_name,r.slug recipe_slug FROM archive_color_recipe_versions v JOIN archive_color_recipes r ON r.id=v.recipe_id ORDER BY r.name,v.version_number DESC"),
-    database.prepare("SELECT * FROM archive_color_recipe_components ORDER BY recipe_version_id,sort_order"),
+    database.prepare(`SELECT component.*,product.material_id,material.name material_name,
+        pigment.name raw_pigment_name,nested_recipe.name nested_recipe_name
+      FROM archive_color_recipe_components component
+      LEFT JOIN archive_material_formulations product ON product.id=component.formulation_id
+      LEFT JOIN archive_material_definitions material ON material.id=product.material_id
+      LEFT JOIN archive_material_definitions pigment ON pigment.id=component.raw_pigment_material_id
+      LEFT JOIN archive_color_recipe_versions nested_version ON nested_version.id=component.nested_recipe_version_id
+      LEFT JOIN archive_color_recipes nested_recipe ON nested_recipe.id=nested_version.recipe_id
+      ORDER BY component.recipe_version_id,component.sort_order`),
     database.prepare("SELECT * FROM archive_color_profiles ORDER BY updated_at DESC"),
     database.prepare("SELECT * FROM archive_color_families ORDER BY sort_order,name"),
     database.prepare("SELECT * FROM archive_color_profile_families ORDER BY profile_id,family_id"),
   ]);
+  const products=await productRows(database);
   return {
     materials: materials.results || [],
+    products,
     formulations: formulations.results || [],
     declared_pigments: declarations.results || [],
     recipes: recipes.results || [],
@@ -767,6 +837,121 @@ async function writeRecord(database, table, recordId, values, create = false) {
     await database.prepare(`UPDATE ${table} SET ${keys.map((key) => `${key}=?`).join(",")},updated_at=datetime('now') WHERE id=?`).bind(...keys.map((key) => values[key]),recordId).run();
   }
   return database.prepare(`SELECT * FROM ${table} WHERE id=?`).bind(recordId).first();
+}
+
+function insertRecordStatement(database,table,recordId,values){
+  const keys=Object.keys(values);
+  return database.prepare(`INSERT INTO ${table}(id,${keys.join(",")},created_at,updated_at) VALUES(?,${keys.map(()=>"?").join(",")},datetime('now'),datetime('now'))`).bind(recordId,...keys.map(key=>values[key]));
+}
+
+function updateRecordStatement(database,table,recordId,values){
+  const keys=Object.keys(values);
+  return database.prepare(`UPDATE ${table} SET ${keys.map(key=>`${key}=?`).join(",")},updated_at=datetime('now') WHERE id=?`).bind(...keys.map(key=>values[key]),recordId);
+}
+
+async function adminProducts(request,database,recordId=""){
+  if(request.method==="GET"){
+    const records=await productRows(database,recordId);
+    if(recordId&&!records.length)return failure("Premade paint or ink not found.",404);
+    return json({records,count:records.length,record:recordId?records[0]:undefined});
+  }
+  if(request.method==="DELETE"&&recordId){
+    await database.prepare("UPDATE archive_material_definitions SET publication_state='archived',public_visible=0,updated_at=datetime('now') WHERE id=?").bind(recordId).run();
+    return json({ok:true,archived:true});
+  }
+  const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  try{
+    if(request.method==="POST"&&!recordId){
+      const materialValues=normalizeMaterial(body);
+      if(!["art-paint","tattoo-ink"].includes(materialValues.material_kind))return failure("Choose Art paint or Tattoo ink.",409);
+      if(!materialValues.slug||!materialValues.name)return failure("Product name is required.");
+      const duplicate=await database.prepare(`SELECT id,slug,name FROM archive_material_definitions
+        WHERE publication_state<>'archived' AND material_kind=?
+          AND lower(trim(brand))=lower(trim(?)) AND lower(trim(product_line))=lower(trim(?))
+          AND lower(trim(product_name))=lower(trim(?)) AND lower(trim(color_name))=lower(trim(?))
+          AND lower(trim(product_code))=lower(trim(?)) LIMIT 1`).bind(
+          materialValues.material_kind,materialValues.brand,materialValues.product_line,
+          materialValues.product_name,materialValues.color_name,materialValues.product_code,
+        ).first();
+      if(duplicate)return json({error:`This premade product already exists: ${duplicate.name}. Open that product instead of adding it again.`,duplicate_candidate:duplicate},{status:409});
+      const desiredState=materialValues.publication_state;
+      if(desiredState==="archived")return failure("Create the product as a Studio draft or published product.",409);
+      const desiredVisible=desiredState==="published"?1:0;
+      materialValues.publication_state="draft";materialValues.public_visible=0;
+      const productId=text(body.id,200)||id("material"),internalId=id("product-record"),profileId=id("color-profile");
+      const formulationValues={material_id:productId,version_number:1,version_label:"",...productDetails(body),publication_state:"draft",public_visible:0,created_by:"studio",updated_by:"studio"};
+      const profileValues={source_type:"material-formulation",source_id:internalId,...sourcedProfileValues(body)};
+      const statements=[
+        insertRecordStatement(database,"archive_material_definitions",productId,{...materialValues,created_by:"studio",updated_by:"studio"}),
+        insertRecordStatement(database,"archive_material_formulations",internalId,formulationValues),
+        insertRecordStatement(database,"archive_color_profiles",profileId,profileValues),
+      ];
+      const pigmentId=text(body.pigment_material_id,200)||null,bottleWording=text(body.bottle_wording,1000);
+      if(pigmentId||bottleWording){
+        const pigment=pigmentId?await database.prepare("SELECT material_kind,pigment_code FROM archive_material_definitions WHERE id=?").bind(pigmentId).first():null;
+        if(pigmentId&&pigment?.material_kind!=="raw-pigment")return failure("The listed pigment must use a shared raw-pigment record.",409);
+        if(!bottleWording)return failure("Record the manufacturer's pigment wording exactly as shown.");
+        statements.push(insertRecordStatement(database,"archive_material_declared_pigments",id("declared-pigment"),{
+          formulation_id:internalId,pigment_material_id:pigmentId,
+          normalized_pigment_code:text(body.normalized_pigment_code||pigment?.pigment_code,120).toUpperCase(),
+          bottle_wording:bottleWording,
+          source_type:["bottle-label","manufacturer-site","safety-data-sheet","technical-sheet","other"].includes(body.source_type)?body.source_type:"bottle-label",
+          source_media_id:text(body.source_media_id,200)||null,source_url:safePublicUrl(body.source_url),
+          observed_at:text(body.observed_at,80)||null,sort_order:0,
+        }));
+      }
+      if(desiredState==="published"){
+        statements.push(
+          updateRecordStatement(database,"archive_material_formulations",internalId,{publication_state:"published",public_visible:desiredVisible,updated_by:"studio"}),
+          updateRecordStatement(database,"archive_material_definitions",productId,{publication_state:"published",public_visible:desiredVisible,updated_by:"studio"}),
+        );
+      }
+      await database.batch(statements);await recomputeNeighbors(database,profileId);
+      return json({record:(await productRows(database,productId))[0]},{status:201});
+    }
+    if(request.method==="PATCH"&&recordId){
+      const before=(await productRows(database,recordId))[0];if(!before)return failure("Premade paint or ink not found.",404);
+      if(before.product_record_state==="published")return failure("This published product is locked. Archive it and create a replacement only when the manufacturer changes the product.",409);
+      const materialValues=normalizeMaterial(body,before),details=productDetails(body,before),profileValues=sourcedProfileValues(body,before);
+      const desiredState=materialValues.publication_state,desiredVisible=desiredState==="published"?1:0;
+      materialValues.publication_state="draft";materialValues.public_visible=0;
+      const internalId=before.product_record_id||id("product-record"),profileId=before.profile_id||id("color-profile");
+      const statements=[updateRecordStatement(database,"archive_material_definitions",before.id,{...materialValues,updated_by:"studio"})];
+      if(before.product_record_id)statements.push(updateRecordStatement(database,"archive_material_formulations",internalId,{...details,updated_by:"studio"}));
+      else statements.push(insertRecordStatement(database,"archive_material_formulations",internalId,{material_id:before.id,version_number:1,version_label:"",...details,publication_state:"draft",public_visible:0,created_by:"studio",updated_by:"studio"}));
+      if(before.profile_id)statements.push(updateRecordStatement(database,"archive_color_profiles",profileId,profileValues));
+      else statements.push(insertRecordStatement(database,"archive_color_profiles",profileId,{source_type:"material-formulation",source_id:internalId,...profileValues}));
+      if(desiredState==="published")statements.push(
+        updateRecordStatement(database,"archive_material_formulations",internalId,{publication_state:"published",public_visible:desiredVisible,updated_by:"studio"}),
+        updateRecordStatement(database,"archive_material_definitions",before.id,{publication_state:"published",public_visible:desiredVisible,updated_by:"studio"}),
+      );
+      await database.batch(statements);await recomputeNeighbors(database,profileId);
+      return json({record:(await productRows(database,before.id))[0]});
+    }
+  }catch(error){return failure(String(error.message||error).includes("UNIQUE")?"A matching premade product already exists.":error.message,409)}
+  return failure("Method not allowed.",405);
+}
+
+async function adminMixedColors(request,database,recordId=""){
+  if(request.method==="GET")return adminRecipes(request,database,recordId);
+  const body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  if(request.method!=="POST"||recordId)return failure("Method not allowed.",405);
+  try{
+    const recipeValues=normalizeRecipe({...body,publication_state:"draft",public_visible:false});
+    if(!recipeValues.slug||!recipeValues.name)return failure("Mixed color name is required.");
+    const recipeId=text(body.id,200)||id("color"),versionId=id("recipe-version"),profileId=id("color-profile");
+    await database.batch([
+      insertRecordStatement(database,"archive_color_recipes",recipeId,{...recipeValues,created_by:"studio",updated_by:"studio"}),
+      insertRecordStatement(database,"archive_color_recipe_versions",versionId,{
+        recipe_id:recipeId,version_number:1,version_label:"",resulting_finish:["matte","satin","gloss","unspecified"].includes(body.resulting_finish)?body.resulting_finish:"unspecified",
+        finish_label:text(body.finish_label,240),instructions:text(body.instructions,12000),notes:text(body.notes,8000),
+        publication_state:"draft",public_visible:0,created_by:"studio",updated_by:"studio",
+      }),
+      insertRecordStatement(database,"archive_color_profiles",profileId,{source_type:"recipe-version",source_id:versionId,...sourcedProfileValues(body)}),
+    ]);
+    await recomputeNeighbors(database,profileId);
+    return json({record:{...(await database.prepare("SELECT * FROM archive_color_recipes WHERE id=?").bind(recipeId).first()),recipe_version_id:versionId,profile_id:profileId}},{status:201});
+  }catch(error){return failure(error.message,409)}
 }
 
 async function adminMaterials(request, database, recordId = "") {
@@ -935,10 +1120,12 @@ async function adminRecipeComponents(request,database,recordId="") {
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
   if(request.method==="POST"&&!recordId){
     const versionId=text(body.recipe_version_id,200),version=await database.prepare("SELECT * FROM archive_color_recipe_versions WHERE id=?").bind(versionId).first();if(!version)return failure("Recipe version not found.",404);if(version.publication_state==="published")return failure("Published recipe versions are immutable.",409);
-    const formulationId=text(body.formulation_id,200)||null,rawId=text(body.raw_pigment_material_id,200)||null,nestedId=text(body.nested_recipe_version_id,200)||null;
-    if(Number(Boolean(formulationId))+Number(Boolean(rawId))+Number(Boolean(nestedId))!==1)return failure("Choose exactly one commercial formulation, raw pigment, or nested recipe.");
+    const productId=text(body.material_id,200)||null,product=productId?await resolveProductRecord(database,productId):null;
+    const formulationId=product?.id||text(body.formulation_id,200)||null,rawId=text(body.raw_pigment_material_id,200)||null,nestedId=text(body.nested_recipe_version_id,200)||null;
+    if(productId&&!product)return failure("Premade paint or ink not found.",404);
+    if(Number(Boolean(formulationId))+Number(Boolean(rawId))+Number(Boolean(nestedId))!==1)return failure("Choose exactly one premade paint or ink, raw pigment, or another mixed color.");
     if(await recipeWouldCycle(database,versionId,nestedId))return failure("Recipe versions cannot contain circular recipe chains.",409);
-    if(formulationId){const material=await database.prepare("SELECT m.material_kind FROM archive_material_formulations f JOIN archive_material_definitions m ON m.id=f.material_id WHERE f.id=?").bind(formulationId).first();if(!material)return failure("Formulation not found.",404);if(!RECIPE_KINDS.has(material.material_kind))return failure("Tools, equipment, supports, needles, disposables, and aftercare cannot be recipe ingredients.",409)}
+    if(formulationId){const material=await database.prepare("SELECT m.material_kind FROM archive_material_formulations f JOIN archive_material_definitions m ON m.id=f.material_id WHERE f.id=?").bind(formulationId).first();if(!material)return failure("Premade paint or ink not found.",404);if(!RECIPE_KINDS.has(material.material_kind))return failure("Tools, equipment, supports, needles, disposables, and aftercare cannot be recipe ingredients.",409)}
     if(rawId){const pigment=await database.prepare("SELECT material_kind FROM archive_material_definitions WHERE id=?").bind(rawId).first();if(pigment?.material_kind!=="raw-pigment")return failure("Only raw pigments may use the raw pigment ingredient field.",409)}
     const values={recipe_version_id:versionId,formulation_id:formulationId,raw_pigment_material_id:rawId,nested_recipe_version_id:nestedId,quantity_value:nullableNumber(body.quantity_value),quantity_unit:["parts","drops","grams","milliliters","percent","freeform"].includes(body.quantity_unit)?body.quantity_unit:"parts",approximate:bool(body.approximate),quantity_note:text(body.quantity_note,1000),sort_order:Math.floor(number(body.sort_order,0))};
     try{return json({record:await writeRecord(database,"archive_color_recipe_components",text(body.id,200)||id("recipe-component"),values,true)},{status:201})}catch(error){return failure(error.message,409)}
@@ -971,22 +1158,25 @@ async function adminProfiles(request,database,recordId="") {
 
 async function adminDeclaredPigments(request,database,recordId="") {
   if(request.method==="GET"){
-    const rows=(await database.prepare(`SELECT d.*,m.name pigment_name,m.slug pigment_slug
+    const rows=(await database.prepare(`SELECT d.*,f.material_id,m.name pigment_name,m.slug pigment_slug
       FROM archive_material_declared_pigments d
+      JOIN archive_material_formulations f ON f.id=d.formulation_id
       LEFT JOIN archive_material_definitions m ON m.id=d.pigment_material_id
-      ${recordId?"WHERE d.id=? OR d.formulation_id=?":""}
-      ORDER BY d.formulation_id,d.sort_order,d.created_at`).bind(...(recordId?[recordId,recordId]:[])).all()).results||[];
+      ${recordId?"WHERE d.id=? OR d.formulation_id=? OR f.material_id=?":""}
+      ORDER BY f.material_id,d.sort_order,d.created_at`).bind(...(recordId?[recordId,recordId,recordId]:[])).all()).results||[];
     return json({records:rows,count:rows.length});
   }
   if(request.method==="DELETE"&&recordId){
-    const row=await database.prepare(`SELECT f.publication_state FROM archive_material_declared_pigments d JOIN archive_material_formulations f ON f.id=d.formulation_id WHERE d.id=?`).bind(recordId).first();if(!row)return failure("Pigment declaration not found.",404);if(row.publication_state==="published")return failure("Published formulations and their pigment declarations are immutable.",409);
+    const row=await database.prepare(`SELECT f.publication_state FROM archive_material_declared_pigments d JOIN archive_material_formulations f ON f.id=d.formulation_id WHERE d.id=?`).bind(recordId).first();if(!row)return failure("Pigment declaration not found.",404);if(row.publication_state==="published")return failure("Published products and their pigment declarations are immutable.",409);
     await database.prepare("DELETE FROM archive_material_declared_pigments WHERE id=?").bind(recordId).run();return json({ok:true,deleted:true});
   }
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
   if((request.method==="POST"&&!recordId)||(request.method==="PATCH"&&recordId)){
     const before=recordId?await database.prepare("SELECT * FROM archive_material_declared_pigments WHERE id=?").bind(recordId).first():null;
     if(recordId&&!before)return failure("Pigment declaration not found.",404);
-    const formulationId=text(body.formulation_id??before?.formulation_id,200),formulation=await database.prepare("SELECT publication_state FROM archive_material_formulations WHERE id=?").bind(formulationId).first();if(!formulation)return failure("Formulation not found.",404);if(formulation.publication_state==="published")return failure("Published formulations and their pigment declarations are immutable.",409);
+    const materialId=text(body.material_id,200);
+    const product=materialId?await resolveProductRecord(database,materialId):null;
+    const formulationId=product?.id||text(body.formulation_id??before?.formulation_id,200),formulation=await database.prepare("SELECT publication_state FROM archive_material_formulations WHERE id=?").bind(formulationId).first();if(!formulation)return failure("Premade paint or ink not found.",404);if(request.method==="PATCH"&&formulation.publication_state==="published")return failure("Published pigment evidence cannot be rewritten. Add a new observed declaration instead.",409);
     const pigmentId=text(body.pigment_material_id??before?.pigment_material_id,200)||null;
     if(pigmentId){const pigment=await database.prepare("SELECT material_kind FROM archive_material_definitions WHERE id=?").bind(pigmentId).first();if(pigment?.material_kind!=="raw-pigment")return failure("The normalized pigment link must point to a raw pigment definition.",409)}
     const sourceType=["bottle-label","manufacturer-site","safety-data-sheet","technical-sheet","other"].includes(body.source_type)?body.source_type:(before?.source_type||"bottle-label");
@@ -1008,7 +1198,7 @@ async function adminDeclaredPigments(request,database,recordId="") {
         values.observed_at,recordId||"",
       ).first();
     if(duplicate)return json({
-      error:"This formulation already has the same pigment declaration. Edit the existing declaration instead of adding a duplicate.",
+      error:"This product already has the same pigment declaration. Edit the existing declaration instead of adding a duplicate.",
       duplicate_candidate:{id:duplicate.id},
     },{status:409});
     const declarationId=recordId||text(body.id,200)||id("declared-pigment");
@@ -1061,14 +1251,30 @@ async function adminPrivateAssets(request,database,kind,recordId="") {
     fields:["material_id","serial_number","studio_nickname","acquired_at","retired_at","private_notes"],
   };
   if(request.method==="GET"){
-    const rows=(await database.prepare(`SELECT * FROM ${config.table} ${recordId?`WHERE id=? OR ${config.parent}=?`:""} ORDER BY created_at DESC`).bind(...(recordId?[recordId,recordId]:[])).all()).results||[];
+    let rows=kind==="batches"
+      ?(await database.prepare(`SELECT batch.*,product.material_id FROM archive_material_batches batch
+          JOIN archive_material_formulations product ON product.id=batch.formulation_id
+          ${recordId?"WHERE batch.id=? OR batch.formulation_id=? OR product.material_id=?":""}
+          ORDER BY batch.created_at DESC`).bind(...(recordId?[recordId,recordId,recordId]:[])).all()).results||[]
+      :(await database.prepare(`SELECT * FROM ${config.table} ${recordId?`WHERE id=? OR ${config.parent}=?`:""} ORDER BY created_at DESC`).bind(...(recordId?[recordId,recordId]:[])).all()).results||[];
+    if(kind==="batches")rows=rows.map(({formulation_id,...row})=>row);
     return json({records:rows,count:rows.length});
   }
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
   if(request.method==="POST"&&!recordId){
+    if(kind==="batches"&&body.material_id){
+      const product=await resolveProductRecord(database,text(body.material_id,200));
+      if(!product)return failure("Premade paint or ink not found.",404);
+      body.formulation_id=product.id;
+    }
     const values={};for(const field of config.fields)values[field]=field.endsWith("_date")||field.endsWith("_at")?(text(body[field],80)||null):text(body[field],field==="private_notes"?8000:240);
-    if(!values[config.parent])return failure(`${config.parent} is required.`);
-    return json({record:await writeRecord(database,config.table,text(body.id,200)||id(kind==="batches"?"material-batch":"equipment-asset"),values,true)},{status:201});
+    if(!values[config.parent])return failure(kind==="batches"?"Choose a premade paint or ink.":"Choose an equipment model.");
+    const record=await writeRecord(database,config.table,text(body.id,200)||id(kind==="batches"?"material-batch":"equipment-asset"),values,true);
+    if(kind==="batches"){
+      const {formulation_id,...publicRecord}=record;
+      return json({record:{...publicRecord,material_id:text(body.material_id,200)}},{status:201});
+    }
+    return json({record},{status:201});
   }
   if(request.method==="DELETE"&&recordId){await database.prepare(`DELETE FROM ${config.table} WHERE id=?`).bind(recordId).run();return json({ok:true,deleted:true})}
   return failure("Method not allowed.",405);
@@ -1179,8 +1385,10 @@ async function adminDossierPalette(request,database,stateId="",part="",recordId=
   }
   if(part==="colors"){
     if(request.method==="POST"&&!recordId){
-      const formulationId=text(body.formulation_id,200)||null,recipeVersionId=text(body.recipe_version_id,200)||null;if(Number(Boolean(formulationId))+Number(Boolean(recipeVersionId))!==1)return failure("Choose one direct product formulation or one recipe version.");
-      if(formulationId){const colorant=await database.prepare(`SELECT m.material_kind FROM archive_material_formulations f JOIN archive_material_definitions m ON m.id=f.material_id WHERE f.id=?`).bind(formulationId).first();if(!colorant)return failure("Product formulation not found.",404);if(!["art-paint","tattoo-ink"].includes(colorant.material_kind))return failure("Only color-bearing paint or tattoo-ink products may be attached as direct color usages.",409)}
+      const materialId=text(body.material_id,200)||null,product=materialId?await resolveProductRecord(database,materialId):null;
+      const formulationId=product?.id||text(body.formulation_id,200)||null,recipeVersionId=text(body.recipe_version_id,200)||null;if(Number(Boolean(formulationId))+Number(Boolean(recipeVersionId))!==1)return failure("Choose one premade paint or ink, or one mixed color.");
+      if(materialId&&!product)return failure("Premade paint or ink not found.",404);
+      if(formulationId){const colorant=await database.prepare(`SELECT m.material_kind FROM archive_material_formulations f JOIN archive_material_definitions m ON m.id=f.material_id WHERE f.id=?`).bind(formulationId).first();if(!colorant)return failure("Premade paint or ink not found.",404);if(!["art-paint","tattoo-ink"].includes(colorant.material_kind))return failure("Only paint or tattoo-ink products may be attached as direct color usages.",409)}
       if(recipeVersionId&&!await database.prepare("SELECT id FROM archive_color_recipe_versions WHERE id=?").bind(recipeVersionId).first())return failure("Recipe version not found.",404);
       const sessionRefId=text(body.tattoo_session_ref_id,200)||null;
       if(sessionRefId&&!await database.prepare("SELECT id FROM archive_tattoo_session_refs WHERE id=? AND state_id=?").bind(sessionRefId,stateId).first())return failure("The Tattoo session must belong to this Archive creative state.",409);
@@ -1262,6 +1470,10 @@ export async function handleArchiveColorMaterialsPublic(request, env, path) {
 
 export async function handleArchiveColorMaterialsAdmin(request, env, path) {
   const database=db(env);
+  const product=path.match(/^\/api\/admin\/archive-color-materials\/products(?:\/([^/]+))?$/);
+  if(product)return adminProducts(request,database,product[1]?decodeURIComponent(product[1]):"");
+  const mixedColor=path.match(/^\/api\/admin\/archive-color-materials\/mixed-colors(?:\/([^/]+))?$/);
+  if(mixedColor)return adminMixedColors(request,database,mixedColor[1]?decodeURIComponent(mixedColor[1]):"");
   const material=path.match(/^\/api\/admin\/archive-color-materials\/materials(?:\/([^/]+))?$/);
   if(material)return adminMaterials(request,database,material[1]?decodeURIComponent(material[1]):"");
   const formulation=path.match(/^\/api\/admin\/archive-color-materials\/formulations(?:\/([^/]+))?$/);

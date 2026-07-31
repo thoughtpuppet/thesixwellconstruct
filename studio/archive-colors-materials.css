@@ -21,6 +21,9 @@
 .acm-checkbox { display:flex!important; grid-auto-flow:column; justify-content:start; align-items:center; }
 .acm-checkbox input { width:24px; min-height:24px; }
 .acm-profile-help { margin:0; border:5px solid var(--ring-faint); padding:10px; color:var(--dim); font-size:12px; line-height:1.45; }
+.acm-fieldset { min-width:0; margin:0; border:5px solid var(--ring-faint); padding:12px; }
+.acm-fieldset legend { padding:0 8px; color:var(--dim); font-size:10px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+.acm-form-nested { margin-top:0; }
 .acm-actions { grid-column:1/-1; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .acm-output { color:var(--dim); font-size:12px; }
 .acm-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
