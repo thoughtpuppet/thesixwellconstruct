@@ -48,6 +48,45 @@ test("CIEDE2000 uses the published reference calculation",()=>{
   assert.ok(Math.abs(distance-2.0425)<0.0001);
 });
 
+test("slug-capable color and material records generate stable slugs when blank or omitted",async()=>{
+  const sql=database(),runtime=env(sql);
+  const material=await admin(runtime,"/api/admin/archive-color-materials/materials",{
+    name:"Auto Slug Tattoo Ink",slug:"",material_kind:"tattoo-ink",medium_scope:"tattoo",
+  });
+  assert.equal(material.status,201,material.body.error);
+  assert.equal(material.body.record.slug,"auto-slug-tattoo-ink");
+
+  const recipe=await admin(runtime,"/api/admin/archive-color-materials/recipes",{
+    name:"Soft Greywash",medium_scope:"tattoo",
+  });
+  assert.equal(recipe.status,201,recipe.body.error);
+  assert.equal(recipe.body.record.slug,"soft-greywash");
+
+  const family=await admin(runtime,"/api/admin/archive-color-materials/families",{
+    name:"Blue Grey",slug:"",
+  });
+  assert.equal(family.status,201,family.body.error);
+  assert.equal(family.body.record.slug,"blue-grey");
+
+  const renamedMaterial=await admin(runtime,`/api/admin/archive-color-materials/materials/${material.body.record.id}`,{
+    name:"Renamed Tattoo Ink",slug:"",
+  },"PATCH");
+  assert.equal(renamedMaterial.status,200,renamedMaterial.body.error);
+  assert.equal(renamedMaterial.body.record.slug,"auto-slug-tattoo-ink");
+
+  const renamedRecipe=await admin(runtime,`/api/admin/archive-color-materials/recipes/${recipe.body.record.id}`,{
+    name:"Renamed Greywash",slug:"",
+  },"PATCH");
+  assert.equal(renamedRecipe.status,200,renamedRecipe.body.error);
+  assert.equal(renamedRecipe.body.record.slug,"soft-greywash");
+
+  const renamedFamily=await admin(runtime,`/api/admin/archive-color-materials/families/${family.body.record.id}`,{
+    name:"Renamed Blue Grey",slug:"",
+  },"PATCH");
+  assert.equal(renamedFamily.status,200,renamedFamily.body.error);
+  assert.equal(renamedFamily.body.record.slug,"blue-grey");
+});
+
 test("Realized as only connects Tattoo Designs or Flash to executed Portfolio tattoos",()=>{
   const sql=database();
   sql.exec(`INSERT INTO content_entities(

@@ -33,6 +33,10 @@ function cleanSlug(value) {
   return text(value, 160).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+function recordSlug(body = {}, before = {}) {
+  return cleanSlug(body.slug || before.slug || body.name || before.name);
+}
+
 function safePublicUrl(value) {
   const candidate=text(value,2000);
   if(!candidate)return "";
@@ -583,7 +587,7 @@ function normalizeMaterial(body, before = {}) {
   if (!MATERIAL_KINDS.has(kind)) throw new Error("Choose a supported material category.");
   if (!STATES.has(publication)) throw new Error("Choose a valid publication state.");
   return {
-    slug: cleanSlug(body.slug ?? before.slug ?? body.name),
+    slug: recordSlug(body, before),
     name: text(body.name ?? before.name, 240),
     material_kind: kind,
     manufacturer: text(body.manufacturer ?? before.manufacturer, 240),
@@ -606,7 +610,7 @@ function normalizeRecipe(body, before = {}) {
   const publication = text(body.publication_state ?? before.publication_state ?? "draft", 20);
   if (!STATES.has(publication)) throw new Error("Choose a valid publication state.");
   return {
-    slug: cleanSlug(body.slug ?? before.slug ?? body.name),
+    slug: recordSlug(body, before),
     name: text(body.name ?? before.name, 240),
     description: text(body.description ?? before.description, 4000),
     medium_scope: ["art","tattoo","shared"].includes(body.medium_scope ?? before.medium_scope) ? (body.medium_scope ?? before.medium_scope) : "shared",
@@ -991,13 +995,13 @@ async function adminFamilies(request,database,recordId="") {
   if(request.method==="GET"){const rows=(await database.prepare(`SELECT * FROM archive_color_families ${recordId?"WHERE id=? OR slug=?":""} ORDER BY sort_order,name`).bind(...(recordId?[recordId,recordId]:[])).all()).results||[];return json({records:rows,count:rows.length})}
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
   if(request.method==="POST"&&!recordId){
-    const values={slug:cleanSlug(body.slug||body.name),name:text(body.name,240),description:text(body.description,2000),swatch_hex:text(body.swatch_hex,20),publication_state:STATES.has(body.publication_state)?body.publication_state:"draft",public_visible:bool(body.public_visible),sort_order:Math.floor(number(body.sort_order,0))};
+    const values={slug:recordSlug(body),name:text(body.name,240),description:text(body.description,2000),swatch_hex:text(body.swatch_hex,20),publication_state:STATES.has(body.publication_state)?body.publication_state:"draft",public_visible:bool(body.public_visible),sort_order:Math.floor(number(body.sort_order,0))};
     if(!values.slug||!values.name)return failure("Family name and slug are required.");
     try{return json({record:await writeRecord(database,"archive_color_families",text(body.id,200)||id("color-family"),values,true)},{status:201})}catch(error){return failure(error.message,409)}
   }
   if(request.method==="PATCH"&&recordId){
     const before=await database.prepare("SELECT * FROM archive_color_families WHERE id=?").bind(recordId).first();if(!before)return failure("Color family not found.",404);
-    const values={slug:cleanSlug(body.slug??before.slug),name:text(body.name??before.name,240),description:text(body.description??before.description,2000),swatch_hex:text(body.swatch_hex??before.swatch_hex,20),publication_state:STATES.has(body.publication_state)?body.publication_state:before.publication_state,public_visible:bool(body.public_visible??before.public_visible),sort_order:Math.floor(number(body.sort_order,before.sort_order))};
+    const values={slug:recordSlug(body,before),name:text(body.name??before.name,240),description:text(body.description??before.description,2000),swatch_hex:text(body.swatch_hex??before.swatch_hex,20),publication_state:STATES.has(body.publication_state)?body.publication_state:before.publication_state,public_visible:bool(body.public_visible??before.public_visible),sort_order:Math.floor(number(body.sort_order,before.sort_order))};
     try{return json({record:await writeRecord(database,"archive_color_families",recordId,values)})}catch(error){return failure(error.message,409)}
   }
   return failure("Method not allowed.",405);
