@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="/studio/construct-manager.css?v=multi-styles">
 <link rel="stylesheet" href="/studio/archive-catalogue.css?v=1">
 <link rel="stylesheet" href="/studio/archive-colors-materials.css?v=4">
+<link rel="stylesheet" href="/studio/archive-failed-experiments.css?v=1">
 <link rel="stylesheet" href="/studio/connections-manager.css?v=1">
 <link rel="stylesheet" href="/studio/admin-collapse.css?v=1">
 <link rel="stylesheet" href="/studio/analytics.css?v=2">
@@ -1355,7 +1356,7 @@
       }
       html += `<button class="subnav-btn" type="button" data-event-setup style="margin-left:auto;">Manage / New Events</button>`;
     } else if (activeTab === "archive") {
-      html = [["dossiers","Dossiers"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
+      html = [["dossiers","Dossiers"],["failed-experiments","Failed Experiments"],["colors-materials","Colors & Materials"],["blackboards","Blackboards"],["origin-threads","Origin Threads"],["records","Legacy Records"],["collections","Collections"],["timeline","Timelines"],["people","People"],["places","Places"],["media-artifacts","Media"],["drafts","Drafts"],["settings","Settings"]].map(([view, label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "site") {
       html = [["pathways","Homepage Pathways"],["nodes","Construct Nodes"],["navigation","Navigation"],["search","Search"],["visibility","Public Visibility"],["settings","Site Settings"]].map(([view,label]) => `<button class="subnav-btn ${subView === view ? "is-active" : ""}" type="button" data-subview="${view}">${label}</button>`).join("");
     } else if (activeTab === "shared") {
@@ -6408,6 +6409,7 @@ ${meetingLines}
 </script>
 <script src="/studio/connections-manager.js?v=1"></script>
 <script src="/studio/archive-colors-materials.js?v=4"></script>
+<script src="/studio/archive-failed-experiments.js?v=1"></script>
 <script src="/studio/construct-manager.js?v=resumable-video-1"></script>
 <script src="/studio/people-manager.js?v=11"></script>
 </body>

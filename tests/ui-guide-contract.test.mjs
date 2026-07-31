@@ -75,7 +75,9 @@ test("the Guide exposes both systems and source libraries without a preview pane
   assert.match(systemJs, /<th>Adoption \/ notes<\/th>/);
   assert.match(systemJs, /adoptionState:\s*record\.adoption \|\| "Not yet migrated"/);
   assert.equal((systemJs.match(/family: "Landing Family"/g) || []).length, 5);
+  assert.match(systemJs, /if \(!record\.heroVariant\)/);
   assert.match(systemJs, /record\.heroVariant = record\.family === "Landing Family" \? "Medium landing hero" : "Supporting hero"/);
+  assert.match(systemJs, /record\.heroVariant !== "Immersive room"/);
   assert.match(systemJs, /record\.sources\.push\("css\/hero\.css"\)/);
 
   for (const landing of [
@@ -153,7 +155,17 @@ test("the Guide exposes both systems and source libraries without a preview pane
   }
 
   assert.match(systemJs, /id: "archive-compare"[^\n]*route: "\/archive\/compare\/"[^\n]*js\/archive-compare\.js/);
-  assert.match(systemJs, /id: "construct-explore"[^\n]*route: "\/explore\/"[^\n]*css\/explore\.css[^\n]*functions\/api\/construct\/_lib\.js[^\n]*separate from the nine medium nodes/);
+  const exploreTemplate = systemJs.match(/\{ id: "construct-explore"[^\n]+\}/)?.[0] || "";
+  assert.ok(exploreTemplate, "missing Construct Explore template record");
+  assert.match(exploreTemplate, /kind: "interactive"/);
+  assert.match(exploreTemplate, /route: "\/explore\/"/);
+  assert.match(exploreTemplate, /heroVariant: "Immersive room"/);
+  assert.match(exploreTemplate, /css\/explore\.css/);
+  assert.match(exploreTemplate, /js\/explore-room\.js/);
+  assert.match(exploreTemplate, /js\/construct-ambient-field\.js/);
+  assert.match(exploreTemplate, /functions\/api\/construct\/_lib\.js/);
+  assert.match(exploreTemplate, /separate from the nine medium nodes/);
+  assert.doesNotMatch(exploreTemplate, /css\/hero\.css/);
   assert.match(systemJs, /id: "component-archive-catalogue"[^\n]*5px state rails[^\n]*top-level comparison workspace/);
   assert.match(systemJs, /id: "component-archive-catalogue"[^\n]*Compare records hero action[^\n]*Individual cards carry no comparison controls/);
   assert.match(systemJs, /id: "studio-dossier"[^\n]*studio\/archive-catalogue\.css[^\n]*read-only permanent identity/);

@@ -71,9 +71,6 @@
 
   #eyesBg {
     z-index: 0;
-    opacity: 0.10;
-    -webkit-mask-image: radial-gradient(ellipse 58% 48% at 50% 42%, black 18%, rgba(0,0,0,0.62) 46%, transparent 86%);
-    mask-image: radial-gradient(ellipse 58% 48% at 50% 42%, black 18%, rgba(0,0,0,0.62) 46%, transparent 86%);
   }
 
   #particleBg {
@@ -1129,6 +1126,7 @@
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>
 <script src="/js/construct-nav.js"></script>
+<script src="/js/construct-ambient-field.js"></script>
 <script>
   /* Term-color toggle: flip highlighted keywords between their medium
      colors (default) and the flat amber accent. Choice persists. */
@@ -1219,194 +1217,21 @@
     setBreakdown('about');
   })();
 
-  /* Stage background: faint eyes wall plus amber particle field. */
-  (function() {
-    const stage = document.querySelector('.stage');
-    const dustCanvas = document.getElementById('particleBg');
-    const pctx = dustCanvas.getContext('2d');
-    const eyesCanvas = document.getElementById('eyesBg');
-    const ectx = eyesCanvas.getContext('2d');
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    let W = 0, H = 0;
-
-    /* ---------- eyes wall (404-style drift, tinted to the slab texture) ---------- */
-    const EYE_TINT = '#6D3D15';
-    let TW = 0, TH = 0, EYE = 0, OX = 0, OY = 0;
-    function tileSize() {
-      if (W < 480)       { TW = 95;  TH = 85;  EYE = 65; }
-      else if (W < 768)  { TW = 120; TH = 108; EYE = 85; }
-      else if (W < 1200) { TW = 148; TH = 132; EYE = 100; }
-      else               { TW = 175; TH = 155; EYE = 115; }
-      OX = (TW - EYE) / 2;
-      OY = (TH - EYE) / 2;
-    }
-
-    const GLOBAL_DOWN = 0.10;
-    const BASE_SPEED = 0.18;
-    const POOL = 20;
-    const rowOffset = new Array(POOL);
-    const rowSpeed = new Array(POOL);
-    for (let r = 0; r < POOL; r++) {
-      const dir = r % 2 === 0 ? 1 : -1;
-      rowOffset[r] = Math.random() * 100000;
-      rowSpeed[r] = dir * BASE_SPEED * (0.70 + Math.random() * 0.60);
-    }
-    let slotY = 0;
-    let baseRow = 0;
-
-    const openImg = new Image();
-    const closedImg = new Image();
-    let eyesReady = false;
-    let loadedImgs = 0;
-    function onImg() {
-      if (++loadedImgs < 2) return;
-      eyesReady = true;
-      drawEyes();
-    }
-    openImg.onload = onImg;
-    closedImg.onload = onImg;
-    openImg.src = '../assets/eyes/openeye.png';
-    closedImg.src = '../assets/eyes/closedeye.png';
-
-    function drawEyes() {
-      ectx.clearRect(0, 0, W, H);
-      if (!eyesReady) return;
-      const slots = Math.ceil(H / TH) + 2;
-      const cols = Math.ceil(W / TW) + 3;
-      for (let i = 0; i < slots; i++) {
-        const logicalRow = baseRow + i;
-        const rowId = ((logicalRow % POOL) + POOL) % POOL;
-        const isOdd = ((logicalRow % 2) + 2) % 2 === 1;
-        const stagger = isOdd ? TW / 2 : 0;
-        const ox = ((rowOffset[rowId] + stagger) % TW + TW) % TW - TW;
-        const y = i * TH + slotY - TH;
-        for (let c = 0; c < cols; c++) {
-          const parity = ((logicalRow + c) % 2 + 2) % 2;
-          ectx.drawImage(parity === 0 ? openImg : closedImg, c * TW + ox + OX, y + OY, EYE, EYE);
-        }
-      }
-      ectx.globalCompositeOperation = 'source-in';
-      ectx.fillStyle = EYE_TINT;
-      ectx.fillRect(0, 0, W, H);
-      ectx.globalCompositeOperation = 'source-over';
-    }
-
-    function stepEyes(f) {
-      slotY += GLOBAL_DOWN * f;
-      while (slotY >= TH) { slotY -= TH; baseRow--; }
-      for (let r = 0; r < POOL; r++) {
-        rowOffset[r] = (rowOffset[r] + rowSpeed[r] * f + 1000000) % 1000000;
-      }
-    }
-
-    /* ---------- particle field ---------- */
-    const PARTICLE_COLOR = '#FCB867';
-    const MAX_P = 120;
-    const SPAWN_INT = 180;
-    const PARTICLE_SPEED = 1.4;
-    const particles = [];
-
-    function particleCenter() {
-      return { x: W / 2, y: H * 0.45 };
-    }
-
-    function spawnP(pre) {
-      const ro = 60;
-      const close = Math.random() < 0.4;
-      const minD = close ? 8 : 80;
-      const maxD = close ? 90 : Math.max(240, Math.min(W, H) * 0.55);
-      const p = {
-        angle: Math.random() * Math.PI * 2,
-        dist: ro,
-        targetDist: ro + minD + Math.random() * (maxD - minD),
-        orbitSpeed: (Math.random() * 0.000035 + 0.00001) * (Math.random() < 0.5 ? 1 : -1),
-        driftSpeed: 0.003 + Math.random() * 0.007,
-        size: Math.max(0.6, 2 + Math.random() * 3.8),
-        maxAlpha: 0.12 + Math.random() * 0.3,
-        floatAmpX: 2 + Math.random() * 4,
-        floatAmpY: 2 + Math.random() * 4,
-        floatPX: 12000 + Math.random() * 10000,
-        floatPY: 14000 + Math.random() * 10000,
-        floatOX: Math.random() * Math.PI * 2,
-        floatOY: Math.random() * Math.PI * 2,
-        fadeInDur: 800 + Math.random() * 600,
-        fadeOutDur: 1400 + Math.random() * 1000,
-        age: 0, totalLife: null, reached: false
-      };
-      if (pre) {
-        const fr = Math.random();
-        p.dist = ro + fr * (p.targetDist - ro);
-        p.age = fr * (p.fadeInDur + 3000);
-        if (p.dist >= p.targetDist) { p.reached = true; p.totalLife = p.age + 4000 + Math.random() * 8000; }
-      }
-      particles.push(p);
-    }
-
-    let spawnTimer = 0;
-    let seeded = false;
-    function updateParticles(dt, t) {
-      if (!seeded && W > 0) {
-        for (let i = 0; i < MAX_P; i++) spawnP(true);
-        seeded = true;
-      }
-      spawnTimer += dt;
-      if (spawnTimer >= SPAWN_INT && particles.length < MAX_P) { spawnP(false); spawnTimer = 0; }
-      const c = particleCenter();
-      pctx.clearRect(0, 0, W, H);
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.age += dt;
-        p.angle += p.orbitSpeed * dt;
-        if (!p.reached) {
-          p.dist += p.driftSpeed * dt;
-          if (p.dist >= p.targetDist) { p.dist = p.targetDist; p.reached = true; p.totalLife = p.age + 4000 + Math.random() * 8000; }
-        }
-        if (p.reached && p.age >= p.totalLife) { particles.splice(i, 1); continue; }
-        let alpha;
-        if (!p.reached) { alpha = Math.min(p.age / p.fadeInDur, 1) * p.maxAlpha; }
-        else { const tl = p.totalLife - p.age; alpha = tl < p.fadeOutDur ? (tl / p.fadeOutDur) * p.maxAlpha : p.maxAlpha; }
-        const fx = p.floatAmpX * Math.sin((t / p.floatPX) * Math.PI * 2 + p.floatOX);
-        const fy = p.floatAmpY * Math.sin((t / p.floatPY) * Math.PI * 2 + p.floatOY);
-        pctx.globalAlpha = alpha;
-        pctx.beginPath();
-        pctx.arc(c.x + Math.cos(p.angle) * p.dist + fx, c.y + Math.sin(p.angle) * p.dist + fy, p.size, 0, Math.PI * 2);
-        pctx.fillStyle = PARTICLE_COLOR;
-        pctx.fill();
-      }
-      pctx.globalAlpha = 1;
-    }
-
-    /* ---------- shared loop ---------- */
-    function resize() {
-      W = stage.clientWidth;
-      H = stage.clientHeight;
-      eyesCanvas.width = W; eyesCanvas.height = H;
-      dustCanvas.width = W; dustCanvas.height = H;
-      tileSize();
-      if (reduceMotion) { drawEyes(); updateParticles(16, 0); }
-    }
-
-    let lastTime = 0;
-    function loop(ts) {
-      const dt = Math.min(ts - lastTime, 50);
-      lastTime = ts;
-      stepEyes(dt / 16.667);
-      drawEyes();
-      updateParticles(dt * PARTICLE_SPEED, ts);
-      requestAnimationFrame(loop);
-    }
-
-    resize();
-    window.addEventListener('resize', resize);
-    /* The stage grows when connection cards populate; re-fit the canvas instead of stretching it. */
-    new ResizeObserver(() => {
-      if (stage.clientWidth !== W || stage.clientHeight !== H) resize();
-    }).observe(stage);
-    if (!reduceMotion) {
-      requestAnimationFrame(ts => { lastTime = ts; requestAnimationFrame(loop); });
-    }
-  })();
+  /* Stage background: shared 404 eye wall plus radial amber particle field. */
+  window.ConstructAmbientField.mount({
+    root: document.querySelector('.stage'),
+    eyesCanvas: document.getElementById('eyesBg'),
+    particleCanvas: document.getElementById('particleBg'),
+    eyeOpacity: 0.10,
+    eyeTint: '#6D3D15',
+    eyeMask: 'radial-gradient(ellipse 58% 48% at 50% 42%, black 18%, rgba(0,0,0,0.62) 46%, transparent 86%)',
+    particleCount: 120,
+    particleColor: '#FCB867',
+    particleOpacity: [0.12, 0.42],
+    particleSize: [2, 5.8],
+    centerX: 0.5,
+    centerY: 0.45
+  });
 
   (function() {
     const center = { x: 500, y: 322 };

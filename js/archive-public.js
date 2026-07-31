@@ -351,7 +351,7 @@
           <input id="archive-query" name="q" type="search" autocomplete="off" placeholder="Try a piece, material, person, symbol, or year">
           <button class="archive-search-button" type="submit">Search</button>
         </form>
-        ${collectionsView ? "" : '<nav class="archive-actions archive-search-actions" aria-label="Archive resources"><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></nav>'}
+        ${collectionsView ? "" : '<nav class="archive-actions archive-search-actions" aria-label="Archive resources"><a class="archive-button" href="/archive/failed-experiments/">Failed Experiments</a><a class="archive-button" href="/archive/colors-materials/">Colors &amp; Materials</a><a class="archive-button" href="/archive/guide/">Read the Archive Guide</a><a class="archive-button" href="/archive/blackboards/">View blackboards</a><a class="archive-button" href="/archive/compare/">Compare records</a></nav>'}
       </section>
       <section class="archive-explorer" aria-label="Archive explorer">
         <aside class="archive-filter-panel" aria-labelledby="archive-filter-title">

@@ -13,57 +13,46 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&display=block">
 <link rel="stylesheet" href="/css/mobile.css">
 <link rel="stylesheet" href="/css/site-typography.css">
-<link rel="stylesheet" href="/css/hero.css">
 <link rel="stylesheet" href="/css/explore.css">
 </head>
-<body>
-<main class="explore-page entrance-fade">
-  <header class="explore-hero site-hero site-hero--supporting">
-    <p class="construct-breadcrumb" aria-label="Breadcrumb"><a href="/home/">Construct</a><span aria-hidden="true"> / </span><span aria-current="page">Explore</span></p>
-    <h1 class="hero-title">Explore.</h1>
-    <p class="hero-descriptor">Move across works, records, process, voices, notes, and pathways without choosing a medium first.</p>
-  </header>
+<body data-live-text-editor="off" data-construct-wayfinding="off">
+<main class="explore-room entrance-fade" data-explore-room data-explore-renderer="fallback" data-explore-state="idle">
+  <h1 class="explore-sr-only">Explore</h1>
 
-  <section class="explore-panel" aria-labelledby="explore-actions-title">
-    <div class="explore-panel__intro">
-      <p class="explore-eyebrow">Cross-Construct discovery</p>
-      <h2 id="explore-actions-title">Choose how open the door should be.</h2>
-      <p>Each action moves immediately to one public place in the Construct.</p>
-    </div>
+  <div class="explore-atmosphere" aria-hidden="true">
+    <canvas class="explore-atmosphere__layer explore-atmosphere__eyes" data-explore-eyes></canvas>
+    <canvas class="explore-atmosphere__layer explore-atmosphere__particles" data-explore-particles></canvas>
+  </div>
 
-    <div class="explore-actions" data-explore-actions>
-      <button class="explore-action explore-action--primary" type="button" data-explore-scope="all">
-        <span>Take me somewhere</span>
-        <small>Across the whole site</small>
-      </button>
-      <div class="explore-actions__secondary">
-        <button class="explore-action" type="button" data-explore-scope="works">
-          <span>Works &amp; objects</span>
-          <small>Art, tattoos, editions, events, symbols, and records</small>
-        </button>
-        <button class="explore-action" type="button" data-explore-scope="process">
-          <span>Process &amp; evidence</span>
-          <small>Sketches, voices, notes, documents, and source material</small>
-        </button>
-        <button class="explore-action" type="button" data-explore-scope="pages">
-          <span>Pages &amp; pathways</span>
-          <small>Public rooms and content-oriented ways through them</small>
-        </button>
-      </div>
-    </div>
+  <div class="explore-scene" data-explore-scene aria-hidden="true">
+    <canvas class="explore-scene__canvas" data-explore-scene-canvas></canvas>
+  </div>
 
-    <p class="explore-status" data-explore-status aria-live="polite">Nothing is chosen until you open a door.</p>
-  </section>
+  <div class="explore-actions" data-explore-actions role="group" aria-label="Choose how to explore the Construct">
+    <button class="explore-action explore-action--primary" type="button" data-explore-scope="all" data-explore-shape="sphere">
+      <span class="explore-action__label">Take me somewhere</span>
+    </button>
 
-  <footer class="explore-footer">
-    <a href="/home/">return to construct</a>
-    <a href="/archive/">archive</a>
-    <a href="/about/mediums/">mediums</a>
-  </footer>
+    <button class="explore-action explore-action--works" type="button" data-explore-scope="works" data-explore-shape="square">
+      <span class="explore-action__label">Works &amp; objects</span>
+    </button>
+
+    <button class="explore-action explore-action--process" type="button" data-explore-scope="process" data-explore-shape="triangle">
+      <span class="explore-action__label">Process &amp; evidence</span>
+    </button>
+
+    <button class="explore-action explore-action--pages" type="button" data-explore-scope="pages" data-explore-shape="hexagon">
+      <span class="explore-action__label">Pages &amp; pathways</span>
+    </button>
+  </div>
+
+  <p class="explore-status" data-explore-status aria-live="polite" aria-atomic="true"></p>
 </main>
 <script src="/js/transition.js"></script>
 <script src="/js/construct-corner.js"></script>
 <script src="/js/construct-nav.js"></script>
+<script src="/js/construct-ambient-field.js"></script>
+<script type="module" src="/js/explore-room.js"></script>
 <script src="/js/explore.js"></script>
 </body>
 </html>

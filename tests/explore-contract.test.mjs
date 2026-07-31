@@ -168,23 +168,74 @@ test("empty eligible pools return a retryable no-store response", async () => {
   assert.equal(response.headers.get("cache-control"), "no-store");
 });
 
-test("Explore page, client states, navigation, and UI Guide use the public system contract", () => {
+test("Explore is an immersive room with semantic sculptural controls", () => {
   const html = read("explore/index.html");
   const css = read("css/explore.css");
+  const room = read("js/explore-room.js");
   const client = read("js/explore.js");
   const nav = read("js/construct-nav.js");
+  const transition = read("js/transition.js");
+  const wayfinding = read("js/construct-wayfinding.js");
   const guide = read("tools/ui-guide-system.js");
   const worker = read("_worker.js");
 
-  assert.match(html, /Construct<\/a><span aria-hidden="true"> \/ <\/span><span aria-current="page">Explore/);
-  assert.match(html, /<h1 class="hero-title">Explore\.<\/h1>/);
-  assert.match(html, /Move across works, records, process, voices, notes, and pathways without choosing a medium first\./);
-  for (const label of ["Take me somewhere", "Works &amp; objects", "Process &amp; evidence", "Pages &amp; pathways"]) assert.match(html, new RegExp(label));
-  assert.doesNotMatch(html, /data-venture=/);
-  assert.match(css, /background:\s*var\(--color-bg\)/);
-  assert.match(css, /border(?:-top)?:\s*5px/);
-  assert.match(css, /min-height:[^;]*44px/);
+  assert.match(html, /<main\b[^>]*\bdata-explore-room\b/);
+  assert.match(html, /<h1\b[^>]*>\s*Explore\.?\s*<\/h1>/);
+  assert.match(html, /<div\b[^>]*\bexplore-atmosphere\b[^>]*aria-hidden="true"/);
+  assert.match(html, /<canvas\b[^>]*\bdata-explore-eyes\b/);
+  assert.match(html, /<canvas\b[^>]*\bdata-explore-particles\b/);
+  assert.match(html, /<div\b[^>]*\bexplore-scene\b[^>]*aria-hidden="true"/);
+  assert.match(html, /<canvas\b[^>]*\bdata-explore-scene-canvas\b/);
+  assert.match(html, /<script src="\/js\/construct-ambient-field\.js"><\/script>/);
+  assert.match(html, /<script type="module" src="\/js\/explore-room\.js"><\/script>/);
+  for (const [scope, label] of [
+    ["all", "Take me somewhere"],
+    ["works", "Works &amp; objects"],
+    ["process", "Process &amp; evidence"],
+    ["pages", "Pages &amp; pathways"],
+  ]) {
+    assert.match(html, new RegExp(`<button[^>]+data-explore-scope="${scope}"[\\s\\S]*?${label}[\\s\\S]*?<\\/button>`));
+  }
+  assert.match(html, /data-explore-status[^>]*aria-live="polite"/);
+  assert.doesNotMatch(html, /data-venture=|href="\/css\/hero\.css"/);
+  assert.doesNotMatch(html, /\bsite-hero\b|\bhero-title\b|\bhero-descriptor\b|\bconstruct-breadcrumb\b|\bexplore-panel\b|<footer\b/);
+  assert.match(html, /<body data-live-text-editor="off" data-construct-wayfinding="off">/);
+
+  assert.match(css, /(?:html|body)[^{]*\{[^}]*background:\s*var\(--color-bg\)/s);
+  assert.match(css, /\.explore-room\s*\{[^}]*min-height:\s*100(?:s|d|l)?vh/s);
+  assert.match(css, /\.explore-action[^}]*min-(?:width|height):\s*(?:var\(--control-min-height,\s*)?44px/s);
+  assert.match(css, /\.explore-action:focus-visible/);
+  assert.match(css, /\.explore-room\[data-explore-renderer="fallback"\]/);
+  assert.match(css, /\.explore-action::before/);
+  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+
+  assert.match(room, /from\s+["']\/entry-room\/3d\/vendor\/three\.module\.js["']/);
+  assert.match(room, /all:\s*\{[\s\S]*?color:\s*0xd01006[\s\S]*?geometry:\s*\(\)\s*=>\s*prismGeometry\(48\)/i);
+  assert.doesNotMatch(room, /SphereGeometry/);
+  assert.doesNotMatch(room, /MeshPhysicalMaterial/);
+  assert.match(room, /0xD01006/i);
+  assert.match(room, /new THREE\.CylinderGeometry\(1,\s*1,\s*0\.46,\s*segments\)/);
+  for (const [segments, color] of [[4, "F06C00"], [3, "FFBB00"], [6, "006EFF"]]) {
+    assert.match(room, new RegExp(`prismGeometry\\(${segments}(?:,|\\))`));
+    assert.match(room, new RegExp(`0x${color}`, "i"));
+  }
+  assert.match(room, /flatShading:\s*true/);
+  assert.match(room, /roughness:\s*1(?:\.0)?/);
+  assert.match(room, /metalness:\s*0(?:\.0)?/);
+  assert.equal((room.match(/floatX:\s*0\./g) || []).length, 4);
+  assert.equal((room.match(/floatY:\s*0\./g) || []).length, 4);
+  assert.equal((room.match(/floatZ:\s*0\./g) || []).length, 4);
+  assert.equal((room.match(/floatTilt:\s*0\./g) || []).length, 4);
+  assert.match(room, /Math\.cos\(elapsed \* 0\.34 \+ item\.floatPhase\)/);
+  assert.match(room, /Math\.sin\(elapsed \* 0\.47 \+ item\.floatPhase \* 1\.13\)/);
+  assert.match(room, /item\.basePosition\.y \+ driftY \+ lift/);
+  assert.match(room, /const driftY = reduceMotion\s*\? 0/);
+  assert.match(room, /reduceMotionQuery\.addEventListener\("change", onMotionChange\)/);
+  assert.match(room, /reduceMotionQuery\.removeEventListener\("change", onMotionChange\)/);
+  assert.match(room, /dataset\.exploreRenderer\s*=\s*["'](?:webgl|fallback)["']/);
   assert.match(client, /Finding somewhere…/);
+  assert.match(client, /data-explore-state|dataset\.exploreState/);
+  assert.match(client, /data-explore-active-scope|dataset\.exploreActiveScope/);
   assert.match(client, /interactive_start/);
   assert.match(client, /interactive_complete/);
   assert.match(client, /sessionStorage/);
@@ -193,6 +244,69 @@ test("Explore page, client states, navigation, and UI Guide use the public syste
   assert.match(nav, /id = 'cnav-mobile-explore'/);
   assert.match(nav, /aria-current', 'page'/);
   assert.equal((nav.match(/\{ key: '[^']+',\s+label:/g) || []).length, 9, "Explore must not become a tenth medium node");
-  assert.match(guide, /id: "construct-explore"/);
+  assert.match(transition, /liveTextEditorDisabled[\s\S]*data-live-text-editor[\s\S]*===\s*'off'/);
+  assert.match(wayfinding, /data-construct-wayfinding['"]\)\s*===\s*['"]off['"]/);
+  const exploreTemplate = guide.match(/\{ id: "construct-explore"[^\n]+\}/)?.[0] || "";
+  assert.match(exploreTemplate, /kind: "interactive"/);
+  assert.match(exploreTemplate, /heroVariant: "Immersive room"/);
+  assert.match(exploreTemplate, /js\/explore-room\.js/);
+  assert.match(exploreTemplate, /js\/construct-ambient-field\.js/);
+  assert.doesNotMatch(exploreTemplate, /css\/hero\.css/);
   assert.match(worker, /url\.pathname === "\/api\/site\/explore"/);
+});
+
+test("the shared ambient field preserves 404 and About behavior while giving Explore a quieter configuration", () => {
+  const ambient = read("js/construct-ambient-field.js");
+  const errorPage = read("404.html");
+  const about = read("about/index.html");
+  const room = read("js/explore-room.js");
+
+  assert.match(ambient, /ConstructAmbientField\s*=\s*Object\.freeze\(\{\s*mount:\s*mount\s*\}\)/);
+  assert.match(ambient, /\/assets\/eyes\/openeye\.png/);
+  assert.match(ambient, /\/assets\/eyes\/closedeye\.png/);
+  assert.match(ambient, /parity === 0 \? openEye : closedEye/);
+  assert.match(ambient, /EYE_FALL_SPEED\s*=\s*0\.10/);
+  assert.match(ambient, /EYE_ROW_SPEED\s*=\s*0\.18/);
+  assert.match(ambient, /pixelRatio\s*=\s*Math\.min\(dprCap/);
+  assert.match(ambient, /finite\(options\.dprCap,\s*2\)/);
+  assert.match(ambient, /new ResizeObserver/);
+  assert.match(ambient, /visibilitychange/);
+  assert.match(ambient, /prefers-reduced-motion:\s*reduce/);
+  assert.match(ambient, /renderSettledFrame/);
+  assert.match(ambient, /particle\.angle\s*\+=\s*particle\.orbitSpeed/);
+  assert.match(ambient, /particle\.dist\s*\+=\s*particle\.driftSpeed/);
+
+  assert.match(errorPage, /<script src="\/js\/construct-ambient-field\.js"><\/script>/);
+  assert.match(errorPage, /ConstructAmbientField\.mount\(\{/);
+  assert.match(errorPage, /eyesCanvas:\s*document\.getElementById\(['"]bg['"]\)/);
+  assert.match(errorPage, /eyeFilter:\s*['"]brightness\(0\.20\) saturate\(2\)['"]/);
+  assert.doesNotMatch(errorPage, /function\s+(?:tileSize|draw|loop)\s*\(/);
+
+  assert.match(about, /<script src="\/js\/construct-ambient-field\.js"><\/script>/);
+  assert.match(about, /ConstructAmbientField\.mount\(\{/);
+  assert.match(about, /eyesCanvas:\s*document\.getElementById\(['"]eyesBg['"]\)/);
+  assert.match(about, /particleCanvas:\s*document\.getElementById\(['"]particleBg['"]\)/);
+  assert.match(about, /eyeOpacity:\s*0\.10/);
+  assert.match(about, /eyeTint:\s*['"]#6D3D15['"]/i);
+  assert.match(about, /particleCount:\s*120/);
+  assert.match(about, /particleColor:\s*['"]#FCB867['"]/i);
+  assert.match(about, /particleOpacity:\s*\[0\.12,\s*0\.42\]/);
+  assert.match(about, /centerX:\s*0\.5/);
+  assert.match(about, /centerY:\s*0\.45/);
+  assert.match(about, /radial-gradient\(ellipse 58% 48% at 50% 42%,\s*black 18%,\s*rgba\(0,\s*0,\s*0,\s*0\.62\) 46%,\s*transparent 86%\)/);
+  assert.doesNotMatch(about, /function\s+(?:drawEyes|stepEyes|spawnP|updateParticles)\s*\(/);
+
+  assert.match(room, /ConstructAmbientField\.mount\(\{/);
+  assert.match(room, /eyeOpacity:\s*0\.05/);
+  assert.match(room, /eyeTint:\s*["']#6D3D15["']/i);
+  assert.match(room, /const eyeMask\s*=\s*["'][^"']*radial-gradient/);
+  assert.match(room, /\beyeMask,\s*$/m);
+  const exploreParticleCount = Number(room.match(/particleCount:\s*(\d+)/)?.[1] || 0);
+  assert.ok(exploreParticleCount >= 72 && exploreParticleCount <= 120);
+  assert.match(room, /getPropertyValue\(["']--color-about["']\)/);
+  assert.match(room, /constructAmber[^\n]*#FCB867/i);
+  assert.match(room, /particleColor:\s*constructAmber/);
+  assert.match(room, /particleOpacity:\s*\[0\.08,\s*0\.3\]/);
+  const particleSize = room.match(/particleSize:\s*\[([\d.]+),\s*([\d.]+)\]/);
+  assert.ok(particleSize && Number(particleSize[1]) < 1 && Number(particleSize[2]) >= 7);
 });

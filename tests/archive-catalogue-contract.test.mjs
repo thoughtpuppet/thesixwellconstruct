@@ -251,6 +251,11 @@ test("Studio re-identifies catalogue families, audits privately, and releases th
   const publicPayload = await publicResponse.json();
   assert.ok(publicPayload.groups.tattoo_executions.some((item) => item.entity_id === "art-marbles"));
   assert.ok(!publicPayload.groups.paintings.some((item) => item.entity_id === "art-marbles"));
+  assert.ok(publicPayload.facets.medium.some((facet) => facet.slug === "tattoos"));
+  const tattooFilterResponse = await handleConstructApi(request("/api/archive/items?medium=tattoos&limit=100"), runtime);
+  assert.ok((await tattooFilterResponse.json()).items.some((item) => item.entity_id === "art-marbles"));
+  const artFilterResponse = await handleConstructApi(request("/api/archive/items?medium=art&limit=100"), runtime);
+  assert.ok(!(await artFilterResponse.json()).items.some((item) => item.entity_id === "art-marbles"));
 
   db.prepare(`INSERT INTO content_entities(
       id,entity_type,node_id,visibility,search_visibility,public_at,
@@ -283,6 +288,57 @@ test("Studio re-identifies between Tattoo design and execution prefixes", async 
   assert.equal(payload.record.catalogue_prefix, "TAT-EXE");
   assert.equal(payload.record.catalogue_number, expectedNumber);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_identity_changes WHERE entity_id=?").get(before.entity_id).count, 1);
+});
+
+test("concurrent catalogue re-identifications allocate distinct lowest open target numbers", async () => {
+  const db = database();
+  const runtime = env(db);
+  const sources = db.prepare("SELECT * FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-DES' ORDER BY catalogue_number LIMIT 2").all();
+  assert.equal(sources.length, 2);
+  const occupied = new Set(db.prepare("SELECT catalogue_number FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-EXE'").all().map((row) => row.catalogue_number));
+  const expected = [];
+  for (let candidate = 1; expected.length < sources.length; candidate += 1) {
+    if (!occupied.has(candidate)) expected.push(candidate);
+  }
+
+  const responses = await Promise.all(sources.map((source) => handleConstructApi(request(`/api/admin/archive-catalogue/${encodeURIComponent(source.entity_id)}/reidentify`, {
+    method: "POST",
+    admin: true,
+    body: { medium_id: "tattoos", object_type_id: "tattoo-execution", expected_catalogue_id: source.catalogue_id },
+  }), runtime)));
+  assert.deepEqual(responses.map((response) => response.status), [200, 200]);
+  const payloads = await Promise.all(responses.map((response) => response.json()));
+  assert.deepEqual(payloads.map((payload) => payload.record.catalogue_number).sort((a, b) => a - b), expected);
+  assert.equal(new Set(payloads.map((payload) => payload.record.catalogue_id)).size, 2);
+  for (const source of sources) {
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_entries WHERE catalogue_id=?").get(source.catalogue_id).count, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_identity_changes WHERE entity_id=?").get(source.entity_id).count, 1);
+  }
+});
+
+test("Studio dossier list orders catalogue identities newest to oldest", async () => {
+  const db = database();
+  const runtime = env(db);
+  for (const id of ["portfolio-order-1", "portfolio-order-2", "portfolio-order-3"]) {
+    db.prepare(`INSERT INTO content_entities(
+        id,entity_type,node_id,visibility,search_visibility,public_at,
+        created_by,updated_by,created_at,updated_at
+      ) VALUES(?,'portfolio_item','node-tattoos','public',1,datetime('now'),
+        'test','test',datetime('now'),datetime('now'))`).run(id);
+  }
+  const entries = db.prepare("SELECT * FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-EXE' ORDER BY catalogue_number LIMIT 3").all();
+  assert.equal(entries.length, 3);
+
+  db.prepare("UPDATE archive_catalogue_entries SET created_at='2024-01-01 00:00:00' WHERE entity_id=?").run(entries[0].entity_id);
+  db.prepare("UPDATE archive_catalogue_entries SET created_at='2025-01-01 00:00:00' WHERE entity_id IN (?,?)").run(entries[1].entity_id, entries[2].entity_id);
+  db.prepare("UPDATE archive_dossiers SET updated_at='2099-01-01 00:00:00' WHERE entity_id=?").run(entries[0].entity_id);
+  db.prepare("UPDATE archive_dossiers SET updated_at='2000-01-01 00:00:00' WHERE entity_id IN (?,?)").run(entries[1].entity_id, entries[2].entity_id);
+
+  const response = await handleConstructApi(request("/api/admin/archive-dossiers", { admin: true }), runtime);
+  assert.equal(response.status, 200);
+  const ids = (await response.json()).records.map((record) => record.entity_id);
+  assert.ok(ids.indexOf(entries[2].entity_id) < ids.indexOf(entries[1].entity_id));
+  assert.ok(ids.indexOf(entries[1].entity_id) < ids.indexOf(entries[0].entity_id));
 });
 
 test("Studio edits identity, versions, states, contextual entities, themes, and subordinate material references", async () => {
@@ -777,6 +833,7 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(studio, /Assigned automatically/);
   assert.match(studio, /catalogueReidentify/);
   assert.match(studio, /Re-identify catalogue family/);
+  assert.doesNotMatch(studio, /preserve its permanent sequence/);
   assert.match(studio, /released for future use/);
   assert.match(studio, /manually written references will not redirect/);
   assert.match(studio, /Do not add a version separately/);

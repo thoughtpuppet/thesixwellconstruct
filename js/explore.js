@@ -3,6 +3,8 @@
 
   var STORAGE_KEY = "sixwell_explore_history_v1";
   var HISTORY_LIMIT = 12;
+  var room = document.querySelector("[data-explore-room]");
+  var actionGroup = document.querySelector("[data-explore-actions]");
   var buttons = Array.prototype.slice.call(document.querySelectorAll("[data-explore-scope]"));
   var status = document.querySelector("[data-explore-status]");
   if (!buttons.length || !status) return;
@@ -40,14 +42,26 @@
     writeHistory(history);
   }
 
-  function setBusy(busy) {
+  function setRoomState(state, scope) {
+    if (!room) return;
+    room.dataset.exploreState = state;
+    if (state === "loading" && scope) room.dataset.exploreActiveScope = scope;
+    else delete room.dataset.exploreActiveScope;
+    buttons.forEach(function (button) {
+      button.dataset.exploreSelected = String(state === "loading" && button.dataset.exploreScope === scope);
+    });
+  }
+
+  function setBusy(busy, scope) {
     buttons.forEach(function (button) { button.disabled = busy; });
-    document.querySelector("[data-explore-actions]").setAttribute("aria-busy", String(busy));
+    if (actionGroup) actionGroup.setAttribute("aria-busy", String(busy));
+    setRoomState(busy ? "loading" : "idle", busy ? scope : "");
   }
 
   function announce(message, state) {
     status.textContent = message;
     status.dataset.state = state || "idle";
+    if (state && state !== "loading") setRoomState(state);
     if (state === "error") status.setAttribute("role", "alert");
     else status.removeAttribute("role");
   }
@@ -62,7 +76,7 @@
     var history = readHistory();
     var query = new URLSearchParams({ scope: scope });
     if (history[scope].length) query.set("exclude", history[scope].join(","));
-    setBusy(true);
+    setBusy(true, scope);
     announce("Finding somewhere…", "loading");
     track("interactive_start", { action: "explore-random", itemId: scope });
 

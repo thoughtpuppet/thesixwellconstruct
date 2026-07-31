@@ -371,7 +371,9 @@
     window.location.pathname === '/home/index.html'
   );
 
-  if (isLocalHost && !isHomePath && !document.querySelector('script[data-live-text-editor]')) {
+  var liveTextEditorDisabled = document.body && document.body.getAttribute('data-live-text-editor') === 'off';
+
+  if (isLocalHost && !isHomePath && !liveTextEditorDisabled && !document.querySelector('script[data-live-text-editor]')) {
     var liveTextEditor = document.createElement('script');
     liveTextEditor.src = '/js/live-text-editor.js?v=' + Date.now();
     liveTextEditor.defer = true;

@@ -4,6 +4,7 @@
 (function() {
   if (window.__constructWayfindingLoaded) return;
   window.__constructWayfindingLoaded = true;
+  if (document.body && document.body.getAttribute('data-construct-wayfinding') === 'off') return;
 
   var MEDIUMS = {
     tattooing: { label: 'Art.Pill Tattoo House', url: '/tattoos/' },

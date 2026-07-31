@@ -70,8 +70,6 @@ const routes = [
   { route: "/events/solehmans-new-year/", file: "events/solehmans-new-year/index.html", variant: "supporting", descriptor: true },
   { route: "/events/ss-and-f-live-audience/", file: "events/ss-and-f-live-audience/index.html", variant: "supporting", descriptor: true },
 
-  { route: "/explore/", file: "explore/index.html", variant: "supporting", descriptor: true },
-
   { route: "/merch/am-i-losing-my-marbles", file: "merch/am-i-losing-my-marbles.html", variant: "supporting" },
   { route: "/merch/lostmarbles-hoodie", file: "merch/lostmarbles-hoodie.html", variant: "supporting" },
   { route: "/merch/marbles-print", file: "merch/marbles-print.html", variant: "supporting" },
@@ -103,7 +101,7 @@ const routes = [
   { route: "/tattoos/submission-received/", file: "tattoos/submission-received/index.html", variant: "supporting", descriptor: true },
 ];
 
-const excludedActiveSource = /(?:managed-preview|about-next|construct-connections-(?:organic|prototype))/;
+const excludedActiveSource = /(?:managed-preview|about-next|construct-connections-(?:organic|prototype))|^explore\/index\.html$/;
 
 async function walkHtml(entry) {
   const absolute = path.join(root, entry);
@@ -137,6 +135,15 @@ test("active public hero inventory is complete and assigns one valid variant", a
   for (const file of activeWithH1) {
     assert.ok(inventoriedFiles.has(file), `${file} has a public H1 but is missing from the hero inventory`);
   }
+});
+
+test("Explore is intentionally an immersive public room, not a shared hero page", async () => {
+  const html = await read("explore/index.html");
+
+  assert.match(html, /<main\b[^>]*\bdata-explore-room\b/);
+  assert.match(html, /<h1\b[^>]*>\s*Explore\.?\s*<\/h1>/);
+  assert.doesNotMatch(html, /href=["']\/css\/hero\.css["']/);
+  assert.doesNotMatch(html, /\bsite-hero\b|\bhero-title\b|\bhero-descriptor\b|\bconstruct-breadcrumb\b/);
 });
 
 test("every inventoried public hero loads and follows the shared component contract", async () => {

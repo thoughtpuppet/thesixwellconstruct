@@ -246,10 +246,12 @@
 .cc-map-title { font-size: 10px; line-height: 1.25; }
 .cc-map-center-node,
 .cc-map-relation,
-.cc-map-node-name { font: 400 8px/1.25 Georgia, 'Times New Roman', serif; letter-spacing: .15em; text-transform: uppercase; }
+.cc-map-node-name,
+.cc-map-state { font: 400 8px/1.25 Georgia, 'Times New Roman', serif; letter-spacing: .15em; text-transform: uppercase; }
 .cc-map-center-node { color: var(--cc-source); }
 .cc-map-relation { color: var(--text-dim, rgba(252, 180, 103, .36)); }
 .cc-map-node-name { color: var(--node); }
+.cc-map-state { color: var(--text-dim, rgba(252, 180, 103, .36)); letter-spacing: .08em; }
 
 .cc-map-node { z-index: 3; display: block; width: 16px; height: 16px; padding: 0; color: inherit; text-decoration: none; transform: translate(-50%, -50%); }
 .cc-map-node--north .cc-map-copy { bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); }
@@ -277,7 +279,8 @@
   .cc-map-copy { width: 86px; max-width: 86px; }
   .cc-map-title { font-size: 8px; }
   .cc-map-relation,
-  .cc-map-node-name { font-size: 7px; letter-spacing: .1em; }
+  .cc-map-node-name,
+  .cc-map-state { font-size: 7px; letter-spacing: .1em; }
 }
 
 @media (max-width: 640px) {
