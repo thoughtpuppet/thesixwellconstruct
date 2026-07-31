@@ -394,6 +394,46 @@ test("finish-aware duplicate checks require an intentional formulation version",
   assert.equal(intentional.body.record.version_number,2);
 });
 
+test("draft pigment declarations can be reviewed, edited, deduplicated, and safely removed",async()=>{
+  const sql=database(),runtime=env(sql);
+  const pigment=await admin(runtime,"/api/admin/archive-color-materials/materials",{
+    name:"Review Carbon Black",material_kind:"raw-pigment",pigment_code:"PBK7",
+  });
+  const ink=await admin(runtime,"/api/admin/archive-color-materials/materials",{
+    name:"Review Black Ink",material_kind:"tattoo-ink",brand:"Review Ink",medium_scope:"tattoo",
+  });
+  const formulation=await admin(runtime,"/api/admin/archive-color-materials/formulations",{
+    material_id:ink.body.record.id,normalized_finish:"matte",finish_label:"Flat black",
+  });
+  const declarationBody={
+    formulation_id:formulation.body.record.id,pigment_material_id:pigment.body.record.id,
+    normalized_pigment_code:"PBk7",bottle_wording:"Carbon Black",
+    source_type:"safety-data-sheet",source_url:"https://manufacturer.example/sds",
+    observed_at:"2026-07-30",
+  };
+  const declaration=await admin(runtime,"/api/admin/archive-color-materials/declared-pigments",declarationBody);
+  assert.equal(declaration.status,201,declaration.body.error);
+  const duplicate=await admin(runtime,"/api/admin/archive-color-materials/declared-pigments",declarationBody);
+  assert.equal(duplicate.status,409);
+  assert.equal(duplicate.body.duplicate_candidate.id,declaration.body.record.id);
+
+  const edited=await admin(runtime,`/api/admin/archive-color-materials/declared-pigments/${declaration.body.record.id}`,{
+    bottle_wording:"Carbon Black (CI 77266)",
+  },"PATCH");
+  assert.equal(edited.status,200,edited.body.error);
+  assert.equal(edited.body.record.normalized_pigment_code,"PBK7");
+  assert.equal(edited.body.record.bottle_wording,"Carbon Black (CI 77266)");
+
+  const snapshot=await payload(await handleConstructApi(request("/api/admin/archive-color-materials",{admin:true}),runtime));
+  const reviewed=snapshot.body.declared_pigments.find(record=>record.id===declaration.body.record.id);
+  assert.equal(reviewed.pigment_name,"Review Carbon Black");
+  assert.equal(reviewed.pigment_slug,"review-carbon-black");
+
+  const removed=await admin(runtime,`/api/admin/archive-color-materials/declared-pigments/${declaration.body.record.id}`,{},"DELETE");
+  assert.equal(removed.status,200,removed.body.error);
+  assert.equal(sql.prepare("SELECT COUNT(*) count FROM archive_material_declared_pigments WHERE id=?").get(declaration.body.record.id).count,0);
+});
+
 test("Tattoo session evidence is state-scoped, privately inspectable, and publicly redacted",async()=>{
   const sql=database(),runtime=env(sql);
   const states=sql.prepare(`SELECT aos.id state_id,aov.entity_id,ad.archive_slug
@@ -453,11 +493,30 @@ test("Studio SVG import owns transforms and public map interactions use privacy-
   const archiveCss=readFileSync(join(ROOT,"css/archive-public.css"),"utf8");
   const context={window:{},console};
   runInNewContext(studioSource,context);
-  const {transformMatrix,matrixMultiply}=context.window.ArchiveColorMaterialsStudio;
+  const {transformMatrix,matrixMultiply,srgbHexToColorProfile}=context.window.ArchiveColorMaterialsStudio;
   assert.deepEqual(Array.from(transformMatrix("translate(10 20) scale(2)")),[2,0,0,2,10,20]);
   assert.deepEqual(Array.from(matrixMultiply([1,0,0,1,5,6],[1,0,0,1,7,8])),[1,0,0,1,12,14]);
+  assert.deepEqual({...srgbHexToColorProfile("#000000")},{
+    lab_l:0,lab_a:0,lab_b:0,oklch_l:0,oklch_c:0,oklch_h:"",
+  });
+  const red=srgbHexToColorProfile("#ff0000");
+  assert.ok(Math.abs(red.lab_l-53.2408)<.0002);
+  assert.ok(Math.abs(red.lab_a-80.0925)<.0002);
+  assert.ok(Math.abs(red.lab_b-67.2032)<.0002);
+  assert.ok(Math.abs(red.oklch_l-.627955)<.000002);
+  assert.ok(Math.abs(red.oklch_c-.257683)<.000002);
+  assert.ok(Math.abs(red.oklch_h-29.234)<.002);
+  assert.match(studioSource,/Calculate Lab and OKLCH from sRGB/);
+  assert.match(studioSource,/Add a color profile to unlock publication/);
+  assert.match(studioSource,/required readonly/);
   assert.match(studioSource,/Review every imported region/);
   assert.match(studioSource,/preserveAspectRatio/);
+  assert.match(studioSource,/Publication blocked/);
+  assert.match(studioSource,/data-edit-material/);
+  assert.match(studioSource,/data-edit-formulation/);
+  assert.match(studioSource,/data-edit-declaration/);
+  assert.match(studioSource,/data-remove-declaration/);
+  assert.match(studioSource,/data-archive-material/);
   assert.match(studioSource,/querySelectorAll\("path,polygon,polyline,rect,circle,ellipse"\)/);
   assert.doesNotMatch(studioSource,/innerHTML\s*=\s*await file\.text/);
   assert.match(publicSource,/data-palette-usage=.*aria-pressed="false"/);

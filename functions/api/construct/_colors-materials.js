@@ -735,7 +735,10 @@ async function librarySnapshot(database) {
   const [materials,formulations,declarations,recipes,versions,components,profiles,families,familyAssignments] = await database.batch([
     database.prepare("SELECT * FROM archive_material_definitions ORDER BY material_kind,name"),
     database.prepare("SELECT f.*,m.name material_name,m.slug material_slug,m.material_kind FROM archive_material_formulations f JOIN archive_material_definitions m ON m.id=f.material_id ORDER BY m.name,f.version_number DESC"),
-    database.prepare("SELECT * FROM archive_material_declared_pigments ORDER BY formulation_id,sort_order"),
+    database.prepare(`SELECT d.*,m.name pigment_name,m.slug pigment_slug
+      FROM archive_material_declared_pigments d
+      LEFT JOIN archive_material_definitions m ON m.id=d.pigment_material_id
+      ORDER BY d.formulation_id,d.sort_order,d.created_at`),
     database.prepare("SELECT * FROM archive_color_recipes ORDER BY name"),
     database.prepare("SELECT v.*,r.name recipe_name,r.slug recipe_slug FROM archive_color_recipe_versions v JOIN archive_color_recipes r ON r.id=v.recipe_id ORDER BY r.name,v.version_number DESC"),
     database.prepare("SELECT * FROM archive_color_recipe_components ORDER BY recipe_version_id,sort_order"),
@@ -980,13 +983,39 @@ async function adminDeclaredPigments(request,database,recordId="") {
     await database.prepare("DELETE FROM archive_material_declared_pigments WHERE id=?").bind(recordId).run();return json({ok:true,deleted:true});
   }
   const body=await readJson(request);if(!body)return failure("Send a JSON object.");
-  if(request.method==="POST"&&!recordId){
-    const formulationId=text(body.formulation_id,200),formulation=await database.prepare("SELECT publication_state FROM archive_material_formulations WHERE id=?").bind(formulationId).first();if(!formulation)return failure("Formulation not found.",404);if(formulation.publication_state==="published")return failure("Published formulations and their pigment declarations are immutable.",409);
-    const pigmentId=text(body.pigment_material_id,200)||null;
+  if((request.method==="POST"&&!recordId)||(request.method==="PATCH"&&recordId)){
+    const before=recordId?await database.prepare("SELECT * FROM archive_material_declared_pigments WHERE id=?").bind(recordId).first():null;
+    if(recordId&&!before)return failure("Pigment declaration not found.",404);
+    const formulationId=text(body.formulation_id??before?.formulation_id,200),formulation=await database.prepare("SELECT publication_state FROM archive_material_formulations WHERE id=?").bind(formulationId).first();if(!formulation)return failure("Formulation not found.",404);if(formulation.publication_state==="published")return failure("Published formulations and their pigment declarations are immutable.",409);
+    const pigmentId=text(body.pigment_material_id??before?.pigment_material_id,200)||null;
     if(pigmentId){const pigment=await database.prepare("SELECT material_kind FROM archive_material_definitions WHERE id=?").bind(pigmentId).first();if(pigment?.material_kind!=="raw-pigment")return failure("The normalized pigment link must point to a raw pigment definition.",409)}
-    const values={formulation_id:formulationId,pigment_material_id:pigmentId,normalized_pigment_code:text(body.normalized_pigment_code,120).toUpperCase(),bottle_wording:text(body.bottle_wording,1000),source_type:["bottle-label","manufacturer-site","safety-data-sheet","technical-sheet","other"].includes(body.source_type)?body.source_type:"bottle-label",source_media_id:text(body.source_media_id,200)||null,source_url:safePublicUrl(body.source_url),observed_at:text(body.observed_at,80)||null,sort_order:Math.floor(number(body.sort_order,0))};
+    const sourceType=["bottle-label","manufacturer-site","safety-data-sheet","technical-sheet","other"].includes(body.source_type)?body.source_type:(before?.source_type||"bottle-label");
+    const values={formulation_id:formulationId,pigment_material_id:pigmentId,normalized_pigment_code:text(body.normalized_pigment_code??before?.normalized_pigment_code,120).toUpperCase(),bottle_wording:text(body.bottle_wording??before?.bottle_wording,1000),source_type:sourceType,source_media_id:text(body.source_media_id??before?.source_media_id,200)||null,source_url:safePublicUrl(body.source_url??before?.source_url),observed_at:text(body.observed_at??before?.observed_at,80)||null,sort_order:Math.floor(number(body.sort_order,before?.sort_order||0))};
     if(!values.bottle_wording)return failure("Record the manufacturer wording exactly as observed.");
-    return json({record:await writeRecord(database,"archive_material_declared_pigments",text(body.id,200)||id("declared-pigment"),values,true)},{status:201});
+    const duplicate=await database.prepare(`SELECT id FROM archive_material_declared_pigments
+      WHERE formulation_id=?
+        AND COALESCE(pigment_material_id,'')=COALESCE(?,'')
+        AND upper(trim(normalized_pigment_code))=upper(trim(?))
+        AND lower(trim(bottle_wording))=lower(trim(?))
+        AND source_type=?
+        AND COALESCE(source_media_id,'')=COALESCE(?,'')
+        AND lower(trim(source_url))=lower(trim(?))
+        AND COALESCE(observed_at,'')=COALESCE(?,'')
+        AND id<>?
+      LIMIT 1`).bind(
+        values.formulation_id,values.pigment_material_id,values.normalized_pigment_code,
+        values.bottle_wording,values.source_type,values.source_media_id,values.source_url,
+        values.observed_at,recordId||"",
+      ).first();
+    if(duplicate)return json({
+      error:"This formulation already has the same pigment declaration. Edit the existing declaration instead of adding a duplicate.",
+      duplicate_candidate:{id:duplicate.id},
+    },{status:409});
+    const declarationId=recordId||text(body.id,200)||id("declared-pigment");
+    return json(
+      {record:await writeRecord(database,"archive_material_declared_pigments",declarationId,values,!recordId)},
+      {status:recordId?200:201},
+    );
   }
   return failure("Method not allowed.",405);
 }
