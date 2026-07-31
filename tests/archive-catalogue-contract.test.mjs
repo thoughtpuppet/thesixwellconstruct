@@ -104,6 +104,9 @@ test("migration assigns every existing cultural object an identity from the exac
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_versions WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_object_states WHERE publication_state<>'published' OR public_visible<>1").get().count, 0);
   assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='archive_catalogue_documentation'").get());
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='archive_catalogue_identity_changes'").get());
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='archive_catalogue_identity_change_audit'").get());
+  assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='archive_catalogue_lowest_open_insert'").get());
   assert.equal(db.prepare(`SELECT COUNT(*) count FROM archive_object_states aos
     JOIN archive_materials am ON am.id=aos.lead_material_id
     JOIN media_assets m ON m.id=am.media_id
@@ -168,6 +171,118 @@ test("Studio catalogue initialization repairs a legacy shell and ignores a stale
   assert.equal(db.prepare(`SELECT COUNT(*) count FROM archive_object_states state
     JOIN archive_object_versions version ON version.id=state.version_id
     WHERE version.entity_id='portfolio-legacy-shell'`).get().count, 1);
+});
+
+test("Studio re-identifies catalogue families, audits privately, and releases the old number for lowest-gap reuse", async () => {
+  const db = database();
+  const runtime = env(db);
+  const before = db.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id='art-marbles'").get();
+  assert.equal(before.catalogue_id, "ART-004");
+
+  for (const id of ["portfolio-gap-fixture-1", "portfolio-gap-fixture-2"]) {
+    db.prepare(`INSERT INTO content_entities(
+        id,entity_type,node_id,visibility,search_visibility,public_at,
+        created_by,updated_by,created_at,updated_at
+      ) VALUES(?,'portfolio_item','node-tattoos','public',1,datetime('now'),
+        'test','test',datetime('now'),datetime('now'))`).run(id);
+  }
+  const releasedTarget = db.prepare("SELECT * FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-EXE' ORDER BY catalogue_number LIMIT 1").get();
+  assert.ok(releasedTarget);
+  db.prepare("DELETE FROM archive_catalogue_entries WHERE entity_id=?").run(releasedTarget.entity_id);
+
+  const preserved = db.prepare(`SELECT
+    (SELECT COUNT(*) FROM archive_object_versions WHERE entity_id='art-marbles') versions,
+    (SELECT COUNT(*) FROM archive_object_states state JOIN archive_object_versions version ON version.id=state.version_id WHERE version.entity_id='art-marbles') states,
+    (SELECT COUNT(*) FROM archive_materials WHERE dossier_entity_id='art-marbles') materials,
+    (SELECT COUNT(*) FROM entity_relationships WHERE source_entity_id='art-marbles' OR target_entity_id='art-marbles') relationships,
+    (SELECT archive_slug FROM archive_dossiers WHERE entity_id='art-marbles') archive_slug`).get();
+
+  const samePrefixResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles/reidentify", {
+    method: "POST",
+    admin: true,
+    body: { medium_id: "art", object_type_id: "art-drawing", expected_catalogue_id: "ART-004" },
+  }), runtime);
+  assert.equal(samePrefixResponse.status, 409);
+
+  const invalidTypeResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles/reidentify", {
+    method: "POST",
+    admin: true,
+    body: { medium_id: "tattoos", object_type_id: "art-painting", expected_catalogue_id: "ART-004" },
+  }), runtime);
+  assert.equal(invalidTypeResponse.status, 409);
+
+  const response = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles/reidentify", {
+    method: "POST",
+    admin: true,
+    body: { medium_id: "tattoos", object_type_id: "tattoo-execution", expected_catalogue_id: "ART-004" },
+  }), runtime);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.released_catalogue_id, "ART-004");
+  assert.equal(payload.record.catalogue_prefix, "TAT-EXE");
+  assert.equal(payload.record.catalogue_number, releasedTarget.catalogue_number);
+  assert.equal(payload.record.catalogue_id, `TAT-EXE-${String(releasedTarget.catalogue_number).padStart(3, "0")}`);
+
+  const change = db.prepare("SELECT * FROM archive_catalogue_identity_changes WHERE entity_id='art-marbles'").get();
+  assert.equal(change.previous_catalogue_id, "ART-004");
+  assert.equal(change.next_catalogue_id, payload.record.catalogue_id);
+  assert.equal(change.changed_by, "studio-reidentify");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_entries WHERE catalogue_id='ART-004'").get().count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_documentation WHERE dossier_entity_id='art-marbles' AND field_key='former-catalogue-number'").get().count, 0);
+
+  const after = db.prepare(`SELECT
+    (SELECT COUNT(*) FROM archive_object_versions WHERE entity_id='art-marbles') versions,
+    (SELECT COUNT(*) FROM archive_object_states state JOIN archive_object_versions version ON version.id=state.version_id WHERE version.entity_id='art-marbles') states,
+    (SELECT COUNT(*) FROM archive_materials WHERE dossier_entity_id='art-marbles') materials,
+    (SELECT COUNT(*) FROM entity_relationships WHERE source_entity_id='art-marbles' OR target_entity_id='art-marbles') relationships,
+    (SELECT archive_slug FROM archive_dossiers WHERE entity_id='art-marbles') archive_slug`).get();
+  assert.deepEqual(after, preserved);
+
+  const staleResponse = await handleConstructApi(request("/api/admin/archive-catalogue/art-marbles/reidentify", {
+    method: "POST",
+    admin: true,
+    body: { medium_id: "tattoos", object_type_id: "tattoo-design", expected_catalogue_id: "ART-004" },
+  }), runtime);
+  assert.equal(staleResponse.status, 409);
+  assert.equal(db.prepare("SELECT catalogue_id FROM archive_catalogue_entries WHERE entity_id='art-marbles'").get().catalogue_id, payload.record.catalogue_id);
+
+  const publicResponse = await handleConstructApi(request("/api/archive/items?limit=100"), runtime);
+  assert.equal(publicResponse.status, 200);
+  const publicPayload = await publicResponse.json();
+  assert.ok(publicPayload.groups.tattoo_executions.some((item) => item.entity_id === "art-marbles"));
+  assert.ok(!publicPayload.groups.paintings.some((item) => item.entity_id === "art-marbles"));
+
+  db.prepare(`INSERT INTO content_entities(
+      id,entity_type,node_id,visibility,search_visibility,public_at,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES('art-reuses-released-identity','art_work','node-art','public',1,datetime('now'),
+      'test','test',datetime('now'),datetime('now'))`).run();
+  const reused = db.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id='art-reuses-released-identity'").get();
+  assert.equal(reused.catalogue_id, "ART-004");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_identity_changes WHERE entity_id='art-reuses-released-identity'").get().count, 0);
+});
+
+test("Studio re-identifies between Tattoo design and execution prefixes", async () => {
+  const db = database();
+  const runtime = env(db);
+  const before = db.prepare("SELECT * FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-DES' ORDER BY catalogue_number LIMIT 1").get();
+  assert.ok(before);
+  const expectedNumber = db.prepare(`SELECT MIN(candidate) next_number FROM (
+      SELECT 1 candidate
+      UNION
+      SELECT catalogue_number+1 FROM archive_catalogue_entries WHERE catalogue_prefix='TAT-EXE'
+    ) candidates
+    WHERE NOT EXISTS(SELECT 1 FROM archive_catalogue_entries occupied WHERE occupied.catalogue_prefix='TAT-EXE' AND occupied.catalogue_number=candidates.candidate)`).get().next_number;
+  const response = await handleConstructApi(request(`/api/admin/archive-catalogue/${encodeURIComponent(before.entity_id)}/reidentify`, {
+    method: "POST",
+    admin: true,
+    body: { medium_id: "tattoos", object_type_id: "tattoo-execution", expected_catalogue_id: before.catalogue_id },
+  }), runtime);
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.record.catalogue_prefix, "TAT-EXE");
+  assert.equal(payload.record.catalogue_number, expectedNumber);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM archive_catalogue_identity_changes WHERE entity_id=?").get(before.entity_id).count, 1);
 });
 
 test("Studio edits identity, versions, states, contextual entities, themes, and subordinate material references", async () => {
@@ -660,6 +775,10 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(studio, /Versions and states/);
   assert.match(studio, /Initialize catalogue, version, and state/);
   assert.match(studio, /Assigned automatically/);
+  assert.match(studio, /catalogueReidentify/);
+  assert.match(studio, /Re-identify catalogue family/);
+  assert.match(studio, /released for future use/);
+  assert.match(studio, /manually written references will not redirect/);
   assert.match(studio, /Do not add a version separately/);
   assert.match(studio, /portfolio_item:\["tattoos","tattoo-execution"\]/);
   assert.match(studio, /Current public condition/);

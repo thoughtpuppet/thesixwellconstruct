@@ -1039,6 +1039,7 @@ export default {
 
     if (
       url.pathname === "/api/search" ||
+      url.pathname === "/api/site/explore" ||
       url.pathname === "/api/site/navigation" ||
       url.pathname.startsWith("/api/connections/") ||
       url.pathname.startsWith("/api/construct/media/") ||

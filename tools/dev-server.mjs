@@ -73,6 +73,7 @@ const checkRoutes = [
   ["/about/current-state/", 200],
   ["/about/contact-press/", 200],
   ["/construct-map/", 200],
+  ["/explore/", 200],
   ["/events/", 200],
   ["/events/calendar/", 200],
   ["/events/cultandshift/", 200],

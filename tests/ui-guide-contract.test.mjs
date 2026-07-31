@@ -127,6 +127,7 @@ test("the Guide exposes both systems and source libraries without a preview pane
     "archive-compare",
     "legend-catalog",
     "construct-search",
+    "construct-explore",
     "preferences",
     "hidden-state",
     "component-forms",
@@ -152,6 +153,7 @@ test("the Guide exposes both systems and source libraries without a preview pane
   }
 
   assert.match(systemJs, /id: "archive-compare"[^\n]*route: "\/archive\/compare\/"[^\n]*js\/archive-compare\.js/);
+  assert.match(systemJs, /id: "construct-explore"[^\n]*route: "\/explore\/"[^\n]*css\/explore\.css[^\n]*functions\/api\/construct\/_lib\.js[^\n]*separate from the nine medium nodes/);
   assert.match(systemJs, /id: "component-archive-catalogue"[^\n]*5px state rails[^\n]*top-level comparison workspace/);
   assert.match(systemJs, /id: "component-archive-catalogue"[^\n]*Compare records hero action[^\n]*Individual cards carry no comparison controls/);
   assert.match(systemJs, /id: "studio-dossier"[^\n]*studio\/archive-catalogue\.css[^\n]*read-only permanent identity/);

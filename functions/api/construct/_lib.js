@@ -1430,10 +1430,10 @@ async function publicArchiveItems(request, env) {
   for(const facet of facetResult.results||[]){if(facets[facet.kind])facets[facet.kind].push({name:facet.name,slug:facet.slug,count:Number(facet.count||0)});}
   const pagination={page,limit,total,total_pages:Math.max(1,Math.ceil(total/limit)),totalPages:Math.max(1,Math.ceil(total/limit))};
   const groups={
-    paintings:items.filter(item=>item.entity_type==="art_work"),
-    tattoo_designs:items.filter(item=>item.entity_type==="tattoo_design"||item.entity_type==="flash_item"),
-    tattoo_executions:items.filter(item=>item.entity_type==="portfolio_item"),
-    other:items.filter(item=>!["art_work","tattoo_design","flash_item","portfolio_item"].includes(item.entity_type)),
+    paintings:items.filter(item=>item.catalogue_medium==="art"),
+    tattoo_designs:items.filter(item=>item.catalogue_prefix==="TAT-DES"),
+    tattoo_executions:items.filter(item=>item.catalogue_prefix==="TAT-EXE"),
+    other:items.filter(item=>item.catalogue_medium!=="art"&&!['TAT-DES','TAT-EXE'].includes(item.catalogue_prefix)),
   };
   return json({items,records:items,groups,facets,pagination,count:items.length,query:q,origin_thread:originThread,originThread,evidence,current_record_position:currentRecordPosition,currentRecordPosition},{cache:"public, max-age=30"});
 }
@@ -1836,6 +1836,204 @@ async function publicSearch(request, env) {
   const legacyRecords=legacyRows.map(row=>({...row,matches:[{fragment_type:"entity",source_id:row.entity_id,label:row.title,body:row.summary||row.body||"",snippet:String(row.summary||row.body||"").slice(0,320),anchor:"",dossier_anchor:row.route}],match_count:1}));
   const records=[...archiveRecords,...legacyRecords];
   return json({records,groups:records,items:records,count:records.length,query:q},{cache:"public, max-age=30"});
+}
+
+const EXPLORE_SCOPES = new Set(["all", "works", "process", "pages"]);
+const EXPLORE_WEIGHTS = { works: 0.5, process: 0.3, pages: 0.2 };
+const EXPLORE_WORK_TYPES = new Set([
+  "art_work", "portfolio_item", "flash_item", "flash_series", "tattoo_design",
+  "merch_item", "event", "visual_symbol",
+]);
+const EXPLORE_BLOCKED_PATHS = [
+  "/api", "/studio", "/tools", "/booking", "/preferences", "/search", "/explore",
+  "/cart", "/checkout",
+];
+const EXPLORE_BLOCKED_SEGMENTS = [
+  "/inquire", "/intake", "/claim", "/apply", "/approved", "/submission-received",
+  "/confirmed", "/confirmation", "/day-of", "/location-parking", "/acquisitioninquiry",
+];
+
+function safeExploreRoute(value) {
+  const route = String(value || "").trim();
+  if (!route.startsWith("/") || route.startsWith("//") || route.length > 1200) return "";
+  let parsed;
+  try { parsed = new URL(route, "https://the-six-well-construct.invalid"); } catch { return ""; }
+  if (parsed.origin !== "https://the-six-well-construct.invalid") return "";
+  const pathname = parsed.pathname.toLowerCase();
+  if (EXPLORE_BLOCKED_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) return "";
+  if (EXPLORE_BLOCKED_SEGMENTS.some((segment) => pathname.includes(segment))) return "";
+  if (pathname.includes("managed-preview") || /\.(?:avif|gif|jpe?g|png|svg|webp|mp3|m4a|wav|ogg|mp4|webm|pdf|docx?|zip)$/i.test(pathname)) return "";
+  for (const key of parsed.searchParams.keys()) {
+    if (/^(?:token|preview_token|access_token|cart|cart_id|checkout|session|secret)$/i.test(key)) return "";
+  }
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+function exploreMedium(nodeId, entityType, fallback = "") {
+  const mappedTypes = new Set(["visual_symbol", "flash_item", "flash_series", "portfolio_item", "tattoo_design", "art_work", "merch_item", "event"]);
+  let canonical = (!nodeId && entityType && !mappedTypes.has(entityType) && fallback)
+    ? canonicalNodeAlias(fallback)
+    : canonicalNodeAlias(nodeId, entityType);
+  if (!nodeId && !entityType) canonical = fallback ? canonicalNodeAlias(fallback) : "";
+  if (!NODE_FALLBACKS || !canonical) return null;
+  const record = Object.values(NODE_FALLBACKS).find((node) => node.id === canonical);
+  if (!record) return fallback ? nodeFallback(canonicalNodeAlias(fallback)) : null;
+  return { id: record.id.replace(/^node-/, ""), label: record.name };
+}
+
+function randomIndex(length, random = Math.random) {
+  if (length < 2) return 0;
+  return Math.min(length - 1, Math.max(0, Math.floor(Number(random()) * length)));
+}
+
+function pickExploreWeightedScope(scopes, random = Math.random) {
+  const total = scopes.reduce((sum, scope) => sum + EXPLORE_WEIGHTS[scope], 0);
+  let cursor = Number(random()) * total;
+  for (const scope of scopes) {
+    cursor -= EXPLORE_WEIGHTS[scope];
+    if (cursor < 0) return scope;
+  }
+  return scopes[scopes.length - 1];
+}
+
+function pickExploreBalanced(candidates, random = Math.random) {
+  const byMedium = new Map();
+  candidates.forEach((candidate) => {
+    if (!byMedium.has(candidate.medium.id)) byMedium.set(candidate.medium.id, new Map());
+    const byEntity = byMedium.get(candidate.medium.id);
+    if (!byEntity.has(candidate.entityKey)) byEntity.set(candidate.entityKey, []);
+    byEntity.get(candidate.entityKey).push(candidate);
+  });
+  const mediumGroups = [...byMedium.values()];
+  const entityGroups = [...mediumGroups[randomIndex(mediumGroups.length, random)].values()];
+  const destinations = entityGroups[randomIndex(entityGroups.length, random)];
+  return destinations[randomIndex(destinations.length, random)];
+}
+
+export function selectExploreDestination(pools, requestedScope = "all", excludedKeys = [], random = Math.random) {
+  const exclusions = new Set((excludedKeys || []).map(String));
+  const scopes = requestedScope === "all" ? ["works", "process", "pages"] : [requestedScope];
+  const available = scopes.filter((scope) => Array.isArray(pools[scope]) && pools[scope].length);
+  if (!available.length) return { destination: null, restarted: false };
+  let filtered = Object.fromEntries(available.map((scope) => [scope, pools[scope].filter((item) => !exclusions.has(item.key))]));
+  let eligibleScopes = available.filter((scope) => filtered[scope].length);
+  let restarted = false;
+  if (!eligibleScopes.length) {
+    restarted = true;
+    filtered = Object.fromEntries(available.map((scope) => [scope, pools[scope]]));
+    eligibleScopes = available;
+  }
+  const selectedScope = requestedScope === "all" ? pickExploreWeightedScope(eligibleScopes, random) : eligibleScopes[0];
+  const picked = pickExploreBalanced(filtered[selectedScope], random);
+  const { entityKey, ...destination } = picked;
+  return { destination, restarted };
+}
+
+function exploreWorkCandidate(row, route, surface = "active") {
+  const safeRoute = safeExploreRoute(route);
+  const medium = exploreMedium(row.node_id, row.entity_type, surface === "archive" ? "archive" : "");
+  if (!safeRoute || !medium || !String(row.title || "").trim()) return null;
+  return {
+    key: `works:${row.entity_id}:${surface}`,
+    scope: "works",
+    kind: surface === "archive" ? "archive-dossier" : row.entity_type.replaceAll("_", "-"),
+    medium,
+    title: String(row.title).trim(),
+    route: safeRoute,
+    entityKey: row.entity_id,
+  };
+}
+
+function exploreProcessCandidate(row) {
+  const route = safeExploreRoute(`/archive/records/${encodeURIComponent(row.archive_slug)}/#${encodeURIComponent(row.anchor || "materials")}`);
+  const medium = exploreMedium(row.node_id, row.entity_type, "archive");
+  if (!route || !medium) return null;
+  const kind = row.fragment_type === "source-material" ? `source-${row.source_kind || "material"}` : (row.material_type || "process");
+  return {
+    key: `process:${row.fragment_type}:${row.source_id}`,
+    scope: "process",
+    kind,
+    medium,
+    title: String(row.label || row.owner_title || "Process evidence").trim(),
+    route,
+    entityKey: row.dossier_entity_id,
+  };
+}
+
+function explorePageCandidate(row, kind) {
+  const route = safeExploreRoute(row.route);
+  const medium = exploreMedium(kind === "node" ? row.id : row.node_id, "", "about");
+  if (!route || !medium || !String(row.title || "").trim()) return null;
+  return {
+    key: `pages:${kind}:${row.id}`,
+    scope: "pages",
+    kind: kind === "node" ? "construct-node" : "construct-pathway",
+    medium,
+    title: String(row.title).trim(),
+    route,
+    entityKey: row.id,
+  };
+}
+
+async function publicExplore(request, env) {
+  if (request.method !== "GET") return failure("Method not allowed.", 405);
+  const url = new URL(request.url);
+  const scope = String(url.searchParams.get("scope") || "all").toLowerCase();
+  if (!EXPLORE_SCOPES.has(scope)) return failure("Invalid Explore scope.", 400);
+  const excluded = String(url.searchParams.get("exclude") || "").split(",").map((key) => key.trim()).filter(Boolean).slice(-12);
+  const database = db(env);
+  const [worksResult, dossiersResult, processResult, nodesResult, pathwaysResult] = await database.batch([
+    database.prepare(`SELECT d.entity_id,d.entity_type,d.node_id,d.title,d.route
+      FROM search_documents d JOIN content_entities ce ON ce.id=d.entity_id
+      WHERE ce.visibility='public' AND ce.search_visibility=1
+        AND d.state NOT IN ('draft','archived','retired','private')
+        AND d.entity_type IN ('art_work','portfolio_item','flash_item','flash_series','tattoo_design','merch_item','event','visual_symbol')`),
+    database.prepare(`SELECT ad.entity_id,ce.entity_type,ce.node_id,ad.archive_slug,
+        COALESCE(NULLIF(sd.title,''),NULLIF(aw.title,''),NULLIF(mi.title,''),NULLIF(pi.title,''),NULLIF(fi.title,''),NULLIF(td.title,''),NULLIF(ev.title,''),NULLIF(vs.name,''),NULLIF(ar.title,''),ad.archive_slug) title
+      FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id
+      LEFT JOIN search_documents sd ON sd.entity_id=ad.entity_id
+      LEFT JOIN art_works aw ON aw.id=ad.entity_id LEFT JOIN merch_items mi ON mi.id=ad.entity_id
+      LEFT JOIN portfolio_items pi ON pi.id=ad.entity_id LEFT JOIN flash_items fi ON fi.id=ad.entity_id
+      LEFT JOIN tattoo_designs td ON td.id=ad.entity_id LEFT JOIN events ev ON ev.id=ad.entity_id
+      LEFT JOIN visual_symbols vs ON vs.id=ad.entity_id LEFT JOIN archive_records ar ON ar.id=ad.entity_id
+      WHERE ce.visibility='public' AND ad.state='published' AND ad.public_visible=1`),
+    database.prepare(`SELECT af.dossier_entity_id,af.fragment_type,af.source_id,af.label,af.anchor,
+        ad.archive_slug,ce.entity_type,ce.node_id,COALESCE(sd.title,ad.archive_slug) owner_title,
+        am.material_type,sms.source_kind
+      FROM archive_search_fragments af
+      JOIN archive_dossiers ad ON ad.entity_id=af.dossier_entity_id
+      JOIN content_entities ce ON ce.id=ad.entity_id
+      LEFT JOIN search_documents sd ON sd.entity_id=ad.entity_id
+      LEFT JOIN archive_materials am ON af.fragment_type='material' AND am.id=af.source_id
+      LEFT JOIN archive_source_material_sets sms ON af.fragment_type='source-material' AND sms.id=af.source_id
+      WHERE af.public_visible=1 AND af.fragment_type IN ('material','source-material')
+        AND ce.visibility='public' AND ad.state='published' AND ad.public_visible=1
+        AND (am.id IS NULL OR am.material_type<>'final-image') AND ${archiveFragmentPublicSql("af")}`),
+    database.prepare(`SELECT cn.id,cn.id node_id,cn.name title,cn.route FROM construct_nodes cn
+      JOIN content_entities ce ON ce.id=cn.id
+      WHERE cn.state='published' AND cn.homepage_enabled=1 AND ce.visibility='public'`),
+    database.prepare(`SELECT cp.id,cp.node_id,cp.name title,cp.route FROM construct_pathways cp
+      JOIN content_entities ce ON ce.id=cp.id
+      WHERE cp.state='published' AND cp.homepage_enabled=1 AND ce.visibility='public'`),
+  ]);
+  const works = [];
+  for (const row of worksResult.results || []) {
+    if (!EXPLORE_WORK_TYPES.has(row.entity_type)) continue;
+    const candidate = exploreWorkCandidate(row, row.route, "active");
+    if (candidate) works.push(candidate);
+  }
+  for (const row of dossiersResult.results || []) {
+    const candidate = exploreWorkCandidate(row, `/archive/records/${encodeURIComponent(row.archive_slug)}/`, "archive");
+    if (candidate) works.push(candidate);
+  }
+  const process = (processResult.results || []).map(exploreProcessCandidate).filter(Boolean);
+  const pages = [
+    ...(nodesResult.results || []).map((row) => explorePageCandidate(row, "node")),
+    ...(pathwaysResult.results || []).map((row) => explorePageCandidate(row, "pathway")),
+  ].filter(Boolean);
+  const result = selectExploreDestination({ works, process, pages }, scope, excluded);
+  if (!result.destination) return failure("No public Explore destinations are available for that scope.", 404);
+  return json(result, { cache: "no-store" });
 }
 
 function searchDocument(resource, row) {
@@ -2941,6 +3139,20 @@ async function archiveCatalogueObjectTypeId(database,owner){
   return objectTypeId;
 }
 
+async function nextArchiveCatalogueNumber(database,cataloguePrefix){
+  const row=await database.prepare(`SELECT MIN(candidate) next_number
+    FROM (
+      SELECT 1 candidate
+      UNION
+      SELECT catalogue_number+1 FROM archive_catalogue_entries WHERE catalogue_prefix=?
+    ) candidates
+    WHERE NOT EXISTS(
+      SELECT 1 FROM archive_catalogue_entries occupied
+      WHERE occupied.catalogue_prefix=? AND occupied.catalogue_number=candidates.candidate
+    )`).bind(cataloguePrefix,cataloguePrefix).first();
+  return Math.max(1,Number(row?.next_number)||1);
+}
+
 async function ensureArchiveCatalogueEntry(database,owner){
   if(!owner?.id||owner.entity_type==="event")return null;
   if(!await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(owner.id).first())return null;
@@ -2950,8 +3162,7 @@ async function ensureArchiveCatalogueEntry(database,owner){
     const type=await database.prepare("SELECT medium_id,catalogue_prefix FROM archive_cultural_object_types WHERE id=?").bind(objectTypeId).first();
     if(!type)throw new Error("The catalogue vocabulary is unavailable.");
     for(let attempt=0;attempt<3&&!catalogue;attempt++){
-      const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();
-      const number=Number(maximum?.maximum||0)+1,catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
+      const number=await nextArchiveCatalogueNumber(database,type.catalogue_prefix),catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
       try{
         await database.prepare(`INSERT INTO archive_catalogue_entries(entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,1,'I','','studio','studio',datetime('now'),datetime('now'))`).bind(owner.id,type.medium_id,objectTypeId,type.catalogue_prefix,number,catalogueId).run();
       }catch(error){
@@ -3005,7 +3216,7 @@ async function archiveCatalogueAdminApi(request,env,entityId=""){
     if(!type)return failure("Choose a cultural object type that belongs to the selected medium.",409);
     const requestedCatalogueNumber=Math.floor(Number(body.catalogue_number??body.catalogueNumber));
     let catalogueNumber=Number(before?.catalogue_number)||0;
-    if(!before){const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();catalogueNumber=Number(maximum?.maximum||0)+1}
+    if(!before)catalogueNumber=await nextArchiveCatalogueNumber(database,type.catalogue_prefix);
     if(before&&((requestedCatalogueNumber>0&&requestedCatalogueNumber!==Number(before.catalogue_number))||type.catalogue_prefix!==before.catalogue_prefix))return failure("Permanent catalogue prefixes and sequence numbers cannot be changed in Studio.",409);
     const hasCurrentState=Object.prototype.hasOwnProperty.call(body,"current_state_id")||Object.prototype.hasOwnProperty.call(body,"currentStateId");
     let currentStateId=hasCurrentState?text(body.current_state_id??body.currentStateId,200):text(before?.current_state_id,200);
@@ -3037,6 +3248,51 @@ async function archiveCatalogueAdminApi(request,env,entityId=""){
     return archiveCatalogueAdminApi(new Request(request.url,{method:"GET",headers:request.headers}),env,entityId);
   }
   return failure("Method not allowed.",405);
+}
+
+async function archiveCatalogueReidentifyAdminApi(request,env,entityId=""){
+  if(request.method!=="POST")return failure("Method not allowed.",405);
+  const database=db(env),body=await readJson(request);if(!body)return failure("Send a JSON object.");
+  const before=await database.prepare("SELECT * FROM archive_catalogue_entries WHERE entity_id=?").bind(entityId).first();
+  if(!before)return failure("Catalogue entry not found.",404);
+  const owner=await database.prepare("SELECT entity_id FROM archive_dossiers WHERE entity_id=?").bind(entityId).first();
+  if(!owner)return failure("Dossier not found.",404);
+  const expectedCatalogueId=text(body.expected_catalogue_id??body.expectedCatalogueId,200);
+  if(!expectedCatalogueId)return failure("Confirm the current catalogue identity before re-identifying.",409);
+  if(expectedCatalogueId!==before.catalogue_id)return failure("This catalogue identity changed after the dossier was opened. Reload it before re-identifying.",409);
+  const mediumId=text(body.medium_id??body.mediumId,80),objectTypeId=text(body.object_type_id??body.objectTypeId,120);
+  const type=await database.prepare("SELECT * FROM archive_cultural_object_types WHERE id=? AND medium_id=?").bind(objectTypeId,mediumId).first();
+  if(!type)return failure("Choose a cultural object type that belongs to the selected medium.",409);
+  if(type.catalogue_prefix===before.catalogue_prefix)return failure("This classification keeps the existing catalogue prefix. Use Save catalogue identity instead.",409);
+  const releasedCatalogueId=before.catalogue_id;
+  try{
+    const updated=await database.prepare(`WITH candidates(candidate) AS (
+        SELECT 1
+        UNION
+        SELECT catalogue_number+1 FROM archive_catalogue_entries WHERE catalogue_prefix=?
+      ), next_number(value) AS (
+        SELECT MIN(candidate) FROM candidates
+        WHERE NOT EXISTS(
+          SELECT 1 FROM archive_catalogue_entries occupied
+          WHERE occupied.catalogue_prefix=? AND occupied.catalogue_number=candidates.candidate
+        )
+      )
+      UPDATE archive_catalogue_entries
+      SET medium_id=?,object_type_id=?,catalogue_prefix=?,
+        catalogue_number=(SELECT value FROM next_number),
+        catalogue_id=?||'-'||printf('%03d',(SELECT value FROM next_number)),
+        updated_by='studio-reidentify',updated_at=datetime('now')
+      WHERE entity_id=? AND catalogue_id=?
+      RETURNING *`).bind(type.catalogue_prefix,type.catalogue_prefix,mediumId,objectTypeId,type.catalogue_prefix,type.catalogue_prefix,entityId,expectedCatalogueId).first();
+    if(!updated)return failure("This catalogue identity changed after the dossier was opened. Reload it before re-identifying.",409);
+  }catch(error){
+    const duplicate=/UNIQUE constraint failed/i.test(String(error?.message||error));
+    return failure(duplicate?"Another catalogue identity was assigned at the same time. Reload and try again.":error.message,duplicate?409:400);
+  }
+  const response=await archiveCatalogueAdminApi(new Request(request.url.replace(/\/reidentify$/,""),{method:"GET",headers:request.headers}),env,entityId);
+  if(!response.ok)return response;
+  const payload=await response.json();
+  return json({...payload,released_catalogue_id:releasedCatalogueId,releasedCatalogueId});
 }
 
 function normalizeArchiveDocumentation(body,existing={}){
@@ -3883,8 +4139,7 @@ async function archiveBlackboardsAdminApi(request,env,entityId="",action=""){
     const recordId=text(body.id,200)||id("archive-blackboard"),versionId=id("archive-version"),stateId=id("archive-state"),setId=id("archive-source-material");
     const type=await database.prepare("SELECT medium_id,catalogue_prefix FROM archive_cultural_object_types WHERE id='other-blackboard'").first();
     if(!type)return failure("Run the Archive Blackboards migration before creating a board.",409);
-    const maximum=await database.prepare("SELECT COALESCE(MAX(catalogue_number),0) maximum FROM archive_catalogue_entries WHERE catalogue_prefix=?").bind(type.catalogue_prefix).first();
-    const number=Number(maximum?.maximum||0)+1,catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
+    const number=await nextArchiveCatalogueNumber(database,type.catalogue_prefix),catalogueId=`${type.catalogue_prefix}-${String(number).padStart(3,"0")}`;
     const occurredAt=text(body.occurred_at??body.occurredAt,80)||null,dateLabel=text(body.date_label??body.dateLabel,160),datePrecision=text(body.date_precision??body.datePrecision,30)||(occurredAt?"exact":"undated");
     if(!ARCHIVE_DATE_PRECISIONS.has(datePrecision))return failure("Invalid date precision.",409);
     try{
@@ -4068,6 +4323,7 @@ export async function handleConstructApi(request,env){
   const url=new URL(request.url);const path=url.pathname;
   const colorMaterialsPublic=await handleArchiveColorMaterialsPublic(request,env,path);if(colorMaterialsPublic)return colorMaterialsPublic;
   if(path==="/api/site/navigation")return publicNavigation(env);
+  if(path==="/api/site/explore")return publicExplore(request,env);
   if(path==="/api/search")return publicSearch(request,env);
   if(path==="/api/archive/blackboards")return publicArchiveBlackboards(request,env);
   if(path==="/api/archive/items")return publicArchiveItems(request,env);
@@ -4091,6 +4347,7 @@ export async function handleConstructApi(request,env){
   const mediaUploadSessionMatch=path.match(/^\/api\/admin\/media\/uploads\/([^/]+)$/);if(mediaUploadSessionMatch)return mediaUploadsApi(request,env,decodeURIComponent(mediaUploadSessionMatch[1]));
   const mediaFileMatch=path.match(/^\/api\/admin\/media\/([^/]+)\/file$/);if(mediaFileMatch)return adminMediaFileApi(request,env,decodeURIComponent(mediaFileMatch[1]));
   const mediaMatch=path.match(/^\/api\/admin\/media(?:\/([^/]+))?$/);if(mediaMatch)return mediaApi(request,env,mediaMatch[1]?decodeURIComponent(mediaMatch[1]):"");
+  const catalogueReidentifyMatch=path.match(/^\/api\/admin\/archive-catalogue\/([^/]+)\/reidentify$/);if(catalogueReidentifyMatch)return archiveCatalogueReidentifyAdminApi(request,env,decodeURIComponent(catalogueReidentifyMatch[1]));
   const catalogueMatch=path.match(/^\/api\/admin\/archive-catalogue(?:\/([^/]+))?$/);if(catalogueMatch)return archiveCatalogueAdminApi(request,env,catalogueMatch[1]?decodeURIComponent(catalogueMatch[1]):"");
   const documentationMatch=path.match(/^\/api\/admin\/archive-documentation(?:\/([^/]+))?$/);if(documentationMatch)return archiveDocumentationAdminApi(request,env,documentationMatch[1]?decodeURIComponent(documentationMatch[1]):"");
   const eventIdentifierMatch=path.match(/^\/api\/admin\/archive-event-identifiers\/([^/]+)$/);if(eventIdentifierMatch)return archiveEventIdentifierAdminApi(request,env,decodeURIComponent(eventIdentifierMatch[1]));

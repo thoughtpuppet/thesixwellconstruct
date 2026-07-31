@@ -1,8 +1,8 @@
 /* ============================================================
    construct-nav.js — the six.well construct
    ============================================================
-   Renders a row of 9 colored dots, one per construct entry, fixed
-   at the top of every inner page.
+   Renders a row of 9 colored dots, one per construct entry, plus a
+   separate Construct-wide Explore action, fixed at the top of every inner page.
 
    - Current construct entry dot: full opacity in its color
    - Other dots: dimmed to 0.2 opacity
@@ -323,6 +323,40 @@
     desktopColorBindings.push({ venture: v, label: label, dot: dot });
   });
 
+  var isExplorePage = window.location.pathname === '/explore' || window.location.pathname.startsWith('/explore/');
+  var exploreAction = document.createElement('button');
+  exploreAction.type = 'button';
+  exploreAction.className = 'cnav-explore';
+  exploreAction.textContent = 'EXPLORE';
+  exploreAction.setAttribute('aria-label', 'Explore the Construct');
+  if (isExplorePage) exploreAction.setAttribute('aria-current', 'page');
+  exploreAction.style.cssText = [
+    'min-height:32px',
+    'padding:6px 8px 5px 12px',
+    'border:0',
+    'border-left:5px solid ' + readTokenColor('--color-about', '#FCB867'),
+    'border-radius:0',
+    'background:' + (isExplorePage ? readTokenColor('--color-about', '#FCB867') : 'transparent'),
+    'color:' + (isExplorePage ? readTokenColor('--color-bg', '#0e0e0e') : readTokenColor('--color-about', '#FCB867')),
+    'font-family:' + CONFIG.labelFont,
+    'font-size:9px',
+    'font-weight:700',
+    'letter-spacing:0.14em',
+    'line-height:1',
+    'cursor:' + (isExplorePage ? 'default' : 'pointer'),
+    'pointer-events:auto',
+  ].join(';');
+  exploreAction.addEventListener('click', function() {
+    if (isExplorePage) return;
+    if (typeof window._constructFade === 'function') window._constructFade('/explore/');
+    else window.location.href = '/explore/';
+  });
+  nav.appendChild(exploreAction);
+
+  var exploreFocusStyle = document.createElement('style');
+  exploreFocusStyle.textContent = '.cnav-explore:focus-visible,#cnav-mobile-explore:focus-visible{outline:3px solid #FCB867;outline-offset:3px;}';
+  document.head.appendChild(exploreFocusStyle);
+
   document.body.appendChild(nav);
 
 
@@ -489,11 +523,45 @@
     'z-index:2',
   ].join(';');
 
+  var mExplore = document.createElement('button');
+  mExplore.id = 'cnav-mobile-explore';
+  mExplore.type = 'button';
+  mExplore.textContent = 'EXPLORE';
+  mExplore.setAttribute('aria-label', 'Explore the Construct');
+  if (isExplorePage) mExplore.setAttribute('aria-current', 'page');
+  mExplore.style.cssText = [
+    'position:absolute',
+    'top:72px',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'min-width:132px',
+    'min-height:44px',
+    'padding:9px 14px',
+    'border:5px solid ' + PARTICLE_COLOR,
+    'border-radius:0',
+    'background:' + (isExplorePage ? PARTICLE_COLOR : SITE_BG),
+    'color:' + (isExplorePage ? SITE_BG : PARTICLE_COLOR),
+    'font-family:' + CONFIG.labelFont,
+    'font-size:10px',
+    'font-weight:700',
+    'letter-spacing:0.18em',
+    'text-transform:uppercase',
+    'cursor:' + (isExplorePage ? 'default' : 'pointer'),
+    'opacity:0',
+    'transition:opacity 350ms ease',
+    'pointer-events:none',
+    'z-index:2',
+  ].join(';');
+
   mScrim.appendChild(mCanvas);
   mScrim.appendChild(mLabels);
   mScrim.appendChild(mCenterLabel);
   mScrim.appendChild(mWordmark);
   mScrim.appendChild(mBack);
+  mScrim.appendChild(mExplore);
 
   /* mRing remains as a compatibility handle for responsive hide/show code. */
   var mRing = mScrim;
@@ -564,6 +632,12 @@
     }
     mScrim.style.background = SITE_BG;
     mWmText.style.color = PARTICLE_COLOR;
+    exploreAction.style.borderLeftColor = PARTICLE_COLOR;
+    exploreAction.style.background = isExplorePage ? PARTICLE_COLOR : 'transparent';
+    exploreAction.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
+    mExplore.style.borderColor = PARTICLE_COLOR;
+    mExplore.style.background = isExplorePage ? PARTICLE_COLOR : SITE_BG;
+    mExplore.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
     mobileNodes.forEach(function(nd) {
       nd.el.style.color = nd.venture.color;
     });
@@ -1067,6 +1141,8 @@
     requestAnimationFrame(function() {
       mScrim.style.opacity = '0.94';
       mWordmark.style.opacity = '0.82';
+      mExplore.style.opacity = '0.82';
+      mExplore.style.pointerEvents = 'auto';
       mChip.style.zIndex = '1099';
     });
     chipCaret.style.transform = 'rotate(180deg)';
@@ -1084,6 +1160,8 @@
     mWordmark.style.opacity = '0';
     mBack.style.opacity = '0';
     mBack.style.pointerEvents = 'none';
+    mExplore.style.opacity = '0';
+    mExplore.style.pointerEvents = 'none';
     mobileNodes.forEach(function(nd) { nd.el.style.opacity = '0'; });
     mCenterLabel.style.opacity = '0';
     chipCaret.style.transform = 'rotate(0deg)';
@@ -1161,6 +1239,13 @@
   mBack.addEventListener('click', function(e) {
     e.stopPropagation();
     collapseMobileSubnodes();
+  });
+
+  mExplore.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (isExplorePage) return;
+    if (typeof window._constructFade === 'function') window._constructFade('/explore/');
+    else window.location.href = '/explore/';
   });
 
   mChip.addEventListener('click', function(e) {
@@ -1305,8 +1390,9 @@
 
       var bounds = desktopHeaderBounds(w);
       var dotCount = desktopDots.length;
+      var exploreWidth = Math.max(76, exploreAction.getBoundingClientRect().width);
       var minRowWidth = dotCount > 0
-        ? (dotCount * CONFIG.dotSize) + ((dotCount - 1) * CONFIG.dotGapMin)
+        ? (dotCount * CONFIG.dotSize) + exploreWidth + (dotCount * CONFIG.dotGapMin)
         : 0;
       var availableWidth = Math.max(0, bounds.right - bounds.left);
 
@@ -1322,11 +1408,11 @@
       mRing.style.display  = 'none';
 
       var fittedGap = dotCount > 1
-        ? (availableWidth - (dotCount * CONFIG.dotSize)) / (dotCount - 1)
+        ? (availableWidth - (dotCount * CONFIG.dotSize) - exploreWidth) / dotCount
         : CONFIG.dotGap;
       fittedGap = Math.max(CONFIG.dotGapMin, Math.min(CONFIG.dotGap, fittedGap));
 
-      var rowWidth = (dotCount * CONFIG.dotSize) + ((dotCount - 1) * fittedGap);
+      var rowWidth = (dotCount * CONFIG.dotSize) + exploreWidth + (dotCount * fittedGap);
       var minCenter = bounds.left + rowWidth / 2;
       var maxCenter = bounds.right - rowWidth / 2;
       var centerX = Math.max(minCenter, Math.min(maxCenter, w / 2));
@@ -1402,6 +1488,7 @@
       var item = nav.querySelector('[data-venture-key="' + venture.key + '"]');
       if (item) nav.appendChild(item);
     });
+    nav.appendChild(exploreAction);
     currentVenture = null;
     VENTURES.forEach(function(venture) { if (venture.key === currentKey) currentVenture = venture; });
     if (currentVenture) chipText.textContent = currentVenture.label;
