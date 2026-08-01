@@ -319,8 +319,15 @@
   .file-badge.stored { color:#55BA5A; }
   .type-tag { display:inline-block; padding:2px 7px; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; border:3px solid rgba(255,231,202,0.22); color:var(--dim); margin-left:6px; }
   .portfolio-manager { display:grid; gap:22px; }
+  .portfolio-list-view,.portfolio-editor-view { display:grid; gap:22px; }
+  .portfolio-list-view[hidden],.portfolio-editor-view[hidden] { display:none; }
   .portfolio-head { display:flex; justify-content:space-between; align-items:end; gap:18px; flex-wrap:wrap; padding-bottom:22px; border-bottom:5px solid var(--ring-faint); }
   .portfolio-head h2 { margin-bottom:8px; }
+  .portfolio-editor-head { display:flex; align-items:end; justify-content:space-between; gap:18px; flex-wrap:wrap; padding-bottom:22px; border-bottom:5px solid var(--ring-faint); }
+  .portfolio-editor-head h2 { margin:8px 0 0; }
+  .portfolio-editor-grid { display:grid; }
+  .portfolio-editor-grid .portfolio-card { grid-template-columns:minmax(220px,.65fr) minmax(0,1.35fr); align-items:start; }
+  .portfolio-editor-grid .portfolio-card-media { position:sticky; top:20px; }
   .portfolio-filters { display:flex; gap:8px; flex-wrap:wrap; }
   .portfolio-drop { border:5px dashed var(--ring-soft); padding:24px; display:grid; place-items:center; gap:10px; text-align:center; background:rgba(252,184,103,0.025); }
   .portfolio-drop.is-over { border-color:var(--accent); background:rgba(252,184,103,0.08); }
@@ -363,6 +370,7 @@
   .portfolio-card-title strong { font-family:var(--sans); font-size:11px; line-height:1.35; letter-spacing:.08em; text-transform:uppercase; overflow-wrap:anywhere; }
   .portfolio-card-actions { display:flex; gap:6px; flex-wrap:wrap; }
   .portfolio-card-actions .button { min-height:34px; padding:0 9px; font-size:9px; }
+  .portfolio-card.is-open [data-portfolio-open] { display:none; }
   .portfolio-publish-status { margin:0; padding:10px 12px; border:5px solid rgba(110,4,4,0.72); background:rgba(110,4,4,0.12); color:var(--text); font-family:var(--sans); font-size:10px; font-weight:700; line-height:1.55; letter-spacing:.04em; }
   .portfolio-publish-status[hidden] { display:none; }
   .portfolio-edit { border-top:5px solid var(--ring-faint); padding-top:10px; }
@@ -449,6 +457,8 @@
     .availability-manager .availability-edit-form,
     .availability-manager .day-row { grid-template-columns:1fr; }
     .availability-manager .wide-field { grid-column:auto; }
+    .portfolio-editor-grid .portfolio-card { grid-template-columns:1fr; }
+    .portfolio-editor-grid .portfolio-card-media { position:static; }
   }
   .sheet-request-list { display:grid; gap:12px; margin-top:16px; }
   .sheet-request-row { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:12px; align-items:start; padding:14px; border:5px solid rgba(252,184,103,.22); }
@@ -632,6 +642,7 @@
   let selectedEventSlug = "";
   let portfolioItems = [];
   let portfolioState = "published";
+  let activePortfolioItemId = "";
   let portfolioObjectUrls = [];
   let portfolioOptions = { styles: [], collections: [] };
   let portfolioBatch = null;
@@ -1623,7 +1634,7 @@
     </div>`;
   }
 
-  function renderPortfolioCard(item, index, total) {
+  function renderPortfolioCard(item, index, total, { editor = false } = {}) {
     const portfolioImages = portfolioImagesForItem(item);
     const projectType = item.projectType || "standard";
     const styleValues = portfolioStyleValues(item);
@@ -1636,7 +1647,7 @@
         ? `<button class="button" type="button" data-portfolio-state="published" data-id="${escapeHtml(item.id)}" title="Save the visible metadata and image permissions, then publish">Save &amp; publish</button>`
         : `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Restore to draft</button>`;
     return `
-      <article class="portfolio-card" data-portfolio-card="${escapeHtml(item.id)}">
+      <article class="portfolio-card${editor ? " is-open" : ""}" data-portfolio-card="${escapeHtml(item.id)}">
         <div class="portfolio-card-media">
           <img ${item.sourceUrl ? `src="${escapeHtml(item.sourceUrl)}"` : `data-secure-src="${escapeHtml(item.imageUrl)}"`} alt="${escapeHtml(item.altText || "Portfolio preview")}">
         </div>
@@ -1644,6 +1655,7 @@
           <div class="portfolio-card-title"><strong>${escapeHtml(portfolioLabel(item))}</strong><span class="pill">${index + 1} / ${total}</span></div>
           <div class="meta">${styleLabels.map(escapeHtml).join(" + ")}${item.collection ? ` / ${escapeHtml(portfolioOptionLabel("collection", item.collection))}` : ""}${projectType === "cover_up" ? " / Cover-up" : ""}</div>
           <div class="portfolio-card-actions">
+            <button class="button" type="button" data-portfolio-open="${escapeHtml(item.id)}">Open</button>
             ${stateAction}
             <button class="button" type="button" data-portfolio-connections data-id="${escapeHtml(item.id)}" aria-expanded="false" aria-controls="portfolio-connections-${escapeHtml(item.id)}">Connections</button>
             ${item.state !== "archived" ? `<button class="button danger-button" type="button" data-portfolio-archive data-id="${escapeHtml(item.id)}">Archive</button>` : ""}
@@ -1651,7 +1663,7 @@
             ${item.state === "published" ? `<a class="button" href="/tattoos/portfolio/?work=${encodeURIComponent(item.id)}" target="_blank" rel="noopener">View public detail</a>` : ""}
           </div>
           <p class="portfolio-publish-status" data-portfolio-publish-status role="alert" hidden></p>
-          <details class="portfolio-edit">
+          <details class="portfolio-edit"${editor ? " open" : ""}>
             <summary>Edit metadata</summary>
             <form class="portfolio-edit-form" data-portfolio-form="${escapeHtml(item.id)}">
               <label>Title<input name="title" value="${escapeHtml(item.title)}" maxlength="160"></label>
@@ -1683,7 +1695,7 @@
               <button class="button" type="submit">Save metadata</button>
             </form>
           </details>
-          <details class="portfolio-angle-manager" data-angle-manager="${escapeHtml(item.id)}">
+          <details class="portfolio-angle-manager" data-angle-manager="${escapeHtml(item.id)}"${editor ? " open" : ""}>
             <summary><span>Tattoo media</span><span class="pill">${portfolioImages.length} item${portfolioImages.length === 1 ? "" : "s"}</span></summary>
             <div class="portfolio-angle-content">
               <div class="portfolio-angle-grid">${portfolioImages.map((image, imageIndex, images) => renderPortfolioImageItem(item, image, imageIndex, images)).join("")}</div>
@@ -1713,13 +1725,31 @@
 
   function paintPortfolioItems() {
     const grid = document.getElementById("portfolioGrid");
-    if (!grid) return;
+    const listView = document.getElementById("portfolioListView");
+    const editorView = document.getElementById("portfolioEditorView");
+    if (!grid || !listView || !editorView) return;
     ["published", "draft", "archived"].forEach((state) => {
       const button = document.querySelector(`[data-portfolio-filter="${state}"]`);
       if (button) button.textContent = `${state} (${portfolioItems.filter((item) => item.state === state).length})`;
     });
     portfolioObjectUrls.forEach((url) => URL.revokeObjectURL(url));
     portfolioObjectUrls = [];
+    if (activePortfolioItemId) {
+      const item = portfolioItems.find((record) => record.id === activePortfolioItemId);
+      if (item) {
+        const stateItems = portfolioItems.filter((record) => record.state === item.state);
+        const index = Math.max(0, stateItems.findIndex((record) => record.id === item.id));
+        listView.hidden = true;
+        editorView.hidden = false;
+        editorView.innerHTML = `<div class="portfolio-editor-head"><div><button class="button" type="button" data-portfolio-back>← Back to Portfolio</button><h2>${escapeHtml(portfolioLabel(item))}</h2><p class="contact">Edit this tattoo record, its media, publication state, and Construct connections.</p></div><span class="pill">${escapeHtml(item.state)}</span></div><div class="portfolio-editor-grid">${renderPortfolioCard(item,index,stateItems.length,{editor:true})}</div>`;
+        hydratePortfolioImages(editorView);
+        return;
+      }
+      activePortfolioItemId = "";
+    }
+    listView.hidden = false;
+    editorView.hidden = true;
+    editorView.innerHTML = "";
     const items = portfolioItemsForState();
     grid.innerHTML = items.length
       ? items.map((item, index) => renderPortfolioCard(item, index, items.length)).join("")
@@ -2216,6 +2246,17 @@
       });
     }, true);
     manager.addEventListener("click", async (event) => {
+      const open = event.target.closest("[data-portfolio-open]");
+      if (open) {
+        activePortfolioItemId = open.dataset.portfolioOpen;
+        paintPortfolioItems();
+        return;
+      }
+      if (event.target.closest("[data-portfolio-back]")) {
+        activePortfolioItemId = "";
+        paintPortfolioItems();
+        return;
+      }
       const combineBatch = event.target.closest("[data-batch-combine]");
       if (combineBatch) {
         try {
@@ -2366,12 +2407,15 @@
     const counts = Object.fromEntries(["published", "draft", "archived"].map((state) => [state, portfolioItems.filter((item) => item.state === state).length]));
     detailEl.innerHTML = `
       <section class="portfolio-manager" id="portfolioManager">
-        <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, and publish tattoo work. Newest entries appear first in Studio and on the public gallery.</p></div>
-          <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
+        <div class="portfolio-list-view" id="portfolioListView">
+          <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, and publish tattoo work. Newest entries appear first in Studio and on the public gallery.</p></div>
+            <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
+          </div>
+          <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. Organize related photographs before creating private Draft entries.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
+          <section class="portfolio-batch" id="portfolioBatch" aria-label="Organize portfolio upload batch" hidden></section>
+          <div class="portfolio-grid" id="portfolioGrid"><div class="portfolio-empty">Loading portfolio...</div></div>
         </div>
-        <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. Organize related photographs before creating private Draft entries.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
-        <section class="portfolio-batch" id="portfolioBatch" aria-label="Organize portfolio upload batch" hidden></section>
-        <div class="portfolio-grid" id="portfolioGrid"><div class="portfolio-empty">Loading portfolio...</div></div>
+        <section class="portfolio-editor-view" id="portfolioEditorView" aria-label="Portfolio item editor" hidden></section>
       </section>`;
     bindPortfolioManager();
     renderPortfolioBatch();
@@ -2885,6 +2929,7 @@
       return;
     }
     activeTab = tab;
+    activePortfolioItemId = "";
     activeId = "";
     activeAppointmentId = "";
     typeValue = "";
@@ -2897,6 +2942,7 @@
   function setSubView(view) {
     if (subView === view) return;
     subView = view;
+    activePortfolioItemId = "";
     activeId = "";
     activeAppointmentId = "";
     statusValue = "";

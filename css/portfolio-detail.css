@@ -30,8 +30,8 @@ body.is-portfolio-detail main { display:none; }
 .overlay-close::before { content:"←"; }
 .overlay-inner { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr); gap:64px; width:100%; max-width:none; max-height:none; align-items:start; }
 .portfolio-detail-media { display:grid; gap:12px; min-width:0; }
-.overlay-image-wrap { height:auto; min-height:420px; max-height:none; border:5px solid var(--ring-faint); background:#090909; }
-.overlay-image-wrap img,.overlay-image-wrap video { width:100%; max-width:100%; height:min(76vh,900px); max-height:none; object-fit:contain; opacity:1; transform:none; transition:opacity var(--t-fast); }
+.overlay-image-wrap { height:auto; min-height:0; max-height:none; border:0; background:transparent; }
+.overlay-image-wrap img,.overlay-image-wrap video { display:block; width:100%; max-width:100%; height:auto; max-height:none; object-fit:contain; opacity:1; transform:none; transition:opacity var(--t-fast); }
 #work-overlay.open .overlay-image-wrap img { opacity:1; transform:none; }
 .portfolio-angle-strip { display:grid; grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:8px; }
 .portfolio-angle-button { aspect-ratio:4/5; border:3px solid var(--ring-faint); overflow:hidden; background:#090909; }
@@ -60,7 +60,7 @@ body.is-portfolio-detail main { display:none; }
 .portfolio-documentation-heading p { color:var(--text-mute); font-size:12px; }
 .portfolio-image-comparison { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .portfolio-documented-image { display:grid; gap:8px; margin:0; min-width:0; }
-.portfolio-documented-image img,.portfolio-documented-image video { width:100%; aspect-ratio:4/5; object-fit:contain; border:5px solid var(--ring-faint); background:#090909; }
+.portfolio-documented-image img,.portfolio-documented-image video { display:block; width:100%; height:auto; object-fit:contain; border:0; background:transparent; }
 .portfolio-image-group { display:grid; gap:10px; }
 .portfolio-image-group-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
 .portfolio-documentation-badge { color:var(--venture-color); }

@@ -107,3 +107,14 @@ test("Tattoo Portfolio uses newest-first API order in public and Studio surfaces
   assert.match(studio, /Newest entries appear first in Studio and on the public gallery\./);
   assert.doesNotMatch(studio, /data-portfolio-move|savePortfolioOrder|movePortfolioItem|draggable="true"/);
 });
+
+test("Studio Portfolio opens one item into the complete editor and returns to the list", async () => {
+  const studio = await source("studio/submissions/index.html");
+
+  assert.match(studio, /data-portfolio-open="\$\{escapeHtml\(item\.id\)\}">Open<\/button>/);
+  assert.match(studio, /data-portfolio-back>← Back to Portfolio<\/button>/);
+  assert.match(studio, /renderPortfolioCard\(item,index,stateItems\.length,\{editor:true\}\)/);
+  assert.match(studio, /portfolio-card\$\{editor \? " is-open" : ""\}/);
+  assert.match(studio, /window\.ConnectionsManager\?\.mount\(panel, \{ entityId: connections\.dataset\.id \}\)/);
+  assert.doesNotMatch(studio, /\.portfolio-card:not\(\.is-open\)/, "Open must not hide the existing card actions or editors");
+});
