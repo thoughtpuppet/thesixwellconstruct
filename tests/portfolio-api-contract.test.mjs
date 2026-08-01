@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 import { handlePortfolioApi } from "../functions/api/portfolio/_lib.js";
 import { handleConstructApi, reapStaleMediaUploads } from "../functions/api/construct/_lib.js";
@@ -1223,4 +1224,87 @@ test("Studio resumable client retries parts three times and exposes resume and c
   assert.match(client, /method:"DELETE"/);
   assert.match(studio, /data-portfolio-upload-cancel/);
   assert.match(studio, /H\.264\/AAC/);
+});
+
+test("Portfolio batch organizer combines, splits, constrains covers, and preserves stable order", () => {
+  const source = readFileSync(join(ROOT, "studio", "portfolio-batch-organizer.js"), "utf8");
+  const context = {};
+  runInNewContext(source, context);
+  const revoked = [];
+  const organizer = new context.PortfolioBatchOrganizer({
+    createPreview: (file) => `preview:${file.name}`,
+    revokePreview: (url) => revoked.push(url),
+  });
+  organizer.addFiles([
+    { name: "one.jpg" },
+    { name: "two.jpg" },
+    { name: "three.jpg" },
+  ]);
+  assert.deepEqual({ ...organizer.summary() }, {
+    entries: 3,
+    images: 3,
+    selected: 0,
+    completedEntries: 0,
+    completedImages: 0,
+  });
+
+  const [first, second] = organizer.groups;
+  organizer.setSelected(first.id, true);
+  organizer.setSelected(second.id, true);
+  const combined = organizer.combineSelected();
+  assert.deepEqual(Array.from(combined.media, (media) => media.name), ["one.jpg", "two.jpg"]);
+  assert.equal(combined.media.filter((media) => media.isCover).length, 1);
+  assert.deepEqual(Array.from(organizer.groups, (group) => Array.from(group.media, (media) => media.name)).flat(), ["one.jpg", "two.jpg", "three.jpg"]);
+
+  const secondary = combined.media[1];
+  organizer.setRole(combined.id, secondary.id, "detail");
+  organizer.setHealingState(combined.id, secondary.id, "healed");
+  organizer.setCover(combined.id, secondary.id);
+  assert.equal(secondary.role, "result");
+  assert.equal(secondary.healingState, "healed");
+  assert.throws(() => organizer.setRole(combined.id, secondary.id, "before"), /cover image must remain a Result/);
+
+  const split = organizer.splitMedia(combined.id, secondary.id);
+  assert.equal(split.media[0].isCover, true);
+  assert.equal(split.media[0].role, "result");
+  assert.deepEqual(Array.from(organizer.groups, (group) => Array.from(group.media, (media) => media.name)).flat(), ["one.jpg", "two.jpg", "three.jpg"]);
+  assert.deepEqual({ ...organizer.summary() }, {
+    entries: 3,
+    images: 3,
+    selected: 0,
+    completedEntries: 0,
+    completedImages: 0,
+  });
+
+  const retryGroup = organizer.groups[0];
+  const retryCover = retryGroup.media[0];
+  assert.equal(organizer.uploadStep(retryGroup, retryCover), "create-entry");
+  retryGroup.itemId = "draft-id";
+  retryCover.imageRef = "primary";
+  retryCover.uploadStatus = "uploaded";
+  assert.equal(organizer.uploadStep(retryGroup, retryCover), "document-media");
+  retryCover.uploadStatus = "complete";
+  assert.equal(organizer.uploadStep(retryGroup, retryCover), "complete");
+  const retrySecondary = { isCover: false, imageRef: "", uploadStatus: "pending" };
+  assert.equal(organizer.uploadStep(retryGroup, retrySecondary), "upload-media");
+  retrySecondary.imageRef = "media-id";
+  retrySecondary.uploadStatus = "uploaded";
+  assert.equal(organizer.uploadStep(retryGroup, retrySecondary), "document-media");
+  retrySecondary.uploadStatus = "complete";
+  assert.equal(organizer.uploadStep(retryGroup, retrySecondary), "complete");
+
+  organizer.reset();
+  assert.deepEqual(revoked, ["preview:one.jpg", "preview:two.jpg", "preview:three.jpg"]);
+});
+
+test("Studio Portfolio loads the pre-upload organizer and resumable retry controls", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studio, /portfolio-batch-organizer\.js/);
+  assert.match(studio, /id="portfolioBatch"/);
+  assert.match(studio, /data-batch-combine/);
+  assert.match(studio, /data-batch-split/);
+  assert.match(studio, /Retry unfinished uploads/);
+  assert.match(studio, /stagePortfolioFiles/);
+  assert.match(studio, /uploadPortfolioBatch/);
+  assert.match(studio, /consentStatus:\s*"unknown"/);
 });

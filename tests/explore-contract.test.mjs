@@ -288,6 +288,9 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(client, /_constructFade/);
   assert.match(nav, /className = 'cnav-explore'/);
   assert.match(nav, /id = 'cnav-mobile-explore'/);
+  assert.equal((nav.match(/textContent = 'ADVENTURE'/g) || []).length, 2);
+  assert.equal((nav.match(/setAttribute\('aria-label', 'Adventure through the Construct'\)/g) || []).length, 2);
+  assert.doesNotMatch(nav, /textContent = 'EXPLORE'|Explore the Construct/);
   assert.match(nav, /aria-current', 'page'/);
   assert.match(nav, /pathname === '\/adventure'/);
   assert.equal((nav.match(/_constructFade\('\/adventure\/'\)/g) || []).length, 2);

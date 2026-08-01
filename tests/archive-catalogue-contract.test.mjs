@@ -172,6 +172,28 @@ test("Tattoo Portfolio dossier labels stay consistent across automatic creation 
   assert.equal(dossier.record_type, "tattoo");
 });
 
+test("Archive presentation uses Tattoo and Tattoo Design without erasing internal catalogue types", async () => {
+  const db = database();
+  const runtime = env(db);
+
+  db.exec(`
+    INSERT INTO content_entities(id,entity_type,node_id,visibility,search_visibility,created_by,updated_by,created_at,updated_at) VALUES
+      ('portfolio-presentation-label','portfolio_item','node-tattoos','public',1,'test','test',datetime('now'),datetime('now')),
+      ('flash-presentation-label','flash_item','node-tattoos','public',1,'test','test',datetime('now'),datetime('now'));
+  `);
+
+  const response = await handleConstructApi(request("/api/admin/archive-dossiers", { admin: true }), runtime);
+  assert.equal(response.status, 200);
+  const records = (await response.json()).records;
+  const tattoo = records.find((record) => record.entity_id === "portfolio-presentation-label");
+  const tattooDesign = records.find((record) => record.entity_id === "flash-presentation-label");
+
+  assert.equal(tattoo.cultural_object_type_id, "tattoo-execution");
+  assert.equal(tattoo.cultural_object_type, "Tattoo");
+  assert.equal(tattooDesign.cultural_object_type_id, "tattoo-flash-design");
+  assert.equal(tattooDesign.cultural_object_type, "Tattoo Design");
+});
+
 test("0088 normalizes an existing Portfolio Item dossier label without changing its identity", () => {
   const migrationName = "0088_archive_tattoo_record_type_consistency.sql";
   const db = databaseBefore(migrationName);
@@ -912,7 +934,10 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(publicScript, /Version \$\{versionNumber\}, State/);
   assert.match(publicScript, /Concept or theme/);
   assert.match(publicScript, /archive-record-card-catalogue/);
-  assert.match(publicScript, /record\.cultural_object_type, record\.culturalObjectType, record\.record_type_label/);
+  assert.match(publicScript, /function archiveObjectTypeLabel\(record\)/);
+  assert.match(publicScript, /return "Tattoo"/);
+  assert.match(publicScript, /return "Tattoo Design"/);
+  assert.match(studio, /function archiveObjectTypeLabel\(record\)/);
   assert.match(publicScript, /archive-record-card-symbol/);
   assert.match(publicScript, /archive-record-symbol/);
   assert.match(publicScript, /archive-notebook-item/);

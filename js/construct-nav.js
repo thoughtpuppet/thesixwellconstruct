@@ -327,8 +327,8 @@
   var exploreAction = document.createElement('button');
   exploreAction.type = 'button';
   exploreAction.className = 'cnav-explore';
-  exploreAction.textContent = 'EXPLORE';
-  exploreAction.setAttribute('aria-label', 'Explore the Construct');
+  exploreAction.textContent = 'ADVENTURE';
+  exploreAction.setAttribute('aria-label', 'Adventure through the Construct');
   if (isExplorePage) exploreAction.setAttribute('aria-current', 'page');
   exploreAction.style.cssText = [
     'min-height:32px',
@@ -526,8 +526,8 @@
   var mExplore = document.createElement('button');
   mExplore.id = 'cnav-mobile-explore';
   mExplore.type = 'button';
-  mExplore.textContent = 'EXPLORE';
-  mExplore.setAttribute('aria-label', 'Explore the Construct');
+  mExplore.textContent = 'ADVENTURE';
+  mExplore.setAttribute('aria-label', 'Adventure through the Construct');
   if (isExplorePage) mExplore.setAttribute('aria-current', 'page');
   mExplore.style.cssText = [
     'position:absolute',

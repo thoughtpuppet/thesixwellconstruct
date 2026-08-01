@@ -831,6 +831,12 @@ function archiveCatalogueLabel(row) {
   return `${row.catalogue_id}.${version}/${state}${variant ? `, ${variant}` : ""}`;
 }
 
+function archiveCulturalObjectTypeLabel(objectTypeId, label) {
+  if (objectTypeId === "tattoo-execution") return "Tattoo";
+  if (objectTypeId === "tattoo-flash-design") return "Tattoo Design";
+  return label || "";
+}
+
 function archiveDigitalAssetType(mimeType="") {
   const mime=String(mimeType||"").toLowerCase();
   if(mime.startsWith("image/"))return "image";
@@ -1070,8 +1076,8 @@ function presentArchiveItem(row) {
     catalogue_medium: row.catalogue_medium || "",
     catalogueMedium: row.catalogue_medium || "",
     catalogue_medium_label: row.catalogue_medium_label || "",
-    cultural_object_type: row.cultural_object_type || "",
-    culturalObjectType: row.cultural_object_type || "",
+    cultural_object_type: archiveCulturalObjectTypeLabel(row.cultural_object_type_id, row.cultural_object_type),
+    culturalObjectType: archiveCulturalObjectTypeLabel(row.cultural_object_type_id, row.cultural_object_type),
     cultural_object_type_id: row.cultural_object_type_id || "",
     current_version: Number(row.current_version || 1),
     current_state: row.current_state || "I",

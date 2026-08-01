@@ -326,6 +326,33 @@
   .portfolio-drop.is-over { border-color:var(--accent); background:rgba(252,184,103,0.08); }
   .portfolio-drop input { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
   .portfolio-upload-status { min-height:18px; color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-batch[hidden] { display:none; }
+  .portfolio-batch { display:grid; gap:16px; border:5px solid var(--ring-faint); padding:16px; background:var(--panel); }
+  .portfolio-batch-head { display:flex; align-items:end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .portfolio-batch-head h3 { margin:0 0 6px; font-family:var(--sans); font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+  .portfolio-batch-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .portfolio-batch-summary { color:var(--accent); font-family:var(--sans); font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-batch-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; align-items:start; }
+  .portfolio-batch-group { display:grid; gap:12px; min-width:0; border:5px solid var(--ring-faint); padding:12px; background:var(--bg); }
+  .portfolio-batch-group.is-selected { border-color:var(--accent); }
+  .portfolio-batch-group.has-error { border-color:rgba(110,4,4,0.82); }
+  .portfolio-batch-group-head { display:flex; align-items:start; justify-content:space-between; gap:10px; }
+  .portfolio-batch-select { display:flex; align-items:center; gap:8px; color:var(--text); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-batch-select input,.portfolio-batch-cover input { width:18px; height:18px; flex:none; margin:0; padding:0; border:0; accent-color:var(--accent); }
+  .portfolio-batch-state { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-batch-error { margin:0; padding:9px 10px; border:5px solid rgba(110,4,4,0.72); color:var(--text); font-family:var(--sans); font-size:10px; line-height:1.45; }
+  .portfolio-batch-media { display:grid; gap:12px; }
+  .portfolio-batch-image { display:grid; grid-template-columns:minmax(92px,.7fr) minmax(0,1fr); gap:12px; min-width:0; border-top:5px solid var(--ring-faint); padding-top:12px; }
+  .portfolio-batch-image:first-child { border-top:0; padding-top:0; }
+  .portfolio-batch-image-preview { position:relative; min-width:0; background:#090909; }
+  .portfolio-batch-image-preview img { width:100%; aspect-ratio:4/5; object-fit:cover; display:block; }
+  .portfolio-batch-image-mark { position:absolute; left:0; bottom:0; max-width:100%; padding:6px 8px; background:var(--panel); color:var(--accent); font-family:var(--sans); font-size:8px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-batch-image-fields { display:grid; gap:8px; min-width:0; }
+  .portfolio-batch-filename { color:var(--muted); font-family:var(--sans); font-size:10px; line-height:1.4; overflow-wrap:anywhere; }
+  .portfolio-batch-cover { display:flex; align-items:center; gap:8px; color:var(--accent); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-batch-image-fields label:not(.portfolio-batch-cover) { display:grid; gap:4px; color:var(--dim); font-family:var(--sans); font-size:8px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+  .portfolio-batch-image-fields select { padding:8px 30px 8px 9px; font-size:10px; }
+  .portfolio-batch-image-fields .button { min-height:30px; padding:0 8px; font-size:8px; justify-self:start; }
   .portfolio-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; align-items:start; }
   .portfolio-card { border:5px solid var(--ring-faint); background:var(--panel); display:grid; min-width:0; }
   .portfolio-card.is-dragging { opacity:.45; }
@@ -398,6 +425,8 @@
   .lifecycle-strip .field { min-width:0; }
   @media (max-width:760px) { .portfolio-settings-grid { grid-template-columns:1fr; } }
   @media (max-width:760px) {
+    .portfolio-batch-grid { grid-template-columns:1fr; }
+    .portfolio-batch-image { grid-template-columns:88px minmax(0,1fr); }
     .portfolio-angle-head { align-items:stretch; flex-direction:column; }
     .portfolio-angle-upload { align-items:stretch; flex-direction:column; }
     .portfolio-angle-upload > label:first-child { min-width:0; }
@@ -482,6 +511,7 @@
 <script src="/studio/admin-collapse.js?v=2"></script>
 <script src="/studio/analytics.js?v=analytics-url-clean"></script>
 <script src="/studio/resumable-media-upload.js?v=1"></script>
+<script src="/studio/portfolio-batch-organizer.js?v=1"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -604,6 +634,8 @@
   let portfolioState = "published";
   let portfolioObjectUrls = [];
   let portfolioOptions = { styles: [], collections: [] };
+  let portfolioBatch = null;
+  let portfolioBatchUploading = false;
   let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
   const tattooSessionPlans = new Map();
   const sessionEstimateCopyFields = [
@@ -1728,27 +1760,200 @@
     await savePortfolioOrder(ids);
   }
 
-  async function uploadPortfolioFiles(files) {
+  function portfolioBatchStarted() {
+    return Boolean(portfolioBatch?.groups.some((group) => group.itemId || group.uploadStatus !== "pending"));
+  }
+
+  function portfolioBatchStatusLabel(group) {
+    if (group.uploadStatus === "complete") return "Draft created";
+    if (group.uploadStatus === "uploading") return "Uploading";
+    if (group.error) return group.itemId ? "Needs retry" : "Upload failed";
+    if (group.itemId) return "Draft in progress";
+    return "Proposed entry";
+  }
+
+  function portfolioBatchImageMarkup(group, media) {
+    const locked = portfolioBatchUploading || portfolioBatchStarted();
+    const role = media.isCover ? "result" : media.role;
+    const roleLabel = PORTFOLIO_IMAGE_ROLES.find(([value]) => value === role)?.[1] || "Result";
+    const imageState = media.uploadStatus === "complete"
+      ? "Uploaded"
+      : media.uploadStatus === "uploaded"
+        ? "Documenting"
+        : media.uploadStatus === "uploading"
+          ? "Uploading"
+          : media.error ? "Retry needed" : media.isCover ? "Cover" : roleLabel;
+    return `<article class="portfolio-batch-image" data-batch-media="${escapeHtml(media.id)}">
+      <div class="portfolio-batch-image-preview">
+        <img src="${escapeHtml(media.previewUrl)}" alt="">
+        <span class="portfolio-batch-image-mark">${escapeHtml(imageState)}</span>
+      </div>
+      <div class="portfolio-batch-image-fields">
+        <span class="portfolio-batch-filename">${escapeHtml(media.name)}</span>
+        <label class="portfolio-batch-cover"><input type="radio" name="batch-cover-${escapeHtml(group.id)}" data-batch-cover="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${media.isCover ? "checked" : ""} ${locked ? "disabled" : ""}><span>Use as cover</span></label>
+        <label>Media role<select data-batch-role="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${media.isCover || locked ? "disabled" : ""}>${PORTFOLIO_IMAGE_ROLES.map(([value,label]) => `<option value="${value}"${value === role ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+        <label>Condition<select data-batch-healing="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${locked ? "disabled" : ""}>${PORTFOLIO_HEALING_STATES.map(([value,label]) => `<option value="${value}"${value === media.healingState ? " selected" : ""}>${label}</option>`).join("")}</select></label>
+        ${group.media.length > 1 ? `<button class="button" type="button" data-batch-split="${escapeHtml(media.id)}" data-group-id="${escapeHtml(group.id)}" ${locked ? "disabled" : ""}>Make separate entry</button>` : ""}
+      </div>
+    </article>`;
+  }
+
+  function portfolioBatchGroupMarkup(group, index) {
+    const locked = portfolioBatchUploading || portfolioBatchStarted();
+    return `<article class="portfolio-batch-group${group.selected ? " is-selected" : ""}${group.error ? " has-error" : ""}" data-batch-group="${escapeHtml(group.id)}">
+      <div class="portfolio-batch-group-head">
+        <label class="portfolio-batch-select"><input type="checkbox" data-batch-select="${escapeHtml(group.id)}" ${group.selected ? "checked" : ""} ${locked ? "disabled" : ""}><span>Entry ${index + 1} · ${group.media.length} image${group.media.length === 1 ? "" : "s"}</span></label>
+        <span class="portfolio-batch-state">${escapeHtml(portfolioBatchStatusLabel(group))}</span>
+      </div>
+      ${group.error ? `<p class="portfolio-batch-error" role="alert">${escapeHtml(group.error)}</p>` : ""}
+      <div class="portfolio-batch-media">${group.media.map((media) => portfolioBatchImageMarkup(group, media)).join("")}</div>
+    </article>`;
+  }
+
+  function renderPortfolioBatch() {
+    const host = document.getElementById("portfolioBatch");
+    if (!host) return;
+    const chooseButton = document.getElementById("portfolioChoose");
+    const fileInput = document.getElementById("portfolioFiles");
+    if (!portfolioBatch?.groups.length) {
+      host.hidden = true;
+      host.innerHTML = "";
+      if (chooseButton) chooseButton.disabled = false;
+      if (fileInput) fileInput.disabled = false;
+      return;
+    }
+    const summary = portfolioBatch.summary();
+    const started = portfolioBatchStarted();
+    const hasProgress = started || summary.completedImages > 0;
+    if (chooseButton) chooseButton.disabled = started || portfolioBatchUploading;
+    if (fileInput) fileInput.disabled = started || portfolioBatchUploading;
+    host.hidden = false;
+    host.innerHTML = `
+      <div class="portfolio-batch-head">
+        <div><h3>Organize batch</h3><p class="contact">Combine photographs of the same tattoo before creating drafts. Use the upload area above to add more images.</p></div>
+        <span class="portfolio-batch-summary">${summary.images} image${summary.images === 1 ? "" : "s"} → ${summary.entries} draft entr${summary.entries === 1 ? "y" : "ies"}</span>
+      </div>
+      <div class="portfolio-batch-actions">
+        <button class="button" type="button" data-batch-combine ${summary.selected < 2 || started || portfolioBatchUploading ? "disabled" : ""}>Combine selected</button>
+        <button class="button danger-button" type="button" data-batch-cancel ${started || portfolioBatchUploading ? "disabled" : ""}>Cancel batch</button>
+        <button class="button" type="button" data-batch-upload ${portfolioBatchUploading ? "disabled" : ""}>${hasProgress ? "Retry unfinished uploads" : `Create ${summary.entries} draft entr${summary.entries === 1 ? "y" : "ies"}`}</button>
+      </div>
+      <div class="portfolio-batch-grid">${portfolioBatch.groups.map(portfolioBatchGroupMarkup).join("")}</div>`;
+    document.querySelectorAll("[data-portfolio-filter]").forEach((button) => { button.disabled = portfolioBatchUploading; });
+  }
+
+  function stagePortfolioFiles(files) {
+    if (portfolioBatchUploading || portfolioBatchStarted()) {
+      setStatus("Finish retrying this batch before starting another upload selection.");
+      return;
+    }
     const validTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-    const status = document.getElementById("portfolioUploadStatus");
+    const errors = [];
     const accepted = [...files].filter((file) => {
-      if (!validTypes.has(file.type)) { setStatus(`${file.name}: use JPEG, PNG, or WebP`); return false; }
-      if (file.size > 15 * 1024 * 1024) { setStatus(`${file.name}: exceeds 15 MB`); return false; }
+      if (!validTypes.has(file.type)) { errors.push(`${file.name}: use JPEG, PNG, or WebP`); return false; }
+      if (file.size > 15 * 1024 * 1024) { errors.push(`${file.name}: exceeds 15 MB`); return false; }
       return true;
     });
-    for (let index = 0; index < accepted.length; index += 1) {
-      const file = accepted[index];
-      status.textContent = `Uploading ${index + 1} of ${accepted.length}: ${file.name}`;
-      const form = new FormData();
-      form.append("file", file);
-      await api("/api/admin/portfolio", { method: "POST", body: form });
-      status.textContent = `Uploaded ${index + 1} of ${accepted.length}`;
-    }
     if (accepted.length) {
-      portfolioState = "draft";
-      await renderPortfolioManager();
-      setStatus(`${accepted.length} portfolio upload${accepted.length === 1 ? "" : "s"} ready in Draft`);
+      if (!portfolioBatch) portfolioBatch = new window.PortfolioBatchOrganizer();
+      portfolioBatch.addFiles(accepted);
+      renderPortfolioBatch();
+      document.getElementById("portfolioUploadStatus").textContent = `${accepted.length} image${accepted.length === 1 ? "" : "s"} added to the organizer`;
     }
+    if (errors.length) setStatus(errors.join(" · "));
+  }
+
+  async function documentPortfolioBatchMedia(group, media) {
+    await api(`/api/admin/portfolio/${encodeURIComponent(group.itemId)}/images/${encodeURIComponent(media.imageRef)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        imageRole: media.isCover ? "result" : media.role,
+        healingState: media.healingState,
+        consentStatus: "unknown",
+        promoteToCoverUp: media.role === "before",
+      }),
+    });
+    media.uploadStatus = "complete";
+    media.error = "";
+  }
+
+  async function uploadPortfolioBatchMedia(group, media) {
+    media.error = "";
+    let step = portfolioBatch.uploadStep(group, media);
+    if (step === "create-entry" || step === "upload-media") {
+      media.uploadStatus = "uploading";
+      renderPortfolioBatch();
+      const upload = new FormData();
+      upload.append("file", media.file);
+      if (step === "create-entry") {
+        const payload = await api("/api/admin/portfolio", { method: "POST", body: upload });
+        if (!payload.item?.id) throw new Error("The draft was created without a portfolio ID. Refresh before retrying.");
+        group.itemId = payload.item.id;
+        media.imageRef = "primary";
+      } else {
+        upload.append("imageRole", media.role);
+        if (media.role === "before") upload.append("promoteToCoverUp", "true");
+        const payload = await api(`/api/admin/portfolio/${encodeURIComponent(group.itemId)}/images`, { method: "POST", body: upload });
+        if (!payload.image?.id) throw new Error("The image was uploaded without a media ID. Refresh before retrying.");
+        media.imageRef = payload.image.id;
+      }
+      media.uploadStatus = "uploaded";
+      renderPortfolioBatch();
+      step = portfolioBatch.uploadStep(group, media);
+    }
+    if (step === "document-media") {
+      media.uploadStatus = "uploading";
+      renderPortfolioBatch();
+      await documentPortfolioBatchMedia(group, media);
+      renderPortfolioBatch();
+    }
+  }
+
+  async function uploadPortfolioBatch() {
+    if (!portfolioBatch?.groups.length || portfolioBatchUploading) return;
+    portfolioBatchUploading = true;
+    renderPortfolioBatch();
+    let failedEntries = 0;
+    for (let groupIndex = 0; groupIndex < portfolioBatch.groups.length; groupIndex += 1) {
+      const group = portfolioBatch.groups[groupIndex];
+      if (group.uploadStatus === "complete") continue;
+      group.uploadStatus = "uploading";
+      group.error = "";
+      const cover = group.media.find((media) => media.isCover);
+      const ordered = [cover, ...group.media.filter((media) => media !== cover)];
+      let activeMedia = cover;
+      try {
+        for (const media of ordered) {
+          activeMedia = media;
+          if (media.uploadStatus !== "complete") await uploadPortfolioBatchMedia(group, media);
+        }
+        group.uploadStatus = "complete";
+      } catch (error) {
+        failedEntries += 1;
+        group.uploadStatus = "error";
+        group.error = error.message;
+        if (activeMedia) {
+          activeMedia.uploadStatus = activeMedia.imageRef ? "uploaded" : "error";
+          activeMedia.error = error.message;
+        }
+      }
+      renderPortfolioBatch();
+    }
+    portfolioBatchUploading = false;
+    const summary = portfolioBatch.summary();
+    if (!failedEntries && summary.completedEntries === summary.entries) {
+      const createdEntries = summary.entries;
+      const createdImages = summary.images;
+      portfolioBatch.reset();
+      portfolioBatch = null;
+      portfolioState = "draft";
+      if (activeTab === "tattoo" && subView === "portfolio") await renderPortfolioManager();
+      setStatus(`${createdImages} image${createdImages === 1 ? "" : "s"} organized into ${createdEntries} draft entr${createdEntries === 1 ? "y" : "ies"}`);
+      return;
+    }
+    if (activeTab === "tattoo" && subView === "portfolio") await renderPortfolioManager();
+    setStatus(`${failedEntries} draft entr${failedEntries === 1 ? "y needs" : "ies need"} attention; retry will resume unfinished uploads`);
   }
 
   async function uploadPortfolioAngles(itemId, files, imageRole = "result") {
@@ -1968,8 +2173,41 @@
     const input = document.getElementById("portfolioFiles");
     if (!manager || !drop || !input) return;
     document.getElementById("portfolioChoose").addEventListener("click", () => input.click());
-    input.addEventListener("change", () => uploadPortfolioFiles(input.files).catch((error) => setStatus(error.message)));
+    input.addEventListener("change", () => {
+      stagePortfolioFiles(input.files);
+      input.value = "";
+    });
     manager.addEventListener("change", (event) => {
+      const batchSelect = event.target.closest("[data-batch-select]");
+      if (batchSelect) {
+        portfolioBatch?.setSelected(batchSelect.dataset.batchSelect, batchSelect.checked);
+        renderPortfolioBatch();
+        return;
+      }
+      const batchCover = event.target.closest("[data-batch-cover]");
+      if (batchCover) {
+        try {
+          portfolioBatch?.setCover(batchCover.dataset.groupId, batchCover.dataset.batchCover);
+          renderPortfolioBatch();
+        } catch (error) { setStatus(error.message); }
+        return;
+      }
+      const batchRole = event.target.closest("[data-batch-role]");
+      if (batchRole) {
+        try {
+          portfolioBatch?.setRole(batchRole.dataset.groupId, batchRole.dataset.batchRole, batchRole.value);
+          renderPortfolioBatch();
+        } catch (error) { setStatus(error.message); }
+        return;
+      }
+      const batchHealing = event.target.closest("[data-batch-healing]");
+      if (batchHealing) {
+        try {
+          portfolioBatch?.setHealingState(batchHealing.dataset.groupId, batchHealing.dataset.batchHealing, batchHealing.value);
+          renderPortfolioBatch();
+        } catch (error) { setStatus(error.message); }
+        return;
+      }
       const styleControl = event.target.closest("[data-style-primary], [data-style-option]");
       if (styleControl) syncStyleSelector(styleControl.closest("[data-style-selector]"), styleControl);
       const toggle = event.target.closest("[data-similar-toggle]");
@@ -1995,7 +2233,7 @@
     });
     ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("is-over"); }));
     ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.remove("is-over"); }));
-    drop.addEventListener("drop", (event) => uploadPortfolioFiles(event.dataTransfer.files).catch((error) => setStatus(error.message)));
+    drop.addEventListener("drop", (event) => stagePortfolioFiles(event.dataTransfer.files));
     manager.addEventListener("dragstart", (event) => {
       if (event.target.closest("[data-image-editor-toggle]")) {
         event.preventDefault();
@@ -2027,6 +2265,40 @@
       });
     }, true);
     manager.addEventListener("click", async (event) => {
+      const combineBatch = event.target.closest("[data-batch-combine]");
+      if (combineBatch) {
+        try {
+          portfolioBatch?.combineSelected();
+          renderPortfolioBatch();
+        } catch (error) { setStatus(error.message); }
+        return;
+      }
+      const splitBatch = event.target.closest("[data-batch-split]");
+      if (splitBatch) {
+        try {
+          portfolioBatch?.splitMedia(splitBatch.dataset.groupId, splitBatch.dataset.batchSplit);
+          renderPortfolioBatch();
+        } catch (error) { setStatus(error.message); }
+        return;
+      }
+      const cancelBatch = event.target.closest("[data-batch-cancel]");
+      if (cancelBatch) {
+        portfolioBatch?.reset();
+        portfolioBatch = null;
+        renderPortfolioBatch();
+        document.getElementById("portfolioUploadStatus").textContent = "Batch cancelled before upload";
+        return;
+      }
+      const uploadBatch = event.target.closest("[data-batch-upload]");
+      if (uploadBatch) {
+        try { await uploadPortfolioBatch(); }
+        catch (error) {
+          portfolioBatchUploading = false;
+          renderPortfolioBatch();
+          setStatus(`Could not create portfolio drafts: ${error.message}`);
+        }
+        return;
+      }
       const imageEditorToggle = event.target.closest("[data-image-editor-toggle]");
       if (imageEditorToggle) {
         togglePortfolioImageEditor(imageEditorToggle);
@@ -2148,10 +2420,12 @@
         <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, publish, and order tattoo work. Saved changes appear on the public gallery immediately.</p></div>
           <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
         </div>
-        <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. New uploads stay in Draft with publication permission Not reviewed.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
+        <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. Organize related photographs before creating private Draft entries.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>
+        <section class="portfolio-batch" id="portfolioBatch" aria-label="Organize portfolio upload batch" hidden></section>
         <div class="portfolio-grid" id="portfolioGrid"><div class="portfolio-empty">Loading portfolio...</div></div>
       </section>`;
     bindPortfolioManager();
+    renderPortfolioBatch();
     await loadPortfolioItems();
   }
 
