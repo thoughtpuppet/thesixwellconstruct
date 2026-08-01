@@ -281,8 +281,45 @@ h1 {
 
 .upload-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
   gap: 8px;
+}
+
+.upload-actions button {
+  min-width: 0;
+  padding-inline: 8px;
+  font-size: 0.78rem;
+}
+
+.upload-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.reference-upload-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.reference-upload-copy strong {
+  font-size: 0.88rem;
+}
+
+.reference-upload-copy span,
+.reference-upload-status {
+  color: rgba(var(--ink-rgb), 0.7);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.reference-file-name {
+  overflow: hidden;
+  color: var(--accent-red);
+  font-size: 0.75rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .starter-button {

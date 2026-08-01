@@ -13,7 +13,7 @@ import {
   isCanvasLayout
 } from "./lib/canvas-layout";
 import { shapeTouchedByEraser, splitWallByEraser } from "./lib/maze";
-import type { CanvasLayout, MazeShape, MazeState, MazeTool, MazeWall, Selection } from "./types";
+import type { CanvasLayout, CanvasReference, MazeShape, MazeState, MazeTool, MazeWall, Selection } from "./types";
 import "./maze-submit.css";
 
 const LEGACY_STORAGE_KEY = "art-pill-maze-design";
@@ -23,6 +23,8 @@ const TOKEN_STORAGE_KEY = "art-pill-maze-resume-token";
 const SUBMISSION_IDEMPOTENCY_KEY = "sixwell:submission-idempotency:/tattoos/build/maze/:maze-form";
 const MAX_UNDO_STEPS = 60;
 const AUTOSAVE_DELAY_MS = 600;
+const REFERENCE_MAX_BYTES = 15 * 1024 * 1024;
+const REFERENCE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const KIOSK = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("kiosk");
 const PREVIEW = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "1";
 const KIOSK_IDLE_MS = 150000;
@@ -207,6 +209,21 @@ function dataUrlToBlob(dataUrl: string): Blob {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], { type: mime });
+}
+
+function captureMazeImage(stage: Konva.Stage | null): string | null {
+  if (!stage) return null;
+  const referenceNodes = stage.find(".maze-reference");
+  const visibility = referenceNodes.map((node) => node.visible());
+  referenceNodes.forEach((node) => node.visible(false));
+  stage.draw();
+  try {
+    const stageScale = stage.scaleX() || 1;
+    return stage.toDataURL({ pixelRatio: 2 / stageScale });
+  } finally {
+    referenceNodes.forEach((node, index) => node.visible(visibility[index]));
+    stage.draw();
+  }
 }
 
 function mazeSubmissionIdempotencyKey() {
@@ -496,7 +513,7 @@ function SaveEmailDialog({
             <input ref={emailRef} type="email" autoComplete="email" required value={value} onChange={(event) => setValue(event.target.value)} />
           </label>
           <p className="maze-submit-note">The resume link remains active for 30 days after the last online save.</p>
-          <p className="maze-submit-note">Reference uploads are not stored with drafts and must be attached again before final submission.</p>
+          <p className="maze-submit-note">Reference underlays are not stored with drafts. Re-upload one after reopening if you still need it while drawing.</p>
           <div className="maze-submit-actions">
             <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
             <button type="submit" className="primary" disabled={busy}>{busy ? "Saving…" : "Save & email link"}</button>
@@ -666,6 +683,8 @@ export default function App() {
   const [resumeToken, setResumeToken] = useState(() => captureResumeToken());
   const [resumeReady, setResumeReady] = useState(false);
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [reference, setReference] = useState<CanvasReference | null>(null);
+  const [referenceStatus, setReferenceStatus] = useState("");
 
   const stateRef = useRef(state);
   const formDraftRef = useRef(formDraft);
@@ -682,6 +701,15 @@ export default function App() {
   );
   const eraseSnapshotRef = useRef<MazeState | null>(null);
   const eraseRecordedRef = useRef(false);
+  const referenceLoadIdRef = useRef(0);
+
+  useEffect(() => () => {
+    if (reference) URL.revokeObjectURL(reference.src);
+  }, [reference]);
+
+  useEffect(() => () => {
+    referenceLoadIdRef.current += 1;
+  }, []);
 
   useEffect(() => {
     stateRef.current = state;
@@ -852,6 +880,56 @@ export default function App() {
     else if (selected?.type === "shape") deleteMazeShape(selected.id);
   };
 
+  const uploadReference = (file: File) => {
+    const loadId = referenceLoadIdRef.current + 1;
+    referenceLoadIdRef.current = loadId;
+    setReferenceStatus("");
+    const supportedType = REFERENCE_TYPES.has(file.type.toLowerCase());
+    const supportedExtension = /\.(png|jpe?g|webp)$/i.test(file.name);
+    if (!supportedType && !supportedExtension) {
+      setReferenceStatus("Choose a PNG, JPEG, or WebP image.");
+      return;
+    }
+    if (file.size > REFERENCE_MAX_BYTES) {
+      setReferenceStatus("Reference images must be 15 MB or smaller.");
+      return;
+    }
+
+    const src = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => {
+      if (referenceLoadIdRef.current !== loadId) {
+        URL.revokeObjectURL(src);
+        return;
+      }
+      if (!image.naturalWidth || !image.naturalHeight) {
+        URL.revokeObjectURL(src);
+        setReferenceStatus("That image could not be read.");
+        return;
+      }
+      setReference({
+        name: file.name,
+        src,
+        width: image.naturalWidth,
+        height: image.naturalHeight
+      });
+      setReferenceStatus("Reference ready. Draw maze marks over it.");
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(src);
+      if (referenceLoadIdRef.current === loadId) {
+        setReferenceStatus("That image could not be read.");
+      }
+    };
+    image.src = src;
+  };
+
+  const removeReference = () => {
+    referenceLoadIdRef.current += 1;
+    setReference(null);
+    setReferenceStatus("Reference removed.");
+  };
+
   const persistLocal = (payload = draftPayload(stateRef.current, formDraftRef.current, clientDraftIdRef.current)) => {
     if (KIOSK || PREVIEW) return;
     const server = serverDraftRef.current;
@@ -878,12 +956,12 @@ export default function App() {
     }
     commit((current) => emptyState(current.canvasLayout));
     setSelected(null);
+    removeReference();
   };
 
   const exportImage = () => {
-    if (!stage) return;
-    const stageScale = stage.scaleX() || 1;
-    const url = stage.toDataURL({ pixelRatio: 2 / stageScale });
+    const url = captureMazeImage(stage);
+    if (!url) return;
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "art-pill-maze.png";
@@ -1065,6 +1143,7 @@ export default function App() {
       setSubmitOpen(false);
       setSaveDialogOpen(false);
       setFormDraft(emptyForm());
+      removeReference();
     };
     const bump = () => {
       window.clearTimeout(idle);
@@ -1134,7 +1213,14 @@ export default function App() {
 
       <section className="workspace">
         <aside className="palette" aria-label="Maze design palette">
-          <MazeTools tool={mazeTool} onToolChange={setMazeTool} />
+          <MazeTools
+            tool={mazeTool}
+            onToolChange={setMazeTool}
+            referenceName={reference?.name || ""}
+            referenceStatus={referenceStatus}
+            onReferenceUpload={uploadReference}
+            onReferenceRemove={removeReference}
+          />
         </aside>
         <div className="canvas-workspace">
           <CanvasLayoutPicker value={state.canvasLayout} onChange={requestCanvasLayout} />
@@ -1142,6 +1228,7 @@ export default function App() {
           <ConstructCanvas
             items={[]}
             canvasLayout={state.canvasLayout}
+            reference={reference}
             mazeWalls={state.mazeWalls}
             mazeShapes={state.mazeShapes}
             selected={selected}
@@ -1187,7 +1274,7 @@ export default function App() {
       <SubmitDialog
         open={submitOpen}
         onClose={() => setSubmitOpen(false)}
-        capturePng={() => (stage ? stage.toDataURL({ pixelRatio: 2 / (stage.scaleX() || 1) }) : null)}
+        capturePng={() => captureMazeImage(stage)}
         getJson={() => JSON.stringify(state)}
         isEmpty={state.mazeWalls.length === 0 && state.mazeShapes.length === 0}
         formDraft={formDraft}

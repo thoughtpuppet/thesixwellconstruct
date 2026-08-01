@@ -2,6 +2,7 @@ import {
   Circle,
   Eraser,
   Hexagon,
+  ImageUp,
   MousePointer2,
   Pentagon,
   PenLine,
@@ -11,6 +12,7 @@ import {
   X
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
+import { useRef } from "react";
 import type { MazeShapeKind, MazeTool } from "../types";
 
 type WallPreset = Extract<MazeTool, { type: "wallPreset" }>["preset"];
@@ -83,9 +85,21 @@ const inkOptions = ["#151413", "#b51f29", "#1f7c8c", "#d66a1f", "#d9a21b", "#2d9
 type MazeToolsProps = {
   tool: MazeTool;
   onToolChange: (tool: MazeTool) => void;
+  referenceName: string;
+  referenceStatus: string;
+  onReferenceUpload: (file: File) => void;
+  onReferenceRemove: () => void;
 };
 
-export function MazeTools({ tool, onToolChange }: MazeToolsProps) {
+export function MazeTools({
+  tool,
+  onToolChange,
+  referenceName,
+  referenceStatus,
+  onReferenceUpload,
+  onReferenceRemove
+}: MazeToolsProps) {
+  const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const shapeTool = tool.type === "shape" ? tool : null;
   const wallTool = tool.type === "wall" ? tool : null;
   const presetTool = tool.type === "wallPreset" ? tool : null;
@@ -110,6 +124,36 @@ export function MazeTools({ tool, onToolChange }: MazeToolsProps) {
       <div className="panel-heading">
         <p>Maze Builder</p>
         <span>draw + place</span>
+      </div>
+
+      <div className="upload-panel reference-upload-panel">
+        <div className="reference-upload-copy">
+          <strong>Reference underlay</strong>
+          <span>Temporary guide only. It will not be saved or exported.</span>
+        </div>
+        <input
+          ref={referenceInputRef}
+          className="hidden-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) onReferenceUpload(file);
+          }}
+        />
+        <div className="upload-actions">
+          <button type="button" onClick={() => referenceInputRef.current?.click()}>
+            <ImageUp size={18} />
+            {referenceName ? "Replace" : "Upload reference"}
+          </button>
+          <button type="button" onClick={onReferenceRemove} disabled={!referenceName}>
+            <X size={18} />
+            Remove
+          </button>
+        </div>
+        {referenceName ? <p className="reference-file-name" title={referenceName}>{referenceName}</p> : null}
+        {referenceStatus ? <p className="reference-upload-status" role="status" aria-live="polite">{referenceStatus}</p> : null}
       </div>
 
       <div className="tool-row" role="group" aria-label="Maze drawing mode">

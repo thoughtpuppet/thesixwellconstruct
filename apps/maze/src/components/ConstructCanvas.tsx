@@ -2,12 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Circle, Layer, Rect, Stage, Transformer } from "react-konva";
 import type Konva from "konva";
 import { symbolLibrary } from "../data/symbols";
-import type { CanvasItem, CanvasLayout, MazeShape, MazeTool, MazeWall, Selection } from "../types";
+import type { CanvasItem, CanvasLayout, CanvasReference, MazeShape, MazeTool, MazeWall, Selection } from "../types";
 import { uuid } from "../lib/id";
 import { pathLength, perfectMazeWall, smoothCurvePoints, wallStampPoints } from "../lib/maze";
 import { CANVAS_LAYOUTS } from "../lib/canvas-layout";
 import { MazeGeometryShape } from "./MazeGeometryShape";
 import { MazeWallLine } from "./MazeWallLine";
+import { ReferenceImage } from "./ReferenceImage";
 import { SymbolImage } from "./SymbolImage";
 
 type ConstructCanvasProps = {
@@ -17,6 +18,7 @@ type ConstructCanvasProps = {
   selected: Selection;
   mazeTool: MazeTool;
   canvasLayout: CanvasLayout;
+  reference: CanvasReference | null;
   workspaceMode: "construct" | "maze";
   onSelect: (selection: Selection) => void;
   onChange: (item: CanvasItem) => void;
@@ -45,6 +47,7 @@ export function ConstructCanvas({
   selected,
   mazeTool,
   canvasLayout,
+  reference,
   workspaceMode,
   onSelect,
   onChange,
@@ -444,6 +447,13 @@ export function ConstructCanvas({
             strokeWidth={2}
             opacity={0.14}
           />
+          {reference ? (
+            <ReferenceImage
+              reference={reference}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+            />
+          ) : null}
           {mazeWalls.map((wall) => (
             <MazeWallLine
               key={wall.instanceId}

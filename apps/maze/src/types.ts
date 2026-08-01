@@ -121,6 +121,13 @@ export type MazeShape = {
 
 export type CanvasLayout = "tall" | "square" | "wide";
 
+export type CanvasReference = {
+  name: string;
+  src: string;
+  width: number;
+  height: number;
+};
+
 export type MazeState = {
   canvasLayout: CanvasLayout;
   mazeWalls: MazeWall[];
