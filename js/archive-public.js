@@ -260,7 +260,7 @@
   function metadata(record) {
     const entries = [
       { value: text(first(record.medium_label, record.medium)), role: "medium" },
-      { value: text(first(record.record_type_label, record.record_type, record.entity_type, record.type)), role: "record-type" },
+      { value: text(first(record.cultural_object_type, record.culturalObjectType, record.record_type_label, record.record_type, record.entity_type, record.type)), role: "record-type" },
       { value: text(first(record.brand_name, record.brand)), role: "brand" },
       { value: text(first(record.year, record.date_or_period)), role: "date" },
     ].filter((entry) => entry.value);
@@ -282,7 +282,7 @@
       match && (match.color_name || match.family_name || match.material_name || match.pigment_code));
     const title = text(record.title, record.name, recordSlug(record), "Untitled record");
     const catalogue = catalogueLabel(record);
-    const recordType = titleCase(text(record.record_type_label, record.record_type, record.entity_type, record.type, "Archive record"));
+    const recordType = titleCase(text(record.cultural_object_type, record.culturalObjectType, record.record_type_label, record.record_type, record.entity_type, record.type, "Archive record"));
     const medium = text(record.medium_label, record.medium, record.catalogue_medium, record.brand_name, record.brand);
     return `<article class="archive-record-card-shell"><a class="archive-record-card" href="${escapeHtml(recordHref(record, match))}">
       <span class="archive-record-card-media">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(text(media.alt, media.alt_text, title))}" loading="lazy" decoding="async">` : symbolMarkup ? `<span class="archive-record-card-symbol" aria-hidden="true">${symbolMarkup}</span>` : `<span class="archive-record-card-placeholder" aria-hidden="true">${escapeHtml(title.slice(0, 2))}</span>`}</span>

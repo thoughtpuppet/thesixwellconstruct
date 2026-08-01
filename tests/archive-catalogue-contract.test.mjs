@@ -49,6 +49,16 @@ function database() {
   return db;
 }
 
+function databaseBefore(migrationName) {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON");
+  for (const name of readdirSync(join(ROOT, "migrations")).filter((value) => value.endsWith(".sql")).sort()) {
+    if (name === migrationName) break;
+    db.exec(readFileSync(join(ROOT, "migrations", name), "utf8"));
+  }
+  return db;
+}
+
 function env(db) { return { SUBMISSIONS_DB: new LocalD1(db), SUBMISSIONS_ADMIN_TOKEN: TOKEN }; }
 function request(path, { method = "GET", body, admin = false } = {}) {
   return new Request(`https://example.test${path}`, {
@@ -130,6 +140,7 @@ test("future tattoo dossier shells automatically receive a catalogue version and
   const state = db.prepare("SELECT * FROM archive_object_states WHERE version_id=?").get(version.id);
 
   assert.ok(dossier);
+  assert.equal(dossier.record_type, "tattoo");
   assert.equal(catalogue.object_type_id, "tattoo-execution");
   assert.equal(catalogue.catalogue_prefix, "TAT-EXE");
   assert.equal(catalogue.catalogue_number, previousMaximum + 1);
@@ -139,6 +150,52 @@ test("future tattoo dossier shells automatically receive a catalogue version and
   assert.equal(state.state_roman, "I");
   assert.equal(state.publication_state, "draft");
   assert.equal(state.public_visible, 0);
+});
+
+test("Tattoo Portfolio dossier labels stay consistent across automatic creation paths", () => {
+  const db = database();
+
+  assert.equal(db.prepare(`SELECT COUNT(*) count
+    FROM archive_dossiers ad
+    JOIN content_entities ce ON ce.id=ad.entity_id
+    WHERE ce.entity_type='portfolio_item' AND ad.record_type<>'tattoo'`).get().count, 0);
+
+  db.prepare(`INSERT INTO content_entities(
+      id,entity_type,node_id,visibility,search_visibility,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES('portfolio-future-publish-label','portfolio_item','node-tattoos','internal',0,
+      'test','test',datetime('now'),datetime('now'))`).run();
+  db.prepare("UPDATE content_entities SET visibility='public',public_at=datetime('now') WHERE id='portfolio-future-publish-label'").run();
+
+  const dossier = db.prepare("SELECT * FROM archive_dossiers WHERE entity_id='portfolio-future-publish-label'").get();
+  assert.ok(dossier);
+  assert.equal(dossier.record_type, "tattoo");
+});
+
+test("0088 normalizes an existing Portfolio Item dossier label without changing its identity", () => {
+  const migrationName = "0088_archive_tattoo_record_type_consistency.sql";
+  const db = databaseBefore(migrationName);
+
+  db.prepare(`INSERT INTO content_entities(
+      id,entity_type,node_id,visibility,search_visibility,public_at,
+      created_by,updated_by,created_at,updated_at
+    ) VALUES('portfolio-legacy-label','portfolio_item','node-tattoos','public',1,datetime('now'),
+      'test','test',datetime('now'),datetime('now'))`).run();
+
+  const before = db.prepare(`SELECT ad.record_type,ace.catalogue_id
+    FROM archive_dossiers ad
+    JOIN archive_catalogue_entries ace ON ace.entity_id=ad.entity_id
+    WHERE ad.entity_id='portfolio-legacy-label'`).get();
+  assert.equal(before.record_type, "portfolio-item");
+
+  db.exec(readFileSync(join(ROOT, "migrations", migrationName), "utf8"));
+
+  const after = db.prepare(`SELECT ad.record_type,ace.catalogue_id
+    FROM archive_dossiers ad
+    JOIN archive_catalogue_entries ace ON ace.entity_id=ad.entity_id
+    WHERE ad.entity_id='portfolio-legacy-label'`).get();
+  assert.equal(after.record_type, "tattoo");
+  assert.equal(after.catalogue_id, before.catalogue_id);
 });
 
 test("Studio catalogue initialization repairs a legacy shell and ignores a stale sequence number", async () => {
@@ -855,6 +912,7 @@ test("Studio and public Archive surfaces expose the catalogue system", () => {
   assert.match(publicScript, /Version \$\{versionNumber\}, State/);
   assert.match(publicScript, /Concept or theme/);
   assert.match(publicScript, /archive-record-card-catalogue/);
+  assert.match(publicScript, /record\.cultural_object_type, record\.culturalObjectType, record\.record_type_label/);
   assert.match(publicScript, /archive-record-card-symbol/);
   assert.match(publicScript, /archive-record-symbol/);
   assert.match(publicScript, /archive-notebook-item/);

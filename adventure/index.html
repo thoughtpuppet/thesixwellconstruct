@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#0e0e0e">
 <meta name="color-scheme" content="dark">
 <title>Explore - the six.well construct</title>
+<link rel="canonical" href="https://thesixwellconstruct.com/adventure/">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/transitions.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,20 +30,24 @@
   </div>
 
   <div class="explore-actions" data-explore-actions role="group" aria-label="Choose how to explore the Construct">
-    <button class="explore-action explore-action--primary" type="button" data-explore-scope="all" data-explore-shape="sphere">
-      <span class="explore-action__label">Take me somewhere</span>
+    <button class="explore-action explore-action--primary" type="button" data-explore-scope="all" data-explore-shape="disc" aria-label="Take me anywhere" aria-describedby="explore-description-all">
+      <span class="explore-action__label">Take me anywhere</span>
+      <span class="explore-action__description" id="explore-description-all">Across the entire domain.</span>
     </button>
 
-    <button class="explore-action explore-action--works" type="button" data-explore-scope="works" data-explore-shape="square">
+    <button class="explore-action explore-action--works" type="button" data-explore-scope="works" data-explore-shape="square" aria-label="Works &amp; objects" aria-describedby="explore-description-works">
       <span class="explore-action__label">Works &amp; objects</span>
+      <span class="explore-action__description" id="explore-description-works">Art, objects, events &amp; archives.</span>
     </button>
 
-    <button class="explore-action explore-action--process" type="button" data-explore-scope="process" data-explore-shape="triangle">
+    <button class="explore-action explore-action--process" type="button" data-explore-scope="process" data-explore-shape="triangle" aria-label="Process &amp; evidence" aria-describedby="explore-description-process">
       <span class="explore-action__label">Process &amp; evidence</span>
+      <span class="explore-action__description" id="explore-description-process">Sketches, notes, bts media &amp; voice memos.</span>
     </button>
 
-    <button class="explore-action explore-action--pages" type="button" data-explore-scope="pages" data-explore-shape="hexagon">
+    <button class="explore-action explore-action--pages" type="button" data-explore-scope="pages" data-explore-shape="hexagon" aria-label="Pages &amp; pathways" aria-describedby="explore-description-pages">
       <span class="explore-action__label">Pages &amp; pathways</span>
+      <span class="explore-action__description" id="explore-description-pages">whole pages, guides, portfolios &amp; pathways.</span>
     </button>
   </div>
 

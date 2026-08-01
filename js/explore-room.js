@@ -75,13 +75,27 @@ if (root) {
     rimLight.position.set(5, 2, -3);
     scene.add(rimLight);
 
+    const backWallMaterial = new THREE.MeshBasicMaterial({
+      color: 0x2a1a12,
+      transparent: true,
+      opacity: 0.18,
+      depthWrite: false,
+    });
+    const backWall = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), backWallMaterial);
+    backWall.position.z = -1.15;
+    backWall.renderOrder = -2;
+    scene.add(backWall);
+
     const objectSpecs = {
       all: {
         color: 0xd01006,
         geometry: () => prismGeometry(48),
         diameterRatio: 0.86,
         rotation: [0.08, -0.18, -0.03],
-        rotationSpeed: 0.00003,
+        rotationSpeed: 0.00007,
+        rollSway: 0.08,
+        tumbleX: 0.2,
+        tumbleY: 0.28,
         floatX: 0.04,
         floatY: 0.075,
         floatZ: 0.025,
@@ -92,7 +106,10 @@ if (root) {
         geometry: () => prismGeometry(4, Math.PI / 4),
         diameterRatio: 0.72,
         rotation: [0.22, -0.31, -0.08],
-        rotationSpeed: -0.00011,
+        rotationSpeed: -0.00017,
+        rollSway: 0.16,
+        tumbleX: 0.26,
+        tumbleY: 0.34,
         floatX: 0.07,
         floatY: 0.11,
         floatZ: 0.04,
@@ -103,7 +120,10 @@ if (root) {
         geometry: () => prismGeometry(3),
         diameterRatio: 0.76,
         rotation: [-0.18, 0.28, 0.02],
-        rotationSpeed: 0.000095,
+        rotationSpeed: 0.00015,
+        rollSway: 0.14,
+        tumbleX: 0.28,
+        tumbleY: 0.3,
         floatX: 0.065,
         floatY: 0.12,
         floatZ: 0.045,
@@ -114,7 +134,10 @@ if (root) {
         geometry: () => prismGeometry(6),
         diameterRatio: 0.72,
         rotation: [0.2, 0.32, 0.08],
-        rotationSpeed: -0.00008,
+        rotationSpeed: -0.000135,
+        rollSway: 0.12,
+        tumbleX: 0.24,
+        tumbleY: 0.36,
         floatX: 0.075,
         floatY: 0.105,
         floatZ: 0.04,
@@ -140,6 +163,30 @@ if (root) {
       });
     }
 
+    function createWallShadowTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 256;
+      canvas.height = 256;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Explore wall shadow canvas is unavailable.");
+
+      const feather = context.createRadialGradient(128, 128, 8, 128, 128, 126);
+      feather.addColorStop(0, "rgba(255, 255, 255, 0.72)");
+      feather.addColorStop(0.28, "rgba(255, 255, 255, 0.46)");
+      feather.addColorStop(0.58, "rgba(255, 255, 255, 0.16)");
+      feather.addColorStop(1, "rgba(255, 255, 255, 0)");
+      context.fillStyle = feather;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.generateMipmaps = false;
+      return texture;
+    }
+
+    const wallShadowTexture = createWallShadowTexture();
+
     const objects = controls.map((control, index) => {
       const scope = control.dataset.exploreScope;
       const spec = objectSpecs[scope];
@@ -149,16 +196,17 @@ if (root) {
       mesh.rotation.set(...spec.rotation);
       group.add(mesh);
 
-      const shadowMaterial = new THREE.MeshBasicMaterial({
+      const wallShadowMaterial = new THREE.SpriteMaterial({
+        map: wallShadowTexture,
         color: 0x000000,
         transparent: true,
-        opacity: scope === "all" ? 0.34 : 0.26,
+        opacity: scope === "all" ? 0.52 : 0.42,
         depthWrite: false,
       });
-      const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 48), shadowMaterial);
-      shadow.position.set(0.12, scope === "all" ? -1.08 : -0.98, -0.62);
-      shadow.scale.set(scope === "all" ? 1.15 : 0.92, scope === "all" ? 0.2 : 0.16, 1);
-      group.add(shadow);
+      const wallShadow = new THREE.Sprite(wallShadowMaterial);
+      wallShadow.position.set(0, 0, -0.82);
+      wallShadow.renderOrder = -1;
+      scene.add(wallShadow);
       scene.add(group);
 
       const item = {
@@ -167,7 +215,8 @@ if (root) {
         group,
         mesh,
         material,
-        shadowMaterial,
+        wallShadow,
+        wallShadowMaterial,
         spec,
         basePosition: new THREE.Vector3(),
         baseScale: 1,
@@ -221,6 +270,19 @@ if (root) {
       canvasBox.width = Math.max(1, bounds.width);
       canvasBox.height = Math.max(1, bounds.height);
 
+      const wallTopLeft = screenToWorld(bounds.left, bounds.top, -1.15);
+      const wallBottomRight = screenToWorld(bounds.right, bounds.bottom, -1.15);
+      backWall.position.set(
+        (wallTopLeft.x + wallBottomRight.x) / 2,
+        (wallTopLeft.y + wallBottomRight.y) / 2,
+        -1.15,
+      );
+      backWall.scale.set(
+        Math.abs(wallBottomRight.x - wallTopLeft.x) * 0.51,
+        Math.abs(wallTopLeft.y - wallBottomRight.y) * 0.51,
+        1,
+      );
+
       objects.forEach((item) => {
         const rect = item.control.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
@@ -231,6 +293,16 @@ if (root) {
         item.baseScale = Math.max(0.01, center.distanceTo(edge));
         item.group.position.copy(item.basePosition);
         item.group.scale.setScalar(item.baseScale);
+        item.wallShadow.position.set(
+          item.basePosition.x + item.baseScale * 0.1,
+          item.basePosition.y - item.baseScale * 0.04,
+          -0.82,
+        );
+        item.wallShadow.scale.set(
+          item.baseScale * (item.scope === "all" ? 2.85 : 2.45),
+          item.baseScale * (item.scope === "all" ? 2.65 : 2.25),
+          1,
+        );
       });
     }
 
@@ -288,27 +360,39 @@ if (root) {
         item.group.position.x += (item.basePosition.x + driftX - item.group.position.x) * responsiveness;
         item.group.position.y += (item.basePosition.y + driftY + lift - item.group.position.y) * responsiveness;
         item.group.position.z += (item.basePosition.z + driftZ - item.group.position.z) * responsiveness;
+        item.wallShadow.position.x +=
+          (item.basePosition.x + item.baseScale * 0.1 + driftX * 0.58 - item.wallShadow.position.x) *
+          responsiveness;
+        item.wallShadow.position.y +=
+          (item.basePosition.y - item.baseScale * 0.04 + (driftY + lift) * 0.58 -
+            item.wallShadow.position.y) *
+          responsiveness;
+        item.wallShadow.position.z = -0.82;
 
         const targetOpacity = dimmed ? 0.18 : 1;
         item.material.opacity += (targetOpacity - item.material.opacity) * responsiveness;
-        const baseShadowOpacity = item.scope === "all" ? 0.34 : 0.26;
-        const targetShadowOpacity = dimmed ? 0.05 : baseShadowOpacity;
-        item.shadowMaterial.opacity += (targetShadowOpacity - item.shadowMaterial.opacity) * responsiveness;
+        const baseWallShadowOpacity = item.scope === "all" ? 0.52 : 0.42;
+        const targetWallShadowOpacity = dimmed ? 0.04 : baseWallShadowOpacity;
+        item.wallShadowMaterial.opacity +=
+          (targetWallShadowOpacity - item.wallShadowMaterial.opacity) * responsiveness;
 
-        const tiltX = reduceMotion
+        const depthTumbleX = reduceMotion
           ? 0
-          : Math.sin(elapsed * 0.38 + item.floatPhase) * item.spec.floatTilt;
-        const tiltY = reduceMotion
+          : Math.sin(elapsed * 0.56 + item.floatPhase * 0.72) * item.spec.tumbleX;
+        const depthTumbleY = reduceMotion
           ? 0
-          : Math.cos(elapsed * 0.29 + item.floatPhase * 0.83) * item.spec.floatTilt;
+          : Math.cos(elapsed * 0.43 + item.floatPhase * 1.19) * item.spec.tumbleY;
         const tiltZ = reduceMotion
           ? 0
           : Math.sin(elapsed * 0.23 + item.floatPhase * 1.37) * item.spec.floatTilt * 0.55;
-        const slowTurn = reduceMotion ? 0 : time * item.spec.rotationSpeed;
+        const zAxisRoll = reduceMotion
+          ? 0
+          : time * item.spec.rotationSpeed +
+            Math.sin(elapsed * 0.31 + item.floatPhase * 0.9) * item.spec.rollSway;
         item.mesh.rotation.set(
-          item.spec.rotation[0] + tiltX,
-          item.spec.rotation[1] + tiltY,
-          item.spec.rotation[2] + tiltZ + slowTurn,
+          item.spec.rotation[0] + depthTumbleX,
+          item.spec.rotation[1] + depthTumbleY,
+          item.spec.rotation[2] + tiltZ + zAxisRoll,
         );
       });
 
@@ -373,9 +457,12 @@ if (root) {
       objects.forEach((item) => {
         item.mesh.geometry.dispose();
         item.material.dispose();
-        item.group.children[1].geometry.dispose();
-        item.shadowMaterial.dispose();
+        scene.remove(item.wallShadow);
+        item.wallShadowMaterial.dispose();
       });
+      wallShadowTexture.dispose();
+      backWall.geometry.dispose();
+      backWallMaterial.dispose();
       renderer.dispose();
       unmountAmbient();
     }

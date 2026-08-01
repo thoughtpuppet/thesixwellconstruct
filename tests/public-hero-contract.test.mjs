@@ -101,7 +101,7 @@ const routes = [
   { route: "/tattoos/submission-received/", file: "tattoos/submission-received/index.html", variant: "supporting", descriptor: true },
 ];
 
-const excludedActiveSource = /(?:managed-preview|about-next|construct-connections-(?:organic|prototype))|^explore\/index\.html$/;
+const excludedActiveSource = /(?:managed-preview|about-next|construct-connections-(?:organic|prototype))|^adventure\/index\.html$/;
 
 async function walkHtml(entry) {
   const absolute = path.join(root, entry);
@@ -120,7 +120,7 @@ test("active public hero inventory is complete and assigns one valid variant", a
 
   const discovered = (
     await Promise.all(
-      ["about", "archive", "art", "booking", "construct-map", "events", "explore", "merch", "preferences", "search", "tattoos"].map(walkHtml),
+      ["about", "adventure", "archive", "art", "booking", "construct-map", "events", "merch", "preferences", "search", "tattoos"].map(walkHtml),
     )
   )
     .flat()
@@ -138,7 +138,7 @@ test("active public hero inventory is complete and assigns one valid variant", a
 });
 
 test("Explore is intentionally an immersive public room, not a shared hero page", async () => {
-  const html = await read("explore/index.html");
+  const html = await read("adventure/index.html");
 
   assert.match(html, /<main\b[^>]*\bdata-explore-room\b/);
   assert.match(html, /<h1\b[^>]*>\s*Explore\.?\s*<\/h1>/);

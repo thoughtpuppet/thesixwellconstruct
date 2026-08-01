@@ -1865,7 +1865,7 @@ const EXPLORE_WORK_TYPES = new Set([
   "merch_item", "event", "visual_symbol",
 ]);
 const EXPLORE_BLOCKED_PATHS = [
-  "/api", "/studio", "/tools", "/booking", "/preferences", "/search", "/explore",
+  "/api", "/studio", "/tools", "/booking", "/preferences", "/search", "/adventure", "/explore",
   "/cart", "/checkout",
 ];
 const EXPLORE_BLOCKED_SEGMENTS = [

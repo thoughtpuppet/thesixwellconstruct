@@ -158,7 +158,8 @@ test("the Guide exposes both systems and source libraries without a preview pane
   const exploreTemplate = systemJs.match(/\{ id: "construct-explore"[^\n]+\}/)?.[0] || "";
   assert.ok(exploreTemplate, "missing Construct Explore template record");
   assert.match(exploreTemplate, /kind: "interactive"/);
-  assert.match(exploreTemplate, /route: "\/explore\/"/);
+  assert.match(exploreTemplate, /route: "\/adventure\/"/);
+  assert.match(exploreTemplate, /adventure\/index\.html/);
   assert.match(exploreTemplate, /heroVariant: "Immersive room"/);
   assert.match(exploreTemplate, /css\/explore\.css/);
   assert.match(exploreTemplate, /js\/explore-room\.js/);

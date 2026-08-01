@@ -1033,6 +1033,18 @@ export default {
       return notFoundPage(request, env);
     }
 
+    if (url.pathname === "/explore" || url.pathname === "/explore/" || url.pathname === "/explore/index.html") {
+      const adventureUrl = new URL(request.url);
+      adventureUrl.pathname = "/adventure/";
+      return Response.redirect(adventureUrl, 308);
+    }
+
+    if (url.pathname === "/adventure" || url.pathname === "/adventure/index.html") {
+      const adventureUrl = new URL(request.url);
+      adventureUrl.pathname = "/adventure/";
+      return Response.redirect(adventureUrl, 308);
+    }
+
     if (url.pathname === "/api/analytics/events") {
       return handleAnalyticsEvents(request, env);
     }

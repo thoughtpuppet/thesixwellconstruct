@@ -117,6 +117,8 @@ test("works and pages only return eligible public internal destinations", async 
     UPDATE construct_pathways SET state='published',homepage_enabled=1,route='https://outside.example/' WHERE id='path-about-01';
     UPDATE content_entities SET visibility='public' WHERE id='path-about-02';
     UPDATE construct_pathways SET state='published',homepage_enabled=1,route='/booking/studio/' WHERE id='path-about-02';
+    UPDATE content_entities SET visibility='public' WHERE id='path-about-03';
+    UPDATE construct_pathways SET state='published',homepage_enabled=1,route='/adventure/' WHERE id='path-about-03';
   `);
   const works = await handleConstructApi(request("/api/site/explore?scope=works"), runtime(db));
   assert.equal(works.status, 200);
@@ -169,7 +171,7 @@ test("empty eligible pools return a retryable no-store response", async () => {
 });
 
 test("Explore is an immersive room with semantic sculptural controls", () => {
-  const html = read("explore/index.html");
+  const html = read("adventure/index.html");
   const css = read("css/explore.css");
   const room = read("js/explore-room.js");
   const client = read("js/explore.js");
@@ -188,23 +190,33 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(html, /<canvas\b[^>]*\bdata-explore-scene-canvas\b/);
   assert.match(html, /<script src="\/js\/construct-ambient-field\.js"><\/script>/);
   assert.match(html, /<script type="module" src="\/js\/explore-room\.js"><\/script>/);
-  for (const [scope, label] of [
-    ["all", "Take me somewhere"],
-    ["works", "Works &amp; objects"],
-    ["process", "Process &amp; evidence"],
-    ["pages", "Pages &amp; pathways"],
+  for (const [scope, label, description] of [
+    ["all", "Take me anywhere", "Across the entire domain\."],
+    ["works", "Works &amp; objects", "Art, objects, events &amp; archives\."],
+    ["process", "Process &amp; evidence", "Sketches, notes, bts media &amp; voice memos\."],
+    ["pages", "Pages &amp; pathways", "whole pages, guides, portfolios &amp; pathways\."],
   ]) {
-    assert.match(html, new RegExp(`<button[^>]+data-explore-scope="${scope}"[\\s\\S]*?${label}[\\s\\S]*?<\\/button>`));
+    const action = html.match(new RegExp(`<button[^>]+data-explore-scope="${scope}"[\\s\\S]*?<\\/button>`))?.[0] || "";
+    assert.match(action, new RegExp(`aria-describedby="explore-description-${scope}"`));
+    assert.match(action, new RegExp(`<span class="explore-action__label">${label}<\\/span>`));
+    assert.match(action, new RegExp(`<span class="explore-action__description" id="explore-description-${scope}">${description}<\\/span>`));
   }
+  assert.match(html, /data-explore-scope="all" data-explore-shape="disc" aria-label="Take me anywhere"/);
   assert.match(html, /data-explore-status[^>]*aria-live="polite"/);
   assert.doesNotMatch(html, /data-venture=|href="\/css\/hero\.css"/);
   assert.doesNotMatch(html, /\bsite-hero\b|\bhero-title\b|\bhero-descriptor\b|\bconstruct-breadcrumb\b|\bexplore-panel\b|<footer\b/);
   assert.match(html, /<body data-live-text-editor="off" data-construct-wayfinding="off">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/thesixwellconstruct\.com\/adventure\/">/);
 
   assert.match(css, /(?:html|body)[^{]*\{[^}]*background:\s*var\(--color-bg\)/s);
   assert.match(css, /\.explore-room\s*\{[^}]*min-height:\s*100(?:s|d|l)?vh/s);
   assert.match(css, /\.explore-action[^}]*min-(?:width|height):\s*(?:var\(--control-min-height,\s*)?44px/s);
   assert.match(css, /\.explore-action:focus-visible/);
+  assert.match(css, /--explore-description:\s*rgba\(252,\s*184,\s*103,\s*0\.55\)/);
+  assert.match(css, /\.explore-action:hover \.explore-action__label,[\s\S]*?color:\s*var\(--explore-focus\)/);
+  assert.match(css, /\.explore-action__description\s*\{[\s\S]*?opacity:\s*0[\s\S]*?transform:\s*translate\(-50%,\s*-8px\)/);
+  assert.match(css, /\.explore-action:hover \.explore-action__description,[\s\S]*?opacity:\s*1[\s\S]*?transform:\s*translate\(-50%,\s*0\)/);
+  assert.match(css, /@media\s*\(hover:\s*none\)[\s\S]*?\.explore-action__description[\s\S]*?opacity:\s*1/);
   assert.match(css, /\.explore-room\[data-explore-renderer="fallback"\]/);
   assert.match(css, /\.explore-action::before/);
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
@@ -222,14 +234,48 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(room, /flatShading:\s*true/);
   assert.match(room, /roughness:\s*1(?:\.0)?/);
   assert.match(room, /metalness:\s*0(?:\.0)?/);
+  assert.match(room, /function createWallShadowTexture\(\)/);
+  assert.match(room, /createRadialGradient\(128,\s*128,\s*8,\s*128,\s*128,\s*126\)/);
+  assert.match(room, /feather\.addColorStop\(0\.58,\s*["']rgba\(255, 255, 255, 0\.16\)["']\)/);
+  assert.match(room, /new THREE\.CanvasTexture\(canvas\)/);
+  assert.match(room, /new THREE\.SpriteMaterial\(\{/);
+  assert.match(room, /new THREE\.Sprite\(wallShadowMaterial\)/);
+  assert.match(room, /wallShadow\.position\.set\(0,\s*0,\s*-0\.82\)/);
+  assert.match(room, /scene\.add\(wallShadow\)/);
+  assert.match(room, /driftX \* 0\.58/);
+  assert.match(room, /driftY \+ lift\) \* 0\.58/);
+  assert.match(room, /item\.wallShadow\.position\.z = -0\.82/);
+  assert.match(room, /wallShadowTexture\.dispose\(\)/);
+  assert.match(room, /new THREE\.PlaneGeometry\(2,\s*2\)/);
+  assert.match(room, /color:\s*0x2a1a12/i);
+  assert.match(room, /backWall\.position\.z = -1\.15/);
+  assert.match(room, /backWall\.renderOrder = -2/);
+  assert.match(room, /wallShadow\.renderOrder = -1/);
+  assert.match(room, /wallTopLeft = screenToWorld\(bounds\.left, bounds\.top, -1\.15\)/);
+  assert.doesNotMatch(room, /CircleGeometry/);
+  assert.doesNotMatch(css, /drop-shadow\(/);
+  assert.match(css, /data-explore-renderer="fallback"[^}]*\.explore-action\s*\{[\s\S]*?radial-gradient\(/);
   assert.equal((room.match(/floatX:\s*0\./g) || []).length, 4);
   assert.equal((room.match(/floatY:\s*0\./g) || []).length, 4);
   assert.equal((room.match(/floatZ:\s*0\./g) || []).length, 4);
   assert.equal((room.match(/floatTilt:\s*0\./g) || []).length, 4);
+  assert.equal((room.match(/rollSway:\s*0\./g) || []).length, 4);
+  assert.equal((room.match(/tumbleX:\s*0\./g) || []).length, 4);
+  assert.equal((room.match(/tumbleY:\s*0\./g) || []).length, 4);
   assert.match(room, /Math\.cos\(elapsed \* 0\.34 \+ item\.floatPhase\)/);
   assert.match(room, /Math\.sin\(elapsed \* 0\.47 \+ item\.floatPhase \* 1\.13\)/);
   assert.match(room, /item\.basePosition\.y \+ driftY \+ lift/);
   assert.match(room, /const driftY = reduceMotion\s*\? 0/);
+  assert.match(room, /const zAxisRoll = reduceMotion\s*\? 0/);
+  assert.match(room, /const depthTumbleX = reduceMotion\s*\? 0/);
+  assert.match(room, /const depthTumbleY = reduceMotion\s*\? 0/);
+  assert.match(room, /Math\.sin\(elapsed \* 0\.56 \+ item\.floatPhase \* 0\.72\) \* item\.spec\.tumbleX/);
+  assert.match(room, /Math\.cos\(elapsed \* 0\.43 \+ item\.floatPhase \* 1\.19\) \* item\.spec\.tumbleY/);
+  assert.match(room, /time \* item\.spec\.rotationSpeed/);
+  assert.match(room, /Math\.sin\(elapsed \* 0\.31 \+ item\.floatPhase \* 0\.9\) \* item\.spec\.rollSway/);
+  assert.match(room, /item\.spec\.rotation\[2\] \+ tiltZ \+ zAxisRoll/);
+  assert.match(room, /item\.spec\.rotation\[0\] \+ depthTumbleX/);
+  assert.match(room, /item\.spec\.rotation\[1\] \+ depthTumbleY/);
   assert.match(room, /reduceMotionQuery\.addEventListener\("change", onMotionChange\)/);
   assert.match(room, /reduceMotionQuery\.removeEventListener\("change", onMotionChange\)/);
   assert.match(room, /dataset\.exploreRenderer\s*=\s*["'](?:webgl|fallback)["']/);
@@ -243,16 +289,23 @@ test("Explore is an immersive room with semantic sculptural controls", () => {
   assert.match(nav, /className = 'cnav-explore'/);
   assert.match(nav, /id = 'cnav-mobile-explore'/);
   assert.match(nav, /aria-current', 'page'/);
+  assert.match(nav, /pathname === '\/adventure'/);
+  assert.equal((nav.match(/_constructFade\('\/adventure\/'\)/g) || []).length, 2);
+  assert.equal((nav.match(/location\.href = '\/adventure\/'/g) || []).length, 2);
+  assert.equal((nav.match(/['"]\/explore\/['"]/g) || []).length, 0);
   assert.equal((nav.match(/\{ key: '[^']+',\s+label:/g) || []).length, 9, "Explore must not become a tenth medium node");
   assert.match(transition, /liveTextEditorDisabled[\s\S]*data-live-text-editor[\s\S]*===\s*'off'/);
   assert.match(wayfinding, /data-construct-wayfinding['"]\)\s*===\s*['"]off['"]/);
   const exploreTemplate = guide.match(/\{ id: "construct-explore"[^\n]+\}/)?.[0] || "";
   assert.match(exploreTemplate, /kind: "interactive"/);
+  assert.match(exploreTemplate, /route: "\/adventure\/"/);
+  assert.match(exploreTemplate, /adventure\/index\.html/);
   assert.match(exploreTemplate, /heroVariant: "Immersive room"/);
   assert.match(exploreTemplate, /js\/explore-room\.js/);
   assert.match(exploreTemplate, /js\/construct-ambient-field\.js/);
   assert.doesNotMatch(exploreTemplate, /css\/hero\.css/);
   assert.match(worker, /url\.pathname === "\/api\/site\/explore"/);
+  assert.match(worker, /url\.pathname === "\/explore"[\s\S]*?adventureUrl\.pathname = "\/adventure\/"[\s\S]*?Response\.redirect\(adventureUrl, 308\)/);
 });
 
 test("the shared ambient field preserves 404 and About behavior while giving Explore a quieter configuration", () => {

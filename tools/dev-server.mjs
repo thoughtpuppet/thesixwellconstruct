@@ -73,7 +73,9 @@ const checkRoutes = [
   ["/about/current-state/", 200],
   ["/about/contact-press/", 200],
   ["/construct-map/", 200],
-  ["/explore/", 200],
+  ["/adventure/", 200],
+  ["/adventure", 308],
+  ["/explore/", 308],
   ["/events/", 200],
   ["/events/calendar/", 200],
   ["/events/cultandshift/", 200],
@@ -574,6 +576,21 @@ async function resolveFile(urlPath) {
 const showHidden = process.argv.includes("--show-hidden");
 
 const server = createServer(async (req, res) => {
+  const requestUrl = new URL(req.url || "/", `http://${host}`);
+  if (requestUrl.pathname === "/explore" || requestUrl.pathname === "/explore/" || requestUrl.pathname === "/explore/index.html") {
+    requestUrl.pathname = "/adventure/";
+    res.writeHead(308, { "Location": `${requestUrl.pathname}${requestUrl.search}` });
+    res.end();
+    return;
+  }
+
+  if (requestUrl.pathname === "/adventure" || requestUrl.pathname === "/adventure/index.html") {
+    requestUrl.pathname = "/adventure/";
+    res.writeHead(308, { "Location": `${requestUrl.pathname}${requestUrl.search}` });
+    res.end();
+    return;
+  }
+
   if ((req.url || "").startsWith("/__tools/") && await handleToolApi(req, res)) {
     return;
   }

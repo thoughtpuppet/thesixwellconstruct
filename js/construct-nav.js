@@ -323,7 +323,7 @@
     desktopColorBindings.push({ venture: v, label: label, dot: dot });
   });
 
-  var isExplorePage = window.location.pathname === '/explore' || window.location.pathname.startsWith('/explore/');
+  var isExplorePage = window.location.pathname === '/adventure' || window.location.pathname.startsWith('/adventure/');
   var exploreAction = document.createElement('button');
   exploreAction.type = 'button';
   exploreAction.className = 'cnav-explore';
@@ -348,8 +348,8 @@
   ].join(';');
   exploreAction.addEventListener('click', function() {
     if (isExplorePage) return;
-    if (typeof window._constructFade === 'function') window._constructFade('/explore/');
-    else window.location.href = '/explore/';
+    if (typeof window._constructFade === 'function') window._constructFade('/adventure/');
+    else window.location.href = '/adventure/';
   });
   nav.appendChild(exploreAction);
 
@@ -1244,8 +1244,8 @@
   mExplore.addEventListener('click', function(e) {
     e.stopPropagation();
     if (isExplorePage) return;
-    if (typeof window._constructFade === 'function') window._constructFade('/explore/');
-    else window.location.href = '/explore/';
+    if (typeof window._constructFade === 'function') window._constructFade('/adventure/');
+    else window.location.href = '/adventure/';
   });
 
   mChip.addEventListener('click', function(e) {
