@@ -10,6 +10,7 @@ const read = (file) => readFileSync(join(ROOT, file), "utf8");
 const app = read("apps/maze/src/App.tsx");
 const canvas = read("apps/maze/src/components/ConstructCanvas.tsx");
 const referenceImage = read("apps/maze/src/components/ReferenceImage.tsx");
+const inspector = read("apps/maze/src/components/Inspector.tsx");
 const tools = read("apps/maze/src/components/MazeTools.tsx");
 const types = read("apps/maze/src/types.ts");
 
@@ -20,6 +21,20 @@ test("Maze Builder exposes a temporary image-reference action", () => {
   assert.match(app, /REFERENCE_MAX_BYTES = 15 \* 1024 \* 1024/);
   assert.match(app, /URL\.createObjectURL\(file\)/);
   assert.match(app, /URL\.revokeObjectURL\(reference\.src\)/);
+});
+
+test("Maze wall width control reaches 45 pixels", () => {
+  assert.match(tools, /<span>Wall<\/span>[\s\S]*?min="8"[\s\S]*?max="45"/);
+});
+
+test("Shape size stays persistent and can target the selected shape or every shape", () => {
+  assert.match(tools, /<span>Shape<\/span>[\s\S]*?min="24"[\s\S]*?max="360"[\s\S]*?value=\{shapeSize\}/);
+  assert.match(tools, /Selected \+ next/);
+  assert.match(tools, /All shapes/);
+  assert.match(app, /shapeSizeScope === "all"[\s\S]*?state\.mazeShapes\.map/);
+  assert.match(app, /shape\.instanceId === selectedShape\.instanceId[\s\S]*?size: nextSize, scale: 1/);
+  assert.match(inspector, /Math\.round\(selectedShape\.size \* selectedShape\.scale\).*?px/);
+  assert.match(inspector, /selectedShape\.scale\.toFixed\(2\).*?from.*?selectedShape\.size/);
 });
 
 test("reference image is non-interactive and rendered beneath Maze marks", () => {

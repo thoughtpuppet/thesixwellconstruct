@@ -13,7 +13,7 @@ import {
   isCanvasLayout
 } from "./lib/canvas-layout";
 import { shapeTouchedByEraser, splitWallByEraser } from "./lib/maze";
-import type { CanvasLayout, CanvasReference, MazeShape, MazeState, MazeTool, MazeWall, Selection } from "./types";
+import type { CanvasLayout, CanvasReference, MazeShape, MazeState, MazeTool, MazeWall, Selection, ShapeSizeScope } from "./types";
 import "./maze-submit.css";
 
 const LEGACY_STORAGE_KEY = "art-pill-maze-design";
@@ -25,6 +25,9 @@ const MAX_UNDO_STEPS = 60;
 const AUTOSAVE_DELAY_MS = 600;
 const REFERENCE_MAX_BYTES = 15 * 1024 * 1024;
 const REFERENCE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const DEFAULT_SHAPE_SIZE = 54;
+const MIN_SHAPE_SIZE = 24;
+const MAX_SHAPE_SIZE = 360;
 const KIOSK = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("kiosk");
 const PREVIEW = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "1";
 const KIOSK_IDLE_MS = 150000;
@@ -685,6 +688,8 @@ export default function App() {
   const [ownerEmail, setOwnerEmail] = useState("");
   const [reference, setReference] = useState<CanvasReference | null>(null);
   const [referenceStatus, setReferenceStatus] = useState("");
+  const [shapeSize, setShapeSize] = useState(DEFAULT_SHAPE_SIZE);
+  const [shapeSizeScope, setShapeSizeScope] = useState<ShapeSizeScope>("selected-future");
 
   const stateRef = useRef(state);
   const formDraftRef = useRef(formDraft);
@@ -726,6 +731,12 @@ export default function App() {
     selected?.type === "shape"
       ? state.mazeShapes.find((shape) => shape.instanceId === selected.id) ?? null
       : null;
+
+  useEffect(() => {
+    if (!selectedShape) return;
+    const renderedSize = Math.round(selectedShape.size * selectedShape.scale);
+    setShapeSize(Math.max(MIN_SHAPE_SIZE, Math.min(MAX_SHAPE_SIZE, renderedSize)));
+  }, [selectedShape?.instanceId, selectedShape?.scale, selectedShape?.size]);
 
   const commit = useCallback((updater: (current: MazeState) => MazeState) => {
     const current = stateRef.current;
@@ -878,6 +889,24 @@ export default function App() {
   const deleteSelected = () => {
     if (selected?.type === "wall") deleteMazeWall(selected.id);
     else if (selected?.type === "shape") deleteMazeShape(selected.id);
+  };
+
+  const resizeShapes = (size: number) => {
+    const nextSize = Math.max(MIN_SHAPE_SIZE, Math.min(MAX_SHAPE_SIZE, Math.round(size)));
+    setShapeSize(nextSize);
+    setMazeTool((current) => current.type === "shape" ? { ...current, size: nextSize } : current);
+
+    if (shapeSizeScope === "all" && state.mazeShapes.length) {
+      setShapes(state.mazeShapes.map((shape) => ({ ...shape, size: nextSize, scale: 1 })));
+      return;
+    }
+    if (selectedShape) {
+      setShapes(state.mazeShapes.map((shape) =>
+        shape.instanceId === selectedShape.instanceId
+          ? { ...shape, size: nextSize, scale: 1 }
+          : shape
+      ));
+    }
   };
 
   const uploadReference = (file: File) => {
@@ -1220,6 +1249,12 @@ export default function App() {
             referenceStatus={referenceStatus}
             onReferenceUpload={uploadReference}
             onReferenceRemove={removeReference}
+            shapeSize={shapeSize}
+            shapeSizeScope={shapeSizeScope}
+            hasSelectedShape={Boolean(selectedShape)}
+            shapeCount={state.mazeShapes.length}
+            onShapeSizeChange={resizeShapes}
+            onShapeSizeScopeChange={setShapeSizeScope}
           />
         </aside>
         <div className="canvas-workspace">

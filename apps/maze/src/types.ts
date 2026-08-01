@@ -121,6 +121,8 @@ export type MazeShape = {
 
 export type CanvasLayout = "tall" | "square" | "wide";
 
+export type ShapeSizeScope = "selected-future" | "all";
+
 export type CanvasReference = {
   name: string;
   src: string;

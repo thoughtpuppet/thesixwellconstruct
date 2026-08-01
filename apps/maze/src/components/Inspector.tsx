@@ -109,8 +109,12 @@ export function Inspector({
                 <dd>{Math.round(selectedShape.rotation)} deg</dd>
               </div>
               <div>
+                <dt>Size</dt>
+                <dd>{Math.round(selectedShape.size * selectedShape.scale)} px</dd>
+              </div>
+              <div>
                 <dt>Scale</dt>
-                <dd>{selectedShape.scale.toFixed(2)}x</dd>
+                <dd>{selectedShape.scale.toFixed(2)}x from {Math.round(selectedShape.size)} px</dd>
               </div>
             </dl>
             <div className="button-row">

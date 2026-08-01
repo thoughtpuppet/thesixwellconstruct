@@ -420,6 +420,55 @@ h1 {
   grid-template-columns: auto 1fr;
 }
 
+.shape-size-range {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.shape-size-range output {
+  min-width: 48px;
+  color: var(--accent-red);
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-align: right;
+}
+
+.shape-size-scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.shape-size-scope button {
+  min-width: 0;
+  min-height: 42px;
+  padding: 5px 7px;
+  border: 5px solid rgba(var(--ink-rgb), 0.16);
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--cream);
+  font-size: 0.7rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.shape-size-scope button.active {
+  border-color: var(--tool-active);
+  background: var(--tool-active);
+}
+
+.shape-size-scope button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.shape-size-help {
+  margin-top: -7px;
+  color: rgba(var(--ink-rgb), 0.7);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .selected-card .range-line,
 .selected-card .field-line {
   grid-template-columns: 82px 1fr;

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useRef } from "react";
-import type { MazeShapeKind, MazeTool } from "../types";
+import type { MazeShapeKind, MazeTool, ShapeSizeScope } from "../types";
 
 type WallPreset = Extract<MazeTool, { type: "wallPreset" }>["preset"];
 
@@ -89,6 +89,12 @@ type MazeToolsProps = {
   referenceStatus: string;
   onReferenceUpload: (file: File) => void;
   onReferenceRemove: () => void;
+  shapeSize: number;
+  shapeSizeScope: ShapeSizeScope;
+  hasSelectedShape: boolean;
+  shapeCount: number;
+  onShapeSizeChange: (size: number) => void;
+  onShapeSizeScopeChange: (scope: ShapeSizeScope) => void;
 };
 
 export function MazeTools({
@@ -97,7 +103,13 @@ export function MazeTools({
   referenceName,
   referenceStatus,
   onReferenceUpload,
-  onReferenceRemove
+  onReferenceRemove,
+  shapeSize,
+  shapeSizeScope,
+  hasSelectedShape,
+  shapeCount,
+  onShapeSizeChange,
+  onShapeSizeScopeChange
 }: MazeToolsProps) {
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const shapeTool = tool.type === "shape" ? tool : null;
@@ -115,7 +127,7 @@ export function MazeTools({
       stroke: "#151413",
       fill: activeColor,
       filled: shapeTool?.filled ?? true,
-      size: shapeTool?.size ?? 54
+      size: shapeSize
     });
   };
 
@@ -251,6 +263,46 @@ export function MazeTools({
         ))}
       </div>
 
+      <label className="range-line shape-size-range">
+        <span>Shape</span>
+        <input
+          type="range"
+          min="24"
+          max="360"
+          value={shapeSize}
+          aria-describedby="shape-size-help"
+          onChange={(event) => onShapeSizeChange(Number(event.target.value))}
+        />
+        <output>{Math.round(shapeSize)} px</output>
+      </label>
+
+      <div className="shape-size-scope" role="group" aria-label="Shape resize scope">
+        <button
+          type="button"
+          className={shapeSizeScope === "selected-future" ? "active" : ""}
+          aria-pressed={shapeSizeScope === "selected-future"}
+          onClick={() => onShapeSizeScopeChange("selected-future")}
+        >
+          Selected + next
+        </button>
+        <button
+          type="button"
+          className={shapeSizeScope === "all" ? "active" : ""}
+          aria-pressed={shapeSizeScope === "all"}
+          onClick={() => onShapeSizeScopeChange("all")}
+          disabled={shapeCount === 0}
+        >
+          All shapes
+        </button>
+      </div>
+      <p className="shape-size-help" id="shape-size-help">
+        {shapeSizeScope === "all"
+          ? "Resizes every placed shape and sets the size for the next shape."
+          : hasSelectedShape
+            ? "Resizes the selected shape and sets the size for the next shape."
+            : "Sets the size for the next shape. Select a placed shape to resize it."}
+      </p>
+
       <div className="swatch-row" aria-label="Maze ink color">
         {inkOptions.map((color) => (
           <button
@@ -270,7 +322,7 @@ export function MazeTools({
                   stroke: "#151413",
                   fill: color,
                   filled: shapeTool?.filled ?? true,
-                  size: shapeTool?.size ?? 54
+                  size: shapeSize
                 });
               }
             }}
@@ -291,7 +343,7 @@ export function MazeTools({
               stroke: "#151413",
               fill: activeColor,
               filled: event.target.checked,
-              size: shapeTool?.size ?? 54
+              size: shapeSize
             })
           }
         />
@@ -303,7 +355,7 @@ export function MazeTools({
         <input
           type="range"
           min="8"
-          max="34"
+          max="45"
           value={activeWallWidth}
           onChange={(event) =>
             tool.type === "wallPreset"
