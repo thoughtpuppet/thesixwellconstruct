@@ -96,3 +96,14 @@ test("Flash remains on the general media card system", async () => {
   assert.match(flash, /href=["']\/css\/media\.css["']/);
   assert.doesNotMatch(flash, /href=["']\/css\/portfolio-cards\.css["']/);
 });
+
+test("Tattoo Portfolio uses newest-first API order in public and Studio surfaces", async () => {
+  const api = await source("functions/api/portfolio/_lib.js");
+  const studio = await source("studio/submissions/index.html");
+
+  assert.match(api, /ORDER BY created_at DESC, rowid DESC/);
+  assert.match(api, /CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, created_at DESC, rowid DESC/);
+  assert.match(studio, /return portfolioItems\.filter\(\(item\) => item\.state === portfolioState\);/);
+  assert.match(studio, /Newest entries appear first in Studio and on the public gallery\./);
+  assert.doesNotMatch(studio, /data-portfolio-move|savePortfolioOrder|movePortfolioItem|draggable="true"/);
+});

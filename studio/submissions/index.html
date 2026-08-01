@@ -1546,8 +1546,7 @@
   }
 
   function portfolioItemsForState() {
-    return portfolioItems.filter((item) => item.state === portfolioState)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+    return portfolioItems.filter((item) => item.state === portfolioState);
   }
 
   function portfolioLabel(item) {
@@ -1625,7 +1624,6 @@
   }
 
   function renderPortfolioCard(item, index, total) {
-    const canSort = portfolioState !== "archived";
     const portfolioImages = portfolioImagesForItem(item);
     const projectType = item.projectType || "standard";
     const styleValues = portfolioStyleValues(item);
@@ -1638,7 +1636,7 @@
         ? `<button class="button" type="button" data-portfolio-state="published" data-id="${escapeHtml(item.id)}" title="Save the visible metadata and image permissions, then publish">Save &amp; publish</button>`
         : `<button class="button" type="button" data-portfolio-state="draft" data-id="${escapeHtml(item.id)}">Restore to draft</button>`;
     return `
-      <article class="portfolio-card" data-portfolio-card="${escapeHtml(item.id)}" ${canSort ? 'draggable="true"' : ""}>
+      <article class="portfolio-card" data-portfolio-card="${escapeHtml(item.id)}">
         <div class="portfolio-card-media">
           <img ${item.sourceUrl ? `src="${escapeHtml(item.sourceUrl)}"` : `data-secure-src="${escapeHtml(item.imageUrl)}"`} alt="${escapeHtml(item.altText || "Portfolio preview")}">
         </div>
@@ -1646,7 +1644,6 @@
           <div class="portfolio-card-title"><strong>${escapeHtml(portfolioLabel(item))}</strong><span class="pill">${index + 1} / ${total}</span></div>
           <div class="meta">${styleLabels.map(escapeHtml).join(" + ")}${item.collection ? ` / ${escapeHtml(portfolioOptionLabel("collection", item.collection))}` : ""}${projectType === "cover_up" ? " / Cover-up" : ""}</div>
           <div class="portfolio-card-actions">
-            ${canSort ? `<button class="button" type="button" data-portfolio-move="up" data-id="${escapeHtml(item.id)}" ${index === 0 ? "disabled" : ""}>Move up</button><button class="button" type="button" data-portfolio-move="down" data-id="${escapeHtml(item.id)}" ${index === total - 1 ? "disabled" : ""}>Move down</button>` : ""}
             ${stateAction}
             <button class="button" type="button" data-portfolio-connections data-id="${escapeHtml(item.id)}" aria-expanded="false" aria-controls="portfolio-connections-${escapeHtml(item.id)}">Connections</button>
             ${item.state !== "archived" ? `<button class="button danger-button" type="button" data-portfolio-archive data-id="${escapeHtml(item.id)}">Archive</button>` : ""}
@@ -1735,29 +1732,6 @@
     portfolioItems = payload.items || [];
     portfolioOptions = payload.options || { styles: [], collections: [] };
     paintPortfolioItems();
-  }
-
-  async function savePortfolioOrder(ids) {
-    await api("/api/admin/portfolio/reorder", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ state: portfolioState, ids }),
-    });
-    ids.forEach((id, index) => {
-      const item = portfolioItems.find((candidate) => candidate.id === id);
-      if (item) item.sortOrder = index + 1;
-    });
-    paintPortfolioItems();
-    setStatus("Portfolio order published");
-  }
-
-  async function movePortfolioItem(id, direction) {
-    const ids = portfolioItemsForState().map((item) => item.id);
-    const from = ids.indexOf(id);
-    const to = direction === "up" ? from - 1 : from + 1;
-    if (from < 0 || to < 0 || to >= ids.length) return;
-    [ids[from], ids[to]] = [ids[to], ids[from]];
-    await savePortfolioOrder(ids);
   }
 
   function portfolioBatchStarted() {
@@ -2234,29 +2208,6 @@
     ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.add("is-over"); }));
     ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (event) => { event.preventDefault(); drop.classList.remove("is-over"); }));
     drop.addEventListener("drop", (event) => stagePortfolioFiles(event.dataTransfer.files));
-    manager.addEventListener("dragstart", (event) => {
-      if (event.target.closest("[data-image-editor-toggle]")) {
-        event.preventDefault();
-        return;
-      }
-      const card = event.target.closest("[data-portfolio-card]");
-      if (!card) return;
-      card.classList.add("is-dragging");
-      event.dataTransfer.setData("text/plain", card.dataset.portfolioCard);
-    });
-    manager.addEventListener("dragend", (event) => event.target.closest("[data-portfolio-card]")?.classList.remove("is-dragging"));
-    manager.addEventListener("dragover", (event) => { if (event.target.closest("[data-portfolio-card]")) event.preventDefault(); });
-    manager.addEventListener("drop", (event) => {
-      const target = event.target.closest("[data-portfolio-card]");
-      const sourceId = event.dataTransfer.getData("text/plain");
-      if (!target || !sourceId || sourceId === target.dataset.portfolioCard) return;
-      event.preventDefault();
-      const ids = portfolioItemsForState().map((item) => item.id);
-      const from = ids.indexOf(sourceId);
-      const to = ids.indexOf(target.dataset.portfolioCard);
-      ids.splice(to, 0, ids.splice(from, 1)[0]);
-      savePortfolioOrder(ids).catch((error) => setStatus(error.message));
-    });
     manager.addEventListener("toggle", (event) => {
       const imageManager = event.target.closest?.("[data-angle-manager]");
       if (!imageManager || imageManager.open) return;
@@ -2306,8 +2257,6 @@
       }
       const filter = event.target.closest("[data-portfolio-filter]");
       if (filter) { portfolioState = filter.dataset.portfolioFilter; renderPortfolioManager(); return; }
-      const move = event.target.closest("[data-portfolio-move]");
-      if (move) { await movePortfolioItem(move.dataset.id, move.dataset.portfolioMove); return; }
       const cover = event.target.closest("[data-image-cover]");
       if (cover) {
         const form = cover.closest("[data-image-documentation]");
@@ -2417,7 +2366,7 @@
     const counts = Object.fromEntries(["published", "draft", "archived"].map((state) => [state, portfolioItems.filter((item) => item.state === state).length]));
     detailEl.innerHTML = `
       <section class="portfolio-manager" id="portfolioManager">
-        <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, publish, and order tattoo work. Saved changes appear on the public gallery immediately.</p></div>
+        <div class="portfolio-head"><div><h2>Portfolio</h2><p class="contact">Upload, describe, and publish tattoo work. Newest entries appear first in Studio and on the public gallery.</p></div>
           <div class="portfolio-filters">${["published", "draft", "archived"].map((state) => `<button class="subnav-btn ${portfolioState === state ? "is-active" : ""}" type="button" data-portfolio-filter="${state}">${state} (${counts[state] || 0})</button>`).join("")}</div>
         </div>
         <div class="portfolio-drop" id="portfolioDrop"><input id="portfolioFiles" type="file" accept="image/jpeg,image/png,image/webp" multiple><strong>Drop JPEG, PNG, or WebP images here</strong><span class="contact">Up to 15 MB each. Organize related photographs before creating private Draft entries.</span><button class="button" id="portfolioChoose" type="button">Choose images</button><div class="portfolio-upload-status" id="portfolioUploadStatus" aria-live="polite"></div></div>

@@ -317,7 +317,7 @@ async function listPublic(env) {
       WHERE state = 'published'
         AND primary_consent_status IN ('not-required','granted')
         AND EXISTS (SELECT 1 FROM content_entities ce WHERE ce.id = portfolio_items.id AND ce.visibility = 'public')
-      ORDER BY sort_order ASC, created_at ASC
+      ORDER BY created_at DESC, rowid DESC
     `).all(),
     portfolioOptions(db),
   ]);
@@ -344,7 +344,7 @@ async function listAdmin(request, env) {
   if (authError) return authError;
   const db = requireDb(env);
   const [result, options] = await Promise.all([
-    db.prepare("SELECT * FROM portfolio_items ORDER BY CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, sort_order ASC, created_at ASC").all(),
+    db.prepare("SELECT * FROM portfolio_items ORDER BY CASE state WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END, created_at DESC, rowid DESC").all(),
     portfolioOptions(db, true),
   ]);
   const rows = result.results || [];

@@ -527,6 +527,27 @@ test("public portfolio and primary media refuse a published row without recorded
   assert.equal(response.headers.get("cache-control"), "private, no-store");
 });
 
+test("public and Studio portfolio lists order entries newest to oldest", async () => {
+  const database = migratedDatabase();
+  for (const [id, createdAt, sortOrder] of [
+    ["portfolio-order-oldest", "2024-01-01 12:00:00", 1],
+    ["portfolio-order-middle", "2025-01-01 12:00:00", 2],
+    ["portfolio-order-newest", "2026-01-01 12:00:00", 99],
+  ]) {
+    insertPortfolioItem(database, { id, state: "published", consent: "granted" });
+    database.prepare("UPDATE portfolio_items SET created_at=?,sort_order=? WHERE id=?").run(createdAt, sortOrder, id);
+  }
+
+  const expected = ["portfolio-order-newest", "portfolio-order-middle", "portfolio-order-oldest"];
+  const publicResponse = await handlePortfolioApi(request("/api/portfolio"), env(database));
+  assert.equal(publicResponse.status, 200);
+  assert.deepEqual((await publicResponse.json()).items.map((item) => item.id).filter((id) => expected.includes(id)), expected);
+
+  const adminResponse = await handlePortfolioApi(request("/api/admin/portfolio", { admin: true }), env(database));
+  assert.equal(adminResponse.status, 200);
+  assert.deepEqual((await adminResponse.json()).items.map((item) => item.id).filter((id) => expected.includes(id)), expected);
+});
+
 test("generic media and attachment APIs cannot privatize a published portfolio cover", async () => {
   const database = migratedDatabase();
   insertPortfolioItem(database, { id: "generic-cover", state: "published", projectType: "cover_up", consent: "granted", coverImageRef: "generic-result" });
