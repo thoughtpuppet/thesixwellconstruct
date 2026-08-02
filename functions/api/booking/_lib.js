@@ -3042,7 +3042,7 @@ function squareLineItem(name, amount, currency) {
   };
 }
 
-async function createSquarePaymentLink(request, env, appointment, bookingType) {
+async function createSquarePaymentLink(request, env, appointment, bookingType, options = {}) {
   if (!squareConfiguredForBookingType(env, bookingType.id)) {
     throw new Error("Square is not configured.");
   }
@@ -3058,7 +3058,7 @@ async function createSquarePaymentLink(request, env, appointment, bookingType) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      idempotency_key: appointment.id,
+      idempotency_key: asString(options.idempotencyKey) || appointment.id,
       order: {
         location_id: squareLocationForBookingType(env, bookingType.id),
         line_items: [
@@ -4849,6 +4849,16 @@ function appointmentCanReschedule(appointment) {
     && new Date(appointment.startAt).getTime() > Date.now();
 }
 
+function appointmentCanChangeApprovedSpecialTime(appointment) {
+  return appointment.isTattooSpecial
+    && ["pending_deposit", "deposit_pending"].includes(appointment.status)
+    && appointment.approvalState === "approved"
+    && appointment.holdState === "active"
+    && new Date(appointment.holdExpiresAt).getTime() > Date.now()
+    && new Date(appointment.paymentDueAt || appointment.holdExpiresAt).getTime() > Date.now()
+    && new Date(appointment.startAt).getTime() > Date.now();
+}
+
 async function pendingReplacementForAppointment(db, appointmentId) {
   return db.prepare(
     `SELECT a.*, bt.label AS booking_type_label
@@ -4869,13 +4879,22 @@ export async function handleRescheduleContext(request, env) {
     const owned = await clientOwnedAppointment(db, asString(body.appointmentId), asString(body.email));
     if (owned.error) return errorResponse(owned.error, owned.status);
     const appointment = normalizeAppointment(owned.row);
-    const canReschedule = appointmentCanReschedule(appointment);
+    const canChangeSpecialRequest = appointmentCanChangeApprovedSpecialTime(appointment);
+    const canReschedule = appointmentCanReschedule(appointment) || canChangeSpecialRequest;
     const bookingTypeRow = await db.prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
       .bind(appointment.bookingTypeId)
       .first();
     if (!bookingTypeRow) return errorResponse("This appointment type is no longer available.", 409);
     const bookingType = normalizeBookingType(bookingTypeRow);
     const availabilityWindows = canReschedule ? await listPublicWindows(db, [bookingType]) : [];
+    if (canChangeSpecialRequest && appointment.availabilityWindowId && !availabilityWindows.some((item) => item.id === appointment.availabilityWindowId)) {
+      const currentWindow = await db.prepare(
+        "SELECT * FROM availability_windows WHERE id = ? AND active = 1 AND is_blackout = 0",
+      ).bind(appointment.availabilityWindowId).first();
+      if (currentWindow && new Date(currentWindow.start_at).getTime() > Date.now()) {
+        availabilityWindows.unshift(normalizeWindow(currentWindow));
+      }
+    }
     const hoursUntilStart = (new Date(appointment.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
     const pendingRow = await pendingReplacementForAppointment(db, appointment.id);
     const pending = pendingRow ? normalizeAppointment(pendingRow) : null;
@@ -4888,11 +4907,12 @@ export async function handleRescheduleContext(request, env) {
     const tattooSettings = await db.prepare("SELECT support_email FROM tattoo_settings WHERE id = 'default'").first();
     return json({
       ok: true,
+      mode: canChangeSpecialRequest ? "special_request_change" : "appointment_reschedule",
       appointment: rescheduleSummary(appointment),
       bookingType,
       availabilityWindows,
       noticeHours: RESCHEDULE_CUTOFF_HOURS,
-      requiresReplacementPayment: hoursUntilStart < RESCHEDULE_CUTOFF_HOURS,
+      requiresReplacementPayment: canChangeSpecialRequest ? false : hoursUntilStart < RESCHEDULE_CUTOFF_HOURS,
       canReschedule,
       supportEmail: tattooSettings?.support_email || env.NOTIFICATION_REPLY_TO || DEFAULT_SUPPORT_EMAIL,
       pendingCheckout: pending ? {
@@ -5198,6 +5218,181 @@ export async function handleCreateReplacementCheckout(request, env) {
   }
 }
 
+async function changeApprovedTattooSpecialRequestedTime(request, env, db, appointmentRow, availabilityWindowId) {
+  const original = normalizeAppointment(appointmentRow);
+  if (!appointmentCanChangeApprovedSpecialTime(original)) {
+    return { error: "This Tattoo Special requested time can no longer be changed before payment.", status: 409 };
+  }
+  const availability = await ensureAvailable(db, availabilityWindowId, original.bookingTypeId, original.id);
+  if (availability.error) return { error: availability.error, status: 409 };
+  const dayGuard = await bookingDayGuardForWindow(db, availability.window.id);
+  if (!dayGuard) return { error: "That appointment time is unavailable.", status: 409 };
+  if (availability.window.id === original.availabilityWindowId && original.squareCheckoutUrl) {
+    return {
+      appointment: original,
+      checkoutUrl: original.squareCheckoutUrl,
+      unchanged: true,
+    };
+  }
+
+  const payment = await pendingCheckoutIdentifiers(db, original.id);
+  const reconciliationRow = {
+    ...appointmentRow,
+    payment_link_id: payment?.payment_link_id || original.squarePaymentLinkId || "",
+    payment_order_id: payment?.payment_order_id || original.squareOrderId || "",
+  };
+  const paymentLinkId = reconciliationRow.payment_link_id || original.squarePaymentLinkId;
+  const orderId = reconciliationRow.square_order_id || reconciliationRow.payment_order_id;
+  const hasCheckout = Boolean(original.squareCheckoutUrl || paymentLinkId || orderId);
+  if (hasCheckout) {
+    try {
+      if (!paymentLinkId || !orderId) throw new Error("The existing deposit checkout is missing its Square identifiers.");
+      const order = await fetchSquareOrderForReconciliation(env, orderId);
+      if (orderLooksPaid(order)) {
+        const confirmed = await confirmPaidAppointment(db, env, request, appointmentRow, order);
+        return {
+          error: "This deposit has already been paid, so the appointment is booked and cannot be changed through the approval email.",
+          status: 409,
+          code: "CHECKOUT_ALREADY_PAID",
+          appointment: confirmed,
+        };
+      }
+      await invalidateSquarePaymentLink(env, paymentLinkId);
+    } catch (error) {
+      await markHoldExpiryAttention(db, reconciliationRow, error.message, new Date().toISOString());
+      return {
+        error: "The existing Square link could not be safely replaced. The requested time remains held for Studio attention.",
+        status: 409,
+        code: "SPECIAL_TIME_CHANGE_ATTENTION",
+        detail: error.message,
+      };
+    }
+  }
+
+  const now = new Date().toISOString();
+  const results = await db.batch([
+    db.prepare(
+      `UPDATE appointments
+       SET availability_window_id = ?, start_at = ?, end_at = ?,
+           original_start_at = COALESCE(original_start_at, start_at),
+           original_end_at = COALESCE(original_end_at, end_at),
+           status = 'pending_deposit', square_order_id = NULL,
+           square_payment_link_id = NULL, square_checkout_url = NULL, updated_at = ?
+       WHERE id = ? AND status IN ('pending_deposit','deposit_pending')
+         AND approval_state = 'approved' AND hold_state = 'active' AND hold_expires_at > ?
+         AND EXISTS (
+           SELECT 1 FROM availability_windows aw
+           WHERE aw.id = ? AND aw.active = 1 AND aw.is_blackout = 0
+             AND (aw.booking_type_id IS NULL OR aw.booking_type_id = appointments.booking_type_id)
+             AND aw.start_at > ?
+             AND (
+               SELECT COUNT(*) FROM appointments day_appointment
+               WHERE day_appointment.id <> appointments.id
+                 AND day_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
+                 AND day_appointment.start_at >= ? AND day_appointment.start_at < ?
+             ) < ?
+             AND NOT EXISTS (
+               SELECT 1 FROM availability_windows blackout
+               WHERE blackout.active = 1 AND blackout.is_blackout = 1
+                 AND julianday(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) / 1440.0
+                   < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
+                 AND julianday(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) / 1440.0
+                   > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+             )
+             AND (
+               SELECT COUNT(*) FROM appointments overlap_appointment
+               LEFT JOIN availability_windows overlap_window
+                 ON overlap_window.id = overlap_appointment.availability_window_id
+               WHERE overlap_appointment.id <> appointments.id
+                 AND overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
+                 AND julianday(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) / 1440.0
+                   < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
+                 AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
+                   > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+             ) < aw.capacity
+             AND (
+               SELECT COUNT(*) FROM appointments exact_appointment
+               WHERE exact_appointment.id <> appointments.id
+                 AND exact_appointment.availability_window_id = aw.id
+                 AND exact_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
+             ) < aw.capacity
+         )`
+    ).bind(
+      availability.window.id,
+      availability.window.start_at,
+      availability.window.end_at,
+      now,
+      original.id,
+      now,
+      availability.window.id,
+      now,
+      dayGuard.startAt,
+      dayGuard.endAt,
+      dayGuard.maxBookingsPerDay,
+    ),
+    db.prepare(
+      `UPDATE deposit_payments SET status = 'cancelled', updated_at = ?
+       WHERE appointment_id = ? AND status = 'pending'
+         AND EXISTS (SELECT 1 FROM appointments a WHERE a.id = ? AND a.updated_at = ?)`
+    ).bind(now, original.id, original.id, now),
+    db.prepare(
+      `UPDATE submissions
+       SET payload_json = json_set(payload_json, '$.held_start_at', ?, '$.held_end_at', ?), updated_at = ?
+       WHERE id = ? AND type = 'tattoo_special'
+         AND EXISTS (SELECT 1 FROM appointments a WHERE a.id = ? AND a.updated_at = ?)`
+    ).bind(availability.window.start_at, availability.window.end_at, now, original.submissionId, original.id, now),
+    db.prepare(
+      `INSERT INTO appointment_events (id, appointment_id, event_type, actor, note, metadata_json, created_at)
+       SELECT ?, id, 'special_requested_time_changed', 'client', ?, ?, ?
+       FROM appointments WHERE id = ? AND updated_at = ?`
+    ).bind(
+      crypto.randomUUID(),
+      `${original.startAt} - ${original.endAt} -> ${availability.window.start_at} - ${availability.window.end_at}`,
+      JSON.stringify({
+        fromStartAt: original.startAt,
+        fromEndAt: original.endAt,
+        toStartAt: availability.window.start_at,
+        toEndAt: availability.window.end_at,
+        beforeDeposit: true,
+      }),
+      now,
+      original.id,
+      now,
+    ),
+  ]);
+  if (Number(results?.[0]?.meta?.changes || 0) < 1) {
+    return { error: "The new requested time became unavailable before the change completed.", status: 409 };
+  }
+
+  const bookingTypeRow = await db.prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(original.bookingTypeId)
+    .first();
+  if (!bookingTypeRow) return { error: "This Tattoo Special appointment type is no longer available.", status: 409 };
+  const movedRow = await selectAppointmentWithMeeting(db, original.id);
+  const moved = normalizeAppointment(movedRow);
+  let paymentLink;
+  try {
+    paymentLink = await createSquarePaymentLink(request, env, moved, normalizeBookingType(bookingTypeRow), {
+      idempotencyKey: `${moved.id}:requested-time:${crypto.randomUUID()}`,
+    });
+  } catch (error) {
+    await db.prepare("UPDATE appointments SET status = 'deposit_pending', updated_at = ? WHERE id = ?")
+      .bind(new Date().toISOString(), moved.id)
+      .run();
+    return { error: "The requested time changed, but the replacement deposit link is not ready. Reopen the email link to try again.", status: 503, detail: error.message };
+  }
+  if (!await savePendingPaymentLink(db, moved, paymentLink)) {
+    await invalidateUnsavedPaymentLink(env, paymentLink);
+    return { error: "The replacement deposit hold expired before checkout was created.", status: 409 };
+  }
+  return {
+    appointment: normalizeAppointment(await selectAppointmentWithMeeting(db, moved.id)),
+    checkoutUrl: paymentLink.url,
+    previousStartAt: original.startAt,
+    previousEndAt: original.endAt,
+  };
+}
+
 export async function handleRescheduleAppointment(request, env) {
   const body = await readJsonBody(request);
   if (!body) return errorResponse("Expected JSON body.", 400);
@@ -5206,9 +5401,32 @@ export async function handleRescheduleAppointment(request, env) {
     const owned = await clientOwnedAppointment(db, asString(body.appointmentId), asString(body.email));
     if (owned.error) return errorResponse(owned.error, owned.status);
     const original = normalizeAppointment(owned.row);
-    if (!appointmentCanReschedule(original)) return errorResponse("This appointment is not eligible for rescheduling.", 409);
     const availabilityWindowId = asString(body.availabilityWindowId);
     if (!availabilityWindowId) return errorResponse("Choose a new appointment time.", 400);
+    if (appointmentCanChangeApprovedSpecialTime(original)) {
+      const changed = await changeApprovedTattooSpecialRequestedTime(
+        request,
+        env,
+        db,
+        owned.row,
+        availabilityWindowId,
+      );
+      if (changed.error) return errorResponse(changed.error, changed.status || 409, {
+        ...(changed.code ? { code: changed.code } : {}),
+        ...(changed.detail ? { detail: changed.detail } : {}),
+        ...(changed.appointment ? { appointment: changed.appointment } : {}),
+      });
+      return json({
+        ok: true,
+        mode: "special_request_changed",
+        appointment: changed.appointment,
+        checkoutUrl: changed.checkoutUrl,
+        previousStartAt: changed.previousStartAt || "",
+        previousEndAt: changed.previousEndAt || "",
+        unchanged: Boolean(changed.unchanged),
+      });
+    }
+    if (!appointmentCanReschedule(original)) return errorResponse("This appointment is not eligible for rescheduling.", 409);
     const hoursUntilStart = (new Date(original.startAt).getTime() - Date.now()) / (60 * 60 * 1000);
     if (hoursUntilStart < RESCHEDULE_CUTOFF_HOURS) {
       const result = await createReplacementCheckout(request, env, db, owned.row, availabilityWindowId);

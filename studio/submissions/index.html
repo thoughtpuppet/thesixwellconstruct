@@ -1105,6 +1105,7 @@
           ${field("Deposit policy accepted", p("policy_accepted"))}
         </div>
         <div class="field" style="margin-top:16px;"><label>Client Tattoo Description</label><div class="value full">${escapeHtml(p("project_details") || p("message"))}</div></div>
+        ${p("script_text") ? `<div class="field" style="margin-top:16px;"><label>Requested Script</label><div class="value full">${escapeHtml(p("script_text"))}</div></div>` : ""}
         ${p("reference_link") ? `<div class="field" style="margin-top:16px;"><label>Reference Link</label><div class="value full">${escapeHtml(p("reference_link"))}</div></div>` : ""}
       `);
     }
@@ -2691,6 +2692,7 @@
         <div class="field"><label>Booking flow</label><div class="value">Studio approval required</div></div>
         <label>References<select name="referenceRequirement"><option value="optional" ${offer.referenceRequirement !== "required" ? "selected" : ""}>Optional</option><option value="required" ${offer.referenceRequirement === "required" ? "selected" : ""}>Required</option></select></label>
         <label>Participants<select name="participantCount"><option value="1" ${Number(offer.participantCount || 1) === 1 ? "selected" : ""}>One adult</option><option value="2" ${Number(offer.participantCount) === 2 ? "selected" : ""}>Two adults</option></select></label>
+        <label>Maximum words <span class="contact">Optional</span><input name="maxWordCount" type="number" min="1" max="100" step="1" value="${escapeHtml(offer.maxWordCount || "")}"></label>
         <label class="check"><input name="active" type="checkbox" ${offer.active !== false ? "checked" : ""}><span>Public while window is open</span></label>
       </div>
       <label>Public description<textarea name="description" maxlength="3000" rows="3">${escapeHtml(offer.description || "")}</textarea></label>
@@ -6551,7 +6553,8 @@ ${meetingLines}
           description: String(values.description || "").trim(), sortOrder: Number(values.sortOrder || 0),
           durationMinutes: Number(values.durationMinutes || 0), depositCents: Math.round(Number(values.depositDollars || 0) * 100),
           mode: values.mode, referenceRequirement: values.referenceRequirement,
-          participantCount: Number(values.participantCount || 1), active: specialOfferForm.elements.active.checked,
+          participantCount: Number(values.participantCount || 1), maxWordCount: Number(values.maxWordCount || 0),
+          active: specialOfferForm.elements.active.checked,
           variants,
         }),
       });

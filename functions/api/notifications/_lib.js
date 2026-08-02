@@ -24,6 +24,15 @@ import {
   renderEmailTemplateContent,
 } from "./_email-templates.js";
 import { renderEmailContent, validateEmailContent } from "./_email-content.js";
+import { CLIENT_EMAIL_THEMES, renderClientEmail } from "./_email-renderer.js";
+import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-design.js";
+import {
+  emailDesignHistory,
+  emailDesignRevision,
+  publishEmailDesignDraft,
+  restoreEmailDesignRevision,
+  saveEmailDesignDraft,
+} from "./_email-design-store.js";
 import {
   publishTemplateDraft,
   restoreTemplateRevision,
@@ -384,9 +393,9 @@ async function recordDelivery(db, delivery) {
     await db
       .prepare(
         `INSERT INTO notification_deliveries (
-          id, channel, template_key, template_variant, template_revision, email_theme,
+          id, channel, template_key, template_variant, template_revision, email_design_revision, email_theme,
           recipient, subject, related_type, related_id, idempotency_key, status, error, sent_at, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(idempotency_key) DO UPDATE SET
           status = excluded.status,
           error = excluded.error,
@@ -395,6 +404,7 @@ async function recordDelivery(db, delivery) {
           recipient = excluded.recipient,
           template_variant = excluded.template_variant,
           template_revision = excluded.template_revision,
+          email_design_revision = excluded.email_design_revision,
           email_theme = excluded.email_theme,
           created_at = excluded.created_at`
       )
@@ -404,6 +414,7 @@ async function recordDelivery(db, delivery) {
         delivery.templateKey,
         delivery.templateVariant || "default",
         Number(delivery.templateRevision || 0),
+        Number(delivery.emailDesignRevision || 0),
         delivery.theme || delivery.emailTheme || "",
         delivery.recipient || delivery.to,
         delivery.subject || null,
@@ -448,6 +459,12 @@ async function sendTransactionalEmail(env, message) {
 
   let outgoing = { ...message };
   if (message.semantic && message.templateKey && !message.contentLocked) {
+    let publishedDesign = null;
+    try {
+      publishedDesign = await emailDesignRevision(db, "published");
+    } catch (error) {
+      console.warn("Email design fallback to repository defaults.", error.message);
+    }
     try {
       const definition = emailTemplateDefinition(message.templateKey, message.templateVariant || "default");
       const published = await templateRevision(db, message.templateKey, message.templateVariant || "default", "published");
@@ -456,14 +473,25 @@ async function sendTransactionalEmail(env, message) {
         if (!validation.ok) throw new Error(validation.errors.join(" "));
         outgoing = {
           ...message,
-          ...renderEmailContent(message.semantic, published.content, definition.options),
+          ...renderEmailContent(message.semantic, published.content, definition.options, publishedDesign?.profile || defaultEmailDesignProfile()),
           templateRevision: published.revision,
+          emailDesignRevision: publishedDesign?.revision || 0,
         };
       } else {
-        outgoing.templateRevision = 0;
+        outgoing = {
+          ...message,
+          ...renderClientEmail(message.semantic, publishedDesign?.profile || defaultEmailDesignProfile()),
+          templateRevision: 0,
+          emailDesignRevision: publishedDesign?.revision || 0,
+        };
       }
     } catch (error) {
-      outgoing.templateRevision = 0;
+      outgoing = {
+        ...message,
+        ...renderClientEmail(message.semantic, publishedDesign?.profile || defaultEmailDesignProfile()),
+        templateRevision: 0,
+        emailDesignRevision: publishedDesign?.revision || 0,
+      };
       console.warn(`Email template fallback for ${message.templateKey}/${message.templateVariant || "default"}.`, error.message);
     }
   }
@@ -1496,6 +1524,7 @@ export async function notifyTattooSpecialDepositRequested(env, request, details 
     depositText: formatMoney(details.depositCents || 0, details.currency || "USD"),
     paymentDue: formatDate(details.paymentDueAt),
     checkoutUrl: details.checkoutUrl,
+    changeTimeUrl: `${publicBaseUrl(env, request)}/booking/reschedule/?appointment=${encodeURIComponent(details.appointmentId)}&flow=special-request`,
   });
   return sendTransactionalEmail(env, {
     to,
@@ -1764,6 +1793,8 @@ export async function handleAdminPreviewNotification(request, env) {
   const selection = selectedEmailTemplate(templateKey, requestedVariant);
   if (selection.error) return errorResponse(selection.error, 404);
   const selected = selection.selected;
+  const publishedDesign = await emailDesignRevision(notificationDb(env), "published");
+  const publishedDesignProfile = publishedDesign?.profile || defaultEmailDesignProfile();
   if (request.method === "POST" && selected.templateKey === "crm_relationship_followup" && body?.compose) {
     const compose = body.compose && typeof body.compose === "object" && !Array.isArray(body.compose) ? body.compose : {};
     const subject = asString(compose.subject).slice(0, 300);
@@ -1779,12 +1810,13 @@ export async function handleAdminPreviewNotification(request, env) {
     const wrapperDefinition = emailTemplateDefinition(selected.templateKey, selected.variant);
     const published = await templateRevision(notificationDb(env), selected.templateKey, selected.variant, "published");
     const composed = published
-      ? renderEmailContent(base.semantic, published.content, wrapperDefinition.options)
-      : base;
+      ? renderEmailContent(base.semantic, published.content, wrapperDefinition.options, publishedDesignProfile)
+      : renderClientEmail(base.semantic, publishedDesignProfile);
     return json({
       ...selected,
       ...composed,
       revision: published?.revision || 0,
+      designRevision: publishedDesign?.revision || 0,
       source: "composer",
     });
   }
@@ -1804,10 +1836,10 @@ export async function handleAdminPreviewNotification(request, env) {
     }
   }
   const result = content
-    ? renderEmailTemplateContent(selected.templateKey, selected.variant, content)
+    ? renderEmailTemplateContent(selected.templateKey, selected.variant, content, publishedDesignProfile)
     : null;
   if (result && !result.validation.ok) return errorResponse("Template copy is invalid.", 422, { errors: result.validation.errors });
-  const rendered = result?.rendered || renderClientEmailPreview(selected.templateKey, selected.variant);
+  const rendered = result?.rendered || renderClientEmailPreview(selected.templateKey, selected.variant, publishedDesignProfile);
   if (!rendered) {
     return errorResponse("Unable to render email preview.", 500);
   }
@@ -1817,8 +1849,153 @@ export async function handleAdminPreviewNotification(request, env) {
     content: content || definition.defaultContent,
     schema: definition.schema,
     revision,
+    designRevision: publishedDesign?.revision || 0,
     source,
   });
+}
+
+const EMAIL_DESIGN_REPRESENTATIVES = Object.freeze({
+  tattoo: Object.freeze({ node: "tattoo", label: "Tattoo", templateKey: "booking_link_created", variant: "tattoo" }),
+  art: Object.freeze({ node: "art", label: "Art", templateKey: "appointment_rescheduled", variant: "studio_visit" }),
+  events: Object.freeze({ node: "events", label: "Events", templateKey: "appointment_rescheduled", variant: "studio_space" }),
+  studio: Object.freeze({ node: "studio", label: "Studio", templateKey: "admin_test", variant: "construct_studio" }),
+});
+
+function emailDesignScopes(scope) {
+  const value = asString(scope || "global");
+  if (value === "global") return Object.values(EMAIL_DESIGN_REPRESENTATIVES);
+  return EMAIL_DESIGN_REPRESENTATIVES[value] ? [EMAIL_DESIGN_REPRESENTATIVES[value]] : null;
+}
+
+async function renderEmailDesignRepresentative(db, representative, profile) {
+  const publishedCopy = await templateRevision(db, representative.templateKey, representative.variant, "published");
+  const result = publishedCopy
+    ? renderEmailTemplateContent(representative.templateKey, representative.variant, publishedCopy.content, profile)
+    : null;
+  if (result && !result.validation.ok) throw new Error(`Published copy is invalid for ${representative.node}.`);
+  const rendered = result?.rendered || renderClientEmailPreview(representative.templateKey, representative.variant, profile);
+  if (!rendered) throw new Error(`Unable to render the ${representative.node} design preview.`);
+  return {
+    ...representative,
+    ...rendered,
+    templateRevision: publishedCopy?.revision || 0,
+    copySource: publishedCopy ? "published" : "default",
+  };
+}
+
+export async function handleAdminEmailDesign(request, env) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const url = new URL(request.url);
+  const prefix = "/api/admin/notifications/design";
+  const action = asString(url.pathname.slice(prefix.length).split("/").filter(Boolean)[0]);
+  const db = notificationDb(env);
+  if (!db) return errorResponse("Missing D1 binding SUBMISSIONS_DB.", 503);
+
+  try {
+    if (request.method === "GET" && (!action || action === "history")) {
+      const [draft, published, history] = await Promise.all([
+        emailDesignRevision(db, "draft"),
+        emailDesignRevision(db, "published"),
+        action === "history" ? emailDesignHistory(db) : Promise.resolve(undefined),
+      ]);
+      return json({
+        version: 1,
+        roles: ["canvas", "panel", "title", "supporting", "descriptor", "signatureMark"],
+        nodes: Object.values(EMAIL_DESIGN_REPRESENTATIVES).map(({ node, label }) => ({
+          node,
+          label,
+          accent: node === "tattoo"
+            ? CLIENT_EMAIL_THEMES.tattoo.accentBright
+            : node === "art"
+              ? CLIENT_EMAIL_THEMES.construct_art.accentBright
+              : node === "events"
+                ? CLIENT_EMAIL_THEMES.construct_event.accentBright
+                : CLIENT_EMAIL_THEMES.construct_studio.accentBright,
+        })),
+        defaultProfile: defaultEmailDesignProfile(),
+        draft,
+        published,
+        history,
+      });
+    }
+
+    const body = await readJsonBody(request);
+    if (!body) return errorResponse("Expected JSON body.", 400);
+
+    if (request.method === "POST" && action === "preview") {
+      const validation = validateEmailDesignProfile(body.profile);
+      if (!validation.ok) return errorResponse("Email design profile is invalid.", 422, { errors: validation.errors });
+      const scopes = emailDesignScopes(body.scope);
+      if (!scopes) return errorResponse("Design scope must be global, tattoo, art, events, or studio.", 422);
+      const previews = await Promise.all(scopes.map((entry) => renderEmailDesignRepresentative(db, entry, validation.profile)));
+      return json({ previews });
+    }
+
+    if (request.method === "PUT" && action === "draft") {
+      const validation = validateEmailDesignProfile(body.profile);
+      if (!validation.ok) return errorResponse("Email design profile is invalid.", 422, { errors: validation.errors });
+      const draft = await saveEmailDesignDraft(db, {
+        profile: validation.profile,
+        baseRevision: body.baseRevision,
+      });
+      if (draft?.conflict) return errorResponse("Email design draft is stale.", 409, draft);
+      return json({ draft });
+    }
+
+    if (request.method === "POST" && action === "publish") {
+      const draft = await emailDesignRevision(db, "draft");
+      if (!draft) return errorResponse("No saved design draft is available to publish.", 409);
+      const published = await publishEmailDesignDraft(db, { revision: body.revision });
+      if (published?.conflict) return errorResponse("Email design draft is stale.", 409, published);
+      return json({ published });
+    }
+
+    if (request.method === "POST" && action === "restore") {
+      const draft = await restoreEmailDesignRevision(db, {
+        revision: body.revision,
+        baseRevision: body.baseRevision,
+      });
+      if (draft?.conflict) return errorResponse("Email design draft is stale.", 409, draft);
+      if (!draft) return errorResponse("Email design revision was not found.", 404);
+      return json({ draft });
+    }
+
+    if (request.method === "POST" && action === "test") {
+      const draft = await emailDesignRevision(db, "draft");
+      if (!draft || draft.revision !== Number(body.revision)) {
+        return errorResponse("Save the current design draft before sending a test.", 409);
+      }
+      const scopes = emailDesignScopes(body.scope);
+      if (!scopes) return errorResponse("Design scope must be global, tattoo, art, events, or studio.", 422);
+      const recipient = adminNotificationAddress(env);
+      const deliveries = [];
+      for (const entry of scopes) {
+        const rendered = await renderEmailDesignRepresentative(db, entry, draft.profile);
+        deliveries.push(await sendTransactionalEmail(env, {
+          to: recipient,
+          fromEmail: env.ADMIN_NOTIFICATION_FROM_EMAIL || DEFAULT_ADMIN_FROM_ADDRESS,
+          fromName: env.ADMIN_NOTIFICATION_FROM_NAME || "Studio email tests",
+          replyTo: replyToAddress(env),
+          ...rendered,
+          subject: `[DESIGN TEST][${entry.label.toUpperCase()}] ${rendered.subject}`,
+          templateKey: entry.templateKey,
+          templateVariant: entry.variant,
+          templateRevision: rendered.templateRevision,
+          emailDesignRevision: draft.revision,
+          contentLocked: true,
+          relatedType: "email_design_test",
+          relatedId: `${entry.node}:${draft.revision}`,
+          idempotencyKey: `email_design_test:${entry.node}:${draft.revision}:${crypto.randomUUID()}`,
+        }));
+      }
+      const ok = deliveries.every((delivery) => delivery.ok);
+      return json({ ok, recipient, deliveries }, { status: ok ? 200 : 502 });
+    }
+  } catch (error) {
+    return errorResponse(error.message || "Email design operation failed.", 500);
+  }
+  return errorResponse("Method not allowed.", 405);
 }
 
 export async function handleAdminEmailTemplates(request, env) {
@@ -1893,7 +2070,13 @@ export async function handleAdminEmailTemplates(request, env) {
     if (request.method === "POST" && action === "test") {
       const draft = await templateRevision(db, selected.templateKey, selected.variant, "draft");
       if (!draft || draft.revision !== Number(body.revision)) return errorResponse("Save the current draft before sending a test.", 409);
-      const result = renderEmailTemplateContent(selected.templateKey, selected.variant, draft.content);
+      const publishedDesign = await emailDesignRevision(db, "published");
+      const result = renderEmailTemplateContent(
+        selected.templateKey,
+        selected.variant,
+        draft.content,
+        publishedDesign?.profile || defaultEmailDesignProfile(),
+      );
       if (!result?.validation.ok) return errorResponse("Saved draft is invalid.", 422, { errors: result?.validation?.errors || [] });
       const rendered = { ...result.rendered, subject: `[TEST] ${result.rendered.subject}` };
       const recipient = adminNotificationAddress(env);
@@ -1906,6 +2089,7 @@ export async function handleAdminEmailTemplates(request, env) {
         templateKey: selected.templateKey,
         templateVariant: selected.variant,
         templateRevision: draft.revision,
+        emailDesignRevision: publishedDesign?.revision || 0,
         contentLocked: true,
         relatedType: "email_template_test",
         relatedId: `${selected.templateKey}:${selected.variant}:${draft.revision}`,

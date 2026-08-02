@@ -10,6 +10,8 @@ import {
   renderClientEmailPreview,
 } from "../functions/api/notifications/_email-templates.js";
 import { renderEmailContent } from "../functions/api/notifications/_email-content.js";
+import { defaultEmailDesignProfile, validateEmailDesignProfile } from "../functions/api/notifications/_email-design.js";
+import { CLIENT_EMAIL_THEMES } from "../functions/api/notifications/_email-renderer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -17,6 +19,14 @@ const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
 const apiProxyOrigin = (process.env.SWC_API_ORIGIN || "https://thesixwellconstruct.com").replace(/\/+$/g, "");
 const localEmailTemplates = new Map();
+const localEmailDesign = { draft: null, published: null, history: [] };
+
+const localDesignRepresentatives = Object.freeze({
+  tattoo: { node: "tattoo", label: "Tattoo", templateKey: "booking_link_created", variant: "tattoo" },
+  art: { node: "art", label: "Art", templateKey: "appointment_rescheduled", variant: "studio_visit" },
+  events: { node: "events", label: "Events", templateKey: "appointment_rescheduled", variant: "studio_space" },
+  studio: { node: "studio", label: "Studio", templateKey: "admin_test", variant: "construct_studio" },
+});
 
 async function requestJson(req) {
   const chunks = [];
@@ -397,8 +407,90 @@ function proxyHeaders(req) {
   return headers;
 }
 
+function localDesignScopes(scope) {
+  if (scope === "global") return Object.values(localDesignRepresentatives);
+  return localDesignRepresentatives[scope] ? [localDesignRepresentatives[scope]] : null;
+}
+
+function renderLocalDesignRepresentative(representative, profile) {
+  const copyState = localEmailTemplates.get(localEmailKey(representative.templateKey, representative.variant));
+  const result = copyState?.published?.content
+    ? renderEmailTemplateContent(representative.templateKey, representative.variant, copyState.published.content, profile)
+    : null;
+  const rendered = result?.rendered || renderClientEmailPreview(representative.templateKey, representative.variant, profile);
+  return {
+    ...representative,
+    ...rendered,
+    templateRevision: copyState?.published?.revision || 0,
+    copySource: copyState?.published ? "published" : "default",
+  };
+}
+
 async function handleApiProxy(req, res) {
   const localUrl = new URL(req.url || "/", `http://${host}:${port}`);
+  if (localUrl.pathname === "/api/admin/notifications/design" || localUrl.pathname.startsWith("/api/admin/notifications/design/")) {
+    const action = localUrl.pathname.slice("/api/admin/notifications/design".length).split("/").filter(Boolean)[0] || "";
+    if (req.method === "GET" && (!action || action === "history")) {
+      return localEmailResponse(res, 200, {
+        version: 1,
+        roles: ["canvas", "panel", "title", "supporting", "descriptor", "signatureMark"],
+        nodes: [
+          { node: "tattoo", label: "Tattoo", accent: CLIENT_EMAIL_THEMES.tattoo.accentBright },
+          { node: "art", label: "Art", accent: CLIENT_EMAIL_THEMES.construct_art.accentBright },
+          { node: "events", label: "Events", accent: CLIENT_EMAIL_THEMES.construct_event.accentBright },
+          { node: "studio", label: "Studio", accent: CLIENT_EMAIL_THEMES.construct_studio.accentBright },
+        ],
+        defaultProfile: defaultEmailDesignProfile(),
+        draft: localEmailDesign.draft,
+        published: localEmailDesign.published,
+        history: action === "history" ? localEmailDesign.history : undefined,
+      });
+    }
+    const body = await requestJson(req);
+    if (!body) return localEmailResponse(res, 400, { error: "Expected JSON body." });
+    if (req.method === "POST" && action === "preview") {
+      const validation = validateEmailDesignProfile(body.profile);
+      if (!validation.ok) return localEmailResponse(res, 422, { error: "Email design profile is invalid.", errors: validation.errors });
+      const scopes = localDesignScopes(String(body.scope || "global"));
+      if (!scopes) return localEmailResponse(res, 422, { error: "Invalid design scope." });
+      return localEmailResponse(res, 200, { previews: scopes.map((entry) => renderLocalDesignRepresentative(entry, validation.profile)) });
+    }
+    if (req.method === "PUT" && action === "draft") {
+      const validation = validateEmailDesignProfile(body.profile);
+      if (!validation.ok) return localEmailResponse(res, 422, { error: "Email design profile is invalid.", errors: validation.errors });
+      const expected = localEmailDesign.draft?.revision || localEmailDesign.published?.revision || 0;
+      if (Number(body.baseRevision) !== expected) return localEmailResponse(res, 409, { error: "Email design draft is stale.", expectedRevision: expected });
+      const revision = localEmailDesign.draft?.revision || Math.max(0, ...localEmailDesign.history.map((item) => item.revision)) + 1;
+      localEmailDesign.draft = { revision, status: "draft", profile: validation.profile, updated_at: new Date().toISOString() };
+      localEmailDesign.history = [localEmailDesign.draft, ...localEmailDesign.history.filter((item) => item.revision !== revision)];
+      return localEmailResponse(res, 200, { draft: localEmailDesign.draft });
+    }
+    if (req.method === "POST" && action === "publish") {
+      if (!localEmailDesign.draft || localEmailDesign.draft.revision !== Number(body.revision)) return localEmailResponse(res, 409, { error: "Email design draft is stale." });
+      if (localEmailDesign.published) localEmailDesign.history = localEmailDesign.history.map((item) => item.revision === localEmailDesign.published.revision ? { ...item, status: "retired" } : item);
+      localEmailDesign.published = { ...localEmailDesign.draft, status: "published" };
+      localEmailDesign.draft = null;
+      localEmailDesign.history = [localEmailDesign.published, ...localEmailDesign.history.filter((item) => item.revision !== localEmailDesign.published.revision)];
+      return localEmailResponse(res, 200, { published: localEmailDesign.published });
+    }
+    if (req.method === "POST" && action === "restore") {
+      const source = localEmailDesign.history.find((item) => item.revision === Number(body.revision));
+      if (!source) return localEmailResponse(res, 404, { error: "Email design revision was not found." });
+      const expected = localEmailDesign.draft?.revision || localEmailDesign.published?.revision || 0;
+      if (Number(body.baseRevision) !== expected) return localEmailResponse(res, 409, { error: "Email design draft is stale.", expectedRevision: expected });
+      const revision = Math.max(0, ...localEmailDesign.history.map((item) => item.revision)) + 1;
+      localEmailDesign.draft = { revision, status: "draft", profile: cloneStructured(source.profile), updated_at: new Date().toISOString() };
+      localEmailDesign.history.unshift(localEmailDesign.draft);
+      return localEmailResponse(res, 200, { draft: localEmailDesign.draft });
+    }
+    if (req.method === "POST" && action === "test") {
+      if (!localEmailDesign.draft || localEmailDesign.draft.revision !== Number(body.revision)) return localEmailResponse(res, 409, { error: "Save the current design draft before sending a test." });
+      const scopes = localDesignScopes(String(body.scope || "global"));
+      if (!scopes) return localEmailResponse(res, 422, { error: "Invalid design scope." });
+      return localEmailResponse(res, 200, { ok: true, mocked: true, recipient: "local-preview@example.test", deliveries: scopes.map(() => ({ ok: true, mocked: true })) });
+    }
+    return localEmailResponse(res, 405, { error: "Method not allowed." });
+  }
   if (localUrl.pathname === "/api/admin/notifications/templates" || localUrl.pathname.startsWith("/api/admin/notifications/templates/")) {
     const parts = localUrl.pathname.slice("/api/admin/notifications/templates".length).split("/").filter(Boolean).map(decodeURIComponent);
     if (!parts.length) return localEmailResponse(res, 200, { templates: clientEmailPreviewCatalog().map((entry) => ({ ...entry, status: localEmailTemplates.get(localEmailKey(entry.templateKey, entry.variant))?.published ? "published" : localEmailTemplates.get(localEmailKey(entry.templateKey, entry.variant))?.draft ? "draft" : "default" })) });
@@ -458,14 +550,15 @@ async function handleApiProxy(req, res) {
       : matches[0];
     const state = selected ? localEmailTemplates.get(localEmailKey(selected.templateKey, selected.variant)) : null;
     const chosenContent = body?.content || (localUrl.searchParams.get("source") === "draft" ? state?.draft?.content : state?.published?.content);
-    let rendered = selected ? (chosenContent ? renderEmailTemplateContent(selected.templateKey, selected.variant, chosenContent)?.rendered : renderClientEmailPreview(selected.templateKey, selected.variant)) : null;
+    const designProfile = localEmailDesign.published?.profile || defaultEmailDesignProfile();
+    let rendered = selected ? (chosenContent ? renderEmailTemplateContent(selected.templateKey, selected.variant, chosenContent, designProfile)?.rendered : renderClientEmailPreview(selected.templateKey, selected.variant, designProfile)) : null;
     if (selected?.templateKey === "crm_relationship_followup" && body?.compose) {
       const composeDefinition = emailTemplateDefinition(selected.templateKey, selected.variant);
       const semantic = cloneStructured(composeDefinition.rendered.semantic);
       semantic.subject = String(body.compose.subject || ""); semantic.preheader = String(body.compose.preheader || ""); semantic.intro = String(body.compose.body || "").split(/\n\s*\n/); rendered = renderClientEmailPreview(selected.templateKey, selected.variant);
       rendered = state?.published?.content
-        ? renderEmailContent(semantic, state.published.content, composeDefinition.options)
-        : (await import("../functions/api/notifications/_email-renderer.js")).renderClientEmail(semantic);
+        ? renderEmailContent(semantic, state.published.content, composeDefinition.options, designProfile)
+        : (await import("../functions/api/notifications/_email-renderer.js")).renderClientEmail(semantic, designProfile);
     }
     if (!selected || !rendered) {
       res.writeHead(404, {

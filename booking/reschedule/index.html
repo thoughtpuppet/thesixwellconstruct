@@ -36,8 +36,8 @@
   <header><a class="back-link" id="backToConfirmation" href="/tattoos/">&larr; Back</a></header>
   <main class="site-hero site-hero--supporting">
     <p class="kicker">Manage booking</p>
-    <h1 class="hero-title">Choose a new time.</h1>
-    <p class="lead hero-descriptor">Confirm the email used for this booking. We will show only availability for the same appointment type. Your current appointment is never cancelled before the reschedule is complete.</p>
+    <h1 class="hero-title" id="pageTitle">Choose a new time.</h1>
+    <p class="lead hero-descriptor" id="pageDescriptor">Confirm the email used for this booking. We will show only availability for the same appointment type. Your current appointment is never cancelled before the reschedule is complete.</p>
 
     <section class="auth-panel" id="authPanel" aria-labelledby="authHeading">
       <h2 class="field-label" id="authHeading">Find your booking</h2>
@@ -89,7 +89,9 @@
   <script>
   (() => {
     const TIME_ZONE = 'America/New_York';
-    const appointmentId = new URLSearchParams(location.search).get('appointment') || '';
+    const searchParams = new URLSearchParams(location.search);
+    const appointmentId = searchParams.get('appointment') || '';
+    const requestedSpecialFlow = searchParams.get('flow') === 'special-request';
     const elements = Object.fromEntries([
       'authPanel','contextForm','bookingEmail','loadButton','contextStatus','contextError','reschedulePanel','bookingSummary','policyPanel','pendingCheckout','rescheduleForm','availabilityFieldset','dayTabs','timePanel','selectionStatus','rescheduleButton','startOverButton','rescheduleError','successPanel','successCopy','confirmationLink','blockedPanel','blockedCopy','backToConfirmation'
     ].map((id) => [id, document.getElementById(id)]));
@@ -99,6 +101,17 @@
     let dayGroups = [];
     let activeDay = 0;
     let activeMonth = '';
+
+    if (requestedSpecialFlow) {
+      document.title = 'Change requested time - Art.Pill Tattoo House';
+      document.getElementById('pageTitle').textContent = 'Change your requested time.';
+      document.getElementById('pageDescriptor').textContent = 'Confirm the email used for your Tattoo Special request. Choose another available time, then pay the deposit immediately. No additional Studio approval is required.';
+      elements.backToConfirmation.href = '/tattoos/specials/';
+      elements.backToConfirmation.textContent = '← Back to specials';
+      document.getElementById('authHeading').textContent = 'Find your approved request';
+      document.getElementById('emailHelp').textContent = 'Use the exact email entered with your Tattoo Special request.';
+      elements.loadButton.textContent = 'Show available times';
+    }
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const dateKey = (value) => new Intl.DateTimeFormat('en-CA',{timeZone:TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
@@ -128,16 +141,20 @@
     function renderSummary(payload) {
       const appointment = payload.appointment;
       const extended = payload.bookingType?.id === 'tattoo_extended';
+      const specialRequestChange = payload.mode === 'special_request_change';
       elements.bookingSummary.innerHTML = [
         ['Appointment type', payload.bookingType?.label || appointment.bookingTypeLabel],
-        ['Current time', `${formatDate(appointment.startAt)} at ${formatTime(appointment.startAt)}`],
+        [specialRequestChange ? 'Currently requested time' : 'Current time', `${formatDate(appointment.startAt)} at ${formatTime(appointment.startAt)}`],
         ...(extended ? [
           ['Extended Day fee', `${payload.bookingType.sessionFeeLabel || '$200'} / remains due with final balance`],
           ['Session option', 'Optional 8-10 hour session / reserves a 10-hour appointment block'],
         ] : []),
-        ['Reschedules used', `${Number(appointment.rescheduleCount || 0)} of 1`]
+        ...(specialRequestChange ? [] : [['Reschedules used', `${Number(appointment.rescheduleCount || 0)} of 1`]])
       ].map(([key,value]) => `<div class="detail-row"><span class="detail-key">${escapeHtml(key)}</span><span class="detail-value">${escapeHtml(value)}</span></div>`).join('');
-      if (payload.requiresReplacementPayment) {
+      if (specialRequestChange) {
+        elements.policyPanel.innerHTML = '<span class="policy-label">Approved Tattoo Special</span><strong>Choose another available time and pay the deposit.</strong><p>Your Tattoo Special and price are already approved. Selecting a new time replaces the original hold and Square link, then takes you directly to deposit payment. The appointment is booked only after Square confirms payment.</p>';
+        elements.rescheduleButton.textContent = 'Continue to deposit payment';
+      } else if (payload.requiresReplacementPayment) {
         elements.policyPanel.innerHTML = `<span class="policy-label">Under ${Number(payload.noticeHours || 48)} hours</span><strong>A new same-type payment is required.</strong><p>Your original appointment stays confirmed while you choose a new time and complete checkout. It is replaced only after the new payment succeeds.${extended ? ' Square collects the Extended Day deposit only; the $200 fee remains due with the remaining balance at the start of your appointment, before tattooing begins.' : ''}</p>`;
         elements.rescheduleButton.textContent = `Continue to ${payload.bookingType?.depositLabel || 'new'} checkout`;
       } else {
@@ -296,6 +313,7 @@
     }
 
     function renderPendingCheckout(payload) {
+      if (payload.mode === 'special_request_change') return false;
       const pending = payload.pendingCheckout;
       if (!pending) return false;
       elements.pendingCheckout.hidden = false;
@@ -346,7 +364,9 @@
         const payload = await response.json().catch(()=>({}));
         if (!response.ok) throw new Error(payload.error || 'Unable to load reschedule options.');
         context = payload;
-        elements.backToConfirmation.href = `${confirmationPath(payload.appointment.bookingTypeId)}?appointment=${encodeURIComponent(appointmentId)}`;
+        elements.backToConfirmation.href = payload.mode === 'special_request_change'
+          ? '/tattoos/specials/'
+          : `${confirmationPath(payload.appointment.bookingTypeId)}?appointment=${encodeURIComponent(appointmentId)}`;
         if (!payload.canReschedule || Number(payload.appointment.rescheduleCount || 0) >= 1) {
           block(payload,'This booking has already used its one online reschedule, or it is no longer eligible.');
           return;
@@ -372,11 +392,18 @@
       showError(elements.rescheduleError,'');
       if (!context || !selectedWindow) { showError(elements.rescheduleError,'Choose an available date and time.'); return; }
       elements.rescheduleButton.disabled = true;
-      elements.selectionStatus.textContent = context.requiresReplacementPayment ? 'Preparing same-type replacement checkout...' : 'Moving your booking...';
+      elements.selectionStatus.textContent = context.mode === 'special_request_change'
+        ? 'Replacing the requested time and preparing deposit payment...'
+        : context.requiresReplacementPayment ? 'Preparing same-type replacement checkout...' : 'Moving your booking...';
       try {
         const response = await fetch('/api/booking/reschedule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({appointmentId,email:verifiedEmail,availabilityWindowId:selectedWindow.id})});
         const payload = await response.json().catch(()=>({}));
         if (!response.ok) throw new Error(payload.error || 'Unable to reschedule this booking.');
+        if (payload.mode === 'special_request_changed') {
+          if (!payload.checkoutUrl) throw new Error('The new time is held, but deposit checkout is not ready. Reopen the approval email link to try again.');
+          location.assign(payload.checkoutUrl);
+          return;
+        }
         if (payload.mode === 'replacement_checkout') {
           if (!payload.checkoutUrl) throw new Error('Replacement checkout is not ready. Your original appointment is still confirmed.');
           location.assign(payload.checkoutUrl);

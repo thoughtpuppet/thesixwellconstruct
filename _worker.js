@@ -84,6 +84,7 @@ import {
   reapStalePendingTickets,
 } from "./functions/api/events/_lib.js";
 import {
+  handleAdminEmailDesign,
   handleAdminEmailTemplates,
   handleAdminPreviewNotification,
   handleAdminResendNotification,
@@ -1024,6 +1025,10 @@ async function handleNotificationsApi(request, env) {
   if (pathname === "/api/admin/notifications/preview") {
     if (!["GET", "POST"].includes(method)) return methodNotAllowed(method, ["GET", "POST"]);
     return handleAdminPreviewNotification(request, env);
+  }
+
+  if (pathname === "/api/admin/notifications/design" || pathname.startsWith("/api/admin/notifications/design/")) {
+    return handleAdminEmailDesign(request, env);
   }
 
   if (pathname === "/api/admin/notifications/templates" || pathname.startsWith("/api/admin/notifications/templates/")) {

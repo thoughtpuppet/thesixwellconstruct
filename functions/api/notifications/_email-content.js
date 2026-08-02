@@ -257,7 +257,9 @@ export function applyEmailContent(semantic, content, options = {}) {
   }
   if (copy.secondaryActionLabels) message.secondaryActions = message.secondaryActions.map((action) => ({
     ...action,
-    label: interpolate(copy.secondaryActionLabels[action.id], variables),
+    label: Object.prototype.hasOwnProperty.call(copy.secondaryActionLabels, action.id)
+      ? interpolate(copy.secondaryActionLabels[action.id], variables)
+      : action.label,
   }));
   if (copy.notice) message.notice = interpolateList(copy.notice, variables);
   if (copy.outro) message.outro = interpolateList(copy.outro, variables);
@@ -272,8 +274,8 @@ export function applyEmailContent(semantic, content, options = {}) {
   return message;
 }
 
-export function renderEmailContent(semantic, content, options = {}) {
-  return renderClientEmail(applyEmailContent(semantic, content, options));
+export function renderEmailContent(semantic, content, options = {}, designProfile = null) {
+  return renderClientEmail(applyEmailContent(semantic, content, options), designProfile);
 }
 
 export function cloneEmailSemantic(semantic) {

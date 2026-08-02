@@ -92,6 +92,7 @@
           <div class="field-grid">
             <div class="field full"><label for="specialsPlacement">Placement</label><input id="specialsPlacement" name="placement" maxlength="500" required placeholder="Where on the body?"></div>
             <div class="field full"><label for="specialsProjectDetails">Project details</label><textarea id="specialsProjectDetails" name="projectDetails" rows="5" maxlength="5000" required placeholder="Describe imagery, composition, skin-tone considerations, and anything Studio should know."></textarea></div>
+            <div class="field full" id="scriptTextField" hidden><label for="specialsScriptText">Script text <span id="scriptTextHint"></span></label><textarea id="specialsScriptText" name="scriptText" rows="3" maxlength="500" placeholder="Enter the exact words you want tattooed."></textarea><p class="field-note" id="scriptWordCount"></p></div>
             <div class="field full"><label for="specialsReferenceLink">Reference link <span id="referenceLinkHint">(optional)</span></label><input id="specialsReferenceLink" type="url" name="referenceLink" placeholder="https://…"></div>
             <div class="field full"><label for="specialsReferences">Reference images <span id="referenceFileHint">(optional)</span></label><input id="specialsReferences" type="file" name="references" accept="image/*" multiple></div>
           </div>

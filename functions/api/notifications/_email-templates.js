@@ -270,8 +270,12 @@ export function buildTattooSpecialDepositRequestEmail(data) {
       { label: "Pay by", value: data.paymentDue },
     ],
     primaryAction: { label: "Pay deposit and confirm", href: data.checkoutUrl },
+    secondaryActions: data.changeTimeUrl ? [
+      { id: "change_requested_time", label: "Change requested time", href: data.changeTimeUrl },
+    ] : [],
     notice: [
       "The appointment becomes booked only after Square confirms the deposit payment.",
+      "If you change the requested time, the original Square link is replaced. An available new time can be selected and paid immediately without another Studio approval.",
       "The payment link expires after 24 hours or at the Tattoo Specials sales deadline, whichever comes first. If it expires unpaid, the held time is released.",
       "The deposit is non-refundable and is credited toward the approved Tattoo Special total.",
     ],
@@ -821,7 +825,7 @@ function previewConfirmation(kind, subject, overrides = {}) {
   });
 }
 
-export function renderClientEmailPreview(templateKey, variant = "") {
+export function renderClientEmailPreview(templateKey, variant = "", designProfile = null) {
   const key = String(templateKey || "").trim();
   const mode = String(variant || "").trim();
   let rendered = null;
@@ -915,6 +919,7 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       depositText: "$50",
       paymentDue: "Tuesday, August 4, 2026 at 2:30 PM EDT",
       checkoutUrl: "https://square.link/u/demo-tattoo-special-deposit",
+      changeTimeUrl: "https://example.com/booking/reschedule/?appointment=demo-special&flow=special-request",
     });
   } else if (key === "tattoo_special_review") {
     rendered = buildTattooSpecialReviewEmail({
@@ -1169,10 +1174,11 @@ export function renderClientEmailPreview(templateKey, variant = "") {
   }
 
   if (!rendered) return null;
+  const designed = designProfile ? renderClientEmail(rendered.semantic, designProfile) : rendered;
   return {
     templateKey: key,
     variant: mode,
-    ...rendered,
+    ...designed,
   };
 }
 
@@ -1193,7 +1199,7 @@ export function emailTemplateDefinition(templateKey, variant = "") {
   };
 }
 
-export function renderEmailTemplateContent(templateKey, variant, content) {
+export function renderEmailTemplateContent(templateKey, variant, content, designProfile = null) {
   const definition = emailTemplateDefinition(templateKey, variant);
   if (!definition) return null;
   const validation = validateEmailContent(definition.rendered.semantic, content, definition.options);
@@ -1201,6 +1207,6 @@ export function renderEmailTemplateContent(templateKey, variant, content) {
   return {
     definition,
     validation,
-    rendered: renderEmailContent(definition.rendered.semantic, validation.content, definition.options),
+    rendered: renderEmailContent(definition.rendered.semantic, validation.content, definition.options, designProfile),
   };
 }

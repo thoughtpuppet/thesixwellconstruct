@@ -101,6 +101,7 @@ async function loadOffers(db, includeInactive = false) {
             o.created_at, o.updated_at,
             v.version_number, v.public_description, v.duration_minutes, v.booking_mode,
             v.reference_requirement, v.participant_count, v.deposit_cents, v.booking_type_id,
+            v.max_word_count,
             v.created_at AS version_created_at
      FROM tattoo_special_offers o
      JOIN tattoo_special_offer_versions v ON v.id = o.current_version_id
@@ -140,6 +141,7 @@ async function loadOffers(db, includeInactive = false) {
     mode: row.booking_mode,
     referenceRequirement: row.reference_requirement,
     participantCount: Number(row.participant_count),
+    maxWordCount: Number(row.max_word_count || 0),
     depositCents: Number(row.deposit_cents),
     bookingTypeId: row.booking_type_id,
     variants: byVersion.get(row.current_version_id) || [],
@@ -163,7 +165,7 @@ function publicSettings(settings, state) {
       alt: settings.alt_text || "Tattoo Specials campaign artwork",
       filename: settings.original_filename || "",
     } : null,
-    normalInquiryUrl: "/tattoos/inquiry/",
+    normalInquiryUrl: "/tattoos/inquire/",
   };
 }
 
@@ -272,6 +274,7 @@ async function selectedTerms(db, offerId, variantId) {
     `SELECT o.id AS offer_id, o.title AS offer_title, o.current_version_id,
             v.id AS offer_version_id, v.duration_minutes, v.booking_mode,
             v.reference_requirement, v.participant_count, v.deposit_cents, v.booking_type_id,
+            v.max_word_count,
             p.id AS variant_id, p.label AS variant_label, p.price_cents
      FROM tattoo_special_offers o
      JOIN tattoo_special_offer_versions v ON v.id = o.current_version_id
@@ -307,6 +310,15 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     const placement = text(fields.placement, 500);
     const projectDetails = text(fields.projectDetails, 5000);
     if (!placement || !projectDetails) return failure("Placement and project details are required.", 400);
+    const scriptText = text(fields.scriptText, 500);
+    const maxWordCount = Number(terms.max_word_count || 0);
+    if (maxWordCount > 0) {
+      if (!scriptText) return failure("Enter the script text for this Tattoo Special.", 400, { field: "scriptText" });
+      const wordCount = scriptText.split(/\s+/).filter(Boolean).length;
+      if (wordCount > maxWordCount) {
+        return failure(`Keep the script to ${maxWordCount} words or fewer.`, 400, { field: "scriptText", maxWordCount });
+      }
+    }
     const fileError = validateReferenceFiles(body.files);
     if (fileError) return failure(fileError, 400);
     const referenceLink = text(fields.referenceLink, 1000);
@@ -362,6 +374,8 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       sales_closes_at: settings.sales_closes_at,
       placement,
       project_details: projectDetails,
+      script_text: scriptText,
+      max_word_count: maxWordCount || null,
       reference_link: referenceLink,
       participants,
       primary_participant_index: 0,
@@ -387,13 +401,14 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
         `INSERT INTO tattoo_special_submission_terms
          (submission_id, offer_id, offer_version_id, variant_id, offer_title, variant_label,
           advertised_price_cents, approved_price_cents, deposit_cents, duration_minutes,
-          booking_mode, booking_type_id, sales_closes_at, participant_count, review_outcome, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          booking_mode, booking_type_id, sales_closes_at, participant_count, review_outcome,
+          max_word_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         submissionId, terms.offer_id, terms.offer_version_id, terms.variant_id, terms.offer_title,
         terms.variant_label, terms.price_cents, direct ? terms.price_cents : null, terms.deposit_cents,
         terms.duration_minutes, terms.booking_mode, terms.booking_type_id, settings.sales_closes_at,
-        terms.participant_count, direct ? "approved" : "pending", now, now,
+        terms.participant_count, direct ? "approved" : "pending", maxWordCount || null, now, now,
       ),
       db.prepare(
         `INSERT INTO tattoo_session_plans
@@ -492,6 +507,7 @@ function normalizeOfferInput(body, defaultDeposit) {
   const mode = "review";
   const reference = text(body.referenceRequirement || "optional", 20);
   const participants = integer(body.participantCount, 1);
+  const maxWordCount = integer(body.maxWordCount, 0);
   const deposit = body.depositCents === undefined ? defaultDeposit : integer(body.depositCents, -1);
   const variants = Array.isArray(body.variants) ? body.variants.map((variant, index) => ({
     label: text(variant.label, 100), priceCents: integer(variant.priceCents, -1), sortOrder: integer(variant.sortOrder, (index + 1) * 10),
@@ -500,9 +516,10 @@ function normalizeOfferInput(body, defaultDeposit) {
   if (duration <= 0 || duration % 30 !== 0) return { error: "Duration must use 30-minute increments." };
   if (!new Set(["optional", "required"]).has(reference)) return { error: "Reference requirement must be optional or required." };
   if (![1, 2].includes(participants)) return { error: "Participant count must be one or two." };
+  if (maxWordCount < 0 || maxWordCount > 100) return { error: "Maximum word count must be between 1 and 100, or left blank." };
   if (deposit < 0) return { error: "Deposit must be zero or greater." };
   if (!variants.length || variants.some((variant) => !variant.label || variant.priceCents <= 0)) return { error: "Add at least one valid price variant." };
-  return { title, slug, description: text(body.description, 3000), duration, mode, reference, participants, deposit, variants, active: body.active !== false, sortOrder: integer(body.sortOrder, 0) };
+  return { title, slug, description: text(body.description, 3000), duration, mode, reference, participants, maxWordCount, deposit, variants, active: body.active !== false, sortOrder: integer(body.sortOrder, 0) };
 }
 
 async function insertOfferVersion(db, offer, input, versionNumber, now) {
@@ -517,9 +534,9 @@ async function insertOfferVersion(db, offer, input, versionNumber, now) {
     db.prepare(
       `INSERT INTO tattoo_special_offer_versions
        (id, offer_id, version_number, public_description, duration_minutes, booking_mode,
-        reference_requirement, participant_count, deposit_cents, booking_type_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(versionId, offer.id, versionNumber, input.description, input.duration, input.mode, input.reference, input.participants, input.deposit, bookingTypeId, now),
+        reference_requirement, participant_count, deposit_cents, booking_type_id, created_at, max_word_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(versionId, offer.id, versionNumber, input.description, input.duration, input.mode, input.reference, input.participants, input.deposit, bookingTypeId, now, input.maxWordCount || null),
     ...input.variants.map((variant, index) => db.prepare(
       `INSERT INTO tattoo_special_offer_variants
        (id, offer_version_id, label, price_cents, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)`
