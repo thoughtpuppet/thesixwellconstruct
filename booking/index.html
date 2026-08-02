@@ -734,7 +734,7 @@
     sessionSectionLabel.textContent = consultation
       ? "Consultation & Reservation Fee"
       : special
-        ? "Chosen Offering & Deposit"
+        ? "Your Tattoo Special & Deposit"
         : "Session & Deposit";
     depositKey.textContent = consultation ? "Reservation Fee" : "Deposit";
     checkoutNote.textContent = consultation
@@ -866,7 +866,7 @@
     renderSessionPlan();
     paceIntro.classList.toggle("hidden", context?.purpose !== "tattoo" || Boolean(special));
     sessionListEl.innerHTML = special && selectedType ? `
-      <div class="choice active special-offering" aria-label="Chosen Tattoo Special offering">
+      <div class="choice active special-offering" aria-label="Chosen Tattoo Special">
         <span>
           <span class="choice-title">${escapeHtml(special.offerTitle)}${special.variantLabel ? ` — ${escapeHtml(special.variantLabel)}` : ""}</span>
           <span class="choice-meta">${escapeHtml(minutesLabel(special.durationMinutes || selectedType.durationMinutes))} / ${escapeHtml(money(special.quotedPriceCents || 0))} total</span>

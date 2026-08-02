@@ -2667,8 +2667,8 @@
   function tattooSpecialOfferEditor(offer = {}) {
     const isNew = !offer.id;
     return `<form class="tattoo-special-offer" data-tattoo-special-offer-form data-offer-id="${escapeHtml(offer.id || "")}">
-      <div class="portfolio-head"><div><span class="pill">${isNew ? "New offer" : `Version ${escapeHtml(offer.versionNumber || 1)}`}</span><h3>${escapeHtml(offer.title || "New Tattoo Special")}</h3></div>${isNew ? "" : `<button class="button danger-button" type="button" data-archive-special-offer="${escapeHtml(offer.id)}">${offer.archivedAt ? "Archived" : "Archive / Delete"}</button>`}</div>
-      <p class="contact">Saving price, duration, deposit, mode, references, participants, or variants creates a new immutable offer version. Existing submissions and links keep their original terms.</p>
+      <div class="portfolio-head"><div><span class="pill">${isNew ? "New special" : `Version ${escapeHtml(offer.versionNumber || 1)}`}</span><h3>${escapeHtml(offer.title || "New Tattoo Special")}</h3></div>${isNew ? "" : `<button class="button danger-button" type="button" data-archive-special-offer="${escapeHtml(offer.id)}">${offer.archivedAt ? "Archived" : "Archive / Delete"}</button>`}</div>
+      <p class="contact">Saving price, duration, deposit, mode, references, participants, or variants creates a new immutable version. Existing submissions and links keep their original terms.</p>
       <div class="tattoo-special-offer__grid">
         <label>Title<input name="title" required maxlength="200" value="${escapeHtml(offer.title || "")}"></label>
         <label>Slug<input name="slug" required maxlength="160" value="${escapeHtml(offer.slug || "")}"></label>
@@ -2682,7 +2682,7 @@
       </div>
       <label>Public description<textarea name="description" maxlength="3000" rows="3">${escapeHtml(offer.description || "")}</textarea></label>
       <label>Price variants <span class="contact">One per line: Label|price in dollars</span><textarea name="variants" rows="4" required>${escapeHtml(tattooSpecialVariantText(offer) || "Standard|200")}</textarea></label>
-      <div class="booking-actions"><button class="button" type="submit">${isNew ? "Create Offer" : "Save New Version"}</button></div>
+      <div class="booking-actions"><button class="button" type="submit">${isNew ? "Create Special" : "Save New Version"}</button></div>
     </form>`;
   }
 
@@ -2700,11 +2700,11 @@
     const readiness = tattooSpecials.readiness || {};
     const selectedMedia = (tattooSpecials.media || []).find((item) => item.id === settings.artwork?.mediaId);
     detailEl.innerHTML = `<section class="tattoo-specials-manager">
-      <div class="portfolio-head"><div><span class="pill">Campaign / Tattoo Special</span><h2>Tattoo Specials</h2><p class="contact">Permanent public surface, sales window, Shared Media artwork, immutable offer versions, and booking readiness.</p></div><div class="booking-actions"><a class="button" href="/tattoos/specials/" target="_blank" rel="noopener">Preview Public Page</a><button class="button" type="button" data-refresh-tattoo-specials>Refresh</button></div></div>
+      <div class="portfolio-head"><div><span class="pill">Campaign / Tattoo Special</span><h2>Tattoo Specials</h2><p class="contact">Permanent public surface, sales window, Shared Media artwork, immutable versions, and booking readiness.</p></div><div class="booking-actions"><a class="button" href="/tattoos/specials/" target="_blank" rel="noopener">Preview Public Page</a><button class="button" type="button" data-refresh-tattoo-specials>Refresh</button></div></div>
       <div class="tattoo-special-readiness" aria-label="Booking readiness">
         <span class="pill ${readiness.database ? "is-ready" : ""}">Database ${readiness.database ? "ready" : "missing"}</span>
         <span class="pill ${readiness.artwork ? "is-ready" : ""}">Artwork ${readiness.artwork ? "ready" : "missing"}</span>
-        <span class="pill ${readiness.activeOffers ? "is-ready" : ""}">${escapeHtml(readiness.activeOffers || 0)} active offers</span>
+        <span class="pill ${readiness.activeOffers ? "is-ready" : ""}">${escapeHtml(readiness.activeOffers || 0)} active specials</span>
         <span class="pill ${readiness.salesWindowValid ? "is-ready" : ""}">Window ${readiness.salesWindowValid ? "valid" : "invalid"}</span>
         <span class="pill">Public state: ${escapeHtml(settings.state || "closed")}</span>
       </div>
@@ -2720,8 +2720,8 @@
         ${selectedMedia?.url ? `<figure class="tattoo-special-artwork"><img src="${escapeHtml(selectedMedia.url)}" alt="${escapeHtml(selectedMedia.alt || "Selected Tattoo Specials artwork")}"></figure>` : ""}
         <div class="booking-actions"><button class="button" type="submit">Save Campaign Settings</button></div>
       </form>
-      <section class="tattoo-specials-offers"><div class="portfolio-head"><div><h3>Current offers</h3><p class="contact">Reorder, activate, archive, or create a future-facing version. Used offers archive instead of deleting.</p></div></div>${(tattooSpecials.offers || []).map(tattooSpecialOfferEditor).join("") || '<p class="empty">No offers configured.</p>'}</section>
-      <section class="tattoo-specials-offers"><h3>Add an offer</h3>${tattooSpecialOfferEditor()}</section>
+      <section class="tattoo-specials-offers"><div class="portfolio-head"><div><h3>Current specials</h3><p class="contact">Reorder, activate, archive, or create a future-facing version. Used specials archive instead of deleting.</p></div></div>${(tattooSpecials.offers || []).map(tattooSpecialOfferEditor).join("") || '<p class="empty">No specials configured.</p>'}</section>
+      <section class="tattoo-specials-offers"><h3>Add a special</h3>${tattooSpecialOfferEditor()}</section>
       <div class="contact" id="tattooSpecialsStatus" role="status" aria-live="polite"></div>
     </section>`;
     enhanceControls(detailEl);
@@ -4203,7 +4203,7 @@ ${meetingLines}
         ${detailField("Deposit credit", money(Number(payload.deposit_cents || 0), "USD"))}
         ${detailField("Duration", `${Number(payload.duration_minutes || 0)} minutes`)}
         ${detailField("Mode", review ? "Complexity review" : "Direct")}
-        ${detailField("Offer version", payload.special_offer_version_id || "")}
+        ${detailField("Special version", payload.special_offer_version_id || "")}
         ${detailField("Participants", participants.map((person) => `${person.name} · ${person.email} · ${person.phone}`).join("\n"))}
       </div>
       ${review && !["booked", "declined"].includes(submission.status) ? `<div class="tattoo-special-offer__grid">
@@ -4213,7 +4213,7 @@ ${meetingLines}
         <button class="button" type="button" data-special-review-outcome="approved" data-submission-id="${escapeHtml(submission.id)}">Approve &amp; Send Link</button>
         <button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Request Simplification</button>
         <button class="button danger-button" type="button" data-special-review-outcome="declined" data-submission-id="${escapeHtml(submission.id)}">Decline</button>
-      </div>` : `<p class="contact">${review ? "Review decision is recorded in the event history. Only the primary purchaser receives automated messages." : "This direct offer was server-approved at submission. Only the primary purchaser receives automated messages."}</p>`}
+      </div>` : `<p class="contact">${review ? "Review decision is recorded in the event history. Only the primary purchaser receives automated messages." : "This direct-booking special was server-approved at submission. Only the primary purchaser receives automated messages."}</p>`}
     </section>`;
   }
 
@@ -5543,11 +5543,11 @@ ${meetingLines}
     }
     const archiveSpecial = event.target.closest("[data-archive-special-offer]");
     if (archiveSpecial) {
-      if (!window.confirm("Archive this used offer, or permanently delete it if it has never been used?")) return;
-      setStatus("Archiving Tattoo Special offer");
+      if (!window.confirm("Archive this used special, or permanently delete it if it has never been used?")) return;
+      setStatus("Archiving Tattoo Special");
       await api(`/api/admin/tattoo/specials/offers/${encodeURIComponent(archiveSpecial.dataset.archiveSpecialOffer)}`, { method: "DELETE" });
       await renderTattooSpecialsManager();
-      setStatus("Tattoo Special offer updated");
+      setStatus("Tattoo Special updated");
       return;
     }
     const specialReview = event.target.closest("[data-special-review-outcome]");
@@ -6473,7 +6473,7 @@ ${meetingLines}
         return { label: String(label || "").trim(), priceCents: Math.round(Number(price || 0) * 100), sortOrder: (index + 1) * 10 };
       }).filter((variant) => variant.label);
       const offerId = specialOfferForm.dataset.offerId;
-      setStatus(offerId ? "Creating a new immutable offer version" : "Creating Tattoo Special offer");
+      setStatus(offerId ? "Creating a new immutable version" : "Creating Tattoo Special");
       await api(offerId ? `/api/admin/tattoo/specials/offers/${encodeURIComponent(offerId)}` : "/api/admin/tattoo/specials/offers", {
         method: offerId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
@@ -6487,7 +6487,7 @@ ${meetingLines}
         }),
       });
       await renderTattooSpecialsManager();
-      setStatus(offerId ? "New offer version is active; earlier terms remain intact" : "Tattoo Special offer created");
+      setStatus(offerId ? "New version is active; earlier terms remain intact" : "Tattoo Special created");
       return;
     }
 

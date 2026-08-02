@@ -769,8 +769,8 @@ const SUBMISSION_RECEIPTS = {
   tattoo_special: {
     label: "Tattoo Special",
     subject: "Tattoo Special received",
-    expectation: "Your selected offer, price, duration, deposit, placement, and references have been recorded as one fixed promotional snapshot.",
-    next: "Direct offers continue to private scheduling. Complexity-review offers receive a private link only after Studio approval.",
+    expectation: "Your selected Tattoo Special, price, duration, deposit, placement, and references have been recorded as one fixed promotional snapshot.",
+    next: "Direct-booking specials continue to private scheduling. Complexity-review specials receive a private link only after Studio approval.",
   },
   consultation: {
     label: "consultation reservation",

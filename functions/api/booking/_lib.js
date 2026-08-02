@@ -1371,7 +1371,7 @@ export async function handleSaveBookingSessionPlan(request, env) {
       return errorResponse("Prerequisite consultation links do not use a final tattoo session plan.", 409);
     }
     if (context.token.submission_type === "tattoo_special") {
-      return errorResponse("Tattoo Specials use the chosen offering and do not require session-plan approval.", 409);
+      return errorResponse("Tattoo Specials use the chosen selection and do not require session-plan approval.", 409);
     }
     const plan = await loadTattooSessionPlan(db, context.token.submission_id);
     if (!plan) return errorResponse("No session plan is attached to this project.", 404);

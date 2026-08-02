@@ -1833,7 +1833,7 @@ test("Tattoo Specials public surface distinguishes scheduled, open, and closed s
   assert.deepEqual(closed.offers, []);
 });
 
-test("Tattoo Specials seed immutable offers and direct submissions keep server-side price, deposit, duration, and token cutoff", async () => {
+test("Tattoo Specials seed immutable versions and direct submissions keep server-side price, deposit, duration, and token cutoff", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
   const bucket = new MemoryBucket();
@@ -1916,7 +1916,7 @@ test("Tattoo Specials seed immutable offers and direct submissions keep server-s
   assert.equal(unnecessaryApproval.status, 409);
   assert.match((await unnecessaryApproval.json()).error, /do not require session-plan approval/i);
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
-  assert.match(bookingPage, /Chosen Offering & Deposit/);
+  assert.match(bookingPage, /Your Tattoo Special & Deposit/);
   assert.match(bookingPage, /special-offering/);
   const nearCutoff = new Date(Date.now() + 5 * 60 * 1000).toISOString();
   database.prepare("UPDATE booking_tokens SET expires_at=? WHERE submission_id=?").run(nearCutoff, direct.submissionId);
@@ -1965,6 +1965,21 @@ test("Tattoo Specials seed immutable offers and direct submissions keep server-s
   assert.match(webhookPayload.reason, /manual refund review/i);
   assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(checkoutPayload.appointmentId).status, "payment_attention");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='tattoo_special_late_payment_attention'").get(checkoutPayload.appointmentId).count, 1);
+
+  const invalidSecondEmail = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-two-small",
+    variantId: "special-two-small-v1-standard",
+    idempotencyKey: "special-two-participants-invalid-email",
+    name: "Primary Adult", email: "primary-adult@example.com", phone: "4045550120",
+    participant2Name: "Second Adult", participant2Email: "second-adult@example", participant2Phone: "4045550121",
+    ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes",
+    placement: "Two placements", projectDetails: "One small tattoo for each adult.",
+  }), env);
+  assert.equal(invalidSecondEmail.status, 400);
+  assert.deepEqual(await invalidSecondEmail.json(), {
+    error: "Enter a complete email address for the second adult participant, such as name@example.com.",
+    field: "participant2Email",
+  });
 
   const sharedAppointment = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-two-small",

@@ -282,7 +282,10 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     const primary = {
       name: text(fields.name, 160), email: text(fields.email, 320).toLowerCase(), phone: text(fields.phone, 80),
     };
-    if (!primary.name || !validEmail(primary.email) || !primary.phone) return failure("Enter the primary purchaser's name, email, and phone number.", 400);
+    if (!primary.name) return failure("Enter the primary purchaser's full name.", 400, { field: "name" });
+    if (!primary.email) return failure("Enter the primary purchaser's email address.", 400, { field: "email" });
+    if (!validEmail(primary.email)) return failure("Enter a complete email address for the primary purchaser, such as name@example.com.", 400, { field: "email" });
+    if (!primary.phone) return failure("Enter the primary purchaser's phone number.", 400, { field: "phone" });
     if (text(fields.ageConfirmed).toLowerCase() !== "yes") return failure("The primary participant must confirm they are at least 18.", 400);
     if (text(fields.policyAccepted).toLowerCase() !== "yes") return failure("Accept the Tattoo Special deposit and booking policies to continue.", 400);
     const placement = text(fields.placement, 500);
@@ -301,9 +304,10 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
         email: text(fields.participant2Email, 320).toLowerCase(),
         phone: text(fields.participant2Phone, 80),
       };
-      if (!secondary.name || !validEmail(secondary.email) || !secondary.phone) {
-        return failure("Enter the second adult participant's name, email, and phone number.", 400);
-      }
+      if (!secondary.name) return failure("Enter the second adult participant's full name.", 400, { field: "participant2Name" });
+      if (!secondary.email) return failure("Enter the second adult participant's email address.", 400, { field: "participant2Email" });
+      if (!validEmail(secondary.email)) return failure("Enter a complete email address for the second adult participant, such as name@example.com.", 400, { field: "participant2Email" });
+      if (!secondary.phone) return failure("Enter the second adult participant's phone number.", 400, { field: "participant2Phone" });
       if (text(fields.participant2AgeConfirmed).toLowerCase() !== "yes") return failure("The second participant must confirm they are at least 18.", 400);
     }
 
@@ -473,7 +477,7 @@ function normalizeOfferInput(body, defaultDeposit) {
   const variants = Array.isArray(body.variants) ? body.variants.map((variant, index) => ({
     label: text(variant.label, 100), priceCents: integer(variant.priceCents, -1), sortOrder: integer(variant.sortOrder, (index + 1) * 10),
   })) : [];
-  if (!title || !slug) return { error: "Offer title and slug are required." };
+  if (!title || !slug) return { error: "A Tattoo Special title and slug are required." };
   if (duration <= 0 || duration % 30 !== 0) return { error: "Duration must use 30-minute increments." };
   if (!new Set(["direct", "review"]).has(mode)) return { error: "Mode must be direct or review." };
   if (!new Set(["optional", "required"]).has(reference)) return { error: "Reference requirement must be optional or required." };
@@ -491,7 +495,7 @@ async function insertOfferVersion(db, offer, input, versionNumber, now) {
       `INSERT INTO booking_types
        (id, venture, label, description, duration_minutes, deposit_cents, currency, active, sort_order, created_at, updated_at)
        VALUES (?, 'tattooing', ?, ?, ?, ?, 'USD', 1, ?, ?, ?)`
-    ).bind(bookingTypeId, input.title, `Tattoo Special · immutable offer version ${versionNumber}`, input.duration, input.deposit, 900 + input.sortOrder, now, now),
+    ).bind(bookingTypeId, input.title, `Tattoo Special · immutable version ${versionNumber}`, input.duration, input.deposit, 900 + input.sortOrder, now, now),
     db.prepare(
       `INSERT INTO tattoo_special_offer_versions
        (id, offer_id, version_number, public_description, duration_minutes, booking_mode,
@@ -529,7 +533,7 @@ export async function handleAdminTattooSpecialOffer(request, env, offerId = "") 
       return json(await adminPayload(db), { status: 201 });
     }
     const offer = offerId ? await db.prepare("SELECT * FROM tattoo_special_offers WHERE id = ?").bind(offerId).first() : null;
-    if (!offer) return failure("Tattoo Special offer not found.", 404);
+    if (!offer) return failure("Tattoo Special not found.", 404);
     if (request.method === "PATCH") {
       const body = await readJson(request);
       const input = normalizeOfferInput(body || {}, Number(settings.default_deposit_cents));
@@ -556,7 +560,7 @@ export async function handleAdminTattooSpecialOffer(request, env, offerId = "") 
     }
     return failure("Method not allowed.", 405);
   } catch (error) {
-    return failure("Unable to save the Tattoo Special offer.", 500, { detail: error.message });
+    return failure("Unable to save the Tattoo Special.", 500, { detail: error.message });
   }
 }
 
@@ -573,7 +577,7 @@ export async function handleAdminTattooSpecialReview(request, env, submissionId)
        WHERE s.id = ? AND s.type = 'tattoo_special'`
     ).bind(submissionId).first();
     if (!row) return failure("Tattoo Special request not found.", 404);
-    if (row.booking_mode !== "review") return failure("This offer does not require complexity review.", 409);
+    if (row.booking_mode !== "review") return failure("This Tattoo Special does not require complexity review.", 409);
     const outcome = text(body.outcome, 40);
     if (!new Set(["approved", "simplification_requested", "declined"]).has(outcome)) return failure("Choose approved, simplification requested, or declined.", 400);
     const now = new Date().toISOString();

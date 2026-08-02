@@ -108,12 +108,12 @@ INSERT OR IGNORE INTO tattoo_special_settings (
 INSERT OR IGNORE INTO booking_types
   (id, venture, label, description, duration_minutes, deposit_cents, currency, active, sort_order, created_at, updated_at)
 VALUES
-  ('tattoo_special_quarter_bg_v1', 'tattooing', '1/4 Sleeve Forearm — B&G', 'Tattoo Special · immutable offer version 1', 180, 5000, 'USD', 1, 901, datetime('now'), datetime('now')),
-  ('tattoo_special_quarter_color_v1', 'tattooing', '1/4 Sleeve Forearm — Color', 'Tattoo Special · immutable offer version 1', 180, 5000, 'USD', 1, 902, datetime('now'), datetime('now')),
-  ('tattoo_special_floral_color_v1', 'tattooing', 'Floral Tattoo — Color, 6×6', 'Tattoo Special · immutable offer version 1', 180, 5000, 'USD', 1, 903, datetime('now'), datetime('now')),
-  ('tattoo_special_anime_v1', 'tattooing', 'Anime/Cartoon — 6×6', 'Tattoo Special · complexity review · immutable offer version 1', 120, 5000, 'USD', 1, 904, datetime('now'), datetime('now')),
-  ('tattoo_special_palm_v1', 'tattooing', 'Palm Sized Tattoo', 'Tattoo Special · immutable offer version 1', 120, 5000, 'USD', 1, 905, datetime('now'), datetime('now')),
-  ('tattoo_special_two_small_v1', 'tattooing', 'Two Small Tattoos — 2×2 each', 'Tattoo Special · two participants · immutable offer version 1', 90, 5000, 'USD', 1, 906, datetime('now'), datetime('now'));
+  ('tattoo_special_quarter_bg_v1', 'tattooing', '1/4 Sleeve Forearm — B&G', 'Tattoo Special · immutable version 1', 180, 5000, 'USD', 1, 901, datetime('now'), datetime('now')),
+  ('tattoo_special_quarter_color_v1', 'tattooing', '1/4 Sleeve Forearm — Color', 'Tattoo Special · immutable version 1', 180, 5000, 'USD', 1, 902, datetime('now'), datetime('now')),
+  ('tattoo_special_floral_color_v1', 'tattooing', 'Floral Tattoo — Color, 6×6', 'Tattoo Special · immutable version 1', 180, 5000, 'USD', 1, 903, datetime('now'), datetime('now')),
+  ('tattoo_special_anime_v1', 'tattooing', 'Anime/Cartoon — 6×6', 'Tattoo Special · complexity review · immutable version 1', 120, 5000, 'USD', 1, 904, datetime('now'), datetime('now')),
+  ('tattoo_special_palm_v1', 'tattooing', 'Palm Sized Tattoo', 'Tattoo Special · immutable version 1', 120, 5000, 'USD', 1, 905, datetime('now'), datetime('now')),
+  ('tattoo_special_two_small_v1', 'tattooing', 'Two Small Tattoos — 2×2 each', 'Tattoo Special · two participants · immutable version 1', 90, 5000, 'USD', 1, 906, datetime('now'), datetime('now'));
 
 INSERT OR IGNORE INTO tattoo_special_offers
   (id, slug, title, active, sort_order, current_version_id, created_at, updated_at)
