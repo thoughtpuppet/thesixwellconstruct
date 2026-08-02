@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/css/mobile.css">
   <link rel="stylesheet" href="/css/site-typography.css">
   <link rel="stylesheet" href="/css/hero.css">
+  <link rel="stylesheet" href="/css/forms.css">
   <link rel="stylesheet" href="/css/tattoo-specials.css">
 </head>
 <body class="tattoo-flow" data-venture="tattooing" data-landing-family="tattoo-service">
@@ -58,46 +59,51 @@
         <h2 id="formTitle">Complete the offer details.</h2>
         <p id="selectedOfferSummary"></p>
       </div>
-      <form id="specialsForm" enctype="multipart/form-data">
+      <form class="public-form" id="specialsForm" enctype="multipart/form-data">
         <input type="hidden" name="offerId" id="offerId">
         <fieldset>
           <legend>Offer</legend>
-          <label>Price option<select name="variantId" id="variantId" required></select></label>
+          <div class="field">
+            <label for="variantId">Price option</label>
+            <select name="variantId" id="variantId" required></select>
+          </div>
           <div class="specials-selection-terms" id="selectionTerms"></div>
         </fieldset>
         <fieldset>
           <legend>Primary purchaser</legend>
-          <div class="specials-fields">
-            <label>Full name<input name="name" autocomplete="name" required></label>
-            <label>Email<input type="email" name="email" autocomplete="email" required></label>
-            <label>Phone<input type="tel" name="phone" autocomplete="tel" required></label>
+          <div class="field-grid">
+            <div class="field"><label for="specialsName">Full name</label><input id="specialsName" name="name" autocomplete="name" required></div>
+            <div class="field"><label for="specialsEmail">Email</label><input id="specialsEmail" type="email" name="email" autocomplete="email" required></div>
+            <div class="field full"><label for="specialsPhone">Phone</label><input id="specialsPhone" type="tel" name="phone" autocomplete="tel" required></div>
           </div>
-          <label class="specials-check"><input type="checkbox" name="ageConfirmed" value="yes" required><span>I confirm that I am at least 18 years old.</span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="ageConfirmed" value="yes" required><span class="form-check__label">I confirm that I am at least 18 years old.</span></label>
         </fieldset>
         <fieldset id="participant2Fieldset" hidden>
           <legend>Second adult participant</legend>
-          <p class="specials-field-note">Studio stores this person’s details, but automated emails go only to the primary purchaser.</p>
-          <div class="specials-fields">
-            <label>Full name<input name="participant2Name" autocomplete="off"></label>
-            <label>Email<input type="email" name="participant2Email" autocomplete="off"></label>
-            <label>Phone<input type="tel" name="participant2Phone" autocomplete="off"></label>
+          <p class="field-note">Studio stores this person’s details, but automated emails go only to the primary purchaser.</p>
+          <div class="field-grid">
+            <div class="field"><label for="participant2Name">Full name</label><input id="participant2Name" name="participant2Name" autocomplete="off"></div>
+            <div class="field"><label for="participant2Email">Email</label><input id="participant2Email" type="email" name="participant2Email" autocomplete="off"></div>
+            <div class="field full"><label for="participant2Phone">Phone</label><input id="participant2Phone" type="tel" name="participant2Phone" autocomplete="off"></div>
           </div>
-          <label class="specials-check"><input type="checkbox" name="participant2AgeConfirmed" value="yes"><span>The second participant is at least 18 years old.</span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="participant2AgeConfirmed" value="yes"><span class="form-check__label">The second participant is at least 18 years old.</span></label>
         </fieldset>
         <fieldset>
           <legend>Project</legend>
-          <label>Placement<input name="placement" maxlength="500" required placeholder="Where on the body?"></label>
-          <label>Project details<textarea name="projectDetails" rows="5" maxlength="5000" required placeholder="Describe imagery, composition, skin-tone considerations, and anything Studio should know."></textarea></label>
-          <label>Reference link <span id="referenceLinkHint">(optional)</span><input type="url" name="referenceLink" placeholder="https://…"></label>
-          <label>Reference images <span id="referenceFileHint">(optional)</span><input type="file" name="references" accept="image/*" multiple></label>
+          <div class="field-grid">
+            <div class="field full"><label for="specialsPlacement">Placement</label><input id="specialsPlacement" name="placement" maxlength="500" required placeholder="Where on the body?"></div>
+            <div class="field full"><label for="specialsProjectDetails">Project details</label><textarea id="specialsProjectDetails" name="projectDetails" rows="5" maxlength="5000" required placeholder="Describe imagery, composition, skin-tone considerations, and anything Studio should know."></textarea></div>
+            <div class="field full"><label for="specialsReferenceLink">Reference link <span id="referenceLinkHint">(optional)</span></label><input id="specialsReferenceLink" type="url" name="referenceLink" placeholder="https://…"></div>
+            <div class="field full"><label for="specialsReferences">Reference images <span id="referenceFileHint">(optional)</span></label><input id="specialsReferences" type="file" name="references" accept="image/*" multiple></div>
+          </div>
         </fieldset>
         <fieldset>
           <legend>Deposit policy</legend>
-          <label class="specials-check"><input type="checkbox" name="policyAccepted" value="yes" required><span>I understand the deposit is non-refundable, credited toward the approved Tattoo Special total, and must be paid before the sales window closes.</span></label>
+          <label class="form-check"><input class="form-check__input" type="checkbox" name="policyAccepted" value="yes" required><span class="form-check__label">I understand the deposit is non-refundable, credited toward the approved Tattoo Special total, and must be paid before the sales window closes.</span></label>
         </fieldset>
         <div class="specials-submit-row">
           <button type="submit" id="specialsSubmit">Continue</button>
-          <p id="specialsFormStatus" role="status"></p>
+          <p class="form-status" id="specialsFormStatus" role="status"></p>
         </div>
       </form>
     </section>

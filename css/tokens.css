@@ -25,8 +25,8 @@
   --color-text-muted: rgba(251, 209, 157, 0.66); /* secondary copy, descriptions, notes */
   --color-text-dim:   rgba(251, 209, 157, 0.38); /* metadata and footers */
   --color-text-ghost: rgba(251, 209, 157, 0.16); /* placeholders and empty states */
-  --color-accent:     #FCB467;   /* global amber — wordmark, landing accents */
-  --color-accent-dim: rgba(252, 180, 103, 0.36); /* amber at low opacity — borders, dividers */
+  --color-accent:     #F8B468;   /* global amber — wordmark, landing accents */
+  --color-accent-dim: rgba(248, 180, 104, 0.36); /* amber at low opacity — borders, dividers */
   --color-breadcrumb-dim:     rgba(252, 184, 103, 0.30); /* ancestor links and matching UI labels */
   --color-breadcrumb-hover:   rgba(252, 184, 103, 0.55); /* ancestor link hover/focus */
   --color-breadcrumb-ghost:   rgba(252, 184, 103, 0.13); /* separators */
@@ -66,10 +66,10 @@
   --color-merch-dark:       #AC5500;
 
   /* ABOUT */
-  --color-about:            #FCB467;
-  --color-about-dim:        rgba(252, 180, 103, 0.25);
-  --color-about-bright:     #FDC385;
-  --color-about-dark:       #C48745;
+  --color-about:            #F8B468;
+  --color-about-dim:        rgba(248, 180, 104, 0.25);
+  --color-about-bright:     #F9C386;
+  --color-about-dark:       #C88B46;
 
   /* EVENTS */
   --color-events:           #005D25;

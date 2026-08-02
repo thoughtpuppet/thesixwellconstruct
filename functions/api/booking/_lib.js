@@ -1076,6 +1076,9 @@ function sessionPlanResponseComplete(plan) {
 
 async function ensureSessionPlanResponse(db, tokenContext) {
   const plan = await loadTattooSessionPlan(db, tokenContext?.token?.submission_id);
+  if (tokenContext?.token?.submission_type === "tattoo_special") {
+    return { plan };
+  }
   if (plan && !sessionPlanResponseComplete(plan)) {
     return {
       error: reviewedBudgetIsComplete(plan) && !Number(plan.budget_acknowledged)
@@ -1284,10 +1287,11 @@ export async function handleBookingContext(request, env) {
 
     const bookingTypes = await listBookingTypes(db, context.allowedBookingTypes);
     const windows = await listPublicWindows(db, bookingTypes);
-    const sessionPlan = context.purpose === "tattoo"
+    const isTattooSpecial = context.token.submission_type === "tattoo_special";
+    const sessionPlan = context.purpose === "tattoo" && !isTattooSpecial
       ? await loadTattooSessionPlan(db, context.token.submission_id)
       : null;
-    const sessionEstimateCopy = context.purpose === "tattoo"
+    const sessionEstimateCopy = context.purpose === "tattoo" && !isTattooSpecial
       ? await loadSessionEstimateCopy(db)
       : null;
     const pendingRow = await db.prepare(
@@ -1365,6 +1369,9 @@ export async function handleSaveBookingSessionPlan(request, env) {
     if (context.invalid) return errorResponse(context.invalid, 403);
     if (context.purpose !== "tattoo") {
       return errorResponse("Prerequisite consultation links do not use a final tattoo session plan.", 409);
+    }
+    if (context.token.submission_type === "tattoo_special") {
+      return errorResponse("Tattoo Specials use the chosen offering and do not require session-plan approval.", 409);
     }
     const plan = await loadTattooSessionPlan(db, context.token.submission_id);
     if (!plan) return errorResponse("No session plan is attached to this project.", 404);

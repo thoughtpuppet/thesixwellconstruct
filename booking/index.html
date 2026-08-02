@@ -75,6 +75,8 @@
   .choice:hover { border-color:var(--accent); background:rgba(252,184,103,0.045); }
   .choice.active { border-color:var(--signal); background:rgba(110,4,4,0.12); }
   .choice.active .price { color:var(--signal); }
+  .choice.special-offering { cursor:default; }
+  .choice.special-offering:hover { border-color:var(--signal); background:rgba(110,4,4,0.12); }
   .choice-title { display:block; font-family:var(--sans); font-size:15px; font-weight:900; letter-spacing:0; color:var(--color-body); }
   .choice-meta { display:block; margin-top:6px; color:var(--dim); font-size:12px; line-height:1.45; }
   .price-wrap { text-align:right; white-space:nowrap; }
@@ -711,6 +713,7 @@
   }
 
   function planIsReady(plan) {
+    if (context?.submission?.type === "tattoo_special" || context?.submission?.special) return true;
     if (!plan) return true;
     const sessionReady = !["required", "client_choice", "not_available"].includes(plan.splitPolicy)
       || Boolean(plan.clientAcknowledged && plan.clientPreference && plan.clientSelectedAt);
@@ -728,7 +731,11 @@
       : special
         ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
       : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
-    sessionSectionLabel.textContent = consultation ? "Consultation & Reservation Fee" : "Session & Deposit";
+    sessionSectionLabel.textContent = consultation
+      ? "Consultation & Reservation Fee"
+      : special
+        ? "Chosen Offering & Deposit"
+        : "Session & Deposit";
     depositKey.textContent = consultation ? "Reservation Fee" : "Deposit";
     checkoutNote.textContent = consultation
       ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
@@ -736,7 +743,7 @@
         ? `${money(special.depositCents || 0)} is collected now and credited toward the ${money(special.quotedPriceCents || 0)} Tattoo Special total. The deposit is non-refundable.`
       : "The tattoo deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.";
     const badge = document.querySelector(".badge");
-    if (badge && special) badge.innerHTML = '<span class="badge-dot"></span>Tattoo Special';
+    if (badge) badge.classList.toggle("hidden", Boolean(special));
   }
 
   function renderPendingCheckout() {
@@ -796,7 +803,7 @@
 
   function renderSessionPlan() {
     const plan = context?.sessionPlan;
-    if (!plan) {
+    if (context?.submission?.type === "tattoo_special" || context?.submission?.special || !plan) {
       sessionPlanSection.classList.add("hidden");
       appointmentSelection.classList.remove("hidden");
       return;
@@ -855,9 +862,18 @@
   function render() {
     const types = context.bookingTypes || [];
     const windows = context.availabilityWindows || [];
+    const special = context?.submission?.special;
     renderSessionPlan();
-    paceIntro.classList.toggle("hidden", context?.purpose !== "tattoo");
-    sessionListEl.innerHTML = types.map((type) => `
+    paceIntro.classList.toggle("hidden", context?.purpose !== "tattoo" || Boolean(special));
+    sessionListEl.innerHTML = special && selectedType ? `
+      <div class="choice active special-offering" aria-label="Chosen Tattoo Special offering">
+        <span>
+          <span class="choice-title">${escapeHtml(special.offerTitle)}${special.variantLabel ? ` — ${escapeHtml(special.variantLabel)}` : ""}</span>
+          <span class="choice-meta">${escapeHtml(minutesLabel(special.durationMinutes || selectedType.durationMinutes))} / ${escapeHtml(money(special.quotedPriceCents || 0))} total</span>
+        </span>
+        <span class="price-wrap"><span class="price">${escapeHtml(selectedType.depositLabel)}</span><span class="price-label">Deposit</span></span>
+      </div>
+    ` : types.map((type) => `
       <button class="choice ${selectedType?.id === type.id ? "active" : ""}" type="button" data-type="${escapeHtml(type.id)}">
         <span>
           <span class="choice-title">${escapeHtml(type.label)}</span>
@@ -902,7 +918,9 @@
     }
 
     clientDetailsSection.classList.toggle("hidden", !context.requiresClientDetails);
-    sessionValue.textContent = selectedType ? selectedType.label : "Select a session";
+    sessionValue.textContent = special
+      ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}`
+      : selectedType ? selectedType.label : "Select a session";
     windowValue.textContent = selectedWindow ? formatDate(selectedWindow.startAt) : "Select a time";
     depositValue.textContent = selectedType ? selectedType.depositLabel : "-";
     const extendedPricingSummary = extendedDayPricing();
@@ -949,6 +967,7 @@
       selectedType = context.bookingTypes[0] || null;
       selectedWindow = null;
       initializePlanSelection();
+      applyPurposeCopy();
       statusEl.classList.add("hidden");
       appEl.classList.remove("hidden");
       checkoutBtn.textContent = "Preview Checkout";

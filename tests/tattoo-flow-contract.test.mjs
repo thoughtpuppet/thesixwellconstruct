@@ -1908,11 +1908,16 @@ test("Tattoo Specials seed immutable offers and direct submissions keep server-s
   assert.equal(context.submission.special.quotedPriceCents, 20000);
   assert.equal(context.bookingTypes[0].durationMinutes, 120);
   assert.equal(context.bookingTypes[0].depositCents, 5000);
+  assert.equal(context.sessionPlan, null);
 
-  const agreement = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+  const unnecessaryApproval = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
     token: rawToken, preference: "studio_plan", acknowledged: true, budgetAcknowledged: true,
   }), env);
-  assert.equal(agreement.status, 200);
+  assert.equal(unnecessaryApproval.status, 409);
+  assert.match((await unnecessaryApproval.json()).error, /do not require session-plan approval/i);
+  const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
+  assert.match(bookingPage, /Chosen Offering & Deposit/);
+  assert.match(bookingPage, /special-offering/);
   const nearCutoff = new Date(Date.now() + 5 * 60 * 1000).toISOString();
   database.prepare("UPDATE booking_tokens SET expires_at=? WHERE submission_id=?").run(nearCutoff, direct.submissionId);
   database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?").run(nearCutoff, direct.submissionId);
