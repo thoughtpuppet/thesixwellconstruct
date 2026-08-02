@@ -111,28 +111,37 @@ export function buildTattooBriefReadyEmail(data) {
 
 export function buildBookingLinkEmail(data) {
   const consultation = Boolean(data.consultation);
+  const tattooSpecial = data.variant === "tattoo_special";
   const approvedDesigns = list(data.approvedSheetDesigns);
   const budgetNotice = data.approvedBudget
-    ? "Review and agree to the approved tattoo-work range in the private booking link before choosing an appointment. Extended Day adds its clearly itemized $200 fee; every tattoo deposit is credited toward the final total."
+    ? tattooSpecial
+      ? "Review the fixed Tattoo Special total, deposit credit, duration, and selection in the private booking link before choosing an appointment."
+      : "Review and agree to the approved tattoo-work range in the private booking link before choosing an appointment. Extended Day adds its clearly itemized $200 fee; every tattoo deposit is credited toward the final total."
     : "";
   return renderClientEmail({
     templateKey: "booking_link_created",
-    templateVariant: consultation ? "consultation" : "tattoo",
+    templateVariant: data.variant || (consultation ? "consultation" : "tattoo"),
     variables: { client_name: data.clientName || "there", budget_notice: budgetNotice },
     theme: "tattoo",
     subject: data.subject,
     preheader: consultation
       ? "Review your consultation option and reserve a planning time."
-      : "Review your approved session plan and choose an appointment.",
-    classification: consultation ? "PLANNING CONSULTATION" : "PRIVATE BOOKING INVITATION",
+      : tattooSpecial
+        ? "Choose a time and pay the deposit to confirm your Tattoo Special appointment."
+        : "Review your approved session plan and choose an appointment.",
+    classification: consultation ? "PLANNING CONSULTATION" : tattooSpecial ? "TATTOO SPECIAL - DEPOSIT REQUIRED" : "PRIVATE BOOKING INVITATION",
     headline: consultation
       ? "Your project review is ready for consultation."
-      : "Your project is ready to book.",
+      : tattooSpecial
+        ? "Finish booking your Tattoo Special."
+        : "Your project is ready to book.",
     greeting: `Hi ${data.clientName || "there"},`,
     intro: [
       consultation
         ? "Your project review is ready for the required in-person planning consultation. This consultation happens before tattoo scheduling."
-        : "Your tattoo project and final session plan are ready for tattoo booking. Choose Quarter Day, Half Day, Full Day, or the optional Extended Day. You may use one longer appointment or split the project across shorter appointments.",
+        : tattooSpecial
+          ? "Your Tattoo Special was approved, but no appointment is booked yet. Choose an available time and complete the Square deposit before the private link expires."
+          : "Your tattoo project and final session plan are ready for tattoo booking. Choose Quarter Day, Half Day, Full Day, or the optional Extended Day. You may use one longer appointment or split the project across shorter appointments.",
     ],
     sections: [
       approvedDesigns.length ? {
@@ -141,21 +150,21 @@ export function buildBookingLinkEmail(data) {
         editableParagraphs: false,
       } : null,
       {
-        title: consultation ? "Available consultation option" : "Approved tattoo session options",
+        title: consultation ? "Available consultation option" : tattooSpecial ? "Tattoo Special session" : "Approved tattoo session options",
         paragraphs: [data.sessionOptions],
         editableParagraphs: false,
       },
     ],
     details: [
-      data.approvedBudget ? { label: "Approved tattoo-work budget", value: data.approvedBudget } : null,
+      data.approvedBudget ? { label: tattooSpecial ? "Tattoo Special total" : "Approved tattoo-work budget", value: data.approvedBudget } : null,
       {
-        label: consultation ? "Consultation reservation fee" : "Tattoo deposit due to book",
+        label: consultation ? "Consultation reservation fee" : tattooSpecial ? "Deposit required to confirm" : "Tattoo deposit due to book",
         value: data.depositText,
       },
       data.expiresAt ? { label: "Private link expires", value: data.expiresAt } : null,
     ],
     primaryAction: {
-      label: consultation ? "Choose consultation time" : "Review session and book",
+      label: consultation ? "Choose consultation time" : tattooSpecial ? "Choose time and pay deposit" : "Review session and book",
       href: data.bookingUrl,
     },
     secondaryActions: [
@@ -169,7 +178,9 @@ export function buildBookingLinkEmail(data) {
       budgetNotice,
       consultation
         ? "The consultation fee is non-refundable and is not a tattoo deposit. Paying schedules only the prerequisite consultation; the tattoo remains unbooked until consultation completion, a final session plan, and a separate tattoo booking link."
-        : "This link is private to your project. Tattoo deposits are non-refundable and go toward the final cost of the scheduled tattoo. Personalized aftercare instructions are provided at the appointment.",
+        : tattooSpecial
+          ? "This link is private to your Tattoo Special. Selecting a time creates only a temporary hold. Your appointment is confirmed only after Square reports the deposit as paid. The deposit is non-refundable and is credited toward the fixed approved total. The selected special, duration, price, and participant count recorded with the request remain attached to the booking."
+          : "This link is private to your project. Tattoo deposits are non-refundable and go toward the final cost of the scheduled tattoo. Personalized aftercare instructions are provided at the appointment.",
       "If the available times do not work, reply to this email and the studio can help.",
     ],
     signature: tattooSignature(),
@@ -236,6 +247,47 @@ export function buildTattooRenderingPaymentConfirmedEmail(data) {
   });
 }
 
+export function buildTattooSpecialReviewEmail(data) {
+  const declined = data.outcome === "declined";
+  const specialName = [data.offerTitle, data.variantLabel].filter(Boolean).join(" — ") || "Tattoo Special";
+  return renderClientEmail({
+    templateKey: "tattoo_special_review",
+    templateVariant: declined ? "declined" : "simplification_requested",
+    variables: { client_name: data.clientName || "there" },
+    theme: "tattoo",
+    subject: declined ? "Your Tattoo Special review" : "Your Tattoo Special needs simplification",
+    preheader: declined
+      ? "An update from the Studio about your Tattoo Special request."
+      : "The Studio needs an adjusted direction before approving your Tattoo Special.",
+    classification: "TATTOO SPECIAL REVIEW",
+    headline: declined
+      ? "The Studio has completed your Tattoo Special review."
+      : "Your Tattoo Special needs a simpler direction.",
+    greeting: `Hi ${data.clientName || "there"},`,
+    intro: [
+      declined
+        ? "The Studio is not able to approve this project as a Tattoo Special. You can still use the normal tattoo inquiry path if you would like to discuss another direction."
+        : "The Studio needs the design simplified before it can approve the advertised Tattoo Special price. Reply to the Studio note below with an adjusted direction or reference.",
+    ],
+    details: [
+      { label: "Tattoo Special", value: specialName },
+      { label: "Advertised total", value: data.advertisedTotal },
+      { label: "Deposit at booking", value: data.depositText },
+      { label: "Appointment duration", value: data.durationText },
+    ],
+    sections: data.studioNote ? [{
+      id: "studio_note",
+      title: "Studio note",
+      paragraphs: [data.studioNote],
+      editableParagraphs: false,
+    }] : [],
+    outro: declined
+      ? ["If you would like to discuss a different project direction, begin with the regular Custom Tattoo inquiry."]
+      : ["Reply to this email with the adjusted direction or reference when you are ready for the Studio to continue the review."],
+    signature: tattooSignature(true),
+  });
+}
+
 const APPOINTMENT_CONFIRMATION_PROFILES = Object.freeze({
   tattoo: {
     theme: "tattoo",
@@ -244,6 +296,15 @@ const APPOINTMENT_CONFIRMATION_PROFILES = Object.freeze({
     feeLabel: "Deposit",
     resourceTitle: "Before your appointment",
     body: "Personalized aftercare instructions will be provided at your appointment.\n\nI may follow up directly with prep notes or adjustments before your appointment, if needed.",
+    signature: tattooSignature(true),
+  },
+  tattoo_special: {
+    theme: "tattoo",
+    classification: "TATTOO SPECIAL APPOINTMENT",
+    headline: "Your Tattoo Special appointment is confirmed.",
+    feeLabel: "Deposit received",
+    resourceTitle: "Before your appointment",
+    body: "Your selected Tattoo Special terms remain attached to this appointment. Personalized aftercare instructions will be provided at your appointment.\n\nI may follow up directly with preparation notes or adjustments before your appointment, if needed.",
     signature: tattooSignature(true),
   },
   consultation_in_person: {
@@ -335,6 +396,7 @@ export function buildAppointmentRescheduledEmail(data) {
   const studio = ["studio_visit", "studio_space", "studio"].includes(data.kind);
   const art = data.kind === "studio_visit";
   const legacy = data.kind === "studio";
+  const tattooSpecial = data.kind === "tattoo_special";
   const theme = art ? "construct_art" : legacy ? "construct_studio" : studio ? "construct_event" : "tattoo";
   return renderClientEmail({
     templateKey: "appointment_rescheduled",
@@ -343,8 +405,8 @@ export function buildAppointmentRescheduledEmail(data) {
     theme,
     subject: data.subject,
     preheader: `Your updated ${data.label} time and confirmation details.`,
-    classification: art ? "UPDATED ART STUDIO VISIT" : studio ? "UPDATED STUDIO RESERVATION" : "UPDATED APPOINTMENT FILE",
-    headline: `Your ${data.label} has been rescheduled.`,
+    classification: art ? "UPDATED ART STUDIO VISIT" : studio ? "UPDATED STUDIO RESERVATION" : tattooSpecial ? "UPDATED TATTOO SPECIAL" : "UPDATED APPOINTMENT FILE",
+    headline: tattooSpecial ? "Your Tattoo Special appointment has been rescheduled." : `Your ${data.label} has been rescheduled.`,
     greeting: `Hi ${data.clientName || "there"},`,
     details: [
       data.previousTime ? { label: "Previous time", value: data.previousTime } : null,
@@ -371,6 +433,7 @@ export function buildAppointmentCancelledEmail(data) {
   const studio = ["studio_visit", "studio_space", "studio"].includes(data.kind);
   const art = data.kind === "studio_visit";
   const legacy = data.kind === "studio";
+  const tattooSpecial = data.kind === "tattoo_special";
   return renderClientEmail({
     templateKey: "appointment_cancelled",
     templateVariant: data.variant || (studio ? "studio_space" : "tattoo"),
@@ -378,8 +441,8 @@ export function buildAppointmentCancelledEmail(data) {
     theme: art ? "construct_art" : legacy ? "construct_studio" : studio ? "construct_event" : "tattoo",
     subject: data.subject,
     preheader: `Cancellation details for your ${data.occasion}.`,
-    classification: art ? "ART STUDIO VISIT CANCELLED" : studio ? "STUDIO RESERVATION CANCELLED" : "APPOINTMENT FILE CLOSED",
-    headline: `Your ${studio ? "six.well construct " : "art.pill TATTOO HOUSE "}${data.occasion} has been cancelled.`,
+    classification: art ? "ART STUDIO VISIT CANCELLED" : studio ? "STUDIO RESERVATION CANCELLED" : tattooSpecial ? "TATTOO SPECIAL CANCELLED" : "APPOINTMENT FILE CLOSED",
+    headline: tattooSpecial ? "Your Tattoo Special appointment has been cancelled." : `Your ${studio ? "six.well construct " : "art.pill TATTOO HOUSE "}${data.occasion} has been cancelled.`,
     greeting: `Hi ${data.clientName || "there"},`,
     details: [
       { label: "Was scheduled", value: data.scheduled },
@@ -402,6 +465,7 @@ export function buildAppointmentReminderEmail(data) {
   const art = data.kind === "studio_visit";
   const legacy = data.kind === "studio";
   const virtual = data.kind === "consultation_virtual";
+  const tattooSpecial = data.kind === "tattoo_special";
   return renderClientEmail({
     templateKey: "appointment_reminder_24h",
     templateVariant: data.variant || (studio ? "studio_space" : virtual ? "virtual" : "tattoo"),
@@ -409,8 +473,8 @@ export function buildAppointmentReminderEmail(data) {
     theme: art ? "construct_art" : legacy ? "construct_studio" : studio ? "construct_event" : "tattoo",
     subject: data.subject,
     preheader: `Your ${data.occasion} is tomorrow. Review the time and arrival details.`,
-    classification: art ? "ART STUDIO VISIT REMINDER" : studio ? "STUDIO REMINDER" : "SESSION REMINDER",
-    headline: `Your ${data.occasion} with ${data.brand} is tomorrow.`,
+    classification: art ? "ART STUDIO VISIT REMINDER" : studio ? "STUDIO REMINDER" : tattooSpecial ? "TATTOO SPECIAL REMINDER" : "SESSION REMINDER",
+    headline: tattooSpecial ? "Your Tattoo Special appointment is tomorrow." : `Your ${data.occasion} with ${data.brand} is tomorrow.`,
     greeting: `Hi ${data.clientName || "there"},`,
     details: [
       { label: "When", value: data.when },
@@ -603,26 +667,35 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "submission_received", variant: "build", label: "Build brief receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "submission_received", variant: "maze", label: "Maze submission receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "submission_received", variant: "special", label: "Special project receipt", brand: "tattoo", stage: "inquiry" },
+  { templateKey: "submission_received", variant: "tattoo_special", label: "Tattoo Special request received", brand: "tattoo", stage: "specials" },
   { templateKey: "submission_received", variant: "consultation", label: "Consultation request receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "submission_received", variant: "build_session", label: "Build-session request receipt", brand: "tattoo", stage: "inquiry" },
   { templateKey: "submission_received", variant: "art_acquisition", label: "Art acquisition inquiry receipt", brand: "art", stage: "inquiry" },
   { templateKey: "submission_received", variant: "studio_visit", label: "Open Studio Visit inquiry receipt", brand: "art", stage: "inquiry" },
   { templateKey: "submission_received", variant: "studio_space", label: "Studio gathering or rental inquiry receipt", brand: "events", stage: "inquiry" },
   { templateKey: "booking_link_created", variant: "tattoo", label: "Private tattoo booking link", brand: "tattoo", stage: "booking" },
+  { templateKey: "booking_link_created", variant: "tattoo_special", label: "Tattoo Special approved / booking link", brand: "tattoo", stage: "specials" },
   { templateKey: "booking_link_created", variant: "consultation", label: "Prerequisite consultation link", brand: "tattoo", stage: "booking" },
+  { templateKey: "tattoo_special_review", variant: "simplification_requested", label: "Tattoo Special simplification requested", brand: "tattoo", stage: "specials" },
+  { templateKey: "tattoo_special_review", variant: "declined", label: "Tattoo Special declined", brand: "tattoo", stage: "specials" },
   { templateKey: "tattoo_rendering_payment_requested", variant: "default", label: "Additional concept sketch payment request", brand: "tattoo", stage: "appointment" },
   { templateKey: "tattoo_rendering_payment_confirmed", variant: "default", label: "Additional concept sketch payment confirmation", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tattoo", label: "Tattoo appointment confirmed", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tip", label: "Tattoo confirmed with tip", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_special", label: "Tattoo Special appointment confirmed", brand: "tattoo", stage: "specials" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_special_tip", label: "Tattoo Special confirmed with tip", brand: "tattoo", stage: "specials" },
   { templateKey: "consultation_confirmed_in_person", variant: "default", label: "In-person consultation confirmed", brand: "tattoo", stage: "appointment" },
   { templateKey: "consultation_confirmed_virtual", variant: "default", label: "Virtual consultation confirmed", brand: "tattoo", stage: "appointment" },
   { templateKey: "build_session_confirmed", variant: "default", label: "Build session confirmed", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_rescheduled", variant: "tattoo", label: "Tattoo appointment rescheduled", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_rescheduled", variant: "tattoo_special", label: "Tattoo Special appointment rescheduled", brand: "tattoo", stage: "specials" },
   { templateKey: "appointment_cancelled", variant: "tattoo", label: "Tattoo appointment cancelled", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_cancelled", variant: "tattoo_special", label: "Tattoo Special appointment cancelled", brand: "tattoo", stage: "specials" },
   { templateKey: "appointment_cancelled", variant: "consultation", label: "Consultation cancelled", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_cancelled", variant: "prerequisite", label: "Prerequisite consultation cancelled", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_cancelled", variant: "build", label: "Build session cancelled", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_reminder_24h", variant: "tattoo", label: "Tattoo appointment reminder", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_reminder_24h", variant: "tattoo_special", label: "Tattoo Special appointment reminder", brand: "tattoo", stage: "specials" },
   { templateKey: "appointment_reminder_24h", variant: "virtual", label: "Virtual consultation reminder", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_reminder_24h", variant: "consultation", label: "In-person consultation reminder", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_reminder_24h", variant: "build", label: "Build session reminder", brand: "tattoo", stage: "appointment" },
@@ -644,12 +717,15 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "event_ticket_reminder_24h", variant: "default", label: "Event reminder", brand: "events", stage: "events" },
   { templateKey: "event_open_mic_slot", variant: "default", label: "Open-mic slot assigned", brand: "events", stage: "events" },
   { templateKey: "admin_submission_received", variant: "tattoo", label: "New tattoo submission alert", brand: "tattoo", audience: "admin", stage: "admin" },
+  { templateKey: "admin_submission_received", variant: "tattoo_special", label: "New Tattoo Special request alert", brand: "tattoo", audience: "admin", stage: "specials" },
   { templateKey: "admin_submission_received", variant: "construct_art", label: "New Art inquiry alert", brand: "art", audience: "admin", stage: "admin" },
   { templateKey: "admin_submission_received", variant: "construct_event", label: "New Studio/event inquiry alert", brand: "events", audience: "admin", stage: "admin" },
   { templateKey: "admin_appointment_confirmed", variant: "tattoo", label: "Tattoo appointment admin alert", brand: "tattoo", audience: "admin", stage: "admin" },
+  { templateKey: "admin_appointment_confirmed", variant: "tattoo_special", label: "Tattoo Special appointment admin alert", brand: "tattoo", audience: "admin", stage: "specials" },
   { templateKey: "admin_appointment_confirmed", variant: "construct_art", label: "Open Studio Visit admin alert", brand: "art", audience: "admin", stage: "admin" },
   { templateKey: "admin_appointment_confirmed", variant: "construct_event", label: "Studio gathering or rental admin alert", brand: "events", audience: "admin", stage: "admin" },
   { templateKey: "admin_appointment_rescheduled", variant: "tattoo", label: "Tattoo reschedule admin alert", brand: "tattoo", audience: "admin", stage: "admin" },
+  { templateKey: "admin_appointment_rescheduled", variant: "tattoo_special", label: "Tattoo Special reschedule admin alert", brand: "tattoo", audience: "admin", stage: "specials" },
   { templateKey: "admin_appointment_rescheduled", variant: "construct_art", label: "Open Studio Visit reschedule admin alert", brand: "art", audience: "admin", stage: "admin" },
   { templateKey: "admin_appointment_rescheduled", variant: "construct_event", label: "Studio gathering or rental reschedule admin alert", brand: "events", audience: "admin", stage: "admin" },
   { templateKey: "admin_appointment_confirmed", variant: "construct_studio", label: "Legacy generic studio booking alert", brand: "studio", audience: "admin", stage: "legacy" },
@@ -739,6 +815,7 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       build: ["Build Your Own submission", "The studio will review your symbols, composition, placement, scale, and budget.", "If the project is a fit, the Studio will send the appropriate next step."],
       maze: ["Maze Studio submission", "The studio will review the generated maze, placement, scale, and project notes.", "If the project is a fit, the Studio will send the appropriate next step."],
       special: ["special project application", "The studio will review the application, scope, placement, references, budget, and timing.", "If the project is a fit, the Studio will contact you with the next step."],
+      tattoo_special: ["Tattoo Special", "Your selected Tattoo Special, price, duration, deposit, placement, and references have been recorded as one fixed promotional snapshot.", "Your request is saved, but no appointment is booked until an available time is selected and Square confirms the deposit payment. Complexity-review specials receive a private link only after Studio approval."],
       consultation: ["consultation request", "Your selected consultation time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       build_session: ["Build session request", "Your selected Build session time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       art_acquisition: ["art acquisition inquiry", "The Art studio will review the work, availability, budget, and questions you shared.", "The studio will reply with availability, acquisition details, or the next step."],
@@ -769,29 +846,57 @@ export function renderClientEmailPreview(templateKey, variant = "") {
     });
   } else if (key === "booking_link_created") {
     const consultation = mode === "consultation";
+    const tattooSpecial = mode === "tattoo_special";
     rendered = buildBookingLinkEmail({
+      variant: mode,
       subject: consultation
         ? "Your private prerequisite consultation link"
-        : "Your private art.pill TATTOO HOUSE tattoo booking link",
+        : tattooSpecial
+          ? "Your private art.pill TATTOO HOUSE Tattoo Special booking link"
+          : "Your private art.pill TATTOO HOUSE tattoo booking link",
       consultation,
       clientName: SAMPLE.clientName,
       approvedSheetDesigns: [],
       sessionOptions: consultation
         ? "In-Person Consultation: 30 minutes. Reservation fee: $50."
-        : "Half Day Session: 3 hours - Approx. 3 hours for medium approved projects or developed symbolic work. Deposit: $100.",
-      approvedBudget: consultation ? "" : "$800-$1,200",
-      depositText: consultation ? "$50" : "$100",
+        : tattooSpecial
+          ? "Palm Sized Tattoo — Standard: 120 minutes. Deposit: $50."
+          : "Half Day Session: 3 hours - Approx. 3 hours for medium approved projects or developed symbolic work. Deposit: $100.",
+      approvedBudget: consultation ? "" : tattooSpecial ? "$200" : "$800-$1,200",
+      depositText: consultation ? "$50" : tattooSpecial ? "$50" : "$100",
       bookingUrl: SAMPLE.bookingUrl,
       expiresAt: "Friday, July 31, 2026 at 11:59 PM EDT",
       bookingTermsUrl: SAMPLE.bookingTermsUrl,
       dayOfInstructionsUrl: SAMPLE.dayOfInstructionsUrl,
       locationParkingUrl: SAMPLE.locationParkingUrl,
     });
+  } else if (key === "tattoo_special_review") {
+    rendered = buildTattooSpecialReviewEmail({
+      outcome: mode,
+      clientName: SAMPLE.clientName,
+      offerTitle: "Anime / Cartoon — 6×6",
+      variantLabel: "Color",
+      advertisedTotal: "$200",
+      depositText: "$50",
+      durationText: "120 minutes",
+      studioNote: mode === "simplification_requested" ? "Please remove the background and keep the portrait as the central direction." : "",
+    });
   } else if (key === "appointment_confirmed") {
+    const tattooSpecial = mode === "tattoo_special" || mode === "tattoo_special_tip";
     rendered = previewConfirmation(
-      "tattoo",
-      "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
-      mode === "tip" ? { tipText: "$25", totalPaidText: "$125" } : {},
+      tattooSpecial ? "tattoo_special" : "tattoo",
+      tattooSpecial
+        ? "Your Tattoo Special appointment at art.pill TATTOO HOUSE has been confirmed"
+        : "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
+      {
+        variant: mode,
+        ...(mode === "tip" || mode === "tattoo_special_tip" ? { tipText: "$25", totalPaidText: tattooSpecial ? "$75" : "$125" } : {}),
+        ...(tattooSpecial ? {
+          session: "Tattoo Special · Palm Sized Tattoo — Standard",
+          feeText: "$50 received",
+          billingPolicyText: "Tattoo Special approved total: $200. Deposit credit: $50. Remaining studio balance: $150. Duration: 120 minutes.",
+        } : {}),
+      },
     );
   } else if (key === "tattoo_rendering_payment_requested") {
     rendered = buildTattooRenderingPaymentRequestEmail({
@@ -861,15 +966,16 @@ export function renderClientEmailPreview(templateKey, variant = "") {
     const studioVisit = mode === "studio_visit";
     const legacy = mode === "studio";
     const studio = studioVisit || legacy || mode === "studio_space";
+    const tattooSpecial = mode === "tattoo_special";
     rendered = buildAppointmentRescheduledEmail({
-      kind: studioVisit ? "studio_visit" : legacy ? "studio" : studio ? "studio_space" : "tattoo",
+      kind: studioVisit ? "studio_visit" : legacy ? "studio" : studio ? "studio_space" : tattooSpecial ? "tattoo_special" : "tattoo",
       variant: mode,
-      subject: studioVisit ? "Your Open Studio Visit has been rescheduled" : studio ? "Your studio booking has been rescheduled" : "Your tattoo appointment has been rescheduled",
-      label: studioVisit ? "Open Studio Visit" : studio ? "studio booking" : "tattoo appointment",
+      subject: studioVisit ? "Your Open Studio Visit has been rescheduled" : studio ? "Your studio booking has been rescheduled" : tattooSpecial ? "Your Tattoo Special appointment has been rescheduled" : "Your tattoo appointment has been rescheduled",
+      label: studioVisit ? "Open Studio Visit" : studio ? "studio booking" : tattooSpecial ? "Tattoo Special appointment" : "tattoo appointment",
       clientName: SAMPLE.clientName,
       previousTime: "Thursday, June 11, 2026 at 2:00 PM EDT - Thursday, June 11, 2026 at 5:00 PM EDT",
       newTime: SAMPLE.when,
-      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : SAMPLE.session,
+      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : tattooSpecial ? "Tattoo Special · Palm Sized Tattoo — Standard" : SAMPLE.session,
       confirmationUrl: SAMPLE.confirmationUrl,
       calendarUrl: SAMPLE.calendarUrl,
       locationUrl: studio ? "" : SAMPLE.locationParkingUrl,
@@ -881,15 +987,16 @@ export function renderClientEmailPreview(templateKey, variant = "") {
     const consultation = mode === "consultation";
     const prerequisite = mode === "prerequisite";
     const build = mode === "build";
-    const occasion = studioVisit ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : prerequisite ? "project consultation" : consultation ? "consultation" : "appointment";
+    const tattooSpecial = mode === "tattoo_special";
+    const occasion = studioVisit ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : prerequisite ? "project consultation" : consultation ? "consultation" : tattooSpecial ? "Tattoo Special appointment" : "appointment";
     rendered = buildAppointmentCancelledEmail({
       variant: mode || "tattoo",
-      kind: studioVisit ? "studio_visit" : legacy ? "studio" : studio ? "studio_space" : "tattoo",
+      kind: studioVisit ? "studio_visit" : legacy ? "studio" : studio ? "studio_space" : tattooSpecial ? "tattoo_special" : "tattoo",
       subject: `Your ${studioVisit ? occasion : occasion.toLowerCase()} has been cancelled`,
       clientName: SAMPLE.clientName,
       occasion,
       scheduled: SAMPLE.when,
-      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : consultation || prerequisite ? "In-Person Consultation" : SAMPLE.session,
+      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : consultation || prerequisite ? "In-Person Consultation" : tattooSpecial ? "Tattoo Special · Palm Sized Tattoo — Standard" : SAMPLE.session,
       policyText: studio
         ? "Per studio policy, deposits and payments are non-refundable. Cancellation is separate from the one-time reschedule option."
         : consultation || prerequisite || build
@@ -914,8 +1021,9 @@ export function renderClientEmailPreview(templateKey, variant = "") {
     const virtual = mode === "virtual";
     const build = mode === "build";
     const consultation = mode === "consultation";
+    const tattooSpecial = mode === "tattoo_special";
     rendered = buildAppointmentReminderEmail({
-      kind: studioVisit ? "studio_visit" : legacy ? "studio" : studio ? "studio_space" : virtual ? "consultation_virtual" : "tattoo",
+      kind: studioVisit ? "studio_visit" : legacy ? "studio" : studio ? "studio_space" : virtual ? "consultation_virtual" : tattooSpecial ? "tattoo_special" : "tattoo",
       variant: mode || "tattoo",
       subject: studioVisit
         ? "Reminder: Your Open Studio Visit at the six.well construct is tomorrow"
@@ -927,12 +1035,14 @@ export function renderClientEmailPreview(templateKey, variant = "") {
             ? "Reminder: Your Build session with art.pill TATTOO HOUSE is tomorrow"
             : consultation
               ? "Reminder: Your consultation with art.pill TATTOO HOUSE is tomorrow"
-          : "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow",
-      occasion: studioVisit ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : virtual || consultation ? "consultation" : "tattoo appointment",
+          : tattooSpecial
+            ? "Reminder: Your Tattoo Special appointment with art.pill TATTOO HOUSE is tomorrow"
+            : "Reminder: Your tattoo appointment with art.pill TATTOO HOUSE is tomorrow",
+      occasion: studioVisit ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : virtual || consultation ? "consultation" : tattooSpecial ? "Tattoo Special appointment" : "tattoo appointment",
       brand: studio ? "the six.well construct" : "art.pill TATTOO HOUSE",
       clientName: SAMPLE.clientName,
       when: SAMPLE.when,
-      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : virtual ? "Virtual Consultation" : consultation ? "In-Person Consultation" : SAMPLE.session,
+      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : virtual ? "Virtual Consultation" : consultation ? "In-Person Consultation" : tattooSpecial ? "Tattoo Special · Palm Sized Tattoo — Standard" : SAMPLE.session,
       zoomUrl: virtual ? SAMPLE.zoomUrl : "",
       calendarUrl: SAMPLE.calendarUrl,
       resources: studio || virtual ? [] : [

@@ -2,7 +2,7 @@ import {
   notifyAdminSubmissionReceived,
   notifyBookingLinkCreated,
   notifySubmissionReceived,
-  sendCrmFollowupEmail,
+  notifyTattooSpecialReview,
 } from "../notifications/_lib.js";
 
 const SPECIAL_TYPE = "tattoo_special";
@@ -392,7 +392,6 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     await Promise.allSettled([
       notifySubmissionReceived(env, normalized),
       notifyAdminSubmissionReceived(env, normalized),
-      ...(token ? [notifyBookingLinkCreated(env, request, normalized, { ...token, approvedBudget: { minCents: Number(terms.price_cents), maxCents: Number(terms.price_cents), currency: "USD" } })] : []),
     ]);
     return json({
       ok: true,
@@ -606,28 +605,11 @@ export async function handleAdminTattooSpecialReview(request, env, submissionId)
         db.prepare("UPDATE submissions SET status = ?, tattoo_stage = 'review', internal_notes = ?, updated_at = ? WHERE id = ?").bind(status, note, now, submissionId),
         db.prepare("INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at) VALUES (?, ?, ?, 'admin', ?, ?)").bind(crypto.randomUUID(), submissionId, `special_review_${outcome}`, note, now),
       ]);
-      const variant = row.variant_label ? ` - ${row.variant_label}` : "";
-      const decisionCopy = outcome === "declined"
-        ? "The Studio is not able to approve this project as a Tattoo Special. You can still use the normal tattoo inquiry path if you would like to discuss another direction."
-        : "The Studio needs the design simplified before it can approve the advertised Tattoo Special price. Reply to the Studio note below with an adjusted direction or reference.";
-      await sendCrmFollowupEmail(env, {
-        to: row.contact_email,
-        subject: outcome === "declined" ? "Your Tattoo Special review" : "Your Tattoo Special needs simplification",
-        preheader: `${row.offer_title}${variant} review update`,
-        emailTheme: "tattoo",
-        text: [
-          `Hi ${row.contact_name || "there"},`,
-          "",
-          `Tattoo Special: ${row.offer_title}${variant}`,
-          `Advertised total: ${money(row.advertised_price_cents)}`,
-          `Deposit at booking: ${money(row.deposit_cents)}`,
-          `Appointment duration: ${Number(row.duration_minutes)} minutes`,
-          "",
-          decisionCopy,
-          ...(note ? ["", `Studio note: ${note}`] : []),
-        ].join("\n"),
-        personId: row.crm_person_id || "",
-        idempotencyKey: `tattoo_special_review_${outcome}:${submissionId}`,
+      await notifyTattooSpecialReview(env, {
+        ...row,
+        submissionId,
+        outcome,
+        note,
       });
     }
     return json({ ok: true, outcome, approvedPriceCents: approvedPrice, bookingUrl: token?.bookingUrl || "" });

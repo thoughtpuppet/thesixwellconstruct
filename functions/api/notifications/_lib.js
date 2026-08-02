@@ -16,6 +16,7 @@ import {
   buildTattooDraftResumeEmail,
   buildTattooRenderingPaymentConfirmedEmail,
   buildTattooRenderingPaymentRequestEmail,
+  buildTattooSpecialReviewEmail,
   clientEmailPreviewCatalog,
   renderClientEmailPreview,
   emailTemplateDefinition,
@@ -188,6 +189,9 @@ function tattooFormName(type) {
 }
 
 function tattooBookingName(appointment) {
+  if (appointment.submissionType === "tattoo_special" || String(appointment.bookingTypeId || "").startsWith("tattoo_special_")) {
+    return "Tattoo Special";
+  }
   if (appointment.bookingTypeId === IN_PERSON_CONSULTATION_BOOKING_TYPE_ID) return "In-Person Consultation";
   if (appointment.bookingTypeId === VIRTUAL_CONSULTATION_BOOKING_TYPE_ID) return "Virtual Consultation";
   if (appointment.bookingTypeId === BUILD_SESSION_BOOKING_TYPE_ID || appointment.purpose === "build_session") {
@@ -548,6 +552,33 @@ export async function sendCrmFollowupEmail(env, message = {}) {
   });
 }
 
+export async function notifyTattooSpecialReview(env, review = {}, options = {}) {
+  const outcome = asString(review.outcome);
+  if (!new Set(["simplification_requested", "declined"]).has(outcome)) {
+    return { ok: false, skipped: true, error: "Tattoo Special review outcome is not sendable." };
+  }
+  const to = asString(review.contact_email || review.contactEmail);
+  if (!to) return { ok: false, skipped: true, error: "Tattoo Special review recipient is required." };
+  const message = buildTattooSpecialReviewEmail({
+    outcome,
+    clientName: review.contact_name || review.contactName,
+    offerTitle: review.offer_title || review.offerTitle,
+    variantLabel: review.variant_label || review.variantLabel,
+    advertisedTotal: formatMoney(review.advertised_price_cents ?? review.advertisedPriceCents ?? 0, review.currency || "USD"),
+    depositText: formatMoney(review.deposit_cents ?? review.depositCents ?? 0, review.currency || "USD"),
+    durationText: `${Number(review.duration_minutes ?? review.durationMinutes ?? 0)} minutes`,
+    studioNote: review.note || review.studioNote || "",
+  });
+  return sendTransactionalEmail(env, {
+    to,
+    ...message,
+    templateKey: "tattoo_special_review",
+    relatedType: "submission",
+    relatedId: asString(review.submission_id || review.submissionId) || null,
+    idempotencyKey: options.idempotencyKey || `tattoo_special_review_${outcome}:${asString(review.submission_id || review.submissionId)}`,
+  });
+}
+
 export async function sendCommunicationPreferencesLink(env, message = {}) {
   const to = asString(message.to);
   const url = asString(message.url);
@@ -684,6 +715,7 @@ function normalizeSubmission(rowOrSubmission) {
 function normalizeAppointment(row) {
   const meetingJoinUrl = row.meeting_join_url || row.meetingJoinUrl || row.meeting?.joinUrl || "";
   const bookingTypeId = row.booking_type_id || row.bookingTypeId || "";
+  const submissionType = row.submission_type || row.submissionType || (String(bookingTypeId).startsWith("tattoo_special_") ? "tattoo_special" : "");
   return {
     id: row.id,
     submissionId: row.submission_id || row.submissionId || "",
@@ -705,12 +737,21 @@ function normalizeAppointment(row) {
     originalStartAt: row.original_start_at || row.originalStartAt || "",
     originalEndAt: row.original_end_at || row.originalEndAt || "",
     meeting: meetingJoinUrl ? { joinUrl: meetingJoinUrl } : null,
-    submissionType: row.submission_type || row.submissionType || "",
+    submissionType,
     specialOfferTitle: row.special_offer_title || row.specialOfferTitle || "",
     specialVariantLabel: row.special_variant_label || row.specialVariantLabel || "",
     specialApprovedPriceCents: row.special_approved_price_cents ?? row.specialApprovedPriceCents ?? row.special_advertised_price_cents ?? 0,
     specialDurationMinutes: row.special_duration_minutes ?? row.specialDurationMinutes ?? 0,
   };
+}
+
+function isTattooSpecialAppointment(appointment) {
+  return appointment.submissionType === "tattoo_special" || String(appointment.bookingTypeId || "").startsWith("tattoo_special_");
+}
+
+function tattooSpecialSessionLabel(appointment) {
+  if (!isTattooSpecialAppointment(appointment)) return appointment.bookingTypeLabel;
+  return `Tattoo Special · ${appointment.specialOfferTitle || appointment.bookingTypeLabel}${appointment.specialVariantLabel ? ` — ${appointment.specialVariantLabel}` : ""}`;
 }
 
 function extendedDayEmailFields(appointment) {
@@ -1006,6 +1047,8 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     expectation: "The studio will review the information you shared before deciding the next step.",
     next: "If more information or booking access is needed, the studio will contact you by email.",
   };
+  const directTattooSpecial = type === "tattoo_special"
+    && asString(normalized.payload?.booking_mode) === "direct";
   const profile = studioVisit
     ? {
         label: "Open Studio Visit request",
@@ -1013,12 +1056,19 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
         expectation: "The Art studio will review the requested visit details and availability.",
         next: "The studio will reply with the next step or booking details.",
       }
-    : baseProfile;
+    : directTattooSpecial
+      ? {
+          ...baseProfile,
+          next: "Your request is saved, but no appointment is booked yet. Continue in the current browser, choose an available time, and complete the Square deposit. An appointment confirmation email is sent only after Square reports a successful payment.",
+        }
+      : baseProfile;
   const constructIdentity = constructTheme === "tattoo" ? null : eventsEmailIdentity(env);
   const settings = constructIdentity
     ? { reviewTimeMessage: DEFAULT_REVIEW_TIME_MESSAGE, supportEmail: constructIdentity.replyTo }
     : await tattooReceiptSettings(env);
-  const reviewLine = ["consultation", "build_session"].includes(type)
+  const reviewLine = directTattooSpecial
+    ? "Selecting a time creates only a temporary hold. The hold expires if the deposit is not paid."
+    : ["consultation", "build_session"].includes(type)
     ? "Complete checkout from the Square link you opened to keep the selected time."
     : settings.reviewTimeMessage;
   const requestedSheetDesigns = type === "flash_claim"
@@ -1027,7 +1077,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   const message = buildSubmissionReceivedEmail({
     variant: studioVisit
       ? "studio_visit"
-      : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", tattoo_special: "special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
+      : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", tattoo_special: "tattoo_special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
     theme: constructTheme,
     subject: constructIdentity
       ? `the six.well construct — ${profile.subject}`
@@ -1086,7 +1136,7 @@ export async function notifyAdminSubmissionReceived(env, submission, options = {
 
   return sendAdminNotification(env, null, {
     theme,
-    templateVariant: theme,
+    templateVariant: normalized.type === "tattoo_special" ? "tattoo_special" : theme,
     subject: formName
       ? tattooSubject(formName)
       : `New submission: ${submissionTypeLabel}`,
@@ -1109,6 +1159,7 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
     : `${publicBaseUrl(env, request)}${token.bookingUrl}`;
   const purpose = asString(token.purpose || token.bookingPurpose || token.booking_purpose) || "tattoo";
   const isConsultationPurpose = purpose === "consultation";
+  const isTattooSpecial = normalized.type === "tattoo_special";
   const approvedBudget = isConsultationPurpose ? "" : reviewedBudgetLabel(token.approvedBudget);
   const expiresAt = token.expiresAt || token.expires_at || "";
   const approvedSheetDesigns = flashSheetDesignLines(
@@ -1117,9 +1168,12 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
     "Approved sheet designs:",
   );
   const message = buildBookingLinkEmail({
+    variant: isTattooSpecial ? "tattoo_special" : isConsultationPurpose ? "consultation" : "tattoo",
     subject: isConsultationPurpose
       ? "Your private prerequisite consultation link"
-      : "Your private art.pill TATTOO HOUSE tattoo booking link",
+      : isTattooSpecial
+        ? "Finish booking your Tattoo Special - deposit required"
+        : "Your private art.pill TATTOO HOUSE tattoo booking link",
     consultation: isConsultationPurpose,
     clientName: normalized.contactName,
     approvedSheetDesigns: approvedSheetDesigns.slice(1),
@@ -1145,14 +1199,15 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
 
 async function sendTattooAppointmentConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
-  const isSpecial = appointment.submissionType === "tattoo_special";
-  const specialSession = isSpecial
-    ? `Tattoo Special · ${appointment.specialOfferTitle || appointment.bookingTypeLabel}${appointment.specialVariantLabel ? ` — ${appointment.specialVariantLabel}` : ""}`
-    : appointment.bookingTypeLabel;
+  const isSpecial = isTattooSpecialAppointment(appointment);
+  const specialSession = tattooSpecialSessionLabel(appointment);
   const specialRemaining = Math.max(0, Number(appointment.specialApprovedPriceCents || 0) - Number(appointment.depositCents || 0));
   const message = buildAppointmentConfirmedEmail({
-    kind: "tattoo",
-    subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
+    kind: isSpecial ? "tattoo_special" : "tattoo",
+    variant: isSpecial ? (appointment.tipCents ? "tattoo_special_tip" : "tattoo_special") : undefined,
+    subject: isSpecial
+      ? "Your Tattoo Special appointment at art.pill TATTOO HOUSE has been confirmed"
+      : "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: specialSession,
@@ -1353,7 +1408,7 @@ export async function notifyAdminAppointmentConfirmed(env, request, appointmentR
 
   return sendAdminNotification(env, request, {
     theme: art ? "construct_art" : studio ? "construct_event" : "tattoo",
-    templateVariant: art ? "construct_art" : studio ? "construct_event" : "tattoo",
+    templateVariant: art ? "construct_art" : studio ? "construct_event" : isTattooSpecialAppointment(appointment) ? "tattoo_special" : "tattoo",
     subject: studio
       ? `Booking confirmed: ${bookingTypeLabel}`
       : tattooAdminBookingSubject(appointment, "Confirmed"),
@@ -1416,11 +1471,13 @@ function rescheduledAppointmentProfile(appointment) {
     || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
   const studio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
   const art = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
+  const tattooSpecial = isTattooSpecialAppointment(appointment);
   return {
     studio,
     art,
     virtual,
-    label: art ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : consultation ? "consultation" : "tattoo appointment",
+    tattooSpecial,
+    label: art ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : consultation ? "consultation" : tattooSpecial ? "Tattoo Special appointment" : "tattoo appointment",
   };
 }
 
@@ -1432,8 +1489,8 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
   const previousStartAt = options.previousStartAt || appointment.originalStartAt || "";
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
   const message = buildAppointmentRescheduledEmail({
-    kind: profile.art ? "studio_visit" : profile.studio ? "studio_space" : "tattoo",
-    variant: profile.art ? "studio_visit" : profile.studio ? "studio_space" : "tattoo",
+    kind: profile.art ? "studio_visit" : profile.studio ? "studio_space" : profile.tattooSpecial ? "tattoo_special" : "tattoo",
+    variant: profile.art ? "studio_visit" : profile.studio ? "studio_space" : profile.tattooSpecial ? "tattoo_special" : "tattoo",
     subject: `Your ${profile.label} has been rescheduled`,
     label: profile.label,
     clientName: appointment.clientName,
@@ -1441,7 +1498,7 @@ export async function notifyAppointmentRescheduled(env, request, appointmentRow,
       ? `${formatDate(previousStartAt)}${previousEndAt ? ` - ${formatDate(previousEndAt)}` : ""}`
       : "",
     newTime: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: profile.studio ? studioBookingName(appointment) : appointment.bookingTypeLabel,
+    session: profile.studio ? studioBookingName(appointment) : tattooSpecialSessionLabel(appointment),
     ...extendedDayEmailFields(appointment),
     zoomUrl: profile.virtual ? appointment.meeting?.joinUrl || "" : "",
     zoomStatus: profile.virtual && !appointment.meeting?.joinUrl
@@ -1471,7 +1528,7 @@ export async function notifyAdminAppointmentRescheduled(env, request, appointmen
   const previousEndAt = options.previousEndAt || appointment.originalEndAt || "";
   return sendAdminNotification(env, request, {
     theme: profile.art ? "construct_art" : profile.studio ? "construct_event" : "tattoo",
-    templateVariant: profile.art ? "construct_art" : profile.studio ? "construct_event" : "tattoo",
+    templateVariant: profile.art ? "construct_art" : profile.studio ? "construct_event" : profile.tattooSpecial ? "tattoo_special" : "tattoo",
     subject: profile.studio
       ? `Booking rescheduled: ${bookingTypeLabel}`
       : tattooAdminBookingSubject(appointment, "Rescheduled"),
@@ -2033,7 +2090,8 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
   const isPrerequisiteConsultation = appointment.purpose === "prerequisite_consultation";
   const isConsultation = [IN_PERSON_CONSULTATION_BOOKING_TYPE_ID, VIRTUAL_CONSULTATION_BOOKING_TYPE_ID].includes(appointment.bookingTypeId)
     || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
-  const occasion = isArt ? "Open Studio Visit" : isStudio ? "studio booking" : isBuild ? "Build session" : isPrerequisiteConsultation ? "project consultation" : isConsultation ? "consultation" : "appointment";
+  const isTattooSpecial = isTattooSpecialAppointment(appointment);
+  const occasion = isArt ? "Open Studio Visit" : isStudio ? "studio booking" : isBuild ? "Build session" : isPrerequisiteConsultation ? "project consultation" : isConsultation ? "consultation" : isTattooSpecial ? "Tattoo Special appointment" : "appointment";
   const rebookUrl = isBuild
     ? `${publicBaseUrl(env, request)}/tattoos/build/in-person/?rebook=1`
     : isConsultation && !isPrerequisiteConsultation
@@ -2048,13 +2106,13 @@ export async function notifyAppointmentCancelled(env, request, appointmentRow, o
       ? "This consultation belongs to your reviewed tattoo project. Contact the studio to continue that project; do not start a separate public consultation."
       : "A cancelled tattoo appointment does not convert into a consultation. Contact the studio if you want to discuss a future project or appointment.";
   const message = buildAppointmentCancelledEmail({
-    variant: isArt ? "studio_visit" : isStudio ? "studio_space" : isBuild ? "build" : isPrerequisiteConsultation ? "prerequisite" : isConsultation ? "consultation" : "tattoo",
-    kind: isArt ? "studio_visit" : isStudio ? "studio_space" : "tattoo",
+    variant: isArt ? "studio_visit" : isStudio ? "studio_space" : isBuild ? "build" : isPrerequisiteConsultation ? "prerequisite" : isConsultation ? "consultation" : isTattooSpecial ? "tattoo_special" : "tattoo",
+    kind: isArt ? "studio_visit" : isStudio ? "studio_space" : isTattooSpecial ? "tattoo_special" : "tattoo",
     subject: `Your ${isArt ? occasion : occasion.toLowerCase()} has been cancelled`,
     clientName: appointment.clientName,
     occasion,
     scheduled: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: isStudio ? studioBookingName(appointment) : appointment.bookingTypeLabel,
+    session: isStudio ? studioBookingName(appointment) : tattooSpecialSessionLabel(appointment),
     ...extendedDayEmailFields(appointment),
     policyText,
     rebookUrl,
@@ -2280,7 +2338,8 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
     || ["prerequisite_consultation", "standalone_consultation"].includes(appointment.purpose);
   const isStudio = STUDIO_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId) || appointment.purpose === "studio";
   const isArt = ART_BOOKING_TYPE_IDS.includes(appointment.bookingTypeId);
-  const occasion = isArt ? "Open Studio Visit" : isStudio ? "studio booking" : isBuild ? "Build session" : isConsultation ? "consultation" : "tattoo appointment";
+  const isTattooSpecial = isTattooSpecialAppointment(appointment);
+  const occasion = isArt ? "Open Studio Visit" : isStudio ? "studio booking" : isBuild ? "Build session" : isConsultation ? "consultation" : isTattooSpecial ? "Tattoo Special appointment" : "tattoo appointment";
   const brand = isStudio ? "the six.well construct" : "art.pill TATTOO HOUSE";
   const resourceActions = isVirtual || isStudio
     ? []
@@ -2291,14 +2350,14 @@ async function sendAppointmentReminder(env, appointmentRow, options = {}) {
           { label: "Location & parking", href: resources.locationParkingUrl },
         ];
   const message = buildAppointmentReminderEmail({
-    kind: isArt ? "studio_visit" : isStudio ? "studio_space" : isVirtual ? "consultation_virtual" : "tattoo",
-    variant: isArt ? "studio_visit" : isStudio ? "studio_space" : isBuild ? "build" : isVirtual ? "virtual" : isConsultation ? "consultation" : "tattoo",
+    kind: isArt ? "studio_visit" : isStudio ? "studio_space" : isVirtual ? "consultation_virtual" : isTattooSpecial ? "tattoo_special" : "tattoo",
+    variant: isArt ? "studio_visit" : isStudio ? "studio_space" : isBuild ? "build" : isVirtual ? "virtual" : isConsultation ? "consultation" : isTattooSpecial ? "tattoo_special" : "tattoo",
     subject: `Reminder: Your ${occasion} with ${brand} is tomorrow`,
     occasion,
     brand,
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: isStudio ? studioBookingName(appointment) : appointment.bookingTypeLabel,
+    session: isStudio ? studioBookingName(appointment) : tattooSpecialSessionLabel(appointment),
     ...extendedDayEmailFields(appointment),
     zoomUrl: isVirtual ? appointment.meeting?.joinUrl || "" : "",
     zoomStatus: isVirtual && !appointment.meeting?.joinUrl

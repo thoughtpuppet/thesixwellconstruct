@@ -66,6 +66,7 @@ import {
   notifyAdminSubmissionReceived,
   notifyAppointmentConfirmed,
   notifyAppointmentCancelled,
+  notifyAppointmentRescheduled,
   notifySubmissionReceived,
   retryPendingAdminAppointmentNotifications,
   sendDueAppointmentReminders,
@@ -1833,6 +1834,13 @@ test("Tattoo Specials public surface distinguishes scheduled, open, and closed s
   assert.deepEqual(closed.offers, []);
 });
 
+test("Tattoo index keeps the lower Specials block and reveals a matching brand-band action only while open", () => {
+  const source = readFileSync(join(ROOT, "tattoos", "index.html"), "utf8");
+  assert.match(source, /class="brand-band-link" id="tattooSpecialsBandCta" href="\/tattoos\/specials\/" hidden>View Current Specials<\/a>/);
+  assert.match(source, /class="booking-cta" id="tattooSpecialsCta" hidden/);
+  assert.match(source, /if \(payload\.state !== "open"\) return;[\s\S]*?if \(cta\) cta\.hidden = false;[\s\S]*?if \(bandCta\) bandCta\.hidden = false;/);
+});
+
 test("Tattoo Specials seed immutable versions and direct submissions keep server-side price, deposit, duration, and token cutoff", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
@@ -1875,6 +1883,13 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   const direct = await directResponse.json();
   assert.equal(direct.reviewRequired, false);
   assert.match(direct.bookingUrl, /^\/booking\/\?token=/);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key='booking_link_created'",
+  ).get(direct.submissionId).count, 0);
+  const directReceipt = sent.find((message) => message.subject?.includes("Tattoo Special received"));
+  assert.ok(directReceipt);
+  assert.match(directReceipt.text, /no appointment is booked yet/i);
+  assert.match(directReceipt.text, /confirmation email is sent only after Square reports a successful payment/i);
 
   const replayResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-palm", variantId: "special-palm-v1-standard", idempotencyKey: "special-direct-palm-1",
@@ -1899,6 +1914,14 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   const tokenRow = database.prepare("SELECT * FROM booking_tokens WHERE submission_id=?").get(direct.submissionId);
   assert.equal(tokenRow.expires_at, closes);
   assert.deepEqual(JSON.parse(tokenRow.allowed_booking_types_json), ["tattoo_special_palm_v1"]);
+  const directEmailVariants = database.prepare(
+    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key"
+  ).all(direct.submissionId).map((row) => ({ ...row }));
+  assert.deepEqual(directEmailVariants, [
+    { template_key: "admin_submission_received", template_variant: "tattoo_special" },
+    { template_key: "submission_received", template_variant: "tattoo_special" },
+  ]);
+  assert.ok(sent.some((message) => message.to === "primary@example.com" && /Tattoo Special has been received/i.test(message.html)));
 
   const rawToken = new URL(direct.bookingUrl, "https://example.test").searchParams.get("token");
   const contextResponse = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`), env);
@@ -1941,6 +1964,9 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   assert.ok(new Date(specialAppointment.hold_expires_at).getTime() <= new Date(nearCutoff).getTime());
   assert.equal(specialAppointment.start_at, appointmentStart.toISOString());
   assert.equal(specialAppointment.end_at, appointmentEnd.toISOString());
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key IN ('appointment_confirmed','admin_appointment_confirmed')",
+  ).get(checkoutPayload.appointmentId).count, 0);
 
   const webhookUrl = "https://example.test/api/square/webhook";
   const signatureKey = "specials-webhook-signature";
@@ -2062,6 +2088,10 @@ test("Anime review requires a reference and approval can raise the exact price w
   assert.equal(storedTerms.review_outcome, "approved");
   const savedPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(requestPayload.submissionId).payload_json);
   assert.equal(savedPayload.approved_price_cents, 25000);
+  const approvedBookingEmail = database.prepare(
+    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? AND template_key='booking_link_created'"
+  ).get(requestPayload.submissionId);
+  assert.deepEqual({ ...approvedBookingEmail }, { template_key: "booking_link_created", template_variant: "tattoo_special" });
 });
 
 test("Anime approval cannot issue a new Special booking link after the sales cutoff", async () => {
@@ -2100,7 +2130,14 @@ test("Anime approval cannot issue a new Special booking link after the sales cut
     { outcome: "simplification_requested", note: "Please remove the background and keep the portrait." }, adminToken, "PATCH",
   ), env, review.submissionId);
   assert.equal(simplification.status, 200);
-  assert.ok(sent.some((message) => message.to === "cutoff@example.com" && /needs simplification/i.test(message.subject)));
+  const reviewMessage = sent.find((message) => message.to === "cutoff@example.com" && /needs simplification/i.test(message.subject));
+  assert.ok(reviewMessage);
+  assert.match(reviewMessage.html, /TATTOO SPECIAL REVIEW/);
+  assert.match(reviewMessage.html, /Please remove the background and keep the portrait/);
+  const reviewDelivery = database.prepare(
+    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_special_review'"
+  ).get(review.submissionId);
+  assert.deepEqual({ ...reviewDelivery }, { template_key: "tattoo_special_review", template_variant: "simplification_requested" });
 });
 
 test("Maze Archive consent is explicit, separately scoped, versioned, and idempotent", async () => {
@@ -3918,6 +3955,7 @@ test("client transactional email catalog renders exact HTML and plain-text varia
     "tattoo_build_draft_resume",
     "submission_received",
     "booking_link_created",
+    "tattoo_special_review",
     "appointment_confirmed",
     "consultation_confirmed_in_person",
     "consultation_confirmed_virtual",
@@ -3969,9 +4007,97 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   assert.equal(nodeVariants.get("studio_booking_confirmed:studio_space"), "events");
   assert.equal(nodeVariants.get("admin_submission_received:construct_art"), "art");
   assert.equal(nodeVariants.get("admin_appointment_confirmed:construct_event"), "events");
+  const tattooSpecialVariants = [
+    "submission_received:tattoo_special",
+    "booking_link_created:tattoo_special",
+    "tattoo_special_review:simplification_requested",
+    "tattoo_special_review:declined",
+    "appointment_confirmed:tattoo_special",
+    "appointment_confirmed:tattoo_special_tip",
+    "appointment_rescheduled:tattoo_special",
+    "appointment_cancelled:tattoo_special",
+    "appointment_reminder_24h:tattoo_special",
+    "admin_submission_received:tattoo_special",
+    "admin_appointment_confirmed:tattoo_special",
+    "admin_appointment_rescheduled:tattoo_special",
+  ];
+  tattooSpecialVariants.forEach((key) => assert.equal(nodeVariants.get(key), "tattoo", `${key} should be independently editable`));
   assert.match(renderClientEmailPreview("submission_received", "art_acquisition").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_visit").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_space").html, /#005D25/);
+});
+
+test("Tattoo Special lifecycle correspondence uses dedicated editable variants", async () => {
+  const database = migratedDatabase();
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: `tattoo-special-email-${sent.length}` }; } },
+  };
+  const appointment = {
+    id: "tattoo-special-lifecycle-email",
+    submissionId: "tattoo-special-lifecycle-submission",
+    submissionType: "tattoo_special",
+    bookingTypeId: "tattoo_special_palm_v1",
+    bookingTypeLabel: "Palm Sized Tattoo",
+    purpose: "tattoo",
+    clientName: "Special Client",
+    clientEmail: "special-client@example.test",
+    startAt: "2026-08-08T16:00:00.000Z",
+    endAt: "2026-08-08T18:00:00.000Z",
+    depositCents: 5000,
+    currency: "USD",
+    specialOfferTitle: "Palm Sized Tattoo",
+    specialVariantLabel: "Standard",
+    specialApprovedPriceCents: 20000,
+    specialDurationMinutes: 120,
+  };
+
+  await notifyAppointmentConfirmed(env, null, appointment);
+  await notifyAdminAppointmentConfirmed(env, null, appointment);
+  await notifyAppointmentRescheduled(env, null, appointment, {
+    previousStartAt: "2026-08-07T16:00:00.000Z",
+    previousEndAt: "2026-08-07T18:00:00.000Z",
+  });
+  await notifyAdminAppointmentRescheduled(env, null, appointment, {
+    previousStartAt: "2026-08-07T16:00:00.000Z",
+    previousEndAt: "2026-08-07T18:00:00.000Z",
+  });
+  await notifyAppointmentCancelled(env, null, appointment);
+
+  const variants = database.prepare(
+    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key"
+  ).all(appointment.id).map((row) => ({ ...row }));
+  assert.deepEqual(variants, [
+    { template_key: "admin_appointment_confirmed", template_variant: "tattoo_special" },
+    { template_key: "admin_appointment_rescheduled", template_variant: "tattoo_special" },
+    { template_key: "appointment_cancelled", template_variant: "tattoo_special" },
+    { template_key: "appointment_confirmed", template_variant: "tattoo_special" },
+    { template_key: "appointment_rescheduled", template_variant: "tattoo_special" },
+  ]);
+  assert.ok(sent.some((message) => /TATTOO SPECIAL APPOINTMENT/.test(message.html)));
+  assert.ok(sent.some((message) => /UPDATED TATTOO SPECIAL/.test(message.html)));
+  assert.ok(sent.some((message) => /TATTOO SPECIAL CANCELLED/.test(message.html)));
+
+  const reminderStart = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const reminderEnd = new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: "tattoo-special-reminder-email",
+    bookingTypeId: "tattoo_special_palm_v1",
+    purpose: "tattoo",
+    name: "Reminder Client",
+    email: "reminder-client@example.test",
+    startAt: reminderStart,
+    endAt: reminderEnd,
+  });
+  const reminder = await sendDueAppointmentReminders(env);
+  assert.equal(reminder.sent, 1);
+  const reminderDelivery = database.prepare(
+    "SELECT template_variant FROM notification_deliveries WHERE related_id='tattoo-special-reminder-email' AND template_key='appointment_reminder_24h'"
+  ).get();
+  assert.equal(reminderDelivery.template_variant, "tattoo_special");
+  assert.match(sent.at(-1).html, /TATTOO SPECIAL REMINDER/);
 });
 
 test("Art inquiries and studio bookings use their routed node email families", async () => {
@@ -4254,6 +4380,51 @@ test("production email sends use only the published copy revision and keep live 
   assert.equal(recorded.template_variant, "custom");
   assert.equal(recorded.template_revision, 1);
   assert.equal(recorded.email_theme, "tattoo");
+});
+
+test("published Tattoo Special receipt copy stays independent from Special Project correspondence", async () => {
+  const database = migratedDatabase();
+  const sent = [];
+  const token = "tattoo-special-template-admin";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: token,
+    EMAIL: { async send(message) { sent.push(message); return { messageId: `special-template-${sent.length}` }; } },
+  };
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const base = "https://example.test/api/admin/notifications/templates/submission_received";
+  const initial = await (await handleAdminEmailTemplates(
+    new Request(`${base}?variant=tattoo_special`, { headers }),
+    env,
+  )).json();
+  const content = structuredClone(initial.defaultContent);
+  content.headline = "Your {{submission_label}} request is now in the dedicated Studio review queue.";
+  let response = await handleAdminEmailTemplates(new Request(`${base}/draft?variant=tattoo_special`, {
+    method: "PUT", headers, body: JSON.stringify({ baseRevision: 0, content }),
+  }), env);
+  assert.equal(response.status, 200);
+  response = await handleAdminEmailTemplates(new Request(`${base}/publish?variant=tattoo_special`, {
+    method: "POST", headers, body: JSON.stringify({ revision: 1 }),
+  }), env);
+  assert.equal(response.status, 200);
+
+  await notifySubmissionReceived(env, {
+    id: "dedicated-tattoo-special-receipt",
+    type: "tattoo_special",
+    contact_name: "Special Client",
+    contact_email: "special@example.test",
+    payload_json: JSON.stringify({}),
+  });
+  await notifySubmissionReceived(env, {
+    id: "ordinary-special-project-receipt",
+    type: "special_project",
+    contact_name: "Project Client",
+    contact_email: "project@example.test",
+    payload_json: JSON.stringify({}),
+  });
+  assert.match(sent[0].html, /Tattoo Special request is now in the dedicated Studio review queue/);
+  assert.doesNotMatch(sent[1].html, /dedicated Studio review queue/);
+  assert.match(sent[1].html, /special project application has been received/i);
 });
 
 test("Open Studio Visit cancellations and reminders keep the Art node identity", async () => {
