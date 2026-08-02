@@ -4137,7 +4137,7 @@ test("client transactional email catalog renders exact HTML and plain-text varia
     assert.ok(rendered.text);
     assert.match(rendered.html, /<!doctype html>/i);
     assert.match(rendered.html, /role="presentation"/);
-    assert.match(rendered.html, /background:#0E0E0E/);
+    assert.match(rendered.html, /background-color:#0E0E0E/);
     assert.match(
       rendered.html,
       new RegExp(escapeEmailHtml(rendered.preheader).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
@@ -4175,6 +4175,45 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   assert.match(renderClientEmailPreview("submission_received", "art_acquisition").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_visit").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_space").html, /#005D25/);
+});
+
+test("client transactional emails lock every presentation layer to an explicit dark canvas", () => {
+  clientEmailPreviewCatalog().forEach((entry) => {
+    const rendered = renderClientEmailPreview(entry.templateKey, entry.variant);
+    const presentationTables = rendered.html.match(/<table\b[^>]*role="presentation"[^>]*>/gi) || [];
+    const tableCells = rendered.html.match(/<td\b[^>]*>/gi) || [];
+    const identity = `${entry.templateKey}:${entry.variant}`;
+
+    assert.match(rendered.html, /<meta name="color-scheme" content="dark">/, identity);
+    assert.match(rendered.html, /<meta name="supported-color-schemes" content="dark">/, identity);
+    assert.match(rendered.html, /<html[^>]*background-color:#0E0E0E[^>]*color-scheme:dark/, identity);
+    assert.match(rendered.html, /<body[^>]*bgcolor="#0E0E0E"[^>]*background-color:#0E0E0E!important/, identity);
+    assert.ok(presentationTables.length > 0, `${identity} should use presentation tables`);
+    assert.ok(tableCells.length > 0, `${identity} should use table cells`);
+    presentationTables.forEach((tag) => {
+      assert.match(tag, /bgcolor="#[0-9A-F]{6}"/i, `${identity} table should have a legacy-safe background`);
+      assert.match(tag, /background-color:#[0-9A-F]{6}/i, `${identity} table should have an inline background`);
+    });
+    tableCells.forEach((tag) => {
+      assert.match(tag, /bgcolor="#[0-9A-F]{6}"/i, `${identity} cell should have a legacy-safe background`);
+      assert.match(tag, /background-color:#[0-9A-F]{6}/i, `${identity} cell should have an inline background`);
+    });
+  });
+});
+
+test("client transactional emails use the shared title, supporting-copy, descriptor, and node-accent hierarchy", () => {
+  const tattoo = renderClientEmailPreview("tattoo_special_review", "simplification_requested").html;
+  const art = renderClientEmailPreview("submission_received", "art_acquisition").html;
+  const events = renderClientEmailPreview("studio_booking_confirmed", "studio_space").html;
+  const studio = renderClientEmailPreview("crm_relationship_followup", "default").html;
+
+  assert.match(tattoo, /<h1[^>]*color:#FBD19D/);
+  assert.match(tattoo, /<p[^>]*color:rgba\(251,209,157,0\.66\)/);
+  assert.match(tattoo, /font-size:10px[^>]*color:rgba\(252,184,103,0\.30\)|color:rgba\(252,184,103,0\.30\)[^>]*font-size:10px/);
+  assert.match(tattoo, /border-bottom:5px solid #6E0404/);
+  assert.match(art, /border-bottom:5px solid #0039BD/);
+  assert.match(events, /border-bottom:5px solid #005D25/);
+  assert.match(studio, /border-bottom:5px solid #FCB467/);
 });
 
 test("Tattoo Special lifecycle correspondence uses dedicated editable variants", async () => {
