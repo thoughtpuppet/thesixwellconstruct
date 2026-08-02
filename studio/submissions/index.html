@@ -1097,6 +1097,18 @@
       `);
     }
 
+    if (t === "tattoo_special") {
+      return card("Tattoo Special Request", `
+        <div class="grid">
+          ${field("Placement", p("placement"))}
+          ${field("Age confirmed", p("age_confirmed"))}
+          ${field("Deposit policy accepted", p("policy_accepted"))}
+        </div>
+        <div class="field" style="margin-top:16px;"><label>Client Tattoo Description</label><div class="value full">${escapeHtml(p("project_details") || p("message"))}</div></div>
+        ${p("reference_link") ? `<div class="field" style="margin-top:16px;"><label>Reference Link</label><div class="value full">${escapeHtml(p("reference_link"))}</div></div>` : ""}
+      `);
+    }
+
     if (t === "special_project") {
       return card("Special Project", `
         <div class="grid">

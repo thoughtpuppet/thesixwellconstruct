@@ -1851,6 +1851,13 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.doesNotMatch(script, /Direct booking|normal private booking link/);
 });
 
+test("Studio Tattoo Special requests show the client tattoo description", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?Tattoo Special Request[\s\S]*?Client Tattoo Description[\s\S]*?p\("project_details"\)/);
+  assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?field\("Placement", p\("placement"\)\)/);
+  assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?p\("reference_link"\)/);
+});
+
 test("Tattoo Specials require Studio approval and preserve server-side price, deposit, duration, and token cutoff", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
