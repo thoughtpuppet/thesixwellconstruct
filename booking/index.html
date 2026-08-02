@@ -721,15 +721,22 @@
 
   function applyPurposeCopy() {
     const consultation = context?.purpose === "consultation";
-    bookingTitle.textContent = consultation ? "CONSULTATION." : "BOOKING.";
+    const special = context?.submission?.special;
+    bookingTitle.textContent = consultation ? "CONSULTATION." : special ? "TATTOO SPECIAL." : "BOOKING.";
     bookingLead.textContent = consultation
       ? "Project review has linked you to a required in-person planning consultation. Choose a time and pay the consultation reservation fee. This does not book the tattoo; tattoo access follows only after the consultation is completed and the studio saves the final session plan."
+      : special
+        ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
       : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
     sessionSectionLabel.textContent = consultation ? "Consultation & Reservation Fee" : "Session & Deposit";
     depositKey.textContent = consultation ? "Reservation Fee" : "Deposit";
     checkoutNote.textContent = consultation
       ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
+      : special
+        ? `${money(special.depositCents || 0)} is collected now and credited toward the ${money(special.quotedPriceCents || 0)} Tattoo Special total. The deposit is non-refundable.`
       : "The tattoo deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.";
+    const badge = document.querySelector(".badge");
+    if (badge && special) badge.innerHTML = '<span class="badge-dot"></span>Tattoo Special';
   }
 
   function renderPendingCheckout() {
@@ -907,7 +914,9 @@
     remainingBalanceValue.textContent = extendedPricingSummary?.laborMin ? pricingRangeLabel(extendedPricingSummary.remainingMin, extendedPricingSummary.remainingMax, extendedPricingSummary.currency) : "-";
     tipValue.textContent = money(selectedTipCents, selectedType?.currency || "USD");
     totalValue.textContent = selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
-    checkoutNote.textContent = selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
+    checkoutNote.textContent = context?.submission?.special
+      ? `${selectedType.depositLabel} is collected through Square and credited toward the ${money(context.submission.special.quotedPriceCents || 0)} Tattoo Special total. Remaining balance: ${money(Math.max(0, (context.submission.special.quotedPriceCents || 0) - Number(selectedType.depositCents || 0)))}.`
+      : selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
       ? `Square collects only the ${selectedType.depositLabel} deposit${selectedTipCents ? " and your optional tip" : ""} today. The $200 Extended Day fee is included in the final studio balance, and the deposit is credited toward your final total.`
       : context?.purpose === "consultation"
         ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."

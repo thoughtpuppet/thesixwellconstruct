@@ -1,0 +1,28 @@
+.archive-maze-page { background: var(--color-bg); }
+.archive-maze-hero { padding: clamp(72px, 11vw, 144px) 0 44px; border-bottom: 5px solid var(--color-archive, #fcb867); }
+.archive-maze-hero h1 { max-width: 13ch; margin: 0 0 20px; }
+.archive-maze-hero .hero-descriptor { margin: 0; }
+.archive-maze-actions { display: flex; flex-wrap: wrap; gap: 12px 20px; padding-top: 24px; }
+.archive-maze-actions a, .maze-record-card a, .maze-room-state a { color: inherit; text-underline-offset: 4px; }
+.maze-room { padding: 52px 0 24px; }
+.maze-room + .maze-room { margin-top: 32px; border-top: 5px solid var(--color-archive, #fcb867); }
+.maze-room-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 380px); gap: 16px; align-items: end; margin-bottom: 24px; }
+.maze-room-heading h2 { margin: 0; font-size: clamp(32px, 5vw, 64px); line-height: .95; }
+.maze-room-heading p { margin: 0; line-height: 1.6; }
+.maze-record-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.maze-record-card, .maze-history-card, .maze-room-state { min-width: 0; border: 5px solid currentColor; background: var(--color-bg); }
+.maze-record-card img, .maze-history-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #111; border-bottom: 5px solid currentColor; }
+.maze-record-copy { padding: 18px; }
+.maze-record-meta { margin: 0 0 10px; color: var(--color-archive, #fcb867); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.maze-record-card h3, .maze-history-card h3 { margin: 0 0 10px; font-size: clamp(24px, 3vw, 40px); }
+.maze-record-copy p { line-height: 1.55; }
+.maze-history-card { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(0, 1.2fr); }
+.maze-history-card img { height: 100%; aspect-ratio: auto; border-right: 5px solid currentColor; border-bottom: 0; }
+.maze-room-state { padding: 24px; line-height: 1.6; }
+.maze-room-state button { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+@media (max-width: 720px) {
+  .archive-maze-hero { padding-top: 64px; }
+  .maze-room-heading, .maze-record-grid, .maze-history-card { grid-template-columns: 1fr; }
+  .maze-history-card img { border-right: 0; border-bottom: 5px solid currentColor; }
+  .maze-record-copy { padding: 14px; }
+}

@@ -42,6 +42,7 @@ const TATTOO_FORM_NAMES = Object.freeze({
   build_brief: "Build Your Own",
   maze_design: "Maze Studio Submission",
   special_project: "Special Projects Application",
+  tattoo_special: "Tattoo Special",
   consultation: "Consultation",
   build_session: "In-Person Build Session",
 });
@@ -704,6 +705,11 @@ function normalizeAppointment(row) {
     originalStartAt: row.original_start_at || row.originalStartAt || "",
     originalEndAt: row.original_end_at || row.originalEndAt || "",
     meeting: meetingJoinUrl ? { joinUrl: meetingJoinUrl } : null,
+    submissionType: row.submission_type || row.submissionType || "",
+    specialOfferTitle: row.special_offer_title || row.specialOfferTitle || "",
+    specialVariantLabel: row.special_variant_label || row.specialVariantLabel || "",
+    specialApprovedPriceCents: row.special_approved_price_cents ?? row.specialApprovedPriceCents ?? row.special_advertised_price_cents ?? 0,
+    specialDurationMinutes: row.special_duration_minutes ?? row.specialDurationMinutes ?? 0,
   };
 }
 
@@ -759,6 +765,12 @@ const SUBMISSION_RECEIPTS = {
     subject: "Special Project application received",
     expectation: "The studio will review the selected open call, concept direction, placement, scale, budget, and timing.",
     next: "If the application is selected, you will receive a private tattoo-booking link or a request for any missing planning details.",
+  },
+  tattoo_special: {
+    label: "Tattoo Special",
+    subject: "Tattoo Special received",
+    expectation: "Your selected offer, price, duration, deposit, placement, and references have been recorded as one fixed promotional snapshot.",
+    next: "Direct offers continue to private scheduling. Complexity-review offers receive a private link only after Studio approval.",
   },
   consultation: {
     label: "consultation reservation",
@@ -872,6 +884,20 @@ function submissionDetailLines(submission) {
       "timeline",
       "message",
       "instagram",
+    ],
+    tattoo_special: [
+      "campaign",
+      "special_offer_title",
+      "special_variant_label",
+      "quoted_price_cents",
+      "approved_price_cents",
+      "deposit_cents",
+      "duration_minutes",
+      "booking_mode",
+      "placement",
+      "project_details",
+      "reference_link",
+      "participants",
     ],
     build_brief: [
       "selected_elements",
@@ -1001,7 +1027,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   const message = buildSubmissionReceivedEmail({
     variant: studioVisit
       ? "studio_visit"
-      : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
+      : ({ tattoo_inquiry: "custom", flash_claim: "flash", build_brief: "build", maze_design: "maze", special_project: "special", tattoo_special: "special", consultation: "consultation", build_session: "build_session", art_acquisition: "art_acquisition", studio_booking: "studio_space" })[type] || "custom",
     theme: constructTheme,
     subject: constructIdentity
       ? `the six.well construct — ${profile.subject}`
@@ -1119,17 +1145,24 @@ export async function notifyBookingLinkCreated(env, request, submission, token, 
 
 async function sendTattooAppointmentConfirmed(env, request, appointment, options = {}) {
   const resources = clientResourceUrls(env, request);
+  const isSpecial = appointment.submissionType === "tattoo_special";
+  const specialSession = isSpecial
+    ? `Tattoo Special · ${appointment.specialOfferTitle || appointment.bookingTypeLabel}${appointment.specialVariantLabel ? ` — ${appointment.specialVariantLabel}` : ""}`
+    : appointment.bookingTypeLabel;
+  const specialRemaining = Math.max(0, Number(appointment.specialApprovedPriceCents || 0) - Number(appointment.depositCents || 0));
   const message = buildAppointmentConfirmedEmail({
     kind: "tattoo",
     subject: "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
-    session: appointment.bookingTypeLabel,
+    session: specialSession,
     feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received`,
     sessionFeeText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
       ? `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance at the start of your appointment, before tattooing begins`
       : "",
-    billingPolicyText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+    billingPolicyText: isSpecial
+      ? `Tattoo Special approved total: ${formatMoney(appointment.specialApprovedPriceCents, appointment.currency)}. Deposit credit: ${formatMoney(appointment.depositCents, appointment.currency)}. Remaining studio balance: ${formatMoney(specialRemaining, appointment.currency)}. Duration: ${appointment.specialDurationMinutes} minutes.`
+      : appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
       ? "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "",
     renderingPolicyText: "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",

@@ -17,6 +17,8 @@ import {
   handleGetSubmission,
   handleGetSubmissionFile,
   handleListSubmissions,
+  handlePromoteMazeArchiveSubmission,
+  handleUpdateMazeArchiveSubmission,
   handleUpdateSubmission,
 } from "./functions/api/submissions/_lib.js";
 import {
@@ -115,6 +117,13 @@ import {
   handleAdminSubmissionBriefDocument,
   handlePublicBriefDownload,
 } from "./functions/api/brief-documents/_lib.js";
+import {
+  handleAdminTattooSpecialOffer,
+  handleAdminTattooSpecialReview,
+  handleAdminTattooSpecials,
+  handleCreateTattooSpecialSubmission,
+  handlePublicTattooSpecials,
+} from "./functions/api/tattoo-specials/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -718,6 +727,17 @@ async function handleSubmissionsApi(request, env) {
     return handleAdminSubmissionBriefDocument(request, env, decodeURIComponent(briefDocumentMatch[1]), action);
   }
 
+  const mazeArchiveMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/maze-archive(?:\/(promote))?$/);
+  if (mazeArchiveMatch) {
+    const id = decodeURIComponent(mazeArchiveMatch[1]);
+    if (mazeArchiveMatch[2] === "promote") {
+      if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+      return handlePromoteMazeArchiveSubmission(request, env, id);
+    }
+    if (method !== "PATCH") return methodNotAllowed(method, ["PATCH"]);
+    return handleUpdateMazeArchiveSubmission(request, env, id);
+  }
+
   const match = pathname.match(/^\/api\/admin\/submissions\/([^/]+)$/);
   if (match) {
     const id = decodeURIComponent(match[1]);
@@ -1201,6 +1221,38 @@ export default {
         return Response.redirect(canonicalUrl, 308);
       }
       return serveLegendRecordPage(request, env, requestedLegendSlug);
+    }
+
+    if (url.pathname === "/api/tattoo/specials") {
+      if (request.method !== "GET") return methodNotAllowed(request.method, ["GET"]);
+      return handlePublicTattooSpecials(request, env);
+    }
+
+    if (url.pathname === "/api/tattoo/specials/submissions") {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handleCreateTattooSpecialSubmission(request, env);
+    }
+
+    if (url.pathname === "/api/admin/tattoo/specials") {
+      if (!["GET", "PATCH"].includes(request.method)) return methodNotAllowed(request.method, ["GET", "PATCH"]);
+      return handleAdminTattooSpecials(request, env);
+    }
+
+    if (url.pathname === "/api/admin/tattoo/specials/offers") {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handleAdminTattooSpecialOffer(request, env);
+    }
+
+    const tattooSpecialOfferMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/offers\/([^/]+)$/);
+    if (tattooSpecialOfferMatch) {
+      if (!["PATCH", "DELETE"].includes(request.method)) return methodNotAllowed(request.method, ["PATCH", "DELETE"]);
+      return handleAdminTattooSpecialOffer(request, env, decodeURIComponent(tattooSpecialOfferMatch[1]));
+    }
+
+    const tattooSpecialReviewMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/submissions\/([^/]+)\/review$/);
+    if (tattooSpecialReviewMatch) {
+      if (request.method !== "PATCH") return methodNotAllowed(request.method, ["PATCH"]);
+      return handleAdminTattooSpecialReview(request, env, decodeURIComponent(tattooSpecialReviewMatch[1]));
     }
 
     if (normalizePath(url.pathname) === "/studio/art-preview") {

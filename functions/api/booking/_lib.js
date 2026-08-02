@@ -70,8 +70,8 @@ const EXTENDED_DAY_BOOKING_TYPE_ID = "tattoo_extended";
 
 // Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.
 const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
-const TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
-const ORIGINAL_TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
+const TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special"]);
+const ORIGINAL_TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special"]);
 const TATTOO_RENDERING_FEE_CENTS = 5000;
 const TATTOO_RENDERING_CURRENCY = "USD";
 const SESSION_CATEGORIES = new Set(["artist_review", "one_session", "multiple_sessions"]);
@@ -338,6 +338,10 @@ function normalizeAppointment(row) {
     bookingTokenId: row.booking_token_id || "",
     bookingTypeId,
     bookingTypeLabel: TATTOO_DAY_SESSION_LABELS[bookingTypeId] || row.booking_type_label || row.bookingTypeLabel || "",
+    submissionType: row.submission_type || row.submissionType || "",
+    isTattooSpecial: (row.submission_type || row.submissionType) === "tattoo_special",
+    specialOfferTitle: row.special_offer_title || row.specialOfferTitle || "",
+    specialVariantLabel: row.special_variant_label || row.specialVariantLabel || "",
     availabilityWindowId: row.availability_window_id || "",
     status: row.status,
     purpose: row.purpose || purposeForBookingType(row.booking_type_id, Boolean(row.booking_token_id)),
@@ -390,13 +394,23 @@ function bookingTypesMatchPurpose(purpose, bookingTypeIds) {
     return ids.length === 1 && ids[0] === "consult_in_person";
   }
   if (purpose === "tattoo") {
-    return ids.every((id) => SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing.includes(id));
+    return ids.every((id) => isTattooingBookingType(id));
   }
   return false;
 }
 
-function holdExpiryFromNow() {
-  return new Date(Date.now() + HOLD_DURATION_MS).toISOString();
+function isTattooSpecialBookingType(id) {
+  return String(id || "").startsWith("tattoo_special_");
+}
+
+function isTattooingBookingType(id) {
+  return SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing.includes(id) || isTattooSpecialBookingType(id);
+}
+
+function holdExpiryFromNow(cutoff = "") {
+  const normalExpiry = Date.now() + HOLD_DURATION_MS;
+  const cutoffMs = cutoff ? new Date(cutoff).getTime() : Number.POSITIVE_INFINITY;
+  return new Date(Math.min(normalExpiry, Number.isFinite(cutoffMs) ? cutoffMs : normalExpiry)).toISOString();
 }
 
 function availabilityScopeFromRequest(request) {
@@ -953,7 +967,7 @@ async function loadTokenContext(db, rawToken) {
     .prepare(
       `SELECT bt.*, s.status AS submission_status, s.contact_name, s.contact_email,
         s.contact_phone, s.type AS submission_type, s.source_path, s.tattoo_stage,
-        s.lifecycle_review_required, s.lifecycle_review_note
+        s.lifecycle_review_required, s.lifecycle_review_note, s.payload_json
        FROM booking_tokens bt
        JOIN submissions s ON s.id = bt.submission_id
        WHERE bt.token_hash = ?`
@@ -1169,7 +1183,7 @@ async function listGeneratedWindows(db, bookingTypes, blackouts, activeAppointme
       if (new Date(ruleEnd).getTime() <= new Date(ruleStart).getTime()) continue;
 
       const allowedTypeIds = SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[rule.category] || SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing;
-      for (const bookingType of bookingTypes.filter((type) => allowedTypeIds.includes(type.id))) {
+      for (const bookingType of bookingTypes.filter((type) => allowedTypeIds.includes(type.id) || (rule.category === "tattooing" && isTattooSpecialBookingType(type.id)))) {
         let slotStart = ruleStart;
         while (new Date(addMinutes(slotStart, bookingType.durationMinutes)).getTime() <= new Date(ruleEnd).getTime()) {
           const slotEnd = addMinutes(slotStart, bookingType.durationMinutes);
@@ -1304,6 +1318,20 @@ export async function handleBookingContext(request, env) {
         tattooStage: context.token.tattoo_stage || "",
         lifecycleReviewRequired: Boolean(context.token.lifecycle_review_required),
         lifecycleReviewNote: context.token.lifecycle_review_note || "",
+        special: context.token.submission_type === "tattoo_special"
+          ? (() => {
+              const payload = parseJsonField(context.token.payload_json, {});
+              return {
+                campaign: "Tattoo Special",
+                offerTitle: payload.special_offer_title || "Tattoo Special",
+                variantLabel: payload.special_variant_label || "",
+                quotedPriceCents: Number(payload.approved_price_cents || payload.quoted_price_cents || 0),
+                depositCents: Number(payload.deposit_cents || 0),
+                durationMinutes: Number(payload.duration_minutes || 0),
+                participants: Array.isArray(payload.participants) ? payload.participants : [],
+              };
+            })()
+          : null,
       },
       requiresClientDetails: directInviteNeedsClient(context.token),
       purpose: context.purpose,
@@ -1469,7 +1497,8 @@ async function materializeGeneratedWindow(db, windowId, bookingTypeId) {
     .first();
   if (!rule) return { error: "That appointment time is no longer available." };
   const ruleCategory = rule.category || "tattooing";
-  if (!(SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[ruleCategory] || []).includes(bookingTypeId)) {
+  if (!(SCHEDULE_CATEGORY_BOOKING_TYPE_IDS[ruleCategory] || []).includes(bookingTypeId)
+      && !(ruleCategory === "tattooing" && isTattooSpecialBookingType(bookingTypeId))) {
     return { error: "That appointment time no longer matches the selected session category." };
   }
 
@@ -1849,7 +1878,7 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     sessionFeeCents: bookingType.session_fee_cents || 0,
     extendedDayAcknowledgedAt: bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null,
     currency: bookingType.currency || "USD",
-    holdExpiresAt: holdExpiryFromNow(),
+    holdExpiresAt: holdExpiryFromNow(tokenContext.token.submission_type === "tattoo_special" ? tokenContext.token.expires_at : ""),
     now,
     eventMetadata: { tokenPurpose: tokenContext.purpose },
   });
@@ -3166,7 +3195,11 @@ async function invalidatePendingRenderingRequestsForAppointment(db, env, appoint
 async function selectAppointmentWithMeeting(db, appointmentId) {
   return db
     .prepare(
-      `SELECT a.*, bt.label AS booking_type_label,
+      `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type,
+              tst.offer_title AS special_offer_title, tst.variant_label AS special_variant_label,
+              tst.approved_price_cents AS special_approved_price_cents,
+              tst.advertised_price_cents AS special_advertised_price_cents,
+              tst.duration_minutes AS special_duration_minutes,
               am.provider AS meeting_provider,
               am.provider_meeting_id,
               am.join_url AS meeting_join_url,
@@ -3175,6 +3208,8 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
               am.updated_at AS meeting_updated_at
        FROM appointments a
        LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+       LEFT JOIN submissions s ON s.id = a.submission_id
+       LEFT JOIN tattoo_special_submission_terms tst ON tst.submission_id = a.submission_id
        LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
        WHERE a.id = ?`
     )
@@ -5300,6 +5335,36 @@ async function processSquareWebhookPayload(request, env, rawBody) {
     }
     return json({ ok: true, paid: true, ignored: true, reason: "Appointment is already confirmed.", appointmentId: appointmentRow.id });
   }
+  const specialTerms = appointmentRow.submission_id
+    ? await db.prepare(
+      `SELECT offer_title, variant_label, sales_closes_at
+       FROM tattoo_special_submission_terms WHERE submission_id = ?`
+    ).bind(appointmentRow.submission_id).first()
+    : null;
+  if (specialTerms && specialTerms.sales_closes_at <= now) {
+    await db.batch([
+      db.prepare(
+        `UPDATE appointments SET hold_state = 'expiry_attention', updated_at = ?
+         WHERE id = ? AND status IN ('pending_deposit','deposit_pending','cancelled','archived')`
+      ).bind(now, appointmentRow.id),
+      db.prepare(
+        `UPDATE deposit_payments
+         SET status = 'payment_attention', provider_payment_id = COALESCE(?, provider_payment_id),
+             raw_json = ?, updated_at = ?
+         WHERE appointment_id = ? AND status <> 'paid'`
+      ).bind(webhookPaymentId(payload) || null, JSON.stringify(order || payload), now, appointmentRow.id),
+      db.prepare(
+        `INSERT INTO appointment_events
+         (id, appointment_id, event_type, actor, note, metadata_json, created_at)
+         VALUES (?, ?, 'tattoo_special_late_payment_attention', 'square_webhook', ?, ?, ?)`
+      ).bind(
+        crypto.randomUUID(), appointmentRow.id,
+        "Square reported a Tattoo Special payment after the sales cutoff. Manual refund review is required; no automatic refund was attempted.",
+        JSON.stringify({ orderId, paymentId: webhookPaymentId(payload), salesClosesAt: specialTerms.sales_closes_at, offerTitle: specialTerms.offer_title }), now,
+      ),
+    ]);
+    return json({ ok: true, paid: true, attention: true, reason: "Tattoo Special payment after sales close requires manual refund review.", appointmentId: appointmentRow.id });
+  }
   if (["cancelled", "archived"].includes(appointmentRow.status)) {
     if (paymentRow?.status === "paid") {
       await mirrorAppointmentToCrm(db, normalizeAppointment(appointmentRow), {
@@ -6073,6 +6138,7 @@ export async function handleAdminCreateBookingToken(request, env) {
       return errorResponse("Tattoo booking access requires the ready-to-book stage.", 409);
     }
     let reviewedSessionPlan = null;
+    let specialTerms = null;
     if (purpose === "tattoo") {
       reviewedSessionPlan = await loadTattooSessionPlan(db, submissionId);
       if (!reviewedSessionPlan || reviewedSessionPlan.session_category === "artist_review" || reviewedSessionPlan.split_policy === "artist_review") {
@@ -6085,6 +6151,16 @@ export async function handleAdminCreateBookingToken(request, env) {
         return errorResponse("Set the approved project budget before generating tattoo booking access.", 409, {
           code: "APPROVED_BUDGET_REQUIRED",
         });
+      }
+      if (submission.type === "tattoo_special") {
+        specialTerms = await db.prepare(
+          `SELECT booking_type_id, sales_closes_at, approved_price_cents, offer_title, variant_label
+           FROM tattoo_special_submission_terms WHERE submission_id = ?`
+        ).bind(submissionId).first();
+        if (!specialTerms) return errorResponse("Tattoo Special terms are missing.", 409);
+        if (new Date(specialTerms.sales_closes_at).getTime() <= Date.now()) {
+          return errorResponse("The Tattoo Special sales window has closed.", 409, { code: "SPECIALS_WINDOW_CLOSED" });
+        }
       }
     }
 
@@ -6123,20 +6199,24 @@ export async function handleAdminCreateBookingToken(request, env) {
     const tokenHash = await sha256Hex(rawToken);
     const now = new Date().toISOString();
     const requestedExpiry = asOptionalString(body.expiresAt);
-    const expiresAtMs = requestedExpiry
+    let expiresAtMs = requestedExpiry
       ? new Date(requestedExpiry).getTime()
       : Date.now() + 1000 * 60 * 60 * 24 * 30;
+    if (specialTerms) expiresAtMs = Math.min(expiresAtMs, new Date(specialTerms.sales_closes_at).getTime());
     if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
       return errorResponse("Booking link expiration must be a valid future timestamp.", 400);
     }
     const expiresAt = new Date(expiresAtMs).toISOString();
     const standardApprovedTattooOffer = purpose === "tattoo"
+      && submission.type !== "tattoo_special"
       && submission.source_path !== "/studio/direct-booking-invite";
     const hasSuppliedBookingTypes = body.allowedBookingTypes !== undefined;
     if (hasSuppliedBookingTypes && !Array.isArray(body.allowedBookingTypes)) {
       return errorResponse("Allowed booking types must be a non-empty list.", 400);
     }
-    const allowed = standardApprovedTattooOffer
+    const allowed = specialTerms
+      ? [specialTerms.booking_type_id]
+      : standardApprovedTattooOffer
       ? [...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing]
       : hasSuppliedBookingTypes
         ? body.allowedBookingTypes.map(asString).filter(Boolean)
@@ -7565,7 +7645,8 @@ export async function handleAdminListAppointments(request, env) {
     const db = requireBookingDb(env);
     const result = await db
       .prepare(
-        `SELECT a.*, bt.label AS booking_type_label,
+        `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type,
+                tst.offer_title AS special_offer_title, tst.variant_label AS special_variant_label,
                 am.provider AS meeting_provider,
                 am.provider_meeting_id,
                 am.join_url AS meeting_join_url,
@@ -7574,6 +7655,8 @@ export async function handleAdminListAppointments(request, env) {
                 am.updated_at AS meeting_updated_at
          FROM appointments a
          LEFT JOIN booking_types bt ON bt.id = a.booking_type_id
+         LEFT JOIN submissions s ON s.id = a.submission_id
+         LEFT JOIN tattoo_special_submission_terms tst ON tst.submission_id = a.submission_id
          LEFT JOIN appointment_meetings am ON am.appointment_id = a.id AND am.provider = 'zoom'
          ORDER BY a.start_at DESC
          LIMIT 100`

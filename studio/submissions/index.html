@@ -209,6 +209,8 @@
   .legend-dot.bright { background:#BE1919; }
   .legend-dot.medium { background:#6E0404; }
   .legend-dot.dark { background:#3F0808; }
+  .special-star-badge { position:absolute; top:4px; right:5px; z-index:3; color:#fff; font:900 12px/1 var(--sans); text-shadow:0 1px 2px #000; }
+  .legend-star { color:#fff; font:900 14px/1 var(--sans); }
   .slot-preview { border:5px solid var(--ring-faint); padding:12px; display:grid; gap:10px; }
   .slot-preview-list { display:grid; gap:8px; max-height:320px; overflow:auto; }
   .slot-preview-item { display:flex; justify-content:space-between; gap:12px; border-bottom:5px solid var(--ring-faint); padding-bottom:8px; }
@@ -429,6 +431,16 @@
   .tattoo-settings-list { display:grid; gap:10px; }
   .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:3px solid var(--ring-faint); padding-top:10px; }
   .tattoo-settings-row.special { grid-template-columns:minmax(0,1fr) minmax(110px,.45fr) minmax(110px,.45fr); }
+  .tattoo-specials-manager { display:grid; gap:22px; }
+  .tattoo-specials-settings { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .tattoo-specials-offers { display:grid; gap:16px; }
+  .tattoo-special-offer { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; }
+  .tattoo-special-offer__grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+  .tattoo-special-readiness { display:flex; flex-wrap:wrap; gap:8px; }
+  .tattoo-special-readiness .pill.is-ready { color:#fff; border-color:#fff; }
+  .tattoo-special-artwork { width:min(100%,320px); border:5px solid var(--ring-faint); padding:8px; }
+  .tattoo-special-artwork img { display:block; width:100%; height:auto; }
+  .tattoo-special-review { border:5px solid rgba(255,255,255,.5); padding:16px; margin:16px 0; display:grid; gap:12px; }
   .lifecycle-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:12px 0 18px; }
   .lifecycle-strip .field { min-width:0; }
   @media (max-width:760px) { .portfolio-settings-grid { grid-template-columns:1fr; } }
@@ -446,6 +458,8 @@
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
     .tattoo-settings-row.special { grid-template-columns:1fr; }
+    .tattoo-specials-settings,
+    .tattoo-special-offer__grid { grid-template-columns:1fr; }
   }
   @media (max-width:900px) {
     .layout { grid-template-columns:1fr; }
@@ -542,7 +556,7 @@
   const bookingPreviewKey = "swc_booking_admin_preview";
   const STUDIO_ADDRESS = "364 Nelson Street SW, Atlanta, GA 30313";
   const TAB_TYPES = {
-    tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "consultation", "in_person_consultation", "build_session"],
+    tattoo: ["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special", "consultation", "in_person_consultation", "build_session"],
     studio: ["studio_booking"],
     art: ["art_acquisition", "art_inquiry"],
     events: ["event_rsvp"],
@@ -600,8 +614,8 @@
       showWalkIns: false,
     },
   };
-  const TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
-  const ORIGINAL_TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "build_brief", "build_your_own", "byo", "maze_design", "special_project"]);
+  const TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "flash_claim", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special"]);
+  const ORIGINAL_TATTOO_PROJECT_TYPES = new Set(["tattoo_inquiry", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special"]);
   const HOME_DAY_COLORS = {
     tattoo: "var(--color-tattooing,#6E0404)",
     art: "var(--color-art,#0039BD)",
@@ -648,6 +662,7 @@
   let portfolioBatch = null;
   let portfolioBatchUploading = false;
   let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
+  let tattooSpecials = { settings: {}, offers: [], media: [], readiness: {} };
   const tattooSessionPlans = new Map();
   const sessionEstimateCopyFields = [
     ["sectionHeading", "Section heading", "input"],
@@ -1352,7 +1367,7 @@
     const statusOptions = [["", "ALL STATUSES"], ["new", "NEW"], ["reviewing", "REVIEWING"], ["approved", "APPROVED"], ["declined", "DECLINED"], ["booked", "BOOKED"], ["cancelled", "CANCELLED"], ["archived", "ARCHIVED"]];
     let html = `<select id="statusFilter" aria-label="Filter by status">${statusOptions.map(([v, l]) => `<option value="${v}"${v === statusValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     if (activeTab === "tattoo") {
-      const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["maze_design", "BUILD A MAZE"], ["special_project", "SPECIAL PROJECT"], ["consultation", "CONSULTATION"], ["build_session", "IN-PERSON BUILD SESSION"]];
+      const typeOptions = [["", "ALL TATTOO TYPES"], ["tattoo_inquiry", "TATTOO INQUIRY"], ["flash_claim", "FLASH CLAIM"], ["build_brief", "BUILD YOUR OWN"], ["maze_design", "BUILD A MAZE"], ["special_project", "SPECIAL PROJECT"], ["tattoo_special", "TATTOO SPECIAL"], ["consultation", "CONSULTATION"], ["build_session", "IN-PERSON BUILD SESSION"]];
       html += `<select id="typeFilter" aria-label="Filter by type">${typeOptions.map(([v, l]) => `<option value="${v}"${v === typeValue ? " selected" : ""}>${l}</option>`).join("")}</select>`;
     }
     toolbarEl.innerHTML = html;
@@ -1375,6 +1390,7 @@
         <button class="subnav-btn ${subView === "portfolio-settings" ? "is-active" : ""}" type="button" data-subview="portfolio-settings">Portfolio Settings</button>
         <button class="subnav-btn ${subView === "flash" ? "is-active" : ""}" type="button" data-subview="flash">Flash</button>
         <button class="subnav-btn ${subView === "designs" ? "is-active" : ""}" type="button" data-subview="designs">Designs</button>
+        <button class="subnav-btn ${subView === "specials" ? "is-active" : ""}" type="button" data-subview="specials">Specials</button>
         <button class="subnav-btn ${subView === "tattoo-settings" ? "is-active" : ""}" type="button" data-subview="tattoo-settings">Tattoo Settings</button>`;
     } else if (activeTab === "studio") {
       html = `
@@ -2644,6 +2660,73 @@
     enhanceControls(detailEl);
   }
 
+  function tattooSpecialVariantText(offer) {
+    return (offer.variants || []).map((variant) => `${variant.label}|${(Number(variant.priceCents || 0) / 100).toFixed(0)}`).join("\n");
+  }
+
+  function tattooSpecialOfferEditor(offer = {}) {
+    const isNew = !offer.id;
+    return `<form class="tattoo-special-offer" data-tattoo-special-offer-form data-offer-id="${escapeHtml(offer.id || "")}">
+      <div class="portfolio-head"><div><span class="pill">${isNew ? "New offer" : `Version ${escapeHtml(offer.versionNumber || 1)}`}</span><h3>${escapeHtml(offer.title || "New Tattoo Special")}</h3></div>${isNew ? "" : `<button class="button danger-button" type="button" data-archive-special-offer="${escapeHtml(offer.id)}">${offer.archivedAt ? "Archived" : "Archive / Delete"}</button>`}</div>
+      <p class="contact">Saving price, duration, deposit, mode, references, participants, or variants creates a new immutable offer version. Existing submissions and links keep their original terms.</p>
+      <div class="tattoo-special-offer__grid">
+        <label>Title<input name="title" required maxlength="200" value="${escapeHtml(offer.title || "")}"></label>
+        <label>Slug<input name="slug" required maxlength="160" value="${escapeHtml(offer.slug || "")}"></label>
+        <label>Display order<input name="sortOrder" type="number" value="${escapeHtml(offer.sortOrder ?? 0)}"></label>
+        <label>Duration (minutes)<input name="durationMinutes" type="number" min="30" step="30" required value="${escapeHtml(offer.durationMinutes || 120)}"></label>
+        <label>Deposit (dollars)<input name="depositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(offer.depositCents ?? tattooSpecials.settings.defaultDepositCents ?? 5000) / 100)}"></label>
+        <label>Mode<select name="mode"><option value="direct" ${offer.mode !== "review" ? "selected" : ""}>Direct booking</option><option value="review" ${offer.mode === "review" ? "selected" : ""}>Complexity review</option></select></label>
+        <label>References<select name="referenceRequirement"><option value="optional" ${offer.referenceRequirement !== "required" ? "selected" : ""}>Optional</option><option value="required" ${offer.referenceRequirement === "required" ? "selected" : ""}>Required</option></select></label>
+        <label>Participants<select name="participantCount"><option value="1" ${Number(offer.participantCount || 1) === 1 ? "selected" : ""}>One adult</option><option value="2" ${Number(offer.participantCount) === 2 ? "selected" : ""}>Two adults</option></select></label>
+        <label class="check"><input name="active" type="checkbox" ${offer.active !== false ? "checked" : ""}><span>Public while window is open</span></label>
+      </div>
+      <label>Public description<textarea name="description" maxlength="3000" rows="3">${escapeHtml(offer.description || "")}</textarea></label>
+      <label>Price variants <span class="contact">One per line: Label|price in dollars</span><textarea name="variants" rows="4" required>${escapeHtml(tattooSpecialVariantText(offer) || "Standard|200")}</textarea></label>
+      <div class="booking-actions"><button class="button" type="submit">${isNew ? "Create Offer" : "Save New Version"}</button></div>
+    </form>`;
+  }
+
+  async function loadTattooSpecials() {
+    tattooSpecials = await api("/api/admin/tattoo/specials");
+  }
+
+  async function renderTattooSpecialsManager() {
+    layoutEl.classList.add("single");
+    listPane.classList.add("hidden");
+    toolbarEl.innerHTML = "";
+    detailEl.innerHTML = '<p class="empty">Loading Tattoo Specials…</p>';
+    await loadTattooSpecials();
+    const settings = tattooSpecials.settings || {};
+    const readiness = tattooSpecials.readiness || {};
+    const selectedMedia = (tattooSpecials.media || []).find((item) => item.id === settings.artwork?.mediaId);
+    detailEl.innerHTML = `<section class="tattoo-specials-manager">
+      <div class="portfolio-head"><div><span class="pill">Campaign / Tattoo Special</span><h2>Tattoo Specials</h2><p class="contact">Permanent public surface, sales window, Shared Media artwork, immutable offer versions, and booking readiness.</p></div><div class="booking-actions"><a class="button" href="/tattoos/specials/" target="_blank" rel="noopener">Preview Public Page</a><button class="button" type="button" data-refresh-tattoo-specials>Refresh</button></div></div>
+      <div class="tattoo-special-readiness" aria-label="Booking readiness">
+        <span class="pill ${readiness.database ? "is-ready" : ""}">Database ${readiness.database ? "ready" : "missing"}</span>
+        <span class="pill ${readiness.artwork ? "is-ready" : ""}">Artwork ${readiness.artwork ? "ready" : "missing"}</span>
+        <span class="pill ${readiness.activeOffers ? "is-ready" : ""}">${escapeHtml(readiness.activeOffers || 0)} active offers</span>
+        <span class="pill ${readiness.salesWindowValid ? "is-ready" : ""}">Window ${readiness.salesWindowValid ? "valid" : "invalid"}</span>
+        <span class="pill">Public state: ${escapeHtml(settings.state || "closed")}</span>
+      </div>
+      <form class="tattoo-settings-card" data-tattoo-special-settings-form>
+        <h3>Campaign settings</h3>
+        <div class="tattoo-specials-settings">
+          <label>Sales opens (Eastern)<input name="salesOpensAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(settings.salesOpensAt))}"></label>
+          <label>Sales closes (Eastern)<input name="salesClosesAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(settings.salesClosesAt))}"></label>
+          <label>Default deposit (dollars)<input name="defaultDepositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(settings.defaultDepositCents || 0) / 100)}"></label>
+          <label>Shared Media artwork<select name="artworkMediaId"><option value="">No artwork</option>${(tattooSpecials.media || []).map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === settings.artwork?.mediaId ? "selected" : ""}>${escapeHtml(item.title || item.filename || item.id)}</option>`).join("")}</select></label>
+          <label class="check"><input name="enabled" type="checkbox" ${settings.enabled ? "checked" : ""}><span>Campaign enabled</span></label>
+        </div>
+        ${selectedMedia?.url ? `<figure class="tattoo-special-artwork"><img src="${escapeHtml(selectedMedia.url)}" alt="${escapeHtml(selectedMedia.alt || "Selected Tattoo Specials artwork")}"></figure>` : ""}
+        <div class="booking-actions"><button class="button" type="submit">Save Campaign Settings</button></div>
+      </form>
+      <section class="tattoo-specials-offers"><div class="portfolio-head"><div><h3>Current offers</h3><p class="contact">Reorder, activate, archive, or create a future-facing version. Used offers archive instead of deleting.</p></div></div>${(tattooSpecials.offers || []).map(tattooSpecialOfferEditor).join("") || '<p class="empty">No offers configured.</p>'}</section>
+      <section class="tattoo-specials-offers"><h3>Add an offer</h3>${tattooSpecialOfferEditor()}</section>
+      <div class="contact" id="tattooSpecialsStatus" role="status" aria-live="polite"></div>
+    </section>`;
+    enhanceControls(detailEl);
+  }
+
   async function renderDirectInviteManager() {
     layoutEl.classList.add("single");
     listPane.classList.add("hidden");
@@ -2904,6 +2987,11 @@
       return;
     }
 
+    if (activeTab === "tattoo" && subView === "specials") {
+      renderTattooSpecialsManager().catch((error) => setStatus(error.message));
+      return;
+    }
+
     if (activeTab === "events") {
       renderEventsTab();
       return;
@@ -3152,7 +3240,8 @@
   function scopedAppointments() {
     const config = AVAILABILITY_CONFIGS[activeTab];
     if (!config || !config.bookingTypeIds) return appointments;
-    return appointments.filter((a) => config.bookingTypeIds.includes(a.bookingTypeId));
+    return appointments.filter((a) => config.bookingTypeIds.includes(a.bookingTypeId)
+      || (activeTab === "tattoo" && (a.isTattooSpecial || String(a.bookingTypeId || "").startsWith("tattoo_special_"))));
   }
 
   function liveAppointments() {
@@ -3371,6 +3460,7 @@
     if (artCount) parts.push(`${artCount} Studio Visit${artCount !== 1 ? "s" : ""}`);
     if (studioCount) parts.push(`${studioCount} room booking${studioCount !== 1 ? "s" : ""}`);
     if (eventCount) parts.push(`${eventCount} event${eventCount !== 1 ? "s" : ""}`);
+    if (entry?.appts.some((appointment) => appointment.isTattooSpecial)) parts.push("Tattoo Special");
     return `${dayLabel}: ${parts.length ? parts.join(", ") : "0 bookings, 0 events"}`;
   }
 
@@ -3411,11 +3501,15 @@
 
   function homeAppointmentCard(appointment, includeDate = false) {
     const kind = homeAppointmentKind(appointment);
-    const kindLabel = kind === "art" ? "Art Studio" : "Tattoo";
+    const kindLabel = appointment.isTattooSpecial ? "Tattoo Special" : kind === "art" ? "Art Studio" : "Tattoo";
+    const appointmentLabel = appointment.isTattooSpecial
+      ? (appointment.specialOfferTitle || "Tattoo Special")
+      : titleize(appointment.bookingTypeId || "session");
     return `
       <button class="hub-entry kind-appt kind-${escapeHtml(kind)}" type="button" data-home-appointment="${escapeHtml(appointment.id || "")}" data-appt-submission="${escapeHtml(appointment.submissionId || "")}">
         <span class="he-top"><span class="he-kind">${escapeHtml(kindLabel)}</span><span class="he-when">${escapeHtml(homeWhen(appointment.startAt, includeDate))}</span></span>
         <span class="name">${escapeHtml(appointment.clientName || "Unnamed")}</span>
+        ${appointment.isTattooSpecial ? `<span class="pill">Tattoo Special · ${escapeHtml(appointmentLabel)}</span>` : ""}
         <span class="appt-meta">${escapeHtml(titleize(appointment.bookingTypeId || "session"))} · ${escapeHtml(appointment.status || "")}</span>
       </button>`;
   }
@@ -3472,6 +3566,7 @@
             <span class="legend-item"><span class="legend-dot art"></span>Studio Visits</span>
             <span class="legend-item"><span class="legend-dot studio"></span>Room Bookings</span>
             <span class="legend-item"><span class="legend-dot events"></span>Events</span>
+            <span class="legend-item"><span class="legend-star" aria-hidden="true">★</span>Tattoo Special</span>
           </div>
         </div>
         <div class="hub-body">
@@ -3513,7 +3608,8 @@
       const today = key === todayKey ? " today" : "";
       const dayLabel = new Date(year, month - 1, d, 12).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
       const label = homeDayCountLabel(dayLabel, entry);
-      cells.push(`<button class="day-button ${cls}${today}${sel}" type="button" data-home-day="${escapeHtml(key)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"${homeDayStyle(fillColors, visualItems.length)}>${homeDayFillHtml(fillColors, visualItems.length)}<span class="day-number">${d}</span></button>`);
+      const hasSpecial = Boolean(entry?.appts.some((appointment) => appointment.isTattooSpecial));
+      cells.push(`<button class="day-button ${cls}${today}${sel}" type="button" data-home-day="${escapeHtml(key)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"${homeDayStyle(fillColors, visualItems.length)}>${homeDayFillHtml(fillColors, visualItems.length)}${hasSpecial ? '<span class="special-star-badge" aria-hidden="true">★</span>' : ""}<span class="day-number">${d}</span></button>`);
     }
     cal.innerHTML = `<div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div class="calendar-grid">${cells.join("")}</div>`;
   }
@@ -3536,11 +3632,12 @@
     const apptCards = [...entry.appts].sort((a, b) => new Date(a.startAt) - new Date(b.startAt)).map((a) => {
       const time = a.startAt ? new Date(a.startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
       const kind = homeAppointmentKind(a);
-      const kindLabel = kind === "art" ? "Art Studio" : "Tattoo";
+      const kindLabel = a.isTattooSpecial ? "Tattoo Special" : kind === "art" ? "Art Studio" : "Tattoo";
       return `
         <button class="hub-entry kind-appt kind-${escapeHtml(kind)}" type="button" data-home-appointment="${escapeHtml(a.id || "")}" data-appt-submission="${escapeHtml(a.submissionId || "")}">
           <span class="he-top"><span class="he-kind">${escapeHtml(kindLabel)}</span><span class="appt-time">${escapeHtml(time)}</span></span>
           <span class="name">${escapeHtml(a.clientName || "Unnamed")}</span>
+          ${a.isTattooSpecial ? `<span class="pill">Tattoo Special · ${escapeHtml(a.specialOfferTitle || "Tattoo Special")}</span>` : ""}
           <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))} · ${escapeHtml(a.status || "")}</span>
         </button>`;
     }).join("");
@@ -3774,6 +3871,27 @@ ${meetingLines}
     `;
   }
 
+  function renderMazeArchivePanel(submission) {
+    if (submission.type !== "maze_design") return "";
+    const archive = submission.mazeArchive || null;
+    if (!archive) return `<div class="assist-panel"><label>Maze Archive</label><p class="contact">No Archive permission was recorded. Existing submissions are not eligible retroactively.</p></div>`;
+    const state = archive.curationStatus || "not_candidate";
+    const summary = `Consent: ${titleize(archive.consentStatus || "not granted")} · Attribution: ${archive.publicCredit || "Anonymous"} · Explanation: ${archive.includeExplanation ? "may be considered" : "private"}`;
+    let controls = "";
+    if (state === "candidate") controls = `
+      <div class="grid" style="margin-top:12px;">
+        <div class="field"><label for="mazeArchiveTitle">Reviewed public title</label><input id="mazeArchiveTitle" maxlength="200" value="Maze by ${escapeHtml(archive.publicCredit || "Anonymous")}"></div>
+        <div class="field"><label for="mazeArchiveAlt">Image alt text</label><input id="mazeArchiveAlt" maxlength="500" placeholder="Describe the maze lines and shapes" required></div>
+      </div>
+      ${archive.includeExplanation ? `<div class="field" style="margin-top:12px;"><label for="mazeArchiveExplanation">Reviewed public explanation (optional)</label><textarea id="mazeArchiveExplanation" rows="4" placeholder="Write or edit the approved public version. Nothing is copied automatically."></textarea><p class="contact">Permitted source explanation: ${escapeHtml(archive.permittedExplanation || "No explanation supplied.")}</p></div>` : ""}
+      <div class="field" style="margin-top:12px;"><label for="mazeArchiveReviewNote">Private curation note</label><textarea id="mazeArchiveReviewNote" rows="2"></textarea></div>
+      <div class="booking-actions"><button class="button" type="button" data-maze-archive-promote="${escapeHtml(submission.id)}">Create private Archive draft</button><button class="button danger-button" type="button" data-maze-archive-action="reject">Reject candidate</button></div>`;
+    if (state === "rejected") controls = `<div class="booking-actions"><button class="button" type="button" data-maze-archive-action="restore">Restore candidate</button></div>`;
+    if (state === "promoted") controls = `<p class="contact">Private Archive identity: ${escapeHtml(archive.archiveTitle || archive.archiveEntityId)}. Publish it only through the canonical record and dossier gates.</p><div class="booking-actions">${archive.archiveSlug ? `<a class="button" href="/archive/records/${encodeURIComponent(archive.archiveSlug)}/?preview=1" target="_blank" rel="noopener">Preview dossier</a>` : ""}<button class="button danger-button" type="button" data-maze-archive-action="withdraw">Withdraw from Archive</button></div>`;
+    if (state === "withdrawn") controls = `<p class="contact">Public eligibility has been removed. The private source submission and audit trail are preserved.</p>`;
+    return `<div class="assist-panel" id="mazeArchivePanel"><label>Maze Archive</label><p class="contact">${escapeHtml(summary)}</p><div class="value" style="margin-top:10px;">Curation: ${escapeHtml(titleize(state))}<br>Consent copy: ${escapeHtml(archive.consentVersion || "Unknown")}</div>${controls}</div>`;
+  }
+
   function previewUrl() {
     const path = window.location.protocol === "file:"
       ? "../../booking/index.html"
@@ -3994,6 +4112,9 @@ ${meetingLines}
   }
 
   function defaultAllowedBookingTypes(submission, purpose = defaultTokenPurpose(submission)) {
+    if (submission.type === "tattoo_special" && submission.payload?.booking_type_id) {
+      return [submission.payload.booking_type_id];
+    }
     return purpose === "consultation"
       ? ["consult_in_person"]
       : ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"];
@@ -4006,6 +4127,9 @@ ${meetingLines}
   function renderBookingTokenControls(submission) {
     const purpose = defaultTokenPurpose(submission);
     const defaults = defaultAllowedBookingTypes(submission, purpose);
+    const typeOptions = submission.type === "tattoo_special"
+      ? [[submission.payload?.booking_type_id || "", `${submission.payload?.special_offer_title || "Tattoo Special"} · ${submission.payload?.duration_minutes || 0} minutes`]]
+      : PRIVATE_BOOKING_TYPE_OPTIONS;
     return `
       <div class="field" style="margin-top:10px;" id="tokenOptions" data-default-token-types="${escapeHtml(sortedTypeList(defaults))}" data-default-token-purpose="${escapeHtml(purpose)}">
         <label>Booking Link Controls</label>
@@ -4015,7 +4139,7 @@ ${meetingLines}
           <select id="tokenPurpose"><option value="consultation" ${purpose === "consultation" ? "selected" : ""}>Prerequisite consultation</option><option value="tattoo" ${purpose === "tattoo" ? "selected" : ""}>Tattoo appointment</option></select>
         </div>
         <div class="booking-actions" style="align-items:flex-start;">
-          ${PRIVATE_BOOKING_TYPE_OPTIONS.map(([value, label]) => `
+          ${typeOptions.map(([value, label]) => `
             <label class="check" style="margin:0;min-width:190px;">
               <input type="checkbox" data-token-type value="${escapeHtml(value)}"${defaults.includes(value) ? " checked" : ""} disabled>
               <span class="check-label">${escapeHtml(label)}</span>
@@ -4044,7 +4168,10 @@ ${meetingLines}
     }
     const defaultKey = document.getElementById("tokenOptions")?.dataset.defaultTokenTypes || "";
     const purpose = document.getElementById("tokenPurpose")?.value || "tattoo";
-    const compatibleTypes = purpose === "consultation"
+    const submission = submissions.find((item) => item.id === submissionId);
+    const compatibleTypes = submission?.type === "tattoo_special"
+      ? new Set([submission.payload?.booking_type_id])
+      : purpose === "consultation"
       ? new Set(["consult_in_person"])
       : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
     if (selected.some((type) => !compatibleTypes.has(type))) {
@@ -4061,6 +4188,33 @@ ${meetingLines}
     const expiresAt = localDateTimeToIso(document.getElementById("tokenExpiresAt")?.value || "");
     if (expiresAt) body.expiresAt = expiresAt;
     return body;
+  }
+
+  function renderTattooSpecialReview(submission) {
+    if (submission.type !== "tattoo_special") return "";
+    const payload = submission.payload || {};
+    const price = Number(payload.approved_price_cents || payload.quoted_price_cents || 0);
+    const review = payload.booking_mode === "review";
+    const participants = Array.isArray(payload.participants) ? payload.participants : [];
+    return `<section class="tattoo-special-review">
+      <div><span class="pill">Tattoo Special</span><h3>${escapeHtml(payload.special_offer_title || "Tattoo Special")}${payload.special_variant_label ? ` — ${escapeHtml(payload.special_variant_label)}` : ""}</h3></div>
+      <div class="tattoo-special-offer__grid">
+        ${detailField("Advertised total", money(Number(payload.quoted_price_cents || 0), "USD"))}
+        ${detailField("Deposit credit", money(Number(payload.deposit_cents || 0), "USD"))}
+        ${detailField("Duration", `${Number(payload.duration_minutes || 0)} minutes`)}
+        ${detailField("Mode", review ? "Complexity review" : "Direct")}
+        ${detailField("Offer version", payload.special_offer_version_id || "")}
+        ${detailField("Participants", participants.map((person) => `${person.name} · ${person.email} · ${person.phone}`).join("\n"))}
+      </div>
+      ${review && !["booked", "declined"].includes(submission.status) ? `<div class="tattoo-special-offer__grid">
+        <label>Exact approved price (dollars)<input id="specialApprovedPrice" type="number" min="${escapeHtml(Number(payload.quoted_price_cents || 0) / 100)}" step="1" value="${escapeHtml(price / 100)}"></label>
+        <label style="grid-column:span 2;">Review note<textarea id="specialReviewNote" rows="3">${escapeHtml(submission.internalNotes || "")}</textarea></label>
+      </div><div class="booking-actions">
+        <button class="button" type="button" data-special-review-outcome="approved" data-submission-id="${escapeHtml(submission.id)}">Approve &amp; Send Link</button>
+        <button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Request Simplification</button>
+        <button class="button danger-button" type="button" data-special-review-outcome="declined" data-submission-id="${escapeHtml(submission.id)}">Decline</button>
+      </div>` : `<p class="contact">${review ? "Review decision is recorded in the event history. Only the primary purchaser receives automated messages." : "This direct offer was server-approved at submission. Only the primary purchaser receives automated messages."}</p>`}
+    </section>`;
   }
 
   function renderDetail(submission) {
@@ -4133,9 +4287,11 @@ ${meetingLines}
 
       ${typeFields(submission)}
       ${renderFiles(submission)}
+      ${renderMazeArchivePanel(submission)}
       ${renderBriefDocument(submission)}
       ${renderPaymentSummary(submission)}
       ${renderAdditionalRenderings(submission)}
+      ${renderTattooSpecialReview(submission)}
       ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<div class="session-plan-editor" id="tattooSessionPlanEditor"></div>` : ""}
 
       <div class="actions">
@@ -4212,7 +4368,9 @@ ${meetingLines}
       const purposeSelect = document.getElementById("tokenPurpose");
       const syncTokenTypes = () => {
         const purpose = purposeSelect?.value || "tattoo";
-        const compatible = purpose === "consultation" ? new Set(["consult_in_person"]) : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
+        const compatible = submission.type === "tattoo_special"
+          ? new Set([submission.payload?.booking_type_id])
+          : purpose === "consultation" ? new Set(["consult_in_person"]) : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
         document.querySelectorAll("[data-token-type]").forEach((input) => {
           const allowed = compatible.has(input.value);
           input.disabled = true;
@@ -4560,9 +4718,10 @@ ${meetingLines}
       if (!a.startAt) continue;
       const key = dayKey(a.startAt);
       const hours = a.endAt ? Math.max(0, (new Date(a.endAt) - new Date(a.startAt)) / 3600000) : 0;
-      const entry = stats.get(key) || { hours: 0, count: 0 };
+      const entry = stats.get(key) || { hours: 0, count: 0, hasSpecial: false };
       entry.hours += hours;
       entry.count += 1;
+      entry.hasSpecial = entry.hasSpecial || Boolean(a.isTattooSpecial);
       stats.set(key, entry);
     }
     return stats;
@@ -4595,7 +4754,7 @@ ${meetingLines}
       const isSelected = key === selectedCalendarDay;
       cells.push(`
         <button class="day-button ${dayClass(entry)}${isSelected ? " selected" : ""}" type="button" data-day="${escapeHtml(key)}" aria-label="${escapeHtml(`${key}: ${label}`)}" title="${escapeHtml(label)}">
-          ${day}
+          ${entry?.hasSpecial ? '<span class="special-star-badge" aria-hidden="true">★</span>' : ""}${day}
         </button>
       `);
     }
@@ -4644,6 +4803,7 @@ ${meetingLines}
             <span class="appt-name">${escapeHtml(a.clientName || "Unnamed")}${meetingLabel ? ` / ${escapeHtml(meetingLabel)}` : ""}</span>
             <span class="appt-time">${escapeHtml(dayFilter ? `${start} – ${end}` : `${dateStr} ${start}`)}</span>
           </div>
+          ${a.isTattooSpecial ? `<span class="pill">Tattoo Special · ${escapeHtml(a.specialOfferTitle || "Tattoo Special")}</span>` : ""}
           <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))}${deposit ? ` · ${deposit} deposit` : ""}${a.status ? ` · ${a.status}` : ""}</span>
           ${manageButton ? `<div class="booking-actions" style="margin-top:6px;">${manageButton}</div>` : ""}
         </div>
@@ -4865,6 +5025,7 @@ ${meetingLines}
             <span class="legend-item"><span class="legend-dot bright"></span>0–2h booked</span>
             <span class="legend-item"><span class="legend-dot medium"></span>2–5h booked</span>
             <span class="legend-item"><span class="legend-dot dark"></span>5h+ booked</span>
+            <span class="legend-item"><span class="legend-star" aria-hidden="true">★</span>Tattoo Special</span>
           </div>
         </div>
         <div class="appt-day-panel">
@@ -5373,6 +5534,90 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("click", async (event) => {
+    const refreshSpecials = event.target.closest("[data-refresh-tattoo-specials]");
+    if (refreshSpecials) {
+      setStatus("Refreshing Tattoo Specials");
+      await renderTattooSpecialsManager();
+      setStatus("Tattoo Specials refreshed");
+      return;
+    }
+    const archiveSpecial = event.target.closest("[data-archive-special-offer]");
+    if (archiveSpecial) {
+      if (!window.confirm("Archive this used offer, or permanently delete it if it has never been used?")) return;
+      setStatus("Archiving Tattoo Special offer");
+      await api(`/api/admin/tattoo/specials/offers/${encodeURIComponent(archiveSpecial.dataset.archiveSpecialOffer)}`, { method: "DELETE" });
+      await renderTattooSpecialsManager();
+      setStatus("Tattoo Special offer updated");
+      return;
+    }
+    const specialReview = event.target.closest("[data-special-review-outcome]");
+    if (specialReview) {
+      const outcome = specialReview.dataset.specialReviewOutcome;
+      const approvedPriceDollars = Number(document.getElementById("specialApprovedPrice")?.value || 0);
+      const note = document.getElementById("specialReviewNote")?.value.trim() || "";
+      if (outcome === "approved" && (!Number.isFinite(approvedPriceDollars) || approvedPriceDollars <= 0)) {
+        setStatus("Enter the exact approved price");
+        return;
+      }
+      specialReview.disabled = true;
+      setStatus(`Saving Tattoo Special review: ${outcome}`);
+      try {
+        await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(specialReview.dataset.submissionId)}/review`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ outcome, approvedPriceCents: Math.round(approvedPriceDollars * 100), note }),
+        });
+        await refreshActiveSubmissionDetail();
+        setStatus(outcome === "approved" ? "Tattoo Special approved and booking link sent" : "Tattoo Special review saved");
+      } catch (error) {
+        setStatus(error.message || "Tattoo Special review could not be saved");
+        if (specialReview.isConnected) specialReview.disabled = false;
+      }
+      return;
+    }
+    const mazePromote = event.target.closest("[data-maze-archive-promote]");
+    if (mazePromote) {
+      const title = document.getElementById("mazeArchiveTitle")?.value.trim() || "";
+      const altText = document.getElementById("mazeArchiveAlt")?.value.trim() || "";
+      if (!title || !altText) { setStatus("A reviewed Maze title and alt text are required"); return; }
+      mazePromote.disabled = true;
+      try {
+        setStatus("Copying the reviewed Maze image into a private Archive draft");
+        await api(`/api/admin/submissions/${encodeURIComponent(mazePromote.dataset.mazeArchivePromote)}/maze-archive/promote`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title, altText, publicExplanation: document.getElementById("mazeArchiveExplanation")?.value.trim() || "", reviewNote: document.getElementById("mazeArchiveReviewNote")?.value.trim() || "" }),
+        });
+        await refreshActiveSubmissionDetail();
+        setStatus("Private Maze Archive draft created");
+      } catch (error) {
+        setStatus(error.message || "Maze Archive promotion failed");
+        if (mazePromote.isConnected) mazePromote.disabled = false;
+      }
+      return;
+    }
+
+    const mazeAction = event.target.closest("[data-maze-archive-action]");
+    if (mazeAction && activeId) {
+      const action = mazeAction.dataset.mazeArchiveAction;
+      if (action === "withdraw" && !window.confirm("Withdraw this Maze from every public Archive surface immediately? The private source and audit history will remain.")) return;
+      mazeAction.disabled = true;
+      try {
+        setStatus(`${titleize(action)} Maze Archive entry`);
+        await api(`/api/admin/submissions/${encodeURIComponent(activeId)}/maze-archive`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action, reviewNote: document.getElementById("mazeArchiveReviewNote")?.value.trim() || "" }),
+        });
+        await refreshActiveSubmissionDetail();
+        setStatus(action === "withdraw" ? "Maze removed from public Archive eligibility" : `Maze candidate ${action}d`);
+      } catch (error) {
+        setStatus(error.message || "Maze Archive action failed");
+        if (mazeAction.isConnected) mazeAction.disabled = false;
+      }
+      return;
+    }
+
     const briefAction = event.target.closest("[data-brief-generate],[data-brief-generate-email],[data-brief-email],[data-brief-revoke],[data-brief-reissue],[data-brief-reissue-email]");
     if (briefAction) {
       const submissionId = briefAction.dataset.briefGenerate
@@ -6198,6 +6443,54 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const specialSettingsForm = event.target.closest("[data-tattoo-special-settings-form]");
+    if (specialSettingsForm) {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(specialSettingsForm));
+      setStatus("Saving Tattoo Specials campaign settings");
+      await api("/api/admin/tattoo/specials", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          salesOpensAt: localDateTimeToIso(values.salesOpensAt),
+          salesClosesAt: localDateTimeToIso(values.salesClosesAt),
+          defaultDepositCents: Math.round(Number(values.defaultDepositDollars || 0) * 100),
+          artworkMediaId: String(values.artworkMediaId || ""),
+          enabled: specialSettingsForm.elements.enabled.checked,
+        }),
+      });
+      await renderTattooSpecialsManager();
+      setStatus("Tattoo Specials campaign settings saved");
+      return;
+    }
+
+    const specialOfferForm = event.target.closest("[data-tattoo-special-offer-form]");
+    if (specialOfferForm) {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(specialOfferForm));
+      const variants = String(values.variants || "").split(/\r?\n/).map((line, index) => {
+        const [label, price] = line.split("|");
+        return { label: String(label || "").trim(), priceCents: Math.round(Number(price || 0) * 100), sortOrder: (index + 1) * 10 };
+      }).filter((variant) => variant.label);
+      const offerId = specialOfferForm.dataset.offerId;
+      setStatus(offerId ? "Creating a new immutable offer version" : "Creating Tattoo Special offer");
+      await api(offerId ? `/api/admin/tattoo/specials/offers/${encodeURIComponent(offerId)}` : "/api/admin/tattoo/specials/offers", {
+        method: offerId ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: String(values.title || "").trim(), slug: String(values.slug || "").trim(),
+          description: String(values.description || "").trim(), sortOrder: Number(values.sortOrder || 0),
+          durationMinutes: Number(values.durationMinutes || 0), depositCents: Math.round(Number(values.depositDollars || 0) * 100),
+          mode: values.mode, referenceRequirement: values.referenceRequirement,
+          participantCount: Number(values.participantCount || 1), active: specialOfferForm.elements.active.checked,
+          variants,
+        }),
+      });
+      await renderTattooSpecialsManager();
+      setStatus(offerId ? "New offer version is active; earlier terms remain intact" : "Tattoo Special offer created");
+      return;
+    }
+
     const tattooSettingsForm = event.target.closest("[data-tattoo-settings-form]");
     if (tattooSettingsForm) {
       event.preventDefault();

@@ -9,6 +9,8 @@ import {
   handleCreateSubmission,
   handleDeleteSubmission,
   handleGetSubmission,
+  handlePromoteMazeArchiveSubmission,
+  handleUpdateMazeArchiveSubmission,
   handleUpdateSubmission,
 } from "../functions/api/submissions/_lib.js";
 import { handleConstructApi } from "../functions/api/construct/_lib.js";
@@ -87,6 +89,13 @@ import {
   renderBriefHtml,
   validateBriefTemplateContent,
 } from "../functions/api/brief-documents/_templates.js";
+import {
+  handleAdminTattooSpecialOffer,
+  handleAdminTattooSpecialReview,
+  handleAdminTattooSpecials,
+  handleCreateTattooSpecialSubmission,
+  handlePublicTattooSpecials,
+} from "../functions/api/tattoo-specials/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TATTOO_BUDGET_RANGES = [
@@ -1757,6 +1766,7 @@ test("Maze submissions require generated artifacts and snapshot their wall and s
   const env = {
     SUBMISSIONS_DB: new LocalD1(database),
     SUBMISSION_FILES: new MemoryBucket(),
+    SUBMISSIONS_ADMIN_TOKEN: "maze-test-admin",
   };
   const payload = {
     type: "maze_design",
@@ -1792,12 +1802,420 @@ test("Maze submissions require generated artifacts and snapshot their wall and s
       },
     ],
   ), env);
-  assert.equal(created.status, 200);
-  const submissionId = (await created.json()).submissionId;
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, createdPayload.detail || createdPayload.error);
+  const submissionId = createdPayload.submissionId;
   const saved = JSON.parse(
     database.prepare("SELECT payload_json FROM submissions WHERE id = ?").get(submissionId).payload_json,
   );
   assert.deepEqual(saved.maze_artifact_snapshot, { wallCount: 1, shapeCount: 1 });
+  assert.equal(database.prepare("SELECT status FROM maze_archive_consents WHERE submission_id=?").get(submissionId).status, "not_granted");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_archive_entries WHERE submission_id=?").get(submissionId).count, 0);
+  const ineligible = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, { title:"No Consent",altText:"A maze." }, "maze-test-admin"), env, submissionId);
+  assert.equal(ineligible.status, 409);
+});
+
+test("Tattoo Specials public surface distinguishes scheduled, open, and closed sales windows", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database) };
+  const now = Date.now();
+
+  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'")
+    .run(new Date(now + 3600000).toISOString(), new Date(now + 7200000).toISOString());
+  const scheduled = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
+  assert.equal(scheduled.state, "scheduled");
+  assert.deepEqual(scheduled.offers, []);
+
+  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=? WHERE id='default'")
+    .run(new Date(now - 7200000).toISOString(), new Date(now - 3600000).toISOString());
+  const closed = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
+  assert.equal(closed.state, "closed");
+  assert.deepEqual(closed.offers, []);
+});
+
+test("Tattoo Specials seed immutable offers and direct submissions keep server-side price, deposit, duration, and token cutoff", async () => {
+  const database = migratedDatabase();
+  const db = new LocalD1(database);
+  const bucket = new MemoryBucket();
+  const adminToken = "studio-specials-test";
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: db, SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test", SQUARE_ACCESS_TOKEN: "square-token", SQUARE_LOCATION_ID: "square-location",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: crypto.randomUUID() }; } },
+  };
+  const opens = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const closes = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'").run(opens, closes);
+
+  const publicResponse = await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env);
+  assert.equal(publicResponse.status, 200);
+  const publicPayload = await publicResponse.json();
+  assert.equal(publicPayload.state, "open");
+  assert.equal(publicPayload.offers.length, 6);
+  assert.equal(publicPayload.offers.find((offer) => offer.id === "special-anime").variants.length, 2);
+
+  const directResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-palm",
+    variantId: "special-palm-v1-standard",
+    idempotencyKey: "special-direct-palm-1",
+    name: "Primary Person",
+    email: "primary@example.com",
+    phone: "4045550101",
+    ageConfirmed: "yes",
+    policyAccepted: "yes",
+    placement: "Upper arm",
+    projectDetails: "A palm-sized symbolic composition.",
+    // These values are intentionally hostile; the server must ignore them.
+    priceCents: "1",
+    depositCents: "1",
+    durationMinutes: "30",
+  }), env);
+  assert.equal(directResponse.status, 201);
+  const direct = await directResponse.json();
+  assert.equal(direct.reviewRequired, false);
+  assert.match(direct.bookingUrl, /^\/booking\/\?token=/);
+
+  const replayResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-palm", variantId: "special-palm-v1-standard", idempotencyKey: "special-direct-palm-1",
+    name: "Primary Person", email: "primary@example.com", phone: "4045550101",
+    ageConfirmed: "yes", policyAccepted: "yes", placement: "Upper arm", projectDetails: "Retry.",
+  }), env);
+  const replay = await replayResponse.json();
+  assert.equal(replayResponse.status, 200);
+  assert.equal(replay.idempotent, true);
+  assert.equal(replay.submissionId, direct.submissionId);
+  assert.equal(replay.bookingUrl, direct.bookingUrl);
+
+  const submission = database.prepare("SELECT * FROM submissions WHERE id=?").get(direct.submissionId);
+  const terms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(direct.submissionId);
+  assert.equal(submission.type, "tattoo_special");
+  assert.equal(submission.status, "approved");
+  assert.equal(submission.tattoo_stage, "ready_to_book");
+  assert.equal(terms.advertised_price_cents, 20000);
+  assert.equal(terms.approved_price_cents, 20000);
+  assert.equal(terms.deposit_cents, 5000);
+  assert.equal(terms.duration_minutes, 120);
+  const tokenRow = database.prepare("SELECT * FROM booking_tokens WHERE submission_id=?").get(direct.submissionId);
+  assert.equal(tokenRow.expires_at, closes);
+  assert.deepEqual(JSON.parse(tokenRow.allowed_booking_types_json), ["tattoo_special_palm_v1"]);
+
+  const rawToken = new URL(direct.bookingUrl, "https://example.test").searchParams.get("token");
+  const contextResponse = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`), env);
+  assert.equal(contextResponse.status, 200);
+  const context = await contextResponse.json();
+  assert.equal(context.submission.special.offerTitle, "Palm Sized Tattoo");
+  assert.equal(context.submission.special.quotedPriceCents, 20000);
+  assert.equal(context.bookingTypes[0].durationMinutes, 120);
+  assert.equal(context.bookingTypes[0].depositCents, 5000);
+
+  const agreement = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: rawToken, preference: "studio_plan", acknowledged: true, budgetAcknowledged: true,
+  }), env);
+  assert.equal(agreement.status, 200);
+  const nearCutoff = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  database.prepare("UPDATE booking_tokens SET expires_at=? WHERE submission_id=?").run(nearCutoff, direct.submissionId);
+  database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?").run(nearCutoff, direct.submissionId);
+  const appointmentStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const appointmentEnd = new Date(appointmentStart.getTime() + 120 * 60 * 1000);
+  insertAvailabilityWindow(database, {
+    id: "special-palm-window", bookingTypeId: "tattoo_special_palm_v1",
+    startAt: appointmentStart.toISOString(), endAt: appointmentEnd.toISOString(),
+  });
+  let squareRequestBody = null;
+  const checkout = await withMockFetch(async (_url, init) => {
+    squareRequestBody = JSON.parse(init.body);
+    return jsonFetchResponse({ payment_link: { id: "special-palm-link", order_id: "special-palm-order", url: "https://square.test/special" } });
+  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: rawToken, bookingTypeId: "tattoo_special_palm_v1", availabilityWindowId: "special-palm-window",
+  }), env));
+  const checkoutPayload = await checkout.json();
+  assert.equal(checkout.status, 200, checkoutPayload.detail || checkoutPayload.error);
+  assert.deepEqual(squareRequestBody.order.line_items.map((item) => item.base_price_money.amount), [5000]);
+  const specialAppointment = database.prepare("SELECT hold_expires_at,start_at,end_at FROM appointments WHERE id=?").get(checkoutPayload.appointmentId);
+  assert.ok(new Date(specialAppointment.hold_expires_at).getTime() <= new Date(nearCutoff).getTime());
+  assert.equal(specialAppointment.start_at, appointmentStart.toISOString());
+  assert.equal(specialAppointment.end_at, appointmentEnd.toISOString());
+
+  const webhookUrl = "https://example.test/api/square/webhook";
+  const signatureKey = "specials-webhook-signature";
+  const webhookBody = JSON.stringify({
+    type: "payment.updated",
+    data: { object: { payment: { id: "special-palm-payment", order_id: "special-palm-order", status: "COMPLETED" } } },
+  });
+  const webhookSignature = await squareWebhookSignatureForTest(webhookBody, signatureKey, webhookUrl);
+  database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?")
+    .run(new Date(Date.now() - 1000).toISOString(), direct.submissionId);
+  const webhookResponse = await withMockFetch(async (url) => {
+    assert.match(String(url), /\/v2\/orders\/special-palm-order$/);
+    return jsonFetchResponse({ order: { id: "special-palm-order", state: "COMPLETED" } });
+  }, () => handleSquareWebhook(new Request(webhookUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-square-hmacsha256-signature": webhookSignature },
+    body: webhookBody,
+  }), { ...env, SQUARE_WEBHOOK_SIGNATURE_KEY: signatureKey, SQUARE_WEBHOOK_NOTIFICATION_URL: webhookUrl }));
+  const webhookPayload = await webhookResponse.json();
+  assert.equal(webhookResponse.status, 200, webhookPayload.error);
+  assert.equal(webhookPayload.attention, true);
+  assert.match(webhookPayload.reason, /manual refund review/i);
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(checkoutPayload.appointmentId).status, "payment_attention");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='tattoo_special_late_payment_attention'").get(checkoutPayload.appointmentId).count, 1);
+
+  const sharedAppointment = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-two-small",
+    variantId: "special-two-small-v1-standard",
+    idempotencyKey: "special-two-participants-1",
+    name: "Primary Adult", email: "primary-adult@example.com", phone: "4045550120",
+    participant2Name: "Second Adult", participant2Email: "second-adult@example.com", participant2Phone: "4045550121",
+    ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes",
+    placement: "Two placements", projectDetails: "One small tattoo for each adult.",
+  }), env);
+  assert.equal(sharedAppointment.status, 201);
+  const shared = await sharedAppointment.json();
+  const sharedSubmission = database.prepare("SELECT payload_json,contact_email FROM submissions WHERE id=?").get(shared.submissionId);
+  const sharedPayload = JSON.parse(sharedSubmission.payload_json);
+  assert.equal(sharedPayload.participants.length, 2);
+  assert.equal(sharedPayload.automated_messages_recipient, "primary-adult@example.com");
+  assert.equal(sharedSubmission.contact_email, "primary-adult@example.com");
+  assert.equal(database.prepare("SELECT participant_count,advertised_price_cents,duration_minutes FROM tattoo_special_submission_terms WHERE submission_id=?").get(shared.submissionId).participant_count, 2);
+  assert.equal(sent.some((message) => message.to === "second-adult@example.com"), false);
+  assert.ok(sent.some((message) => message.to === "primary-adult@example.com"));
+
+  const beforeVersion = terms.offer_version_id;
+  const adminState = await (await handleAdminTattooSpecials(draftRequest("/api/admin/tattoo/specials", "GET", undefined, adminToken), env)).json();
+  const palm = adminState.offers.find((offer) => offer.id === "special-palm");
+  const versionResponse = await handleAdminTattooSpecialOffer(adminJsonRequest(
+    "/api/admin/tattoo/specials/offers/special-palm",
+    {
+      title: palm.title, slug: palm.slug, description: palm.description,
+      durationMinutes: 150, depositCents: 6000, mode: "direct",
+      referenceRequirement: "optional", participantCount: 1, active: true, sortOrder: palm.sortOrder,
+      variants: [{ label: "Standard", priceCents: 22500, sortOrder: 10 }],
+    }, adminToken, "PATCH",
+  ), env, "special-palm");
+  assert.equal(versionResponse.status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_special_offer_versions WHERE offer_id='special-palm'").get().count, 2);
+  assert.equal(database.prepare("SELECT offer_version_id FROM tattoo_special_submission_terms WHERE submission_id=?").get(direct.submissionId).offer_version_id, beforeVersion);
+  assert.equal(database.prepare("SELECT deposit_cents FROM booking_types WHERE id='tattoo_special_palm_v1'").get().deposit_cents, 5000);
+});
+
+test("Anime review requires a reference and approval can raise the exact price while preserving the advertised base", async () => {
+  const database = migratedDatabase();
+  const db = new LocalD1(database);
+  const bucket = new MemoryBucket();
+  const adminToken = "studio-specials-review";
+  const env = { SUBMISSIONS_DB: db, SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: adminToken };
+  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'")
+    .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 86400000).toISOString());
+  const base = {
+    offerId: "special-anime", variantId: "special-anime-v1-color", name: "Anime Client",
+    email: "anime@example.com", phone: "4045550110", ageConfirmed: "yes", policyAccepted: "yes",
+    placement: "Forearm", projectDetails: "Color character portrait with a detailed background.",
+  };
+  const missing = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", { ...base, idempotencyKey: "anime-missing-ref" }), env);
+  assert.equal(missing.status, 400);
+  assert.match((await missing.json()).error, /requires at least one reference/i);
+
+  const received = await handleCreateTattooSpecialSubmission(multipartRequest(
+    "/api/tattoo/specials/submissions",
+    { ...base, idempotencyKey: "anime-with-ref", referenceLink: "https://example.com/reference" },
+  ), env);
+  assert.equal(received.status, 201);
+  const requestPayload = await received.json();
+  assert.equal(requestPayload.reviewRequired, true);
+  assert.equal(requestPayload.bookingUrl, "");
+  assert.equal(database.prepare("SELECT status FROM submissions WHERE id=?").get(requestPayload.submissionId).status, "new");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(requestPayload.submissionId).count, 0);
+
+  const approved = await handleAdminTattooSpecialReview(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${requestPayload.submissionId}/review`,
+    { outcome: "approved", approvedPriceCents: 25000, note: "Approved with simplified background detail." },
+    adminToken, "PATCH",
+  ), env, requestPayload.submissionId);
+  assert.equal(approved.status, 200);
+  const approval = await approved.json();
+  assert.equal(approval.approvedPriceCents, 25000);
+  assert.match(approval.bookingUrl, /^\/booking\/\?token=/);
+  const storedTerms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(requestPayload.submissionId);
+  assert.equal(storedTerms.advertised_price_cents, 20000);
+  assert.equal(storedTerms.approved_price_cents, 25000);
+  assert.equal(storedTerms.review_outcome, "approved");
+  const savedPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(requestPayload.submissionId).payload_json);
+  assert.equal(savedPayload.approved_price_cents, 25000);
+});
+
+test("Anime approval cannot issue a new Special booking link after the sales cutoff", async () => {
+  const database = migratedDatabase();
+  const db = new LocalD1(database);
+  const adminToken = "studio-specials-cutoff";
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: db, SUBMISSION_FILES: new MemoryBucket(), SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    EMAIL: { async send(message) { sent.push(message); return { messageId: crypto.randomUUID() }; } },
+  };
+  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'")
+    .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 3600000).toISOString());
+  const received = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-anime", variantId: "special-anime-v1-bg", idempotencyKey: "anime-cutoff-review",
+    name: "Cutoff Client", email: "cutoff@example.com", phone: "4045550199", ageConfirmed: "yes", policyAccepted: "yes",
+    placement: "Forearm", projectDetails: "Character portrait.", referenceLink: "https://example.com/reference",
+  }), env);
+  const review = await received.json();
+  assert.equal(received.status, 201);
+  database.prepare("UPDATE tattoo_special_settings SET sales_closes_at=? WHERE id='default'")
+    .run(new Date(Date.now() - 1000).toISOString());
+  database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?")
+    .run(new Date(Date.now() - 1000).toISOString(), review.submissionId);
+
+  const approval = await handleAdminTattooSpecialReview(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${review.submissionId}/review`,
+    { outcome: "approved", approvedPriceCents: 15000 }, adminToken, "PATCH",
+  ), env, review.submissionId);
+  assert.equal(approval.status, 409);
+  assert.match((await approval.json()).error, /sales window has closed/i);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(review.submissionId).count, 0);
+
+  const simplification = await handleAdminTattooSpecialReview(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${review.submissionId}/review`,
+    { outcome: "simplification_requested", note: "Please remove the background and keep the portrait." }, adminToken, "PATCH",
+  ), env, review.submissionId);
+  assert.equal(simplification.status, 200);
+  assert.ok(sent.some((message) => message.to === "cutoff@example.com" && /needs simplification/i.test(message.subject)));
+});
+
+test("Maze Archive consent is explicit, separately scoped, versioned, and idempotent", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSION_FILES: bucket };
+  const base = {
+    type: "maze_design", firstName: "Jordan", lastName: "Rivera", email: "jordan@example.test",
+    age_confirmed: "yes", budget_range: "Up to $300", maze_explanation: "A private path through grief.", review_consent: "yes",
+  };
+  const files = [
+    { fieldName: "maze_image", fileName: "maze.png", contentType: "image/png", body: new Uint8Array([137,80,78,71,13,10,26,10]) },
+    { fieldName: "maze_json_file", fileName: "maze.json", contentType: "application/json", body: JSON.stringify({ mazeWalls:[{id:"w"}],mazeShapes:[] }) },
+  ];
+  const invalid = await handleCreateSubmission(multipartRequest("/api/submissions", { ...base, maze_archive_opt_in:"yes", maze_archive_attribution:"display_name" }, files), env);
+  assert.equal(invalid.status, 400);
+
+  const request = multipartRequest("/api/submissions", {
+    ...base, maze_archive_opt_in:"yes", maze_archive_attribution:"first_name", maze_archive_include_explanation:"yes",
+  }, files);
+  request.headers.set("idempotency-key", "maze-archive-consent-test");
+  const first = await handleCreateSubmission(request, env);
+  const firstPayload = await first.json();
+  assert.equal(first.status, 200, firstPayload.detail || firstPayload.error);
+  assert.equal(firstPayload.mazeArchive.consentStatus, "granted");
+  assert.equal(firstPayload.mazeArchive.publicCredit, "Jordan");
+  assert.equal(firstPayload.mazeArchive.includeExplanation, true);
+  assert.equal(firstPayload.mazeArchive.curationStatus, "candidate");
+  assert.equal(firstPayload.mazeArchive.consentVersion, "maze-archive-v1");
+
+  const replay = multipartRequest("/api/submissions", {
+    ...base, maze_archive_opt_in:"yes", maze_archive_attribution:"first_name", maze_archive_include_explanation:"yes",
+  }, files);
+  replay.headers.set("idempotency-key", "maze-archive-consent-test");
+  const second = await handleCreateSubmission(replay, env);
+  const secondPayload = await second.json();
+  assert.equal(second.status, 200);
+  assert.equal(secondPayload.idempotent, true);
+  assert.equal(secondPayload.submissionId, firstPayload.submissionId);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_archive_consents WHERE submission_id=?").get(firstPayload.submissionId).count, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_archive_entries WHERE submission_id=?").get(firstPayload.submissionId).count, 1);
+});
+
+test("Maze Archive promotion copies one presentation PNG, stays private until canonical publication, and withdraws immediately", async () => {
+  const database = migratedDatabase();
+  const bucket = new MemoryBucket();
+  const token = "maze-archive-admin";
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: token };
+  const request = multipartRequest("/api/submissions", {
+    type:"maze_design",firstName:"Avery",lastName:"Stone",email:"avery@example.test",phone:"555-0100",
+    placement:"forearm",budget_range:"Up to $300",maze_explanation:"This sentence may be considered.",review_consent:"yes",age_confirmed:"yes",
+    maze_archive_opt_in:"yes",maze_archive_attribution:"display_name",maze_archive_display_name:"A. Stone",maze_archive_include_explanation:"yes",
+  }, [
+    { fieldName:"maze_image",fileName:"maze.png",contentType:"image/png",body:new Uint8Array([137,80,78,71,13,10,26,10]) },
+    { fieldName:"maze_json_file",fileName:"maze.json",contentType:"application/json",body:JSON.stringify({mazeWalls:[{id:"w"}],mazeShapes:[{id:"s"}]}) },
+  ]);
+  const created = await handleCreateSubmission(request, env);
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, createdPayload.detail || createdPayload.error);
+  const submissionId = createdPayload.submissionId;
+
+  const rejected = await handleUpdateMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive`, { action:"reject",reviewNote:"Not this round." }, token, "PATCH"), env, submissionId);
+  assert.equal((await rejected.json()).mazeArchive.curationStatus, "rejected");
+  const restored = await handleUpdateMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive`, { action:"restore" }, token, "PATCH"), env, submissionId);
+  assert.equal((await restored.json()).mazeArchive.curationStatus, "candidate");
+
+  const originalFilesJson = database.prepare("SELECT files_json FROM submissions WHERE id=?").get(submissionId).files_json;
+  database.prepare("UPDATE submissions SET files_json='[]' WHERE id=?").run(submissionId);
+  const missingPng = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, { title:"Threshold Maze",altText:"A maze." }, token), env, submissionId);
+  assert.equal(missingPng.status, 409);
+  database.prepare("UPDATE submissions SET files_json=? WHERE id=?").run(originalFilesJson,submissionId);
+
+  const missingAlt = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, { title:"Threshold Maze" }, token), env, submissionId);
+  assert.equal(missingAlt.status, 400);
+  class FailingPromotionD1 extends LocalD1 {
+    async batch(statements) {
+      if (statements.some(statement=>statement.sql.includes("INSERT INTO content_entities"))) throw new Error("simulated database failure");
+      return super.batch(statements);
+    }
+  }
+  env.SUBMISSIONS_DB = new FailingPromotionD1(database);
+  const rolledBack = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, { title:"Threshold Maze",altText:"A maze." }, token), env, submissionId);
+  assert.equal(rolledBack.status, 500);
+  assert.equal(bucket.objects.has(`archive/maze/${submissionId}/public.png`), false);
+  env.SUBMISSIONS_DB = new LocalD1(database);
+  const promoted = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, {
+    title:"Threshold Maze",altText:"Angular black maze walls and a centered circle.",publicExplanation:"A reviewed public version.",
+  }, token), env, submissionId);
+  const promotedPayload = await promoted.json();
+  assert.equal(promoted.status, 201, promotedPayload.detail || promotedPayload.error);
+  assert.equal(promotedPayload.mazeArchive.curationStatus, "promoted");
+  const archiveKey = `archive/maze/${submissionId}/public.png`;
+  assert.equal(bucket.objects.has(archiveKey), true);
+  assert.equal([...bucket.objects.keys()].filter(key=>key===archiveKey).length, 1);
+  assert.equal(database.prepare("SELECT visibility FROM content_entities WHERE id=?").get(promotedPayload.mazeArchive.archiveEntityId).visibility, "internal");
+  assert.equal(database.prepare("SELECT state,public_visible FROM archive_dossiers WHERE entity_id=?").get(promotedPayload.mazeArchive.archiveEntityId).state, "draft");
+
+  const replay = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, {
+    title:"Threshold Maze",altText:"Angular black maze walls and a centered circle.",
+  }, token), env, submissionId);
+  assert.equal((await replay.json()).idempotent, true);
+  assert.equal(bucket.objects.size, 3); // two private source artifacts plus one public derivative
+
+  const entityId = promotedPayload.mazeArchive.archiveEntityId;
+  database.prepare("UPDATE content_entities SET visibility='public',search_visibility=1,public_at=datetime('now') WHERE id=?").run(entityId);
+  database.prepare("UPDATE archive_records SET state='published' WHERE id=?").run(entityId);
+  database.prepare("UPDATE archive_dossiers SET state='published',public_visible=1,published_at=datetime('now') WHERE entity_id=?").run(entityId);
+  const publishedState = database.prepare("SELECT ce.visibility,ad.state dossier_state,ad.public_visible,ar.state record_state FROM content_entities ce JOIN archive_dossiers ad ON ad.entity_id=ce.id JOIN archive_records ar ON ar.id=ce.id WHERE ce.id=?").get(entityId);
+  assert.equal(`${publishedState.visibility}/${publishedState.dossier_state}/${publishedState.public_visible}/${publishedState.record_state}`, "public/published/1/published");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM archive_dossier_collections adc JOIN archive_collections ac ON ac.id=adc.collection_id WHERE adc.dossier_entity_id=? AND ac.slug='maze-built-by-others' AND ac.state='published'").get(entityId).count, 1);
+  assert.equal(database.prepare(`SELECT COUNT(*) count FROM archive_dossiers ad JOIN content_entities ce ON ce.id=ad.entity_id WHERE ce.visibility='public' AND ad.state='published' AND ad.public_visible=1 AND EXISTS (SELECT 1 FROM archive_dossier_collections adc JOIN archive_collections ac ON ac.id=adc.collection_id WHERE adc.dossier_entity_id=ad.entity_id AND ac.state='published' AND (ac.slug=? OR lower(ac.name)=?))`).get("maze-built-by-others","maze-built-by-others").count, 1);
+  class QueryD1 extends LocalD1 {
+    async batch(statements) {
+      return statements.every(statement=>/^SELECT\b/i.test(statement.sql.trim()))
+        ? Promise.all(statements.map(statement=>statement.all()))
+        : super.batch(statements);
+    }
+  }
+  env.SUBMISSIONS_DB = new QueryD1(database);
+  const publicResponse = await handleConstructApi(new Request("https://example.test/api/archive/items?collection=maze-built-by-others"), env);
+  const publicPayload = await publicResponse.json();
+  assert.equal(publicPayload.items.length, 1, JSON.stringify(publicPayload));
+  assert.equal(publicPayload.items[0].title, "Threshold Maze");
+  assert.equal(publicPayload.items[0].publicCredit, "A. Stone");
+  assert.equal(publicPayload.items[0].primaryImageAlt, "Angular black maze walls and a centered circle.", JSON.stringify(publicPayload.items[0]));
+  assert.match(publicPayload.items[0].primaryImage, /\/api\/construct\/entity-media\//, JSON.stringify(publicPayload.items[0]));
+  const publicText = JSON.stringify(publicPayload);
+  for (const secret of ["avery@example.test","555-0100","forearm","Up to $300","maze_json_file","submissions/"]) assert.doesNotMatch(publicText, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i"));
+
+  const withdrawn = await handleUpdateMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive`, { action:"withdraw" }, token, "PATCH"), env, submissionId);
+  assert.equal(withdrawn.status, 200);
+  const after = await handleConstructApi(new Request("https://example.test/api/archive/items?collection=maze-built-by-others"), env);
+  assert.equal((await after.json()).items.length, 0);
+  assert.equal(bucket.objects.has(archiveKey), true);
+  assert.equal(database.prepare("SELECT status FROM maze_archive_consents WHERE submission_id=?").get(submissionId).status, "withdrawn");
 });
 
 test("Build review UI keeps managed themes, load recovery, readable snapshots, and responsive Maze sizing", () => {

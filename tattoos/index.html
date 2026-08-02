@@ -724,6 +724,17 @@
       </ul>
       <p class="section-body section-body--ghost" data-copy-id="tattoos-rates-fine-print">All sessions require a deposit, applied toward the total cost. Rates are confirmed at booking time and subject to change.</p>
     </section>
+    <div class="booking-cta" id="tattooSpecialsCta" hidden>
+      <div class="booking-cta-left">
+        <p class="booking-cta-label">Limited booking window</p>
+        <h2 class="booking-cta-title">Tattoo Specials.</h2>
+        <p class="booking-cta-body" id="tattooSpecialsCtaCopy">Studio-managed promotional offers are currently open.</p>
+      </div>
+      <div class="booking-cta-actions">
+        <a class="cta-primary" href="/tattoos/specials/">View current specials →</a>
+        <p class="booking-cta-note">Pay the deposit during the sales window. Your appointment may happen later.</p>
+      </div>
+    </div>
     <div class="booking-cta">
       <div class="booking-cta-left">
         <p class="booking-cta-label" data-copy-id="tattoos-cta-label">Ready to Begin?</p>
@@ -743,6 +754,18 @@
   <script src="/js/walk-in-windows.js"></script>
   <script>
     loadWalkInCards("walkInCards", { emptyMessage: "No walk-in windows are currently scheduled. Check back soon or submit an inquiry to book an appointment." });
+    fetch("/api/tattoo/specials", { cache: "no-store", headers: { accept: "application/json" } })
+      .then(function(response) { if (!response.ok) throw new Error(); return response.json(); })
+      .then(function(payload) {
+        if (payload.state !== "open") return;
+        var cta = document.getElementById("tattooSpecialsCta");
+        var copy = document.getElementById("tattooSpecialsCtaCopy");
+        if (copy && payload.salesClosesAt) {
+          copy.textContent = "Current Tattoo Specials close " + new Intl.DateTimeFormat("en-US", { timeZone: payload.timezone || "America/New_York", month: "long", day: "numeric", year: "numeric" }).format(new Date(payload.salesClosesAt)) + ".";
+        }
+        if (cta) cta.hidden = false;
+      })
+      .catch(function() {});
     fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
       .then(function(response) { if (!response.ok) throw new Error(); return response.json(); })
       .then(function(payload) {

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tattoo Specials · art.pill Tattoo House</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/transitions.css">
+  <link rel="stylesheet" href="/css/landing-family.css">
+  <link rel="stylesheet" href="/css/mobile.css">
+  <link rel="stylesheet" href="/css/site-typography.css">
+  <link rel="stylesheet" href="/css/hero.css">
+  <link rel="stylesheet" href="/css/tattoo-specials.css">
+</head>
+<body class="tattoo-flow" data-venture="tattooing" data-landing-family="tattoo-service">
+  <header class="specials-header">
+    <a class="specials-inquire" href="/tattoos/inquire/">Regular inquiry</a>
+  </header>
+  <main>
+    <section class="landing-hero site-hero site-hero--landing specials-hero">
+      <div><h1 class="hero-title">SPECIALS.</h1></div>
+      <p class="hero-descriptor">Limited tattoo offerings from <span>art.pill Tattoo House</span>. Pay the deposit during the sales window; schedule the appointment from the private link.</p>
+    </section>
+
+    <section class="specials-state" id="specialsState" aria-live="polite">
+      <p class="specials-kicker">Tattoo Special</p>
+      <h2 id="stateTitle">Loading the current offering.</h2>
+      <p id="stateCopy">Checking the Studio-managed sales window and offer versions.</p>
+    </section>
+
+    <section class="specials-campaign" id="specialsCampaign" hidden>
+      <figure class="specials-artwork" id="specialsArtwork" hidden>
+        <img id="specialsArtworkImage" alt="">
+      </figure>
+      <div class="specials-window">
+        <p class="specials-kicker">Sales window</p>
+        <h2 id="specialsDates"></h2>
+        <p>Appointments may happen after the sales window. Your deposit must be paid before the window closes.</p>
+        <dl>
+          <div><dt>Deposit</dt><dd id="specialsDeposit">$50</dd></div>
+          <div><dt>Campaign</dt><dd>Tattoo Special</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="specials-offers" id="specialsOffersSection" hidden aria-labelledby="offersTitle">
+      <p class="specials-kicker">Current offers</p>
+      <h2 id="offersTitle">Choose your Tattoo Special.</h2>
+      <div class="specials-grid" id="specialsOffers"></div>
+    </section>
+
+    <section class="specials-form-section" id="specialsFormSection" hidden aria-labelledby="formTitle">
+      <div class="specials-form-intro">
+        <p class="specials-kicker">Your request</p>
+        <h2 id="formTitle">Complete the offer details.</h2>
+        <p id="selectedOfferSummary"></p>
+      </div>
+      <form id="specialsForm" enctype="multipart/form-data">
+        <input type="hidden" name="offerId" id="offerId">
+        <fieldset>
+          <legend>Offer</legend>
+          <label>Price option<select name="variantId" id="variantId" required></select></label>
+          <div class="specials-selection-terms" id="selectionTerms"></div>
+        </fieldset>
+        <fieldset>
+          <legend>Primary purchaser</legend>
+          <div class="specials-fields">
+            <label>Full name<input name="name" autocomplete="name" required></label>
+            <label>Email<input type="email" name="email" autocomplete="email" required></label>
+            <label>Phone<input type="tel" name="phone" autocomplete="tel" required></label>
+          </div>
+          <label class="specials-check"><input type="checkbox" name="ageConfirmed" value="yes" required><span>I confirm that I am at least 18 years old.</span></label>
+        </fieldset>
+        <fieldset id="participant2Fieldset" hidden>
+          <legend>Second adult participant</legend>
+          <p class="specials-field-note">Studio stores this person’s details, but automated emails go only to the primary purchaser.</p>
+          <div class="specials-fields">
+            <label>Full name<input name="participant2Name" autocomplete="off"></label>
+            <label>Email<input type="email" name="participant2Email" autocomplete="off"></label>
+            <label>Phone<input type="tel" name="participant2Phone" autocomplete="off"></label>
+          </div>
+          <label class="specials-check"><input type="checkbox" name="participant2AgeConfirmed" value="yes"><span>The second participant is at least 18 years old.</span></label>
+        </fieldset>
+        <fieldset>
+          <legend>Project</legend>
+          <label>Placement<input name="placement" maxlength="500" required placeholder="Where on the body?"></label>
+          <label>Project details<textarea name="projectDetails" rows="5" maxlength="5000" required placeholder="Describe imagery, composition, skin-tone considerations, and anything Studio should know."></textarea></label>
+          <label>Reference link <span id="referenceLinkHint">(optional)</span><input type="url" name="referenceLink" placeholder="https://…"></label>
+          <label>Reference images <span id="referenceFileHint">(optional)</span><input type="file" name="references" accept="image/*" multiple></label>
+        </fieldset>
+        <fieldset>
+          <legend>Deposit policy</legend>
+          <label class="specials-check"><input type="checkbox" name="policyAccepted" value="yes" required><span>I understand the deposit is non-refundable, credited toward the approved Tattoo Special total, and must be paid before the sales window closes.</span></label>
+        </fieldset>
+        <div class="specials-submit-row">
+          <button type="submit" id="specialsSubmit">Continue</button>
+          <p id="specialsFormStatus" role="status"></p>
+        </div>
+      </form>
+    </section>
+
+    <section class="specials-receipt" id="specialsReceipt" hidden aria-live="polite">
+      <p class="specials-kicker">Request received</p>
+      <h2 id="receiptTitle"></h2>
+      <p id="receiptCopy"></p>
+    </section>
+  </main>
+  <footer class="specials-footer"><p>© art.pill Tattoo House · the six.well construct</p><a href="/tattoos/inquire/">Normal tattoo inquiry</a></footer>
+  <script src="/js/tattoo-specials.js"></script>
+  <script src="/js/transition.js"></script>
+  <script src="/js/construct-corner.js"></script>
+  <script src="/js/construct-nav.js"></script>
+</body>
+</html>

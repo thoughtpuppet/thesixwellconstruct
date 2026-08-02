@@ -273,6 +273,8 @@ function SubmitDialog({
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [archiveOptIn, setArchiveOptIn] = useState(false);
+  const [archiveAttribution, setArchiveAttribution] = useState("anonymous");
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const busyRef = useRef(busy);
@@ -415,6 +417,33 @@ function SubmitDialog({
             What does this maze carry?
             <textarea name="maze_explanation" rows={4} required placeholder="Explain the meaning, the path, what it should hold." value={formDraft.mazeExplanation} onChange={(event) => onFormDraftChange({ ...formDraft, mazeExplanation: event.target.value })} />
           </label>
+          <fieldset className="maze-archive-consent-block">
+            <legend>Public Maze Archive (optional)</legend>
+            <label className="maze-submit-consent">
+              <input type="checkbox" name="maze_archive_opt_in" value="yes" checked={archiveOptIn} onChange={(event) => setArchiveOptIn(event.target.checked)} />
+              <span>Consider my maze for the public Maze Archive. If selected after review, I grant Art.Pill and the Six.Well Construct a limited, non-exclusive, revocable permission to display the maze image. I keep ownership, and submitting does not guarantee publication.</span>
+            </label>
+            <p className="maze-submit-help">Your contact details and editable Maze JSON remain private. Only a separately reviewed image copy can enter the Archive.</p>
+            {archiveOptIn ? (
+              <div className="maze-archive-consent-options">
+                <label>
+                  Public attribution
+                  <select name="maze_archive_attribution" value={archiveAttribution} onChange={(event) => setArchiveAttribution(event.target.value)}>
+                    <option value="anonymous">Anonymous (default)</option>
+                    <option value="first_name">First name</option>
+                    <option value="display_name">Custom display name</option>
+                  </select>
+                </label>
+                {archiveAttribution === "display_name" ? (
+                  <label>Custom display name<input name="maze_archive_display_name" maxLength={80} required /></label>
+                ) : null}
+                <label className="maze-submit-consent">
+                  <input type="checkbox" name="maze_archive_include_explanation" value="yes" />
+                  <span>Allow my personal explanation to be considered separately for public display. It will not be copied automatically.</span>
+                </label>
+              </div>
+            ) : null}
+          </fieldset>
           <label className="maze-submit-consent">
             <input type="checkbox" name="age_confirmed" value="yes" required />
             <span>I confirm that I am 18 years of age or older.</span>
@@ -1225,6 +1254,7 @@ export default function App() {
               Back to Build
             </a>
           ) : null}
+          {!KIOSK ? <a className="back-to-build" href="/archive/maze/">Maze Archive</a> : null}
           <button type="button" onClick={undo} disabled={undoStack.length === 0} title="Undo">
             <Undo2 size={18} />
             Undo

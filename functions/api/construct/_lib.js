@@ -729,13 +729,13 @@ function archiveEntitySql(where = "1=1") {
       WHEN 'art_work' THEN aw.title WHEN 'merch_item' THEN mi.title
       WHEN 'portfolio_item' THEN COALESCE(NULLIF(pi.title,''),'Untitled tattoo')
       WHEN 'flash_item' THEN fi.title WHEN 'tattoo_design' THEN td.title WHEN 'event' THEN ev.title
-      WHEN 'visual_symbol' THEN vs.name ELSE COALESCE(sd.title,ad.archive_slug) END title,
+      WHEN 'visual_symbol' THEN vs.name ELSE COALESCE(ar.title,sd.title,ad.archive_slug) END title,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.statement WHEN 'merch_item' THEN mi.product_type
       WHEN 'portfolio_item' THEN pi.caption WHEN 'flash_item' THEN fi.description
       WHEN 'tattoo_design' THEN td.description
       WHEN 'event' THEN ev.description WHEN 'visual_symbol' THEN vs.meaning
-      ELSE COALESCE(sd.summary,'') END canonical_summary,
+      ELSE COALESCE(ar.summary,sd.summary,'') END canonical_summary,
     CASE ce.entity_type
       WHEN 'art_work' THEN COALESCE(NULLIF(aw.legacy_path,''),'/art/'||aw.slug||'/')
       WHEN 'merch_item' THEN mi.route
@@ -747,7 +747,8 @@ function archiveEntitySql(where = "1=1") {
       ELSE COALESCE(sd.route,'') END canonical_route,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.year WHEN 'portfolio_item' THEN pi.year
-      WHEN 'event' THEN COALESCE(ev.starts_at,'') ELSE COALESCE(sd.date_label,'') END canonical_date,
+      WHEN 'event' THEN COALESCE(ev.starts_at,'') ELSE COALESCE(ar.date_or_period,sd.date_label,'') END canonical_date,
+    CASE WHEN ar.record_type='community-maze' THEN ar.node_label ELSE '' END public_credit,
     CASE ce.entity_type
       WHEN 'art_work' THEN aw.medium WHEN 'portfolio_item' THEN pi.primary_style
       WHEN 'flash_item' THEN fi.item_type WHEN 'merch_item' THEN mi.product_type
@@ -791,6 +792,13 @@ function archiveEntitySql(where = "1=1") {
         ORDER BY CASE em.role WHEN 'primary' THEN 0 WHEN 'gallery' THEN 1 ELSE 2 END,em.sort_order,em.created_at LIMIT 1),
       ''
     ) primary_image,
+    (SELECT COALESCE(NULLIF(em.alt_text_override,''),m.alt_text)
+      FROM entity_media em JOIN media_assets m ON m.id=em.media_id
+      WHERE em.entity_id=ce.id AND em.public_visible=1
+        AND m.state='active' AND m.privacy='public' AND m.consent_status IN ('not-required','granted')
+        AND m.public_presentation='inline' AND m.mime_type LIKE 'image/%'
+      ORDER BY CASE em.role WHEN 'primary' THEN 0 WHEN 'gallery' THEN 1 ELSE 2 END,em.sort_order,em.created_at LIMIT 1
+    ) primary_image_alt,
     CASE WHEN ce.entity_type='visual_symbol' THEN COALESCE(vs.svg_markup,'') ELSE '' END primary_svg_markup,
     (SELECT group_concat(material_type) FROM (
       SELECT DISTINCT am.material_type material_type FROM archive_materials am
@@ -812,6 +820,7 @@ function archiveEntitySql(where = "1=1") {
   LEFT JOIN tattoo_designs td ON ce.entity_type='tattoo_design' AND td.id=ce.id
   LEFT JOIN events ev ON ce.entity_type='event' AND ev.id=ce.id
   LEFT JOIN visual_symbols vs ON ce.entity_type='visual_symbol' AND vs.id=ce.id
+  LEFT JOIN archive_records ar ON ce.entity_type='archive_record' AND ar.id=ce.id
   LEFT JOIN search_documents sd ON sd.entity_id=ce.id
   LEFT JOIN archive_catalogue_entries ace ON ace.entity_id=ad.entity_id
   LEFT JOIN archive_object_states current_state_row ON current_state_row.id=ace.current_state_id
@@ -820,6 +829,21 @@ function archiveEntitySql(where = "1=1") {
   LEFT JOIN archive_catalogue_media acm ON acm.id=ace.medium_id
   LEFT JOIN archive_event_identifiers aei ON aei.entity_id=ad.entity_id
   WHERE ${where}`;
+}
+
+function archiveCollectionIds(value){
+  const source=Array.isArray(value)?value:String(value||"").split(",");
+  return [...new Set(source.map(item=>text(typeof item==="object"?(item.id||item.collection_id||item.collectionId):item,200)).filter(Boolean))].slice(0,50);
+}
+
+async function replaceDossierCollections(database,entityId,ids){
+  if(ids.length){
+    const rows=(await database.prepare(`SELECT id FROM archive_collections WHERE id IN (${ids.map(()=>"?").join(",")})`).bind(...ids).all()).results||[];
+    if(rows.length!==ids.length)throw new Error("Choose valid Archive collections.");
+  }
+  const statements=[database.prepare("DELETE FROM archive_dossier_collections WHERE dossier_entity_id=?").bind(entityId)];
+  ids.forEach((collectionId,index)=>statements.push(database.prepare("INSERT INTO archive_dossier_collections(dossier_entity_id,collection_id,sort_order,created_at) VALUES(?,?,?,datetime('now'))").bind(entityId,collectionId,index+1)));
+  await database.batch(statements);
 }
 
 function archiveCatalogueLabel(row) {
@@ -1044,7 +1068,7 @@ function presentArchiveItem(row) {
   const archiveRoute = `/archive/records/${encodeURIComponent(row.archive_slug)}/`;
   const primarySvgMarkup = row.primary_svg_markup ? sanitizeLegendSvg(row.primary_svg_markup) : "";
   const primaryMedia = row.primary_image
-    ? { url: row.primary_image, kind: "image" }
+    ? { url: row.primary_image, alt_text: row.primary_image_alt || row.title || "", altText: row.primary_image_alt || row.title || "", kind: "image" }
     : primarySvgMarkup
       ? { svg_markup: primarySvgMarkup, svgMarkup: primarySvgMarkup, kind: "symbol" }
       : null;
@@ -1058,6 +1082,8 @@ function presentArchiveItem(row) {
     entityType: row.entity_type,
     record_type: row.record_type || row.entity_type,
     recordType: row.record_type || row.entity_type,
+    public_credit: row.public_credit || "",
+    publicCredit: row.public_credit || "",
     title: row.title || row.archive_slug,
     summary,
     orientation: row.orientation || "",
@@ -1103,6 +1129,8 @@ function presentArchiveItem(row) {
     primaryImage: row.primary_image || "",
     image_url: row.primary_image || "",
     imageUrl: row.primary_image || "",
+    primary_image_alt: row.primary_image_alt || "",
+    primaryImageAlt: row.primary_image_alt || "",
     primary_svg_markup: primarySvgMarkup,
     primarySvgMarkup,
     primary_media: primaryMedia,
@@ -3539,7 +3567,7 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     const statement=database.prepare(`${archiveEntitySql(where)} ORDER BY ${order}`);const result=entityId?await statement.bind(entityId).all():await statement.all();const records=(result.results||[]).map(row=>({...row,...presentArchiveItem(row)}));
     if(entityId&&!records[0])return failure("Dossier not found.",404);
     if(entityId){
-      const [originResult,contextResult,themeResult,versionResult,stateResult,documentationResult]=await database.batch([
+      const [originResult,contextResult,themeResult,versionResult,stateResult,documentationResult,collectionResult]=await database.batch([
         database.prepare(`SELECT ot.*,otd.is_primary,otd.sort_order assignment_sort_order FROM archive_origin_thread_dossiers otd JOIN archive_origin_threads ot ON ot.id=otd.thread_id WHERE otd.dossier_entity_id=? ORDER BY otd.is_primary DESC,otd.sort_order,ot.title`).bind(entityId),
         database.prepare(`SELECT ads.subject_entity_id entity_id,ads.role,ads.public_visible,ads.sort_order,ce.entity_type,
           COALESCE(p.name,o.name,pl.name,ev.title,ce.id) name
@@ -3551,10 +3579,11 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
         database.prepare("SELECT * FROM archive_object_versions WHERE entity_id=? ORDER BY sort_order,version_number").bind(entityId),
         database.prepare(`SELECT aos.*,aov.entity_id,aov.version_number FROM archive_object_states aos JOIN archive_object_versions aov ON aov.id=aos.version_id WHERE aov.entity_id=? ORDER BY aov.version_number,aos.sort_order,aos.state_order,aos.variant_label`).bind(entityId),
         database.prepare("SELECT * FROM archive_catalogue_documentation WHERE dossier_entity_id=? ORDER BY sort_order,field_key,created_at,id").bind(entityId),
+        database.prepare(`SELECT ac.*,adc.sort_order assignment_sort_order FROM archive_dossier_collections adc JOIN archive_collections ac ON ac.id=adc.collection_id WHERE adc.dossier_entity_id=? ORDER BY adc.sort_order,ac.name`).bind(entityId),
       ]);
-      const originThreads=originResult.results||[],contextAssignments=contextResult.results||[],themes=themeResult.results||[],versions=versionResult.results||[],states=stateResult.results||[],documentation=(documentationResult.results||[]).map(presentArchiveDocumentation);
-      const enriched={...records[0],origin_threads:originThreads,origin_thread_ids:originThreads.map(thread=>thread.id),primary_origin_thread_id:originThreads.find(thread=>Number(thread.is_primary))?.id||"",context_assignments:contextAssignments,themes,theme_names:themes.map(theme=>theme.name),versions,states,documentation};
-      return json({record:enriched,dossier:enriched,origin_threads:originThreads,context_assignments:contextAssignments,themes,versions,states,documentation});
+      const originThreads=originResult.results||[],contextAssignments=contextResult.results||[],themes=themeResult.results||[],versions=versionResult.results||[],states=stateResult.results||[],documentation=(documentationResult.results||[]).map(presentArchiveDocumentation),collections=collectionResult.results||[];
+      const enriched={...records[0],origin_threads:originThreads,origin_thread_ids:originThreads.map(thread=>thread.id),primary_origin_thread_id:originThreads.find(thread=>Number(thread.is_primary))?.id||"",context_assignments:contextAssignments,themes,theme_names:themes.map(theme=>theme.name),versions,states,documentation,collections,collection_ids:collections.map(collection=>collection.id)};
+      return json({record:enriched,dossier:enriched,origin_threads:originThreads,context_assignments:contextAssignments,themes,versions,states,documentation,collections});
     }
     return json({records,count:records.length});
   }
@@ -3572,9 +3601,11 @@ async function archiveDossiersAdminApi(request,env,entityId=""){
     const next={archive_slug:slug(body.archive_slug??body.archiveSlug??body.slug??before.archive_slug),orientation:text(body.orientation??before.orientation,8000),story:text(body.story??before.story,50000),story_html:text(body.story_html??before.story_html,50000),empty_materials_note:text(body.empty_materials_note??before.empty_materials_note,3000),record_type:text(body.record_type??body.recordType??before.record_type,100),state:text(body.state??before.state,30),public_visible:body.public_visible===undefined&&body.publicVisible===undefined?Number(before.public_visible):truthy(body.public_visible??body.publicVisible)?1:0,featured:body.featured===undefined?Number(before.featured):truthy(body.featured)?1:0,sort_order:Number(body.sort_order??before.sort_order)||0};
     if(!next.archive_slug)return failure("archive_slug is required.");if(!ARCHIVE_STATES.has(next.state))return failure("Invalid dossier state.");if(next.state==="published"&&next.public_visible&&owner?.visibility!=="public")return failure("The canonical entity must be public before its dossier can publish.",409);
     const hasOriginUpdate=Object.prototype.hasOwnProperty.call(body,"origin_thread_ids")||Object.prototype.hasOwnProperty.call(body,"originThreadIds"),assignmentIds=hasOriginUpdate?originThreadIds(body.origin_thread_ids??body.originThreadIds):[],primaryOriginId=hasOriginUpdate?text(body.primary_origin_thread_id??body.primaryOriginThreadId,200):"";
+    const hasCollectionUpdate=Object.prototype.hasOwnProperty.call(body,"collection_ids")||Object.prototype.hasOwnProperty.call(body,"collectionIds"),collectionIds=hasCollectionUpdate?archiveCollectionIds(body.collection_ids??body.collectionIds):[];
     if(hasOriginUpdate&&(primaryOriginId&&!assignmentIds.includes(primaryOriginId)||!await validateOriginThreadIds(database,assignmentIds)))return failure("Choose valid origin threads and make the primary thread part of the dossier assignment.",409);
     await database.prepare(`UPDATE archive_dossiers SET archive_slug=?,orientation=?,story=?,story_html=?,empty_materials_note=?,record_type=?,state=?,public_visible=?,featured=?,sort_order=?,published_at=CASE WHEN ?='published' AND ?=1 THEN COALESCE(published_at,datetime('now')) ELSE published_at END,updated_by='studio',updated_at=datetime('now') WHERE entity_id=?`).bind(next.archive_slug,next.orientation,next.story,next.story_html,next.empty_materials_note,next.record_type,next.state,next.public_visible,next.featured,next.sort_order,next.state,next.public_visible,entityId).run();
     if(hasOriginUpdate)await replaceDossierOriginThreads(database,entityId,assignmentIds,primaryOriginId);
+    if(hasCollectionUpdate)try{await replaceDossierCollections(database,entityId,collectionIds)}catch(error){return failure(error.message,409)}
     try{
       await replaceArchiveContext(database,entityId,archiveContextAssignments(body.context_assignments??body.contextAssignments));
       await replaceArchiveThemes(database,entityId,body.theme_names??body.themeNames);

@@ -43,6 +43,7 @@ const TATTOO_SUBMISSION_TYPES = new Set([
   "special_project",
   "build_brief",
   "maze_design",
+  "tattoo_special",
 ]);
 
 const TATTOO_STAGES = new Set([
@@ -501,6 +502,64 @@ function createSubmissionId() {
   return crypto.randomUUID();
 }
 
+export const MAZE_ARCHIVE_CONSENT_VERSION = "maze-archive-v1";
+export const MAZE_ARCHIVE_CONSENT_TEXT = "If selected after review, Art.Pill and the Six.Well Construct may display my maze image in the public Maze Archive under a limited, non-exclusive, revocable permission. Ownership is not transferred. Contact details and the editable Maze file remain private.";
+
+function selected(value) {
+  return ["1", "true", "yes", "on"].includes(asString(value).toLowerCase());
+}
+
+function normalizeMazeArchiveConsent(payload, contact = {}) {
+  const granted = selected(payload.maze_archive_opt_in);
+  const mode = asString(payload.maze_archive_attribution || "anonymous").toLowerCase();
+  if (!new Set(["anonymous", "first_name", "display_name"]).has(mode)) {
+    return { error: "Choose Anonymous, first name, or custom display name for Maze Archive attribution." };
+  }
+  const displayName = asString(payload.maze_archive_display_name).trim();
+  if (granted && mode === "display_name" && (!displayName || displayName.length > 80)) {
+    return { error: "Enter a custom Maze Archive display name of 80 characters or fewer." };
+  }
+  const firstName = asString(contact.firstName).trim();
+  if (granted && mode === "first_name" && !firstName) {
+    return { error: "A first name is required for first-name Maze Archive attribution." };
+  }
+  const credit = mode === "first_name" ? firstName : mode === "display_name" ? displayName : "Anonymous";
+  return {
+    status: granted ? "granted" : "not_granted",
+    attributionMode: granted ? mode : "anonymous",
+    publicCredit: granted ? credit : "Anonymous",
+    includeExplanation: granted && selected(payload.maze_archive_include_explanation),
+  };
+}
+
+async function loadMazeArchiveState(database, submissionId, payload = {}) {
+  const row = await database.prepare(`SELECT c.status consent_status,c.attribution_mode,c.public_credit,c.include_explanation,
+      c.consent_version,c.consented_at,c.withdrawn_at,e.curation_status,e.archive_entity_id,e.review_note,e.reviewed_at,
+      ad.archive_slug,ar.title archive_title
+    FROM maze_archive_consents c
+    LEFT JOIN maze_archive_entries e ON e.submission_id=c.submission_id
+    LEFT JOIN archive_dossiers ad ON ad.entity_id=e.archive_entity_id
+    LEFT JOIN archive_records ar ON ar.id=e.archive_entity_id
+    WHERE c.submission_id=?`).bind(submissionId).first();
+  if (!row) return null;
+  return {
+    consentStatus: row.consent_status,
+    attributionMode: row.attribution_mode,
+    publicCredit: row.public_credit,
+    includeExplanation: Boolean(row.include_explanation),
+    consentVersion: row.consent_version,
+    consentedAt: row.consented_at || "",
+    withdrawnAt: row.withdrawn_at || "",
+    curationStatus: row.curation_status || "not_candidate",
+    archiveEntityId: row.archive_entity_id || "",
+    archiveSlug: row.archive_slug || "",
+    archiveTitle: row.archive_title || "",
+    reviewNote: row.review_note || "",
+    reviewedAt: row.reviewed_at || "",
+    permittedExplanation: row.include_explanation ? asString(payload.maze_explanation) : "",
+  };
+}
+
 async function saveSubmissionFiles(env, submissionId, files) {
   const saved = [];
   const bucket = env.SUBMISSION_FILES || null;
@@ -588,7 +647,7 @@ function normalizeRow(row) {
 }
 
 function crmNodeForSubmission(type, payload = {}) {
-  if (["tattoo_inquiry", "flash_claim", "special_project", "build_brief", "maze_design", "consultation", "build_session"].includes(type)) {
+  if (["tattoo_inquiry", "flash_claim", "special_project", "tattoo_special", "build_brief", "maze_design", "consultation", "build_session"].includes(type)) {
     return "node-tattoos";
   }
   if (type === "art_acquisition") return "node-art";
@@ -930,6 +989,13 @@ export async function handleCreateSubmission(request, env) {
     });
   }
 
+  const mazeArchiveConsent = submission.type === "maze_design"
+    ? normalizeMazeArchiveConsent(body.payload, submission.contact)
+    : null;
+  if (mazeArchiveConsent?.error) {
+    return errorResponse(mazeArchiveConsent.error, 400, { code: "INVALID_MAZE_ARCHIVE_CONSENT" });
+  }
+
   const fileValidation = validateSubmissionFiles(submission.type, body.files, env);
   if (fileValidation) return errorResponse(fileValidation.error, fileValidation.status);
   const coverUpPhotoValidation = validateLargeCoverUpPhotos(submission.type, body.payload, body.files);
@@ -962,6 +1028,9 @@ export async function handleCreateSubmission(request, env) {
           });
         }
         const normalized = normalizeRow(existing);
+        const mazeArchive = existing.type === "maze_design"
+          ? await loadMazeArchiveState(db, existing.id, normalized.payload)
+          : null;
         await mirrorSubmissionToCrm(db, existing);
         return json({
           ok: true,
@@ -969,6 +1038,7 @@ export async function handleCreateSubmission(request, env) {
           filesStored: normalized.files.filter((file) => file.stored).length,
           filesReceived: normalized.files.length,
           idempotent: true,
+          mazeArchive,
         });
       }
     }
@@ -1244,6 +1314,19 @@ export async function handleCreateSubmission(request, env) {
       ...(buildDraftContext?.id
         ? [finalizeSubmissionBuildDraft(db, buildDraftContext.id, id, now)]
         : []),
+      ...(mazeArchiveConsent
+        ? [
+            db.prepare(`INSERT INTO maze_archive_consents
+              (submission_id,status,attribution_mode,public_credit,include_explanation,consent_version,consent_text,consented_at,withdrawn_at,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,CASE WHEN ?='granted' THEN ? ELSE NULL END,NULL,?,?)`)
+              .bind(id,mazeArchiveConsent.status,mazeArchiveConsent.attributionMode,mazeArchiveConsent.publicCredit,mazeArchiveConsent.includeExplanation?1:0,MAZE_ARCHIVE_CONSENT_VERSION,MAZE_ARCHIVE_CONSENT_TEXT,mazeArchiveConsent.status,now,now,now),
+            ...(mazeArchiveConsent.status === "granted"
+              ? [db.prepare(`INSERT INTO maze_archive_entries
+                  (submission_id,archive_entity_id,curation_status,review_note,reviewed_at,created_at,updated_at)
+                  VALUES(?,NULL,'candidate','',NULL,?,?)`).bind(id,now,now)]
+              : []),
+          ]
+        : []),
     ]);
 
     await mirrorSubmissionToCrm(db, {
@@ -1308,6 +1391,7 @@ export async function handleCreateSubmission(request, env) {
       filesStored: savedFiles.filter((file) => file.stored).length,
       filesReceived: savedFiles.length,
       briefDocument: briefResult?.document || null,
+      mazeArchive: mazeArchiveConsent ? await loadMazeArchiveState(db, id, submission.payload) : null,
       notifications: {
         client: notificationOutcome(clientNotification),
         admin: notificationOutcome(adminNotification),
@@ -1425,12 +1509,41 @@ export async function handleListSubmissions(request, env) {
         });
       }
     }
+    const mazeArchiveBySubmission = new Map();
+    const mazeRows = rows.filter((row) => row.type === "maze_design");
+    if (mazeRows.length) {
+      const placeholders = mazeRows.map(() => "?").join(",");
+      const states = (await db.prepare(`SELECT c.submission_id,c.status consent_status,c.attribution_mode,c.public_credit,
+          c.include_explanation,c.consent_version,c.consented_at,c.withdrawn_at,e.curation_status,e.archive_entity_id,
+          e.review_note,e.reviewed_at,ad.archive_slug,ar.title archive_title
+        FROM maze_archive_consents c
+        LEFT JOIN maze_archive_entries e ON e.submission_id=c.submission_id
+        LEFT JOIN archive_dossiers ad ON ad.entity_id=e.archive_entity_id
+        LEFT JOIN archive_records ar ON ar.id=e.archive_entity_id
+        WHERE c.submission_id IN (${placeholders})`).bind(...mazeRows.map((row) => row.id)).all()).results || [];
+      for (const state of states) mazeArchiveBySubmission.set(state.submission_id, {
+        consentStatus: state.consent_status,
+        attributionMode: state.attribution_mode,
+        publicCredit: state.public_credit,
+        includeExplanation: Boolean(state.include_explanation),
+        consentVersion: state.consent_version,
+        consentedAt: state.consented_at || "",
+        withdrawnAt: state.withdrawn_at || "",
+        curationStatus: state.curation_status || "not_candidate",
+        archiveEntityId: state.archive_entity_id || "",
+        archiveSlug: state.archive_slug || "",
+        archiveTitle: state.archive_title || "",
+        reviewNote: state.review_note || "",
+        reviewedAt: state.reviewed_at || "",
+      });
+    }
     return json({
       submissions: rows.map((row) => {
         const normalized = normalizeRow(row);
         const sheetDesignSelections = sheetDesignsBySubmission.get(row.id) || [];
         return {
           ...normalized,
+          mazeArchive: mazeArchiveBySubmission.get(row.id) || null,
           sheetDesignSelections,
           sheet_design_selections: sheetDesignSelections,
         };
@@ -1568,6 +1681,9 @@ export async function handleGetSubmission(request, env, id) {
     }
 
     const normalized = normalizeRow(row);
+    const mazeArchive = row.type === "maze_design"
+      ? await loadMazeArchiveState(db, id, normalized.payload)
+      : null;
     const briefDocumentRow = await loadBriefDocument(db, id);
     const briefDocument = await presentBriefDocument(env, request, briefDocumentRow);
     const flashConflict = flashReservation?.conflictSubmissionId
@@ -1583,6 +1699,7 @@ export async function handleGetSubmission(request, env, id) {
         flash_conflict: flashConflict,
         renderingRequests,
         briefDocument,
+        mazeArchive,
       },
       events: events.results || [],
       appointmentEvents: appointmentEvents.results || [],
@@ -1593,6 +1710,153 @@ export async function handleGetSubmission(request, env, id) {
       detail: error.message,
     });
   }
+}
+
+async function readAdminJson(request) {
+  try {
+    const body = await request.json();
+    return body && typeof body === "object" ? body : {};
+  } catch {
+    return null;
+  }
+}
+
+export async function handlePromoteMazeArchiveSubmission(request, env, submissionId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readAdminJson(request);
+  if (!body) return errorResponse("Send a JSON object.", 400);
+  const title = asString(body.title).trim().slice(0, 200);
+  const altText = asString(body.altText || body.alt_text).trim().slice(0, 500);
+  const publicExplanation = asString(body.publicExplanation || body.public_explanation).trim().slice(0, 8000);
+  if (!title || !altText) return errorResponse("A reviewed title and alt text are required.", 400);
+
+  const database = requireSubmissionDb(env);
+  const submission = await database.prepare("SELECT * FROM submissions WHERE id=?").bind(submissionId).first();
+  if (!submission || submission.type !== "maze_design") return errorResponse("Maze submission not found.", 404);
+  const payload = parseJsonField(submission.payload_json, {});
+  const files = parseJsonField(submission.files_json, []);
+  const consent = await database.prepare(`SELECT c.*,e.curation_status,e.archive_entity_id
+    FROM maze_archive_consents c LEFT JOIN maze_archive_entries e ON e.submission_id=c.submission_id
+    WHERE c.submission_id=?`).bind(submissionId).first();
+  if (!consent || consent.status !== "granted") return errorResponse("Granted Maze Archive consent is required.", 409);
+  if (consent.curation_status === "promoted" && consent.archive_entity_id) {
+    return json({ ok: true, idempotent: true, mazeArchive: await loadMazeArchiveState(database, submissionId, payload) });
+  }
+  if (consent.curation_status !== "candidate") return errorResponse("Only an active candidate can be promoted.", 409);
+  if (publicExplanation && !Number(consent.include_explanation)) {
+    return errorResponse("This person did not permit their explanation to be considered for publication.", 409);
+  }
+  const sourceFile = files.find((file) => file.fieldName === "maze_image" && file.stored && file.storageKey && file.contentType === "image/png");
+  if (!sourceFile) return errorResponse("A stored PNG is required before promotion.", 409);
+  const bucket = env.SUBMISSION_FILES;
+  if (!bucket) return errorResponse("Archive media storage is not configured.", 503);
+
+  const entityId = `maze-archive-${submissionId}`;
+  const mediaId = `maze-archive-media-${submissionId}`;
+  const archiveSlug = `maze-${submissionId}`;
+  const archiveKey = `archive/maze/${submissionId}/public.png`;
+  const source = await bucket.get(sourceFile.storageKey);
+  if (!source?.body) return errorResponse("The private submission PNG could not be found.", 409);
+
+  await bucket.put(archiveKey, source.body, {
+    httpMetadata: { contentType: "image/png", cacheControl: "public, max-age=31536000, immutable" },
+    customMetadata: { sourceSubmissionId: submissionId, derivativePurpose: "maze-archive-presentation" },
+  });
+
+  const now = new Date().toISOString();
+  try {
+    await database.batch([
+      database.prepare(`INSERT INTO content_entities
+        (id,entity_type,node_id,visibility,search_visibility,featured,public_at,archived_at,internal_notes,created_by,updated_by,created_at,updated_at)
+        VALUES(?,'archive_record','tattoos','internal',0,0,NULL,NULL,?,'maze-archive','maze-archive',?,?)`)
+        .bind(entityId,`Promoted from private submission ${submissionId}.`,now,now),
+      database.prepare(`INSERT INTO archive_records
+        (id,slug,title,node_label,record_type,room,date_or_period,timeline_period,summary,body,body_html,record_status,state,why_it_matters,source_note,related_notes_json,related_routes_json,aggregate_attendance,sort_order,created_at,updated_at)
+        VALUES(?,?,?,?, 'community-maze','Tattoos','','',?,?,?,'curated submission','draft','','','[]','[]',0,0,?,?)`)
+        .bind(entityId,archiveSlug,title,consent.public_credit,"A curated Maze Pattern arrangement.",publicExplanation,"",now,now),
+      database.prepare(`INSERT INTO search_documents
+        (entity_id,entity_type,node_id,slug,title,summary,body,state,collection_labels,theme_labels,person_labels,place_labels,date_label,route,updated_at)
+        VALUES(?,'archive_record','tattoos',?,?,?,?,'draft','Built by Others','','','','',?,?)`)
+        .bind(entityId,archiveSlug,title,"A curated Maze Pattern arrangement.",publicExplanation,`/archive/records/${archiveSlug}/`,now),
+      database.prepare(`INSERT INTO archive_dossiers
+        (entity_id,archive_slug,orientation,story,story_html,empty_materials_note,record_type,state,public_visible,featured,sort_order,published_at,created_by,updated_by,created_at,updated_at)
+        VALUES(?,?,?,'','','No process materials are public for this community Maze.','community-maze','draft',0,0,0,NULL,'maze-archive','maze-archive',?,?)`)
+        .bind(entityId,archiveSlug,publicExplanation,now,now),
+      database.prepare(`INSERT INTO media_assets
+        (id,source_url,storage_key,original_filename,mime_type,byte_size,width,height,duration_seconds,alt_text,caption,credit,rights_notes,privacy,consent_status,state,created_by,created_at,updated_at,transcript,transcript_status,transcript_language,public_title,public_description,public_presentation)
+        VALUES(?,'',?,'maze.png','image/png',?,NULL,NULL,NULL,?,'',?,'Maze Archive display permission recorded on the source submission.','public','granted','active','maze-archive',?,?,'','not-requested','',?,'','inline')`)
+        .bind(mediaId,archiveKey,Number(sourceFile.size||source.size||0),altText,consent.public_credit,now,now,title),
+      database.prepare(`INSERT INTO entity_media(entity_id,media_id,role,sort_order,public_visible,alt_text_override,caption_override,created_at)
+        VALUES(?,?,'primary',1,1,?,'',?)`).bind(entityId,mediaId,altText,now),
+      database.prepare(`INSERT INTO archive_dossier_collections(dossier_entity_id,collection_id,sort_order,created_at)
+        VALUES(?,'archive-maze-built-by-others',0,?)`).bind(entityId,now),
+      database.prepare(`INSERT INTO archive_catalogue_entries
+        (entity_id,medium_id,object_type_id,catalogue_prefix,catalogue_number,catalogue_id,current_version,current_state,variant_label,current_state_id,created_by,updated_by,created_at,updated_at)
+        SELECT ?,'other','other-cultural-object','OBJ',COALESCE(MAX(catalogue_number),0)+1,
+          'OBJ-'||printf('%03d',COALESCE(MAX(catalogue_number),0)+1),1,'I','',NULL,'maze-archive','maze-archive',?,?
+        FROM archive_catalogue_entries WHERE catalogue_prefix='OBJ'`).bind(entityId,now,now),
+      database.prepare(`INSERT INTO archive_object_versions
+        (id,entity_id,version_number,title,description,occurred_at,date_precision,date_label,sort_order,publication_state,public_visible,created_by,updated_by,created_at,updated_at)
+        VALUES(?,?,1,'Version 1','',NULL,'undated','',1,'draft',0,'maze-archive','maze-archive',?,?)`)
+        .bind(`archive-version-initial:${entityId}`,entityId,now,now),
+      database.prepare(`INSERT INTO archive_object_states
+        (id,version_id,state_roman,state_order,title,description,variant_label,occurred_at,date_precision,date_label,sort_order,publication_state,public_visible,lead_material_id,created_by,updated_by,created_at,updated_at)
+        VALUES(?,?,'I',1,'Submitted arrangement','','',NULL,'undated','',1,'draft',0,NULL,'maze-archive','maze-archive',?,?)`)
+        .bind(`archive-state-initial:${entityId}`,`archive-version-initial:${entityId}`,now,now),
+      database.prepare("UPDATE archive_catalogue_entries SET current_state_id=?,updated_at=? WHERE entity_id=?")
+        .bind(`archive-state-initial:${entityId}`,now,entityId),
+      database.prepare("UPDATE maze_archive_entries SET archive_entity_id=?,curation_status='promoted',review_note=?,reviewed_at=?,updated_at=? WHERE submission_id=? AND curation_status='candidate'")
+        .bind(entityId,asString(body.reviewNote||body.review_note).slice(0,2000),now,now,submissionId),
+      database.prepare(`INSERT INTO submission_events(id,submission_id,event_type,actor,note,created_at)
+        VALUES(?,?,'maze_archive_promoted','admin',?,?)`).bind(crypto.randomUUID(),submissionId,`Private Archive draft ${entityId} created.`,now),
+    ]);
+  } catch (error) {
+    await bucket.delete(archiveKey).catch(() => {});
+    return errorResponse("Unable to create the Maze Archive draft.", 500, { detail: error.message });
+  }
+  return json({ ok: true, mazeArchive: await loadMazeArchiveState(database, submissionId, payload) }, { status: 201 });
+}
+
+export async function handleUpdateMazeArchiveSubmission(request, env, submissionId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readAdminJson(request);
+  if (!body) return errorResponse("Send a JSON object.", 400);
+  const action = asString(body.action).toLowerCase();
+  const database = requireSubmissionDb(env);
+  const submission = await database.prepare("SELECT * FROM submissions WHERE id=? AND type='maze_design'").bind(submissionId).first();
+  if (!submission) return errorResponse("Maze submission not found.", 404);
+  const state = await loadMazeArchiveState(database, submissionId, parseJsonField(submission.payload_json, {}));
+  if (!state) return errorResponse("This submission has no Maze Archive consent record.", 409);
+  const note = asString(body.reviewNote || body.review_note).slice(0,2000);
+  const now = new Date().toISOString();
+  if (action === "reject" && state.curationStatus === "candidate") {
+    await database.batch([
+      database.prepare("UPDATE maze_archive_entries SET curation_status='rejected',review_note=?,reviewed_at=?,updated_at=? WHERE submission_id=?").bind(note,now,now,submissionId),
+      database.prepare("INSERT INTO submission_events(id,submission_id,event_type,actor,note,created_at) VALUES(?,?,'maze_archive_rejected','admin',?,?)").bind(crypto.randomUUID(),submissionId,note||null,now),
+    ]);
+  } else if (action === "restore" && state.curationStatus === "rejected" && state.consentStatus === "granted") {
+    await database.batch([
+      database.prepare("UPDATE maze_archive_entries SET curation_status='candidate',review_note=?,reviewed_at=?,updated_at=? WHERE submission_id=?").bind(note,now,now,submissionId),
+      database.prepare("INSERT INTO submission_events(id,submission_id,event_type,actor,note,created_at) VALUES(?,?,'maze_archive_restored','admin',?,?)").bind(crypto.randomUUID(),submissionId,note||null,now),
+    ]);
+  } else if (action === "withdraw" && state.curationStatus === "promoted" && state.archiveEntityId) {
+    await database.batch([
+      database.prepare("UPDATE maze_archive_consents SET status='withdrawn',withdrawn_at=?,updated_at=? WHERE submission_id=?").bind(now,now,submissionId),
+      database.prepare("UPDATE maze_archive_entries SET curation_status='withdrawn',review_note=?,reviewed_at=?,updated_at=? WHERE submission_id=?").bind(note,now,now,submissionId),
+      database.prepare("UPDATE content_entities SET visibility='internal',search_visibility=0,public_at=NULL,archived_at=?,updated_by='maze-archive',updated_at=? WHERE id=?").bind(now,now,state.archiveEntityId),
+      database.prepare("UPDATE archive_records SET state='archived',updated_at=? WHERE id=?").bind(now,state.archiveEntityId),
+      database.prepare("UPDATE search_documents SET state='archived',updated_at=? WHERE entity_id=?").bind(now,state.archiveEntityId),
+      database.prepare("UPDATE archive_dossiers SET state='archived',public_visible=0,updated_by='maze-archive',updated_at=? WHERE entity_id=?").bind(now,state.archiveEntityId),
+      database.prepare("UPDATE entity_media SET public_visible=0 WHERE entity_id=?").bind(state.archiveEntityId),
+      database.prepare("UPDATE media_assets SET privacy='internal',public_presentation='hidden',updated_at=? WHERE id IN (SELECT media_id FROM entity_media WHERE entity_id=?)").bind(now,state.archiveEntityId),
+      database.prepare("INSERT INTO submission_events(id,submission_id,event_type,actor,note,created_at) VALUES(?,?,'maze_archive_withdrawn','admin',?,?)").bind(crypto.randomUUID(),submissionId,note||null,now),
+    ]);
+  } else {
+    return errorResponse("That Maze Archive action is not available in the current state.", 409);
+  }
+  return json({ ok: true, mazeArchive: await loadMazeArchiveState(database, submissionId, parseJsonField(submission.payload_json, {})) });
 }
 
 export async function handleUpdateSubmission(request, env, id) {
