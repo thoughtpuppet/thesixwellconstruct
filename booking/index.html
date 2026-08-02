@@ -426,6 +426,7 @@
       sessionEstimateCopy: payload.sessionEstimateCopy || defaultSessionEstimateCopy,
       bookingTypes: payload.bookingTypes,
       availabilityWindows: payload.availabilityWindows,
+      pendingCheckout: payload.pendingCheckout || null,
     };
   }
 
@@ -769,6 +770,12 @@
     if (pending.approvalState === "pending") {
       pendingCheckoutText.textContent = `Your requested time, ${formatDate(pending.startAt || pending.heldStartAt)}, is held for Studio review. Your request-received email confirms that no appointment is booked and no deposit is due until approval.`;
       releaseCheckoutBtn.classList.remove("hidden");
+      pendingCheckoutPanel.classList.remove("hidden");
+      appEl.classList.add("hidden");
+      return true;
+    }
+    if (pending.approvalState === "approved" && context?.submission?.special) {
+      pendingCheckoutText.textContent = `Studio approved your requested time, ${formatDate(pending.startAt)}. The appointment is not booked until the Square deposit link sent by email and text is paid${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}.`;
       pendingCheckoutPanel.classList.remove("hidden");
       appEl.classList.add("hidden");
       return true;

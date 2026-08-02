@@ -3917,6 +3917,22 @@ ${meetingLines}
 
   function clientPreviewContext(submission, payload, sessionPlan = null, sessionEstimateCopy = null) {
     const clientName = submission.contactName || payloadValue(submission, "name") || "Preview Client";
+    const allowedTypeIds = new Set(defaultAllowedBookingTypes(submission));
+    const bookingTypes = (payload.bookingTypes || []).filter((type) => allowedTypeIds.has(type.id));
+    const availabilityWindows = (payload.availabilityWindows || []).filter((windowItem) =>
+      !windowItem.bookingTypeId || allowedTypeIds.has(windowItem.bookingTypeId)
+    );
+    const specialPayload = submission.payload || {};
+    const special = submission.type === "tattoo_special" ? {
+      offerTitle: specialPayload.special_offer_title || "Tattoo Special",
+      variantLabel: specialPayload.special_variant_label || "",
+      quotedPriceCents: Number(specialPayload.approved_price_cents || specialPayload.quoted_price_cents || 0),
+      depositCents: Number(specialPayload.deposit_cents || 0),
+      durationMinutes: Number(specialPayload.duration_minutes || 0),
+    } : null;
+    const pendingApproval = Boolean(special && specialPayload.booking_mode === "review"
+      && !["approved", "booked", "declined"].includes(submission.status));
+    const pendingAppointment = special ? latestAppointmentFor(submission.id) : null;
     return {
       createdAt: Date.now(),
       purpose: defaultTokenPurpose(submission),
@@ -3932,12 +3948,27 @@ ${meetingLines}
         type: submission.type || "tattoo_inquiry",
         status: submission.status || "",
         sourcePath: submission.sourcePath || "",
+        pendingApproval,
+        ...(special ? { special } : {}),
       },
       settings: payload.settings || null,
       sessionPlan,
       sessionEstimateCopy,
-      bookingTypes: payload.bookingTypes || [],
-      availabilityWindows: payload.availabilityWindows || [],
+      bookingTypes,
+      availabilityWindows,
+      pendingCheckout: pendingAppointment && ["pending_deposit", "deposit_pending"].includes(pendingAppointment.status)
+        ? {
+            appointmentId: pendingAppointment.id,
+            startAt: pendingAppointment.startAt,
+            endAt: pendingAppointment.endAt,
+            checkoutUrl: "",
+            holdExpiresAt: pendingAppointment.holdExpiresAt,
+            holdState: pendingAppointment.holdState,
+            resumable: false,
+            approvalState: pendingAppointment.approvalState,
+            paymentDueAt: pendingAppointment.paymentDueAt,
+          }
+        : null,
     };
   }
 
@@ -6129,20 +6160,33 @@ ${meetingLines}
     if (event.target.id === "previewBookingBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
       if (!submission) return;
+      const previewWindow = window.open("about:blank", "_blank");
+      if (!previewWindow) {
+        setStatus("Client preview was blocked. Allow popups for Studio and try again.");
+        return;
+      }
+      previewWindow.opener = null;
+      previewWindow.document.title = "Building client preview";
+      previewWindow.document.body.textContent = "Building the real-data client previewâ€¦";
       setStatus("Building preview");
-      const [payload, planPayload, settingsPayload] = await Promise.all([
-        api("/api/admin/booking/availability-preview"),
-        TATTOO_PROJECT_TYPES.has(submission.type) ? api(`/api/admin/booking/session-plans/${encodeURIComponent(activeId)}`) : Promise.resolve({ sessionPlan:null }),
-        TATTOO_PROJECT_TYPES.has(submission.type) ? api("/api/admin/tattoo/settings") : Promise.resolve({ settings:null }),
-      ]);
-      localStorage.setItem(bookingPreviewKey, JSON.stringify(clientPreviewContext(
-        submission,
-        payload,
-        planPayload.sessionPlan || null,
-        settingsPayload.settings?.sessionEstimateCopy || null,
-      )));
-      window.open(previewUrl().toString(), "_blank", "noopener,noreferrer");
-      setStatus("Real-data preview opened");
+      try {
+        const [payload, planPayload, settingsPayload] = await Promise.all([
+          api("/api/admin/booking/availability-preview"),
+          TATTOO_PROJECT_TYPES.has(submission.type) ? api(`/api/admin/booking/session-plans/${encodeURIComponent(activeId)}`) : Promise.resolve({ sessionPlan:null }),
+          TATTOO_PROJECT_TYPES.has(submission.type) ? api("/api/admin/tattoo/settings") : Promise.resolve({ settings:null }),
+        ]);
+        localStorage.setItem(bookingPreviewKey, JSON.stringify(clientPreviewContext(
+          submission,
+          payload,
+          planPayload.sessionPlan || null,
+          settingsPayload.settings?.sessionEstimateCopy || null,
+        )));
+        previewWindow.location.replace(previewUrl().toString());
+        setStatus("Real-data preview opened");
+      } catch (error) {
+        previewWindow.close();
+        setStatus(error.message || "Client preview could not be built");
+      }
       return;
     }
 

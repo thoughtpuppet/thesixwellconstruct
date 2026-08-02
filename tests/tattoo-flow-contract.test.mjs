@@ -1858,6 +1858,20 @@ test("Studio Tattoo Special requests show the client tattoo description", () => 
   assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?p\("reference_link"\)/);
 });
 
+test("Studio client preview opens synchronously and carries the Tattoo Special lifecycle", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const booking = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
+  const handlerStart = studio.indexOf('if (event.target.id === "previewBookingBtn"');
+  const handlerEnd = studio.indexOf('if (event.target.id === "generateBookingBtn"', handlerStart);
+  const handler = studio.slice(handlerStart, handlerEnd);
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
+  assert.ok(handler.indexOf('window.open("about:blank", "_blank")') >= 0);
+  assert.ok(handler.indexOf('window.open("about:blank", "_blank")') < handler.indexOf("await Promise.all"));
+  assert.match(studio, /function clientPreviewContext[\s\S]*?allowedTypeIds[\s\S]*?special_offer_title[\s\S]*?pendingApproval[\s\S]*?pendingCheckout/);
+  assert.match(booking, /function adminPreviewContext[\s\S]*?pendingCheckout: payload\.pendingCheckout \|\| null/);
+  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Square deposit link sent by email and text/);
+});
+
 test("Tattoo Specials require Studio approval and preserve server-side price, deposit, duration, and token cutoff", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
