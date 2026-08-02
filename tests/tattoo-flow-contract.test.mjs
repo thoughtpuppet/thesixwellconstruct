@@ -1863,11 +1863,13 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.match(script, /Studio approval required/);
   assert.match(script, /appointment is booked only after payment/i);
   assert.match(page, /id="scriptTextField" hidden[\s\S]*?name="scriptText"/);
-  assert.match(script, /offer\.maxWordCount[\s\S]*?words maximum/);
+  assert.match(script, /selectedOffer\?\.maxWordCount[\s\S]*?words maximum/);
+  assert.doesNotMatch(script, /special-card__meta/);
   assert.match(script, /Keep the script to \$\{maximum\} words or fewer/);
   assert.match(script, /There are no special available at this time\./);
   assert.match(script, /Check back another time or <a href="\$\{escape\(payload\.normalInquiryUrl\)\}">submit a normal tattoo request<\/a>\./);
   assert.match(page, /id="specialsSubmit">Continue to Select Time Slot<\/button>/);
+  assert.match(page, /class="specials-booking-cue" href="#specialsOffersSection"[\s\S]*?↓[\s\S]*?Book Your Appointment/);
   assert.match(booking, /pendingSpecialApproval \? "Submit Request for Approval" : "Continue to Square"/);
   assert.doesNotMatch(script, /Direct booking|normal private booking link/);
   assert.doesNotMatch(script, /complexity approval|special-anime/);
@@ -2017,12 +2019,16 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(context.bookingTypes[0].depositCents, 5000);
   assert.equal(context.sessionPlan, null);
 
-  const appointmentStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const appointmentStart = new Date(
+    Math.ceil((Date.now() + 7 * 24 * 60 * 60 * 1000) / (60 * 60 * 1000)) * 60 * 60 * 1000,
+  );
   const appointmentEnd = new Date(appointmentStart.getTime() + 120 * 60 * 1000);
   insertAvailabilityWindow(database, {
     id: "special-palm-window", bookingTypeId: "tattoo_special_palm_v2",
     startAt: appointmentStart.toISOString(), endAt: appointmentEnd.toISOString(),
     capacity: 2,
+    bufferBeforeMinutes: 30,
+    bufferAfterMinutes: 30,
   });
   const holdResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: rawToken,
@@ -2044,6 +2050,8 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     id: "special-palm-overlapping-window", bookingTypeId: "tattoo_special_palm_v2",
     startAt: overlappingStart.toISOString(), endAt: overlappingEnd.toISOString(),
     capacity: 2,
+    bufferBeforeMinutes: 30,
+    bufferAfterMinutes: 30,
   });
   const competingResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-palm", variantId: "special-palm-v2-standard", idempotencyKey: "special-review-palm-overlap",
@@ -2068,6 +2076,24 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const competingHoldPayload = await competingHold.json();
   assert.equal(competingHold.status, 400, JSON.stringify(competingHoldPayload));
   assert.match(competingHoldPayload.error, /overlaps another booking/i);
+
+  const adjacentStart = new Date(appointmentEnd.getTime() + 60 * 60 * 1000);
+  const adjacentEnd = new Date(adjacentStart.getTime() + 120 * 60 * 1000);
+  insertAvailabilityWindow(database, {
+    id: "special-palm-adjacent-window", bookingTypeId: "tattoo_special_palm_v2",
+    startAt: adjacentStart.toISOString(), endAt: adjacentEnd.toISOString(),
+    capacity: 2,
+    bufferBeforeMinutes: 30,
+    bufferAfterMinutes: 30,
+  });
+  const adjacentHoldResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: competingToken,
+    bookingTypeId: "tattoo_special_palm_v2",
+    availabilityWindowId: "special-palm-adjacent-window",
+  }), env);
+  const adjacentHold = await adjacentHoldResponse.json();
+  assert.equal(adjacentHoldResponse.status, 200, adjacentHold.detail || adjacentHold.error);
+  assert.equal(adjacentHold.appointment.startAt, adjacentStart.toISOString());
 
   const requestEmailVariants = database.prepare(
     "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key"
@@ -4469,26 +4495,35 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
   }
 });
 
-test("client transactional emails lock every presentation layer to an explicit dark canvas", () => {
+test("client transactional emails use a table-owned canvas with Gmail inversion protection", () => {
   clientEmailPreviewCatalog().forEach((entry) => {
     const rendered = renderClientEmailPreview(entry.templateKey, entry.variant);
     const presentationTables = rendered.html.match(/<table\b[^>]*role="presentation"[^>]*>/gi) || [];
     const tableCells = rendered.html.match(/<td\b[^>]*>/gi) || [];
+    const blendScreens = rendered.html.match(/class="gmail-blend-screen"/g) || [];
+    const blendDifferences = rendered.html.match(/class="gmail-blend-difference"/g) || [];
     const identity = `${entry.templateKey}:${entry.variant}`;
 
     assert.doesNotMatch(rendered.html, /color-scheme/i, identity);
     assert.doesNotMatch(rendered.html, /supported-color-schemes/i, identity);
-    assert.match(rendered.html, /<html[^>]*background-color:#0E0E0E/, identity);
-    assert.match(rendered.html, /<body[^>]*bgcolor="#0E0E0E"[^>]*background-color:#0E0E0E!important/, identity);
+    assert.match(rendered.html, /<html lang="en">/, identity);
+    assert.match(rendered.html, /<body class="email-body" style="margin:0;padding:0;">/, identity);
+    assert.doesNotMatch(rendered.html, /<body[^>]*(?:bgcolor|background-color)/i, identity);
+    assert.match(rendered.html, /u \+ \.email-body \.gmail-blend-screen\{[^}]*mix-blend-mode:screen/, identity);
+    assert.match(rendered.html, /u \+ \.email-body \.gmail-blend-difference\{[^}]*mix-blend-mode:difference/, identity);
+    assert.ok(blendScreens.length > 0, `${identity} should wrap foreground content`);
+    assert.equal(blendScreens.length, blendDifferences.length, `${identity} blend layers should stay paired`);
     assert.ok(presentationTables.length > 0, `${identity} should use presentation tables`);
     assert.ok(tableCells.length > 0, `${identity} should use table cells`);
     presentationTables.forEach((tag) => {
       assert.match(tag, /bgcolor="#[0-9A-F]{6}"/i, `${identity} table should have a legacy-safe background`);
-      assert.match(tag, /background-color:#[0-9A-F]{6}/i, `${identity} table should have an inline background`);
+      assert.match(tag, /background-color:#[0-9A-F]{6}!important/i, `${identity} table should have an inline background`);
+      assert.match(tag, /background-image:linear-gradient\((#[0-9A-F]{6}),\1\)!important/i, `${identity} table should have a solid anti-inversion background image`);
     });
     tableCells.forEach((tag) => {
       assert.match(tag, /bgcolor="#[0-9A-F]{6}"/i, `${identity} cell should have a legacy-safe background`);
-      assert.match(tag, /background-color:#[0-9A-F]{6}/i, `${identity} cell should have an inline background`);
+      assert.match(tag, /background-color:#[0-9A-F]{6}!important/i, `${identity} cell should have an inline background`);
+      assert.match(tag, /background-image:linear-gradient\((#[0-9A-F]{6}),\1\)!important/i, `${identity} cell should have a solid anti-inversion background image`);
     });
   });
 });

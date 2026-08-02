@@ -73,6 +73,14 @@ function compact(items) {
   });
 }
 
+function solidBackground(color) {
+  return `background-color:${color}!important;background-image:linear-gradient(${color},${color})!important;`;
+}
+
+function gmailBlend(content) {
+  return `<span class="gmail-blend-screen"><span class="gmail-blend-difference">${content}</span></span>`;
+}
+
 function themeFor(id) {
   return THEMES[id] || THEMES.tattoo;
 }
@@ -80,7 +88,7 @@ function themeFor(id) {
 function renderParagraphs(paragraphs, design) {
   return compact(paragraphs).map((paragraph) => `
     <p style="margin:0 0 18px;color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:16px;line-height:1.65;">
-      ${htmlText(paragraph)}
+      ${gmailBlend(htmlText(paragraph))}
     </p>`).join("");
 }
 
@@ -88,14 +96,14 @@ function renderDetails(details, theme, design) {
   const rows = compact(details).filter((detail) => value(detail?.label) && value(detail?.value));
   if (!rows.length) return "";
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;border:5px solid ${theme.accent};border-collapse:collapse;margin:6px 0 28px;background-color:${design.canvas};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;border:5px solid ${theme.accent};border-collapse:collapse;margin:6px 0 28px;${solidBackground(design.canvas)}">
       ${rows.map((detail, index) => `
         <tr>
-          <td class="detail-label" width="36%" valign="top" bgcolor="${design.canvas}" style="box-sizing:border-box;width:36%;padding:14px 16px;${index ? `border-top:5px solid ${theme.accent};` : ""}background-color:${design.canvas};color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:700;letter-spacing:.16em;line-height:1.5;text-transform:uppercase;">
-            ${htmlText(detail.label)}
+          <td class="detail-label" width="36%" valign="top" bgcolor="${design.canvas}" style="box-sizing:border-box;width:36%;padding:14px 16px;${index ? `border-top:5px solid ${theme.accent};` : ""}${solidBackground(design.canvas)}color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:700;letter-spacing:.16em;line-height:1.5;text-transform:uppercase;">
+            ${gmailBlend(htmlText(detail.label))}
           </td>
-          <td class="detail-value" width="64%" valign="top" bgcolor="${design.canvas}" style="box-sizing:border-box;width:64%;padding:14px 16px;${index ? `border-top:5px solid ${theme.accent};` : ""}background-color:${design.canvas};color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;line-height:1.55;">
-            ${htmlText(detail.value)}
+          <td class="detail-value" width="64%" valign="top" bgcolor="${design.canvas}" style="box-sizing:border-box;width:64%;padding:14px 16px;${index ? `border-top:5px solid ${theme.accent};` : ""}${solidBackground(design.canvas)}color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;line-height:1.55;">
+            ${gmailBlend(htmlText(detail.value))}
           </td>
         </tr>`).join("")}
     </table>`;
@@ -108,19 +116,19 @@ function renderSection(section, theme, design) {
   if (!title && !paragraphs.length && !items.length) return "";
 
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin:0 0 26px;background-color:${design.canvas};">
-      ${title ? `<tr><td bgcolor="${design.canvas}" style="padding:0 0 10px;background-color:${design.canvas};color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.18em;line-height:1.5;text-transform:uppercase;">${htmlText(title)}</td></tr>` : ""}
-      ${paragraphs.length ? `<tr><td bgcolor="${design.canvas}" style="background-color:${design.canvas};">${renderParagraphs(paragraphs, design)}</td></tr>` : ""}
-      ${items.length ? `<tr><td bgcolor="${design.canvas}" style="background-color:${design.canvas};">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;border-collapse:collapse;background-color:${design.canvas};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin:0 0 26px;${solidBackground(design.canvas)}">
+      ${title ? `<tr><td bgcolor="${design.canvas}" style="padding:0 0 10px;${solidBackground(design.canvas)}color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:.18em;line-height:1.5;text-transform:uppercase;">${gmailBlend(htmlText(title))}</td></tr>` : ""}
+      ${paragraphs.length ? `<tr><td bgcolor="${design.canvas}" style="${solidBackground(design.canvas)}">${renderParagraphs(paragraphs, design)}</td></tr>` : ""}
+      ${items.length ? `<tr><td bgcolor="${design.canvas}" style="${solidBackground(design.canvas)}">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;border-collapse:collapse;${solidBackground(design.canvas)}">
           ${items.map((item, index) => {
             const href = safeUrl(item.href);
             const itemValue = value(item.value) || href;
+            const itemContent = `${value(item.label) ? `<strong style="color:${design.title};font-weight:normal;">${htmlText(item.label)}:</strong> ` : ""}${href ? `<a href="${escapeEmailHtml(href)}" style="color:${SHARED.amber};text-decoration:underline;word-break:break-word;">${htmlText(itemValue)}</a>` : htmlText(itemValue)}`;
             return `
               <tr>
-                <td valign="top" bgcolor="${design.canvas}" style="padding:${index ? "12px" : "0"} 0 0;background-color:${design.canvas};color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;line-height:1.6;">
-                  ${value(item.label) ? `<strong style="color:${design.title};font-weight:normal;">${htmlText(item.label)}:</strong> ` : ""}
-                  ${href ? `<a href="${escapeEmailHtml(href)}" style="color:${SHARED.amber};text-decoration:underline;word-break:break-word;">${htmlText(itemValue)}</a>` : htmlText(itemValue)}
+                <td valign="top" bgcolor="${design.canvas}" style="padding:${index ? "12px" : "0"} 0 0;${solidBackground(design.canvas)}color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;line-height:1.6;">
+                  ${gmailBlend(itemContent)}
                 </td>
               </tr>`;
           }).join("")}
@@ -134,18 +142,17 @@ function renderPrimaryAction(action, theme, design) {
   const label = value(action?.label);
   if (!href || !label) return "";
   return `
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="margin:2px 0 28px;background-color:${design.canvas};">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="margin:2px 0 28px;${solidBackground(design.canvas)}">
       <tr>
-        <td bgcolor="${theme.accentBright}" style="background-color:${theme.accentBright};border:5px solid ${theme.accentBright};">
+        <td bgcolor="${theme.accentBright}" style="${solidBackground(theme.accentBright)}border:5px solid ${theme.accentBright};">
           <a href="${escapeEmailHtml(href)}" style="display:inline-block;padding:13px 20px;color:${design[theme.buttonTextRole]};font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;letter-spacing:.14em;line-height:1.25;text-decoration:none;text-transform:uppercase;">
-            ${htmlText(label)}
+            ${gmailBlend(htmlText(label))}
           </a>
         </td>
       </tr>
       <tr>
-        <td bgcolor="${design.canvas}" style="padding-top:10px;background-color:${design.canvas};color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:1.5;word-break:break-all;">
-          If the button does not open, use:<br>
-          <a href="${escapeEmailHtml(href)}" style="color:${design.supporting};text-decoration:underline;">${htmlText(href)}</a>
+        <td bgcolor="${design.canvas}" style="padding-top:10px;${solidBackground(design.canvas)}color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:1.5;word-break:break-all;">
+          ${gmailBlend(`If the button does not open, use:<br><a href="${escapeEmailHtml(href)}" style="color:${design.supporting};text-decoration:underline;">${htmlText(href)}</a>`)}
         </td>
       </tr>
     </table>`;
@@ -158,12 +165,11 @@ function renderSecondaryActions(actions, design) {
   })).filter((action) => action.label && action.href);
   if (!valid.length) return "";
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin:0 0 28px;background-color:${design.canvas};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin:0 0 28px;${solidBackground(design.canvas)}">
       ${valid.map((action, index) => `
         <tr>
-          <td bgcolor="${design.canvas}" style="padding:${index ? "12px" : "0"} 0 0;background-color:${design.canvas};color:${design.supporting};font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:.08em;line-height:1.5;text-transform:uppercase;">
-            <a href="${escapeEmailHtml(action.href)}" style="color:${SHARED.amber};text-decoration:underline;">${htmlText(action.label)}</a>
-            <span style="display:block;padding-top:3px;color:${design.descriptor};font-family:Georgia,'Times New Roman',Times,serif;font-size:12px;letter-spacing:0;text-transform:none;word-break:break-all;">${htmlText(action.href)}</span>
+          <td bgcolor="${design.canvas}" style="padding:${index ? "12px" : "0"} 0 0;${solidBackground(design.canvas)}color:${design.supporting};font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:.08em;line-height:1.5;text-transform:uppercase;">
+            ${gmailBlend(`<a href="${escapeEmailHtml(action.href)}" style="color:${SHARED.amber};text-decoration:underline;">${htmlText(action.label)}</a><span style="display:block;padding-top:3px;color:${design.descriptor};font-family:Georgia,'Times New Roman',Times,serif;font-size:12px;letter-spacing:0;text-transform:none;word-break:break-all;">${htmlText(action.href)}</span>`)}
           </td>
         </tr>`).join("")}
     </table>`;
@@ -173,10 +179,10 @@ function renderNotice(notice, theme, design) {
   const lines = compact(notice);
   if (!lines.length) return "";
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.panel}" style="width:100%;margin:0 0 28px;border-left:5px solid ${theme.accentBright};background-color:${design.panel};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.panel}" style="width:100%;margin:0 0 28px;border-left:5px solid ${theme.accentBright};${solidBackground(design.panel)}">
       <tr>
-        <td bgcolor="${design.panel}" style="padding:16px 18px;background-color:${design.panel};color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:14px;line-height:1.65;">
-          ${lines.map(htmlText).join("<br><br>")}
+        <td bgcolor="${design.panel}" style="padding:16px 18px;${solidBackground(design.panel)}color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:14px;line-height:1.65;">
+          ${gmailBlend(lines.map(htmlText).join("<br><br>"))}
         </td>
       </tr>
     </table>`;
@@ -186,9 +192,9 @@ function renderHero(heroImage, theme, design) {
   const src = safeUrl(heroImage?.src);
   if (!src) return "";
   return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin:0 0 28px;border:5px solid ${theme.accent};background-color:${design.canvas};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin:0 0 28px;border:5px solid ${theme.accent};${solidBackground(design.canvas)}">
       <tr>
-        <td bgcolor="${design.canvas}" style="background-color:${design.canvas};">
+        <td bgcolor="${design.canvas}" style="${solidBackground(design.canvas)}">
           <img src="${escapeEmailHtml(src)}" width="610" alt="${escapeEmailHtml(value(heroImage.alt))}" style="display:block;width:100%;max-width:610px;height:auto;border:0;">
         </td>
       </tr>
@@ -285,28 +291,27 @@ export function renderClientEmail(message, designProfile = null) {
     ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${htmlText(preheader)}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>`
     : "";
   const signature = message.signature ? `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin-top:8px;background-color:${design.canvas};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;margin-top:8px;${solidBackground(design.canvas)}">
       <tr>
-        <td bgcolor="${design.canvas}" style="background-color:${design.canvas};color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;line-height:1.65;">
-          ${value(message.signature.closing) ? `${htmlText(message.signature.closing)}<br>` : ""}
-          ${value(message.signature.name) ? `<span style="color:${design.title};">${htmlText(message.signature.name)}</span><br>` : ""}
-          <span style="color:${design.signatureMark};font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;">${htmlText(message.signature.mark || theme.brand)}</span>
+        <td bgcolor="${design.canvas}" style="${solidBackground(design.canvas)}color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:15px;line-height:1.65;">
+          ${gmailBlend(`${value(message.signature.closing) ? `${htmlText(message.signature.closing)}<br>` : ""}${value(message.signature.name) ? `<span style="color:${design.title};">${htmlText(message.signature.name)}</span><br>` : ""}<span style="color:${design.signatureMark};font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;">${htmlText(message.signature.mark || theme.brand)}</span>`)}
         </td>
       </tr>
     </table>` : "";
 
   const html = `<!doctype html>
-<html lang="en" style="background-color:${design.canvas};">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${escapeEmailHtml(subject)}</title>
   <style>
-    html,body{background-color:${design.canvas}!important}
     body,table,td,p,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
     table,td{mso-table-lspace:0;mso-table-rspace:0}
     table{border-collapse:collapse!important}
     img{-ms-interpolation-mode:bicubic}
+    u + .email-body .gmail-blend-screen{display:block;background:#000;mix-blend-mode:screen}
+    u + .email-body .gmail-blend-difference{display:block;background:#000;mix-blend-mode:difference}
     @media only screen and (max-width:660px){
       .email-shell{width:100%!important}
       .email-pad{padding-left:20px!important;padding-right:20px!important;overflow-wrap:anywhere!important;word-break:break-word!important}
@@ -316,22 +321,22 @@ export function renderClientEmail(message, designProfile = null) {
     }
   </style>
 </head>
-<body class="email-body" bgcolor="${design.canvas}" style="margin:0;padding:0;background-color:${design.canvas}!important;color:${design.supporting};">
+<body class="email-body" style="margin:0;padding:0;">
   ${hiddenPreheader}
-  <table role="presentation" class="email-canvas" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;background-color:${design.canvas}!important;">
+  <table role="presentation" class="email-canvas" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;${solidBackground(design.canvas)}">
     <tr>
-      <td align="center" bgcolor="${design.canvas}" style="padding:24px 12px;background-color:${design.canvas}!important;">
-        <table role="presentation" class="email-shell" width="620" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:620px;max-width:620px;background-color:${design.canvas}!important;">
+      <td align="center" bgcolor="${design.canvas}" style="padding:24px 12px;${solidBackground(design.canvas)}">
+        <table role="presentation" class="email-shell" width="620" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:620px;max-width:620px;${solidBackground(design.canvas)}">
           <tr>
-            <td class="email-pad" bgcolor="${design.canvas}" style="padding:22px 30px 18px;border-bottom:5px solid ${theme.accent};background-color:${design.canvas}!important;">
-              <span style="color:${design.title};font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;letter-spacing:.16em;line-height:1.4;text-transform:uppercase;">${htmlText(theme.brand)}</span>
+            <td class="email-pad" bgcolor="${design.canvas}" style="padding:22px 30px 18px;border-bottom:5px solid ${theme.accent};${solidBackground(design.canvas)}">
+              ${gmailBlend(`<span style="color:${design.title};font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;letter-spacing:.16em;line-height:1.4;text-transform:uppercase;">${htmlText(theme.brand)}</span>`)}
             </td>
           </tr>
           <tr>
-            <td class="email-pad" bgcolor="${design.canvas}" style="padding:34px 30px 38px;background-color:${design.canvas}!important;overflow-wrap:anywhere;word-break:break-word;">
-              ${value(message.classification) ? `<div style="margin:0 0 12px;color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;line-height:1.5;text-transform:uppercase;">${htmlText(message.classification)}</div>` : ""}
-              ${value(message.headline) ? `<h1 class="email-title" style="margin:0 0 22px;color:${design.title};font-family:Arial,Helvetica,sans-serif;font-size:38px;font-weight:900;letter-spacing:-.045em;line-height:1.05;">${htmlText(message.headline)}</h1>` : ""}
-              ${value(message.greeting) ? `<p style="margin:0 0 18px;color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:16px;line-height:1.65;">${htmlText(message.greeting)}</p>` : ""}
+            <td class="email-pad" bgcolor="${design.canvas}" style="padding:34px 30px 38px;${solidBackground(design.canvas)}overflow-wrap:anywhere;word-break:break-word;">
+              ${value(message.classification) ? `<div style="margin:0 0 12px;color:${design.descriptor};font-family:Arial,Helvetica,sans-serif;font-size:10px;font-weight:700;letter-spacing:.2em;line-height:1.5;text-transform:uppercase;">${gmailBlend(htmlText(message.classification))}</div>` : ""}
+              ${value(message.headline) ? `<h1 class="email-title" style="margin:0 0 22px;color:${design.title};font-family:Arial,Helvetica,sans-serif;font-size:38px;font-weight:900;letter-spacing:-.045em;line-height:1.05;">${gmailBlend(htmlText(message.headline))}</h1>` : ""}
+              ${value(message.greeting) ? `<p style="margin:0 0 18px;color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:16px;line-height:1.65;">${gmailBlend(htmlText(message.greeting))}</p>` : ""}
               ${renderHero(message.heroImage, theme, design)}
               ${renderParagraphs(message.intro, design)}
               ${renderDetails(message.details, theme, design)}
@@ -344,8 +349,8 @@ export function renderClientEmail(message, designProfile = null) {
             </td>
           </tr>
           <tr>
-            <td class="email-pad" bgcolor="${design.canvas}" style="padding:18px 30px 24px;border-top:5px solid ${theme.accent};background-color:${design.canvas}!important;color:${design.descriptor};font-family:Georgia,'Times New Roman',Times,serif;font-size:11px;line-height:1.65;">
-              ${compact(message.footer).length ? compact(message.footer).map(htmlText).join("<br>") : `${htmlText(theme.brand)}<br>Transactional studio correspondence.`}
+            <td class="email-pad" bgcolor="${design.canvas}" style="padding:18px 30px 24px;border-top:5px solid ${theme.accent};${solidBackground(design.canvas)}color:${design.descriptor};font-family:Georgia,'Times New Roman',Times,serif;font-size:11px;line-height:1.65;">
+              ${gmailBlend(compact(message.footer).length ? compact(message.footer).map(htmlText).join("<br>") : `${htmlText(theme.brand)}<br>Transactional studio correspondence.`)}
             </td>
           </tr>
         </table>

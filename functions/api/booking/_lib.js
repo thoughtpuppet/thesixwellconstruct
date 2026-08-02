@@ -1682,10 +1682,10 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
           SELECT 1 FROM availability_windows blackout
           WHERE blackout.active = 1 AND blackout.is_blackout = 1
             AND (
-              julianday(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) / 1440.0
-                < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-              AND julianday(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) / 1440.0
-                > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+              unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
+                < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+              AND unixepoch(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) * 60
+                > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
             )
         )
         AND (
@@ -1694,10 +1694,10 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
             ON overlap_window.id = overlap_appointment.availability_window_id
           WHERE overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
             AND (
-              julianday(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) / 1440.0
-                < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-              AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
-                > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+              unixepoch(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) * 60
+                < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+              AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
+                > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
             )
         ) < CASE
           WHEN ? IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
@@ -3771,20 +3771,20 @@ async function insertDirectPublicSession(db, submission, appointment, submission
     AND NOT EXISTS (
       SELECT 1 FROM availability_windows blackout
       WHERE blackout.active = 1 AND blackout.is_blackout = 1
-        AND julianday(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) / 1440.0
-          < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-        AND julianday(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) / 1440.0
-          > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+        AND unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
+          < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+        AND unixepoch(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) * 60
+          > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
     )
     AND (
       SELECT COUNT(*) FROM appointments overlap_appointment
       LEFT JOIN availability_windows overlap_window
         ON overlap_window.id = overlap_appointment.availability_window_id
       WHERE overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-        AND julianday(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) / 1440.0
-          < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-        AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
-          > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+        AND unixepoch(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) * 60
+          < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+        AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
+          > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
     ) < ${isExclusiveTattooBookingType(appointment.bookingTypeId) ? "1" : "aw.capacity"}
     AND (
       SELECT COUNT(*) FROM appointments exact_appointment
@@ -5092,10 +5092,10 @@ async function moveConfirmedAppointment(
              AND NOT EXISTS (
                SELECT 1 FROM availability_windows blackout
                WHERE blackout.active = 1 AND blackout.is_blackout = 1
-                 AND julianday(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) / 1440.0
-                   < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-                 AND julianday(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) / 1440.0
-                   > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+                 AND unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
+                   < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+                 AND unixepoch(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) * 60
+                   > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
              )
              AND (
                SELECT COUNT(*) FROM appointments overlap_appointment
@@ -5103,10 +5103,10 @@ async function moveConfirmedAppointment(
                  ON overlap_window.id = overlap_appointment.availability_window_id
                WHERE overlap_appointment.id <> appointments.id
                  AND overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-                 AND julianday(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) / 1440.0
-                   < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-                 AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
-                   > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+                 AND unixepoch(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) * 60
+                   < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+                 AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
+                   > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
              ) < CASE
                WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
                  OR appointments.booking_type_id LIKE 'tattoo_special_%'
@@ -5318,10 +5318,10 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
              AND NOT EXISTS (
                SELECT 1 FROM availability_windows blackout
                WHERE blackout.active = 1 AND blackout.is_blackout = 1
-                 AND julianday(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) / 1440.0
-                   < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-                 AND julianday(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) / 1440.0
-                   > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+                 AND unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
+                   < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+                 AND unixepoch(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) * 60
+                   > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
              )
              AND (
                SELECT COUNT(*) FROM appointments overlap_appointment
@@ -5329,10 +5329,10 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
                  ON overlap_window.id = overlap_appointment.availability_window_id
                WHERE overlap_appointment.id <> appointments.id
                  AND overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-                 AND julianday(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) / 1440.0
-                   < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
-                 AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
-                   > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
+                 AND unixepoch(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) * 60
+                   < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
+                 AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
+                   > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
              ) < CASE
                WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
                  OR appointments.booking_type_id LIKE 'tattoo_special_%'
