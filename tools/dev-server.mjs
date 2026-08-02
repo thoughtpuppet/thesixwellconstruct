@@ -72,16 +72,16 @@ const checkRoutes = [
   ["/edit-links-mac.html", 200],
   ["/edit-links-mac", 200],
   ["/page-visibility", 200],
-  ["/about/", 200],
-  ["/about/visual-language/", 200],
-  ["/about/legend/open-eye/", 200],
-  ["/about/breakdown/", 200],
-  ["/about/founder/", 200],
-  ["/about/mediums/", 200],
-  ["/about/six-well/", 200],
-  ["/about/ways-in/", 200],
-  ["/about/current-state/", 200],
-  ["/about/contact-press/", 200],
+  ["/about/", 302],
+  ["/about/visual-language/", 302],
+  ["/about/legend/open-eye/", 302],
+  ["/about/breakdown/", 302],
+  ["/about/founder/", 302],
+  ["/about/mediums/", 302],
+  ["/about/six-well/", 302],
+  ["/about/ways-in/", 302],
+  ["/about/current-state/", 302],
+  ["/about/contact-press/", 302],
   ["/construct-map/", 200],
   ["/adventure/", 200],
   ["/adventure", 308],
@@ -97,21 +97,21 @@ const checkRoutes = [
   ["/music/", 302],
   ["/film/", 302],
   ["/writings/", 302],
-  ["/archive/", 200],
-  ["/archive/guide/", 200],
-  ["/archive/compare/", 200],
-  ["/archive/collections/", 200],
-  ["/archive/about/", 200],
-  ["/archive/art/", 200],
-  ["/archive/events/", 200],
-  ["/archive/film/", 200],
-  ["/archive/merch/", 200],
-  ["/archive/music/", 200],
-  ["/archive/sixwell-construct/", 200],
-  ["/archive/tattoos/", 200],
-  ["/archive/writings/", 200],
-  ["/archive/records/lostmarbles/", 200],
-  ["/archive/timelines/art/", 200],
+  ["/archive/", 302],
+  ["/archive/guide/", 302],
+  ["/archive/compare/", 302],
+  ["/archive/collections/", 302],
+  ["/archive/about/", 302],
+  ["/archive/art/", 302],
+  ["/archive/events/", 302],
+  ["/archive/film/", 302],
+  ["/archive/merch/", 302],
+  ["/archive/music/", 302],
+  ["/archive/sixwell-construct/", 302],
+  ["/archive/tattoos/", 302],
+  ["/archive/writings/", 302],
+  ["/archive/records/lostmarbles/", 302],
+  ["/archive/timelines/art/", 302],
   ["/tattoos/", 200],
   ["/tattoos/special-projects/", 200],
   ["/tattoos/inquire/", 200],
@@ -153,6 +153,7 @@ const hiddenPublicPaths = new Set([
   "/music",
   "/writings",
 ]);
+const closedPublicPagePaths = ["/about", "/archive"];
 const hidePublicPagesExceptHome = false;
 const publicFrontDoorPaths = new Set(["/", "/index", "/index/", "/index.html"]);
 const publicEntryRoomAliasPaths = new Set(["/entry-room", "/entry-room/", "/entry-room/index.html"]);
@@ -282,6 +283,11 @@ function isHiddenByHomeOnlyMode(urlPath) {
 function isHiddenPublicRoute(urlPath) {
   if (isHiddenByHomeOnlyMode(urlPath)) return true;
   const normalized = normalizeRoute(urlPath);
+  const normalizedLower = normalized.toLowerCase();
+  if (
+    isPublicPageRoute(urlPath) &&
+    closedPublicPagePaths.some((closedPath) => normalizedLower === closedPath || normalizedLower.startsWith(`${closedPath}/`))
+  ) return true;
   for (const hiddenPath of hiddenPublicPaths) {
     if (normalized === hiddenPath || normalized.startsWith(`${hiddenPath}/`)) return true;
   }

@@ -131,6 +131,7 @@ const HIDDEN_PUBLIC_PATHS = [
   "/music",
   "/writings"
 ];
+const CLOSED_PUBLIC_PAGE_PATHS = ["/about", "/archive"];
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_FRONT_DOOR_PATHS = new Set(["/", "/index", "/index/", "/index.html"]);
@@ -348,6 +349,14 @@ function archiveDynamicAssetPath(pathname) {
   if (parts[1] === "materials") return "/archive/materials/index.html";
   if (parts[1] === "failed-experiments") return "/archive/failed-experiments/index.html";
   return "";
+}
+
+function isClosedPublicPagePath(pathname) {
+  if (!isPublicPagePath(pathname)) return false;
+  const normalizedPath = normalizePath(pathname).toLowerCase();
+  return CLOSED_PUBLIC_PAGE_PATHS.some((closedPath) => (
+    normalizedPath === closedPath || normalizedPath.startsWith(`${closedPath}/`)
+  ));
 }
 
 const LEGEND_RECORD_RESERVED_SLUGS = new Set([
@@ -1056,6 +1065,10 @@ export default {
     const url = new URL(request.url);
     if (isLocalOnlyPath(url.pathname) && !isLocalPreview(url)) {
       return notFoundPage(request, env);
+    }
+
+    if (isClosedPublicPagePath(url.pathname)) {
+      return redirectToNotFoundPage(request);
     }
 
     if (url.pathname === "/explore" || url.pathname === "/explore/" || url.pathname === "/explore/index.html") {

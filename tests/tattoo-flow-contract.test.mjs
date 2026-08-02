@@ -1856,6 +1856,7 @@ test("Tattoo index keeps the lower Specials block and reveals a matching brand-b
 test("Tattoo Specials public copy matches the held-time approval lifecycle", () => {
   const page = readFileSync(join(ROOT, "tattoos", "specials", "index.html"), "utf8");
   const script = readFileSync(join(ROOT, "js", "tattoo-specials.js"), "utf8");
+  const booking = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   const reschedule = readFileSync(join(ROOT, "booking", "reschedule", "index.html"), "utf8");
   assert.match(page, /select an available time, and pay the deposit after Studio approval/i);
   assert.doesNotMatch(page, /<dt>Campaign<\/dt>/i);
@@ -1866,6 +1867,8 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.match(script, /Keep the script to \$\{maximum\} words or fewer/);
   assert.match(script, /There are no special available at this time\./);
   assert.match(script, /Check back another time or <a href="\$\{escape\(payload\.normalInquiryUrl\)\}">submit a normal tattoo request<\/a>\./);
+  assert.match(page, /id="specialsSubmit">Continue to Select Time Slot<\/button>/);
+  assert.match(booking, /pendingSpecialApproval \? "Submit Request for Approval" : "Continue to Square"/);
   assert.doesNotMatch(script, /Direct booking|normal private booking link/);
   assert.doesNotMatch(script, /complexity approval|special-anime/);
   assert.match(reschedule, /flow.*special-request/);
@@ -1880,6 +1883,23 @@ test("Studio Tattoo Special requests show the client tattoo description", () => 
   assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?p\("reference_link"\)/);
   assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?Requested Script[\s\S]*?p\("script_text"\)/);
   assert.match(studio, /name="maxWordCount"[\s\S]*?offer\.maxWordCount/);
+});
+
+test("Studio request details open an editable native text message to the submitted client phone", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studio, /function smsHref\(phone\)[\s\S]*?return `sms:\$\{source\.startsWith\("\+"\)/);
+  assert.match(studio, /clientSmsHref = smsHref\(submission\.contactPhone \|\| payloadValue\(submission, "phone"\)\)/);
+  assert.match(studio, /id="textClientBtn" href="\$\{escapeHtml\(clientSmsHref\)\}">Text Client<\/a>/);
+  assert.match(studio, /Text Client opens your device's Messages app with the editable copy above\. Review it, then press Send yourself\./);
+  assert.match(studio, /textClientButton[\s\S]*?navigator\.clipboard\?\.writeText\(value\)[\s\S]*?body=\$\{encodeURIComponent\(value\)\}/);
+});
+
+test("Studio resends the active Tattoo Special deposit email instead of its consumed calendar token", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studio, /canResendSpecialDeposit[\s\S]*?appointment\?\.approvalState === "approved"[\s\S]*?pending_deposit/);
+  assert.match(studio, /data-resend-template="tattoo_special_deposit_requested"[\s\S]*?Resend Deposit Link Email/);
+  assert.match(studio, /templateKey === "tattoo_special_deposit_requested"[\s\S]*?Tattoo Special deposit email resent/);
+  assert.match(studio, /catch \(error\)[\s\S]*?Email could not be resent/);
 });
 
 test("Studio client preview opens synchronously and carries the Tattoo Special lifecycle", () => {
@@ -2002,6 +2022,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   insertAvailabilityWindow(database, {
     id: "special-palm-window", bookingTypeId: "tattoo_special_palm_v2",
     startAt: appointmentStart.toISOString(), endAt: appointmentEnd.toISOString(),
+    capacity: 2,
   });
   const holdResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: rawToken,
@@ -2016,6 +2037,38 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(hold.appointment.endAt, appointmentEnd.toISOString());
   assert.ok(new Date(hold.appointment.holdExpiresAt).getTime() <= new Date(closes).getTime());
   assert.equal(database.prepare("SELECT square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id).square_checkout_url, null);
+
+  const overlappingStart = new Date(appointmentStart.getTime() + 30 * 60 * 1000);
+  const overlappingEnd = new Date(overlappingStart.getTime() + 120 * 60 * 1000);
+  insertAvailabilityWindow(database, {
+    id: "special-palm-overlapping-window", bookingTypeId: "tattoo_special_palm_v2",
+    startAt: overlappingStart.toISOString(), endAt: overlappingEnd.toISOString(),
+    capacity: 2,
+  });
+  const competingResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-palm", variantId: "special-palm-v2-standard", idempotencyKey: "special-review-palm-overlap",
+    name: "Competing Client", email: "competing@example.com", phone: "4045550198",
+    ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
+    placement: "Forearm", projectDetails: "A second palm-sized request.",
+  }), env);
+  assert.equal(competingResponse.status, 201);
+  const competing = await competingResponse.json();
+  const competingToken = new URL(competing.bookingUrl, "https://example.test").searchParams.get("token");
+  const competingContextResponse = await handleBookingContext(new Request(
+    `https://example.test/api/booking/context?token=${encodeURIComponent(competingToken)}`,
+  ), env);
+  assert.equal(competingContextResponse.status, 200);
+  const competingContext = await competingContextResponse.json();
+  assert.equal(competingContext.availabilityWindows.some((item) => item.id === "special-palm-overlapping-window"), false);
+  const competingHold = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: competingToken,
+    bookingTypeId: "tattoo_special_palm_v2",
+    availabilityWindowId: "special-palm-overlapping-window",
+  }), env);
+  const competingHoldPayload = await competingHold.json();
+  assert.equal(competingHold.status, 400, JSON.stringify(competingHoldPayload));
+  assert.match(competingHoldPayload.error, /overlaps another booking/i);
+
   const requestEmailVariants = database.prepare(
     "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key"
   ).all(submitted.submissionId).map((row) => ({ ...row }));
@@ -2078,7 +2131,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   ), env, submitted.submissionId);
   assert.equal(nonAnimeSimplification.status, 409);
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
-  assert.match(bookingPage, /Hold Time & Send Request/);
+  assert.match(bookingPage, /Submit Request for Approval/);
   assert.match(bookingPage, /special-offering/);
   const specialAppointment = database.prepare("SELECT hold_expires_at,start_at,end_at,approval_state,payment_due_at,square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id);
   assert.equal(specialAppointment.approval_state, "approved");
@@ -2331,6 +2384,8 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
 test("approved Tattoo Special clients can replace the requested time and pay without another approval", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
+  const sent = [];
+  const adminToken = "special-resend-admin";
   const now = Date.now();
   const oldStart = new Date(now + 10 * 24 * 60 * 60 * 1000).toISOString();
   const oldEnd = new Date(new Date(oldStart).getTime() + 120 * 60 * 1000).toISOString();
@@ -2416,10 +2471,24 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
   });
   const env = {
     SUBMISSIONS_DB: db,
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
     SQUARE_ACCESS_TOKEN: "square-token",
     SQUARE_LOCATION_ID: "square-location",
     PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: { async send(message) { sent.push(message); return { id: `special-resend-${sent.length}` }; } },
   };
+
+  const resendResponse = await handleAdminResendNotification(adminJsonRequest(
+    "/api/admin/notifications/resend",
+    { templateKey: "tattoo_special_deposit_requested", appointmentId },
+    adminToken,
+  ), env);
+  const resendPayload = await resendResponse.json();
+  assert.equal(resendResponse.status, 200, JSON.stringify(resendPayload));
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].subject, /Tattoo Special was approved/i);
+  assert.match(sent[0].text, /square\.test\/special-change-old/);
+  assert.match(sent[0].text, /Change requested time/i);
 
   const contextResponse = await handleRescheduleContext(jsonRequest("/api/booking/reschedule/context", {
     appointmentId,
@@ -4384,6 +4453,22 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_space").html, /#005D25/);
 });
 
+test("paid tattoo confirmations include final-payment, grace-period, and all client-resource guidance", () => {
+  for (const variant of ["tattoo", "tip", "tattoo_special", "tattoo_special_tip"]) {
+    const rendered = renderClientEmailPreview("appointment_confirmed", variant);
+    const identity = `appointment_confirmed:${variant}`;
+    assert.match(rendered.text, /remaining balance must be paid before tattooing begins/, identity);
+    assert.match(rendered.text, /Cash is preferred/, identity);
+    assert.match(rendered.text, /Cash App, Apple Pay, and credit\/debit cards are also accepted/, identity);
+    assert.match(rendered.text, /3% processing fee applies to all digital transactions/, identity);
+    assert.match(rendered.text, /15-minute grace period/, identity);
+    assert.match(rendered.text, /Arrival later than 15 minutes may require cancellation, rescheduling, and a new deposit/, identity);
+    assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/policies\/"/, identity);
+    assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/day-of\/"/, identity);
+    assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/location-parking\/"/, identity);
+  }
+});
+
 test("client transactional emails lock every presentation layer to an explicit dark canvas", () => {
   clientEmailPreviewCatalog().forEach((entry) => {
     const rendered = renderClientEmailPreview(entry.templateKey, entry.variant);
@@ -4391,9 +4476,9 @@ test("client transactional emails lock every presentation layer to an explicit d
     const tableCells = rendered.html.match(/<td\b[^>]*>/gi) || [];
     const identity = `${entry.templateKey}:${entry.variant}`;
 
-    assert.match(rendered.html, /<meta name="color-scheme" content="dark">/, identity);
-    assert.match(rendered.html, /<meta name="supported-color-schemes" content="dark">/, identity);
-    assert.match(rendered.html, /<html[^>]*background-color:#0E0E0E[^>]*color-scheme:dark/, identity);
+    assert.doesNotMatch(rendered.html, /color-scheme/i, identity);
+    assert.doesNotMatch(rendered.html, /supported-color-schemes/i, identity);
+    assert.match(rendered.html, /<html[^>]*background-color:#0E0E0E/, identity);
     assert.match(rendered.html, /<body[^>]*bgcolor="#0E0E0E"[^>]*background-color:#0E0E0E!important/, identity);
     assert.ok(presentationTables.length > 0, `${identity} should use presentation tables`);
     assert.ok(tableCells.length > 0, `${identity} should use table cells`);

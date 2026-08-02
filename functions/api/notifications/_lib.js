@@ -22,6 +22,7 @@ import {
   renderClientEmailPreview,
   emailTemplateDefinition,
   renderEmailTemplateContent,
+  TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY,
 } from "./_email-templates.js";
 import { renderEmailContent, validateEmailContent } from "./_email-content.js";
 import { CLIENT_EMAIL_THEMES, renderClientEmail } from "./_email-renderer.js";
@@ -1252,12 +1253,13 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
       ? "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "",
     renderingPolicyText: "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
-    paymentPolicyText: "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins.",
+    paymentPolicyText: TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY,
     tipText: appointment.tipCents ? formatMoney(appointment.tipCents, appointment.currency) : "",
     totalPaidText: appointment.tipCents ? formatMoney(appointment.totalDueCents, appointment.currency) : "",
     confirmationUrl: appointmentConfirmationUrl(env, request, appointment),
     calendarUrl: appointmentCalendarUrl(env, request, appointment),
     resources: [
+      { label: "Tattoo policies", href: resources.bookingTermsUrl },
       { label: "Day-of instructions", href: resources.dayOfInstructionsUrl },
       { label: "Location & parking", href: resources.locationParkingUrl },
     ],
@@ -2211,6 +2213,56 @@ export async function handleAdminResendNotification(request, env) {
           : null,
       }, {
         idempotencyKey: resendKey(`booking_link_created:${tokenId}`),
+      });
+      return deliveryResponse(delivery);
+    }
+
+    if (templateKey === "tattoo_special_deposit_requested") {
+      if (!appointmentId) return errorResponse("Missing Tattoo Special appointment id.", 400);
+      const specialAppointment = await db.prepare(
+        `SELECT a.*, s.type AS submission_type,
+                s.contact_name AS submission_contact_name,
+                s.contact_email AS submission_contact_email,
+                t.offer_title, t.variant_label, t.advertised_price_cents,
+                t.approved_price_cents, t.deposit_cents AS special_deposit_cents,
+                t.sales_closes_at
+         FROM appointments a
+         JOIN submissions s ON s.id = a.submission_id
+         JOIN tattoo_special_submission_terms t ON t.submission_id = s.id
+         WHERE a.id = ? AND s.type = 'tattoo_special'`
+      ).bind(appointmentId).first();
+      if (!specialAppointment) return errorResponse("Tattoo Special appointment not found.", 404);
+      const now = new Date().toISOString();
+      if (
+        specialAppointment.approval_state !== "approved"
+        || !["pending_deposit", "deposit_pending"].includes(specialAppointment.status)
+        || specialAppointment.hold_state !== "active"
+      ) {
+        return errorResponse("Only an approved Tattoo Special awaiting its deposit can receive this email.", 409);
+      }
+      if (
+        !specialAppointment.square_checkout_url
+        || specialAppointment.hold_expires_at <= now
+        || (specialAppointment.payment_due_at && specialAppointment.payment_due_at <= now)
+        || specialAppointment.sales_closes_at <= now
+      ) {
+        return errorResponse("This Tattoo Special deposit link is no longer active. Review the held time before sending a new link.", 409);
+      }
+      const delivery = await notifyTattooSpecialDepositRequested(env, request, {
+        appointmentId: specialAppointment.id,
+        clientName: specialAppointment.client_name || specialAppointment.submission_contact_name,
+        clientEmail: specialAppointment.client_email || specialAppointment.submission_contact_email,
+        startAt: specialAppointment.start_at,
+        endAt: specialAppointment.end_at,
+        offerTitle: specialAppointment.offer_title,
+        variantLabel: specialAppointment.variant_label,
+        approvedPriceCents: specialAppointment.approved_price_cents || specialAppointment.advertised_price_cents,
+        depositCents: specialAppointment.special_deposit_cents || specialAppointment.deposit_cents,
+        currency: specialAppointment.currency || "USD",
+        paymentDueAt: specialAppointment.payment_due_at || specialAppointment.hold_expires_at,
+        checkoutUrl: specialAppointment.square_checkout_url,
+      }, {
+        idempotencyKey: resendKey(`tattoo_special_deposit_requested:${specialAppointment.id}`),
       });
       return deliveryResponse(delivery);
     }

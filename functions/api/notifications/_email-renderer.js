@@ -296,15 +296,12 @@ export function renderClientEmail(message, designProfile = null) {
     </table>` : "";
 
   const html = `<!doctype html>
-<html lang="en" style="background-color:${design.canvas};color-scheme:dark;supported-color-schemes:dark;">
+<html lang="en" style="background-color:${design.canvas};">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <meta name="supported-color-schemes" content="dark">
   <title>${escapeEmailHtml(subject)}</title>
   <style>
-    :root{color-scheme:dark;supported-color-schemes:dark}
     html,body{background-color:${design.canvas}!important}
     body,table,td,p,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
     table,td{mso-table-lspace:0;mso-table-rspace:0}
@@ -319,7 +316,7 @@ export function renderClientEmail(message, designProfile = null) {
     }
   </style>
 </head>
-<body class="email-body" bgcolor="${design.canvas}" style="margin:0;padding:0;background-color:${design.canvas}!important;color:${design.supporting};color-scheme:dark;">
+<body class="email-body" bgcolor="${design.canvas}" style="margin:0;padding:0;background-color:${design.canvas}!important;color:${design.supporting};">
   ${hiddenPreheader}
   <table role="presentation" class="email-canvas" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="${design.canvas}" style="width:100%;background-color:${design.canvas}!important;">
     <tr>

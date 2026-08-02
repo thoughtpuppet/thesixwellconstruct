@@ -1,7 +1,20 @@
 (function(){
   const stateEl=document.getElementById("specialsState"),stateTitle=document.getElementById("stateTitle"),stateCopy=document.getElementById("stateCopy"),campaign=document.getElementById("specialsCampaign"),offersSection=document.getElementById("specialsOffersSection"),offersEl=document.getElementById("specialsOffers"),formSection=document.getElementById("specialsFormSection"),form=document.getElementById("specialsForm"),receipt=document.getElementById("specialsReceipt");
   document.querySelectorAll('input[type="email"][pattern]').forEach(input=>{input.addEventListener("invalid",()=>{if(input.validity.patternMismatch)input.setCustomValidity(input.title)});input.addEventListener("input",()=>input.setCustomValidity(""))});
-  let payload=null,selectedOffer=null,idempotencyKey=crypto.randomUUID();
+  function createIdempotencyKey(){
+    const cryptoApi=typeof crypto!=="undefined"?crypto:null;
+    if(cryptoApi&&typeof cryptoApi.randomUUID==="function")return cryptoApi.randomUUID();
+    if(cryptoApi&&typeof cryptoApi.getRandomValues==="function"){
+      const bytes=new Uint8Array(16);
+      cryptoApi.getRandomValues(bytes);
+      bytes[6]=(bytes[6]&15)|64;
+      bytes[8]=(bytes[8]&63)|128;
+      const hex=Array.from(bytes,byte=>byte.toString(16).padStart(2,"0")).join("");
+      return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    }
+    return `specials-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  }
+  let payload=null,selectedOffer=null,idempotencyKey=createIdempotencyKey();
   const money=cents=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format((Number(cents)||0)/100);
   const date=value=>new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",month:"long",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(value));
   const escape=value=>String(value??"").replace(/[&<>'"]/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[char]);

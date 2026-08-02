@@ -393,6 +393,8 @@ const APPOINTMENT_CONFIRMATION_PROFILES = Object.freeze({
   },
 });
 
+export const TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY = "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins. Cash is preferred. Cash App, Apple Pay, and credit/debit cards are also accepted. A 3% processing fee applies to all digital transactions. There is a 15-minute grace period. Arrival later than 15 minutes may require cancellation, rescheduling, and a new deposit.";
+
 export function buildAppointmentConfirmedEmail(data) {
   const profile = APPOINTMENT_CONFIRMATION_PROFILES[data.kind] || APPOINTMENT_CONFIRMATION_PROFILES.tattoo;
   const resourceActions = list(data.resources).map((resource) => ({
@@ -813,12 +815,13 @@ function previewConfirmation(kind, subject, overrides = {}) {
     tipText: overrides.tipText || "",
     totalPaidText: overrides.totalPaidText || "",
     zoomUrl: overrides.zoomUrl || "",
-    paymentPolicyText: overrides.paymentPolicyText || (kind === "tattoo"
-      ? "Your deposit goes toward the final tattoo cost. At the start of your appointment, after the final design, placement, and session price are confirmed, the remaining balance must be paid before tattooing begins."
+    paymentPolicyText: overrides.paymentPolicyText || (["tattoo", "tattoo_special"].includes(kind)
+      ? TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY
       : ""),
     confirmationUrl: overrides.confirmationUrl || SAMPLE.confirmationUrl,
     calendarUrl: SAMPLE.calendarUrl,
     resources: overrides.resources || [
+      { label: "Tattoo policies", href: SAMPLE.bookingTermsUrl },
       { label: "Day-of instructions", href: SAMPLE.dayOfInstructionsUrl },
       { label: "Location & parking", href: SAMPLE.locationParkingUrl },
     ],

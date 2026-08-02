@@ -487,8 +487,17 @@ function overlappingAppointmentCount(windowRow, appointmentRows) {
   ).length;
 }
 
-function hasSlotCapacity(windowRow, appointmentRows) {
-  return overlappingAppointmentCount(windowRow, appointmentRows) < Number(windowRow.capacity || 1);
+function isExclusiveTattooBookingType(bookingTypeId) {
+  return SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing.includes(bookingTypeId)
+    || isTattooSpecialBookingType(bookingTypeId);
+}
+
+function hasSlotCapacity(windowRow, appointmentRows, candidateBookingTypeId = "") {
+  const overlapCount = overlappingAppointmentCount(windowRow, appointmentRows);
+  const bookingTypeId = candidateBookingTypeId || windowRow.booking_type_id || windowRow.bookingTypeId || "";
+  return isExclusiveTattooBookingType(bookingTypeId)
+    ? overlapCount === 0
+    : overlapCount < Number(windowRow.capacity || 1);
 }
 
 function datePartsInZone(date, timezone) {
@@ -1150,11 +1159,12 @@ async function listPublicWindows(db, bookingTypes) {
     .all();
   const blackouts = blackoutResult.results || [];
   const activeAppointments = await loadActiveAppointments(db, new Date().toISOString());
+  const soleBookingTypeId = ids.length === 1 ? ids[0] : "";
 
   const manualWindows = (manualResult.results || [])
     .filter((row) => Number(row.appointment_count || 0) < Number(row.capacity || 1))
     .filter((row) => !isBlockedByBlackout(row, blackouts))
-    .filter((row) => hasSlotCapacity(row, activeAppointments))
+    .filter((row) => hasSlotCapacity(row, activeAppointments, row.booking_type_id || soleBookingTypeId))
     .map(normalizeWindow);
 
   const generatedWindows = await listGeneratedWindows(db, bookingTypes, blackouts, activeAppointments);
@@ -1268,7 +1278,7 @@ function bookedDaysFromMap(map) {
 async function loadActiveAppointments(db, afterIso) {
   const result = await db
     .prepare(
-      `SELECT a.id, a.start_at, a.end_at,
+      `SELECT a.id, a.booking_type_id, a.start_at, a.end_at,
               COALESCE(aw.buffer_before_minutes, 0) AS buffer_before_minutes,
               COALESCE(aw.buffer_after_minutes, 0) AS buffer_after_minutes
        FROM appointments a
@@ -1500,7 +1510,7 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
     db,
     new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
   )).filter((appointment) => appointment.id !== excludeAppointmentId);
-  if (!hasSlotCapacity(window, activeAppointments)) {
+  if (!hasSlotCapacity(window, activeAppointments, bookingTypeId)) {
     return { error: "That appointment time overlaps another booking." };
   }
   return { window };
@@ -1689,7 +1699,11 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
               AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
                 > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
             )
-        ) < aw.capacity
+        ) < CASE
+          WHEN ? IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+            OR ? LIKE 'tattoo_special_%'
+          THEN 1 ELSE aw.capacity
+        END
         AND (
           ? IS NULL OR EXISTS (
             SELECT 1 FROM appointments replacement_original
@@ -1794,6 +1808,8 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.replacementForAppointmentId || null,
       values.replacementForAppointmentId || null,
       dayGuard.maxBookingsPerDay,
+      values.bookingTypeId,
+      values.bookingTypeId,
       values.replacementForAppointmentId || null,
       values.replacementForAppointmentId || null,
       values.bookingTokenId || null,
@@ -3769,7 +3785,7 @@ async function insertDirectPublicSession(db, submission, appointment, submission
           < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
         AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
           > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
-    ) < aw.capacity
+    ) < ${isExclusiveTattooBookingType(appointment.bookingTypeId) ? "1" : "aw.capacity"}
     AND (
       SELECT COUNT(*) FROM appointments exact_appointment
       WHERE exact_appointment.availability_window_id = aw.id
@@ -5091,13 +5107,21 @@ async function moveConfirmedAppointment(
                    < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
                  AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
                    > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
-             ) < aw.capacity
+             ) < CASE
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+                 OR appointments.booking_type_id LIKE 'tattoo_special_%'
+               THEN 1 ELSE aw.capacity
+             END
              AND (
                SELECT COUNT(*) FROM appointments exact_appointment
                WHERE exact_appointment.id <> appointments.id
                  AND exact_appointment.availability_window_id = aw.id
                  AND exact_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-             ) < aw.capacity
+             ) < CASE
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+                 OR appointments.booking_type_id LIKE 'tattoo_special_%'
+               THEN 1 ELSE aw.capacity
+             END
          )`
     ).bind(
       availability.window.id,
@@ -5309,13 +5333,21 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
                    < julianday(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) / 1440.0
                  AND julianday(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) / 1440.0
                    > julianday(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) / 1440.0
-             ) < aw.capacity
+             ) < CASE
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+                 OR appointments.booking_type_id LIKE 'tattoo_special_%'
+               THEN 1 ELSE aw.capacity
+             END
              AND (
                SELECT COUNT(*) FROM appointments exact_appointment
                WHERE exact_appointment.id <> appointments.id
                  AND exact_appointment.availability_window_id = aw.id
                  AND exact_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-             ) < aw.capacity
+             ) < CASE
+               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
+                 OR appointments.booking_type_id LIKE 'tattoo_special_%'
+               THEN 1 ELSE aw.capacity
+             END
          )`
     ).bind(
       availability.window.id,

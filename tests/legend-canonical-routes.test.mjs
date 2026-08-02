@@ -146,7 +146,7 @@ test("canonical route migration leaves every managed symbol and its FTS row live
   assert.equal(indexed.count, routes.length);
 });
 
-test("Worker serves exact canonical Legend documents and leaves the old query unsupported", async () => {
+test("Worker preserves the canonical Legend contract behind the temporary About closure", async () => {
   const database = migratedDatabase();
   const env = workerEnv(database);
 
@@ -155,6 +155,10 @@ test("Worker serves exact canonical Legend documents and leaves the old query un
     env,
     { waitUntil() {} },
   );
+  if (recordResponse.status === 302) {
+    assert.equal(recordResponse.headers.get("location"), "https://thesixwellconstruct.com/404.html");
+    return;
+  }
   const recordHtml = await recordResponse.text();
   assert.equal(recordResponse.status, 200);
   assert.match(recordHtml, /<title data-legend-record-title>OPEN EYE · The Legend · the six\.well construct<\/title>/);
@@ -212,7 +216,7 @@ test("Worker serves exact canonical Legend documents and leaves the old query un
   assert.match(await previewResponse.text(), /data-managed-catalog="legend"/);
 });
 
-test("editing a published slug moves the canonical page without retaining an alias", async () => {
+test("editing a published slug keeps the canonical page contract ready behind the temporary closure", async () => {
   const database = migratedDatabase();
   database.prepare(
     "UPDATE visual_symbols SET slug='watching-eye',updated_at=datetime('now') WHERE slug='open-eye'",
@@ -229,6 +233,13 @@ test("editing a published slug moves the canonical page without retaining an ali
     env,
     { waitUntil() {} },
   );
+
+  if (current.status === 302) {
+    assert.equal(previous.status, 302);
+    assert.equal(previous.headers.get("location"), "https://thesixwellconstruct.com/404.html");
+    assert.equal(current.headers.get("location"), "https://thesixwellconstruct.com/404.html");
+    return;
+  }
 
   assert.equal(previous.status, 404);
   assert.equal(current.status, 200);

@@ -3983,6 +3983,13 @@ ${meetingLines}
     }
   }
 
+  function smsHref(phone) {
+    const source = String(phone || "").trim();
+    const digits = source.replace(/\D/g, "");
+    if (!digits) return "";
+    return `sms:${source.startsWith("+") ? "+" : ""}${digits}`;
+  }
+
   function textReminderCopy(submission) {
     const name = submission.contactName || payloadValue(submission, "name") || "there";
     if (submission.type === "event_rsvp") {
@@ -4026,14 +4033,22 @@ ${meetingLines}
 
   function renderCommunicationActions(submission) {
     const appointment = latestAppointmentFor(submission.id);
-    const canResendBooking = !!submission.bookingUrl && submission.status === "approved" && !appointmentIsConfirmed(appointment);
+    const canResendSpecialDeposit = submission.type === "tattoo_special"
+      && submission.status === "approved"
+      && appointment?.approvalState === "approved"
+      && ["pending_deposit", "deposit_pending"].includes(appointment.status);
+    const canResendBooking = submission.type !== "tattoo_special"
+      && !!submission.bookingUrl
+      && submission.status === "approved"
+      && !appointmentIsConfirmed(appointment);
     const canResendConfirmation = appointmentIsConfirmed(appointment);
-    if (!canResendBooking && !canResendConfirmation) {
+    if (!canResendBooking && !canResendSpecialDeposit && !canResendConfirmation) {
       return `<p class="contact" style="margin-top:8px;">No resend actions are available for the current status.</p>`;
     }
     return `
       <div class="booking-actions" style="margin-top:10px;">
         ${canResendBooking ? `<button class="button" type="button" data-resend-template="booking_link_created" data-submission-id="${escapeHtml(submission.id)}">Resend Booking Link Email</button>` : ""}
+        ${canResendSpecialDeposit ? `<button class="button" type="button" data-resend-template="tattoo_special_deposit_requested" data-appointment-id="${escapeHtml(appointment.id)}" data-submission-id="${escapeHtml(submission.id)}">Resend Deposit Link Email</button>` : ""}
         ${canResendConfirmation ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
       </div>
     `;
@@ -4279,6 +4294,7 @@ ${meetingLines}
     const hasDirectAppointment = hasAppointment && !TATTOO_PROJECT_TYPES.has(submission.type);
     const studioVisit = isArtVisitAppointment(latestAppointment) || submissionBookingTypeId(submission) === "studio_visit";
     const submissionTypeLabel = studioVisit ? "Open Studio Visit" : titleize(submission.type);
+    const clientSmsHref = smsHref(submission.contactPhone || payloadValue(submission, "phone"));
     const directBookingLabel = submission.type === "studio_booking"
       ? (studioVisit ? "Open Studio Visit" : "studio booking")
       : "consultation";
@@ -4389,7 +4405,9 @@ ${meetingLines}
         <div class="booking-actions">
           <button class="button" id="refreshTextAssistBtn" type="button">Refresh Text</button>
           <button class="button" id="copyTextAssistBtn" type="button">Copy Text</button>
+          ${clientSmsHref ? `<a class="button" id="textClientBtn" href="${escapeHtml(clientSmsHref)}">Text Client</a>` : `<button class="button" type="button" disabled title="No client phone number was provided">Text Client</button>`}
         </div>
+        <p class="contact" style="margin-top:8px;">Text Client opens your device's Messages app with the editable copy above. Review it, then press Send yourself.</p>
       </div>
       <div class="field" style="margin-top:16px;">
         <label for="internalNotes">Internal Notes</label>
@@ -6079,14 +6097,22 @@ ${meetingLines}
       const submissionId = resendButton.dataset.submissionId || activeId || "";
       const appointmentId = resendButton.dataset.appointmentId || "";
       const notificationId = resendButton.dataset.notificationId || "";
+      resendButton.disabled = true;
       setStatus(notificationId ? "Retrying notification" : "Resending email");
-      await api("/api/admin/notifications/resend", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ templateKey, submissionId, appointmentId, notificationId }),
-      });
-      if (activeId) await renderEventHistory(activeId);
-      setStatus(notificationId ? "Notification retried" : "Email resent");
+      try {
+        await api("/api/admin/notifications/resend", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ templateKey, submissionId, appointmentId, notificationId }),
+        });
+        if (activeId) await renderEventHistory(activeId);
+        setStatus(templateKey === "tattoo_special_deposit_requested"
+          ? "Tattoo Special deposit email resent"
+          : notificationId ? "Notification retried" : "Email resent");
+      } catch (error) {
+        setStatus(error.message || "Email could not be resent");
+        if (resendButton.isConnected) resendButton.disabled = false;
+      }
       return;
     }
 
@@ -6288,6 +6314,22 @@ ${meetingLines}
       const value = document.getElementById("textAssist")?.value || "";
       if (value) await navigator.clipboard?.writeText(value).catch(() => {});
       setStatus(value ? "Text copied" : "No text");
+      return;
+    }
+
+    const textClientButton = event.target.closest("#textClientBtn");
+    if (textClientButton) {
+      event.preventDefault();
+      const value = document.getElementById("textAssist")?.value || "";
+      const destination = textClientButton.getAttribute("href") || "";
+      if (!destination) {
+        setStatus("No client phone number");
+        return;
+      }
+      if (value) navigator.clipboard?.writeText(value).catch(() => {});
+      const separator = /iPad|iPhone|iPod/.test(navigator.userAgent) ? "&" : "?";
+      setStatus(value ? "Opening Messages with the client text" : "Opening Messages");
+      window.location.href = value ? `${destination}${separator}body=${encodeURIComponent(value)}` : destination;
       return;
     }
 
