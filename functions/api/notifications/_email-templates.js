@@ -61,6 +61,7 @@ export function buildSubmissionReceivedEmail(data) {
     greeting: `Hi ${data.clientName || "there"},`,
     details: [
       { label: "Submission reference", value: data.submissionId },
+      data.heldWhen ? { label: "Requested time (held)", value: data.heldWhen } : null,
     ],
     primaryAction: data.briefUrl ? {
       label: data.briefLabel || "Download submitted brief",
@@ -242,6 +243,37 @@ export function buildTattooRenderingPaymentConfirmedEmail(data) {
     notice: [
       "This fee is non-refundable and is not credited toward the tattoo total.",
       "Minor refinements to the selected direction and artist-initiated redraws remain included in the original project process.",
+    ],
+    signature: tattooSignature(true),
+  });
+}
+
+export function buildTattooSpecialDepositRequestEmail(data) {
+  return renderClientEmail({
+    templateKey: "tattoo_special_deposit_requested",
+    templateVariant: "default",
+    variables: { client_name: data.clientName || "there" },
+    theme: "tattoo",
+    subject: data.subject || "Your Tattoo Special was approved — deposit required",
+    preheader: "Pay the deposit before the deadline to confirm your held appointment time.",
+    classification: "TATTOO SPECIAL APPROVED",
+    headline: "Your held time is approved. Pay the deposit to book it.",
+    greeting: `Hi ${data.clientName || "there"},`,
+    intro: [
+      "Studio approved your Tattoo Special request. Your requested time is still held, but it is not booked yet.",
+    ],
+    details: [
+      { label: "Requested appointment", value: data.when },
+      { label: "Tattoo Special", value: data.selection },
+      { label: "Approved total", value: data.approvedTotal },
+      { label: "Deposit due", value: data.depositText },
+      { label: "Pay by", value: data.paymentDue },
+    ],
+    primaryAction: { label: "Pay deposit and confirm", href: data.checkoutUrl },
+    notice: [
+      "The appointment becomes booked only after Square confirms the deposit payment.",
+      "The payment link expires after 24 hours or at the Tattoo Specials sales deadline, whichever comes first. If it expires unpaid, the held time is released.",
+      "The deposit is non-refundable and is credited toward the approved Tattoo Special total.",
     ],
     signature: tattooSignature(true),
   });
@@ -674,7 +706,8 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "submission_received", variant: "studio_visit", label: "Open Studio Visit inquiry receipt", brand: "art", stage: "inquiry" },
   { templateKey: "submission_received", variant: "studio_space", label: "Studio gathering or rental inquiry receipt", brand: "events", stage: "inquiry" },
   { templateKey: "booking_link_created", variant: "tattoo", label: "Private tattoo booking link", brand: "tattoo", stage: "booking" },
-  { templateKey: "booking_link_created", variant: "tattoo_special", label: "Tattoo Special approved / booking link", brand: "tattoo", stage: "specials" },
+  { templateKey: "booking_link_created", variant: "tattoo_special", label: "Legacy Tattoo Special calendar link", brand: "tattoo", stage: "legacy" },
+  { templateKey: "tattoo_special_deposit_requested", variant: "default", label: "Tattoo Special approved / deposit payment", brand: "tattoo", stage: "specials" },
   { templateKey: "booking_link_created", variant: "consultation", label: "Prerequisite consultation link", brand: "tattoo", stage: "booking" },
   { templateKey: "tattoo_special_review", variant: "simplification_requested", label: "Tattoo Special simplification requested", brand: "tattoo", stage: "specials" },
   { templateKey: "tattoo_special_review", variant: "declined", label: "Tattoo Special declined", brand: "tattoo", stage: "specials" },
@@ -717,7 +750,7 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "event_ticket_reminder_24h", variant: "default", label: "Event reminder", brand: "events", stage: "events" },
   { templateKey: "event_open_mic_slot", variant: "default", label: "Open-mic slot assigned", brand: "events", stage: "events" },
   { templateKey: "admin_submission_received", variant: "tattoo", label: "New tattoo submission alert", brand: "tattoo", audience: "admin", stage: "admin" },
-  { templateKey: "admin_submission_received", variant: "tattoo_special", label: "New Tattoo Special request alert", brand: "tattoo", audience: "admin", stage: "specials" },
+  { templateKey: "admin_submission_received", variant: "tattoo_special", label: "New Tattoo Special approval request alert", brand: "tattoo", audience: "admin", stage: "specials" },
   { templateKey: "admin_submission_received", variant: "construct_art", label: "New Art inquiry alert", brand: "art", audience: "admin", stage: "admin" },
   { templateKey: "admin_submission_received", variant: "construct_event", label: "New Studio/event inquiry alert", brand: "events", audience: "admin", stage: "admin" },
   { templateKey: "admin_appointment_confirmed", variant: "tattoo", label: "Tattoo appointment admin alert", brand: "tattoo", audience: "admin", stage: "admin" },
@@ -815,7 +848,7 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       build: ["Build Your Own submission", "The studio will review your symbols, composition, placement, scale, and budget.", "If the project is a fit, the Studio will send the appropriate next step."],
       maze: ["Maze Studio submission", "The studio will review the generated maze, placement, scale, and project notes.", "If the project is a fit, the Studio will send the appropriate next step."],
       special: ["special project application", "The studio will review the application, scope, placement, references, budget, and timing.", "If the project is a fit, the Studio will contact you with the next step."],
-      tattoo_special: ["Tattoo Special", "Your selected Tattoo Special, price, duration, deposit, placement, and references have been recorded as one fixed promotional snapshot.", "Your request is saved, but no appointment is booked until an available time is selected and Square confirms the deposit payment. Complexity-review specials receive a private link only after Studio approval."],
+      tattoo_special: ["Tattoo Special request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked yet. If approved, you will receive an email and text with a Square link to pay the deposit for the held time."],
       consultation: ["consultation request", "Your selected consultation time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       build_session: ["Build session request", "Your selected Build session time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       art_acquisition: ["art acquisition inquiry", "The Art studio will review the work, availability, budget, and questions you shared.", "The studio will reply with availability, acquisition details, or the next step."],
@@ -837,10 +870,13 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       clientName: SAMPLE.clientName,
       label: profile[0],
       submissionId: "demo-submission-014",
+      heldWhen: mode === "tattoo_special" ? "Saturday, September 19, 2026 at 1:00 PM EDT - Saturday, September 19, 2026 at 3:00 PM EDT" : "",
       requestedSheetDesigns: flash ? ["A is Moth - placement: Forearm - scale: 4 in"] : [],
       expectation: profile[1],
       next: profile[2],
-      reviewLine: ["consultation", "build_session"].includes(mode) ? "Complete checkout to keep the selected time." : "Most project submissions are reviewed within 5-7 business days.",
+      reviewLine: mode === "tattoo_special"
+        ? "This is a request and a temporary hold, not a booked appointment. The appointment is confirmed only after Studio approval and successful deposit payment."
+        : ["consultation", "build_session"].includes(mode) ? "Complete checkout to keep the selected time." : "Most project submissions are reviewed within 5-7 business days.",
       supportEmail: SAMPLE.supportEmail,
       briefUrl: ["build", "maze"].includes(mode) ? "https://thesixwellconstruct.com/api/tattoo/briefs/demo-document?v=1&sig=sample" : "",
     });
@@ -869,6 +905,16 @@ export function renderClientEmailPreview(templateKey, variant = "") {
       bookingTermsUrl: SAMPLE.bookingTermsUrl,
       dayOfInstructionsUrl: SAMPLE.dayOfInstructionsUrl,
       locationParkingUrl: SAMPLE.locationParkingUrl,
+    });
+  } else if (key === "tattoo_special_deposit_requested") {
+    rendered = buildTattooSpecialDepositRequestEmail({
+      clientName: SAMPLE.clientName,
+      when: "Saturday, September 19, 2026 at 1:00 PM EDT - Saturday, September 19, 2026 at 3:00 PM EDT",
+      selection: "Palm Sized Tattoo — Standard",
+      approvedTotal: "$200",
+      depositText: "$50",
+      paymentDue: "Tuesday, August 4, 2026 at 2:30 PM EDT",
+      checkoutUrl: "https://square.link/u/demo-tattoo-special-deposit",
     });
   } else if (key === "tattoo_special_review") {
     rendered = buildTattooSpecialReviewEmail({

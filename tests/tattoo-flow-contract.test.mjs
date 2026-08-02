@@ -1841,7 +1841,17 @@ test("Tattoo index keeps the lower Specials block and reveals a matching brand-b
   assert.match(source, /if \(payload\.state !== "open"\) return;[\s\S]*?if \(cta\) cta\.hidden = false;[\s\S]*?if \(bandCta\) bandCta\.hidden = false;/);
 });
 
-test("Tattoo Specials seed immutable versions and direct submissions keep server-side price, deposit, duration, and token cutoff", async () => {
+test("Tattoo Specials public copy matches the held-time approval lifecycle", () => {
+  const page = readFileSync(join(ROOT, "tattoos", "specials", "index.html"), "utf8");
+  const script = readFileSync(join(ROOT, "js", "tattoo-specials.js"), "utf8");
+  assert.match(page, /select an available time, and pay the deposit after Studio approval/i);
+  assert.doesNotMatch(page, /<dt>Campaign<\/dt>/i);
+  assert.match(script, /Studio approval required/);
+  assert.match(script, /appointment is booked only after payment/i);
+  assert.doesNotMatch(script, /Direct booking|normal private booking link/);
+});
+
+test("Tattoo Specials require Studio approval and preserve server-side price, deposit, duration, and token cutoff", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
   const bucket = new MemoryBucket();
@@ -1850,6 +1860,7 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   const env = {
     SUBMISSIONS_DB: db, SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: adminToken,
     PUBLIC_SITE_URL: "https://example.test", SQUARE_ACCESS_TOKEN: "square-token", SQUARE_LOCATION_ID: "square-location",
+    TWILIO_ACCOUNT_SID: "ACspecial", TWILIO_AUTH_TOKEN: "twilio-token", TWILIO_MESSAGING_SERVICE_SID: "MGspecial",
     EMAIL: { async send(message) { sent.push(message); return { messageId: crypto.randomUUID() }; } },
   };
   const opens = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -1862,16 +1873,28 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   assert.equal(publicPayload.state, "open");
   assert.equal(publicPayload.offers.length, 6);
   assert.equal(publicPayload.offers.find((offer) => offer.id === "special-anime").variants.length, 2);
+  assert.deepEqual(
+    publicPayload.offers.map((offer) => [offer.id, offer.mode]),
+    [
+      ["special-quarter-bg", "review"],
+      ["special-quarter-color", "review"],
+      ["special-floral-color", "review"],
+      ["special-anime", "review"],
+      ["special-palm", "review"],
+      ["special-two-small", "review"],
+    ],
+  );
 
-  const directResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+  const requestResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-palm",
-    variantId: "special-palm-v1-standard",
-    idempotencyKey: "special-direct-palm-1",
+    variantId: "special-palm-v2-standard",
+    idempotencyKey: "special-review-palm-1",
     name: "Primary Person",
     email: "primary@example.com",
     phone: "4045550101",
     ageConfirmed: "yes",
     policyAccepted: "yes",
+    transactionalMessagesAccepted: "yes",
     placement: "Upper arm",
     projectDetails: "A palm-sized symbolic composition.",
     // These values are intentionally hostile; the server must ignore them.
@@ -1879,94 +1902,153 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
     depositCents: "1",
     durationMinutes: "30",
   }), env);
-  assert.equal(directResponse.status, 201);
-  const direct = await directResponse.json();
-  assert.equal(direct.reviewRequired, false);
-  assert.match(direct.bookingUrl, /^\/booking\/\?token=/);
+  assert.equal(requestResponse.status, 201);
+  const submitted = await requestResponse.json();
+  assert.equal(submitted.reviewRequired, true);
+  assert.match(submitted.bookingUrl, /^\/booking\/\?token=/);
   assert.equal(database.prepare(
-    "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key='booking_link_created'",
-  ).get(direct.submissionId).count, 0);
-  const directReceipt = sent.find((message) => message.subject?.includes("Tattoo Special received"));
-  assert.ok(directReceipt);
-  assert.match(directReceipt.text, /no appointment is booked yet/i);
-  assert.match(directReceipt.text, /confirmation email is sent only after Square reports a successful payment/i);
+    "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?",
+  ).get(submitted.submissionId).count, 0);
+  assert.equal(sent.length, 0);
 
   const replayResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
-    offerId: "special-palm", variantId: "special-palm-v1-standard", idempotencyKey: "special-direct-palm-1",
+    offerId: "special-palm", variantId: "special-palm-v2-standard", idempotencyKey: "special-review-palm-1",
     name: "Primary Person", email: "primary@example.com", phone: "4045550101",
-    ageConfirmed: "yes", policyAccepted: "yes", placement: "Upper arm", projectDetails: "Retry.",
+    ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
+    placement: "Upper arm", projectDetails: "Retry.",
   }), env);
   const replay = await replayResponse.json();
   assert.equal(replayResponse.status, 200);
   assert.equal(replay.idempotent, true);
-  assert.equal(replay.submissionId, direct.submissionId);
-  assert.equal(replay.bookingUrl, direct.bookingUrl);
+  assert.equal(replay.submissionId, submitted.submissionId);
+  assert.equal(replay.bookingUrl, submitted.bookingUrl);
 
-  const submission = database.prepare("SELECT * FROM submissions WHERE id=?").get(direct.submissionId);
-  const terms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(direct.submissionId);
+  let submission = database.prepare("SELECT * FROM submissions WHERE id=?").get(submitted.submissionId);
+  const terms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(submitted.submissionId);
   assert.equal(submission.type, "tattoo_special");
-  assert.equal(submission.status, "approved");
-  assert.equal(submission.tattoo_stage, "ready_to_book");
+  assert.equal(submission.status, "new");
+  assert.equal(submission.tattoo_stage, "review");
   assert.equal(terms.advertised_price_cents, 20000);
-  assert.equal(terms.approved_price_cents, 20000);
+  assert.equal(terms.approved_price_cents, null);
   assert.equal(terms.deposit_cents, 5000);
   assert.equal(terms.duration_minutes, 120);
-  const tokenRow = database.prepare("SELECT * FROM booking_tokens WHERE submission_id=?").get(direct.submissionId);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId).count, 1);
+  const tokenRow = database.prepare("SELECT * FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId);
   assert.equal(tokenRow.expires_at, closes);
-  assert.deepEqual(JSON.parse(tokenRow.allowed_booking_types_json), ["tattoo_special_palm_v1"]);
-  const directEmailVariants = database.prepare(
-    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key"
-  ).all(direct.submissionId).map((row) => ({ ...row }));
-  assert.deepEqual(directEmailVariants, [
-    { template_key: "admin_submission_received", template_variant: "tattoo_special" },
-    { template_key: "submission_received", template_variant: "tattoo_special" },
-  ]);
-  assert.ok(sent.some((message) => message.to === "primary@example.com" && /Tattoo Special has been received/i.test(message.html)));
-
-  const rawToken = new URL(direct.bookingUrl, "https://example.test").searchParams.get("token");
+  assert.deepEqual(JSON.parse(tokenRow.allowed_booking_types_json), ["tattoo_special_palm_v2"]);
+  const rawToken = new URL(submitted.bookingUrl, "https://example.test").searchParams.get("token");
   const contextResponse = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`), env);
   assert.equal(contextResponse.status, 200);
   const context = await contextResponse.json();
+  assert.equal(context.submission.pendingApproval, true);
   assert.equal(context.submission.special.offerTitle, "Palm Sized Tattoo");
   assert.equal(context.submission.special.quotedPriceCents, 20000);
   assert.equal(context.bookingTypes[0].durationMinutes, 120);
   assert.equal(context.bookingTypes[0].depositCents, 5000);
   assert.equal(context.sessionPlan, null);
 
-  const unnecessaryApproval = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
-    token: rawToken, preference: "studio_plan", acknowledged: true, budgetAcknowledged: true,
-  }), env);
-  assert.equal(unnecessaryApproval.status, 409);
-  assert.match((await unnecessaryApproval.json()).error, /do not require session-plan approval/i);
-  const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
-  assert.match(bookingPage, /Your Tattoo Special & Deposit/);
-  assert.match(bookingPage, /special-offering/);
-  const nearCutoff = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-  database.prepare("UPDATE booking_tokens SET expires_at=? WHERE submission_id=?").run(nearCutoff, direct.submissionId);
-  database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?").run(nearCutoff, direct.submissionId);
   const appointmentStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const appointmentEnd = new Date(appointmentStart.getTime() + 120 * 60 * 1000);
   insertAvailabilityWindow(database, {
-    id: "special-palm-window", bookingTypeId: "tattoo_special_palm_v1",
+    id: "special-palm-window", bookingTypeId: "tattoo_special_palm_v2",
     startAt: appointmentStart.toISOString(), endAt: appointmentEnd.toISOString(),
   });
+  const holdResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: rawToken,
+    bookingTypeId: "tattoo_special_palm_v2",
+    availabilityWindowId: "special-palm-window",
+  }), env);
+  const hold = await holdResponse.json();
+  assert.equal(holdResponse.status, 200, hold.detail || hold.error);
+  assert.equal(hold.pendingApproval, true);
+  assert.equal(hold.appointment.approvalState, "pending");
+  assert.equal(hold.appointment.startAt, appointmentStart.toISOString());
+  assert.equal(hold.appointment.endAt, appointmentEnd.toISOString());
+  assert.ok(new Date(hold.appointment.holdExpiresAt).getTime() <= new Date(closes).getTime());
+  assert.equal(database.prepare("SELECT square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id).square_checkout_url, null);
+  const requestEmailVariants = database.prepare(
+    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key"
+  ).all(submitted.submissionId).map((row) => ({ ...row }));
+  assert.deepEqual(requestEmailVariants, [
+    { template_key: "admin_submission_received", template_variant: "tattoo_special" },
+    { template_key: "submission_received", template_variant: "tattoo_special" },
+  ]);
+  const requestEmail = sent.find((message) => message.to === "primary@example.com" && /request received/i.test(message.subject));
+  assert.ok(requestEmail);
+  assert.match(requestEmail.html, /Requested time \(held\)/i);
+  assert.match(requestEmail.html, /no appointment is booked/i);
+
+  const prematureCheckout = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: rawToken,
+    bookingTypeId: "tattoo_special_palm_v2",
+    availabilityWindowId: "special-palm-window",
+  }), env);
+  assert.equal(prematureCheckout.status, 409);
+  assert.equal((await prematureCheckout.json()).code, "SPECIAL_APPROVAL_REQUIRED");
+
   let squareRequestBody = null;
-  const checkout = await withMockFetch(async (_url, init) => {
-    squareRequestBody = JSON.parse(init.body);
-    return jsonFetchResponse({ payment_link: { id: "special-palm-link", order_id: "special-palm-order", url: "https://square.test/special" } });
-  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
-    token: rawToken, bookingTypeId: "tattoo_special_palm_v1", availabilityWindowId: "special-palm-window",
-  }), env));
-  const checkoutPayload = await checkout.json();
-  assert.equal(checkout.status, 200, checkoutPayload.detail || checkoutPayload.error);
+  let smsRequestBody = "";
+  const approvalResponse = await withMockFetch(async (url, init) => {
+    const target = String(url);
+    if (target.endsWith("/v2/online-checkout/payment-links")) {
+      squareRequestBody = JSON.parse(init.body);
+      return jsonFetchResponse({ payment_link: { id: "special-palm-link", order_id: "special-palm-order", url: "https://square.test/special" } });
+    }
+    if (target.includes("api.twilio.com")) {
+      smsRequestBody = String(init.body);
+      return jsonFetchResponse({ sid: "SMspecial" });
+    }
+    throw new Error(`Unexpected approval request: ${target}`);
+  }, () => handleAdminTattooSpecialReview(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/review`,
+    { outcome: "approved", approvedPriceCents: 1, note: "Approved at the fixed promotional price." },
+    adminToken, "PATCH",
+  ), env, submitted.submissionId));
+  assert.equal(approvalResponse.status, 200);
+  const approval = await approvalResponse.json();
+  assert.equal(approval.approvedPriceCents, 20000);
+  assert.equal(approval.checkoutUrl, "https://square.test/special");
+  assert.equal(approval.appointmentId, hold.appointment.id);
+  assert.ok(new Date(approval.paymentDueAt).getTime() <= new Date(closes).getTime());
+  assert.ok(new Date(approval.paymentDueAt).getTime() <= Date.now() + 24 * 60 * 60 * 1000);
   assert.deepEqual(squareRequestBody.order.line_items.map((item) => item.base_price_money.amount), [5000]);
-  const specialAppointment = database.prepare("SELECT hold_expires_at,start_at,end_at FROM appointments WHERE id=?").get(checkoutPayload.appointmentId);
-  assert.ok(new Date(specialAppointment.hold_expires_at).getTime() <= new Date(nearCutoff).getTime());
+  const smsMessage = new URLSearchParams(smsRequestBody).get("Body");
+  assert.match(smsMessage, /Pay the \$50 deposit/);
+  assert.match(smsMessage, /https:\/\/square\.test\/special/);
+  submission = database.prepare("SELECT * FROM submissions WHERE id=?").get(submitted.submissionId);
+  assert.equal(submission.status, "approved");
+  assert.equal(submission.tattoo_stage, "ready_to_book");
+  assert.ok(database.prepare("SELECT revoked_at FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId).revoked_at);
+  const revokedContext = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`), env);
+  assert.equal(revokedContext.status, 403);
+  const nonAnimeSimplification = await handleAdminTattooSpecialReview(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/review`,
+    { outcome: "simplification_requested", note: "This option should remain Anime-only." },
+    adminToken, "PATCH",
+  ), env, submitted.submissionId);
+  assert.equal(nonAnimeSimplification.status, 409);
+  const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
+  assert.match(bookingPage, /Hold Time & Send Request/);
+  assert.match(bookingPage, /special-offering/);
+  const specialAppointment = database.prepare("SELECT hold_expires_at,start_at,end_at,approval_state,payment_due_at,square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id);
+  assert.equal(specialAppointment.approval_state, "approved");
+  assert.equal(specialAppointment.payment_due_at, approval.paymentDueAt);
+  assert.equal(specialAppointment.square_checkout_url, "https://square.test/special");
   assert.equal(specialAppointment.start_at, appointmentStart.toISOString());
   assert.equal(specialAppointment.end_at, appointmentEnd.toISOString());
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key IN ('appointment_confirmed','admin_appointment_confirmed')",
-  ).get(checkoutPayload.appointmentId).count, 0);
+  ).get(hold.appointment.id).count, 0);
+  const approvalEmail = sent.find((message) => message.to === "primary@example.com" && /deposit required/i.test(message.subject));
+  assert.ok(approvalEmail);
+  assert.match(approvalEmail.html, /Pay deposit and confirm/i);
+  assert.match(approvalEmail.html, /booked only after Square confirms/i);
+  assert.deepEqual(database.prepare(
+    "SELECT channel,status FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_special_deposit_requested' ORDER BY channel",
+  ).all(hold.appointment.id).map((row) => ({ ...row })), [
+    { channel: "email", status: "sent" },
+    { channel: "sms", status: "sent" },
+  ]);
 
   const webhookUrl = "https://example.test/api/square/webhook";
   const signatureKey = "specials-webhook-signature";
@@ -1976,7 +2058,7 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   });
   const webhookSignature = await squareWebhookSignatureForTest(webhookBody, signatureKey, webhookUrl);
   database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?")
-    .run(new Date(Date.now() - 1000).toISOString(), direct.submissionId);
+    .run(new Date(Date.now() - 1000).toISOString(), submitted.submissionId);
   const webhookResponse = await withMockFetch(async (url) => {
     assert.match(String(url), /\/v2\/orders\/special-palm-order$/);
     return jsonFetchResponse({ order: { id: "special-palm-order", state: "COMPLETED" } });
@@ -1989,16 +2071,16 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   assert.equal(webhookResponse.status, 200, webhookPayload.error);
   assert.equal(webhookPayload.attention, true);
   assert.match(webhookPayload.reason, /manual refund review/i);
-  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(checkoutPayload.appointmentId).status, "payment_attention");
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='tattoo_special_late_payment_attention'").get(checkoutPayload.appointmentId).count, 1);
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(hold.appointment.id).status, "payment_attention");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='tattoo_special_late_payment_attention'").get(hold.appointment.id).count, 1);
 
   const invalidSecondEmail = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-two-small",
-    variantId: "special-two-small-v1-standard",
+    variantId: "special-two-small-v2-standard",
     idempotencyKey: "special-two-participants-invalid-email",
     name: "Primary Adult", email: "primary-adult@example.com", phone: "4045550120",
     participant2Name: "Second Adult", participant2Email: "second-adult@example", participant2Phone: "4045550121",
-    ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes",
+    ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
     placement: "Two placements", projectDetails: "One small tattoo for each adult.",
   }), env);
   assert.equal(invalidSecondEmail.status, 400);
@@ -2009,11 +2091,11 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
 
   const sharedAppointment = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-two-small",
-    variantId: "special-two-small-v1-standard",
+    variantId: "special-two-small-v2-standard",
     idempotencyKey: "special-two-participants-1",
     name: "Primary Adult", email: "primary-adult@example.com", phone: "4045550120",
     participant2Name: "Second Adult", participant2Email: "second-adult@example.com", participant2Phone: "4045550121",
-    ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes",
+    ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
     placement: "Two placements", projectDetails: "One small tattoo for each adult.",
   }), env);
   assert.equal(sharedAppointment.status, 201);
@@ -2025,7 +2107,7 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
   assert.equal(sharedSubmission.contact_email, "primary-adult@example.com");
   assert.equal(database.prepare("SELECT participant_count,advertised_price_cents,duration_minutes FROM tattoo_special_submission_terms WHERE submission_id=?").get(shared.submissionId).participant_count, 2);
   assert.equal(sent.some((message) => message.to === "second-adult@example.com"), false);
-  assert.ok(sent.some((message) => message.to === "primary-adult@example.com"));
+  assert.equal(sent.some((message) => message.to === "primary-adult@example.com"), false);
 
   const beforeVersion = terms.offer_version_id;
   const adminState = await (await handleAdminTattooSpecials(draftRequest("/api/admin/tattoo/specials", "GET", undefined, adminToken), env)).json();
@@ -2040,9 +2122,10 @@ test("Tattoo Specials seed immutable versions and direct submissions keep server
     }, adminToken, "PATCH",
   ), env, "special-palm");
   assert.equal(versionResponse.status, 200);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_special_offer_versions WHERE offer_id='special-palm'").get().count, 2);
-  assert.equal(database.prepare("SELECT offer_version_id FROM tattoo_special_submission_terms WHERE submission_id=?").get(direct.submissionId).offer_version_id, beforeVersion);
-  assert.equal(database.prepare("SELECT deposit_cents FROM booking_types WHERE id='tattoo_special_palm_v1'").get().deposit_cents, 5000);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_special_offer_versions WHERE offer_id='special-palm'").get().count, 3);
+  assert.equal(database.prepare("SELECT offer_version_id FROM tattoo_special_submission_terms WHERE submission_id=?").get(submitted.submissionId).offer_version_id, beforeVersion);
+  assert.equal(database.prepare("SELECT deposit_cents FROM booking_types WHERE id='tattoo_special_palm_v2'").get().deposit_cents, 5000);
+  assert.equal(database.prepare("SELECT booking_mode FROM tattoo_special_offer_versions WHERE id=(SELECT current_version_id FROM tattoo_special_offers WHERE id='special-palm')").get().booking_mode, "review");
 });
 
 test("Anime review requires a reference and approval can raise the exact price while preserving the advertised base", async () => {
@@ -2050,12 +2133,16 @@ test("Anime review requires a reference and approval can raise the exact price w
   const db = new LocalD1(database);
   const bucket = new MemoryBucket();
   const adminToken = "studio-specials-review";
-  const env = { SUBMISSIONS_DB: db, SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: adminToken };
+  const env = {
+    SUBMISSIONS_DB: db, SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    SQUARE_ACCESS_TOKEN: "square-token", SQUARE_LOCATION_ID: "square-location",
+  };
   database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'")
     .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 86400000).toISOString());
   const base = {
     offerId: "special-anime", variantId: "special-anime-v1-color", name: "Anime Client",
     email: "anime@example.com", phone: "4045550110", ageConfirmed: "yes", policyAccepted: "yes",
+    transactionalMessagesAccepted: "yes",
     placement: "Forearm", projectDetails: "Color character portrait with a detailed background.",
   };
   const missing = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", { ...base, idempotencyKey: "anime-missing-ref" }), env);
@@ -2069,29 +2156,56 @@ test("Anime review requires a reference and approval can raise the exact price w
   assert.equal(received.status, 201);
   const requestPayload = await received.json();
   assert.equal(requestPayload.reviewRequired, true);
-  assert.equal(requestPayload.bookingUrl, "");
+  assert.match(requestPayload.bookingUrl, /^\/booking\/\?token=/);
   assert.equal(database.prepare("SELECT status FROM submissions WHERE id=?").get(requestPayload.submissionId).status, "new");
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(requestPayload.submissionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(requestPayload.submissionId).count, 1);
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?",
+  ).get(requestPayload.submissionId).count, 0);
+  const rawToken = new URL(requestPayload.bookingUrl, "https://example.test").searchParams.get("token");
+  const start = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 120 * 60 * 1000);
+  insertAvailabilityWindow(database, {
+    id: "special-anime-window", bookingTypeId: "tattoo_special_anime_v1",
+    startAt: start.toISOString(), endAt: end.toISOString(),
+  });
+  const heldResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: rawToken,
+    bookingTypeId: "tattoo_special_anime_v1",
+    availabilityWindowId: "special-anime-window",
+  }), env);
+  const held = await heldResponse.json();
+  assert.equal(heldResponse.status, 200, held.detail || held.error);
+  assert.equal(held.pendingApproval, true);
+  assert.deepEqual(database.prepare(
+    "SELECT template_key FROM notification_deliveries WHERE related_id=? ORDER BY template_key",
+  ).all(requestPayload.submissionId).map((row) => row.template_key), [
+    "admin_submission_received",
+    "submission_received",
+  ]);
 
-  const approved = await handleAdminTattooSpecialReview(adminJsonRequest(
+  const approved = await withMockFetch(async (url) => {
+    assert.match(String(url), /\/v2\/online-checkout\/payment-links$/);
+    return jsonFetchResponse({ payment_link: { id: "anime-link", order_id: "anime-order", url: "https://square.test/anime" } });
+  }, () => handleAdminTattooSpecialReview(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${requestPayload.submissionId}/review`,
     { outcome: "approved", approvedPriceCents: 25000, note: "Approved with simplified background detail." },
     adminToken, "PATCH",
-  ), env, requestPayload.submissionId);
+  ), env, requestPayload.submissionId));
   assert.equal(approved.status, 200);
   const approval = await approved.json();
   assert.equal(approval.approvedPriceCents, 25000);
-  assert.match(approval.bookingUrl, /^\/booking\/\?token=/);
+  assert.equal(approval.checkoutUrl, "https://square.test/anime");
   const storedTerms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(requestPayload.submissionId);
   assert.equal(storedTerms.advertised_price_cents, 20000);
   assert.equal(storedTerms.approved_price_cents, 25000);
   assert.equal(storedTerms.review_outcome, "approved");
   const savedPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(requestPayload.submissionId).payload_json);
   assert.equal(savedPayload.approved_price_cents, 25000);
-  const approvedBookingEmail = database.prepare(
-    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? AND template_key='booking_link_created'"
-  ).get(requestPayload.submissionId);
-  assert.deepEqual({ ...approvedBookingEmail }, { template_key: "booking_link_created", template_variant: "tattoo_special" });
+  const approvedDepositEmail = database.prepare(
+    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? AND channel='email' AND template_key='tattoo_special_deposit_requested'"
+  ).get(held.appointment.id);
+  assert.deepEqual({ ...approvedDepositEmail }, { template_key: "tattoo_special_deposit_requested", template_variant: "default" });
 });
 
 test("Anime approval cannot issue a new Special booking link after the sales cutoff", async () => {
@@ -2108,10 +2222,24 @@ test("Anime approval cannot issue a new Special booking link after the sales cut
   const received = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-anime", variantId: "special-anime-v1-bg", idempotencyKey: "anime-cutoff-review",
     name: "Cutoff Client", email: "cutoff@example.com", phone: "4045550199", ageConfirmed: "yes", policyAccepted: "yes",
+    transactionalMessagesAccepted: "yes",
     placement: "Forearm", projectDetails: "Character portrait.", referenceLink: "https://example.com/reference",
   }), env);
   const review = await received.json();
   assert.equal(received.status, 201);
+  const rawToken = new URL(review.bookingUrl, "https://example.test").searchParams.get("token");
+  const start = new Date(Date.now() + 11 * 24 * 60 * 60 * 1000);
+  const end = new Date(start.getTime() + 120 * 60 * 1000);
+  insertAvailabilityWindow(database, {
+    id: "special-anime-cutoff-window", bookingTypeId: "tattoo_special_anime_v1",
+    startAt: start.toISOString(), endAt: end.toISOString(),
+  });
+  const held = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
+    token: rawToken,
+    bookingTypeId: "tattoo_special_anime_v1",
+    availabilityWindowId: "special-anime-cutoff-window",
+  }), env);
+  assert.equal(held.status, 200);
   database.prepare("UPDATE tattoo_special_settings SET sales_closes_at=? WHERE id='default'")
     .run(new Date(Date.now() - 1000).toISOString());
   database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?")
@@ -2123,7 +2251,7 @@ test("Anime approval cannot issue a new Special booking link after the sales cut
   ), env, review.submissionId);
   assert.equal(approval.status, 409);
   assert.match((await approval.json()).error, /sales window has closed/i);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(review.submissionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(review.submissionId).count, 1);
 
   const simplification = await handleAdminTattooSpecialReview(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${review.submissionId}/review`,
@@ -4010,6 +4138,7 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   const tattooSpecialVariants = [
     "submission_received:tattoo_special",
     "booking_link_created:tattoo_special",
+    "tattoo_special_deposit_requested:default",
     "tattoo_special_review:simplification_requested",
     "tattoo_special_review:declined",
     "appointment_confirmed:tattoo_special",
@@ -4382,7 +4511,7 @@ test("production email sends use only the published copy revision and keep live 
   assert.equal(recorded.email_theme, "tattoo");
 });
 
-test("published Tattoo Special receipt copy stays independent from Special Project correspondence", async () => {
+test("published Tattoo Special request copy stays independent from Special Project correspondence", async () => {
   const database = migratedDatabase();
   const sent = [];
   const token = "tattoo-special-template-admin";
@@ -4398,7 +4527,7 @@ test("published Tattoo Special receipt copy stays independent from Special Proje
     env,
   )).json();
   const content = structuredClone(initial.defaultContent);
-  content.headline = "Your {{submission_label}} request is now in the dedicated Studio review queue.";
+  content.headline = "Your {{submission_label}} is now in the dedicated Studio review queue.";
   let response = await handleAdminEmailTemplates(new Request(`${base}/draft?variant=tattoo_special`, {
     method: "PUT", headers, body: JSON.stringify({ baseRevision: 0, content }),
   }), env);
@@ -4413,7 +4542,12 @@ test("published Tattoo Special receipt copy stays independent from Special Proje
     type: "tattoo_special",
     contact_name: "Special Client",
     contact_email: "special@example.test",
-    payload_json: JSON.stringify({}),
+    payload_json: JSON.stringify({
+      booking_mode: "review",
+      offer_id: "special-anime",
+      held_start_at: "2026-08-15T17:00:00.000Z",
+      held_end_at: "2026-08-15T19:00:00.000Z",
+    }),
   });
   await notifySubmissionReceived(env, {
     id: "ordinary-special-project-receipt",
@@ -4423,6 +4557,7 @@ test("published Tattoo Special receipt copy stays independent from Special Proje
     payload_json: JSON.stringify({}),
   });
   assert.match(sent[0].html, /Tattoo Special request is now in the dedicated Studio review queue/);
+  assert.match(sent[0].html, /Requested time \(held\)/i);
   assert.doesNotMatch(sent[1].html, /dedicated Studio review queue/);
   assert.match(sent[1].html, /special project application has been received/i);
 });

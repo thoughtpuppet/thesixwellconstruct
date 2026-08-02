@@ -4,7 +4,9 @@ import {
   notifyAppointmentCancelled,
   notifyAppointmentConfirmed,
   notifyAppointmentRescheduled,
+  notifyAdminSubmissionReceived,
   notifyBookingLinkCreated,
+  notifySubmissionReceived,
   notifyTattooRenderingPaymentConfirmed,
   notifyTattooRenderingPaymentRequested,
 } from "../notifications/_lib.js";
@@ -361,6 +363,9 @@ function normalizeAppointment(row) {
     squareCheckoutUrl: row.square_checkout_url || "",
     holdExpiresAt: row.hold_expires_at || "",
     holdState: row.hold_state || "",
+    approvalState: row.approval_state || "not_required",
+    approvalDecidedAt: row.approval_decided_at || "",
+    paymentDueAt: row.payment_due_at || "",
     holdReconciledAt: row.hold_reconciled_at || "",
     completedAt: row.completed_at || "",
     completionNote: row.completion_note || "",
@@ -411,6 +416,12 @@ function holdExpiryFromNow(cutoff = "") {
   const normalExpiry = Date.now() + HOLD_DURATION_MS;
   const cutoffMs = cutoff ? new Date(cutoff).getTime() : Number.POSITIVE_INFINITY;
   return new Date(Math.min(normalExpiry, Number.isFinite(cutoffMs) ? cutoffMs : normalExpiry)).toISOString();
+}
+
+function approvalHoldExpiry(cutoff = "") {
+  const cutoffMs = cutoff ? new Date(cutoff).getTime() : Number.NaN;
+  const fallback = Date.now() + 24 * 60 * 60 * 1000;
+  return new Date(Number.isFinite(cutoffMs) && cutoffMs > Date.now() ? cutoffMs : fallback).toISOString();
 }
 
 function availabilityScopeFromRequest(request) {
@@ -979,7 +990,10 @@ async function loadTokenContext(db, rawToken) {
   const now = new Date().toISOString();
   if (token.revoked_at || token.used_at) return { invalid: "This booking link is no longer active." };
   if (token.expires_at && token.expires_at < now) return { invalid: "This booking link has expired." };
-  if (token.submission_status !== "approved") {
+  const pendingSpecialApproval = token.submission_type === "tattoo_special"
+    && token.submission_status === "new"
+    && token.tattoo_stage === "review";
+  if (token.submission_status !== "approved" && !pendingSpecialApproval) {
     return { invalid: "This booking link is waiting on approval." };
   }
 
@@ -991,7 +1005,7 @@ async function loadTokenContext(db, rawToken) {
   if (purpose === "consultation" && token.tattoo_stage !== "consultation_required") {
     return { invalid: "This project is not currently waiting for a prerequisite consultation." };
   }
-  if (purpose === "tattoo" && token.tattoo_stage !== "ready_to_book") {
+  if (purpose === "tattoo" && token.tattoo_stage !== "ready_to_book" && !pendingSpecialApproval) {
     return { invalid: "This project is not ready for tattoo scheduling yet." };
   }
 
@@ -999,6 +1013,7 @@ async function loadTokenContext(db, rawToken) {
     token,
     purpose,
     allowedBookingTypes,
+    pendingSpecialApproval,
   };
 }
 
@@ -1320,6 +1335,7 @@ export async function handleBookingContext(request, env) {
         id: context.token.submission_id,
         type: context.token.submission_type,
         tattooStage: context.token.tattoo_stage || "",
+        pendingApproval: Boolean(context.pendingSpecialApproval),
         lifecycleReviewRequired: Boolean(context.token.lifecycle_review_required),
         lifecycleReviewNote: context.token.lifecycle_review_note || "",
         special: context.token.submission_type === "tattoo_special"
@@ -1346,10 +1362,14 @@ export async function handleBookingContext(request, env) {
       availabilityWindows: windows,
       pendingCheckout: pendingAppointment ? {
         appointmentId: pendingAppointment.id,
+        startAt: pendingAppointment.startAt,
+        endAt: pendingAppointment.endAt,
         checkoutUrl: pendingResumable ? pendingAppointment.squareCheckoutUrl : "",
         holdExpiresAt: pendingAppointment.holdExpiresAt,
         holdState: pendingAppointment.holdState,
         resumable: pendingResumable,
+        approvalState: pendingAppointment.approvalState,
+        paymentDueAt: pendingAppointment.paymentDueAt,
       } : null,
     });
   } catch (error) {
@@ -1632,12 +1652,12 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
         id, submission_id, booking_token_id, booking_type_id, availability_window_id,
         status, purpose, client_name, client_email, client_phone, start_at, end_at,
         deposit_cents, tip_cents, session_fee_cents,
-        extended_day_acknowledged_at, currency, hold_expires_at, hold_state,
+        extended_day_acknowledged_at, currency, hold_expires_at, hold_state, approval_state,
         replacement_for_appointment_id, reschedule_count, original_start_at,
         original_end_at, created_at, updated_at
       )
-      SELECT ?, ?, ?, ?, aw.id, 'pending_deposit', ?, ?, ?, ?, aw.start_at, aw.end_at,
-             ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?
+       SELECT ?, ?, ?, ?, aw.id, 'pending_deposit', ?, ?, ?, ?, aw.start_at, aw.end_at,
+              ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?
       FROM availability_windows aw
       WHERE aw.id = ? AND aw.active = 1 AND aw.is_blackout = 0
         AND (aw.booking_type_id IS NULL OR aw.booking_type_id = ?)
@@ -1704,10 +1724,17 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
                 SELECT 1 FROM json_each(active_token.allowed_booking_types_json)
                 WHERE value = ?
               )
-              AND token_submission.status = 'approved'
+              AND (
+                token_submission.status = 'approved'
+                OR (
+                  token_submission.type = 'tattoo_special'
+                  AND token_submission.status = 'new'
+                  AND token_submission.tattoo_stage = 'review'
+                )
+              )
               AND (
                 (? = 'prerequisite_consultation' AND token_submission.tattoo_stage = 'consultation_required')
-                OR (? = 'tattoo' AND token_submission.tattoo_stage = 'ready_to_book')
+                OR (? = 'tattoo' AND token_submission.tattoo_stage IN ('review','ready_to_book'))
               )
           )
         )
@@ -1752,6 +1779,7 @@ async function insertPendingAppointment(db, values, eventType = "hold_created") 
       values.extendedDayAcknowledgedAt || null,
       values.currency || "USD",
       values.holdExpiresAt,
+      values.approvalState || "not_required",
       values.replacementForAppointmentId || null,
       values.rescheduleCount || 0,
       values.originalStartAt || null,
@@ -1885,7 +1913,10 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     sessionFeeCents: bookingType.session_fee_cents || 0,
     extendedDayAcknowledgedAt: bookingType.id === EXTENDED_DAY_BOOKING_TYPE_ID ? now : null,
     currency: bookingType.currency || "USD",
-    holdExpiresAt: holdExpiryFromNow(tokenContext.token.submission_type === "tattoo_special" ? tokenContext.token.expires_at : ""),
+    holdExpiresAt: tokenContext.pendingSpecialApproval
+      ? approvalHoldExpiry(tokenContext.token.expires_at)
+      : holdExpiryFromNow(tokenContext.token.submission_type === "tattoo_special" ? tokenContext.token.expires_at : ""),
+    approvalState: tokenContext.pendingSpecialApproval ? "pending" : "not_required",
     now,
     eventMetadata: { tokenPurpose: tokenContext.purpose },
   });
@@ -2823,7 +2854,57 @@ export async function handleCreateBookingHold(request, env) {
       ...(result.code ? { code: result.code } : {}),
       ...(result.appointment ? { appointment: result.appointment } : {}),
     });
-    return json({ ok: true, appointment: result.appointment });
+    if (context.pendingSpecialApproval) {
+      const now = new Date().toISOString();
+      await db.batch([
+        db.prepare(
+          `UPDATE submissions
+           SET payload_json = json_set(payload_json,
+                 '$.held_appointment_id', ?,
+                 '$.held_start_at', ?,
+                 '$.held_end_at', ?,
+                 '$.approval_hold_expires_at', ?),
+               updated_at = ?
+           WHERE id = ? AND type = 'tattoo_special' AND status = 'new' AND tattoo_stage = 'review'`
+        ).bind(
+          result.appointment.id,
+          result.appointment.startAt,
+          result.appointment.endAt,
+          result.appointment.holdExpiresAt,
+          now,
+          context.token.submission_id,
+        ),
+        db.prepare(
+          `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
+           SELECT ?, id, 'special_time_held', 'client', ?, ? FROM submissions
+           WHERE id = ? AND NOT EXISTS (
+             SELECT 1 FROM submission_events existing
+             WHERE existing.submission_id = submissions.id AND existing.event_type = 'special_time_held'
+           )`
+        ).bind(
+          crypto.randomUUID(),
+          `${result.appointment.startAt} - ${result.appointment.endAt}`,
+          now,
+          context.token.submission_id,
+        ),
+      ]);
+      const submission = await db.prepare("SELECT * FROM submissions WHERE id = ?")
+        .bind(context.token.submission_id)
+        .first();
+      await Promise.allSettled([
+        notifySubmissionReceived(env, submission, {
+          idempotencyKey: `submission_received:${context.token.submission_id}:${result.appointment.id}`,
+        }),
+        notifyAdminSubmissionReceived(env, submission, {
+          idempotencyKey: `admin_submission_received:${context.token.submission_id}:${result.appointment.id}`,
+        }),
+      ]);
+    }
+    return json({
+      ok: true,
+      appointment: result.appointment,
+      pendingApproval: Boolean(context.pendingSpecialApproval),
+    });
   } catch (error) {
     return errorResponse("Unable to create booking hold.", 500, {
       detail: error.message,
@@ -3440,6 +3521,11 @@ export async function handleCreateBookingCheckout(request, env) {
     let context = await loadTokenContext(db, asString(body.token));
     if (!context) return errorResponse("A private booking link is required.", 401);
     if (context.invalid) return errorResponse(context.invalid, 403);
+    if (context.pendingSpecialApproval) {
+      return errorResponse("Studio approval is required before the Tattoo Special deposit can be paid.", 409, {
+        code: "SPECIAL_APPROVAL_REQUIRED",
+      });
+    }
     if (context.purpose === "tattoo") {
       const sessionPlanCheck = await ensureSessionPlanResponse(db, context);
       if (sessionPlanCheck.error) return errorResponse(sessionPlanCheck.error, 409);
@@ -3519,6 +3605,72 @@ async function fetchSquareOrder(env, orderId) {
   if (!response.ok) return null;
   const payload = await response.json().catch(() => ({}));
   return payload.order || null;
+}
+
+export async function createApprovedTattooSpecialDepositCheckout(request, env, submissionId) {
+  const db = requireBookingDb(env);
+  const row = await db.prepare(
+    `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type,
+            t.sales_closes_at, t.offer_title AS special_offer_title,
+            t.variant_label AS special_variant_label
+     FROM appointments a
+     JOIN submissions s ON s.id = a.submission_id
+     JOIN tattoo_special_submission_terms t ON t.submission_id = s.id
+     JOIN booking_types bt ON bt.id = a.booking_type_id
+     WHERE a.submission_id = ? AND s.type = 'tattoo_special'
+       AND s.status = 'approved' AND s.tattoo_stage = 'ready_to_book'
+       AND a.status IN ('pending_deposit','deposit_pending')
+       AND a.hold_state = 'active'
+       AND a.approval_state IN ('pending','approved')
+     ORDER BY a.created_at DESC LIMIT 1`
+  ).bind(submissionId).first();
+  if (!row) throw new Error("The client must select an available time before this Tattoo Special can be approved.");
+  if (new Date(row.hold_expires_at).getTime() <= Date.now()) {
+    throw new Error("The requested time is no longer held. Ask the client to select another time.");
+  }
+  if (row.square_checkout_url && row.square_payment_link_id) {
+    return {
+      appointment: normalizeAppointment(row),
+      checkoutUrl: row.square_checkout_url,
+      paymentDueAt: row.payment_due_at || row.hold_expires_at,
+      existing: true,
+    };
+  }
+
+  const salesCloseMs = new Date(row.sales_closes_at).getTime();
+  const paymentDueMs = Math.min(Date.now() + 24 * 60 * 60 * 1000, salesCloseMs);
+  if (!Number.isFinite(paymentDueMs) || paymentDueMs <= Date.now()) {
+    throw new Error("The Tattoo Specials payment window has closed.");
+  }
+  const paymentDueAt = new Date(paymentDueMs).toISOString();
+  const now = new Date().toISOString();
+  await db.prepare(
+    `UPDATE appointments
+     SET approval_state = 'approved', approval_decided_at = COALESCE(approval_decided_at, ?),
+         payment_due_at = ?, hold_expires_at = ?, updated_at = ?
+     WHERE id = ? AND hold_state = 'active' AND approval_state IN ('pending','approved')`
+  ).bind(now, paymentDueAt, paymentDueAt, now, row.id).run();
+
+  const appointmentRow = await selectAppointmentWithMeeting(db, row.id);
+  const appointment = normalizeAppointment(appointmentRow || row);
+  const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(appointment.bookingTypeId)
+    .first();
+  if (!bookingType) throw new Error("The Tattoo Special booking type is unavailable.");
+
+  const paymentLink = await createSquarePaymentLink(request, env, appointment, bookingType);
+  const saved = await savePendingPaymentLink(db, appointment, paymentLink);
+  if (!saved) {
+    await invalidateUnsavedPaymentLink(env, paymentLink);
+    throw new Error("The approval hold expired before the deposit link could be created.");
+  }
+  const updated = await selectAppointmentWithMeeting(db, row.id);
+  return {
+    appointment: normalizeAppointment(updated || appointmentRow || row),
+    checkoutUrl: paymentLink.url,
+    paymentDueAt,
+    existing: false,
+  };
 }
 
 async function fetchSquareOrderForReconciliation(env, orderId) {

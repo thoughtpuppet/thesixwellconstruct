@@ -2668,14 +2668,15 @@
     const isNew = !offer.id;
     return `<form class="tattoo-special-offer" data-tattoo-special-offer-form data-offer-id="${escapeHtml(offer.id || "")}">
       <div class="portfolio-head"><div><span class="pill">${isNew ? "New special" : `Version ${escapeHtml(offer.versionNumber || 1)}`}</span><h3>${escapeHtml(offer.title || "New Tattoo Special")}</h3></div>${isNew ? "" : `<button class="button danger-button" type="button" data-archive-special-offer="${escapeHtml(offer.id)}">${offer.archivedAt ? "Archived" : "Archive / Delete"}</button>`}</div>
-      <p class="contact">Saving price, duration, deposit, mode, references, participants, or variants creates a new immutable version. Existing submissions and links keep their original terms.</p>
+      <p class="contact">Saving price, duration, deposit, references, participants, or variants creates a new immutable version. Every new Tattoo Special request requires Studio approval before booking. Existing submissions and links keep their original terms.</p>
       <div class="tattoo-special-offer__grid">
         <label>Title<input name="title" required maxlength="200" value="${escapeHtml(offer.title || "")}"></label>
         <label>Slug<input name="slug" required maxlength="160" value="${escapeHtml(offer.slug || "")}"></label>
         <label>Display order<input name="sortOrder" type="number" value="${escapeHtml(offer.sortOrder ?? 0)}"></label>
         <label>Duration (minutes)<input name="durationMinutes" type="number" min="30" step="30" required value="${escapeHtml(offer.durationMinutes || 120)}"></label>
         <label>Deposit (dollars)<input name="depositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(offer.depositCents ?? tattooSpecials.settings.defaultDepositCents ?? 5000) / 100)}"></label>
-        <label>Mode<select name="mode"><option value="direct" ${offer.mode !== "review" ? "selected" : ""}>Direct booking</option><option value="review" ${offer.mode === "review" ? "selected" : ""}>Complexity review</option></select></label>
+        <input name="mode" type="hidden" value="review">
+        <div class="field"><label>Booking flow</label><div class="value">Studio approval required</div></div>
         <label>References<select name="referenceRequirement"><option value="optional" ${offer.referenceRequirement !== "required" ? "selected" : ""}>Optional</option><option value="required" ${offer.referenceRequirement === "required" ? "selected" : ""}>Required</option></select></label>
         <label>Participants<select name="participantCount"><option value="1" ${Number(offer.participantCount || 1) === 1 ? "selected" : ""}>One adult</option><option value="2" ${Number(offer.participantCount) === 2 ? "selected" : ""}>Two adults</option></select></label>
         <label class="check"><input name="active" type="checkbox" ${offer.active !== false ? "checked" : ""}><span>Public while window is open</span></label>
@@ -4195,6 +4196,8 @@ ${meetingLines}
     const payload = submission.payload || {};
     const price = Number(payload.approved_price_cents || payload.quoted_price_cents || 0);
     const review = payload.booking_mode === "review";
+    const adjustablePrice = payload.special_offer_id === "special-anime";
+    const heldAppointment = latestAppointmentFor(submission.id);
     const participants = Array.isArray(payload.participants) ? payload.participants : [];
     return `<section class="tattoo-special-review">
       <div><span class="pill">Tattoo Special</span><h3>${escapeHtml(payload.special_offer_title || "Tattoo Special")}${payload.special_variant_label ? ` — ${escapeHtml(payload.special_variant_label)}` : ""}</h3></div>
@@ -4202,16 +4205,18 @@ ${meetingLines}
         ${detailField("Advertised total", money(Number(payload.quoted_price_cents || 0), "USD"))}
         ${detailField("Deposit credit", money(Number(payload.deposit_cents || 0), "USD"))}
         ${detailField("Duration", `${Number(payload.duration_minutes || 0)} minutes`)}
-        ${detailField("Mode", review ? "Complexity review" : "Direct")}
+        ${detailField("Booking flow", review ? "Studio approval required" : "Historical direct booking")}
+        ${detailField("Requested time", heldAppointment?.startAt ? `${formatDate(heldAppointment.startAt)}${heldAppointment.endAt ? `\nEnds: ${formatDate(heldAppointment.endAt)}` : ""}` : "No time selected yet")}
+        ${detailField("Appointment state", heldAppointment?.approvalState === "approved" ? "Approved — awaiting deposit" : heldAppointment?.approvalState === "pending" ? "Held for approval" : heldAppointment?.status || "Request only")}
         ${detailField("Special version", payload.special_offer_version_id || "")}
         ${detailField("Participants", participants.map((person) => `${person.name} · ${person.email} · ${person.phone}`).join("\n"))}
       </div>
       ${review && !["booked", "declined"].includes(submission.status) ? `<div class="tattoo-special-offer__grid">
-        <label>Exact approved price (dollars)<input id="specialApprovedPrice" type="number" min="${escapeHtml(Number(payload.quoted_price_cents || 0) / 100)}" step="1" value="${escapeHtml(price / 100)}"></label>
-        <label style="grid-column:span 2;">Review note<textarea id="specialReviewNote" rows="3">${escapeHtml(submission.internalNotes || "")}</textarea></label>
+        <label>${adjustablePrice ? "Exact approved price" : "Promotional price"} (dollars)<input id="specialApprovedPrice" type="number" min="${escapeHtml(Number(payload.quoted_price_cents || 0) / 100)}" step="1" value="${escapeHtml(price / 100)}" ${adjustablePrice ? "" : "readonly"}></label>
+        <label style="grid-column:span 2;">Studio note<textarea id="specialReviewNote" rows="3">${escapeHtml(submission.internalNotes || "")}</textarea></label>
       </div><div class="booking-actions">
-        <button class="button" type="button" data-special-review-outcome="approved" data-submission-id="${escapeHtml(submission.id)}">Approve &amp; Send Link</button>
-        <button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Request Simplification</button>
+        <button class="button" type="button" data-special-review-outcome="approved" data-submission-id="${escapeHtml(submission.id)}" ${heldAppointment?.approvalState === "pending" || heldAppointment?.approvalState === "approved" ? "" : "disabled"}>Approve &amp; Send Deposit Link</button>
+        ${adjustablePrice ? `<button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Request Simplification</button>` : ""}
         <button class="button danger-button" type="button" data-special-review-outcome="declined" data-submission-id="${escapeHtml(submission.id)}">Decline</button>
       </div>` : `<p class="contact">${review ? "Review decision is recorded in the event history. Only the primary purchaser receives automated messages." : "This direct-booking special was server-approved at submission. Only the primary purchaser receives automated messages."}</p>`}
     </section>`;
@@ -5562,13 +5567,21 @@ ${meetingLines}
       specialReview.disabled = true;
       setStatus(`Saving Tattoo Special review: ${outcome}`);
       try {
-        await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(specialReview.dataset.submissionId)}/review`, {
+        const result = await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(specialReview.dataset.submissionId)}/review`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ outcome, approvedPriceCents: Math.round(approvedPriceDollars * 100), note }),
         });
         await refreshActiveSubmissionDetail();
-        setStatus(outcome === "approved" ? "Tattoo Special approved and booking link sent" : "Tattoo Special review saved");
+        if (outcome === "approved") {
+          const emailSent = result.email?.ok === true;
+          const textSent = result.text?.ok === true;
+          setStatus(emailSent && textSent
+            ? "Tattoo Special approved; deposit link sent by email and text"
+            : `Tattoo Special approved; deposit link created. ${emailSent ? "Email sent" : "Email needs attention"}; ${textSent ? "text sent" : "text needs attention"}.`);
+        } else {
+          setStatus("Tattoo Special review saved");
+        }
       } catch (error) {
         setStatus(error.message || "Tattoo Special review could not be saved");
         if (specialReview.isConnected) specialReview.disabled = false;

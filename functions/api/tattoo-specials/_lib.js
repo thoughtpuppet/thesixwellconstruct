@@ -1,9 +1,9 @@
 import {
-  notifyAdminSubmissionReceived,
-  notifyBookingLinkCreated,
-  notifySubmissionReceived,
+  notifyTattooSpecialDepositRequested,
   notifyTattooSpecialReview,
 } from "../notifications/_lib.js";
+import { sendTattooSpecialDepositText } from "../notifications/_sms.js";
+import { createApprovedTattooSpecialDepositCheckout } from "../booking/_lib.js";
 
 const SPECIAL_TYPE = "tattoo_special";
 const SPECIAL_BOOKING_PREFIX = "tattoo_special_";
@@ -59,6 +59,19 @@ function windowState(settings, nowMs = Date.now()) {
 
 function money(cents) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
+}
+
+function easternDateTime(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(value));
 }
 
 function durationLabel(minutes) {
@@ -288,6 +301,9 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     if (!primary.phone) return failure("Enter the primary purchaser's phone number.", 400, { field: "phone" });
     if (text(fields.ageConfirmed).toLowerCase() !== "yes") return failure("The primary participant must confirm they are at least 18.", 400);
     if (text(fields.policyAccepted).toLowerCase() !== "yes") return failure("Accept the Tattoo Special deposit and booking policies to continue.", 400);
+    if (text(fields.transactionalMessagesAccepted).toLowerCase() !== "yes") {
+      return failure("Agree to receive transactional email and text updates for this Tattoo Special request.", 400);
+    }
     const placement = text(fields.placement, 500);
     const projectDetails = text(fields.projectDetails, 5000);
     if (!placement || !projectDetails) return failure("Placement and project details are required.", 400);
@@ -313,8 +329,17 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
 
     const idempotencyKey = text(request.headers.get("idempotency-key") || fields.idempotencyKey, 200);
     if (!idempotencyKey) return failure("An idempotency key is required.", 400);
-    const existing = await db.prepare("SELECT id, booking_url, status FROM submissions WHERE idempotency_key = ?").bind(idempotencyKey).first();
-    if (existing) return json({ ok: true, idempotent: true, submissionId: existing.id, bookingUrl: existing.booking_url || "", reviewRequired: !existing.booking_url });
+    const existing = await db.prepare("SELECT id, booking_url, status, payload_json FROM submissions WHERE idempotency_key = ?").bind(idempotencyKey).first();
+    if (existing) {
+      const existingPayload = JSON.parse(existing.payload_json || "{}");
+      return json({
+        ok: true,
+        idempotent: true,
+        submissionId: existing.id,
+        bookingUrl: existing.booking_url || "",
+        reviewRequired: existingPayload.booking_mode === "review",
+      });
+    }
 
     const submissionId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -343,6 +368,7 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       automated_messages_recipient: primary.email,
       age_confirmed: "yes",
       policy_accepted: "yes",
+      transactional_messages_accepted: "yes",
     };
     const contact = { name: primary.name, email: primary.email, phone: primary.phone, participants };
     await db.batch([
@@ -386,19 +412,13 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       ).bind(crypto.randomUUID(), submissionId, `Tattoo Special · ${terms.offer_title} · ${terms.variant_label}`, now),
     ]);
 
-    let token = null;
-    if (direct) token = await createBookingAccess(db, request, submissionId, terms, settings.sales_closes_at);
-    const normalized = { id: submissionId, type: SPECIAL_TYPE, status: direct ? "approved" : "new", sourcePath: "/tattoos/specials/", subject: `Tattoo Special · ${terms.offer_title}`, contact, payload, files: savedFiles };
-    await Promise.allSettled([
-      notifySubmissionReceived(env, normalized),
-      notifyAdminSubmissionReceived(env, normalized),
-    ]);
+    const token = await createBookingAccess(db, request, submissionId, terms, settings.sales_closes_at);
     return json({
       ok: true,
       submissionId,
       reviewRequired: !direct,
       bookingUrl: token?.bookingUrl || "",
-      receipt: direct ? "Your private booking link is ready." : "Your references were sent to Studio for complexity review.",
+      receipt: direct ? "Your private booking link is ready." : "Choose an available time to finish sending your Tattoo Special request for Studio approval.",
     }, { status: 201 });
   } catch (error) {
     if (String(error.message || error).includes("UNIQUE constraint failed: submissions.idempotency_key")) {
@@ -469,7 +489,7 @@ function normalizeOfferInput(body, defaultDeposit) {
   const title = text(body.title, 200);
   const slug = text(body.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), 160);
   const duration = integer(body.durationMinutes, -1);
-  const mode = text(body.mode || body.bookingMode, 20);
+  const mode = "review";
   const reference = text(body.referenceRequirement || "optional", 20);
   const participants = integer(body.participantCount, 1);
   const deposit = body.depositCents === undefined ? defaultDeposit : integer(body.depositCents, -1);
@@ -478,7 +498,6 @@ function normalizeOfferInput(body, defaultDeposit) {
   })) : [];
   if (!title || !slug) return { error: "A Tattoo Special title and slug are required." };
   if (duration <= 0 || duration % 30 !== 0) return { error: "Duration must use 30-minute increments." };
-  if (!new Set(["direct", "review"]).has(mode)) return { error: "Mode must be direct or review." };
   if (!new Set(["optional", "required"]).has(reference)) return { error: "Reference requirement must be optional or required." };
   if (![1, 2].includes(participants)) return { error: "Participant count must be one or two." };
   if (deposit < 0) return { error: "Deposit must be zero or greater." };
@@ -576,35 +595,87 @@ export async function handleAdminTattooSpecialReview(request, env, submissionId)
        WHERE s.id = ? AND s.type = 'tattoo_special'`
     ).bind(submissionId).first();
     if (!row) return failure("Tattoo Special request not found.", 404);
-    if (row.booking_mode !== "review") return failure("This Tattoo Special does not require complexity review.", 409);
+    if (row.booking_mode !== "review") return failure("This historical Tattoo Special did not require Studio approval.", 409);
     const outcome = text(body.outcome, 40);
     if (!new Set(["approved", "simplification_requested", "declined"]).has(outcome)) return failure("Choose approved, simplification requested, or declined.", 400);
+    if (outcome === "simplification_requested" && row.offer_id !== "special-anime") {
+      return failure("Simplification requests are available only for the Anime/Cartoon Tattoo Special.", 409);
+    }
     const now = new Date().toISOString();
     const note = text(body.note, 3000);
     let approvedPrice = null;
-    let token = null;
+    let checkout = null;
+    let approvalDeliveries = [];
     if (outcome === "approved") {
       if (new Date(row.sales_closes_at).getTime() <= Date.now()) {
-        return failure("The Tattoo Specials sales window has closed. No new booking link can be issued.", 409);
+        return failure("The Tattoo Specials sales window has closed. No deposit link can be issued.", 409);
       }
-      approvedPrice = integer(body.approvedPriceCents, Number(row.advertised_price_cents));
-      if (approvedPrice < Number(row.advertised_price_cents)) return failure("The approved Anime price cannot be lower than its advertised base price.", 400);
+      const heldAppointment = await db.prepare(
+        `SELECT id FROM appointments
+         WHERE submission_id = ? AND status IN ('pending_deposit','deposit_pending')
+           AND hold_state = 'active' AND approval_state IN ('pending','approved')
+           AND hold_expires_at > ?
+         ORDER BY created_at DESC LIMIT 1`
+      ).bind(submissionId, now).first();
+      if (!heldAppointment) {
+        return failure("The client must select an available time before this Tattoo Special can be approved.", 409);
+      }
+      approvedPrice = row.offer_id === "special-anime"
+        ? integer(body.approvedPriceCents, Number(row.advertised_price_cents))
+        : Number(row.advertised_price_cents);
+      if (row.offer_id === "special-anime" && approvedPrice < Number(row.advertised_price_cents)) {
+        return failure("The approved Anime price cannot be lower than its advertised base price.", 400);
+      }
       await db.batch([
         db.prepare("UPDATE tattoo_special_submission_terms SET approved_price_cents = ?, review_outcome = 'approved', updated_at = ? WHERE submission_id = ?").bind(approvedPrice, now, submissionId),
-        db.prepare("UPDATE tattoo_session_plans SET approved_budget_min_cents = ?, approved_budget_max_cents = ?, artist_note = ?, updated_at = ? WHERE submission_id = ?").bind(approvedPrice, approvedPrice, note || `${row.offer_title} approved after complexity review.`, now, submissionId),
+        db.prepare("UPDATE tattoo_session_plans SET approved_budget_min_cents = ?, approved_budget_max_cents = ?, artist_note = ?, updated_at = ? WHERE submission_id = ?").bind(approvedPrice, approvedPrice, note || `${row.offer_title} approved by Studio.`, now, submissionId),
         db.prepare("UPDATE submissions SET status = 'approved', tattoo_stage = 'ready_to_book', internal_notes = ?, payload_json = json_set(payload_json, '$.approved_price_cents', ?), updated_at = ? WHERE id = ?").bind(note, approvedPrice, now, submissionId),
+        db.prepare("UPDATE booking_tokens SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE submission_id = ?").bind(now, now, submissionId),
         db.prepare("INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at) VALUES (?, ?, 'special_review_approved', 'admin', ?, ?)").bind(crypto.randomUUID(), submissionId, `${row.offer_title} · ${money(approvedPrice)}${note ? ` · ${note}` : ""}`, now),
       ]);
-      token = await createBookingAccess(db, request, submissionId, row, row.sales_closes_at);
-      const normalized = { id: submissionId, type: SPECIAL_TYPE, contactName: row.contact_name, contactEmail: row.contact_email, contactPhone: row.contact_phone, contact: JSON.parse(row.contact_json || "{}"), payload: JSON.parse(row.payload_json || "{}") };
-      await notifyBookingLinkCreated(env, request, normalized, { ...token, approvedBudget: { minCents: approvedPrice, maxCents: approvedPrice, currency: "USD" } });
+      checkout = await createApprovedTattooSpecialDepositCheckout(request, env, submissionId);
+      const deliveryDetails = {
+        appointmentId: checkout.appointment.id,
+        clientName: row.contact_name,
+        clientEmail: row.contact_email,
+        clientPhone: row.contact_phone,
+        startAt: checkout.appointment.startAt,
+        endAt: checkout.appointment.endAt,
+        offerTitle: row.offer_title,
+        variantLabel: row.variant_label,
+        approvedPriceCents: approvedPrice,
+        depositCents: row.deposit_cents,
+        currency: "USD",
+        paymentDueAt: checkout.paymentDueAt,
+        checkoutUrl: checkout.checkoutUrl,
+      };
+      approvalDeliveries = await Promise.allSettled([
+        notifyTattooSpecialDepositRequested(env, request, deliveryDetails),
+        sendTattooSpecialDepositText(env, {
+          ...deliveryDetails,
+          depositText: money(row.deposit_cents),
+          paymentDueText: easternDateTime(checkout.paymentDueAt),
+        }),
+      ]);
     } else {
       const status = outcome === "declined" ? "declined" : "reviewing";
-      await db.batch([
+      const statements = [
         db.prepare("UPDATE tattoo_special_submission_terms SET review_outcome = ?, updated_at = ? WHERE submission_id = ?").bind(outcome, now, submissionId),
         db.prepare("UPDATE submissions SET status = ?, tattoo_stage = 'review', internal_notes = ?, updated_at = ? WHERE id = ?").bind(status, note, now, submissionId),
         db.prepare("INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at) VALUES (?, ?, ?, 'admin', ?, ?)").bind(crypto.randomUUID(), submissionId, `special_review_${outcome}`, note, now),
-      ]);
+      ];
+      if (outcome === "declined") {
+        statements.push(
+          db.prepare(
+            `UPDATE appointments SET status = 'cancelled', hold_state = 'released', approval_state = 'declined',
+             approval_decided_at = ?, cancelled_at = ?, cancellation_reason = 'Tattoo Special request declined', updated_at = ?
+             WHERE submission_id = ? AND status IN ('pending_deposit','deposit_pending') AND hold_state = 'active'`
+          ).bind(now, now, now, submissionId),
+          db.prepare("UPDATE booking_tokens SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE submission_id = ?")
+            .bind(now, now, submissionId),
+        );
+      }
+      await db.batch(statements);
       await notifyTattooSpecialReview(env, {
         ...row,
         submissionId,
@@ -612,7 +683,16 @@ export async function handleAdminTattooSpecialReview(request, env, submissionId)
         note,
       });
     }
-    return json({ ok: true, outcome, approvedPriceCents: approvedPrice, bookingUrl: token?.bookingUrl || "" });
+    return json({
+      ok: true,
+      outcome,
+      approvedPriceCents: approvedPrice,
+      checkoutUrl: checkout?.checkoutUrl || "",
+      appointmentId: checkout?.appointment?.id || "",
+      paymentDueAt: checkout?.paymentDueAt || "",
+      email: approvalDeliveries[0]?.value || null,
+      text: approvalDeliveries[1]?.value || null,
+    });
   } catch (error) {
     return failure("Unable to update the Tattoo Special review.", 500, { detail: error.message });
   }

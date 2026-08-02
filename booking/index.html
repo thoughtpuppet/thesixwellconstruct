@@ -205,7 +205,7 @@
       <div id="sessionFeeRow" class="panel-row hidden"><span class="panel-key">Extended Day Fee</span><span id="sessionFeeValue">-</span></div>
       <div id="estimatedTotalRow" class="panel-row hidden"><span class="panel-key">Estimated Total</span><span id="estimatedTotalValue">-</span></div>
       <div id="remainingBalanceRow" class="panel-row hidden"><span class="panel-key">Estimated Remaining</span><span id="remainingBalanceValue">-</span></div>
-      <div class="tip-control">
+      <div class="tip-control" id="tipControl">
         <span class="panel-key">Optional Tip</span>
         <div class="tip-options" role="group" aria-label="Optional tip amount">
           <button class="tip-button active" type="button" data-tip-cents="0">None</button>
@@ -215,8 +215,8 @@
         </div>
         <input id="customTipInput" class="custom-tip" type="number" min="0" max="500" step="0.01" inputmode="decimal" placeholder="Custom tip">
       </div>
-      <div class="panel-row"><span class="panel-key">Tip</span><span id="tipValue">$0</span></div>
-      <div class="panel-row"><span class="panel-key">Total Due Today</span><span id="totalValue">-</span></div>
+      <div class="panel-row" id="tipRow"><span class="panel-key">Tip</span><span id="tipValue">$0</span></div>
+      <div class="panel-row" id="totalDueRow"><span class="panel-key">Total Due Today</span><span id="totalValue">-</span></div>
       <button id="checkoutBtn" class="checkout" type="button" disabled>Continue to Square</button>
       <p id="checkoutNote" class="fine">Deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.</p>
     </aside>
@@ -266,6 +266,9 @@
   const tipValue = document.getElementById("tipValue");
   const totalValue = document.getElementById("totalValue");
   const customTipInput = document.getElementById("customTipInput");
+  const tipControl = document.getElementById("tipControl");
+  const tipRow = document.getElementById("tipRow");
+  const totalDueRow = document.getElementById("totalDueRow");
   const checkoutBtn = document.getElementById("checkoutBtn");
   const checkoutNote = document.getElementById("checkoutNote");
   const bookingTitle = document.getElementById("bookingTitle");
@@ -725,22 +728,28 @@
   function applyPurposeCopy() {
     const consultation = context?.purpose === "consultation";
     const special = context?.submission?.special;
+    const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
     bookingTitle.textContent = consultation ? "CONSULTATION." : special ? "TATTOO SPECIAL." : "BOOKING.";
     bookingLead.textContent = consultation
       ? "Project review has linked you to a required in-person planning consultation. Choose a time and pay the consultation reservation fee. This does not book the tattoo; tattoo access follows only after the consultation is completed and the studio saves the final session plan."
       : special
-        ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
+        ? pendingSpecialApproval
+          ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select an available time to hold it while Studio reviews your request. No appointment is booked and no deposit is due until approval.`
+          : `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
       : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
     sessionSectionLabel.textContent = consultation
       ? "Consultation & Reservation Fee"
       : special
         ? "Your Tattoo Special & Deposit"
         : "Session & Deposit";
-    depositKey.textContent = consultation ? "Reservation Fee" : "Deposit";
+    depositKey.textContent = consultation ? "Reservation Fee" : pendingSpecialApproval ? "Deposit after approval" : "Deposit";
+    checkoutBtn.textContent = pendingSpecialApproval ? "Hold Time & Send Request" : "Continue to Square";
     checkoutNote.textContent = consultation
       ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
       : special
-        ? `${money(special.depositCents || 0)} is collected now and credited toward the ${money(special.quotedPriceCents || 0)} Tattoo Special total. The deposit is non-refundable.`
+        ? pendingSpecialApproval
+          ? `Nothing is charged now. If Studio approves the request, the ${money(special.depositCents || 0)} deposit link will be sent by email and text and will expire after 24 hours or at the Specials sales deadline, whichever comes first.`
+          : `${money(special.depositCents || 0)} is collected now and credited toward the ${money(special.quotedPriceCents || 0)} Tattoo Special total. The deposit is non-refundable.`
       : "The tattoo deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.";
     const badge = document.querySelector(".badge");
     if (badge) badge.classList.toggle("hidden", Boolean(special));
@@ -757,6 +766,13 @@
     const activeState = pending.holdState === "active";
     const active = activeState && Number.isFinite(expiresMs) && expiresMs > Date.now();
     const service = context?.purpose === "consultation" ? "consultation" : "tattoo appointment";
+    if (pending.approvalState === "pending") {
+      pendingCheckoutText.textContent = `Your requested time, ${formatDate(pending.startAt || pending.heldStartAt)}, is held for Studio review. Your request-received email confirms that no appointment is booked and no deposit is due until approval.`;
+      releaseCheckoutBtn.classList.remove("hidden");
+      pendingCheckoutPanel.classList.remove("hidden");
+      appEl.classList.add("hidden");
+      return true;
+    }
     if (activeState) {
       pendingCheckoutText.textContent = active
         ? `Your ${service} time is held until ${formatDate(expiresAt)}. Resume the existing Square checkout; a second checkout will not be created.`
@@ -931,9 +947,15 @@
     estimatedTotalValue.textContent = extendedPricingSummary?.laborMin ? pricingRangeLabel(extendedPricingSummary.totalMin, extendedPricingSummary.totalMax, extendedPricingSummary.currency) : "-";
     remainingBalanceValue.textContent = extendedPricingSummary?.laborMin ? pricingRangeLabel(extendedPricingSummary.remainingMin, extendedPricingSummary.remainingMax, extendedPricingSummary.currency) : "-";
     tipValue.textContent = money(selectedTipCents, selectedType?.currency || "USD");
-    totalValue.textContent = selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
+    const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
+    tipControl.classList.toggle("hidden", pendingSpecialApproval);
+    tipRow.classList.toggle("hidden", pendingSpecialApproval);
+    totalDueRow.querySelector(".panel-key").textContent = pendingSpecialApproval ? "Due Today" : "Total Due Today";
+    totalValue.textContent = pendingSpecialApproval ? "$0" : selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
     checkoutNote.textContent = context?.submission?.special
-      ? `${selectedType.depositLabel} is collected through Square and credited toward the ${money(context.submission.special.quotedPriceCents || 0)} Tattoo Special total. Remaining balance: ${money(Math.max(0, (context.submission.special.quotedPriceCents || 0) - Number(selectedType.depositCents || 0)))}.`
+      ? pendingSpecialApproval
+        ? `This time is held for approval only. No appointment is booked and no payment link is created yet.`
+        : `${selectedType.depositLabel} is collected through Square and credited toward the ${money(context.submission.special.quotedPriceCents || 0)} Tattoo Special total. Remaining balance: ${money(Math.max(0, (context.submission.special.quotedPriceCents || 0) - Number(selectedType.depositCents || 0)))}.`
       : selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
       ? `Square collects only the ${selectedType.depositLabel} deposit${selectedTipCents ? " and your optional tip" : ""} today. The $200 Extended Day fee is included in the final studio balance, and the deposit is credited toward your final total.`
       : context?.purpose === "consultation"
@@ -1136,15 +1158,16 @@
       return;
     }
     checkoutBtn.disabled = true;
-    checkoutNote.textContent = "Preparing your Square deposit checkout.";
-    const response = await fetch("/api/booking/checkout", {
+    const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
+    checkoutNote.textContent = pendingSpecialApproval ? "Holding your selected time and sending your request." : "Preparing your Square deposit checkout.";
+    const response = await fetch(pendingSpecialApproval ? "/api/booking/hold" : "/api/booking/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         token,
         bookingTypeId: selectedType.id,
         availabilityWindowId: selectedWindow.id,
-        tipCents: selectedTipCents,
+        tipCents: pendingSpecialApproval ? 0 : selectedTipCents,
         extendedDayAcknowledged: selectedType.id === EXTENDED_DAY_BOOKING_TYPE_ID && extendedDayAcknowledged,
         clientName: clientNameInput.value.trim(),
         clientEmail: clientEmailInput.value.trim(),
@@ -1153,8 +1176,19 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      checkoutNote.textContent = payload.error || "Unable to prepare deposit checkout.";
+      checkoutNote.textContent = payload.error || (pendingSpecialApproval ? "Unable to hold this time for approval." : "Unable to prepare deposit checkout.");
       checkoutBtn.disabled = false;
+      return;
+    }
+    if (pendingSpecialApproval) {
+      context.pendingCheckout = {
+        appointmentId: payload.appointment.id,
+        holdExpiresAt: payload.appointment.holdExpiresAt,
+        holdState: payload.appointment.holdState,
+        approvalState: payload.appointment.approvalState,
+        startAt: payload.appointment.startAt,
+      };
+      renderPendingCheckout();
       return;
     }
     window.location.href = payload.checkoutUrl;

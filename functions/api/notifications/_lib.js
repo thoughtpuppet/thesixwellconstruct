@@ -16,6 +16,7 @@ import {
   buildTattooDraftResumeEmail,
   buildTattooRenderingPaymentConfirmedEmail,
   buildTattooRenderingPaymentRequestEmail,
+  buildTattooSpecialDepositRequestEmail,
   buildTattooSpecialReviewEmail,
   clientEmailPreviewCatalog,
   renderClientEmailPreview,
@@ -808,10 +809,10 @@ const SUBMISSION_RECEIPTS = {
     next: "If the application is selected, you will receive a private tattoo-booking link or a request for any missing planning details.",
   },
   tattoo_special: {
-    label: "Tattoo Special",
-    subject: "Tattoo Special received",
-    expectation: "Your selected Tattoo Special, price, duration, deposit, placement, and references have been recorded as one fixed promotional snapshot.",
-    next: "Direct-booking specials continue to private scheduling. Complexity-review specials receive a private link only after Studio approval.",
+    label: "Tattoo Special request",
+    subject: "Tattoo Special request received",
+    expectation: "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.",
+    next: "No appointment is booked yet. If approved, you will receive an email and text with a Square link to pay the deposit for the held time.",
   },
   consultation: {
     label: "consultation reservation",
@@ -1034,6 +1035,9 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
   if (!normalized.contactEmail) return { ok: false, skipped: true };
 
   const type = normalizedSubmissionType(normalized.type);
+  if (type === "tattoo_special" && asString(normalized.payload?.booking_mode) !== "review") {
+    return { ok: false, skipped: true, reason: "direct_booking_confirmation_only" };
+  }
   const studioVisit = type === "studio_booking"
     && (normalized.payload?.booking_type_id || normalized.payload?.bookingTypeId) === "studio_visit";
   const constructTheme = type === "art_acquisition" || studioVisit
@@ -1047,8 +1051,6 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     expectation: "The studio will review the information you shared before deciding the next step.",
     next: "If more information or booking access is needed, the studio will contact you by email.",
   };
-  const directTattooSpecial = type === "tattoo_special"
-    && asString(normalized.payload?.booking_mode) === "direct";
   const profile = studioVisit
     ? {
         label: "Open Studio Visit request",
@@ -1056,21 +1058,16 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
         expectation: "The Art studio will review the requested visit details and availability.",
         next: "The studio will reply with the next step or booking details.",
       }
-    : directTattooSpecial
-      ? {
-          ...baseProfile,
-          next: "Your request is saved, but no appointment is booked yet. Continue in the current browser, choose an available time, and complete the Square deposit. An appointment confirmation email is sent only after Square reports a successful payment.",
-        }
-      : baseProfile;
+    : baseProfile;
   const constructIdentity = constructTheme === "tattoo" ? null : eventsEmailIdentity(env);
   const settings = constructIdentity
     ? { reviewTimeMessage: DEFAULT_REVIEW_TIME_MESSAGE, supportEmail: constructIdentity.replyTo }
     : await tattooReceiptSettings(env);
-  const reviewLine = directTattooSpecial
-    ? "Selecting a time creates only a temporary hold. The hold expires if the deposit is not paid."
+  const reviewLine = type === "tattoo_special"
+    ? "This is a request and a temporary hold, not a booked appointment. The appointment is confirmed only after Studio approval and successful deposit payment."
     : ["consultation", "build_session"].includes(type)
-    ? "Complete checkout from the Square link you opened to keep the selected time."
-    : settings.reviewTimeMessage;
+      ? "Complete checkout from the Square link you opened to keep the selected time."
+      : settings.reviewTimeMessage;
   const requestedSheetDesigns = type === "flash_claim"
     ? flashSheetDesignLines(normalized.payload, "sheet_design_selections", "Requested sheet designs:")
     : [];
@@ -1085,6 +1082,9 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     clientName: normalized.contactName,
     label: profile.label,
     submissionId: normalized.id,
+    heldWhen: normalized.payload?.held_start_at
+      ? `${formatDate(normalized.payload.held_start_at)}${normalized.payload?.held_end_at ? ` - ${formatDate(normalized.payload.held_end_at)}` : ""}`
+      : "",
     requestedSheetDesigns: requestedSheetDesigns.slice(1),
     expectation: profile.expectation,
     next: profile.next,
@@ -1107,6 +1107,9 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
 
 export async function notifyAdminSubmissionReceived(env, submission, options = {}) {
   const normalized = normalizeSubmission(submission);
+  if (normalized.type === "tattoo_special" && asString(normalized.payload?.booking_mode) !== "review") {
+    return { ok: false, skipped: true, reason: "direct_booking_confirmation_only" };
+  }
   const formName = tattooFormName(normalized.type);
   const studioVisit = normalized.type === "studio_booking"
     && (normalized.payload?.booking_type_id || normalized.payload?.bookingTypeId) === "studio_visit";
@@ -1479,6 +1482,30 @@ function rescheduledAppointmentProfile(appointment) {
     tattooSpecial,
     label: art ? "Open Studio Visit" : studio ? "studio booking" : build ? "Build session" : consultation ? "consultation" : tattooSpecial ? "Tattoo Special appointment" : "tattoo appointment",
   };
+}
+
+export async function notifyTattooSpecialDepositRequested(env, request, details = {}, options = {}) {
+  const to = asString(details.clientEmail || details.contactEmail);
+  if (!to) return { ok: false, skipped: true, error: "Tattoo Special deposit recipient is required." };
+  const message = buildTattooSpecialDepositRequestEmail({
+    subject: "Your Tattoo Special was approved — deposit required",
+    clientName: details.clientName || details.contactName,
+    when: `${formatDate(details.startAt)}${details.endAt ? ` - ${formatDate(details.endAt)}` : ""}`,
+    selection: [details.offerTitle, details.variantLabel].filter(Boolean).join(" — "),
+    approvedTotal: formatMoney(details.approvedPriceCents || 0, details.currency || "USD"),
+    depositText: formatMoney(details.depositCents || 0, details.currency || "USD"),
+    paymentDue: formatDate(details.paymentDueAt),
+    checkoutUrl: details.checkoutUrl,
+  });
+  return sendTransactionalEmail(env, {
+    to,
+    ...message,
+    templateKey: "tattoo_special_deposit_requested",
+    templateVariant: "default",
+    relatedType: "appointment",
+    relatedId: details.appointmentId,
+    idempotencyKey: options.idempotencyKey || `tattoo_special_deposit_requested:${details.appointmentId}`,
+  });
 }
 
 export async function notifyAppointmentRescheduled(env, request, appointmentRow, options = {}) {
