@@ -412,13 +412,14 @@ export function buildAppointmentConfirmedEmail(data) {
     headline: profile.headline,
     greeting: `Hi ${data.clientName || "there"},`,
     details: [
-      { label: "When", value: data.when },
-      { label: ["studio_visit", "studio_space"].includes(data.kind) ? "Booking" : "Session", value: data.session },
-      { label: profile.feeLabel, value: data.feeText },
-      data.sessionFeeText ? { label: "Extended Day fee", value: data.sessionFeeText } : null,
-      data.tipText ? { label: "Optional tip", value: data.tipText } : null,
-      data.totalPaidText ? { label: "Total paid today", value: data.totalPaidText } : null,
-      data.zoomUrl ? { label: "Zoom link", value: data.zoomUrl } : null,
+      { id: "when", label: "When", value: data.when },
+      { id: "session", label: ["studio_visit", "studio_space"].includes(data.kind) ? "Booking" : "Session", value: data.session },
+      ...list(data.pricingDetails),
+      { id: "deposit", label: profile.feeLabel, value: data.feeText },
+      ...list(data.balanceDetails),
+      data.tipText ? { id: "optional_tip", label: "Optional tip", value: data.tipText } : null,
+      data.totalPaidText ? { id: "total_paid_today", label: "Total paid today", value: data.totalPaidText } : null,
+      data.zoomUrl ? { id: "zoom_link", label: "Zoom link", value: data.zoomUrl } : null,
     ],
     primaryAction: { label: "View confirmation", href: data.confirmationUrl },
     secondaryActions: [
@@ -721,6 +722,12 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "tattoo_rendering_payment_confirmed", variant: "default", label: "Additional concept sketch payment confirmation", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tattoo", label: "Tattoo appointment confirmed", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tip", label: "Tattoo confirmed with tip", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_extended", label: "Extended Day appointment confirmed", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_extended_tip", label: "Extended Day confirmed with tip", brand: "tattoo", stage: "appointment" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_legacy", label: "Legacy tattoo confirmation without reviewed total", brand: "tattoo", stage: "legacy" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_legacy_tip", label: "Legacy tattoo confirmation with tip", brand: "tattoo", stage: "legacy" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_extended_legacy", label: "Legacy Extended Day confirmation without reviewed total", brand: "tattoo", stage: "legacy" },
+  { templateKey: "appointment_confirmed", variant: "tattoo_extended_legacy_tip", label: "Legacy Extended Day confirmation with tip", brand: "tattoo", stage: "legacy" },
   { templateKey: "appointment_confirmed", variant: "tattoo_special", label: "Tattoo Special appointment confirmed", brand: "tattoo", stage: "specials" },
   { templateKey: "appointment_confirmed", variant: "tattoo_special_tip", label: "Tattoo Special confirmed with tip", brand: "tattoo", stage: "specials" },
   { templateKey: "consultation_confirmed_in_person", variant: "default", label: "In-person consultation confirmed", brand: "tattoo", stage: "appointment" },
@@ -811,10 +818,14 @@ function previewConfirmation(kind, subject, overrides = {}) {
     clientName: SAMPLE.clientName,
     when: overrides.when || SAMPLE.when,
     session: overrides.session || SAMPLE.session,
+    pricingDetails: overrides.pricingDetails || [],
     feeText: overrides.feeText || "$100 received",
+    balanceDetails: overrides.balanceDetails || [],
     tipText: overrides.tipText || "",
     totalPaidText: overrides.totalPaidText || "",
     zoomUrl: overrides.zoomUrl || "",
+    billingPolicyText: overrides.billingPolicyText || "",
+    renderingPolicyText: overrides.renderingPolicyText || "",
     paymentPolicyText: overrides.paymentPolicyText || (["tattoo", "tattoo_special"].includes(kind)
       ? TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY
       : ""),
@@ -855,7 +866,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       build: ["Build Your Own submission", "The studio will review your symbols, composition, placement, scale, and budget.", "If the project is a fit, the Studio will send the appropriate next step."],
       maze: ["Maze Studio submission", "The studio will review the generated maze, placement, scale, and project notes.", "If the project is a fit, the Studio will send the appropriate next step."],
       special: ["special project application", "The studio will review the application, scope, placement, references, budget, and timing.", "If the project is a fit, the Studio will contact you with the next step."],
-      tattoo_special: ["Tattoo Special request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked yet. If approved, you will receive an email and text with a Square link to pay the deposit for the held time."],
+      tattoo_special: ["request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked yet. If approved, you will receive an email and text with a Square link to pay the deposit for the held time."],
       consultation: ["consultation request", "Your selected consultation time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       build_session: ["Build session request", "Your selected Build session time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       art_acquisition: ["art acquisition inquiry", "The Art studio will review the work, availability, budget, and questions you shared.", "The studio will reply with availability, acquisition details, or the next step."],
@@ -872,7 +883,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       variant: mode || "custom",
       theme: constructTheme,
       subject: constructTheme === "tattoo"
-        ? `art.pill TATTOO HOUSE - ${profile[0]} received`
+        ? `art.pill TATTOO HOUSE - ${mode === "tattoo_special" ? "Tattoo Special request" : profile[0]} received`
         : `the six.well construct - ${profile[0]} received`,
       clientName: SAMPLE.clientName,
       label: profile[0],
@@ -937,6 +948,19 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
     });
   } else if (key === "appointment_confirmed") {
     const tattooSpecial = mode === "tattoo_special" || mode === "tattoo_special_tip";
+    const extended = mode === "tattoo_extended"
+      || mode === "tattoo_extended_tip"
+      || mode === "tattoo_extended_legacy"
+      || mode === "tattoo_extended_legacy_tip";
+    const legacy = mode === "tattoo_legacy"
+      || mode === "tattoo_legacy_tip"
+      || mode === "tattoo_extended_legacy"
+      || mode === "tattoo_extended_legacy_tip";
+    const tipped = mode === "tip"
+      || mode === "tattoo_special_tip"
+      || mode === "tattoo_extended_tip"
+      || mode === "tattoo_legacy_tip"
+      || mode === "tattoo_extended_legacy_tip";
     rendered = previewConfirmation(
       tattooSpecial ? "tattoo_special" : "tattoo",
       tattooSpecial
@@ -944,11 +968,41 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
         : "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
       {
         variant: mode,
-        ...(mode === "tip" || mode === "tattoo_special_tip" ? { tipText: "$25", totalPaidText: tattooSpecial ? "$75" : "$125" } : {}),
+        ...(tipped ? { tipText: "$25", totalPaidText: tattooSpecial ? "$75" : extended ? "$375" : "$125" } : {}),
+        ...(!tattooSpecial && !extended && !legacy ? {
+          pricingDetails: [
+            { id: "approved_tattoo_work", label: "Approved tattoo work", value: "$600" },
+            { id: "appointment_total", label: "Appointment total", value: "$600" },
+          ],
+          balanceDetails: [
+            { id: "remaining_balance", label: "Remaining balance", value: "$500" },
+          ],
+        } : {}),
+        ...(extended ? {
+          session: "Extended Day Session",
+          feeText: "$350 received",
+          pricingDetails: legacy
+            ? [{ id: "extended_day_fee", label: "Extended Day fee", value: "+$200" }]
+            : [
+                { id: "approved_tattoo_work", label: "Approved tattoo work", value: "$2,000" },
+                { id: "extended_day_fee", label: "Extended Day fee", value: "+$200" },
+                { id: "appointment_total", label: "Appointment total", value: "$2,200" },
+              ],
+          balanceDetails: legacy
+            ? []
+            : [{ id: "remaining_balance", label: "Remaining balance", value: "$1,850" }],
+          billingPolicyText: "Extended day sessions are always optional and are presented as an option for clients who want longer sessions.",
+        } : {}),
         ...(tattooSpecial ? {
           session: "Tattoo Special · Hand Sized Tattoo — Standard",
           feeText: "$50 received",
-          billingPolicyText: "Tattoo Special approved total: $200. Deposit credit: $50. Remaining studio balance: $150. Duration: 120 minutes.",
+          pricingDetails: [
+            { id: "tattoo_special_total", label: "Tattoo Special total", value: "$200" },
+          ],
+          balanceDetails: [
+            { id: "remaining_balance", label: "Remaining balance", value: "$150" },
+            { id: "tattoo_special_duration", label: "Duration", value: "120 minutes" },
+          ],
         } : {}),
       },
     );

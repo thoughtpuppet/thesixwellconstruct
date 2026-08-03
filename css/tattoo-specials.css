@@ -107,7 +107,6 @@ main {
 }
 
 .specials-state,
-.specials-campaign,
 .specials-offers,
 .specials-form-section,
 .specials-receipt {
@@ -128,7 +127,6 @@ main {
 }
 
 .specials-state p,
-.specials-window-copy,
 .specials-form-intro p,
 .specials-receipt p {
   max-width: 700px;
@@ -146,12 +144,11 @@ main {
   text-transform: uppercase;
 }
 
-.specials-campaign {
-  width: 100%;
-}
-
 .specials-window-copy {
+  max-width: 700px;
   margin: 0;
+  color: var(--special-muted);
+  line-height: 1.6;
 }
 
 .specials-window-copy strong {
@@ -159,39 +156,8 @@ main {
   font-weight: 700;
 }
 
-.specials-booking-cue {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 110px;
-  padding: 20px 16px 0;
-  color: var(--special-accent);
-  font-family: var(--special-sans);
-  font-size: clamp(15px, 1.8vw, 22px);
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-align: center;
-  text-decoration: none;
-  text-transform: uppercase;
-}
-
-.specials-booking-cue__arrow {
-  font-size: 34px;
-  line-height: 0.8;
-  transition: transform var(--duration-base) var(--ease-out);
-}
-
-.specials-booking-cue:hover .specials-booking-cue__arrow,
-.specials-booking-cue:focus-visible .specials-booking-cue__arrow {
-  transform: translateY(6px);
-}
-
-.specials-booking-cue:focus-visible {
-  outline: 5px solid var(--special-ring);
-  outline-offset: 4px;
+#specialsDates {
+  color: var(--color-accent, #f8b468);
 }
 
 .specials-grid {
@@ -374,12 +340,6 @@ main {
   .special-card {
     min-height: 0;
     padding: 22px;
-  }
-
-  .specials-booking-cue {
-    min-height: 96px;
-    padding-top: 12px;
-    font-size: 15px;
   }
 
   .specials-footer,

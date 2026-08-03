@@ -12,6 +12,10 @@ import {
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
+import {
+  reviewedTattooBudgetIsComplete as reviewedBudgetIsComplete,
+  tattooPricingSummary as pricingSummaryForAppointment,
+} from "./_pricing.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -1063,35 +1067,6 @@ function normalizeTattooSessionPlan(row) {
 async function loadTattooSessionPlan(db, submissionId) {
   if (!submissionId) return null;
   return db.prepare("SELECT * FROM tattoo_session_plans WHERE submission_id = ?").bind(submissionId).first();
-}
-
-function reviewedBudgetIsComplete(plan) {
-  const minimum = Number(plan?.approved_budget_min_cents || 0);
-  const maximum = Number(plan?.approved_budget_max_cents || 0);
-  return Number.isSafeInteger(minimum)
-    && Number.isSafeInteger(maximum)
-    && minimum > 0
-    && maximum >= minimum
-    && (plan?.approved_budget_currency || "USD") === "USD";
-}
-
-function pricingSummaryForAppointment(plan, appointment) {
-  if (!reviewedBudgetIsComplete(plan) || !appointment) return null;
-  const laborMinimumCents = Number(plan.approved_budget_min_cents);
-  const laborMaximumCents = Number(plan.approved_budget_max_cents);
-  const sessionFeeCents = Number(appointment.sessionFeeCents ?? appointment.session_fee_cents ?? 0);
-  const depositCreditCents = Number(appointment.depositCents ?? appointment.deposit_cents ?? 0);
-  return {
-    laborMinimumCents,
-    laborMaximumCents,
-    sessionFeeCents,
-    combinedMinimumCents: laborMinimumCents + sessionFeeCents,
-    combinedMaximumCents: laborMaximumCents + sessionFeeCents,
-    depositCreditCents,
-    remainingMinimumCents: Math.max(0, laborMinimumCents + sessionFeeCents - depositCreditCents),
-    remainingMaximumCents: Math.max(0, laborMaximumCents + sessionFeeCents - depositCreditCents),
-    currency: plan.approved_budget_currency || appointment.currency || "USD",
-  };
 }
 
 function sessionPlanRequiresClientResponse(plan) {

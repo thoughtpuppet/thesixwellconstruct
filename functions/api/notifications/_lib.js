@@ -27,6 +27,7 @@ import {
 import { renderEmailContent, validateEmailContent } from "./_email-content.js";
 import { CLIENT_EMAIL_THEMES, renderClientEmail } from "./_email-renderer.js";
 import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-design.js";
+import { tattooPricingSummary } from "../booking/_pricing.js";
 import {
   emailDesignHistory,
   emailDesignRevision,
@@ -275,6 +276,14 @@ function formatMoney(cents, currency = "USD") {
     currency,
     maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(Number(cents || 0) / 100);
+}
+
+function formatMoneyRange(minimumCents, maximumCents, currency = "USD") {
+  const minimum = Number(minimumCents || 0);
+  const maximum = Number(maximumCents || 0);
+  return minimum === maximum
+    ? formatMoney(minimum, currency)
+    : `Estimated: ${formatMoney(minimum, currency)}–${formatMoney(maximum, currency)}`;
 }
 
 function reviewedBudgetLabel(budget) {
@@ -784,6 +793,65 @@ function tattooSpecialSessionLabel(appointment) {
   return `Tattoo Special · ${appointment.specialOfferTitle || appointment.bookingTypeLabel}${appointment.specialVariantLabel ? ` — ${appointment.specialVariantLabel}` : ""}`;
 }
 
+async function reviewedTattooPricing(env, appointment) {
+  const db = notificationDb(env);
+  if (!db || !appointment?.submissionId) return null;
+  try {
+    const plan = await db.prepare(
+      `SELECT approved_budget_min_cents, approved_budget_max_cents, approved_budget_currency
+       FROM tattoo_session_plans WHERE submission_id = ?`,
+    ).bind(appointment.submissionId).first();
+    return tattooPricingSummary(plan, appointment);
+  } catch (error) {
+    console.warn("Tattoo confirmation pricing fallback to general balance guidance.", error.message);
+    return null;
+  }
+}
+
+function ordinaryTattooPricingDetails(pricing, appointment) {
+  if (!pricing) {
+    return {
+      pricingDetails: appointment?.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+        && Number(appointment.sessionFeeCents || 0) > 0
+        ? [{
+            id: "extended_day_fee",
+            label: "Extended Day fee",
+            value: `+${formatMoney(appointment.sessionFeeCents, appointment.currency)}`,
+          }]
+        : [],
+      balanceDetails: [],
+    };
+  }
+  const range = pricing.laborMinimumCents !== pricing.laborMaximumCents;
+  const pricingDetails = [
+    {
+      id: "approved_tattoo_work",
+      label: "Approved tattoo work",
+      value: formatMoneyRange(pricing.laborMinimumCents, pricing.laborMaximumCents, pricing.currency),
+    },
+  ];
+  if (pricing.sessionFeeCents > 0) {
+    pricingDetails.push({
+      id: "extended_day_fee",
+      label: "Extended Day fee",
+      value: `+${formatMoney(pricing.sessionFeeCents, pricing.currency)}`,
+    });
+  }
+  pricingDetails.push({
+    id: "appointment_total",
+    label: "Appointment total",
+    value: formatMoneyRange(pricing.combinedMinimumCents, pricing.combinedMaximumCents, pricing.currency),
+  });
+  return {
+    pricingDetails,
+    balanceDetails: [{
+      id: "remaining_balance",
+      label: "Remaining balance",
+      value: formatMoneyRange(pricing.remainingMinimumCents, pricing.remainingMaximumCents, pricing.currency),
+    }],
+  };
+}
+
 function extendedDayEmailFields(appointment) {
   if (appointment.bookingTypeId !== EXTENDED_DAY_BOOKING_TYPE_ID) {
     return { sessionFeeText: "", billingPolicyText: "" };
@@ -838,7 +906,7 @@ const SUBMISSION_RECEIPTS = {
     next: "If the application is selected, you will receive a private tattoo-booking link or a request for any missing planning details.",
   },
   tattoo_special: {
-    label: "Tattoo Special request",
+    label: "request",
     subject: "Tattoo Special request received",
     expectation: "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.",
     next: "No appointment is booked yet. If approved, you will receive an email and text with a Square link to pay the deposit for the held time.",
@@ -1234,23 +1302,54 @@ async function sendTattooAppointmentConfirmed(env, request, appointment, options
   const isSpecial = isTattooSpecialAppointment(appointment);
   const specialSession = tattooSpecialSessionLabel(appointment);
   const specialRemaining = Math.max(0, Number(appointment.specialApprovedPriceCents || 0) - Number(appointment.depositCents || 0));
+  const hasExtendedDayFee = appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+    && Number(appointment.sessionFeeCents || 0) > 0;
+  const ordinaryPricing = isSpecial ? null : await reviewedTattooPricing(env, appointment);
+  const ordinaryDetails = ordinaryTattooPricingDetails(ordinaryPricing, appointment);
+  const pricingDetails = isSpecial
+    ? [{
+        id: "tattoo_special_total",
+        label: "Tattoo Special total",
+        value: formatMoney(appointment.specialApprovedPriceCents, appointment.currency),
+      }]
+    : ordinaryDetails.pricingDetails;
+  const balanceDetails = isSpecial
+    ? [
+        {
+          id: "remaining_balance",
+          label: "Remaining balance",
+          value: formatMoney(specialRemaining, appointment.currency),
+        },
+        {
+          id: "tattoo_special_duration",
+          label: "Duration",
+          value: `${appointment.specialDurationMinutes} minutes`,
+        },
+      ]
+    : ordinaryDetails.balanceDetails;
+  const variant = isSpecial
+    ? (appointment.tipCents ? "tattoo_special_tip" : "tattoo_special")
+    : hasExtendedDayFee
+      ? ordinaryPricing
+        ? (appointment.tipCents ? "tattoo_extended_tip" : "tattoo_extended")
+        : (appointment.tipCents ? "tattoo_extended_legacy_tip" : "tattoo_extended_legacy")
+      : ordinaryPricing
+        ? undefined
+        : (appointment.tipCents ? "tattoo_legacy_tip" : "tattoo_legacy");
   const message = buildAppointmentConfirmedEmail({
     kind: isSpecial ? "tattoo_special" : "tattoo",
-    variant: isSpecial ? (appointment.tipCents ? "tattoo_special_tip" : "tattoo_special") : undefined,
+    variant,
     subject: isSpecial
       ? "Your Tattoo Special appointment at art.pill TATTOO HOUSE has been confirmed"
       : "Your tattoo appointment at art.pill TATTOO HOUSE has been confirmed",
     clientName: appointment.clientName,
     when: `${formatDate(appointment.startAt)} - ${formatDate(appointment.endAt)}`,
     session: specialSession,
+    pricingDetails,
     feeText: `${formatMoney(appointment.depositCents, appointment.currency)} received`,
-    sessionFeeText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance at the start of your appointment, before tattooing begins`
-      : "",
-    billingPolicyText: isSpecial
-      ? `Tattoo Special approved total: ${formatMoney(appointment.specialApprovedPriceCents, appointment.currency)}. Deposit credit: ${formatMoney(appointment.depositCents, appointment.currency)}. Remaining studio balance: ${formatMoney(specialRemaining, appointment.currency)}. Duration: ${appointment.specialDurationMinutes} minutes.`
-      : appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
+    balanceDetails,
+    billingPolicyText: appointment.bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
+      ? "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you."
       : "",
     renderingPolicyText: "Your paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.",
     paymentPolicyText: TATTOO_APPOINTMENT_PAYMENT_AND_ARRIVAL_POLICY,

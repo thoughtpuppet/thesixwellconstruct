@@ -1961,7 +1961,7 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   const reschedule = readFileSync(join(ROOT, "booking", "reschedule", "index.html"), "utf8");
   assert.match(page, /select an available time, and pay the deposit after Studio approval/i);
   assert.doesNotMatch(page, /<dt>Campaign<\/dt>/i);
-  assert.match(script, /Studio approval required/);
+  assert.doesNotMatch(script, /Studio approval required/);
   assert.match(script, /appointment is booked only after payment/i);
   assert.match(page, /id="scriptTextField" hidden[\s\S]*?name="scriptText"/);
   assert.match(script, /selectedOffer\?\.maxWordCount[\s\S]*?words maximum/);
@@ -1970,7 +1970,11 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.match(script, /There are no special available at this time\./);
   assert.match(script, /Check back another time or <a href="\$\{escape\(payload\.normalInquiryUrl\)\}">submit a normal tattoo request<\/a>\./);
   assert.match(page, /id="specialsSubmit">Continue to Select Time Slot<\/button>/);
-  assert.match(page, /class="specials-booking-cue" href="#specialsOffersSection"[\s\S]*?↓[\s\S]*?Book Your Appointment/);
+  assert.doesNotMatch(page, /specials-booking-cue|Book Your Appointment/);
+  assert.doesNotMatch(script, /specialsCampaign|campaign\.hidden/);
+  assert.doesNotMatch(readFileSync(join(ROOT, "css", "tattoo-specials.css"), "utf8"), /specials-booking-cue/);
+  assert.match(readFileSync(join(ROOT, "css", "tattoo-specials.css"), "utf8"), /#specialsDates\s*\{[\s\S]*?color:\s*var\(--color-accent, #f8b468\)/);
+  assert.match(readFileSync(join(ROOT, "css", "tattoo-specials.css"), "utf8"), /\.specials-window-copy strong\s*\{[\s\S]*?color:\s*var\(--special-accent\)/);
   assert.match(page, /<h2 id="offersTitle">Choose your Tattoo Special\.<\/h2>[\s\S]*?class="specials-window-copy"[\s\S]*?id="specialsDates"[\s\S]*?id="specialsDeposit"/);
   assert.doesNotMatch(page, /specialsArtwork|specials-artwork/);
   assert.doesNotMatch(script, /payload\.artwork|specialsArtwork/);
@@ -2266,6 +2270,11 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   ]);
   const requestEmail = sent.find((message) => message.to === "primary@example.com" && /request received/i.test(message.subject));
   assert.ok(requestEmail);
+  assert.match(requestEmail.subject, /Tattoo Special request received$/);
+  assert.match(requestEmail.html, /Your request has been received\./);
+  assert.match(requestEmail.text, /Your request has been received\./);
+  assert.doesNotMatch(requestEmail.html, /Your Tattoo Special request has been received\./);
+  assert.doesNotMatch(requestEmail.text, /Your Tattoo Special request has been received\./);
   assert.match(requestEmail.html, /Requested time \(held\)/i);
   assert.match(requestEmail.html, /no appointment is booked/i);
 
@@ -4644,13 +4653,19 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   assert.match(specialDepositPreview.html, /Change requested time/);
   assert.match(specialDepositPreview.html, /flow=special-request/);
   assert.match(specialDepositPreview.text, /without another Studio approval/i);
+  const specialReceiptPreview = renderClientEmailPreview("submission_received", "tattoo_special");
+  assert.match(specialReceiptPreview.subject, /Tattoo Special request received$/);
+  assert.match(specialReceiptPreview.html, /Your request has been received\./);
+  assert.match(specialReceiptPreview.text, /Your request has been received\./);
+  assert.doesNotMatch(specialReceiptPreview.html, /Your Tattoo Special request has been received\./);
+  assert.doesNotMatch(specialReceiptPreview.text, /Your Tattoo Special request has been received\./);
   assert.match(renderClientEmailPreview("submission_received", "art_acquisition").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_visit").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_space").html, /#005D25/);
 });
 
 test("paid tattoo confirmations include final-payment, grace-period, and all client-resource guidance", () => {
-  for (const variant of ["tattoo", "tip", "tattoo_special", "tattoo_special_tip"]) {
+  for (const variant of ["tattoo", "tip", "tattoo_extended", "tattoo_extended_tip", "tattoo_special", "tattoo_special_tip"]) {
     const rendered = renderClientEmailPreview("appointment_confirmed", variant);
     const identity = `appointment_confirmed:${variant}`;
     assert.match(rendered.text, /remaining balance must be paid before tattooing begins/, identity);
@@ -4674,6 +4689,179 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
     });
     assert.match(rendered.html, /<a href="https:\/\/thesixwellconstruct\.com\/api\/booking\/calendar\?appointment=demo-appointment"[^>]*>Add to calendar<\/a>/, identity);
   }
+});
+
+test("paid tattoo confirmations render live remaining-balance breakdowns", async () => {
+  const database = migratedDatabase();
+  const sent = [];
+  const adminToken = "confirmation-pricing-admin";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: { async send(message) { sent.push(message); return { messageId: `pricing-${sent.length}` }; } },
+  };
+  const headers = { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" };
+  const templateBase = "https://example.test/api/admin/notifications/templates/appointment_confirmed";
+  const initial = await (await handleAdminEmailTemplates(
+    new Request(`${templateBase}?variant=tattoo`, { headers }),
+    env,
+  )).json();
+  let response = await handleAdminEmailTemplates(new Request(`${templateBase}/draft?variant=tattoo`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ baseRevision: 0, content: initial.defaultContent }),
+  }), env);
+  assert.equal(response.status, 200);
+  response = await handleAdminEmailTemplates(new Request(`${templateBase}/publish?variant=tattoo`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ revision: 1 }),
+  }), env);
+  assert.equal(response.status, 200);
+
+  const insertPlan = (submissionId, minimumCents, maximumCents) => {
+    insertSubmissionFixture(database, {
+      id: submissionId,
+      type: "tattoo_inquiry",
+      status: "approved",
+      tattooStage: "tattoo_scheduled",
+      email: `${submissionId}@example.test`,
+    });
+    database.prepare(
+      `INSERT INTO tattoo_session_plans (
+        id, submission_id, approved_budget_min_cents, approved_budget_max_cents,
+        approved_budget_currency
+      ) VALUES (?,?,?,?, 'USD')`,
+    ).run(`plan-${submissionId}`, submissionId, minimumCents, maximumCents);
+  };
+  const sendConfirmation = async ({
+    id,
+    minimumCents,
+    maximumCents,
+    bookingTypeId = "tattoo_half",
+    bookingTypeLabel = "Half Day Session",
+    depositCents = 10000,
+    sessionFeeCents = 0,
+    tipCents = 0,
+    withPlan = true,
+  }) => {
+    const submissionId = `submission-${id}`;
+    if (withPlan) insertPlan(submissionId, minimumCents, maximumCents);
+    else insertSubmissionFixture(database, {
+      id: submissionId,
+      type: "tattoo_inquiry",
+      status: "approved",
+      tattooStage: "tattoo_scheduled",
+      email: `${submissionId}@example.test`,
+    });
+    await notifyAppointmentConfirmed(env, null, {
+      id: `appointment-${id}`,
+      submissionId,
+      bookingTypeId,
+      bookingTypeLabel,
+      purpose: "tattoo",
+      clientName: "Pricing Client",
+      clientEmail: `${id}@example.test`,
+      startAt: "2026-08-08T16:00:00.000Z",
+      endAt: "2026-08-08T19:00:00.000Z",
+      depositCents,
+      sessionFeeCents,
+      tipCents,
+      currency: "USD",
+    });
+    return sent.at(-1);
+  };
+
+  const exact = await sendConfirmation({
+    id: "exact",
+    minimumCents: 60000,
+    maximumCents: 60000,
+    sessionFeeCents: 20000,
+  });
+  assert.match(exact.text, /Approved tattoo work: \$600/);
+  assert.match(exact.text, /Appointment total: \$600/);
+  assert.match(exact.text, /Deposit: \$100 received/);
+  assert.match(exact.text, /Remaining balance: \$500/);
+  assert.doesNotMatch(exact.text, /Extended Day fee/);
+  assert.doesNotMatch(exact.text, /\$800|Estimated:/);
+
+  insertAppointmentFixture(database, {
+    id: "appointment-exact-resend",
+    submissionId: "submission-exact",
+    bookingTypeId: "tattoo_half",
+    status: "confirmed",
+    purpose: "tattoo",
+    name: "Pricing Client",
+    email: "exact-resend@example.test",
+    startAt: "2026-08-08T16:00:00.000Z",
+    endAt: "2026-08-08T19:00:00.000Z",
+    depositCents: 10000,
+  });
+  const resend = await handleAdminResendNotification(adminJsonRequest(
+    "/api/admin/notifications/resend",
+    { templateKey: "appointment_confirmed", appointmentId: "appointment-exact-resend" },
+    adminToken,
+  ), env);
+  assert.equal(resend.status, 200);
+  assert.match(sent.at(-1).text, /Appointment total: \$600/);
+  assert.match(sent.at(-1).text, /Remaining balance: \$500/);
+
+  const ranged = await sendConfirmation({ id: "range", minimumCents: 160000, maximumCents: 200000 });
+  assert.match(ranged.text, /Approved tattoo work: Estimated: \$1,600[^\d]+\$2,000/);
+  assert.match(ranged.text, /Appointment total: Estimated: \$1,600[^\d]+\$2,000/);
+  assert.match(ranged.text, /Remaining balance: Estimated: \$1,500[^\d]+\$1,900/);
+  assert.doesNotMatch(ranged.text, /Extended Day fee/);
+
+  const exactExtended = await sendConfirmation({
+    id: "exact-extended",
+    minimumCents: 200000,
+    maximumCents: 200000,
+    bookingTypeId: "tattoo_extended",
+    bookingTypeLabel: "Extended Day Session",
+    depositCents: 35000,
+    sessionFeeCents: 20000,
+    tipCents: 2500,
+  });
+  assert.match(exactExtended.text, /Approved tattoo work: \$2,000/);
+  assert.match(exactExtended.text, /Extended Day fee: \+\$200/);
+  assert.match(exactExtended.text, /Appointment total: \$2,200/);
+  assert.match(exactExtended.text, /Deposit: \$350 received/);
+  assert.match(exactExtended.text, /Remaining balance: \$1,850/);
+  assert.match(exactExtended.text, /Optional tip: \$25/);
+  assert.match(exactExtended.text, /Total paid today: \$375/);
+
+  const rangedExtended = await sendConfirmation({
+    id: "range-extended",
+    minimumCents: 160000,
+    maximumCents: 200000,
+    bookingTypeId: "tattoo_extended",
+    bookingTypeLabel: "Extended Day Session",
+    depositCents: 35000,
+    sessionFeeCents: 20000,
+  });
+  assert.match(rangedExtended.text, /Extended Day fee: \+\$200/);
+  assert.match(rangedExtended.text, /Appointment total: Estimated: \$1,800[^\d]+\$2,200/);
+  assert.match(rangedExtended.text, /Remaining balance: Estimated: \$1,450[^\d]+\$1,850/);
+
+  const legacy = await sendConfirmation({ id: "legacy", withPlan: false });
+  assert.doesNotMatch(legacy.text, /Approved tattoo work:|Appointment total:|Remaining balance: \$/);
+  assert.match(legacy.text, /remaining balance must be paid before tattooing begins/);
+
+  const legacyExtended = await sendConfirmation({
+    id: "legacy-extended",
+    bookingTypeId: "tattoo_extended",
+    bookingTypeLabel: "Extended Day Session",
+    depositCents: 35000,
+    sessionFeeCents: 20000,
+    withPlan: false,
+  });
+  assert.match(legacyExtended.text, /Extended Day fee: \+\$200/);
+  assert.doesNotMatch(legacyExtended.text, /Approved tattoo work:|Appointment total:|Remaining balance: \$/);
+
+  const studioPreviewSource = readFileSync(join(ROOT, "studio", "previews", "index.html"), "utf8");
+  assert.match(studioPreviewSource, /Approved tattoo work: \$2,000[\s\S]*Extended Day fee: \+\$200[\s\S]*Remaining balance: \$1,850/);
+  assert.match(studioPreviewSource, /Approved tattoo work: \$600[\s\S]*Appointment total: \$600[\s\S]*Remaining balance: \$500/);
 });
 
 test("client transactional emails protect table backgrounds and reserve Gmail blending for white text", () => {
@@ -4811,6 +4999,11 @@ test("Tattoo Special lifecycle correspondence uses dedicated editable variants",
   };
 
   await notifyAppointmentConfirmed(env, null, appointment);
+  const specialConfirmation = sent.at(-1);
+  assert.match(specialConfirmation.text, /Tattoo Special total: \$200/);
+  assert.match(specialConfirmation.text, /Deposit received: \$50 received/);
+  assert.match(specialConfirmation.text, /Remaining balance: \$150/);
+  assert.match(specialConfirmation.text, /Duration: 120 minutes/);
   await notifyAdminAppointmentConfirmed(env, null, appointment);
   await notifyAppointmentRescheduled(env, null, appointment, {
     previousStartAt: "2026-08-07T16:00:00.000Z",
@@ -5342,7 +5535,7 @@ test("published Tattoo Special request copy stays independent from Special Proje
     contact_email: "project@example.test",
     payload_json: JSON.stringify({}),
   });
-  assert.match(sent[0].html, /Tattoo Special request is now in the dedicated Studio review queue/);
+  assert.match(sent[0].html, /request is now in the dedicated Studio review queue/);
   assert.match(sent[0].html, /Requested time \(held\)/i);
   assert.doesNotMatch(sent[1].html, /dedicated Studio review queue/);
   assert.match(sent[1].html, /special project application has been received/i);
