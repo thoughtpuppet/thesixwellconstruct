@@ -120,6 +120,7 @@ import {
 } from "./functions/api/brief-documents/_lib.js";
 import {
   handleAdminTattooSpecialOffer,
+  handleAdminTattooSpecialCampaign,
   handleAdminTattooSpecialReview,
   handleAdminTattooSpecials,
   handleCreateTattooSpecialSubmission,
@@ -1259,6 +1260,17 @@ export default {
     if (url.pathname === "/api/admin/tattoo/specials/offers") {
       if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
       return handleAdminTattooSpecialOffer(request, env);
+    }
+
+    if (url.pathname === "/api/admin/tattoo/specials/campaigns") {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handleAdminTattooSpecialCampaign(request, env);
+    }
+
+    const tattooSpecialCampaignMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/campaigns\/([^/]+)$/);
+    if (tattooSpecialCampaignMatch) {
+      if (!["PATCH", "DELETE"].includes(request.method)) return methodNotAllowed(request.method, ["PATCH", "DELETE"]);
+      return handleAdminTattooSpecialCampaign(request, env, decodeURIComponent(tattooSpecialCampaignMatch[1]));
     }
 
     const tattooSpecialOfferMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/offers\/([^/]+)$/);

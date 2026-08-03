@@ -95,19 +95,69 @@ async function loadSettings(db) {
   ).first();
 }
 
-async function loadOffers(db, includeInactive = false) {
+async function loadCampaigns(db, includeArchived = true) {
   const rows = (await db.prepare(
+    `SELECT c.*, m.source_url, m.storage_key, m.original_filename, m.mime_type, m.alt_text,
+            m.state AS media_state, m.privacy AS media_privacy,
+            m.consent_status AS media_consent_status, m.public_presentation AS media_presentation
+     FROM tattoo_special_campaigns c
+     LEFT JOIN media_assets m ON m.id = c.artwork_media_id
+     ${includeArchived ? "" : "WHERE c.archived_at IS NULL"}
+     ORDER BY c.is_public DESC, c.sort_order, c.sales_opens_at DESC, c.created_at DESC`
+  ).all()).results || [];
+  return rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    state: windowState(row),
+    enabled: Boolean(row.enabled),
+    isPublic: Boolean(row.is_public),
+    archivedAt: row.archived_at || "",
+    timezone: row.timezone || "America/New_York",
+    salesOpensAt: row.sales_opens_at || "",
+    salesClosesAt: row.sales_closes_at || "",
+    defaultDepositCents: Number(row.default_deposit_cents || 0),
+    defaultDeposit: money(Number(row.default_deposit_cents || 0)),
+    sortOrder: Number(row.sort_order || 0),
+    artwork: row.artwork_media_id ? {
+      mediaId: row.artwork_media_id,
+      url: mediaUrl(row),
+      alt: row.alt_text || "Tattoo Specials artwork",
+      filename: row.original_filename || "",
+    } : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function loadPublishedCampaign(db) {
+  return db.prepare(
+    `SELECT c.*, m.source_url, m.storage_key, m.original_filename, m.mime_type, m.alt_text
+     FROM tattoo_special_campaigns c
+     LEFT JOIN media_assets m ON m.id = c.artwork_media_id
+     WHERE c.is_public = 1 AND c.archived_at IS NULL
+     LIMIT 1`
+  ).first();
+}
+
+async function loadOffers(db, includeInactive = false, campaignId = "") {
+  const where = includeInactive
+    ? "WHERE 1 = 1"
+    : "WHERE o.active = 1 AND o.archived_at IS NULL";
+  const statement = db.prepare(
     `SELECT o.id, o.slug, o.title, o.active, o.archived_at, o.sort_order, o.current_version_id,
-            o.created_at, o.updated_at,
+            o.campaign_id, o.created_at, o.updated_at,
             v.version_number, v.public_description, v.duration_minutes, v.booking_mode,
             v.reference_requirement, v.participant_count, v.deposit_cents, v.booking_type_id,
             v.max_word_count,
             v.created_at AS version_created_at
      FROM tattoo_special_offers o
      JOIN tattoo_special_offer_versions v ON v.id = o.current_version_id
-     ${includeInactive ? "" : "WHERE o.active = 1 AND o.archived_at IS NULL"}
+     ${where}
+     ${campaignId ? "AND o.campaign_id = ?" : ""}
      ORDER BY o.sort_order, o.created_at`
-  ).all()).results || [];
+  );
+  const rows = (await (campaignId ? statement.bind(campaignId) : statement).all()).results || [];
   if (!rows.length) return [];
   const versionIds = rows.map((row) => row.current_version_id);
   const variants = (await db.prepare(
@@ -128,6 +178,7 @@ async function loadOffers(db, includeInactive = false) {
   }
   return rows.map((row) => ({
     id: row.id,
+    campaignId: row.campaign_id || "",
     slug: row.slug,
     title: row.title,
     active: Boolean(row.active),
@@ -152,6 +203,8 @@ async function loadOffers(db, includeInactive = false) {
 
 function publicSettings(settings, state) {
   return {
+    campaignId: settings?.id || "",
+    campaignTitle: settings?.title || "",
     state,
     enabled: Boolean(settings?.enabled),
     timezone: settings?.timezone || "America/New_York",
@@ -162,7 +215,7 @@ function publicSettings(settings, state) {
     artwork: settings?.artwork_media_id ? {
       mediaId: settings.artwork_media_id,
       url: mediaUrl(settings),
-      alt: settings.alt_text || "Tattoo Specials campaign artwork",
+      alt: settings.alt_text || "Tattoo Specials artwork",
       filename: settings.original_filename || "",
     } : null,
     normalInquiryUrl: "/tattoos/inquire/",
@@ -173,11 +226,11 @@ export async function handlePublicTattooSpecials(request, env) {
   if (request.method !== "GET") return failure("Method not allowed.", 405);
   try {
     const db = requireDb(env);
-    const settings = await loadSettings(db);
+    const settings = await loadPublishedCampaign(db);
     const state = windowState(settings);
     return json({
       ...publicSettings(settings, state),
-      offers: state === "open" ? await loadOffers(db, false) : [],
+      offers: state === "open" ? await loadOffers(db, false, settings.id) : [],
     });
   } catch (error) {
     return failure("Unable to load Tattoo Specials.", 500, { detail: error.message });
@@ -269,18 +322,22 @@ async function createBookingAccess(db, request, submissionId, terms, closesAt) {
   return { id: tokenId, rawToken: token, bookingUrl: bookingUrl.pathname + bookingUrl.search, purpose: "tattoo", expiresAt: closesAt, allowedBookingTypes: [terms.booking_type_id] };
 }
 
-async function selectedTerms(db, offerId, variantId) {
+async function selectedTerms(db, offerId, variantId, campaignId) {
   return db.prepare(
     `SELECT o.id AS offer_id, o.title AS offer_title, o.current_version_id,
+            c.id AS campaign_id, c.title AS campaign_title, c.sales_closes_at,
             v.id AS offer_version_id, v.duration_minutes, v.booking_mode,
             v.reference_requirement, v.participant_count, v.deposit_cents, v.booking_type_id,
             v.max_word_count,
             p.id AS variant_id, p.label AS variant_label, p.price_cents
      FROM tattoo_special_offers o
+     JOIN tattoo_special_campaigns c ON c.id = o.campaign_id
      JOIN tattoo_special_offer_versions v ON v.id = o.current_version_id
      JOIN tattoo_special_offer_variants p ON p.offer_version_id = v.id
-     WHERE o.id = ? AND p.id = ? AND o.active = 1 AND o.archived_at IS NULL`
-  ).bind(offerId, variantId).first();
+     WHERE o.id = ? AND p.id = ? AND o.campaign_id = ?
+       AND c.is_public = 1 AND c.enabled = 1 AND c.archived_at IS NULL
+       AND o.active = 1 AND o.archived_at IS NULL`
+  ).bind(offerId, variantId, campaignId).first();
 }
 
 export async function handleCreateTattooSpecialSubmission(request, env) {
@@ -290,9 +347,9 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
   const fields = body.fields;
   try {
     const db = requireDb(env);
-    const settings = await loadSettings(db);
+    const settings = await loadPublishedCampaign(db);
     if (windowState(settings) !== "open") return failure("Tattoo Specials are not currently accepting payments.", 409, { code: "SPECIALS_WINDOW_CLOSED" });
-    const terms = await selectedTerms(db, text(fields.offerId, 200), text(fields.variantId, 200));
+    const terms = await selectedTerms(db, text(fields.offerId, 200), text(fields.variantId, 200), settings.id);
     if (!terms) return failure("That Tattoo Special is unavailable. Refresh and choose again.", 409);
 
     const primary = {
@@ -360,6 +417,8 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     const participants = [primary, ...(secondary ? [secondary] : [])];
     const payload = {
       campaign: "Tattoo Special",
+      special_campaign_id: terms.campaign_id,
+      special_campaign_title: terms.campaign_title,
       special_offer_id: terms.offer_id,
       special_offer_version_id: terms.offer_version_id,
       special_offer_title: terms.offer_title,
@@ -371,7 +430,7 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       duration_minutes: Number(terms.duration_minutes),
       booking_mode: terms.booking_mode,
       booking_type_id: terms.booking_type_id,
-      sales_closes_at: settings.sales_closes_at,
+      sales_closes_at: terms.sales_closes_at,
       placement,
       project_details: projectDetails,
       script_text: scriptText,
@@ -399,15 +458,15 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       ),
       db.prepare(
         `INSERT INTO tattoo_special_submission_terms
-         (submission_id, offer_id, offer_version_id, variant_id, offer_title, variant_label,
+         (submission_id, campaign_id, campaign_title, offer_id, offer_version_id, variant_id, offer_title, variant_label,
           advertised_price_cents, approved_price_cents, deposit_cents, duration_minutes,
           booking_mode, booking_type_id, sales_closes_at, participant_count, review_outcome,
           max_word_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
-        submissionId, terms.offer_id, terms.offer_version_id, terms.variant_id, terms.offer_title,
+        submissionId, terms.campaign_id, terms.campaign_title, terms.offer_id, terms.offer_version_id, terms.variant_id, terms.offer_title,
         terms.variant_label, terms.price_cents, direct ? terms.price_cents : null, terms.deposit_cents,
-        terms.duration_minutes, terms.booking_mode, terms.booking_type_id, settings.sales_closes_at,
+        terms.duration_minutes, terms.booking_mode, terms.booking_type_id, terms.sales_closes_at,
         terms.participant_count, direct ? "approved" : "pending", maxWordCount || null, now, now,
       ),
       db.prepare(
@@ -427,7 +486,7 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       ).bind(crypto.randomUUID(), submissionId, `Tattoo Special · ${terms.offer_title} · ${terms.variant_label}`, now),
     ]);
 
-    const token = await createBookingAccess(db, request, submissionId, terms, settings.sales_closes_at);
+    const token = await createBookingAccess(db, request, submissionId, terms, terms.sales_closes_at);
     return json({
       ok: true,
       submissionId,
@@ -444,7 +503,9 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
 }
 
 async function adminPayload(db) {
-  const settings = await loadSettings(db);
+  const campaigns = await loadCampaigns(db, true);
+  const publishedRow = await loadPublishedCampaign(db);
+  const settings = publishedRow ? publicSettings(publishedRow, windowState(publishedRow)) : publicSettings(null, "closed");
   const media = (await db.prepare(
     `SELECT id, source_url, storage_key, original_filename, mime_type, alt_text, public_title
      FROM media_assets
@@ -453,14 +514,15 @@ async function adminPayload(db) {
      ORDER BY created_at DESC LIMIT 250`
   ).all()).results || [];
   return {
-    settings: publicSettings(settings, windowState(settings)),
+    settings,
+    campaigns,
     offers: await loadOffers(db, true),
     media: media.map((row) => ({ id: row.id, url: mediaUrl(row), filename: row.original_filename, alt: row.alt_text, title: row.public_title })),
     readiness: {
       database: true,
-      artwork: Boolean(settings?.artwork_media_id && mediaUrl(settings)),
-      activeOffers: (await loadOffers(db, false)).length,
-      salesWindowValid: new Date(settings?.sales_opens_at).getTime() < new Date(settings?.sales_closes_at).getTime(),
+      artwork: Boolean(publishedRow?.artwork_media_id && mediaUrl(publishedRow)),
+      activeOffers: publishedRow ? (await loadOffers(db, false, publishedRow.id)).length : 0,
+      salesWindowValid: Boolean(publishedRow && new Date(publishedRow.sales_opens_at).getTime() < new Date(publishedRow.sales_closes_at).getTime()),
     },
   };
 }
@@ -474,7 +536,8 @@ export async function handleAdminTattooSpecials(request, env) {
     if (request.method !== "PATCH") return failure("Method not allowed.", 405);
     const body = await readJson(request);
     if (!body) return failure("Expected JSON body.", 400);
-    const current = await loadSettings(db);
+    const current = await loadPublishedCampaign(db);
+    if (!current) return failure("Publish a Tattoo Specials campaign before editing public settings.", 409);
     const opensAt = text(body.salesOpensAt || current.sales_opens_at, 80);
     const closesAt = text(body.salesClosesAt || current.sales_closes_at, 80);
     if (!Number.isFinite(new Date(opensAt).getTime()) || !Number.isFinite(new Date(closesAt).getTime()) || new Date(opensAt) >= new Date(closesAt)) {
@@ -491,16 +554,116 @@ export async function handleAdminTattooSpecials(request, env) {
       if (!eligible) return failure("Choose a public, active, inline image from Shared Media.", 409);
     }
     await db.prepare(
-      `UPDATE tattoo_special_settings SET sales_opens_at = ?, sales_closes_at = ?,
-       default_deposit_cents = ?, artwork_media_id = ?, enabled = ?, updated_at = ? WHERE id = 'default'`
-    ).bind(opensAt, closesAt, deposit, mediaId, body.enabled === undefined ? Number(current.enabled) : (body.enabled ? 1 : 0), new Date().toISOString()).run();
+      `UPDATE tattoo_special_campaigns SET sales_opens_at = ?, sales_closes_at = ?,
+       default_deposit_cents = ?, artwork_media_id = ?, enabled = ?, updated_at = ? WHERE id = ?`
+    ).bind(opensAt, closesAt, deposit, mediaId, body.enabled === undefined ? Number(current.enabled) : (body.enabled ? 1 : 0), new Date().toISOString(), current.id).run();
     return json(await adminPayload(db));
   } catch (error) {
     return failure("Unable to update Tattoo Specials settings.", 500, { detail: error.message });
   }
 }
 
-function normalizeOfferInput(body, defaultDeposit) {
+function campaignSlug(value) {
+  return text(value, 160).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function normalizeCampaignInput(body, current = {}) {
+  const title = text(body.title === undefined ? current.title : body.title, 200);
+  const slug = campaignSlug(body.slug === undefined ? (current.slug || title) : body.slug);
+  const opensAt = text(body.salesOpensAt === undefined ? current.sales_opens_at : body.salesOpensAt, 80);
+  const closesAt = text(body.salesClosesAt === undefined ? current.sales_closes_at : body.salesClosesAt, 80);
+  const deposit = body.defaultDepositCents === undefined
+    ? Number(current.default_deposit_cents ?? 5000)
+    : integer(body.defaultDepositCents, -1);
+  if (!title || !slug) return { error: "Campaign title and slug are required." };
+  if (!Number.isFinite(new Date(opensAt).getTime()) || !Number.isFinite(new Date(closesAt).getTime()) || new Date(opensAt) >= new Date(closesAt)) {
+    return { error: "Enter a valid campaign sales opening and closing time." };
+  }
+  if (deposit < 0) return { error: "Default deposit must be zero or greater." };
+  return {
+    title,
+    slug,
+    opensAt,
+    closesAt,
+    timezone: text(body.timezone === undefined ? (current.timezone || "America/New_York") : body.timezone, 80) || "America/New_York",
+    deposit,
+    artworkMediaId: body.artworkMediaId === undefined ? (current.artwork_media_id || null) : (text(body.artworkMediaId, 200) || null),
+    enabled: body.enabled === undefined ? Boolean(current.enabled ?? true) : Boolean(body.enabled),
+    isPublic: body.isPublic === undefined ? Boolean(current.is_public) : Boolean(body.isPublic),
+    sortOrder: integer(body.sortOrder, Number(current.sort_order || 0)),
+  };
+}
+
+async function validateCampaignArtwork(db, mediaId) {
+  if (!mediaId) return true;
+  return Boolean(await db.prepare(
+    `SELECT id FROM media_assets WHERE id = ? AND state = 'active' AND privacy = 'public'
+     AND public_presentation = 'inline' AND consent_status IN ('not-required','granted') AND mime_type LIKE 'image/%'`
+  ).bind(mediaId).first());
+}
+
+export async function handleAdminTattooSpecialCampaign(request, env, campaignId = "") {
+  const auth = adminError(request, env);
+  if (auth) return auth;
+  try {
+    const db = requireDb(env);
+    if (request.method === "POST" && !campaignId) {
+      const body = await readJson(request);
+      const input = normalizeCampaignInput(body || {});
+      if (input.error) return failure(input.error, 400);
+      if (!await validateCampaignArtwork(db, input.artworkMediaId)) return failure("Choose a public, active, inline image from Shared Media.", 409);
+      const id = `campaign-${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
+      const statements = [];
+      if (input.isPublic) statements.push(db.prepare("UPDATE tattoo_special_campaigns SET is_public = 0, updated_at = ? WHERE is_public = 1").bind(now));
+      statements.push(db.prepare(
+        `INSERT INTO tattoo_special_campaigns
+         (id, slug, title, sales_opens_at, sales_closes_at, timezone, default_deposit_cents,
+          artwork_media_id, enabled, is_public, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(id, input.slug, input.title, input.opensAt, input.closesAt, input.timezone, input.deposit,
+        input.artworkMediaId, input.enabled ? 1 : 0, input.isPublic ? 1 : 0, input.sortOrder, now, now));
+      await db.batch(statements);
+      return json(await adminPayload(db), { status: 201 });
+    }
+    const current = campaignId
+      ? await db.prepare("SELECT * FROM tattoo_special_campaigns WHERE id = ?").bind(campaignId).first()
+      : null;
+    if (!current) return failure("Tattoo Specials campaign not found.", 404);
+    if (request.method === "PATCH") {
+      const body = await readJson(request);
+      const input = normalizeCampaignInput(body || {}, current);
+      if (input.error) return failure(input.error, 400);
+      if (!await validateCampaignArtwork(db, input.artworkMediaId)) return failure("Choose a public, active, inline image from Shared Media.", 409);
+      const now = new Date().toISOString();
+      const statements = [];
+      if (input.isPublic) statements.push(db.prepare("UPDATE tattoo_special_campaigns SET is_public = 0, updated_at = ? WHERE is_public = 1 AND id <> ?").bind(now, campaignId));
+      statements.push(db.prepare(
+        `UPDATE tattoo_special_campaigns SET slug = ?, title = ?, sales_opens_at = ?, sales_closes_at = ?,
+         timezone = ?, default_deposit_cents = ?, artwork_media_id = ?, enabled = ?, is_public = ?,
+         archived_at = NULL, sort_order = ?, updated_at = ? WHERE id = ?`
+      ).bind(input.slug, input.title, input.opensAt, input.closesAt, input.timezone, input.deposit,
+        input.artworkMediaId, input.enabled ? 1 : 0, input.isPublic ? 1 : 0, input.sortOrder, now, campaignId));
+      await db.batch(statements);
+      return json(await adminPayload(db));
+    }
+    if (request.method === "DELETE") {
+      const now = new Date().toISOString();
+      await db.batch([
+        db.prepare("UPDATE tattoo_special_campaigns SET enabled = 0, is_public = 0, archived_at = ?, updated_at = ? WHERE id = ?").bind(now, now, campaignId),
+        db.prepare("UPDATE tattoo_special_offers SET active = 0, archived_at = COALESCE(archived_at, ?), updated_at = ? WHERE campaign_id = ?").bind(now, now, campaignId),
+      ]);
+      return json({ ...(await adminPayload(db)), archived: true });
+    }
+    return failure("Method not allowed.", 405);
+  } catch (error) {
+    const message = String(error.message || error);
+    if (message.includes("UNIQUE constraint failed: tattoo_special_campaigns.slug")) return failure("That campaign slug is already in use.", 409);
+    return failure("Unable to save the Tattoo Specials campaign.", 500, { detail: error.message });
+  }
+}
+
+function normalizeOfferInput(body, defaultDeposit, campaignId) {
   const title = text(body.title, 200);
   const slug = text(body.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), 160);
   const duration = integer(body.durationMinutes, -1);
@@ -512,6 +675,7 @@ function normalizeOfferInput(body, defaultDeposit) {
   const variants = Array.isArray(body.variants) ? body.variants.map((variant, index) => ({
     label: text(variant.label, 100), priceCents: integer(variant.priceCents, -1), sortOrder: integer(variant.sortOrder, (index + 1) * 10),
   })) : [];
+  if (!campaignId) return { error: "Choose a campaign for this Tattoo Special." };
   if (!title || !slug) return { error: "A Tattoo Special title and slug are required." };
   if (duration <= 0 || duration % 30 !== 0) return { error: "Duration must use 30-minute increments." };
   if (!new Set(["optional", "required"]).has(reference)) return { error: "Reference requirement must be optional or required." };
@@ -519,7 +683,7 @@ function normalizeOfferInput(body, defaultDeposit) {
   if (maxWordCount < 0 || maxWordCount > 100) return { error: "Maximum word count must be between 1 and 100, or left blank." };
   if (deposit < 0) return { error: "Deposit must be zero or greater." };
   if (!variants.length || variants.some((variant) => !variant.label || variant.priceCents <= 0)) return { error: "Add at least one valid price variant." };
-  return { title, slug, description: text(body.description, 3000), duration, mode, reference, participants, maxWordCount, deposit, variants, active: body.active !== false, sortOrder: integer(body.sortOrder, 0) };
+  return { campaignId, title, slug, description: text(body.description, 3000), duration, mode, reference, participants, maxWordCount, deposit, variants, active: body.active !== false, sortOrder: integer(body.sortOrder, 0) };
 }
 
 async function insertOfferVersion(db, offer, input, versionNumber, now) {
@@ -541,8 +705,8 @@ async function insertOfferVersion(db, offer, input, versionNumber, now) {
       `INSERT INTO tattoo_special_offer_variants
        (id, offer_version_id, label, price_cents, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)`
     ).bind(`${versionId}-variant-${index + 1}`, versionId, variant.label, variant.priceCents, variant.sortOrder, now)),
-    db.prepare("UPDATE tattoo_special_offers SET current_version_id = ?, title = ?, slug = ?, active = ?, archived_at = NULL, sort_order = ?, updated_at = ? WHERE id = ?")
-      .bind(versionId, input.title, input.slug, input.active ? 1 : 0, input.sortOrder, now, offer.id),
+    db.prepare("UPDATE tattoo_special_offers SET campaign_id = ?, current_version_id = ?, title = ?, slug = ?, active = ?, archived_at = NULL, sort_order = ?, updated_at = ? WHERE id = ?")
+      .bind(input.campaignId, versionId, input.title, input.slug, input.active ? 1 : 0, input.sortOrder, now, offer.id),
   ];
   await db.batch(statements);
   return versionId;
@@ -553,17 +717,19 @@ export async function handleAdminTattooSpecialOffer(request, env, offerId = "") 
   if (auth) return auth;
   try {
     const db = requireDb(env);
-    const settings = await loadSettings(db);
     if (request.method === "POST" && !offerId) {
       const body = await readJson(request);
-      const input = normalizeOfferInput(body || {}, Number(settings.default_deposit_cents));
+      const campaignId = text(body?.campaignId, 200);
+      const campaign = campaignId ? await db.prepare("SELECT * FROM tattoo_special_campaigns WHERE id = ? AND archived_at IS NULL").bind(campaignId).first() : null;
+      if (!campaign) return failure("Choose an active campaign for this Tattoo Special.", 409);
+      const input = normalizeOfferInput(body || {}, Number(campaign.default_deposit_cents), campaignId);
       if (input.error) return failure(input.error, 400);
       const id = `special-${crypto.randomUUID()}`;
       const now = new Date().toISOString();
       await db.prepare(
-        `INSERT INTO tattoo_special_offers (id, slug, title, active, sort_order, current_version_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`
-      ).bind(id, input.slug, input.title, input.active ? 1 : 0, input.sortOrder, now, now).run();
+        `INSERT INTO tattoo_special_offers (id, campaign_id, slug, title, active, sort_order, current_version_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`
+      ).bind(id, campaignId, input.slug, input.title, input.active ? 1 : 0, input.sortOrder, now, now).run();
       await insertOfferVersion(db, { id, slug: input.slug }, input, 1, now);
       return json(await adminPayload(db), { status: 201 });
     }
@@ -571,7 +737,10 @@ export async function handleAdminTattooSpecialOffer(request, env, offerId = "") 
     if (!offer) return failure("Tattoo Special not found.", 404);
     if (request.method === "PATCH") {
       const body = await readJson(request);
-      const input = normalizeOfferInput(body || {}, Number(settings.default_deposit_cents));
+      const campaignId = text(body?.campaignId || offer.campaign_id, 200);
+      const campaign = await db.prepare("SELECT * FROM tattoo_special_campaigns WHERE id = ? AND archived_at IS NULL").bind(campaignId).first();
+      if (!campaign) return failure("Choose an active campaign for this Tattoo Special.", 409);
+      const input = normalizeOfferInput(body || {}, Number(campaign.default_deposit_cents), campaignId);
       if (input.error) return failure(input.error, 400);
       const version = await db.prepare("SELECT COALESCE(MAX(version_number), 0) AS version FROM tattoo_special_offer_versions WHERE offer_id = ?").bind(offerId).first();
       await insertOfferVersion(db, offer, input, Number(version.version || 0) + 1, new Date().toISOString());

@@ -434,6 +434,9 @@
   .tattoo-specials-manager { display:grid; gap:22px; }
   .tattoo-specials-settings { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
   .tattoo-specials-offers { display:grid; gap:16px; }
+  .tattoo-specials-campaigns { display:grid; gap:16px; }
+  .tattoo-special-campaign { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; }
+  .tattoo-special-campaign.is-public { border-color:rgba(255,255,255,.72); }
   .tattoo-special-offer { border:5px solid var(--ring-faint); padding:16px; background:var(--panel); display:grid; gap:12px; }
   .tattoo-special-offer__grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
   .tattoo-special-readiness { display:flex; flex-wrap:wrap; gap:8px; }
@@ -2677,17 +2680,53 @@
     return (offer.variants || []).map((variant) => `${variant.label}|${(Number(variant.priceCents || 0) / 100).toFixed(0)}`).join("\n");
   }
 
+  function tattooSpecialCampaignOptions(selectedId = "") {
+    return (tattooSpecials.campaigns || [])
+      .filter((campaign) => !campaign.archivedAt)
+      .map((campaign) => `<option value="${escapeHtml(campaign.id)}" ${campaign.id === selectedId ? "selected" : ""}>${escapeHtml(campaign.title)}${campaign.isPublic ? " — Published" : ""}</option>`)
+      .join("");
+  }
+
+  function tattooSpecialCampaignEditor(campaign = {}) {
+    const isNew = !campaign.id;
+    const artwork = (tattooSpecials.media || []).find((item) => item.id === campaign.artwork?.mediaId);
+    const fallback = tattooSpecials.settings || {};
+    return `<form class="tattoo-special-campaign ${campaign.isPublic ? "is-public" : ""}" data-tattoo-special-campaign-form data-campaign-id="${escapeHtml(campaign.id || "")}">
+      <div class="portfolio-head"><div><span class="pill">${isNew ? "New campaign" : campaign.isPublic ? "Published campaign" : campaign.archivedAt ? "Archived campaign" : "Campaign"}</span><h3>${escapeHtml(campaign.title || "New Tattoo Specials Campaign")}</h3></div>${isNew ? "" : `<button class="button danger-button" type="button" data-archive-special-campaign="${escapeHtml(campaign.id)}">Archive Campaign</button>`}</div>
+      <p class="contact">A campaign owns its sales window, artwork, default deposit, and specials. Publishing it replaces the campaign currently shown at /tattoos/specials/ without changing historical submissions.</p>
+      <div class="tattoo-specials-settings">
+        <label>Campaign title<input name="title" required maxlength="200" value="${escapeHtml(campaign.title || "")}"></label>
+        <label>Slug<input name="slug" required maxlength="160" value="${escapeHtml(campaign.slug || "")}"></label>
+        <label>Sales opens (Eastern)<input name="salesOpensAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(campaign.salesOpensAt || fallback.salesOpensAt))}"></label>
+        <label>Sales closes (Eastern)<input name="salesClosesAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(campaign.salesClosesAt || fallback.salesClosesAt))}"></label>
+        <label>Default deposit (dollars)<input name="defaultDepositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(campaign.defaultDepositCents ?? fallback.defaultDepositCents ?? 5000) / 100)}"></label>
+        <label>Shared Media artwork<select name="artworkMediaId"><option value="">No artwork</option>${(tattooSpecials.media || []).map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === campaign.artwork?.mediaId ? "selected" : ""}>${escapeHtml(item.title || item.filename || item.id)}</option>`).join("")}</select></label>
+        <label>Display order<input name="sortOrder" type="number" value="${escapeHtml(campaign.sortOrder ?? 0)}"></label>
+        <label class="check"><input name="enabled" type="checkbox" ${campaign.enabled !== false ? "checked" : ""}><span>Campaign enabled</span></label>
+        <label class="check"><input name="isPublic" type="checkbox" ${campaign.isPublic ? "checked" : ""}><span>Publish at /tattoos/specials/</span></label>
+      </div>
+      ${artwork?.url ? `<figure class="tattoo-special-artwork"><img src="${escapeHtml(artwork.url)}" alt="${escapeHtml(artwork.alt || "Selected Tattoo Specials artwork")}"></figure>` : ""}
+      <div class="booking-actions"><button class="button" type="submit">${isNew ? "Create Campaign" : "Save Campaign"}</button></div>
+    </form>`;
+  }
+
   function tattooSpecialOfferEditor(offer = {}) {
     const isNew = !offer.id;
+    const defaultCampaign = (tattooSpecials.campaigns || []).find((campaign) => campaign.isPublic && !campaign.archivedAt)
+      || (tattooSpecials.campaigns || []).find((campaign) => !campaign.archivedAt)
+      || {};
+    const campaignId = offer.campaignId || defaultCampaign.id || "";
+    const campaign = (tattooSpecials.campaigns || []).find((item) => item.id === campaignId) || defaultCampaign;
     return `<form class="tattoo-special-offer" data-tattoo-special-offer-form data-offer-id="${escapeHtml(offer.id || "")}">
       <div class="portfolio-head"><div><span class="pill">${isNew ? "New special" : `Version ${escapeHtml(offer.versionNumber || 1)}`}</span><h3>${escapeHtml(offer.title || "New Tattoo Special")}</h3></div>${isNew ? "" : `<button class="button danger-button" type="button" data-archive-special-offer="${escapeHtml(offer.id)}">${offer.archivedAt ? "Archived" : "Archive / Delete"}</button>`}</div>
       <p class="contact">Saving price, duration, deposit, references, participants, or variants creates a new immutable version. Every new Tattoo Special request requires Studio approval before booking. Existing submissions and links keep their original terms.</p>
       <div class="tattoo-special-offer__grid">
+        <label>Campaign<select name="campaignId" required><option value="">Choose campaign</option>${tattooSpecialCampaignOptions(campaignId)}</select></label>
         <label>Title<input name="title" required maxlength="200" value="${escapeHtml(offer.title || "")}"></label>
         <label>Slug<input name="slug" required maxlength="160" value="${escapeHtml(offer.slug || "")}"></label>
         <label>Display order<input name="sortOrder" type="number" value="${escapeHtml(offer.sortOrder ?? 0)}"></label>
         <label>Duration (minutes)<input name="durationMinutes" type="number" min="30" step="30" required value="${escapeHtml(offer.durationMinutes || 120)}"></label>
-        <label>Deposit (dollars)<input name="depositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(offer.depositCents ?? tattooSpecials.settings.defaultDepositCents ?? 5000) / 100)}"></label>
+        <label>Deposit (dollars)<input name="depositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(offer.depositCents ?? campaign.defaultDepositCents ?? 5000) / 100)}"></label>
         <input name="mode" type="hidden" value="review">
         <div class="field"><label>Booking flow</label><div class="value">Studio approval required</div></div>
         <label>References<select name="referenceRequirement"><option value="optional" ${offer.referenceRequirement !== "required" ? "selected" : ""}>Optional</option><option value="required" ${offer.referenceRequirement === "required" ? "selected" : ""}>Required</option></select></label>
@@ -2713,9 +2752,8 @@
     await loadTattooSpecials();
     const settings = tattooSpecials.settings || {};
     const readiness = tattooSpecials.readiness || {};
-    const selectedMedia = (tattooSpecials.media || []).find((item) => item.id === settings.artwork?.mediaId);
     detailEl.innerHTML = `<section class="tattoo-specials-manager">
-      <div class="portfolio-head"><div><span class="pill">Campaign / Tattoo Special</span><h2>Tattoo Specials</h2><p class="contact">Permanent public surface, sales window, Shared Media artwork, immutable versions, and booking readiness.</p></div><div class="booking-actions"><a class="button" href="/tattoos/specials/" target="_blank" rel="noopener">Preview Public Page</a><button class="button" type="button" data-refresh-tattoo-specials>Refresh</button></div></div>
+      <div class="portfolio-head"><div><span class="pill">Campaigns + Individual Specials</span><h2>Tattoo Specials</h2><p class="contact">Build complete campaigns or add individual specials inside the Submissions console. One campaign is published to the permanent public route at a time.</p></div><div class="booking-actions"><a class="button" href="/tattoos/specials/" target="_blank" rel="noopener">Preview Public Page</a><button class="button" type="button" data-refresh-tattoo-specials>Refresh</button></div></div>
       <div class="tattoo-special-readiness" aria-label="Booking readiness">
         <span class="pill ${readiness.database ? "is-ready" : ""}">Database ${readiness.database ? "ready" : "missing"}</span>
         <span class="pill ${readiness.artwork ? "is-ready" : ""}">Artwork ${readiness.artwork ? "ready" : "missing"}</span>
@@ -2723,20 +2761,10 @@
         <span class="pill ${readiness.salesWindowValid ? "is-ready" : ""}">Window ${readiness.salesWindowValid ? "valid" : "invalid"}</span>
         <span class="pill">Public state: ${escapeHtml(settings.state || "closed")}</span>
       </div>
-      <form class="tattoo-settings-card" data-tattoo-special-settings-form>
-        <h3>Campaign settings</h3>
-        <div class="tattoo-specials-settings">
-          <label>Sales opens (Eastern)<input name="salesOpensAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(settings.salesOpensAt))}"></label>
-          <label>Sales closes (Eastern)<input name="salesClosesAt" type="datetime-local" required value="${escapeHtml(formatDateTimeInput(settings.salesClosesAt))}"></label>
-          <label>Default deposit (dollars)<input name="defaultDepositDollars" type="number" min="0" step="1" required value="${escapeHtml(Number(settings.defaultDepositCents || 0) / 100)}"></label>
-          <label>Shared Media artwork<select name="artworkMediaId"><option value="">No artwork</option>${(tattooSpecials.media || []).map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === settings.artwork?.mediaId ? "selected" : ""}>${escapeHtml(item.title || item.filename || item.id)}</option>`).join("")}</select></label>
-          <label class="check"><input name="enabled" type="checkbox" ${settings.enabled ? "checked" : ""}><span>Campaign enabled</span></label>
-        </div>
-        ${selectedMedia?.url ? `<figure class="tattoo-special-artwork"><img src="${escapeHtml(selectedMedia.url)}" alt="${escapeHtml(selectedMedia.alt || "Selected Tattoo Specials artwork")}"></figure>` : ""}
-        <div class="booking-actions"><button class="button" type="submit">Save Campaign Settings</button></div>
-      </form>
-      <section class="tattoo-specials-offers"><div class="portfolio-head"><div><h3>Current specials</h3><p class="contact">Reorder, activate, archive, or create a future-facing version. Used specials archive instead of deleting.</p></div></div>${(tattooSpecials.offers || []).map(tattooSpecialOfferEditor).join("") || '<p class="empty">No specials configured.</p>'}</section>
-      <section class="tattoo-specials-offers"><h3>Add a special</h3>${tattooSpecialOfferEditor()}</section>
+      <section class="tattoo-specials-campaigns"><div class="portfolio-head"><div><h3>Campaign library</h3><p class="contact">Prepare future windows, change the published campaign, or archive a completed campaign without losing its submissions.</p></div></div>${(tattooSpecials.campaigns || []).map(tattooSpecialCampaignEditor).join("") || '<p class="empty">No campaigns configured.</p>'}</section>
+      <section class="tattoo-specials-campaigns"><h3>Add an entire campaign</h3>${tattooSpecialCampaignEditor()}</section>
+      <section class="tattoo-specials-offers"><div class="portfolio-head"><div><h3>Individual specials</h3><p class="contact">Each special belongs to a campaign. Reorder, activate, archive, move between campaigns, or create a future-facing immutable version.</p></div></div>${(tattooSpecials.offers || []).map(tattooSpecialOfferEditor).join("") || '<p class="empty">No specials configured.</p>'}</section>
+      <section class="tattoo-specials-offers"><h3>Add an individual special</h3>${(tattooSpecials.campaigns || []).some((campaign) => !campaign.archivedAt) ? tattooSpecialOfferEditor() : '<p class="empty">Create a campaign before adding an individual special.</p>'}</section>
       <div class="contact" id="tattooSpecialsStatus" role="status" aria-live="polite"></div>
     </section>`;
     enhanceControls(detailEl);
@@ -5609,6 +5637,15 @@ ${meetingLines}
       setStatus("Tattoo Specials refreshed");
       return;
     }
+    const archiveCampaign = event.target.closest("[data-archive-special-campaign]");
+    if (archiveCampaign) {
+      if (!window.confirm("Archive this campaign and remove its specials from the public page? Historical submissions will remain intact.")) return;
+      setStatus("Archiving Tattoo Specials campaign");
+      await api(`/api/admin/tattoo/specials/campaigns/${encodeURIComponent(archiveCampaign.dataset.archiveSpecialCampaign)}`, { method: "DELETE" });
+      await renderTattooSpecialsManager();
+      setStatus("Tattoo Specials campaign archived");
+      return;
+    }
     const archiveSpecial = event.target.closest("[data-archive-special-offer]");
     if (archiveSpecial) {
       if (!window.confirm("Archive this used special, or permanently delete it if it has never been used?")) return;
@@ -6556,6 +6593,32 @@ ${meetingLines}
   });
 
   detailEl.addEventListener("submit", async (event) => {
+    const specialCampaignForm = event.target.closest("[data-tattoo-special-campaign-form]");
+    if (specialCampaignForm) {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(specialCampaignForm));
+      const campaignId = specialCampaignForm.dataset.campaignId;
+      setStatus(campaignId ? "Saving Tattoo Specials campaign" : "Creating Tattoo Specials campaign");
+      await api(campaignId ? `/api/admin/tattoo/specials/campaigns/${encodeURIComponent(campaignId)}` : "/api/admin/tattoo/specials/campaigns", {
+        method: campaignId ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: String(values.title || "").trim(),
+          slug: String(values.slug || "").trim(),
+          salesOpensAt: localDateTimeToIso(values.salesOpensAt),
+          salesClosesAt: localDateTimeToIso(values.salesClosesAt),
+          defaultDepositCents: Math.round(Number(values.defaultDepositDollars || 0) * 100),
+          artworkMediaId: String(values.artworkMediaId || ""),
+          enabled: specialCampaignForm.elements.enabled.checked,
+          isPublic: specialCampaignForm.elements.isPublic.checked,
+          sortOrder: Number(values.sortOrder || 0),
+        }),
+      });
+      await renderTattooSpecialsManager();
+      setStatus(campaignId ? "Tattoo Specials campaign saved" : "Tattoo Specials campaign created");
+      return;
+    }
+
     const specialSettingsForm = event.target.closest("[data-tattoo-special-settings-form]");
     if (specialSettingsForm) {
       event.preventDefault();
@@ -6591,6 +6654,7 @@ ${meetingLines}
         method: offerId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          campaignId: String(values.campaignId || ""),
           title: String(values.title || "").trim(), slug: String(values.slug || "").trim(),
           description: String(values.description || "").trim(), sortOrder: Number(values.sortOrder || 0),
           durationMinutes: Number(values.durationMinutes || 0), depositCents: Math.round(Number(values.depositDollars || 0) * 100),

@@ -972,7 +972,7 @@
       ? `Square collects only the ${selectedType.depositLabel} deposit${selectedTipCents ? " and your optional tip" : ""} today. The $200 Extended Day fee is included in the final studio balance, and the deposit is credited toward your final total.`
       : context?.purpose === "consultation"
         ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
-        : "The tattoo deposit is applied toward the appointment total. Shorter sessions have no Extended Day fee, and additional dates can be coordinated when needed. Optional tips are itemized separately on the Square receipt.";
+        : "The tattoo deposit is applied toward the appointment total.";
     updateCheckoutState();
     window.dispatchEvent(new CustomEvent("sixwell:booking-rendered"));
   }

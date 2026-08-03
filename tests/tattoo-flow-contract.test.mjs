@@ -97,6 +97,7 @@ import {
   validateBriefTemplateContent,
 } from "../functions/api/brief-documents/_templates.js";
 import {
+  handleAdminTattooSpecialCampaign,
   handleAdminTattooSpecialOffer,
   handleAdminTattooSpecialReview,
   handleAdminTattooSpecials,
@@ -1832,18 +1833,118 @@ test("Tattoo Specials public surface distinguishes scheduled, open, and closed s
   const env = { SUBMISSIONS_DB: new LocalD1(database) };
   const now = Date.now();
 
-  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'")
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='campaign-fka-2026'")
     .run(new Date(now + 3600000).toISOString(), new Date(now + 7200000).toISOString());
   const scheduled = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
   assert.equal(scheduled.state, "scheduled");
   assert.deepEqual(scheduled.offers, []);
 
-  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=? WHERE id='default'")
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_opens_at=?,sales_closes_at=? WHERE id='campaign-fka-2026'")
     .run(new Date(now - 7200000).toISOString(), new Date(now - 3600000).toISOString());
   const closed = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
   assert.equal(closed.state, "closed");
   assert.deepEqual(closed.offers, []);
   assert.equal(closed.normalInquiryUrl, "/tattoos/inquire/");
+});
+
+test("Studio creates campaigns and individual specials while the published campaign owns the public window", async () => {
+  const database = migratedDatabase();
+  const db = new LocalD1(database);
+  const token = "studio-special-campaigns";
+  const env = { SUBMISSIONS_DB: db, SUBMISSIONS_ADMIN_TOKEN: token };
+  const opensAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const closesAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  const initialAdmin = await (await handleAdminTattooSpecials(
+    draftRequest("/api/admin/tattoo/specials", "GET", undefined, token), env,
+  )).json();
+  assert.equal(initialAdmin.campaigns.length, 1);
+  assert.equal(initialAdmin.campaigns[0].id, "campaign-fka-2026");
+  assert.ok(initialAdmin.offers.every((offer) => offer.campaignId === "campaign-fka-2026"));
+
+  const createdCampaignResponse = await handleAdminTattooSpecialCampaign(adminJsonRequest(
+    "/api/admin/tattoo/specials/campaigns",
+    {
+      title: "Autumn Tattoo Specials",
+      slug: "autumn-tattoo-specials",
+      salesOpensAt: opensAt,
+      salesClosesAt: closesAt,
+      defaultDepositCents: 5000,
+      enabled: true,
+      isPublic: false,
+      sortOrder: 20,
+    },
+    token,
+  ), env);
+  assert.equal(createdCampaignResponse.status, 201);
+  const createdCampaignPayload = await createdCampaignResponse.json();
+  const campaign = createdCampaignPayload.campaigns.find((item) => item.slug === "autumn-tattoo-specials");
+  assert.ok(campaign);
+  assert.equal(campaign.isPublic, false);
+
+  const createdSpecialResponse = await handleAdminTattooSpecialOffer(adminJsonRequest(
+    "/api/admin/tattoo/specials/offers",
+    {
+      campaignId: campaign.id,
+      title: "Autumn Hand Tattoo",
+      slug: "autumn-hand-tattoo",
+      description: "One hand-sized autumn tattoo.",
+      durationMinutes: 120,
+      depositCents: 5000,
+      referenceRequirement: "optional",
+      participantCount: 1,
+      active: true,
+      sortOrder: 10,
+      variants: [{ label: "Standard", priceCents: 22000, sortOrder: 10 }],
+    },
+    token,
+  ), env);
+  assert.equal(createdSpecialResponse.status, 201);
+  const createdSpecialPayload = await createdSpecialResponse.json();
+  const special = createdSpecialPayload.offers.find((item) => item.slug === "autumn-hand-tattoo");
+  assert.ok(special);
+  assert.equal(special.campaignId, campaign.id);
+
+  const beforePublish = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
+  assert.equal(beforePublish.campaignId, "campaign-fka-2026");
+  assert.equal(beforePublish.offers.some((item) => item.id === special.id), false);
+
+  const publishResponse = await handleAdminTattooSpecialCampaign(adminJsonRequest(
+    `/api/admin/tattoo/specials/campaigns/${campaign.id}`,
+    { isPublic: true },
+    token,
+    "PATCH",
+  ), env, campaign.id);
+  assert.equal(publishResponse.status, 200);
+  const published = await (await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env)).json();
+  assert.equal(published.campaignId, campaign.id);
+  assert.equal(published.campaignTitle, "Autumn Tattoo Specials");
+  assert.deepEqual(published.offers.map((item) => item.id), [special.id]);
+
+  const submissionResponse = await handleCreateTattooSpecialSubmission(multipartRequest(
+    "/api/tattoo/specials/submissions",
+    {
+      offerId: special.id,
+      variantId: special.variants[0].id,
+      idempotencyKey: "autumn-special-request",
+      name: "Campaign Client",
+      email: "campaign@example.com",
+      phone: "4045550123",
+      ageConfirmed: "yes",
+      policyAccepted: "yes",
+      transactionalMessagesAccepted: "yes",
+      placement: "Upper arm",
+      projectDetails: "Autumn leaves.",
+    },
+  ), env);
+  assert.equal(submissionResponse.status, 201);
+  const submission = await submissionResponse.json();
+  const terms = database.prepare(
+    "SELECT campaign_id,campaign_title,offer_id FROM tattoo_special_submission_terms WHERE submission_id=?",
+  ).get(submission.submissionId);
+  assert.equal(terms.campaign_id, campaign.id);
+  assert.equal(terms.campaign_title, "Autumn Tattoo Specials");
+  assert.equal(terms.offer_id, special.id);
 });
 
 test("Tattoo index keeps the lower Specials block and reveals a matching brand-band action only while open", () => {
@@ -1885,6 +1986,18 @@ test("Studio Tattoo Special requests show the client tattoo description", () => 
   assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?p\("reference_link"\)/);
   assert.match(studio, /if \(t === "tattoo_special"\)[\s\S]*?Requested Script[\s\S]*?p\("script_text"\)/);
   assert.match(studio, /name="maxWordCount"[\s\S]*?offer\.maxWordCount/);
+});
+
+test("Studio Tattoo Specials manager creates complete campaigns and campaign-owned individual specials", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
+  assert.match(studio, /Add an entire campaign[\s\S]*?data-tattoo-special-campaign-form/);
+  assert.match(studio, /Add an individual special[\s\S]*?data-tattoo-special-offer-form/);
+  assert.match(studio, /Publish at \/tattoos\/specials\//);
+  assert.match(studio, /name="campaignId" required/);
+  assert.match(studio, /\/api\/admin\/tattoo\/specials\/campaigns/);
+  assert.match(worker, /handleAdminTattooSpecialCampaign/);
+  assert.match(worker, /tattooSpecialCampaignMatch/);
 });
 
 test("Studio request details open an editable native text message to the submitted client phone", () => {
@@ -1932,7 +2045,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   };
   const opens = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const closes = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'").run(opens, closes);
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='campaign-fka-2026'").run(opens, closes);
 
   const publicResponse = await handlePublicTattooSpecials(new Request("https://example.test/api/tattoo/specials"), env);
   assert.equal(publicResponse.status, 200);
@@ -2274,7 +2387,7 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
     SUBMISSIONS_DB: db, SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: adminToken,
     SQUARE_ACCESS_TOKEN: "square-token", SQUARE_LOCATION_ID: "square-location",
   };
-  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'")
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='campaign-fka-2026'")
     .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 86400000).toISOString());
   const base = {
     offerId: "special-script", variantId: "special-script-v2-color", name: "Script Client",
@@ -2365,7 +2478,7 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
     SUBMISSIONS_DB: db, SUBMISSION_FILES: new MemoryBucket(), SUBMISSIONS_ADMIN_TOKEN: adminToken,
     EMAIL: { async send(message) { sent.push(message); return { messageId: crypto.randomUUID() }; } },
   };
-  database.prepare("UPDATE tattoo_special_settings SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='default'")
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='campaign-fka-2026'")
     .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 3600000).toISOString());
   const received = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-script", variantId: "special-script-v2-bg", idempotencyKey: "script-cutoff-review",
@@ -2388,7 +2501,7 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
     availabilityWindowId: "special-script-cutoff-window",
   }), env);
   assert.equal(held.status, 200);
-  database.prepare("UPDATE tattoo_special_settings SET sales_closes_at=? WHERE id='default'")
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_closes_at=? WHERE id='campaign-fka-2026'")
     .run(new Date(Date.now() - 1000).toISOString());
   database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?")
     .run(new Date(Date.now() - 1000).toISOString(), review.submissionId);
