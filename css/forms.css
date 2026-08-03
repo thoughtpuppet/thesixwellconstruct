@@ -433,12 +433,43 @@ input.form-check__input:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .public-form :where(
+  .form-field__label,
+  .form-field > label,
+  .public-form :is(.field, .field-group) > label,
+  .public-form > label:not(.form-check) {
+    font-size: 12px;
+  }
+
+  .public-form :is(.field, .field-group) :where(
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
     textarea,
     select
   ),
-  .form-control {
-    font-size: 16px;
+  .public-form > :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    textarea,
+    select
+  ),
+  .public-form .form-control,
+  .form-control.form-control {
+    font-size: 18px !important;
+  }
+
+  .public-form input[type="file"]::file-selector-button,
+  input.form-control--file::file-selector-button,
+  label.form-check,
+  .form-check-group__heading,
+  .form-check-group__manage {
+    font-size: 12px;
+  }
+
+  .form-note {
+    font-size: 15px;
+  }
+
+  .form-help,
+  .public-form :is(.file-note, .field-note, .field-help),
+  .form-status {
+    font-size: 14px;
   }
 }

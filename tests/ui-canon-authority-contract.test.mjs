@@ -274,7 +274,7 @@ test("ordinary public data-entry fields use the shared form authority", async ()
   assert.match(formsCss, /--form-control-textarea-min-height:\s*124px/);
   assert.match(formsCss, /border:\s*5px solid var\(--form-control-border\)/);
   assert.match(formsCss, /font-size:\s*15px/);
-  assert.match(formsCss, /font-size:\s*16px/);
+  assert.match(formsCss, /font-size:\s*18px/);
   assert.match(formsCss, /:user-invalid/);
   assert.match(formsCss, /:focus-visible[\s\S]{0,180}border-color:\s*var\(--form-control-accent\);[\s\S]{0,80}outline:\s*0/);
   assert.match(formsCss, /:user-invalid[\s\S]{0,360}border-color:\s*var\(--form-control-accent\);[\s\S]{0,80}outline:\s*0/);

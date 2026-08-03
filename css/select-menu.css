@@ -261,7 +261,7 @@ body[data-venture="film"] .custom-select {
   .custom-select > .custom-select-trigger,
   .custom-select-option {
     min-height: 44px;
-    font-size: 16px;
+    font-size: 18px;
   }
 }
 

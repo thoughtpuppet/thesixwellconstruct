@@ -1020,6 +1020,7 @@
           ${field("Flash Code", p("flash_code"))}
           ${field("Series", p("flash_series"))}
           ${field("Flash Size", p("flash_size"))}
+          ${field("Date of Birth", p("dob"))}
           ${field("Placement", p("placement"))}
           ${field("Scale", p("scale"))}
           ${field("Budget Range", p("budget_range") || p("claim_bid"))}
@@ -1042,6 +1043,7 @@
     if (t === "build_brief" || t === "build_your_own" || t === "byo") {
       return card("Build Your Own", `
         <div class="grid">
+          ${field("Date of Birth", p("dob"))}
           ${field("Placement", p("placement"))}
           ${field("Size / Scale", p("size") || p("scale"))}
           ${field("Budget", p("budget_range"))}
@@ -1061,6 +1063,7 @@
     if (t === "maze_design") {
       return card("Build a Maze", `
         <div class="grid">
+          ${field("Date of Birth", p("dob"))}
           ${field("Placement", p("placement"))}
           ${field("Size / Scale", p("scale"))}
           ${field("Budget", p("budget_range"))}
@@ -1073,9 +1076,10 @@
       `);
     }
 
-    if (t === "consultation" || t === "in_person_consultation") {
-      return card("Consultation", `
+    if (t === "consultation" || t === "in_person_consultation" || t === "build_session") {
+      return card(t === "build_session" ? "In-Person Build Session" : "Consultation", `
         <div class="grid">
+          ${field("Date of Birth", p("dob"))}
           ${field("Preferred Slots", p("preferred_slots"))}
           ${field("Direction", p("direction"))}
           ${field("Budget", p("budget_range"))}
@@ -1104,6 +1108,7 @@
       return card("Tattoo Special Request", `
         <div class="grid">
           ${field("Placement", p("placement"))}
+          ${field("Date of Birth", p("dob"))}
           ${field("Age confirmed", p("age_confirmed"))}
           ${field("Deposit policy accepted", p("policy_accepted"))}
         </div>
@@ -1116,6 +1121,7 @@
     if (t === "special_project") {
       return card("Special Project", `
         <div class="grid">
+          ${field("Date of Birth", p("dob"))}
           ${field("Placement", p("placement"))}
           ${field("Size", p("size"))}
           ${field("Budget", p("budget_range"))}
@@ -1186,7 +1192,7 @@
       </div>
       <div class="field" style="margin-top:16px;"><label>Project or Flash Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
       <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
-      <div class="field" style="margin-top:16px;"><label>Project Notes</label><div class="value full">${escapeHtml(p("message"))}</div></div>
+      <div class="field" style="margin-top:16px;"><label>Project Description</label><div class="value full">${escapeHtml(p("message"))}</div></div>
     `);
   }
 
@@ -2730,7 +2736,7 @@
         <input name="mode" type="hidden" value="review">
         <div class="field"><label>Booking flow</label><div class="value">Studio approval required</div></div>
         <label>References<select name="referenceRequirement"><option value="optional" ${offer.referenceRequirement !== "required" ? "selected" : ""}>Optional</option><option value="required" ${offer.referenceRequirement === "required" ? "selected" : ""}>Required</option></select></label>
-        <label>Participants<select name="participantCount"><option value="1" ${Number(offer.participantCount || 1) === 1 ? "selected" : ""}>One adult</option><option value="2" ${Number(offer.participantCount) === 2 ? "selected" : ""}>Two adults</option></select></label>
+        <label>Participants<select name="participantCount"><option value="1" ${Number(offer.participantCount || 1) === 1 ? "selected" : ""}>One adult</option><option value="2" ${Number(offer.participantCount) === 2 ? "selected" : ""}>Up to two adults</option></select></label>
         <label>Maximum words <span class="contact">Optional</span><input name="maxWordCount" type="number" min="1" max="100" step="1" value="${escapeHtml(offer.maxWordCount || "")}"></label>
         <label class="check"><input name="active" type="checkbox" ${offer.active !== false ? "checked" : ""}><span>Public while window is open</span></label>
       </div>
@@ -4297,7 +4303,7 @@ ${meetingLines}
         ${detailField("Requested time", heldAppointment?.startAt ? `${formatDate(heldAppointment.startAt)}${heldAppointment.endAt ? `\nEnds: ${formatDate(heldAppointment.endAt)}` : ""}` : "No time selected yet")}
         ${detailField("Appointment state", heldAppointment?.approvalState === "approved" ? "Approved — awaiting deposit" : heldAppointment?.approvalState === "pending" ? "Held for approval" : heldAppointment?.status || "Request only")}
         ${detailField("Special version", payload.special_offer_version_id || "")}
-        ${detailField("Participants", participants.map((person) => `${person.name} · ${person.email} · ${person.phone}`).join("\n"))}
+        ${detailField("Participants", participants.map((person) => `${person.name} · ${person.email} · ${person.phone}${person.dob ? ` · DOB ${person.dob}` : ""}`).join("\n"))}
       </div>
       ${review && !["booked", "declined"].includes(submission.status) ? `<div class="tattoo-special-offer__grid">
         <label>${adjustablePrice ? "Exact approved price" : "Promotional price"} (dollars)<input id="specialApprovedPrice" type="number" min="${escapeHtml(Number(payload.quoted_price_cents || 0) / 100)}" step="1" value="${escapeHtml(price / 100)}" ${adjustablePrice ? "" : "readonly"}></label>

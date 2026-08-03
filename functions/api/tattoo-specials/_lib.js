@@ -79,6 +79,25 @@ function durationLabel(minutes) {
   return Number.isInteger(hours) ? `${hours} hour${hours === 1 ? "" : "s"}` : `${hours} hours`;
 }
 
+function isAtLeastEighteen(dateValue) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text(dateValue, 10));
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const birth = new Date(Date.UTC(year, month - 1, day));
+  if (birth.getUTCFullYear() !== year || birth.getUTCMonth() !== month - 1 || birth.getUTCDate() !== day) return false;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date()).filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
+  let age = parts.year - year;
+  if (parts.month < month || (parts.month === month && parts.day < day)) age -= 1;
+  return age >= 18;
+}
+
 function mediaUrl(row) {
   if (!row) return "";
   return row.source_url || (row.storage_key ? `/api/construct/media/${encodeURIComponent(row.id)}` : "");
@@ -353,12 +372,13 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     if (!terms) return failure("That Tattoo Special is unavailable. Refresh and choose again.", 409);
 
     const primary = {
-      name: text(fields.name, 160), email: text(fields.email, 320).toLowerCase(), phone: text(fields.phone, 80),
+      name: text(fields.name, 160), email: text(fields.email, 320).toLowerCase(), phone: text(fields.phone, 80), dob: text(fields.dob, 10),
     };
     if (!primary.name) return failure("Enter the primary purchaser's full name.", 400, { field: "name" });
     if (!primary.email) return failure("Enter the primary purchaser's email address.", 400, { field: "email" });
     if (!validEmail(primary.email)) return failure("Enter a complete email address for the primary purchaser, such as name@example.com.", 400, { field: "email" });
     if (!primary.phone) return failure("Enter the primary purchaser's phone number.", 400, { field: "phone" });
+    if (!isAtLeastEighteen(primary.dob)) return failure("Enter a valid date of birth confirming the primary participant is at least 18.", 400, { field: "dob" });
     if (text(fields.ageConfirmed).toLowerCase() !== "yes") return failure("The primary participant must confirm they are at least 18.", 400);
     if (text(fields.policyAccepted).toLowerCase() !== "yes") return failure("Accept the Tattoo Special deposit and booking policies to continue.", 400);
     if (text(fields.transactionalMessagesAccepted).toLowerCase() !== "yes") {
@@ -384,16 +404,23 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
     }
     let secondary = null;
     if (Number(terms.participant_count) === 2) {
-      secondary = {
+      const secondaryInput = {
         name: text(fields.participant2Name, 160),
         email: text(fields.participant2Email, 320).toLowerCase(),
         phone: text(fields.participant2Phone, 80),
+        dob: text(fields.participant2Dob, 10),
+        ageConfirmed: text(fields.participant2AgeConfirmed).toLowerCase() === "yes",
       };
-      if (!secondary.name) return failure("Enter the second adult participant's full name.", 400, { field: "participant2Name" });
-      if (!secondary.email) return failure("Enter the second adult participant's email address.", 400, { field: "participant2Email" });
-      if (!validEmail(secondary.email)) return failure("Enter a complete email address for the second adult participant, such as name@example.com.", 400, { field: "participant2Email" });
-      if (!secondary.phone) return failure("Enter the second adult participant's phone number.", 400, { field: "participant2Phone" });
-      if (text(fields.participant2AgeConfirmed).toLowerCase() !== "yes") return failure("The second participant must confirm they are at least 18.", 400);
+      const secondaryStarted = Boolean(secondaryInput.name || secondaryInput.email || secondaryInput.phone || secondaryInput.dob || secondaryInput.ageConfirmed);
+      if (secondaryStarted) {
+        if (!secondaryInput.name) return failure("Enter the second adult participant's full name.", 400, { field: "participant2Name" });
+        if (!secondaryInput.email) return failure("Enter the second adult participant's email address.", 400, { field: "participant2Email" });
+        if (!validEmail(secondaryInput.email)) return failure("Enter a complete email address for the second adult participant, such as name@example.com.", 400, { field: "participant2Email" });
+        if (!secondaryInput.phone) return failure("Enter the second adult participant's phone number.", 400, { field: "participant2Phone" });
+        if (!isAtLeastEighteen(secondaryInput.dob)) return failure("Enter a valid date of birth confirming the second participant is at least 18.", 400, { field: "participant2Dob" });
+        if (!secondaryInput.ageConfirmed) return failure("The second participant must confirm they are at least 18.", 400);
+        secondary = { name: secondaryInput.name, email: secondaryInput.email, phone: secondaryInput.phone, dob: secondaryInput.dob };
+      }
     }
 
     const idempotencyKey = text(request.headers.get("idempotency-key") || fields.idempotencyKey, 200);
@@ -439,6 +466,7 @@ export async function handleCreateTattooSpecialSubmission(request, env) {
       participants,
       primary_participant_index: 0,
       automated_messages_recipient: primary.email,
+      dob: primary.dob,
       age_confirmed: "yes",
       policy_accepted: "yes",
       transactional_messages_accepted: "yes",

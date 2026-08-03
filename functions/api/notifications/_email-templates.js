@@ -49,10 +49,11 @@ export function buildTattooDraftResumeEmail(data) {
 export function buildSubmissionReceivedEmail(data) {
   const requested = list(data.requestedSheetDesigns);
   const construct = ["construct_art", "construct_event", "construct_studio"].includes(data.theme);
+  const supportPhone = String(data.supportPhone || "").trim();
   return renderClientEmail({
     templateKey: "submission_received",
     templateVariant: data.variant || "custom",
-    variables: { client_name: data.clientName || "there", submission_label: data.label, support_email: data.supportEmail, review_line: data.reviewLine },
+    variables: { client_name: data.clientName || "there", submission_label: data.label, support_email: data.supportEmail, support_phone: supportPhone, review_line: data.reviewLine },
     theme: construct ? data.theme : "tattoo",
     subject: data.subject,
     preheader: "Your submission reference, review expectations, and next steps.",
@@ -80,7 +81,9 @@ export function buildSubmissionReceivedEmail(data) {
     ],
     notice: [
       data.reviewLine,
-      `Questions or corrections? Email ${data.supportEmail} and include your submission reference.`,
+      supportPhone
+        ? `Questions or corrections? Email ${data.supportEmail}, call ${supportPhone}, or text ${supportPhone}, and include your submission reference.`
+        : `Questions or corrections? Email ${data.supportEmail} and include your submission reference.`,
     ],
     signature: construct ? constructSignature() : tattooSignature(),
   });
@@ -801,6 +804,7 @@ const SAMPLE = Object.freeze({
   dayOfInstructionsUrl: "https://thesixwellconstruct.com/tattoos/day-of/",
   locationParkingUrl: "https://thesixwellconstruct.com/tattoos/location-parking/",
   supportEmail: "saisolehman@artpilltattoohouse.com",
+  supportPhone: "(770) 820-5800",
   zoomUrl: "https://zoom.us/j/00000000000",
   eventTitle: "Signal & Symbol",
   eventWhen: "Saturday, July 25, 2026 at 7:00 PM EDT",
@@ -896,6 +900,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
         ? "This is a request and a temporary hold, not a booked appointment. The appointment is confirmed only after Studio approval and successful deposit payment."
         : ["consultation", "build_session"].includes(mode) ? "Complete checkout to keep the selected time." : "Most project submissions are reviewed within 5-7 business days.",
       supportEmail: SAMPLE.supportEmail,
+      supportPhone: SAMPLE.supportPhone,
       briefUrl: ["build", "maze"].includes(mode) ? "https://thesixwellconstruct.com/api/tattoo/briefs/demo-document?v=1&sig=sample" : "",
     });
   } else if (key === "booking_link_created") {

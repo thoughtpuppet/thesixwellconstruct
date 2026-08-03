@@ -37,6 +37,7 @@ type MazeFormDraft = {
   lastName: string;
   email: string;
   phone: string;
+  dateOfBirth: string;
   placement: string;
   scale: string;
   budgetRange: string;
@@ -46,7 +47,7 @@ type MazeFormDraft = {
 type MazeDraftPayload = MazeState & {
   version: 1;
   clientDraftId: string;
-  contact: Pick<MazeFormDraft, "firstName" | "lastName" | "email" | "phone">;
+  contact: Pick<MazeFormDraft, "firstName" | "lastName" | "email" | "phone" | "dateOfBirth">;
   placement: string;
   scale: string;
   budgetRange: string;
@@ -90,6 +91,7 @@ function emptyForm(): MazeFormDraft {
     lastName: "",
     email: "",
     phone: "",
+    dateOfBirth: "",
     placement: "",
     scale: "",
     budgetRange: "",
@@ -166,7 +168,8 @@ function draftPayload(state: MazeState, form: MazeFormDraft, clientDraftId: stri
       firstName: form.firstName,
       lastName: form.lastName,
       email: form.email,
-      phone: form.phone
+      phone: form.phone,
+      dateOfBirth: form.dateOfBirth
     },
     placement: form.placement,
     scale: form.scale,
@@ -396,6 +399,7 @@ function SubmitDialog({
             <label>Last name<input name="lastName" autoComplete="family-name" required value={formDraft.lastName} onChange={(event) => onFormDraftChange({ ...formDraft, lastName: event.target.value })} /></label>
             <label>Email<input name="email" type="email" autoComplete="email" required readOnly={Boolean(ownerEmail)} value={formDraft.email} onChange={(event) => onFormDraftChange({ ...formDraft, email: event.target.value })} /></label>
             <label>Phone (optional)<input name="phone" autoComplete="tel" value={formDraft.phone} onChange={(event) => onFormDraftChange({ ...formDraft, phone: event.target.value })} /></label>
+            <label>Date of birth<input name="dob" type="date" autoComplete="bday" required value={formDraft.dateOfBirth} onChange={(event) => onFormDraftChange({ ...formDraft, dateOfBirth: event.target.value })} /></label>
             <label>Placement (optional)<input name="placement" placeholder="e.g. forearm, spine" value={formDraft.placement} onChange={(event) => onFormDraftChange({ ...formDraft, placement: event.target.value })} /></label>
             <label>Approx. scale (optional)<input name="scale" placeholder="e.g. palm-size" value={formDraft.scale} onChange={(event) => onFormDraftChange({ ...formDraft, scale: event.target.value })} /></label>
           </div>

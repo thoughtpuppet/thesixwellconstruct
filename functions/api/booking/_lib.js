@@ -2088,8 +2088,28 @@ function publicClientFromBody(body) {
     referralSource: asOptionalString(body.referralSource || body.referral_source),
     direction: asOptionalString(body.direction),
     understand: asString(body.understand),
+    dob: asString(body.dob),
     ageConfirmed: asString(body.age_confirmed),
   };
+}
+
+function publicClientIsAtLeastEighteen(dateValue) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asString(dateValue));
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const birth = new Date(Date.UTC(year, month - 1, day));
+  if (birth.getUTCFullYear() !== year || birth.getUTCMonth() !== month - 1 || birth.getUTCDate() !== day) return false;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: DEFAULT_CALENDAR_TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date()).filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
+  let age = parts.year - year;
+  if (parts.month < month || (parts.month === month && parts.day < day)) age -= 1;
+  return age >= 18;
 }
 
 function validatePublicConsultation(body, allowedTypeIds = PUBLIC_CONSULTATION_BOOKING_TYPE_IDS) {
@@ -2099,11 +2119,15 @@ function validatePublicConsultation(body, allowedTypeIds = PUBLIC_CONSULTATION_B
   if (!client.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client.email)) {
     return { error: "A valid email is required." };
   }
+  if (!client.phone) return { error: "Phone number is required." };
   if (client.understand !== "yes") {
     return { error: "Consultation acknowledgement is required." };
   }
   if (client.ageConfirmed !== "yes") {
     return { error: "You must confirm that you are 18 or older." };
+  }
+  if (!publicClientIsAtLeastEighteen(client.dob)) {
+    return { error: "Enter a valid date of birth confirming age 18 or older." };
   }
   if (!allowedTypeIds.includes(asString(body.bookingTypeId))) {
     return { error: "Please select an available public session type." };
@@ -2170,6 +2194,7 @@ async function createPublicConsultationSubmission(db, body, client, bookingType)
     booking_type_label: bookingType.label,
     deposit_label: formatMoney(bookingType.deposit_cents, bookingType.currency || "USD"),
     understand: client.understand,
+    dob: client.dob,
     age_confirmed: client.ageConfirmed,
   };
   const contact = {
@@ -2490,6 +2515,7 @@ function validatePublicStudio(body) {
   if (!client.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(client.email)) {
     return { error: "A valid email is required." };
   }
+  if (!client.phone) return { error: "Phone number is required." };
   if (client.understand !== "yes") {
     return { error: "Please acknowledge the studio booking terms." };
   }

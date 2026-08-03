@@ -73,7 +73,7 @@
               </div>
               <div class="field">
                 <label for="performerPhone">Phone</label>
-                <input id="performerPhone" name="performerPhone" type="tel" autocomplete="tel">
+                <input id="performerPhone" name="performerPhone" type="tel" autocomplete="tel" required>
               </div>
               <div class="field"><label for="micPreferredName">Preferred name (optional)</label><input id="micPreferredName" name="preferred_name" autocomplete="nickname"></div>
               <div class="field"><label for="micPronouns">Pronouns (optional)</label><input id="micPronouns" name="pronouns"></div>
@@ -119,7 +119,7 @@
             </div>
             <div class="field">
               <label for="phone">Phone</label>
-              <input id="phone" name="phone" type="tel" autocomplete="tel">
+              <input id="phone" name="phone" type="tel" autocomplete="tel" required>
             </div>
             <div class="field"><label for="ticketPreferredName">Preferred name (optional)</label><input id="ticketPreferredName" name="preferred_name" autocomplete="nickname"></div>
             <div class="field"><label for="ticketPronouns">Pronouns (optional)</label><input id="ticketPronouns" name="pronouns"></div>
@@ -318,6 +318,7 @@
       var gotcha = els.ticketForm.querySelector("[name='_gotcha']").value;
       if (!name) return message(els.ticketMessage, "Please enter your name.", "error");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return message(els.ticketMessage, "Please enter a valid email.", "error");
+      if (!phone) return message(els.ticketMessage, "Please enter your phone number.", "error");
       if (previewMode) {
         message(els.ticketMessage, "Preview mode - checkout is disabled. Your selection: " + seats + " seat" + (seats === 1 ? "" : "s") + ".", "ok");
         return;
@@ -347,8 +348,10 @@
       message(els.micMessage, "", "");
       var performerName = document.getElementById("performerName").value.trim();
       var performerEmail = document.getElementById("performerEmail").value.trim();
+      var performerPhone = document.getElementById("performerPhone").value.trim();
       if (!performerName) return message(els.micMessage, "Please enter your performer name.", "error");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(performerEmail)) return message(els.micMessage, "Please enter a valid email.", "error");
+      if (!performerPhone) return message(els.micMessage, "Please enter your phone number.", "error");
       if (previewMode) {
         if (params.get("mic") === "error") {
           message(els.micMessage, "Preview mode - unable to save request.", "error");
@@ -365,7 +368,7 @@
         body:JSON.stringify(Object.assign({
           performerName: performerName,
           performerEmail: performerEmail,
-          performerPhone: document.getElementById("performerPhone").value.trim(),
+          performerPhone: performerPhone,
           actType: document.getElementById("actType").value.trim(),
           pieceTitle: document.getElementById("pieceTitle").value.trim(),
           requestedSlot: document.getElementById("requestedSlot").value.trim(),

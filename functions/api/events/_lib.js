@@ -1330,6 +1330,7 @@ export async function handleEventCheckout(request, env, slug) {
   if (!email || !isLikelyEmail(email)) {
     return errorResponse("A valid email is required.", 400);
   }
+  if (!phone) return errorResponse("Phone number is required.", 400);
   if (!Number.isFinite(seats) || seats < 1) {
     return errorResponse("Select at least one seat.", 400);
   }
@@ -1518,6 +1519,7 @@ export async function handleEventWaitlist(request, env, slug) {
   if (!email || !isLikelyEmail(email)) {
     return errorResponse("A valid email is required.", 400);
   }
+  if (!phone) return errorResponse("Phone number is required.", 400);
 
   try {
     const db = requireEventsDb(env);
@@ -1627,6 +1629,7 @@ export async function handleEventOpenMicSignup(request, env, slug) {
   if (!performerEmail || !isLikelyEmail(performerEmail)) {
     return errorResponse("A valid email is required.", 400);
   }
+  if (!performerPhone) return errorResponse("Phone number is required.", 400);
 
   try {
     const db = requireEventsDb(env);

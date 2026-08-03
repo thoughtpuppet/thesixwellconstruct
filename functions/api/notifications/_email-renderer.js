@@ -63,6 +63,35 @@ function htmlText(input) {
   return escapeEmailHtml(input).replace(/\n/g, "<br>");
 }
 
+function phoneHref(input, protocol = "tel") {
+  const digits = value(input).replace(/\D/g, "");
+  if (!["tel", "sms"].includes(protocol)) return "";
+  if (digits.length === 10) return `${protocol}:+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `${protocol}:+${digits}`;
+  return "";
+}
+
+function htmlContactText(input) {
+  const raw = value(input);
+  const phonePattern = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/g;
+  let rendered = "";
+  let cursor = 0;
+
+  for (const match of raw.matchAll(phonePattern)) {
+    const index = match.index ?? 0;
+    const context = raw.slice(Math.max(0, index - 12), index);
+    const protocol = /\btext\s*$/i.test(context) ? "sms" : "tel";
+    const href = phoneHref(match[0], protocol);
+    rendered += htmlText(raw.slice(cursor, index));
+    rendered += href
+      ? `<a href="${escapeEmailHtml(href)}" style="color:${SHARED.amber}!important;text-decoration:underline!important;">${htmlText(match[0])}</a>`
+      : htmlText(match[0]);
+    cursor = index + match[0].length;
+  }
+
+  return rendered + htmlText(raw.slice(cursor));
+}
+
 function compact(items) {
   return (Array.isArray(items) ? items : []).filter((item) => {
     if (typeof item === "string") return Boolean(value(item));
@@ -197,7 +226,7 @@ function renderNotice(notice, theme, design) {
       <tr>
         <td width="5" bgcolor="${theme.accentBright}" style="box-sizing:border-box;width:5px;min-width:5px;padding:0;${solidBackground(theme.accentBright)}font-size:0;line-height:0;">&nbsp;</td>
         <td bgcolor="${design.panel}" style="padding:16px 18px;${solidBackground(design.panel)}color:${design.supporting};font-family:Georgia,'Times New Roman',Times,serif;font-size:14px;line-height:1.65;">
-          ${gmailSafeText(lines.map(htmlText).join("<br><br>"), design.supporting)}
+          ${gmailSafeText(lines.map(htmlContactText).join("<br><br>"), design.supporting)}
         </td>
       </tr>
     </table>`;

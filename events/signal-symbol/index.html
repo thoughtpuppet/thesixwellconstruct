@@ -374,8 +374,8 @@
               <input type="email" id="email" name="email" autocomplete="email" required>
             </div>
             <div class="field">
-              <label for="phone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
-              <input type="tel" id="phone" name="phone" autocomplete="tel">
+              <label for="phone">Phone</label>
+              <input type="tel" id="phone" name="phone" autocomplete="tel" required>
             </div>
             <div class="field"><label for="ticketPreferredName">Preferred name (optional)</label><input id="ticketPreferredName" name="preferred_name" autocomplete="nickname"></div>
             <div class="field"><label for="ticketPronouns">Pronouns (optional)</label><input id="ticketPronouns" name="pronouns"></div>
@@ -409,8 +409,8 @@
                 <input type="email" id="waitEmail" name="email" autocomplete="email" required>
               </div>
               <div class="field">
-                <label for="waitPhone">Phone <span style="text-transform:none;letter-spacing:0;color:var(--text-muted);font-weight:400;">(optional)</span></label>
-                <input type="tel" id="waitPhone" name="phone" autocomplete="tel">
+                <label for="waitPhone">Phone</label>
+                <input type="tel" id="waitPhone" name="phone" autocomplete="tel" required>
               </div>
               <div class="field"><label for="waitPreferredName">Preferred name (optional)</label><input id="waitPreferredName" name="preferred_name" autocomplete="nickname"></div>
               <div class="field"><label for="waitPronouns">Pronouns (optional)</label><input id="waitPronouns" name="pronouns"></div>
@@ -634,6 +634,7 @@
       var gotcha = els.form.querySelector('[name="_gotcha"]').value;
       if (!name) return showError("Please enter your name.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError("Please enter a valid email.");
+      if (!phone) return showError("Please enter your phone number.");
 
       if (previewMode) {
         showError("Preview mode - checkout is disabled. Your selection: " + seats + " seat" + (seats === 1 ? "" : "s") + ".");
@@ -676,6 +677,7 @@
       var gotcha = els.waitlistForm.querySelector('[name="_gotcha"]').value;
       if (!name) return showWaitlistError("Please enter your name.");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showWaitlistError("Please enter a valid email.");
+      if (!phone) return showWaitlistError("Please enter your phone number.");
 
       if (previewMode) {
         showWaitlistSuccess("Preview mode - event update signup is disabled, but this is the saved state visitors will see.");

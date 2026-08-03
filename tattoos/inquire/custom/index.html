@@ -65,7 +65,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } .guide-stack { grid-template-columns:1fr; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .form-panel { padding:30px 0; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
+  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .field textarea.project-description { min-height:180px!important; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
 @media (max-width: 700px) {
   header.top {
     position: sticky;
@@ -118,7 +118,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field"><label for="firstName">First name <span class="required-mark">*</span></label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
             <div class="field"><label for="lastName">Last name <span class="required-mark">*</span></label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
             <div class="field"><label for="email">Email <span class="required-mark">*</span></label><input id="email" name="email" type="email" autocomplete="email" required></div>
-            <div class="field"><label for="phone">Phone (optional)</label><input id="phone" name="phone" autocomplete="tel"></div>
+            <div class="field"><label for="phone">Phone <span class="required-mark">*</span></label><input id="phone" name="phone" type="tel" autocomplete="tel" required></div>
             <div class="field"><label for="preferred_name">Preferred name (optional)</label><input id="preferred_name" name="preferred_name" autocomplete="nickname"></div>
             <div class="field"><label for="pronouns">Pronouns (optional)</label><input id="pronouns" name="pronouns"></div>
             <div class="field"><label for="instagram">Instagram (optional)</label><input id="instagram" name="instagram" placeholder="@"></div>
@@ -179,7 +179,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             </div>
             <div class="field full" id="placementPhotoField"><label for="placement_photo">Placement photo</label><input id="placement_photo" name="placement_photo" type="file" accept="image/png,image/jpeg,image/webp"><p class="file-note">Strongly recommended. A photo of the area where you want the tattoo helps with placement and scale; circle the desired location if possible.</p></div>
             <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
-            <div class="field full"><label for="message">Project notes <span class="required-mark">*</span></label><textarea id="message" name="message" required></textarea></div>
+            <div class="field full"><label for="message">Project description <span class="required-mark">*</span></label><textarea class="project-description" id="message" name="message" required></textarea></div>
           </div>
           <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older. <span class="required-mark">*</span></span></label>
           <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand this is an inquiry and does not guarantee an appointment.</span></label>

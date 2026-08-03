@@ -941,6 +941,7 @@ async function tattooReceiptSettings(env) {
   const fallback = {
     reviewTimeMessage: env.TATTOO_REVIEW_TIME_MESSAGE || DEFAULT_REVIEW_TIME_MESSAGE,
     supportEmail: env.NOTIFICATION_REPLY_TO || DEFAULT_REPLY_TO,
+    supportPhone: env.STUDIO_CONTACT_PHONE || "(770) 820-5800",
   };
   const db = notificationDb(env);
   if (!db) return fallback;
@@ -951,6 +952,7 @@ async function tattooReceiptSettings(env) {
     return {
       reviewTimeMessage: asString(row?.review_time_message) || fallback.reviewTimeMessage,
       supportEmail: asString(row?.support_email) || fallback.supportEmail,
+      supportPhone: fallback.supportPhone,
     };
   } catch {
     return fallback;
@@ -1158,7 +1160,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     : baseProfile;
   const constructIdentity = constructTheme === "tattoo" ? null : eventsEmailIdentity(env);
   const settings = constructIdentity
-    ? { reviewTimeMessage: DEFAULT_REVIEW_TIME_MESSAGE, supportEmail: constructIdentity.replyTo }
+    ? { reviewTimeMessage: DEFAULT_REVIEW_TIME_MESSAGE, supportEmail: constructIdentity.replyTo, supportPhone: env.STUDIO_CONTACT_PHONE || "(770) 820-5800" }
     : await tattooReceiptSettings(env);
   const reviewLine = type === "tattoo_special"
     ? "This is a request and a temporary hold, not a booked appointment. The appointment is confirmed only after Studio approval and successful deposit payment."
@@ -1187,6 +1189,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     next: profile.next,
     reviewLine,
     supportEmail: settings.supportEmail,
+    supportPhone: settings.supportPhone,
     briefUrl: normalized.briefUrl,
     briefLabel: normalized.briefLabel,
   });

@@ -94,7 +94,7 @@ const REQUIRED_FIELDS_BY_TYPE = {
     ["size", "Approximate size is required."],
     ["budget_range", "Budget range is required."],
     ["color_preference", "Color preference is required."],
-    ["message", "Project notes are required."],
+    ["message", "Project description is required."],
     ["review_consent", "Review consent is required.", "yes"],
   ],
   flash_claim: [
@@ -440,12 +440,16 @@ function validateSubmission(submission, payload) {
     return { error: "A valid email is required.", status: 400 };
   }
 
+  if (!submission.contact.phone) {
+    return { error: "Phone number is required.", status: 400 };
+  }
+
   if (TATTOO_SUBMISSION_TYPES.has(submission.type) && payload.age_confirmed !== "yes") {
     return { error: "You must confirm that you are 18 or older.", status: 400 };
   }
 
-  if (submission.type === "tattoo_inquiry" && !isAtLeastEighteen(payload.dob)) {
-    return { error: "Tattoo inquiries require a valid date of birth confirming age 18 or older.", status: 400 };
+  if (TATTOO_SUBMISSION_TYPES.has(submission.type) && !isAtLeastEighteen(payload.dob)) {
+    return { error: "Tattoo requests require a valid date of birth confirming age 18 or older.", status: 400 };
   }
 
   if (submission.type === "build_brief") {

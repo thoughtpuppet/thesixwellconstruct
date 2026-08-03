@@ -219,10 +219,15 @@ function migratedDatabase({ before = "" } = {}) {
 }
 
 function jsonRequest(path, payload, headers = {}) {
+  const publicContactPath = path === "/api/submissions"
+    || path === "/api/booking/public-session/checkout";
+  const requestPayload = publicContactPath && payload?.phone === undefined
+    ? { ...payload, phone: "404-555-0100" }
+    : payload;
   return new Request(`https://example.test${path}`, {
     method: "POST",
     headers: { "content-type": "application/json", ...headers },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(requestPayload),
   });
 }
 
@@ -240,7 +245,10 @@ function draftRequest(path, method = "GET", payload, token = "", headers = {}) {
 
 function multipartRequest(path, payload, files = []) {
   const form = new FormData();
-  for (const [key, value] of Object.entries(payload)) {
+  const requestPayload = path === "/api/submissions" && payload?.phone === undefined
+    ? { ...payload, phone: "404-555-0100" }
+    : payload;
+  for (const [key, value] of Object.entries(requestPayload)) {
     if (value !== undefined && value !== null) form.append(key, String(value));
   }
   for (const file of files) {
@@ -1048,6 +1056,7 @@ test("All tattoo project types require budget and canonical ranges remain accept
       type: "flash_claim",
       name: "Flash Budget",
       email: "flash-budget@example.test",
+      dob: "1990-01-01",
       age_confirmed: "yes",
       selected_flash: "placeholder-flash",
       flash_claim_acknowledged: "yes",
@@ -1057,6 +1066,7 @@ test("All tattoo project types require budget and canonical ranges remain accept
       type: "build_brief",
       name: "Build Budget",
       email: "build-budget@example.test",
+      dob: "1990-01-01",
       age_confirmed: "yes",
       placement: "Upper arm",
       design_intent: "A protected route.",
@@ -1067,6 +1077,7 @@ test("All tattoo project types require budget and canonical ranges remain accept
       type: "maze_design",
       name: "Maze Budget",
       email: "maze-budget@example.test",
+      dob: "1990-01-01",
       age_confirmed: "yes",
       maze_explanation: "A returning path.",
       review_consent: "yes",
@@ -1075,6 +1086,7 @@ test("All tattoo project types require budget and canonical ranges remain accept
       type: "special_project",
       name: "Special Budget",
       email: "special-budget@example.test",
+      dob: "1990-01-01",
       age_confirmed: "yes",
       project_title: "Mythic Body Studies",
       placement: "Back",
@@ -1397,6 +1409,7 @@ test("Build submissions require intent, snapshot stable published symbol IDs, st
     type: "build_brief",
     name: "Build Client",
     email: "build@example.test",
+    dob: "1990-01-01",
     age_confirmed: "yes",
     placement: "Upper arm",
     budget_range: "$500–$800",
@@ -1454,6 +1467,7 @@ test("Build submissions reject empty, duplicate, oversized, and unavailable symb
     type: "build_brief",
     name: "Build Boundary Client",
     email: "build-boundary@example.test",
+    dob: "1990-01-01",
     age_confirmed: "yes",
     placement: "Upper arm",
     budget_range: "$300–$500",
@@ -1590,6 +1604,7 @@ test("Build drafts hash resume tokens, autosync with revisions, email links, and
     firstName: "Draft",
     lastName: "Client",
     email: "draft@example.test",
+    dob: "1990-01-01",
     age_confirmed: "yes",
     placement: "Upper arm",
     budget_range: "$500–$800",
@@ -1785,6 +1800,7 @@ test("Maze submissions require generated artifacts and snapshot their wall and s
     type: "maze_design",
     name: "Maze Client",
     email: "maze@example.test",
+    dob: "1990-01-01",
     age_confirmed: "yes",
     budget_range: "$300–$500",
     maze_explanation: "A route through a protected threshold.",
@@ -1826,6 +1842,57 @@ test("Maze submissions require generated artifacts and snapshot their wall and s
   assert.equal(database.prepare("SELECT COUNT(*) count FROM maze_archive_entries WHERE submission_id=?").get(submissionId).count, 0);
   const ineligible = await handlePromoteMazeArchiveSubmission(adminJsonRequest(`/api/admin/submissions/${submissionId}/maze-archive/promote`, { title:"No Consent",altText:"A maze." }, "maze-test-admin"), env, submissionId);
   assert.equal(ineligible.status, 409);
+});
+
+test("every tattoo intake asks for date of birth alongside adult confirmation", () => {
+  const formPaths = [
+    ["tattoos", "inquire", "custom", "index.html"],
+    ["tattoos", "inquire", "consultation", "index.html"],
+    ["tattoos", "build", "index.html"],
+    ["tattoos", "build", "in-person", "index.html"],
+    ["tattoos", "build-managed-preview", "index.html"],
+    ["tattoos", "flash", "claim", "index.html"],
+    ["tattoos", "special-projects", "apply", "index.html"],
+    ["tattoos", "specials", "index.html"],
+  ];
+  const requiredDob = /<input(?=[^>]*name="dob")(?=[^>]*type="date")(?=[^>]*required)[^>]*>/;
+  for (const segments of formPaths) {
+    const source = readFileSync(join(ROOT, ...segments), "utf8");
+    assert.match(source, requiredDob, segments.join("/"));
+    assert.match(source, /name="(?:age_confirmed|ageConfirmed)"[^>]*required/, segments.join("/"));
+  }
+  const specials = readFileSync(join(ROOT, "tattoos", "specials", "index.html"), "utf8");
+  assert.match(specials, /name="participant2Dob"/);
+  assert.match(specials, /name="participant2AgeConfirmed"/);
+  const mazeSource = readFileSync(join(ROOT, "apps", "maze", "src", "App.tsx"), "utf8");
+  assert.match(mazeSource, /name="dob" type="date" autoComplete="bday" required/);
+  assert.match(mazeSource, /name="age_confirmed" value="yes" required/);
+  const submissionsApi = readFileSync(join(ROOT, "functions", "api", "submissions", "_lib.js"), "utf8");
+  const bookingApi = readFileSync(join(ROOT, "functions", "api", "booking", "_lib.js"), "utf8");
+  assert.match(submissionsApi, /TATTOO_SUBMISSION_TYPES\.has\(submission\.type\) && !isAtLeastEighteen\(payload\.dob\)/);
+  assert.match(bookingApi, /!publicClientIsAtLeastEighteen\(client\.dob\)/);
+});
+
+test("tattoo intake APIs reject missing and underage birth dates even when adult confirmation is checked", async () => {
+  const env = { SUBMISSIONS_DB: new LocalD1(migratedDatabase()) };
+  const base = {
+    type: "build_brief",
+    name: "Age Verification Client",
+    email: "age-verification@example.test",
+    phone: "4045550100",
+    age_confirmed: "yes",
+    placement: "Upper arm",
+    budget_range: "$300â€“$500",
+    design_intent: "A protected route.",
+    symbol_ids: ["maze-path"],
+    review_consent: "yes",
+  };
+  const missing = await handleCreateSubmission(jsonRequest("/api/submissions", base), env);
+  assert.equal(missing.status, 400);
+  assert.match((await missing.json()).error, /date of birth.*18 or older/i);
+  const underage = await handleCreateSubmission(jsonRequest("/api/submissions", { ...base, dob: "2010-01-01" }), env);
+  assert.equal(underage.status, 400);
+  assert.match((await underage.json()).error, /date of birth.*18 or older/i);
 });
 
 test("Tattoo Specials public surface distinguishes scheduled, open, and closed sales windows", async () => {
@@ -1930,6 +1997,7 @@ test("Studio creates campaigns and individual specials while the published campa
       name: "Campaign Client",
       email: "campaign@example.com",
       phone: "4045550123",
+      dob: "1990-01-01",
       ageConfirmed: "yes",
       policyAccepted: "yes",
       transactionalMessagesAccepted: "yes",
@@ -1970,6 +2038,9 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.match(script, /There are no special available at this time\./);
   assert.match(script, /Check back another time or <a href="\$\{escape\(payload\.normalInquiryUrl\)\}">submit a normal tattoo request<\/a>\./);
   assert.match(page, /id="specialsSubmit">Continue to Select Time Slot<\/button>/);
+  assert.match(page, />I agree to receive transactional email and text messages about this Tattoo Special request\.<\/span>/);
+  assert.match(page, />The studio stores this person’s details, but automated emails and texts go only to the primary participant\.<\/p>/);
+  assert.doesNotMatch(page, /request, approval, deposit, and appointment|Message and data rates may apply|Reply STOP to opt out/i);
   assert.doesNotMatch(page, /specials-booking-cue|Book Your Appointment/);
   assert.doesNotMatch(script, /specialsCampaign|campaign\.hidden/);
   assert.doesNotMatch(readFileSync(join(ROOT, "css", "tattoo-specials.css"), "utf8"), /specials-booking-cue/);
@@ -2089,6 +2160,15 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     ],
   );
 
+  const underageResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-palm", variantId: "special-palm-v3-standard", idempotencyKey: "special-underage",
+    name: "Underage Client", email: "underage@example.com", phone: "4045550197", dob: "2010-01-01",
+    ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
+    placement: "Upper arm", projectDetails: "This request must not pass age verification.",
+  }), env);
+  assert.equal(underageResponse.status, 400);
+  assert.match((await underageResponse.json()).error, /date of birth.*at least 18/i);
+
   const requestResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-palm",
     variantId: "special-palm-v3-standard",
@@ -2096,6 +2176,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     name: "Primary Person",
     email: "primary@example.com",
     phone: "4045550101",
+    dob: "1990-01-01",
     ageConfirmed: "yes",
     policyAccepted: "yes",
     transactionalMessagesAccepted: "yes",
@@ -2118,6 +2199,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const replayResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-palm", variantId: "special-palm-v3-standard", idempotencyKey: "special-review-palm-1",
     name: "Primary Person", email: "primary@example.com", phone: "4045550101",
+    dob: "1990-01-01",
     ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
     placement: "Upper arm", projectDetails: "Retry.",
   }), env);
@@ -2188,6 +2270,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const competingResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-palm", variantId: "special-palm-v3-standard", idempotencyKey: "special-review-palm-overlap",
     name: "Competing Client", email: "competing@example.com", phone: "4045550198",
+    dob: "1990-01-01",
     ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
     placement: "Forearm", projectDetails: "A second hand-sized request.",
   }), env);
@@ -2378,12 +2461,27 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(hold.appointment.id).status, "payment_attention");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='tattoo_special_late_payment_attention'").get(hold.appointment.id).count, 1);
 
+  const onePersonTwoSmall = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
+    offerId: "special-two-small",
+    variantId: "special-two-small-v2-standard",
+    idempotencyKey: "special-two-tattoos-one-person",
+    name: "One Recipient", email: "one-recipient@example.com", phone: "4045550119",
+    dob: "1990-01-01",
+    ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
+    placement: "Left and right forearms", projectDetails: "Both small tattoos are for the primary purchaser.",
+  }), env);
+  assert.equal(onePersonTwoSmall.status, 201);
+  const onePersonSubmission = await onePersonTwoSmall.json();
+  const onePersonPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(onePersonSubmission.submissionId).payload_json);
+  assert.equal(onePersonPayload.participants.length, 1);
+
   const invalidSecondEmail = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-two-small",
     variantId: "special-two-small-v2-standard",
     idempotencyKey: "special-two-participants-invalid-email",
     name: "Primary Adult", email: "primary-adult@example.com", phone: "4045550120",
     participant2Name: "Second Adult", participant2Email: "second-adult@example", participant2Phone: "4045550121",
+    dob: "1990-01-01", participant2Dob: "1990-01-01",
     ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
     placement: "Two placements", projectDetails: "One small tattoo for each adult.",
   }), env);
@@ -2399,6 +2497,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     idempotencyKey: "special-two-participants-1",
     name: "Primary Adult", email: "primary-adult@example.com", phone: "4045550120",
     participant2Name: "Second Adult", participant2Email: "second-adult@example.com", participant2Phone: "4045550121",
+    dob: "1990-01-01", participant2Dob: "1990-01-01",
     ageConfirmed: "yes", participant2AgeConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
     placement: "Two placements", projectDetails: "One small tattoo for each adult.",
   }), env);
@@ -2446,7 +2545,7 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
     .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 86400000).toISOString());
   const base = {
     offerId: "special-script", variantId: "special-script-v2-color", name: "Script Client",
-    email: "script@example.com", phone: "4045550110", ageConfirmed: "yes", policyAccepted: "yes",
+    email: "script@example.com", phone: "4045550110", dob: "1990-01-01", ageConfirmed: "yes", policyAccepted: "yes",
     transactionalMessagesAccepted: "yes",
     placement: "Forearm", projectDetails: "Fine-line script with a clean, readable layout.",
   };
@@ -2537,7 +2636,7 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
     .run(new Date(Date.now() - 3600000).toISOString(), new Date(Date.now() + 3600000).toISOString());
   const received = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-script", variantId: "special-script-v2-bg", idempotencyKey: "script-cutoff-review",
-    name: "Cutoff Client", email: "cutoff@example.com", phone: "4045550199", ageConfirmed: "yes", policyAccepted: "yes",
+    name: "Cutoff Client", email: "cutoff@example.com", phone: "4045550199", dob: "1990-01-01", ageConfirmed: "yes", policyAccepted: "yes",
     transactionalMessagesAccepted: "yes",
     placement: "Forearm", projectDetails: "Simple black script.", scriptText: "Keep going",
   }), env);
@@ -2764,7 +2863,7 @@ test("Maze Archive consent is explicit, separately scoped, versioned, and idempo
   const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSION_FILES: bucket };
   const base = {
     type: "maze_design", firstName: "Jordan", lastName: "Rivera", email: "jordan@example.test",
-    age_confirmed: "yes", budget_range: "Up to $300", maze_explanation: "A private path through grief.", review_consent: "yes",
+    dob: "1990-01-01", age_confirmed: "yes", budget_range: "Up to $300", maze_explanation: "A private path through grief.", review_consent: "yes",
   };
   const files = [
     { fieldName: "maze_image", fileName: "maze.png", contentType: "image/png", body: new Uint8Array([137,80,78,71,13,10,26,10]) },
@@ -2806,7 +2905,7 @@ test("Maze Archive promotion copies one presentation PNG, stays private until ca
   const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSION_FILES: bucket, SUBMISSIONS_ADMIN_TOKEN: token };
   const request = multipartRequest("/api/submissions", {
     type:"maze_design",firstName:"Avery",lastName:"Stone",email:"avery@example.test",phone:"555-0100",
-    placement:"forearm",budget_range:"Up to $300",maze_explanation:"This sentence may be considered.",review_consent:"yes",age_confirmed:"yes",
+    placement:"forearm",dob:"1990-01-01",budget_range:"Up to $300",maze_explanation:"This sentence may be considered.",review_consent:"yes",age_confirmed:"yes",
     maze_archive_opt_in:"yes",maze_archive_attribution:"display_name",maze_archive_display_name:"A. Stone",maze_archive_include_explanation:"yes",
   }, [
     { fieldName:"maze_image",fileName:"maze.png",contentType:"image/png",body:new Uint8Array([137,80,78,71,13,10,26,10]) },
@@ -2952,6 +3051,18 @@ test("Custom submissions reject underage clients and dates inside the managed le
   assert.equal(tooSoon.status, 400);
   const body = await tooSoon.json();
   assert.equal(body.code, "REQUESTED_DATE_TOO_SOON");
+});
+
+test("public submissions reject a missing phone number", async () => {
+  const database = migratedDatabase();
+  const env = { SUBMISSIONS_DB: new LocalD1(database) };
+  const response = await handleCreateSubmission(
+    jsonRequest("/api/submissions", validCustom({ phone: "" })),
+    env,
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "Phone number is required.");
 });
 
 test("preview and direct-session spoofing cannot write through the generic submission endpoint", async () => {
@@ -4014,6 +4125,7 @@ test("direct Build checkout atomically creates the correct server-owned lane and
     email: "build-checkout@example.test",
     direction: "A symbolic construction.",
     understand: "yes",
+    dob: "1990-01-01",
     age_confirmed: "yes",
     source_path: "/booking/studio/",
     subject: "Misleading client-controlled lane",
@@ -4662,6 +4774,8 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   assert.match(specialReceiptPreview.text, /Your request has been received\./);
   assert.doesNotMatch(specialReceiptPreview.html, /Your Tattoo Special request has been received\./);
   assert.doesNotMatch(specialReceiptPreview.text, /Your Tattoo Special request has been received\./);
+  assert.match(specialReceiptPreview.html, /Questions or corrections\? Email saisolehman@artpilltattoohouse\.com, call <a href="tel:\+17708205800"[^>]*>\(770\) 820-5800<\/a>, or text <a href="sms:\+17708205800"[^>]*>\(770\) 820-5800<\/a>, and include your submission reference\./);
+  assert.match(specialReceiptPreview.text, /Questions or corrections\? Email saisolehman@artpilltattoohouse\.com, call \(770\) 820-5800, or text \(770\) 820-5800, and include your submission reference\./);
   assert.match(renderClientEmailPreview("submission_received", "art_acquisition").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_visit").html, /#0039BD/);
   assert.match(renderClientEmailPreview("studio_booking_confirmed", "studio_space").html, /#005D25/);
@@ -5942,6 +6056,7 @@ test("the first Flash approval reserves the managed design and a competing appro
     type: "flash_claim",
     name,
     email,
+    dob: "1990-01-01",
     age_confirmed: "yes",
     selected_flash: flash.id,
     placement: "Forearm",
@@ -6010,6 +6125,7 @@ test("managed sheet claims approve subsets atomically and place only approved de
     type: "flash_claim",
     name,
     email,
+    dob: "1990-01-01",
     age_confirmed: "yes",
     selected_flash: flash.id,
     sheet_design_selections_json: selections,
@@ -6214,6 +6330,7 @@ test("Flash claim acknowledgement and browser retry keys are enforced end to end
     type: "flash_claim",
     name: "Missing Acknowledgement",
     email: "flash@example.test",
+    dob: "1990-01-01",
     age_confirmed: "yes",
     selected_flash: flash.id,
     placement: "Forearm",
@@ -6565,6 +6682,7 @@ test("direct public checkout is resumable and idempotent without creating a seco
     email: "repeat@example.test",
     direction: "A stable Build direction.",
     understand: "yes",
+    dob: "1990-01-01",
     age_confirmed: "yes",
   };
   const makeRequest = () => jsonRequest(
@@ -6679,6 +6797,7 @@ test("concurrent public checkout attempts cannot overbook a capacity-one window"
       email: `concurrent-${suffix}@example.test`,
       direction: `Direction ${suffix}`,
       understand: "yes",
+      dob: "1990-01-01",
       age_confirmed: "yes",
     },
     { "idempotency-key": `concurrent-key-${suffix}` },
