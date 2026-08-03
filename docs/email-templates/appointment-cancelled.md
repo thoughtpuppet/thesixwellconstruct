@@ -71,6 +71,6 @@ and the "reservation fees" wording for `consult_in_person`,
 `consult_virtual`, and `build_in_person`. The rebook link points to
 `/tattoos/build/in-person/?rebook=1` for build sessions and
 `/tattoos/inquire/consultation/?rebook=1` for everything else.
-For Extended Day, identify the cancelled appointment as an optional 8-10 hour
-session that reserved a 10-hour appointment block with a $200 Extended Day
+For Extended Day, identify the cancelled appointment as an optional 8-12 hour
+session that reserved a 12-hour appointment block with a $200 Extended Day
 fee. Do not imply that the later $200 fee was collected through Square.

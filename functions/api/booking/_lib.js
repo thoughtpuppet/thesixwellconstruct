@@ -71,6 +71,12 @@ const TATTOO_DAY_SESSION_LABELS = Object.freeze({
   tattoo_full: "Full Day Session",
   tattoo_extended: "Extended Day Session",
 });
+const TATTOO_DAY_SESSION_DURATION_LABELS = Object.freeze({
+  tattoo_quarter: "2 hours",
+  tattoo_half: "4 hours",
+  tattoo_full: "8 hours",
+  tattoo_extended: "8-12 hours",
+});
 const EXTENDED_DAY_BOOKING_TYPE_ID = "tattoo_extended";
 
 // Consultation and build-session bookings charge their full fee up front, not a deposit toward a future session.
@@ -251,7 +257,7 @@ function normalizeBookingType(row) {
     sessionFeeCents: Number(row.session_fee_cents ?? row.sessionFeeCents ?? 0),
     sessionFeeLabel: formatMoney(Number(row.session_fee_cents ?? row.sessionFeeCents ?? 0), row.currency || "USD"),
     durationRangeLabel: row.id === EXTENDED_DAY_BOOKING_TYPE_ID
-      ? "8-10 hours"
+      ? "8-12 hours"
       : formatDurationLabel(durationMinutes),
   };
 }
@@ -593,7 +599,9 @@ function addMinutes(iso, minutes) {
 
 function directInviteSessionNote(bookingTypeId) {
   const label = TATTOO_DAY_SESSION_LABELS[bookingTypeId] || "selected session";
-  return `The composition is planned for a ${label}.`;
+  const duration = TATTOO_DAY_SESSION_DURATION_LABELS[bookingTypeId] || "";
+  const article = bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID ? "an" : "a";
+  return `The composition is planned for ${article} ${label}${duration ? ` (${duration})` : ""}.`;
 }
 
 function normalizeSessionEstimateCopy(value) {
@@ -1498,10 +1506,10 @@ async function ensureAvailable(db, windowId, bookingTypeId, excludeAppointmentId
     bookingTypeId === EXTENDED_DAY_BOOKING_TYPE_ID
     && (
       window.booking_type_id !== EXTENDED_DAY_BOOKING_TYPE_ID
-      || new Date(window.end_at).getTime() - new Date(window.start_at).getTime() !== 600 * 60 * 1000
+      || new Date(window.end_at).getTime() - new Date(window.start_at).getTime() !== 720 * 60 * 1000
     )
   ) {
-    return { error: "Extended Day requires a dedicated 10-hour availability window." };
+    return { error: "Extended Day requires a dedicated 12-hour availability window." };
   }
 
   const countRow = await db
@@ -8042,9 +8050,9 @@ export async function handleAdminCreateAvailability(request, env) {
   if (
     !body.isBlackout
     && asString(body.bookingTypeId) === EXTENDED_DAY_BOOKING_TYPE_ID
-    && new Date(endAt).getTime() - new Date(startAt).getTime() !== 600 * 60 * 1000
+    && new Date(endAt).getTime() - new Date(startAt).getTime() !== 720 * 60 * 1000
   ) {
-    return errorResponse("Extended Day availability must reserve exactly 10 hours.", 400);
+    return errorResponse("Extended Day availability must reserve exactly 12 hours.", 400);
   }
 
   try {
@@ -8177,9 +8185,9 @@ export async function handleAdminUpdateAvailability(request, env, id) {
     if (
       !next.is_blackout
       && next.booking_type_id === EXTENDED_DAY_BOOKING_TYPE_ID
-      && new Date(next.end_at).getTime() - new Date(next.start_at).getTime() !== 600 * 60 * 1000
+      && new Date(next.end_at).getTime() - new Date(next.start_at).getTime() !== 720 * 60 * 1000
     ) {
-      return errorResponse("Extended Day availability must reserve exactly 10 hours.", 400);
+      return errorResponse("Extended Day availability must reserve exactly 12 hours.", 400);
     }
     if (!next.is_blackout && next.active) {
       const existing = await db

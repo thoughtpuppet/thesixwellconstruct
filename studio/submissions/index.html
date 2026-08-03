@@ -175,6 +175,10 @@
   .booking-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
   .assist-panel { border:5px solid var(--ring-faint); padding:14px; margin-top:16px; display:grid; gap:10px; }
   .assist-panel textarea { min-height:112px; }
+  .text-template-editor { border:5px solid var(--ring-faint); padding:14px; display:grid; gap:12px; margin-top:6px; min-width:0; max-width:100%; }
+  .text-template-editor-grid { display:grid; grid-template-columns:minmax(180px,.65fr) minmax(0,1.35fr); gap:12px; align-items:start; min-width:0; }
+  .text-template-editor-grid > label,.text-template-editor select,.text-template-editor textarea { min-width:0; max-width:100%; }
+  .text-template-editor-preview { border:5px solid var(--ring-faint); padding:12px; color:var(--muted); line-height:1.6; overflow-wrap:anywhere; min-width:0; max-width:100%; }
   .session-plan-editor { border:5px solid rgba(110,4,4,.46); padding:16px; margin-top:18px; display:grid; gap:14px; }
   .session-plan-editor h3 { margin:0; color:var(--accent); font-family:var(--sans); font-size:16px; text-transform:uppercase; }
   .session-plan-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
@@ -295,6 +299,7 @@
   .token-card h2 { font-size:22px; }
   .hidden { display:none; }
   .next-action { display:inline-block; padding:3px 8px; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; border:3px solid; }
+  .submission-progress { display:flex; flex-wrap:wrap; gap:6px; }
   .na-needs-review { border-color:rgba(252,184,103,0.5); color:var(--accent); }
   .na-no-link { border-color:rgba(85,186,90,0.5); color:#55BA5A; }
   .na-link-sent { border-color:rgba(85,186,90,0.72); color:#55BA5A; }
@@ -469,6 +474,7 @@
     .tattoo-settings-grid { grid-template-columns:1fr; }
     .tattoo-settings-row,
     .tattoo-settings-row.special { grid-template-columns:1fr; }
+    .text-template-editor-grid { grid-template-columns:1fr; }
     .tattoo-specials-settings,
     .tattoo-special-offer__grid { grid-template-columns:minmax(0,1fr); }
   }
@@ -547,6 +553,7 @@
 <script src="/studio/analytics.js?v=analytics-url-clean"></script>
 <script src="/studio/resumable-media-upload.js?v=1"></script>
 <script src="/studio/portfolio-batch-organizer.js?v=1"></script>
+<script src="/js/manual-text-assist.js?v=1"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -579,7 +586,7 @@
   const AVAILABILITY_CONFIGS = {
     tattoo: {
       groups: [
-        { category: "tattooing", label: "Tattooing Hours", note: "Applies to Quarter, Half, Full, and Extended Day sessions. Extended Day appears only where a complete 10-hour block fits.", containerId: "weeklyRulesTattooing" },
+        { category: "tattooing", label: "Tattooing Hours", note: "Applies to Quarter, Half, Full, and Extended Day sessions. Extended Day appears only where a complete 12-hour block fits.", containerId: "weeklyRulesTattooing" },
         { category: "consultation", label: "Consultation Hours", note: "Applies to in-person and virtual consultations, and in-person build sessions.", containerId: "weeklyRulesConsultation" },
       ],
       sessionTypeOptions: [
@@ -587,10 +594,10 @@
         ["consult_in_person", "In-Person Consultation"],
         ["consult_virtual", "Virtual Consultation"],
         ["build_in_person", "In-Person Build Session"],
-        ["tattoo_quarter", "Quarter Day Session"],
-        ["tattoo_half", "Half Day Session"],
-        ["tattoo_full", "Full Day Session"],
-        ["tattoo_extended", "Extended Day Session (10-hour block)"],
+        ["tattoo_quarter", "Quarter Day Session (2 hours)"],
+        ["tattoo_half", "Half Day Session (4 hours)"],
+        ["tattoo_full", "Full Day Session (8 hours)"],
+        ["tattoo_extended", "Extended Day Session (8-12 hours / 12-hour block)"],
       ],
       bookingTypeIds: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended", "consult_in_person", "consult_virtual", "build_in_person"],
       walkInPlaceholder: "Small flash, build consults, or studio note",
@@ -636,16 +643,16 @@
   const FULL_PAYMENT_BOOKING_TYPE_IDS = ["consult_in_person", "consult_virtual", "build_in_person"];
   const PRIVATE_BOOKING_TYPE_OPTIONS = [
     ["consult_in_person", "In-Person Consultation"],
-    ["tattoo_quarter", "Quarter Day Session"],
-    ["tattoo_half", "Half Day Session"],
-    ["tattoo_full", "Full Day Session"],
-    ["tattoo_extended", "Extended Day Session"],
+    ["tattoo_quarter", "Quarter Day Session (2 hours)"],
+    ["tattoo_half", "Half Day Session (4 hours)"],
+    ["tattoo_full", "Full Day Session (8 hours)"],
+    ["tattoo_extended", "Extended Day Session (8-12 hours)"],
   ];
   const DIRECT_INVITE_SESSION_NOTES = {
-    tattoo_quarter: "The composition is planned for a Quarter Day Session.",
-    tattoo_half: "The composition is planned for a Half Day Session.",
-    tattoo_full: "The composition is planned for a Full Day Session.",
-    tattoo_extended: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
+    tattoo_quarter: "The composition is planned for a Quarter Day Session (2 hours).",
+    tattoo_half: "The composition is planned for a Half Day Session (4 hours).",
+    tattoo_full: "The composition is planned for a Full Day Session (8 hours).",
+    tattoo_extended: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.",
   };
   const homeCalendarPreview = new URLSearchParams(window.location.search).get("preview") === "1";
   const directInvitePreview = new URLSearchParams(window.location.search).get("preview") === "direct-invite";
@@ -674,6 +681,13 @@
   let portfolioBatchUploading = false;
   let tattooSettings = { settings: {}, rateCards: [], specialProjects: [], displayedHours: "" };
   let tattooSpecials = { settings: {}, offers: [], media: [], readiness: {} };
+  let manualTextTemplates = Object.fromEntries(
+    (window.ManualTextAssist?.DEFAULT_TEMPLATES || []).map((template) => [template.key, { ...template }])
+  );
+  let manualTextTemplatesLoaded = false;
+  let textAssistDirty = false;
+  let textAssistDraft = "";
+  let textAssistSubmissionId = "";
   const tattooSessionPlans = new Map();
   const sessionEstimateCopyFields = [
     ["sectionHeading", "Section heading", "input"],
@@ -938,10 +952,34 @@
     if (s === "declined") return `<span class="next-action na-declined">Declined</span>`;
     if (s === "archived") return `<span class="next-action na-archived">Archived</span>`;
     if (s === "booked") return `<span class="next-action na-booked">Booked</span>`;
-    if (s === "approved" && hasUrl) return `<span class="next-action na-link-sent">Link Sent</span>`;
+    if (s === "approved" && hasUrl) return `<span class="next-action na-link-sent">Booking Link Ready</span>`;
     if (s === "approved" && !hasUrl) return `<span class="next-action na-no-link">Approved — No Link</span>`;
     if (s === "reviewing") return `<span class="next-action na-needs-review">In Review</span>`;
     return `<span class="next-action na-needs-review">Needs Review</span>`;
+  }
+
+  function submissionProgressBadges(submission) {
+    const badges = [];
+    if (submission.clientNotificationStatus === "sent") {
+      badges.push('<span class="next-action na-link-sent">Notification sent</span>');
+    } else if (submission.clientNotificationStatus === "failed") {
+      badges.push('<span class="next-action na-email-warn">Notification failed</span>');
+    }
+    if (submission.depositPaymentStatus === "paid") {
+      badges.push('<span class="next-action na-no-link">Deposit paid</span>');
+    } else if (submission.depositPaymentStatus === "paid_attention") {
+      badges.push('<span class="next-action na-email-warn">Deposit paid - attention needed</span>');
+    } else if (submission.depositPaymentStatus === "pending") {
+      badges.push('<span class="next-action na-deposit-pending">Deposit pending</span>');
+    }
+    return badges.length ? `<span class="submission-progress">${badges.join("")}</span>` : "";
+  }
+
+  function communicationStateLabel(submission) {
+    if (submission.clientNotificationStatus === "sent") return "Notification sent";
+    if (submission.clientNotificationStatus === "failed") return "Failed - Retry available";
+    if (submission.clientNotificationStatus === "pending") return "Sending";
+    return ["approved", "declined"].includes(submission.status) ? "Unsent" : "No recorded decision";
   }
 
   function requiresInPersonConsult(submission) {
@@ -1372,11 +1410,47 @@
     try {
       const payload = await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}/tokens`);
       const tokens = payload.tokens || [];
+      const submission = submissions.find((item) => item.id === submissionId);
+      const appointment = latestAppointmentFor(submissionId);
+      const active = tokens.find((t) => t.state === "active");
+      if (submission?.type === "tattoo_special" && submission.status === "approved") {
+        const checkoutDeadline = appointment?.paymentDueAt || appointment?.holdExpiresAt || "";
+        const checkoutDeadlineMs = checkoutDeadline ? new Date(checkoutDeadline).getTime() : NaN;
+        const checkoutStillOpen = appointmentIsPending(appointment)
+          && appointment?.holdState === "active"
+          && (!Number.isFinite(checkoutDeadlineMs) || checkoutDeadlineMs > Date.now())
+          && Boolean(appointment?.squareCheckoutUrl);
+        const clientControlsEnabled = Boolean(active);
+        ["previewBookingBtn", "copyBookingBtn", "revokeBookingBtn"].forEach((id) => {
+          const control = document.getElementById(id);
+          if (control) control.disabled = !clientControlsEnabled;
+        });
+        if (active) {
+          const activeUntil = checkoutStillOpen ? checkoutDeadline : active.expiresAt;
+          const detail = checkoutStillOpen
+            ? `Square checkout and client access are active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}.`
+            : `Client access is active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}; the client can choose a new available time before paying.`;
+          container.innerHTML = `<strong>Deposit link active</strong><br>${escapeHtml(detail)}`;
+          container.style.color = "var(--accent)";
+          return;
+        }
+        const salesClosesAt = submission.payload?.sales_closes_at || submission.payload?.salesClosesAt || "";
+        const salesClosed = salesClosesAt && new Date(salesClosesAt).getTime() <= Date.now();
+        const priorExpiry = checkoutDeadline || tokens.find((token) => token.expiresAt)?.expiresAt || "";
+        const stateLabel = checkoutStillOpen ? "Deposit link needs repair" : "Deposit link expired";
+        const detail = checkoutStillOpen
+          ? `The Square checkout remains active${checkoutDeadline ? ` until ${formatDate(checkoutDeadline)}` : ""}, but the client-facing link is not active.`
+          : `Client access is no longer active${priorExpiry ? ` as of ${formatDate(priorExpiry)}` : ""}. Reopening creates fresh access so the client can choose an available time.`;
+        container.innerHTML = `<strong>${stateLabel}</strong><br>${escapeHtml(detail)}${salesClosed
+          ? `<br>The Tattoo Special sales window has closed, so this link cannot be reopened.`
+          : `<div class="booking-actions" style="margin-top:8px;"><button class="button" type="button" data-reopen-special-deposit="${escapeHtml(submissionId)}" data-special-deposit-mode="${checkoutStillOpen ? "repair" : "reopen"}">${checkoutStillOpen ? "Repair Deposit Link" : "Reopen Deposit Link"}</button></div>`}`;
+        container.style.color = salesClosed ? "var(--dim)" : "var(--signal)";
+        return;
+      }
       if (!tokens.length) {
         container.textContent = "No tokens generated";
         return;
       }
-      const active = tokens.find((t) => t.state === "active");
       const counts = tokens.reduce((acc, t) => { acc[t.state] = (acc[t.state] || 0) + 1; return acc; }, {});
       const parts = [];
       if (active) parts.push(`Active ${active.purpose ? `${titleize(active.purpose)} ` : ""}token${active.expiresAt ? ` · expires ${formatDate(active.expiresAt)}` : ""}`);
@@ -1573,6 +1647,24 @@
     activeAppointmentId = id;
     statusValue = "";
     typeValue = "";
+    selectedEventSlug = "";
+    renderActiveTab();
+  }
+
+  function openAppointment(id) {
+    const appointment = appointments.find((item) => item.id === id);
+    if (!appointment) return;
+    if (isStudioAppointment(appointment)) {
+      openStudioAppointment(id);
+      return;
+    }
+    activeTab = "tattoo";
+    subView = "appointments";
+    activeId = "";
+    activeAppointmentId = id;
+    statusValue = "";
+    typeValue = "";
+    selectedCalendarDay = "";
     selectedEventSlug = "";
     renderActiveTab();
   }
@@ -2922,10 +3014,10 @@
           <fieldset class="direct-invite-types" data-direct-invite-types="tattoo">
             <legend>Session type</legend>
             <div class="direct-invite-type-grid">
-              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Day Session</span></label>
-              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Day Session</span></label>
-              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Day Session</span></label>
-              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_extended"><span>Extended Day Session (8-10 hours)</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_quarter" checked><span>Quarter Day Session (2 hours)</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_half"><span>Half Day Session (4 hours)</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_full"><span>Full Day Session (8 hours)</span></label>
+              <label class="check"><input type="radio" name="tattooBookingType" value="tattoo_extended"><span>Extended Day Session (8-12 hours)</span></label>
             </div>
             <label class="field">Session plan wording <span class="contact">(client-facing)</span>
               <textarea name="clientEstimateNote" maxlength="5000" rows="4">${escapeHtml(DIRECT_INVITE_SESSION_NOTES.tattoo_quarter)}</textarea>
@@ -3478,7 +3570,10 @@
 
   function renderStudioAppointmentDetail(appointment) {
     const isArtVisit = activeTab === "art";
-    const bookingLabel = isArtVisit ? "Open Studio Visit" : "Room Booking";
+    const isTattooAppointment = activeTab === "tattoo";
+    const bookingLabel = isTattooAppointment
+      ? (appointment?.isTattooSpecial ? "Tattoo Special" : "Tattoo Appointment")
+      : isArtVisit ? "Open Studio Visit" : "Room Booking";
     if (!appointment) {
       detailEl.innerHTML = `<p class="empty">Select a ${bookingLabel.toLowerCase()} to manage details.</p>`;
       return;
@@ -3492,7 +3587,9 @@
     const checkoutHref = appointment.squareCheckoutUrl || "";
     const sourceLabel = related
       ? `Linked ${bookingLabel.toLowerCase()} request`
-      : `${bookingLabel} / direct calendar booking`;
+      : appointment.submissionId
+        ? `${bookingLabel} / request no longer available`
+        : `${bookingLabel} / direct calendar booking`;
     const contactName = appointment.clientName || related?.contactName || "Unnamed";
     const contactEmail = appointment.clientEmail || related?.contactEmail || "";
     const contactPhone = appointment.clientPhone || related?.contactPhone || "";
@@ -3508,6 +3605,7 @@
           ${escapeHtml(formatDate(appointment.startAt))}${appointment.endAt ? ` - ${escapeHtml(formatDate(appointment.endAt))}` : ""}
         </p>
         <div class="booking-actions">
+          ${isTattooAppointment ? '<button class="button" type="button" data-back-appointments>Back to Appointments</button>' : ""}
           ${calendarHref ? `<a class="button" href="${escapeHtml(calendarHref)}" target="_blank" rel="noopener noreferrer">Add to Calendar</a>` : ""}
           ${calendarHref ? `<button class="button" type="button" data-copy-calendar="${escapeHtml(calendarHref)}">Copy Calendar Link</button>` : ""}
           ${checkoutHref ? `<a class="button" href="${escapeHtml(checkoutHref)}" target="_blank" rel="noopener noreferrer">Open Square Checkout</a>` : ""}
@@ -3829,6 +3927,7 @@
           <span class="pill">${escapeHtml(submission.status)}</span>
         </span>
         <span class="meta">${escapeHtml(titleize(displayType))} / ${escapeHtml(submission.contactEmail || "")}${submission.tattooStage ? ` / ${escapeHtml(titleize(submission.tattooStage))}` : ""}</span>
+        <span data-submission-progress="${escapeHtml(submission.id)}">${submissionProgressBadges(submission)}</span>
         <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
           ${nextActionBadge(submission)}
@@ -4141,14 +4240,43 @@ ${meetingLines}
     return `sms:${source.startsWith("+") ? "+" : ""}${digits}`;
   }
 
-  function textReminderCopy(submission) {
-    const name = submission.contactName || payloadValue(submission, "name") || "there";
-    if (submission.type === "event_rsvp") {
-      const eventTitle = payloadValue(submission, "event_title") || "the event";
-      if (submission.status === "booked") {
-        return `Hi ${name}, this is the six.well construct. Your spot for ${eventTitle} is confirmed and paid. See you there — reply here if anything changes.`;
+  function manualTextTemplateList() {
+    return Object.values(manualTextTemplates);
+  }
+
+  async function loadManualTextTemplates(force = false) {
+    if (manualTextTemplatesLoaded && !force) return;
+    try {
+      const payload = await api("/api/admin/communications/text-templates");
+      for (const template of payload.templates || []) {
+        if (template?.key) manualTextTemplates[template.key] = { ...template };
       }
-      return `Hi ${name}, this is the six.well construct. We saw your RSVP for ${eventTitle}. Your seat is held once Square payment clears — reply here if you need a hand.`;
+      manualTextTemplatesLoaded = true;
+    } catch {
+      manualTextTemplatesLoaded = false;
+    }
+  }
+
+  function textReminderContext(submission) {
+    const contactName = String(submission.contactName || payloadValue(submission, "name") || "").trim();
+    const firstName = contactName ? contactName.split(/\s+/)[0] : "there";
+    const baseValues = {
+      greeting: window.ManualTextAssist.greetingForDate(new Date()),
+      first_name: firstName,
+      event_title: payloadValue(submission, "event_title") || "the event",
+      booking_label: "studio booking",
+      booking_url: "",
+      approved_budget_sentence: "",
+    };
+    if (submission.type === "event_rsvp") {
+      const selection = window.ManualTextAssist.templateSelection({
+        type: submission.type,
+        status: submission.status,
+      });
+      return {
+        ...selection,
+        values: baseValues,
+      };
     }
     const bookingUrl = absoluteUrl(submission.bookingUrl || document.getElementById("bookingUrl")?.value || "");
     const budgetLabel = approvedBudgetLabel(
@@ -4165,32 +4293,102 @@ ${meetingLines}
       : "";
     const isStudio = submission.type === "studio_booking" || isStudioAppointment(appointment);
     const studioVisit = isArtVisitAppointment(appointment) || submissionBookingTypeId(submission) === "studio_visit";
-    if (isStudio) {
-      if (appointment && appointment.status === "confirmed") {
-        return studioVisit
-          ? `Hi ${name}, this is the six.well construct. Your Open Studio Visit is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes.`
-          : `Hi ${name}, this is the six.well construct. Your studio booking is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes.`;
-      }
-      return studioVisit
-        ? `Hi ${name}, this is the six.well construct. We received your Open Studio Visit request and will follow up with next steps. Thank you.`
-        : `Hi ${name}, this is the six.well construct. We received your studio booking request and will follow up with next steps. Thank you.`;
+    const selection = window.ManualTextAssist.templateSelection({
+      type: submission.type,
+      status: submission.status,
+      isStudio,
+      appointmentConfirmed: appointment?.status === "confirmed",
+      specialClientUrl: Boolean(specialClientUrl),
+      bookingUrl: Boolean(bookingUrl),
+      requiresInPersonConsult: requiresInPersonConsult(submission),
+    });
+    return {
+      ...selection,
+      values: {
+        ...baseValues,
+        booking_label: studioVisit ? "Open Studio Visit" : "studio booking",
+        booking_url: specialClientUrl || bookingUrl,
+        approved_budget_sentence: budgetLabel ? `Your approved project budget is ${budgetLabel}.` : "",
+      },
+    };
+  }
+
+  function textReminderCopy(submission) {
+    const context = textReminderContext(submission);
+    return window.ManualTextAssist.compose(
+      manualTextTemplates,
+      context.openingKey,
+      context.bodyKey,
+      context.values
+    );
+  }
+
+  function updateTextAssist(submission, { force = false } = {}) {
+    const textAssist = document.getElementById("textAssist");
+    if (!textAssist || (!force && textAssistDirty)) return false;
+    const value = textReminderCopy(submission);
+    textAssist.value = value;
+    textAssistDirty = false;
+    textAssistDraft = value;
+    textAssistSubmissionId = submission.id;
+    return true;
+  }
+
+  function textTemplatePreview(templateKey, body, submission) {
+    const context = textReminderContext(submission);
+    const template = manualTextTemplates[templateKey];
+    const previewTemplates = { ...manualTextTemplates, [templateKey]: { ...template, body } };
+    let openingKey = context.openingKey;
+    let bodyKey = context.bodyKey;
+    if (templateKey === "opening_tattoo") {
+      openingKey = templateKey;
+      if (!["Tattoo"].includes(manualTextTemplates[bodyKey]?.group)) bodyKey = "tattoo_inquiry_received";
+    } else if (templateKey === "opening_sixwell") {
+      openingKey = templateKey;
+      if (!["Events", "Studio"].includes(manualTextTemplates[bodyKey]?.group)) bodyKey = "studio_received";
+    } else {
+      bodyKey = templateKey;
+      openingKey = ["Events", "Studio"].includes(template?.group) ? "opening_sixwell" : "opening_tattoo";
     }
-    if (appointment && appointment.status === "confirmed") {
-      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
-    }
-    if (specialClientUrl) {
-      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your Tattoo Special request has been approved. Review your approved request and pay the deposit to confirm your appointment here: ${specialClientUrl}`;
-    }
-    if (bookingUrl && submission.status === "approved") {
-      if (requiresInPersonConsult(submission)) {
-        return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: ${bookingUrl}`;
-      }
-      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your project has been approved for booking.${budgetLabel ? ` Your approved project budget is ${budgetLabel}.` : ""} Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: ${bookingUrl}`;
-    }
-    if (bookingUrl && submission.status === "booked") {
-      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
-    }
-    return `Hi ${name}, this is art.pill TATTOO HOUSE. We received your inquiry and will review the project details before sending booking access. Thank you.`;
+    return window.ManualTextAssist.compose(previewTemplates, openingKey, bodyKey, {
+      ...context.values,
+      booking_url: context.values.booking_url || "[booking link]",
+      approved_budget_sentence: context.values.approved_budget_sentence || "Your approved project budget is [approved budget].",
+    });
+  }
+
+  function textTemplateEditorHtml(submission) {
+    const selectedKey = textReminderContext(submission).bodyKey;
+    const options = manualTextTemplateList().map((template) =>
+      `<option value="${escapeHtml(template.key)}" ${template.key === selectedKey ? "selected" : ""}>${escapeHtml(`${template.group} / ${template.label}`)}</option>`
+    ).join("");
+    const selected = manualTextTemplates[selectedKey] || manualTextTemplateList()[0];
+    const allowed = (selected?.allowedTokens || []).map((token) => `{{${token}}}`).join(", ") || "No variables";
+    const body = selected?.body || "";
+    return `<div class="text-template-editor" id="textTemplateEditor" hidden>
+      <div class="text-template-editor-grid">
+        <label>Template<select id="textTemplateSelect" data-select-menu-skip>${options}</select></label>
+        <label>Editable text<textarea id="textTemplateBody" maxlength="2000">${escapeHtml(body)}</textarea></label>
+      </div>
+      <p class="contact" id="textTemplateTokens">Available variables: ${escapeHtml(allowed)}</p>
+      <div><label>Preview</label><div class="text-template-editor-preview" id="textTemplatePreview">${escapeHtml(textTemplatePreview(selected.key, body, submission))}</div></div>
+      <div class="booking-actions"><button class="button" id="saveTextTemplateBtn" type="button">Save Template</button></div>
+      <p class="save-feedback" id="textTemplateSaveState" role="status" aria-live="polite"></p>
+    </div>`;
+  }
+
+  function updateTextTemplateEditor(submission) {
+    const select = document.getElementById("textTemplateSelect");
+    const body = document.getElementById("textTemplateBody");
+    const tokens = document.getElementById("textTemplateTokens");
+    const preview = document.getElementById("textTemplatePreview");
+    if (!select || !body || !tokens || !preview) return;
+    const template = manualTextTemplates[select.value];
+    if (!template) return;
+    body.value = template.body || "";
+    const allowed = (template.allowedTokens || []).map((token) => `{{${token}}}`).join(", ") || "No variables";
+    tokens.textContent = `Available variables: ${allowed}`;
+    preview.textContent = textTemplatePreview(template.key, body.value, submission);
   }
 
   function renderCommunicationActions(submission) {
@@ -4202,7 +4400,7 @@ ${meetingLines}
       || (submission.status === "approved" && (nonBookingApproval || specialPrepared || tattooPrepared));
     const canResendConfirmation = appointmentIsConfirmed(appointment);
     return `
-      <div class="value" id="decisionCommunicationState">${["approved", "declined"].includes(submission.status) ? "Unsent" : "No recorded decision"}</div>
+      <div class="value" id="decisionCommunicationState">${escapeHtml(communicationStateLabel(submission))}</div>
       ${submission.status === "declined" ? `<label for="decisionClientMessage" style="margin-top:12px;">Client-facing decline reason</label><textarea id="decisionClientMessage" placeholder="Add the reviewed reason that may be sent to the client.">${escapeHtml(submission.decisionClientMessage || "")}</textarea><p class="contact">Saving this reason sends nothing.</p><div class="booking-actions" style="margin-top:10px;"><button class="button" id="saveDeclineReasonBtn" type="button">Save Decline Reason</button></div><p class="save-feedback" id="declineReasonSaveState" role="status" aria-live="polite"></p>` : ""}
       <div class="booking-actions" style="margin-top:10px;">
         ${submission.status === "approved" && submission.type === "tattoo_special" && !specialPrepared ? `<button class="button" type="button" data-prepare-special-deposit="${escapeHtml(submission.id)}">Prepare Deposit Link</button>` : ""}
@@ -4325,8 +4523,7 @@ ${meetingLines}
       mount.innerHTML = sessionPlanEditorHtml(payload.sessionPlan || {}, submission);
       enhanceControls(mount);
       if (submission) applyBookingTokenDraftToControls(payload.sessionPlan || {}, submission);
-      const textAssist = document.getElementById("textAssist");
-      if (textAssist && submission) textAssist.value = textReminderCopy(submission);
+      if (submission) updateTextAssist(submission);
     } catch (error) {
       mount.innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
     }
@@ -4393,8 +4590,7 @@ ${meetingLines}
       enhanceControls(mount);
     }
     if (submission) applyBookingTokenDraftToControls(payload.sessionPlan || {}, submission);
-    const textAssist = document.getElementById("textAssist");
-    if (textAssist && submission) textAssist.value = textReminderCopy(submission);
+    if (submission) updateTextAssist(submission);
     return payload.sessionPlan;
   }
 
@@ -4570,6 +4766,8 @@ ${meetingLines}
   }
 
   function renderDetail(submission) {
+    const preserveTextAssist = textAssistDirty && textAssistSubmissionId === submission.id;
+    const initialTextAssist = preserveTextAssist ? textAssistDraft : textReminderCopy(submission);
     const hasAppointment = !!latestAppointmentFor(submission.id);
     const latestAppointment = latestAppointmentFor(submission.id);
     const hasStoredFiles = Array.isArray(submission.files) && submission.files.some((file) => file?.storageKey);
@@ -4611,6 +4809,7 @@ ${meetingLines}
           ${latestAppointment?.purpose ? `<span class="pill">Purpose: ${escapeHtml(titleize(latestAppointment.purpose))}</span>` : ""}
           ${lifecycleReviewRequired ? `<span class="pill" style="color:#EC5E26;border-color:rgba(236,94,38,.72);">Historic Review Required</span>` : ""}
           ${nextActionBadge(submission)}
+          <span id="submissionProgressBadges" data-submission-progress="${escapeHtml(submission.id)}">${submissionProgressBadges(submission)}</span>
           ${requiresInPersonConsult(submission) ? `<span class="pill" style="color:#FCB867;border-color:rgba(252,184,103,0.5);">IN-PERSON CONSULT REQUIRED</span>` : ""}
         </div>
         <h2>${escapeHtml(submission.contactName || "Unnamed")}</h2>
@@ -4674,8 +4873,8 @@ ${meetingLines}
               <button class="button" id="copyBookingBtn" type="button">Copy</button>
               <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
             </div>
-            ${renderBookingTokenControls(submission)}
             <div id="tokenStateInfo" style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:6px;">Loading token state…</div>
+            ${renderBookingTokenControls(submission)}
           `}
         </div>
       </div>
@@ -4690,13 +4889,15 @@ ${meetingLines}
         <label>Client Communication</label>
         ${renderCommunicationActions(submission)}
         <label for="textAssist" style="margin-top:14px;">Manual Text Assist</label>
-        <textarea id="textAssist">${escapeHtml(textReminderCopy(submission))}</textarea>
+        <textarea id="textAssist">${escapeHtml(initialTextAssist)}</textarea>
         <div class="booking-actions">
           <button class="button" id="refreshTextAssistBtn" type="button">Refresh Text</button>
           <button class="button" id="copyTextAssistBtn" type="button">Copy Text</button>
           ${clientSmsHref ? `<a class="button" id="textClientBtn" href="${escapeHtml(clientSmsHref)}">Text Client</a>` : `<button class="button" type="button" disabled title="No client phone number was provided">Text Client</button>`}
+          <button class="button" id="editTextTemplatesBtn" type="button" aria-expanded="false">Edit Templates</button>
         </div>
         <p class="contact" style="margin-top:8px;">Text Client opens your device's Messages app with the editable copy above. Review it, then press Send yourself.</p>
+        ${textTemplateEditorHtml(submission)}
       </div>
       <div class="field" style="margin-top:16px;">
         <label for="internalNotes">Internal Notes</label>
@@ -4719,6 +4920,9 @@ ${meetingLines}
         </div>
       </div>
     `;
+    textAssistDraft = initialTextAssist;
+    textAssistSubmissionId = submission.id;
+    if (!preserveTextAssist) textAssistDirty = false;
     enhanceControls(detailEl);
     renderEventHistory(submission.id);
     if (TATTOO_PROJECT_TYPES.has(submission.type)) renderTattooSessionPlanEditor(submission.id);
@@ -5142,9 +5346,10 @@ ${meetingLines}
       const deposit = a.depositCents ? money(a.depositCents, a.currency || "USD") : "";
       const meetingLabel = a.meeting?.joinUrl ? "Zoom ready" : a.bookingTypeId === "consult_virtual" ? "Zoom missing" : "";
       const related = appointmentRelatedSubmission(a);
-      const manageButton = isStudioAppointment(a)
-        ? `<button class="button" type="button" data-manage-studio-appointment="${escapeHtml(a.id)}">Manage Booking</button>`
-        : related ? `<button class="button" type="button" data-open-submission="${escapeHtml(related.id)}">Open Submission</button>` : "";
+      const manageButton = `<button class="button" type="button" data-manage-appointment="${escapeHtml(a.id)}">Manage Appointment</button>`;
+      const submissionButton = related
+        ? `<button class="button" type="button" data-open-submission="${escapeHtml(related.id)}">Open Submission</button>`
+        : "";
       return `
         <div class="appt-item">
           <div class="appt-item-top">
@@ -5153,7 +5358,7 @@ ${meetingLines}
           </div>
           ${a.isTattooSpecial ? `<span class="pill">Tattoo Special · ${escapeHtml(a.specialOfferTitle || "Tattoo Special")}</span>` : ""}
           <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))}${deposit ? ` · ${deposit} deposit` : ""}${a.status ? ` · ${a.status}` : ""}</span>
-          ${manageButton ? `<div class="booking-actions" style="margin-top:6px;">${manageButton}</div>` : ""}
+          <div class="booking-actions" style="margin-top:6px;">${manageButton}${submissionButton}</div>
         </div>
       `;
     }).join("");
@@ -5388,6 +5593,13 @@ ${meetingLines}
   }
 
   async function renderAppointmentsManager() {
+    const activeAppointment = activeAppointmentId
+      ? appointments.find((appointment) => appointment.id === activeAppointmentId)
+      : null;
+    if (activeAppointment && !isStudioAppointment(activeAppointment)) {
+      renderStudioAppointmentDetail(activeAppointment);
+      return;
+    }
     detailEl.innerHTML = `
       <div class="availability-manager">
         <div class="detail-head">
@@ -5537,7 +5749,7 @@ ${meetingLines}
         <div class="field">
               <label for="availabilityType">${activeTab === "art" ? "Visit Type" : activeTab === "studio" ? "Room Booking Type" : "Session Type"}</label>
               <select id="availabilityType">${sessionTypeOptionsHtml}</select>
-          ${activeTab === "tattoo" ? '<div class="contact">Extended Day exceptions must span exactly 10 hours.</div>' : ""}
+          ${activeTab === "tattoo" ? '<div class="contact">Extended Day exceptions must span exactly 12 hours.</div>' : ""}
         </div>
         <div class="field">
           <label for="availabilityCapacity">Same-Time Capacity</label>
@@ -5822,10 +6034,47 @@ ${meetingLines}
     setStatus(`${submissions.length} loaded${previewApplied ? " + preview" : ""}`);
   }
 
+  let submissionProgressRefreshBusy = false;
+  async function refreshSubmissionProgress() {
+    if (!token || document.hidden || submissionProgressRefreshBusy) return;
+    submissionProgressRefreshBusy = true;
+    try {
+      const payload = await api("/api/admin/submissions?limit=100");
+      const latestById = new Map((payload.submissions || []).map((submission) => [submission.id, submission]));
+      const progressFields = [
+        "clientNotificationStatus",
+        "clientNotificationSentAt",
+        "depositPaymentStatus",
+        "depositPaidAt",
+      ];
+      submissions.forEach((submission) => {
+        const latest = latestById.get(submission.id);
+        if (!latest) return;
+        progressFields.forEach((field) => { submission[field] = latest[field]; });
+      });
+      document.querySelectorAll("[data-submission-progress]").forEach((container) => {
+        const submission = submissions.find((item) => item.id === container.dataset.submissionProgress);
+        if (submission) container.innerHTML = submissionProgressBadges(submission);
+      });
+      const activeSubmission = submissions.find((item) => item.id === activeId);
+      const communicationState = document.getElementById("decisionCommunicationState");
+      if (activeSubmission && communicationState) communicationState.textContent = communicationStateLabel(activeSubmission);
+    } catch {
+      // Background progress refresh is best-effort; normal Studio actions still surface errors.
+    } finally {
+      submissionProgressRefreshBusy = false;
+    }
+  }
+
   async function loadAndRender() {
-    await loadSubmissions();
+    await Promise.all([loadSubmissions(), loadManualTextTemplates()]);
     renderActiveTab();
   }
+
+  window.setInterval(refreshSubmissionProgress, 30000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) refreshSubmissionProgress();
+  });
 
   tokenForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -5881,7 +6130,76 @@ ${meetingLines}
     }
   });
 
+  detailEl.addEventListener("input", (event) => {
+    if (event.target.id === "textAssist") {
+      textAssistDirty = true;
+      textAssistDraft = event.target.value;
+      textAssistSubmissionId = activeId;
+      return;
+    }
+    if (event.target.id === "textTemplateBody" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      const key = document.getElementById("textTemplateSelect")?.value || "";
+      const preview = document.getElementById("textTemplatePreview");
+      if (submission && preview) preview.textContent = textTemplatePreview(key, event.target.value, submission);
+    }
+  });
+
+  detailEl.addEventListener("change", (event) => {
+    if (event.target.id !== "textTemplateSelect" || !activeId) return;
+    const submission = submissions.find((item) => item.id === activeId);
+    if (submission) updateTextTemplateEditor(submission);
+  });
+
   detailEl.addEventListener("click", async (event) => {
+    if (event.target.id === "editTextTemplatesBtn" && activeId) {
+      const editor = document.getElementById("textTemplateEditor");
+      if (!editor) return;
+      editor.hidden = !editor.hidden;
+      event.target.setAttribute("aria-expanded", String(!editor.hidden));
+      if (!editor.hidden) {
+        await loadManualTextTemplates(true);
+        const submission = submissions.find((item) => item.id === activeId);
+        if (submission) {
+          const selectedKey = document.getElementById("textTemplateSelect")?.value || textReminderContext(submission).bodyKey;
+          const select = document.getElementById("textTemplateSelect");
+          if (select && manualTextTemplates[selectedKey]) select.value = selectedKey;
+          updateTextTemplateEditor(submission);
+        }
+      }
+      return;
+    }
+
+    if (event.target.id === "saveTextTemplateBtn" && activeId) {
+      const saveButton = event.target;
+      const templateKey = document.getElementById("textTemplateSelect")?.value || "";
+      const body = document.getElementById("textTemplateBody")?.value || "";
+      const saveState = document.getElementById("textTemplateSaveState");
+      saveButton.disabled = true;
+      if (saveState) saveState.textContent = "Saving template…";
+      try {
+        const payload = await api("/api/admin/communications/text-templates", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ templateKey, body }),
+        });
+        manualTextTemplates[templateKey] = { ...manualTextTemplates[templateKey], ...payload.template };
+        const submission = submissions.find((item) => item.id === activeId);
+        const refreshed = submission ? updateTextAssist(submission) : false;
+        if (submission) updateTextTemplateEditor(submission);
+        if (saveState) saveState.textContent = refreshed
+          ? "Template saved and applied to the current text."
+          : "Template saved. Your hand-edited text was preserved; use Refresh Text when you want to apply it.";
+        setStatus("Text template saved");
+      } catch (error) {
+        if (saveState) saveState.textContent = error.message || "Template could not be saved";
+        setStatus(error.message || "Template could not be saved");
+      } finally {
+        if (saveButton.isConnected) saveButton.disabled = false;
+      }
+      return;
+    }
+
     const refreshSpecials = event.target.closest("[data-refresh-tattoo-specials]");
     if (refreshSpecials) {
       setStatus("Refreshing Tattoo Specials");
@@ -6316,6 +6634,19 @@ ${meetingLines}
       return;
     }
 
+    const manageAppointment = event.target.closest("[data-manage-appointment]");
+    if (manageAppointment) {
+      openAppointment(manageAppointment.dataset.manageAppointment);
+      return;
+    }
+
+    const backToAppointments = event.target.closest("[data-back-appointments]");
+    if (backToAppointments) {
+      activeAppointmentId = "";
+      renderAppointmentsManager().catch((error) => setStatus(error.message));
+      return;
+    }
+
     const cancelAppointment = event.target.closest("[data-cancel-appointment]");
     if (cancelAppointment) {
       const appointmentId = cancelAppointment.dataset.cancelAppointment;
@@ -6663,6 +6994,45 @@ ${meetingLines}
       return;
     }
 
+    const reopenSpecialDeposit = event.target.closest("[data-reopen-special-deposit]");
+    if (reopenSpecialDeposit) {
+      reopenSpecialDeposit.disabled = true;
+      const submissionId = reopenSpecialDeposit.dataset.reopenSpecialDeposit;
+      const mode = reopenSpecialDeposit.dataset.specialDepositMode || "reopen";
+      try {
+        setStatus(mode === "repair"
+          ? "Repairing active Tattoo Special deposit access; no email will be sent"
+          : "Reopening Tattoo Special deposit access; no email will be sent");
+        let payload;
+        if (mode === "repair") {
+          payload = await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(submissionId)}/deposit`, {
+            method: "POST",
+          });
+        } else {
+          const submission = submissions.find((item) => item.id === submissionId);
+          const bookingTypeId = submission?.payload?.booking_type_id || "";
+          payload = await api("/api/admin/booking/tokens", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              submissionId,
+              purpose: "tattoo",
+              revokeExisting: true,
+              ...(bookingTypeId ? { allowedBookingTypes: [bookingTypeId] } : {}),
+            }),
+          });
+        }
+        const reopenedUrl = payload.clientUrl || payload.token?.bookingUrl || payload.token?.path || "";
+        if (reopenedUrl) await navigator.clipboard?.writeText(reopenedUrl).catch(() => {});
+        await loadAndRender();
+        setStatus("Deposit link reopened and copied; no email sent");
+      } catch (error) {
+        setStatus(error.message || "Deposit link could not be reopened");
+        if (reopenSpecialDeposit.isConnected) reopenSpecialDeposit.disabled = false;
+      }
+      return;
+    }
+
     const prepareSpecialDeposit = event.target.closest("[data-prepare-special-deposit]");
     if (prepareSpecialDeposit) {
       prepareSpecialDeposit.disabled = true;
@@ -6704,12 +7074,14 @@ ${meetingLines}
           body: JSON.stringify({ kind: sendSimplification ? "simplification" : "decision", resend, confirmed: resend }),
         });
         await renderEventHistory(submissionId);
+        await refreshSubmissionProgress();
         button.textContent = "Resend";
         button.dataset.resend = "1";
         const state = document.getElementById("decisionCommunicationState");
         if (state) state.textContent = "Sent";
         setStatus("Client notification sent");
       } catch (error) {
+        await refreshSubmissionProgress();
         const state = document.getElementById("decisionCommunicationState");
         if (state) state.textContent = "Failed · Retry available";
         button.textContent = "Retry";
@@ -6740,15 +7112,12 @@ ${meetingLines}
       });
       const tokenPath = payload.token.path || payload.token.bookingUrl || "";
       document.getElementById("bookingUrl").value = tokenPath;
-      const textAssist = document.getElementById("textAssist");
-      if (textAssist) {
-        textAssist.value = textReminderCopy({
+      updateTextAssist({
           ...(submissions.find((s) => s.id === activeId) || submission),
           bookingUrl: tokenPath,
           status: "approved",
           approvedBudget: payload.token?.approvedBudget || null,
-        });
-      }
+      });
       await navigator.clipboard?.writeText(payload.token.bookingUrl || tokenPath).catch(() => {});
       await loadAndRender();
       setStatus("Booking link generated and copied; no email sent");
@@ -6757,13 +7126,12 @@ ${meetingLines}
 
     if (event.target.id === "refreshTextAssistBtn" && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
-      const textAssist = document.getElementById("textAssist");
-      if (submission && textAssist) {
-        textAssist.value = textReminderCopy({
+      if (submission) {
+        updateTextAssist({
           ...submission,
           bookingUrl: document.getElementById("bookingUrl")?.value || submission.bookingUrl,
           status: submission.status,
-        });
+        }, { force: true });
       }
       setStatus("Text refreshed");
       return;
@@ -7372,8 +7740,8 @@ ${meetingLines}
     }
     const startAt = localDateTimeToIso(document.getElementById("availabilityStart").value);
     const endAt = localDateTimeToIso(document.getElementById("availabilityEnd").value);
-    if (bookingTypeId === "tattoo_extended" && Date.parse(endAt) - Date.parse(startAt) !== 600 * 60 * 1000) {
-      setStatus("Extended Day exceptions must protect exactly 10 hours");
+    if (bookingTypeId === "tattoo_extended" && Date.parse(endAt) - Date.parse(startAt) !== 720 * 60 * 1000) {
+      setStatus("Extended Day exceptions must protect exactly 12 hours");
       return;
     }
     setStatus("Adding exception");
@@ -7494,6 +7862,10 @@ ${meetingLines}
       const appointment = appointments.find((item) => item.id === homeAppointment.dataset.homeAppointment);
       if (appointment && isStudioAppointment(appointment)) {
         openStudioAppointment(appointment.id);
+        return;
+      }
+      if (appointment && !appointmentRelatedSubmission(appointment)) {
+        openAppointment(appointment.id);
         return;
       }
     }

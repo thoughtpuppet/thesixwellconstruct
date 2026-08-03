@@ -77,7 +77,7 @@ payment process once the deposit is confirmed. Include location and day-of
 links here because this is the client's practical reference email.
 This template never includes a Zoom link - regular tattoo sessions are
 in-person only.
-For Extended Day, use: “Optional 8-10 hour session. Reserves a 10-hour
+For Extended Day, use: “Optional 8-12 hour session. Reserves a 12-hour
 appointment block with a $200 Extended Day fee.” State that Extended Day is
 always optional and that Quarter, Half, and Full Day sessions do not include
 the fee.

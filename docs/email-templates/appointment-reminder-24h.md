@@ -96,7 +96,7 @@ Day-of instructions only apply to tattoo and build sessions - omit them for
 consultations. Virtual consultations skip location/parking entirely and
 include the Zoom join link (link only, no password) directly under the
 session line.
-Extended Day reminders state: “Optional 8-10 hour session. Reserves a 10-hour
+Extended Day reminders state: “Optional 8-12 hour session. Reserves a 12-hour
 appointment block with a $200 Extended Day fee.” They also state that Extended
 Day is always optional and that Quarter, Half, and Full Day sessions do not
 include the fee.

@@ -794,6 +794,84 @@ function parseJsonField(value, fallback) {
   }
 }
 
+const CLIENT_DECISION_NOTIFICATION_TEMPLATES = new Set([
+  "booking_link_created",
+  "tattoo_special_deposit_requested",
+  "submission_approved",
+  "submission_declined",
+  "tattoo_special_review",
+]);
+
+function emptySubmissionProgress() {
+  return {
+    clientNotificationStatus: "unsent",
+    clientNotificationSentAt: "",
+    depositPaymentStatus: "none",
+    depositPaidAt: "",
+  };
+}
+
+async function loadSubmissionProgress(database, submissionRows = []) {
+  const rows = submissionRows.filter((row) => row?.id);
+  const progress = new Map(rows.map((row) => [row.id, emptySubmissionProgress()]));
+  if (!rows.length) return progress;
+
+  const ids = rows.map((row) => row.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const revisions = new Map(rows.map((row) => [row.id, Number(row.decision_revision || 0)]));
+  const notificationRows = (await database.prepare(
+    `SELECT nd.template_key,nd.status,nd.sent_at,nd.created_at,nd.idempotency_key,
+            CASE WHEN nd.related_type='submission' THEN nd.related_id ELSE a.submission_id END submission_id
+     FROM notification_deliveries nd
+     LEFT JOIN appointments a ON nd.related_type='appointment' AND a.id=nd.related_id
+     WHERE nd.channel='email'
+       AND ((nd.related_type='submission' AND nd.related_id IN (${placeholders}))
+         OR (nd.related_type='appointment' AND a.submission_id IN (${placeholders})))
+     ORDER BY nd.created_at DESC`
+  ).bind(...ids, ...ids).all()).results || [];
+
+  for (const delivery of notificationRows) {
+    const submissionId = delivery.submission_id;
+    const state = progress.get(submissionId);
+    if (!state || !CLIENT_DECISION_NOTIFICATION_TEMPLATES.has(delivery.template_key)) continue;
+    const revision = revisions.get(submissionId) || 0;
+    const attemptPrefix = `decision_notification:${submissionId}:${revision}:`;
+    if (!String(delivery.idempotency_key || "").startsWith(attemptPrefix)) continue;
+    if (delivery.status === "sent") {
+      state.clientNotificationStatus = "sent";
+      if (!state.clientNotificationSentAt) state.clientNotificationSentAt = delivery.sent_at || delivery.created_at || "";
+    } else if (state.clientNotificationStatus !== "sent" && ["failed", "skipped"].includes(delivery.status)) {
+      state.clientNotificationStatus = "failed";
+    } else if (state.clientNotificationStatus === "unsent") {
+      state.clientNotificationStatus = "pending";
+    }
+  }
+
+  const paymentRows = (await database.prepare(
+    `SELECT a.submission_id,dp.status,dp.provider_payment_id,dp.updated_at
+     FROM deposit_payments dp
+     JOIN appointments a ON a.id=dp.appointment_id
+     WHERE a.submission_id IN (${placeholders})
+     ORDER BY dp.updated_at DESC`
+  ).bind(...ids).all()).results || [];
+  for (const payment of paymentRows) {
+    const state = progress.get(payment.submission_id);
+    if (!state) continue;
+    const status = String(payment.status || "").toLowerCase();
+    const paid = ["paid", "completed", "settled"].includes(status) || Boolean(payment.provider_payment_id);
+    if (status === "payment_attention") {
+      state.depositPaymentStatus = "paid_attention";
+      if (!state.depositPaidAt) state.depositPaidAt = payment.updated_at || "";
+    } else if (paid && state.depositPaymentStatus !== "paid_attention") {
+      state.depositPaymentStatus = "paid";
+      if (!state.depositPaidAt) state.depositPaidAt = payment.updated_at || "";
+    } else if (status === "pending" && state.depositPaymentStatus === "none") {
+      state.depositPaymentStatus = "pending";
+    }
+  }
+  return progress;
+}
+
 function normalizeRow(row) {
   if (!row) return null;
   const flashReservation = row.reserved_flash_id ? {
@@ -831,6 +909,10 @@ function normalizeRow(row) {
     files: parseJsonField(row.files_json, []),
     internalNotes: row.internal_notes || "",
     bookingUrl: row.booking_url || "",
+    clientNotificationStatus: row.clientNotificationStatus || row.client_notification_status || "unsent",
+    clientNotificationSentAt: row.clientNotificationSentAt || row.client_notification_sent_at || "",
+    depositPaymentStatus: row.depositPaymentStatus || row.deposit_payment_status || "none",
+    depositPaidAt: row.depositPaidAt || row.deposit_paid_at || "",
     flashReservation,
     flashConflict,
     flash_conflict: flashConflict,
@@ -1705,6 +1787,7 @@ export async function handleListSubmissions(request, env) {
       .all();
 
     const rows = result.results || [];
+    const progressBySubmission = await loadSubmissionProgress(db, rows);
     const sheetDesignsBySubmission = new Map();
     if (rows.length) {
       const placeholders = rows.map(() => "?").join(",");
@@ -1765,7 +1848,7 @@ export async function handleListSubmissions(request, env) {
     }
     return json({
       submissions: rows.map((row) => {
-        const normalized = normalizeRow(row);
+        const normalized = normalizeRow({ ...row, ...(progressBySubmission.get(row.id) || {}) });
         const sheetDesignSelections = sheetDesignsBySubmission.get(row.id) || [];
         return {
           ...normalized,
@@ -1907,7 +1990,8 @@ export async function handleGetSubmission(request, env, id) {
       }
     }
 
-    const normalized = normalizeRow(row);
+    const progressBySubmission = await loadSubmissionProgress(db, [row]);
+    const normalized = normalizeRow({ ...row, ...(progressBySubmission.get(row.id) || {}) });
     const mazeArchive = row.type === "maze_design"
       ? await loadMazeArchiveState(db, id, normalized.payload)
       : null;

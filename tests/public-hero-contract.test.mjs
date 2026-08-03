@@ -51,7 +51,7 @@ const routes = [
   { route: "/art/slothpainting", file: "art/slothpainting.html", variant: "supporting" },
   { route: "/art/thefrustrationsofinnercharospainting", file: "art/thefrustrationsofinnercharospainting.html", variant: "supporting" },
 
-  { route: "/booking/", file: "booking/index.html", variant: "supporting", descriptor: true },
+  { route: "/booking/", file: "booking/index.html", variant: "supporting", descriptor: false },
   { route: "/booking/reschedule/", file: "booking/reschedule/index.html", variant: "supporting", descriptor: true },
   { route: "/booking/studio/", file: "booking/studio/index.html", variant: "supporting", descriptor: true },
   { route: "/booking/studio-visit/", file: "booking/studio-visit/index.html", variant: "supporting", descriptor: true },

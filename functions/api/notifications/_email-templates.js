@@ -960,7 +960,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
         ? "In-Person Consultation: 30 minutes. Reservation fee: $50."
         : tattooSpecial
           ? "Hand Sized Tattoo — Standard: 120 minutes. Deposit: $50."
-          : "Half Day Session: 3 hours - Approx. 3 hours for medium approved projects or developed symbolic work. Deposit: $100.",
+          : "Half Day Session: 4 hours - 4 hours for medium approved projects or developed symbolic work. Deposit: $100.",
       approvedBudget: consultation ? "" : tattooSpecial ? "$200" : "$800-$1,200",
       depositText: consultation ? "$50" : tattooSpecial ? "$50" : "$100",
       bookingUrl: SAMPLE.bookingUrl,

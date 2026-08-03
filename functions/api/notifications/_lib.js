@@ -64,29 +64,29 @@ const DEFAULT_REVIEW_TIME_MESSAGE = "Most project submissions are reviewed withi
 const DEFAULT_BOOKING_TYPES = {
   tattoo_quarter: {
     label: "Quarter Day Session",
-    description: "Approx. 1.5 hours for small approved projects, flash, or focused work.",
-    durationMinutes: 90,
+    description: "2 hours for small approved projects, flash, or focused work.",
+    durationMinutes: 120,
     depositCents: 5000,
     currency: "USD",
   },
   tattoo_half: {
     label: "Half Day Session",
-    description: "Approx. 3 hours for medium approved projects or developed symbolic work.",
-    durationMinutes: 180,
+    description: "4 hours for medium approved projects or developed symbolic work.",
+    durationMinutes: 240,
     depositCents: 10000,
     currency: "USD",
   },
   tattoo_full: {
     label: "Full Day Session",
-    description: "Up to 6 hours for large approved work, special projects, or deeper sessions.",
-    durationMinutes: 360,
+    description: "8 hours for large approved work, special projects, or deeper sessions.",
+    durationMinutes: 480,
     depositCents: 20000,
     currency: "USD",
   },
   tattoo_extended: {
     label: "Extended Day Session",
-    description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.",
-    durationMinutes: 600,
+    description: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee.",
+    durationMinutes: 720,
     depositCents: 35000,
     sessionFeeCents: 20000,
     currency: "USD",
@@ -317,7 +317,7 @@ function normalizeBookingType(row) {
     durationMinutes,
     depositCents: row.deposit_cents ?? row.depositCents ?? 0,
     sessionFeeCents: row.session_fee_cents ?? row.sessionFeeCents ?? 0,
-    durationRangeLabel: id === EXTENDED_DAY_BOOKING_TYPE_ID ? "8-10 hours" : formatDuration(durationMinutes),
+    durationRangeLabel: id === EXTENDED_DAY_BOOKING_TYPE_ID ? "8-12 hours" : formatDuration(durationMinutes),
     currency: row.currency || "USD",
   };
 }
@@ -904,7 +904,7 @@ function extendedDayEmailFields(appointment) {
   }
   return {
     sessionFeeText: `${formatMoney(appointment.sessionFeeCents, appointment.currency)} due with the remaining studio balance at the start of your appointment, before tattooing begins`,
-    billingPolicyText: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you. The Extended Day fee is not charged again during a no-cost reschedule.",
+    billingPolicyText: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee. Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you. The Extended Day fee is not charged again during a no-cost reschedule.",
   };
 }
 

@@ -4,11 +4,13 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 import {
   handleCreateSubmission,
   handleDeleteSubmission,
   handleGetSubmission,
+  handleListSubmissions,
   handlePromoteMazeArchiveSubmission,
   handleSubmissionDecision,
   handleSubmissionDecisionNotification,
@@ -108,6 +110,7 @@ import {
   handleCreateTattooSpecialSubmission,
   handlePublicTattooSpecials,
 } from "../functions/api/tattoo-specials/_lib.js";
+import { handleAdminManualTextTemplates } from "../functions/api/communications/_lib.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TATTOO_BUDGET_RANGES = [
@@ -553,6 +556,92 @@ function saveReviewedTattooPlan(env, submissionId, token, fields = {}) {
   ), env, submissionId);
 }
 
+test("Studio submission progress reports current client notification delivery and paid deposits", async () => {
+  const database = migratedDatabase();
+  const adminToken = "submission-progress-admin";
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const decidedAt = "2026-08-03T16:00:00.000Z";
+  insertSubmissionFixture(database, {
+    id: "progress-request",
+    type: "tattoo_special",
+    status: "approved",
+  });
+  database.prepare(
+    "UPDATE submissions SET decision_revision=3,decided_at=? WHERE id='progress-request'",
+  ).run(decidedAt);
+  insertAppointmentFixture(database, {
+    id: "progress-appointment",
+    submissionId: "progress-request",
+    bookingTypeId: "tattoo_quarter",
+    status: "confirmed",
+    purpose: "tattoo",
+    startAt: "2026-08-08T20:00:00.000Z",
+    endAt: "2026-08-08T22:00:00.000Z",
+  });
+  insertPaymentFixture(database, {
+    id: "progress-payment",
+    appointmentId: "progress-appointment",
+    checkoutId: "progress-checkout",
+    orderId: "progress-order",
+    status: "paid",
+  });
+  const insertDelivery = database.prepare(
+    `INSERT INTO notification_deliveries
+      (id,channel,template_key,recipient,related_type,related_id,idempotency_key,status,error,sent_at,created_at)
+     VALUES (?,'email','tattoo_special_deposit_requested','payment@example.test','appointment','progress-appointment',?,?,?,?,?)`,
+  );
+  insertDelivery.run(
+    "progress-old-sent",
+    "decision_notification:progress-request:2:old",
+    "sent",
+    null,
+    "2026-08-03T15:00:00.000Z",
+    "2026-08-03T15:00:00.000Z",
+  );
+  insertDelivery.run(
+    "progress-current-failed",
+    "decision_notification:progress-request:3:failed",
+    "failed",
+    "Temporary delivery failure",
+    null,
+    "2026-08-03T16:05:00.000Z",
+  );
+
+  const listed = await handleListSubmissions(new Request(
+    "https://example.test/api/admin/submissions?limit=100",
+    { headers: { authorization: `Bearer ${adminToken}` } },
+  ), env);
+  assert.equal(listed.status, 200);
+  const listedSubmission = (await listed.json()).submissions.find((item) => item.id === "progress-request");
+  assert.equal(listedSubmission.clientNotificationStatus, "failed");
+  assert.equal(listedSubmission.depositPaymentStatus, "paid");
+  assert.ok(listedSubmission.depositPaidAt);
+
+  insertDelivery.run(
+    "progress-current-sent",
+    "decision_notification:progress-request:3:sent",
+    "sent",
+    null,
+    "2026-08-03T16:10:00.000Z",
+    "2026-08-03T16:10:00.000Z",
+  );
+  const detailed = await handleGetSubmission(new Request(
+    "https://example.test/api/admin/submissions/progress-request",
+    { headers: { authorization: `Bearer ${adminToken}` } },
+  ), env, "progress-request");
+  assert.equal(detailed.status, 200);
+  const detailSubmission = (await detailed.json()).submission;
+  assert.equal(detailSubmission.clientNotificationStatus, "sent");
+  assert.equal(detailSubmission.clientNotificationSentAt, "2026-08-03T16:10:00.000Z");
+  assert.equal(detailSubmission.depositPaymentStatus, "paid");
+
+  const studioSource = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studioSource, /Notification sent<\/span>/);
+  assert.match(studioSource, /Deposit paid<\/span>/);
+  assert.match(studioSource, /Booking Link Ready<\/span>/);
+  assert.match(studioSource, /window\.setInterval\(refreshSubmissionProgress, 30000\)/);
+});
+
 function validCustomForProject(projectType, overrides = {}) {
   const fields = {
     new_work: {},
@@ -801,7 +890,7 @@ test("Studio session-plan saves persist booking choices without preparing access
 });
 
 test("Extended Day client surfaces use the approved optional-session copy", () => {
-  const description = "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.";
+  const description = "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee.";
   const optionality = "Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.";
   const clientSources = [
     join(ROOT, "tattoos", "index.html"),
@@ -1525,10 +1614,10 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
       "SELECT id, label, duration_minutes, deposit_cents, session_fee_cents, minimum_billable_minutes FROM booking_types WHERE id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended') ORDER BY id"
     ).all().map((row) => ({ ...row })),
     [
-      { id: "tattoo_extended", label: "Extended Day Session", duration_minutes: 600, deposit_cents: 35000, session_fee_cents: 20000, minimum_billable_minutes: 0 },
-      { id: "tattoo_full", label: "Full Day Session", duration_minutes: 360, deposit_cents: 20000, session_fee_cents: 0, minimum_billable_minutes: 0 },
-      { id: "tattoo_half", label: "Half Day Session", duration_minutes: 180, deposit_cents: 10000, session_fee_cents: 0, minimum_billable_minutes: 0 },
-      { id: "tattoo_quarter", label: "Quarter Day Session", duration_minutes: 90, deposit_cents: 5000, session_fee_cents: 0, minimum_billable_minutes: 0 },
+      { id: "tattoo_extended", label: "Extended Day Session", duration_minutes: 720, deposit_cents: 35000, session_fee_cents: 20000, minimum_billable_minutes: 0 },
+      { id: "tattoo_full", label: "Full Day Session", duration_minutes: 480, deposit_cents: 20000, session_fee_cents: 0, minimum_billable_minutes: 0 },
+      { id: "tattoo_half", label: "Half Day Session", duration_minutes: 240, deposit_cents: 10000, session_fee_cents: 0, minimum_billable_minutes: 0 },
+      { id: "tattoo_quarter", label: "Quarter Day Session", duration_minutes: 120, deposit_cents: 5000, session_fee_cents: 0, minimum_billable_minutes: 0 },
     ],
   );
 });
@@ -2655,7 +2744,7 @@ test("Studio prepares a Tattoo Special deposit link silently before explicit cli
   assert.match(studio, /data-send-decision-notification[\s\S]*?Send Approval Notification/);
   assert.match(studio, /Prepare the required booking or deposit link before sending approval/);
   assert.match(studio, /const specialClientUrl = submission\.type === "tattoo_special"[\s\S]*?Boolean\(appointment\.checkoutUrl \|\| appointment\.squareCheckoutUrl\)[\s\S]*?\? bookingUrl/);
-  assert.match(studio, /if \(specialClientUrl\)[\s\S]*?pay the deposit to confirm your appointment here: \$\{specialClientUrl\}/);
+  assert.match(studio, /specialClientUrl: Boolean\(specialClientUrl\)[\s\S]*?booking_url: specialClientUrl \|\| bookingUrl/);
   assert.match(studio, /Prepared booking URL[\s\S]*?id="tokenStateInfo"[\s\S]*?renderBookingTokenControls\(submission\)/);
   assert.match(studio, /Deposit link active/);
   assert.match(studio, /Deposit link needs repair/);
@@ -3734,6 +3823,112 @@ test("preview and direct-session spoofing cannot write through the generic submi
   assert.equal(database.prepare("SELECT count(*) AS count FROM submissions").get().count, 0);
 });
 
+test("manual text templates require Studio auth, persist valid copy, and reject unknown variables", async () => {
+  const database = migratedDatabase();
+  const adminToken = "manual-text-admin";
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: adminToken };
+  const endpoint = "https://example.test/api/admin/communications/text-templates";
+
+  const unauthorized = await handleAdminManualTextTemplates(new Request(endpoint), env);
+  assert.equal(unauthorized.status, 401);
+
+  const initialResponse = await handleAdminManualTextTemplates(new Request(endpoint, {
+    headers: { authorization: `Bearer ${adminToken}` },
+  }), env);
+  assert.equal(initialResponse.status, 200);
+  const initial = await initialResponse.json();
+  assert.equal(initial.templates.length, 11);
+  assert.equal(
+    initial.templates.find((template) => template.key === "opening_tattoo").body,
+    "{{greeting}} {{first_name}}, this is Sai Solehman of art.pill TATTOO HOUSE.",
+  );
+
+  const savedResponse = await handleAdminManualTextTemplates(adminJsonRequest(
+    "/api/admin/communications/text-templates",
+    { templateKey: "tattoo_inquiry_received", body: "Thank you for sharing your project with me." },
+    adminToken,
+    "PATCH",
+  ), env);
+  assert.equal(savedResponse.status, 200);
+  assert.equal((await savedResponse.json()).template.body, "Thank you for sharing your project with me.");
+  assert.equal(
+    database.prepare("SELECT body_text FROM manual_text_templates WHERE template_key=?").get("tattoo_inquiry_received").body_text,
+    "Thank you for sharing your project with me.",
+  );
+
+  const unknownVariable = await handleAdminManualTextTemplates(adminJsonRequest(
+    "/api/admin/communications/text-templates",
+    { templateKey: "tattoo_inquiry_received", body: "Hello {{unknown_value}}" },
+    adminToken,
+    "PATCH",
+  ), env);
+  assert.equal(unknownVariable.status, 422);
+  assert.match((await unknownVariable.json()).error, /unsupported template variable/i);
+
+  const malformedVariable = await handleAdminManualTextTemplates(adminJsonRequest(
+    "/api/admin/communications/text-templates",
+    { templateKey: "opening_tattoo", body: "{{First Name}}, this should not save." },
+    adminToken,
+    "PATCH",
+  ), env);
+  assert.equal(malformedVariable.status, 422);
+});
+
+test("manual text assist uses New York greeting boundaries and composes the named Tattoo opening", () => {
+  const source = readFileSync(join(ROOT, "js", "manual-text-assist.js"), "utf8");
+  const sandbox = {};
+  runInNewContext(source, sandbox);
+  const assist = sandbox.ManualTextAssist;
+  const cases = [
+    ["2026-08-03T04:59:00-04:00", "Hi"],
+    ["2026-08-03T05:00:00-04:00", "Good morning"],
+    ["2026-08-03T11:59:00-04:00", "Good morning"],
+    ["2026-08-03T12:00:00-04:00", "Good afternoon"],
+    ["2026-08-03T16:59:00-04:00", "Good afternoon"],
+    ["2026-08-03T17:00:00-04:00", "Good evening"],
+    ["2026-08-03T21:59:00-04:00", "Good evening"],
+    ["2026-08-03T22:00:00-04:00", "Hi"],
+  ];
+  for (const [timestamp, expected] of cases) {
+    assert.equal(assist.greetingForDate(timestamp), expected, timestamp);
+  }
+  const selectionCases = [
+    [{ type: "event_rsvp", status: "booked" }, "opening_sixwell", "event_confirmed"],
+    [{ type: "event_rsvp", status: "new" }, "opening_sixwell", "event_received"],
+    [{ isStudio: true, appointmentConfirmed: true }, "opening_sixwell", "studio_confirmed"],
+    [{ isStudio: true, appointmentConfirmed: false }, "opening_sixwell", "studio_received"],
+    [{ appointmentConfirmed: true }, "opening_tattoo", "tattoo_appointment_confirmed"],
+    [{ specialClientUrl: true }, "opening_tattoo", "tattoo_special_approved"],
+    [{ bookingUrl: true, status: "approved", requiresInPersonConsult: true }, "opening_tattoo", "tattoo_consultation_required"],
+    [{ bookingUrl: true, status: "approved" }, "opening_tattoo", "tattoo_booking_approved"],
+    [{ bookingUrl: true, status: "booked" }, "opening_tattoo", "tattoo_appointment_confirmed"],
+    [{ status: "new" }, "opening_tattoo", "tattoo_inquiry_received"],
+  ];
+  for (const [context, openingKey, bodyKey] of selectionCases) {
+    assert.deepEqual(
+      { ...assist.templateSelection(context) },
+      { openingKey, bodyKey },
+      JSON.stringify(context),
+    );
+  }
+  const templates = Object.fromEntries(assist.DEFAULT_TEMPLATES.map((template) => [template.key, template]));
+  assert.equal(
+    assist.compose(templates, "opening_tattoo", "tattoo_inquiry_received", {
+      greeting: "Good afternoon",
+      first_name: "Avery",
+    }),
+    "Good afternoon Avery, this is Sai Solehman of art.pill TATTOO HOUSE. We received your inquiry and will review the project details before sending booking access. Thank you.",
+  );
+  assert.doesNotMatch(
+    assist.compose(templates, "opening_sixwell", "studio_received", {
+      greeting: "Good morning",
+      first_name: "Avery",
+      booking_label: "Open Studio Visit",
+    }),
+    /art\.pill TATTOO HOUSE/,
+  );
+});
+
 test("Studio can create a direct private booking invite without a prior inquiry", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
@@ -3803,10 +3998,10 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(plan.session_category, "one_session");
   assert.equal(plan.split_policy, "not_available");
   assert.equal(plan.estimated_sessions_min, 1);
-  assert.equal(plan.estimated_total_minutes_min, 180);
-  assert.equal(plan.estimated_total_minutes_max, 180);
+  assert.equal(plan.estimated_total_minutes_min, 240);
+  assert.equal(plan.estimated_total_minutes_max, 240);
   assert.equal(plan.client_acknowledged, 0);
-  assert.equal(plan.artist_note, "The composition is planned for a Half Day Session.");
+  assert.equal(plan.artist_note, "The composition is planned for a Half Day Session (4 hours).");
   assert.doesNotMatch(plan.artist_note, /offline conversation/i);
 
   const rawToken = new URL(payload.token.bookingUrl).searchParams.get("token");
@@ -3820,7 +4015,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(contextPayload.client.email, "");
   assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.id), ["tattoo_half"]);
   assert.deepEqual(contextPayload.bookingTypes.map((bookingType) => bookingType.label), ["Half Day Session"]);
-  assert.equal(contextPayload.sessionPlan.artistNote, "The composition is planned for a Half Day Session.");
+  assert.equal(contextPayload.sessionPlan.artistNote, "The composition is planned for a Half Day Session (4 hours).");
   assert.equal(contextPayload.sessionEstimateCopy.sectionHeading, "Plan Your Tattoo Session");
   assert.equal(contextPayload.sessionEstimateCopy.confirmButtonLabel, "Accept This Estimate");
   assert.equal(
@@ -4756,16 +4951,16 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
 
   const startAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   startAt.setUTCHours(14, 0, 0, 0);
-  const tooShortEnd = new Date(startAt.getTime() + 9 * 60 * 60 * 1000);
+  const tooShortEnd = new Date(startAt.getTime() + 10 * 60 * 60 * 1000);
   const rejectedWindow = await handleAdminCreateAvailability(adminJsonRequest(
     "/api/admin/booking/availability",
     { venture: "tattooing", bookingTypeId: "tattoo_extended", startAt: startAt.toISOString(), endAt: tooShortEnd.toISOString(), isBlackout: false },
     adminToken,
   ), env);
   assert.equal(rejectedWindow.status, 400);
-  assert.match((await rejectedWindow.json()).error, /exactly 10 hours/i);
+  assert.match((await rejectedWindow.json()).error, /exactly 12 hours/i);
 
-  const endAt = new Date(startAt.getTime() + 10 * 60 * 60 * 1000);
+  const endAt = new Date(startAt.getTime() + 12 * 60 * 60 * 1000);
   insertAvailabilityWindow(database, {
     id: "extended-day-window",
     bookingTypeId: "tattoo_extended",
@@ -4785,7 +4980,7 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
       depositCents: extendedType.depositCents,
       sessionFeeCents: extendedType.sessionFeeCents,
     },
-    { durationMinutes: 600, durationRangeLabel: "8-10 hours", depositCents: 35000, sessionFeeCents: 20000 },
+    { durationMinutes: 720, durationRangeLabel: "8-12 hours", depositCents: 35000, sessionFeeCents: 20000 },
   );
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.match(bookingPage, /No Extended Day dates are currently available\. Shorter sessions remain bookable\./);
@@ -5514,7 +5709,7 @@ test("a paid replacement updates both appointment states in People", async () =>
   );
   assert.equal(
     database.prepare("SELECT description FROM booking_types WHERE id = 'tattoo_extended'").get().description,
-    "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.",
+    "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee.",
   );
 });
 
@@ -7391,6 +7586,7 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   const worker = readFileSync(join(ROOT, "_worker.js"), "utf8");
   const wrangler = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8");
   const submissionsStudio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  const manualTextAssist = readFileSync(join(ROOT, "js", "manual-text-assist.js"), "utf8");
   const privateBookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   for (const route of [
     "/api/booking/public-session/context",
@@ -7402,6 +7598,7 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
     "/api/booking/replacement-checkout",
     "/api/admin/booking/direct-invites",
     "/api/admin/booking/rendering-requests",
+    "/api/admin/communications/text-templates",
     "/api/tattoo/settings",
     "/api/admin/tattoo/settings",
   ]) assert.match(worker, new RegExp(route.replaceAll("/", "\\/")), route);
@@ -7429,6 +7626,12 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /data-cancel-appointment/);
   assert.match(submissionsStudio, /data-delete-appointment/);
   assert.match(submissionsStudio, /Permanently Delete Appointment/);
+  assert.match(submissionsStudio, /data-manage-appointment/);
+  assert.match(submissionsStudio, /Manage Appointment/);
+  assert.match(submissionsStudio, /data-back-appointments/);
+  assert.match(submissionsStudio, /request no longer available/);
+  assert.match(submissionsStudio, /function openAppointment\(id\)/);
+  assert.match(submissionsStudio, /appointment && !appointmentRelatedSubmission\(appointment\)[\s\S]*?openAppointment\(appointment\.id\)/);
   assert.match(submissionsStudio, /Additional Renderings/);
   assert.match(submissionsStudio, /data-create-rendering-request/);
   assert.match(submissionsStudio, /data-copy-rendering-link/);
@@ -7436,6 +7639,24 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /data-cancel-rendering-request/);
   assert.match(submissionsStudio, /data-force-delete="1"/);
   assert.match(submissionsStudio, /data-decision-action="approve"/);
+  assert.match(submissionsStudio, /id="editTextTemplatesBtn"/);
+  assert.match(submissionsStudio, /id="textTemplateEditor"/);
+  assert.match(submissionsStudio, /textAssistDirty/);
+  assert.match(submissionsStudio, /function updateTextAssist\(submission,[\s\S]*?!force && textAssistDirty/);
+  assert.match(submissionsStudio, /preserveTextAssist = textAssistDirty && textAssistSubmissionId === submission\.id/);
+  assert.match(submissionsStudio, /event\.target\.id === "textAssist"[\s\S]*?textAssistDraft = event\.target\.value/);
+  assert.match(submissionsStudio, /updateTextAssist\(submission\)/);
+  for (const templateKey of [
+    "event_confirmed",
+    "event_received",
+    "studio_confirmed",
+    "studio_received",
+    "tattoo_appointment_confirmed",
+    "tattoo_special_approved",
+    "tattoo_consultation_required",
+    "tattoo_booking_approved",
+    "tattoo_inquiry_received",
+  ]) assert.match(manualTextAssist, new RegExp(templateKey), templateKey);
   assert.match(submissionsStudio, /\/decision-notification/);
   assert.match(worker, /handleSubmissionDecision/);
   assert.match(privateBookingPage, /id="clientDetailsSection"/);

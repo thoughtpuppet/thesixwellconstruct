@@ -147,7 +147,7 @@
         [specialRequestChange ? 'Currently requested time' : 'Current time', `${formatDate(appointment.startAt)} at ${formatTime(appointment.startAt)}`],
         ...(extended ? [
           ['Extended Day fee', `${payload.bookingType.sessionFeeLabel || '$200'} / remains due with final balance`],
-          ['Session option', 'Optional 8-10 hour session / reserves a 10-hour appointment block'],
+          ['Session option', 'Optional 8-12 hour session / reserves a 12-hour appointment block'],
         ] : []),
         ...(specialRequestChange ? [] : [['Reschedules used', `${Number(appointment.rescheduleCount || 0)} of 1`]])
       ].map(([key,value]) => `<div class="detail-row"><span class="detail-key">${escapeHtml(key)}</span><span class="detail-value">${escapeHtml(value)}</span></div>`).join('');

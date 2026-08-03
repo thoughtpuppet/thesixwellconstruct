@@ -23,7 +23,7 @@ Approved session options:
 
 {{session_options}}
 
-Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200
+Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200
 Extended Day fee.
 
 Extended day sessions are always optional and are presented as an option for

@@ -130,6 +130,7 @@ import {
   handleCreateTattooSpecialSubmission,
   handlePublicTattooSpecials,
 } from "./functions/api/tattoo-specials/_lib.js";
+import { handleAdminManualTextTemplates } from "./functions/api/communications/_lib.js";
 
 const HIDDEN_PUBLIC_PATHS = [
   "/film",
@@ -1208,6 +1209,13 @@ export default {
         return methodNotAllowed(request.method, ["GET", "PATCH"]);
       }
       return handleAdminTattooSettings(request, env);
+    }
+
+    if (url.pathname === "/api/admin/communications/text-templates") {
+      if (!["GET", "PATCH"].includes(request.method)) {
+        return methodNotAllowed(request.method, ["GET", "PATCH"]);
+      }
+      return handleAdminManualTextTemplates(request, env);
     }
 
     if (url.pathname.startsWith("/api/admin/notifications/")) {

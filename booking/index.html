@@ -33,7 +33,7 @@
   .badge-dot { width:5px; height:5px; border-radius:50%; background:var(--ring); }
   .section-label { font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--muted); }
   h1 { max-width:720px; margin:16px 0 24px; }
-  .lead { margin:0 0 24px; }
+  .booking-context-copy { max-width:720px; margin:0 0 24px; color:var(--text); font-size:16px; line-height:1.8; }
   .status { max-width:720px; border-top:5px solid var(--ring-soft); border-bottom:5px solid var(--ring-faint); padding:22px 0; color:var(--muted); line-height:1.7; }
   .pending-checkout-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
   .pending-checkout-link,.pending-checkout-button { display:inline-flex; min-height:44px; align-items:center; justify-content:center; border:5px solid var(--ring-soft); background:transparent; color:var(--color-body); padding:0 16px; font-family:var(--sans); font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
@@ -129,7 +129,7 @@
 <header></header>
 <main class="site-hero site-hero--supporting">
   <h1 class="hero-title" id="bookingTitle" data-copy-id="booking-title">BOOKING.</h1>
-  <p class="lead hero-descriptor" id="bookingLead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
+  <p class="booking-context-copy" id="bookingLead" data-copy-id="booking-lead">This booking link opens after your project has been approved. Select a session, complete the deposit through Square, and return here for confirmation.</p>
   <div class="badge"><span class="badge-dot"></span>Private Booking</div>
   <p class="local-edit-note" data-live-edit-ignore="true">Preview editing is local only. Use the toolbar at bottom right, then export the changes for source-file updates.</p>
 
@@ -363,8 +363,8 @@
         {
           id: "tattoo_quarter",
           label: "Quarter Day Session",
-          description: "Approx. 1.5 hours for small approved projects, flash, or focused work.",
-          durationMinutes: 90,
+          description: "2 hours for small approved projects, flash, or focused work.",
+          durationMinutes: 120,
           depositCents: 5000,
           depositLabel: "$50",
           currency: "USD",
@@ -372,8 +372,8 @@
         {
           id: "tattoo_half",
           label: "Half Day Session",
-          description: "Approx. 3 hours for medium approved projects or developed symbolic work.",
-          durationMinutes: 180,
+          description: "4 hours for medium approved projects or developed symbolic work.",
+          durationMinutes: 240,
           depositCents: 10000,
           depositLabel: "$100",
           currency: "USD",
@@ -381,8 +381,8 @@
         {
           id: "tattoo_full",
           label: "Full Day Session",
-          description: "Up to 6 hours for large approved work, special projects, or deeper sessions.",
-          durationMinutes: 360,
+          description: "8 hours for large approved work, special projects, or deeper sessions.",
+          durationMinutes: 480,
           depositCents: 20000,
           depositLabel: "$200",
           currency: "USD",
@@ -390,9 +390,9 @@
         {
           id: "tattoo_extended",
           label: "Extended Day Session",
-          description: "Optional 8-10 hour session. Reserves a 10-hour appointment block with a $200 Extended Day fee.",
-          durationMinutes: 600,
-          durationRangeLabel: "8-10 hours",
+          description: "Optional 8-12 hour session. Reserves a 12-hour appointment block with a $200 Extended Day fee.",
+          durationMinutes: 720,
+          durationRangeLabel: "8-12 hours",
           depositCents: 35000,
           depositLabel: "$350",
           sessionFeeCents: 20000,
@@ -723,7 +723,7 @@
         <div><span>Remaining balance</span><strong>$1,850</strong></div>
       </div>
       <p class="fine">Extended day sessions are always optional and are presented as an option for clients who want longer sessions. Quarter, Half, and Full Day sessions do not include the Extended Day fee, and your project may be split across shorter appointments if desired. If additional appointments are needed, I will coordinate the remaining dates with you.</p>
-      <label class="form-check"><input class="form-check__input" id="extendedDayAck" type="checkbox" ${extendedDayAcknowledged ? "checked" : ""}><span class="form-check__label">I understand that Extended Day is optional, reserves a 10-hour appointment block, and adds a $200 Extended Day fee. I may instead choose a Quarter, Half, or Full Day session and split my project across shorter appointments.</span></label>
+      <label class="form-check"><input class="form-check__input" id="extendedDayAck" type="checkbox" ${extendedDayAcknowledged ? "checked" : ""}><span class="form-check__label">I understand that Extended Day is optional, reserves a 12-hour appointment block, and adds a $200 Extended Day fee. I may instead choose a Quarter, Half, or Full Day session and split my project across shorter appointments.</span></label>
     `;
   }
 
@@ -866,11 +866,15 @@
       return true;
     }
     if (pending.approvalState === "approved" && context?.submission?.special) {
+      const special = context.submission.special;
+      const designLabel = [special.offerTitle, special.variantLabel].filter(Boolean).join(" - ") || "Tattoo Special";
+      const requestedAppointment = `${designLabel} appointment for ${formatDate(pending.startAt)}`;
+      const depositLabel = money(special.depositCents || 0);
       pendingCheckoutText.textContent = active && pending.checkoutUrl
-        ? `Studio approved your requested time, ${formatDate(pending.startAt)}. Confirm it with the deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}, or choose a different date.`
+        ? `Your requested ${requestedAppointment} has been approved. Confirm it by paying the ${depositLabel} deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}, or choose a different date.`
         : active
-          ? `Studio approved your requested time, ${formatDate(pending.startAt)}. The deposit link is still being prepared; return here after the Studio confirms it is ready.`
-          : `The deposit window for your approved requested time has ended. Contact the Studio before attempting another booking.`;
+          ? `Your requested ${requestedAppointment} has been approved. The ${depositLabel} deposit link is still being prepared; return here after the Studio confirms it is ready.`
+          : `Your requested ${requestedAppointment} was approved, but its deposit window has ended. Contact the Studio before attempting another booking.`;
       if (active && pending.checkoutUrl) {
         resumeCheckoutLink.href = pending.checkoutUrl;
         resumeCheckoutLink.textContent = "Confirm and pay deposit";
