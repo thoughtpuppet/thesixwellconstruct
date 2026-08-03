@@ -2678,7 +2678,7 @@ test("Studio client preview opens synchronously and carries the Tattoo Special l
   assert.match(booking, /<strong>Notes from the artist:<\/strong><br>\$\{sessionCopyHtml\(plan\.artistNote \|\| copy\.fallbackNote\)\}/);
   assert.match(booking, /if \(!renderPendingCheckout\(\)\) appEl\.classList\.remove\("hidden"\)/);
   assert.match(booking, /if \(previewMode\)[\s\S]*?client's Square checkout is not opened from Studio preview/);
-  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Confirm requested date and pay deposit[\s\S]*?resumeCheckoutLink\.classList\.remove\("hidden"\)/);
+  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Confirm and pay deposit[\s\S]*?resumeCheckoutLink\.classList\.remove\("hidden"\)/);
   assert.match(booking, /changeRequestedDateLink\.href = `\/booking\/reschedule\/\?appointment=\$\{encodeURIComponent\(pending\.appointmentId\)\}&flow=special-request`/);
 });
 

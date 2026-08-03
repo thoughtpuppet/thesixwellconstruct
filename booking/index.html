@@ -867,7 +867,7 @@
           : `The deposit window for your approved requested time has ended. Contact the Studio before attempting another booking.`;
       if (active && pending.checkoutUrl) {
         resumeCheckoutLink.href = pending.checkoutUrl;
-        resumeCheckoutLink.textContent = "Confirm requested date and pay deposit";
+        resumeCheckoutLink.textContent = "Confirm and pay deposit";
         resumeCheckoutLink.classList.remove("hidden");
       }
       if (pending.appointmentId) {
