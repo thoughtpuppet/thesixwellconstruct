@@ -2218,7 +2218,14 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
          LIMIT 1`
       ).bind(id, new Date().toISOString(), id).first();
       if (blocker) {
-        return errorResponse("Clear active booking access, pending checkouts, held times, and confirmed appointments before reopening review.", 409, {
+        const blockerMessage = blocker.kind === "booking_link"
+          ? "Revoke the active booking link before reopening review."
+          : blocker.kind === "pending_checkout"
+            ? "Release the pending checkout and its held time before reopening review."
+            : blocker.kind === "confirmed_appointment"
+              ? "Cancel the confirmed appointment before reopening review."
+              : "Clear the active booking commitment before reopening review.";
+        return errorResponse(blockerMessage, 409, {
           code: "ACTIVE_ACCESS_BLOCKS_REOPEN",
           blockerType: blocker.kind,
           blockerId: blocker.id,
