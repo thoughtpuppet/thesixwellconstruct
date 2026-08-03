@@ -41,6 +41,27 @@
       ]
     },
     {
+      "id": "maze-puzzle-piece",
+      "slug": "puzzle-piece",
+      "category": "MAZE",
+      "name": "The Puzzle Piece",
+      "meaning": "An invitation to begin again. Return to the threshold, try another sequence, and notice what changes on the next attempt.",
+      "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><path fill='currentColor' d='M30 30H48C48 19 52 12 60 12S72 19 72 30H90V48C101 48 108 52 108 60S101 72 90 72V90H72C72 79 68 72 60 72S48 79 48 90H30V72C41 72 48 68 48 60S41 48 30 48V30Z'/></svg>",
+      "examples": [
+        {
+          "title": "Retry entry puzzle",
+          "medium": "The Construct",
+          "caption": "The shared navigation mark that returns visitors to the entry-room puzzle.",
+          "href": "/"
+        }
+      ],
+      "themes": [
+        "return",
+        "play",
+        "discovery"
+      ]
+    },
+    {
       "id": "fig-eye",
       "slug": "open-eye",
       "category": "Figural",

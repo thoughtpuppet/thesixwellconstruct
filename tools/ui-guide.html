@@ -272,6 +272,9 @@ td:first-child { color: var(--color-body); }
 
 /* dot nav demo */
 .dotnav-demo { display: flex; gap: 30px; align-items: center; }
+.dotnav-demo .puzzle { width: 22px; height: 22px; padding: 0; border: 0; background: transparent; color: var(--color-about); opacity: .62; cursor: pointer; }
+.dotnav-demo .puzzle svg { display: block; width: 100%; height: 100%; }
+.dotnav-demo .puzzle:hover { opacity: 1; }
 .dotnav-demo .dot { width: 17px; height: 17px; border-radius: 50%; opacity: .22; transition: opacity .2s; cursor: pointer; }
 .dotnav-demo .dot[data-medium],
 .map-medium[data-medium] .dot { background: var(--medium-color); }
@@ -794,13 +797,14 @@ body.editing [contenteditable="true"] { outline: 1px dashed rgba(252,184,103,.35
       <tr><th>Piece</th><th>Script</th><th>What it renders</th></tr>
       <tr><td>Fade overlay</td><td><code>js/transition.js</code></td><td><code>#construct-fade</code> — 500ms fade-to-black between pages; must load first (sets <code>window._constructFade</code>)</td></tr>
       <tr><td>Corner lockup</td><td><code>js/construct-corner.js</code></td><td>Top-left ring (#6D3D15 annulus) + 6 orbiting amber dots + "the six.well construct" wordmark (Inter 900, 19px, −0.05em, #FCB867 at .82). Click returns to <code>/home/</code>. Fades in after 800ms.</td></tr>
-      <tr><td>Medium dot nav</td><td><code>js/construct-nav.js</code></td><td>9 colored 17px dots, top-center, 30px gap. Current medium full opacity, others at .22. Hover shows a 9px Inter 700 label in the medium color.</td></tr>
+      <tr><td>Medium dot nav</td><td><code>js/construct-nav.js</code></td><td>An amber puzzle-piece action linking to <code>/</code>, followed by 9 colored 17px dots and the Adventure action. Current medium is full opacity; hover reveals the action or medium label.</td></tr>
       <tr><td>Wayfinding</td><td><code>js/construct-wayfinding.js</code></td><td>Breadcrumb at top of <code>&lt;main&gt;</code> + normalized footer with "Return to construct" / "Back to [medium]" links; construct/home always points to <code>/home/</code></td></tr>
     </table>
 
     <h3>Dot nav (production order · visual canon pending review)</h3>
     <div class="demo">
       <div class="dotnav-demo">
+        <button class="puzzle" type="button" aria-label="Puzzle" onclick="return false"><svg viewBox="0 0 120 120" aria-hidden="true"><path fill="currentColor" d="M30 30H48C48 19 52 12 60 12S72 19 72 30H90V48C101 48 108 52 108 60S101 72 90 72V90H72C72 79 68 72 60 72S48 79 48 90H30V72C41 72 48 68 48 60S41 48 30 48V30Z"/></svg></button>
         <span class="dot current" data-medium="tattooing" title="TATTOOING"></span>
         <span class="dot" data-medium="art" title="ART MAKING"></span>
         <span class="dot" data-medium="merch" title="MERCH"></span>

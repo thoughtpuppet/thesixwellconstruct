@@ -182,6 +182,7 @@
      If missing or unrecognised, no dot is highlighted.
   ────────────────────────────────────────────────────────── */
   var currentKey = (document.body.getAttribute('data-venture') || '').toLowerCase();
+  var PUZZLE_PIECE_SVG = '<svg viewBox="0 0 120 120" aria-hidden="true" focusable="false"><path fill="currentColor" d="M30 30H48C48 19 52 12 60 12S72 19 72 30H90V48C101 48 108 52 108 60S101 72 90 72V90H72C72 79 68 72 60 72S48 79 48 90H30V72C41 72 48 68 48 60S41 48 30 48V30Z"/></svg>';
 
 
   /* ── BUILD NAV ────────────────────────────────────────────
@@ -220,6 +221,74 @@
 
 
   var desktopColorBindings = [];
+
+  var retryItem = document.createElement('div');
+  retryItem.className = 'cnav-item cnav-retry-item';
+  retryItem.style.cssText = [
+    'position:relative',
+    'display:flex',
+    'flex-direction:column',
+    'align-items:center',
+    'pointer-events:auto',
+  ].join(';');
+
+  var retryLabel = document.createElement('span');
+  retryLabel.className = 'cnav-label';
+  retryLabel.textContent = 'PUZZLE';
+  retryLabel.style.cssText = [
+    'position:absolute',
+    'bottom:calc(100% + ' + CONFIG.labelOffset + 'px)',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'font-family:' + CONFIG.labelFont,
+    'font-size:' + CONFIG.labelSize + 'px',
+    'font-weight:' + CONFIG.labelWeight,
+    'letter-spacing:' + CONFIG.labelTracking,
+    'text-transform:uppercase',
+    'color:' + readTokenColor('--color-about', '#FCB867'),
+    'white-space:nowrap',
+    'line-height:1',
+    'opacity:0',
+    'transition:opacity 180ms ease',
+    'pointer-events:none',
+  ].join(';');
+
+  var retryAction = document.createElement('button');
+  retryAction.type = 'button';
+  retryAction.className = 'cnav-retry';
+  retryAction.setAttribute('aria-label', 'Puzzle');
+  retryAction.innerHTML = PUZZLE_PIECE_SVG;
+  retryAction.style.cssText = [
+    'width:22px',
+    'height:22px',
+    'padding:0',
+    'border:0',
+    'background:transparent',
+    'color:' + readTokenColor('--color-about', '#FCB867'),
+    'cursor:pointer',
+    'opacity:0.62',
+    'transition:opacity 180ms ease,transform 180ms ease',
+    'pointer-events:auto',
+    'flex-shrink:0',
+  ].join(';');
+  retryAction.querySelector('svg').style.cssText = 'display:block;width:100%;height:100%';
+  retryItem.addEventListener('mouseenter', function() {
+    retryAction.style.opacity = '1';
+    retryAction.style.transform = 'scale(1.18)';
+    retryLabel.style.opacity = '1';
+  });
+  retryItem.addEventListener('mouseleave', function() {
+    retryAction.style.opacity = '0.62';
+    retryAction.style.transform = 'scale(1)';
+    retryLabel.style.opacity = '0';
+  });
+  retryAction.addEventListener('click', function() {
+    if (typeof window._constructFade === 'function') window._constructFade('/');
+    else window.location.href = '/';
+  });
+  retryItem.appendChild(retryLabel);
+  retryItem.appendChild(retryAction);
+  nav.appendChild(retryItem);
 
   VENTURES.forEach(function(v) {
     var isCurrent = (v.key === currentKey);
@@ -354,7 +423,7 @@
   nav.appendChild(exploreAction);
 
   var exploreFocusStyle = document.createElement('style');
-  exploreFocusStyle.textContent = '.cnav-explore:focus-visible,#cnav-mobile-explore:focus-visible{outline:3px solid #FCB867;outline-offset:3px;}';
+  exploreFocusStyle.textContent = '.cnav-retry:focus-visible,.cnav-explore:focus-visible,#cnav-mobile-retry:focus-visible,#cnav-mobile-explore:focus-visible{outline:3px solid #FCB867;outline-offset:3px;}';
   document.head.appendChild(exploreFocusStyle);
 
   document.body.appendChild(nav);
@@ -523,6 +592,33 @@
     'z-index:2',
   ].join(';');
 
+  var mRetry = document.createElement('button');
+  mRetry.id = 'cnav-mobile-retry';
+  mRetry.type = 'button';
+  mRetry.setAttribute('aria-label', 'Puzzle');
+  mRetry.innerHTML = PUZZLE_PIECE_SVG;
+  mRetry.style.cssText = [
+    'position:absolute',
+    'top:72px',
+    'left:calc(50% - 122px)',
+    'display:inline-flex',
+    'align-items:center',
+    'justify-content:center',
+    'width:44px',
+    'height:44px',
+    'padding:7px',
+    'border:5px solid ' + PARTICLE_COLOR,
+    'border-radius:0',
+    'background:' + SITE_BG,
+    'color:' + PARTICLE_COLOR,
+    'cursor:pointer',
+    'opacity:0',
+    'transition:opacity 350ms ease',
+    'pointer-events:none',
+    'z-index:2',
+  ].join(';');
+  mRetry.querySelector('svg').style.cssText = 'display:block;width:100%;height:100%';
+
   var mExplore = document.createElement('button');
   mExplore.id = 'cnav-mobile-explore';
   mExplore.type = 'button';
@@ -561,6 +657,7 @@
   mScrim.appendChild(mCenterLabel);
   mScrim.appendChild(mWordmark);
   mScrim.appendChild(mBack);
+  mScrim.appendChild(mRetry);
   mScrim.appendChild(mExplore);
 
   /* mRing remains as a compatibility handle for responsive hide/show code. */
@@ -635,6 +732,11 @@
     exploreAction.style.borderLeftColor = PARTICLE_COLOR;
     exploreAction.style.background = isExplorePage ? PARTICLE_COLOR : 'transparent';
     exploreAction.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
+    retryLabel.style.color = PARTICLE_COLOR;
+    retryAction.style.color = PARTICLE_COLOR;
+    mRetry.style.borderColor = PARTICLE_COLOR;
+    mRetry.style.background = SITE_BG;
+    mRetry.style.color = PARTICLE_COLOR;
     mExplore.style.borderColor = PARTICLE_COLOR;
     mExplore.style.background = isExplorePage ? PARTICLE_COLOR : SITE_BG;
     mExplore.style.color = isExplorePage ? SITE_BG : PARTICLE_COLOR;
@@ -1141,6 +1243,8 @@
     requestAnimationFrame(function() {
       mScrim.style.opacity = '0.94';
       mWordmark.style.opacity = '0.82';
+      mRetry.style.opacity = '0.82';
+      mRetry.style.pointerEvents = 'auto';
       mExplore.style.opacity = '0.82';
       mExplore.style.pointerEvents = 'auto';
       mChip.style.zIndex = '1099';
@@ -1160,6 +1264,8 @@
     mWordmark.style.opacity = '0';
     mBack.style.opacity = '0';
     mBack.style.pointerEvents = 'none';
+    mRetry.style.opacity = '0';
+    mRetry.style.pointerEvents = 'none';
     mExplore.style.opacity = '0';
     mExplore.style.pointerEvents = 'none';
     mobileNodes.forEach(function(nd) { nd.el.style.opacity = '0'; });
@@ -1239,6 +1345,12 @@
   mBack.addEventListener('click', function(e) {
     e.stopPropagation();
     collapseMobileSubnodes();
+  });
+
+  mRetry.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (typeof window._constructFade === 'function') window._constructFade('/');
+    else window.location.href = '/';
   });
 
   mExplore.addEventListener('click', function(e) {
@@ -1390,9 +1502,10 @@
 
       var bounds = desktopHeaderBounds(w);
       var dotCount = desktopDots.length;
+      var retryWidth = Math.max(22, retryAction.getBoundingClientRect().width);
       var exploreWidth = Math.max(76, exploreAction.getBoundingClientRect().width);
       var minRowWidth = dotCount > 0
-        ? (dotCount * CONFIG.dotSize) + exploreWidth + (dotCount * CONFIG.dotGapMin)
+        ? retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + ((dotCount + 1) * CONFIG.dotGapMin)
         : 0;
       var availableWidth = Math.max(0, bounds.right - bounds.left);
 
@@ -1408,11 +1521,11 @@
       mRing.style.display  = 'none';
 
       var fittedGap = dotCount > 1
-        ? (availableWidth - (dotCount * CONFIG.dotSize) - exploreWidth) / dotCount
+        ? (availableWidth - retryWidth - (dotCount * CONFIG.dotSize) - exploreWidth) / (dotCount + 1)
         : CONFIG.dotGap;
       fittedGap = Math.max(CONFIG.dotGapMin, Math.min(CONFIG.dotGap, fittedGap));
 
-      var rowWidth = (dotCount * CONFIG.dotSize) + exploreWidth + (dotCount * fittedGap);
+      var rowWidth = retryWidth + (dotCount * CONFIG.dotSize) + exploreWidth + ((dotCount + 1) * fittedGap);
       var minCenter = bounds.left + rowWidth / 2;
       var maxCenter = bounds.right - rowWidth / 2;
       var centerX = Math.max(minCenter, Math.min(maxCenter, w / 2));
