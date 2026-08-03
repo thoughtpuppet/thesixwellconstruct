@@ -2432,6 +2432,7 @@ export async function handleAdminResendNotification(request, env) {
       if (!appointmentId) return errorResponse("Missing Tattoo Special appointment id.", 400);
       const specialAppointment = await db.prepare(
         `SELECT a.*, s.type AS submission_type,
+                s.id AS special_submission_id, s.booking_url AS submission_booking_url,
                 s.contact_name AS submission_contact_name,
                 s.contact_email AS submission_contact_email,
                 t.offer_title, t.variant_label, t.advertised_price_cents,
@@ -2459,6 +2460,16 @@ export async function handleAdminResendNotification(request, env) {
       ) {
         return errorResponse("This Tattoo Special deposit link is no longer active. Review the held time before sending a new link.", 409);
       }
+      const clientAccess = specialAppointment.submission_booking_url
+        ? await activeTokenForBookingUrl(
+          db,
+          specialAppointment.special_submission_id,
+          specialAppointment.submission_booking_url,
+        )
+        : null;
+      if (!clientAccess) {
+        return errorResponse("This Tattoo Special client deposit page is no longer active. Prepare client access before resending it.", 409);
+      }
       const delivery = await notifyTattooSpecialDepositRequested(env, request, {
         appointmentId: specialAppointment.id,
         clientName: specialAppointment.client_name || specialAppointment.submission_contact_name,
@@ -2471,7 +2482,9 @@ export async function handleAdminResendNotification(request, env) {
         depositCents: specialAppointment.special_deposit_cents || specialAppointment.deposit_cents,
         currency: specialAppointment.currency || "USD",
         paymentDueAt: specialAppointment.payment_due_at || specialAppointment.hold_expires_at,
-        checkoutUrl: specialAppointment.square_checkout_url,
+        checkoutUrl: specialAppointment.submission_booking_url.startsWith("http")
+          ? specialAppointment.submission_booking_url
+          : `${publicBaseUrl(env, request)}${specialAppointment.submission_booking_url}`,
       }, {
         idempotencyKey: resendKey(`tattoo_special_deposit_requested:${specialAppointment.id}`),
       });

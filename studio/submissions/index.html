@@ -4155,6 +4155,14 @@ ${meetingLines}
       submission.approvedBudget || tattooSessionPlans.get(submission.id)
     );
     const appointment = latestAppointmentFor(submission.id);
+    const specialClientUrl = submission.type === "tattoo_special"
+      && submission.status === "approved"
+      && appointmentIsPending(appointment)
+      && appointment?.approvalState === "approved"
+      && ["active", "expiry_attention"].includes(appointment?.holdState || "")
+      && Boolean(appointment.checkoutUrl || appointment.squareCheckoutUrl)
+      ? bookingUrl
+      : "";
     const isStudio = submission.type === "studio_booking" || isStudioAppointment(appointment);
     const studioVisit = isArtVisitAppointment(appointment) || submissionBookingTypeId(submission) === "studio_visit";
     if (isStudio) {
@@ -4169,6 +4177,9 @@ ${meetingLines}
     }
     if (appointment && appointment.status === "confirmed") {
       return `Hi ${name}, this is art.pill TATTOO HOUSE. Your appointment is confirmed. Keep an eye on your email for studio follow-up before the session.`;
+    }
+    if (specialClientUrl) {
+      return `Hi ${name}, this is art.pill TATTOO HOUSE. Your Tattoo Special request has been approved. Review your approved request and pay the deposit to confirm your appointment here: ${specialClientUrl}`;
     }
     if (bookingUrl && submission.status === "approved") {
       if (requiresInPersonConsult(submission)) {

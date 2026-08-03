@@ -253,6 +253,29 @@ function isTattooSubmissionType(type) {
   return TATTOO_SUBMISSION_TYPES.has(type);
 }
 
+function absoluteClientUrl(env, request, pathOrUrl) {
+  const base = env.PUBLIC_SITE_URL || new URL(request.url).origin;
+  return new URL(pathOrUrl, base).toString();
+}
+
+async function activeBookingAccessForUrl(db, submissionId, bookingUrl) {
+  let token = "";
+  try {
+    token = new URL(bookingUrl, "https://booking.invalid").searchParams.get("token") || "";
+  } catch {
+    return null;
+  }
+  if (!token) return null;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  const tokenHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return db.prepare(
+    `SELECT * FROM booking_tokens
+     WHERE submission_id=? AND token_hash=? AND revoked_at IS NULL AND used_at IS NULL
+       AND (expires_at IS NULL OR expires_at>?)
+     LIMIT 1`
+  ).bind(submissionId, tokenHash, new Date().toISOString()).first();
+}
+
 function submissionNeedsPrerequisiteConsultation(rowOrPayload) {
   const payload = rowOrPayload?.payload_json
     ? parseJsonField(rowOrPayload.payload_json, {})
@@ -2668,9 +2691,6 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
           db.prepare(
             "UPDATE submissions SET payload_json=json_set(payload_json,'$.approved_price_cents',?) WHERE id=? AND updated_at=?"
           ).bind(specialDecision.approvedPrice, id, now),
-          db.prepare(
-            "UPDATE booking_tokens SET revoked_at=COALESCE(revoked_at,?),updated_at=? WHERE submission_id=?"
-          ).bind(now, now, id),
         );
       } else if (action === "decline") {
         statements.push(
@@ -2787,6 +2807,14 @@ export async function handleSubmissionDecisionNotification(request, env, id) {
           code: "DEPOSIT_LINK_REQUIRED",
         });
       }
+      const clientAccess = submission.booking_url
+        ? await activeBookingAccessForUrl(db, id, submission.booking_url)
+        : null;
+      if (!clientAccess) {
+        return errorResponse("Prepare the Tattoo Special client deposit page before sending approval.", 409, {
+          code: "DEPOSIT_CLIENT_LINK_REQUIRED",
+        });
+      }
       delivery = await notifyTattooSpecialDepositRequested(env, request, {
         appointmentId: details.appointment_id,
         clientName: submission.contact_name,
@@ -2799,7 +2827,7 @@ export async function handleSubmissionDecisionNotification(request, env, id) {
         depositCents: details.deposit_cents,
         currency: "USD",
         paymentDueAt: details.payment_due_at,
-        checkoutUrl: details.square_checkout_url,
+        checkoutUrl: absoluteClientUrl(env, request, submission.booking_url),
       }, { idempotencyKey: attemptKey });
     } else if (submission.status === "approved" && isTattooSubmissionType(submission.type)) {
       const token = await db.prepare(

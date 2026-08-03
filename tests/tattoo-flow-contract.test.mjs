@@ -417,6 +417,7 @@ function insertSubmissionFixture(database, {
 function insertAppointmentFixture(database, {
   id,
   submissionId = null,
+  bookingTokenId = null,
   bookingTypeId = "consult_in_person",
   availabilityWindowId = null,
   status = "confirmed",
@@ -440,16 +441,17 @@ function insertAppointmentFixture(database, {
   const now = new Date().toISOString();
   database.prepare(
     `INSERT INTO appointments (
-      id, submission_id, booking_type_id, availability_window_id, status, purpose,
+      id, submission_id, booking_token_id, booking_type_id, availability_window_id, status, purpose,
       client_name, client_email, start_at, end_at, deposit_cents, tip_cents,
       currency, square_order_id, square_payment_link_id, square_checkout_url,
       hold_expires_at, hold_state, replacement_for_appointment_id,
       replaced_by_appointment_id, reschedule_count, approval_state, payment_due_at,
       created_at, updated_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     id,
     submissionId,
+    bookingTokenId,
     bookingTypeId,
     availabilityWindowId,
     status,
@@ -2639,6 +2641,8 @@ test("Studio prepares a Tattoo Special deposit link silently before explicit cli
   assert.match(studio, /\/tattoo\/specials\/submissions\/\$\{encodeURIComponent\(prepareSpecialDeposit\.dataset\.prepareSpecialDeposit\)\}\/deposit/);
   assert.match(studio, /data-send-decision-notification[\s\S]*?Send Approval Notification/);
   assert.match(studio, /Prepare the required booking or deposit link before sending approval/);
+  assert.match(studio, /const specialClientUrl = submission\.type === "tattoo_special"[\s\S]*?Boolean\(appointment\.checkoutUrl \|\| appointment\.squareCheckoutUrl\)[\s\S]*?\? bookingUrl/);
+  assert.match(studio, /if \(specialClientUrl\)[\s\S]*?pay the deposit to confirm your appointment here: \$\{specialClientUrl\}/);
 });
 
 test("Studio saves a client-facing decline reason separately from the decision notification", () => {
@@ -2673,7 +2677,7 @@ test("Studio client preview opens synchronously and carries the Tattoo Special l
   assert.match(booking, /<strong>Notes from the artist:<\/strong><br>\$\{sessionCopyHtml\(plan\.artistNote \|\| copy\.fallbackNote\)\}/);
   assert.match(booking, /if \(!renderPendingCheckout\(\)\) appEl\.classList\.remove\("hidden"\)/);
   assert.match(booking, /if \(previewMode\)[\s\S]*?client's Square checkout is not opened from Studio preview/);
-  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Square deposit link sent by email/);
+  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Pay deposit and confirm[\s\S]*?resumeCheckoutLink\.classList\.remove\("hidden"\)/);
 });
 
 test("Tattoo Specials require Studio approval and preserve server-side price, deposit, duration, and token cutoff", async () => {
@@ -2936,6 +2940,14 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   });
   assert.equal(approvalResponse.status, 200, await approvalResponse.clone().text());
   assert.equal(sent.some((message) => message.to === "primary@example.com" && /deposit required/i.test(message.subject)), false);
+  assert.equal(database.prepare("SELECT revoked_at FROM booking_tokens WHERE id=?").get(tokenRow.id).revoked_at, null);
+  const approvedBeforePreparation = await handleBookingContext(new Request(
+    `https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`,
+  ), env);
+  assert.equal(approvedBeforePreparation.status, 200);
+  const approvedBeforePreparationPayload = await approvedBeforePreparation.json();
+  assert.equal(approvedBeforePreparationPayload.submission.pendingApproval, false);
+  assert.equal(approvedBeforePreparationPayload.pendingCheckout.checkoutUrl, "");
   const depositResponse = await withMockFetch(async (url, init) => {
     const target = String(url);
     if (target.endsWith("/v2/online-checkout/payment-links")) {
@@ -2950,6 +2962,8 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(depositResponse.status, 200, await depositResponse.clone().text());
   const approval = await depositResponse.json();
   assert.equal(approval.checkoutUrl, "https://square.test/special");
+  assert.match(approval.clientUrl, /^https:\/\/example\.test\/booking\/\?token=/);
+  assert.notEqual(approval.clientUrl, new URL(submitted.bookingUrl, "https://example.test").toString());
   assert.equal(approval.appointmentId, hold.appointment.id);
   assert.ok(new Date(approval.paymentDueAt).getTime() <= new Date(closes).getTime());
   assert.ok(new Date(approval.paymentDueAt).getTime() <= Date.now() + 24 * 60 * 60 * 1000);
@@ -2958,9 +2972,34 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   submission = database.prepare("SELECT * FROM submissions WHERE id=?").get(submitted.submissionId);
   assert.equal(submission.status, "approved");
   assert.equal(submission.tattoo_stage, "ready_to_book");
-  assert.ok(database.prepare("SELECT revoked_at FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId).revoked_at);
-  const revokedContext = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`), env);
-  assert.equal(revokedContext.status, 403);
+  assert.equal(submission.booking_url, new URL(approval.clientUrl).pathname + new URL(approval.clientUrl).search);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId).count, 2);
+  assert.ok(database.prepare("SELECT revoked_at FROM booking_tokens WHERE id=?").get(tokenRow.id).revoked_at);
+  const replacedContext = await handleBookingContext(new Request(
+    `https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`,
+  ), env);
+  assert.equal(replacedContext.status, 403);
+  const preparedRawToken = new URL(approval.clientUrl).searchParams.get("token");
+  const approvedContextResponse = await handleBookingContext(new Request(
+    `https://example.test/api/booking/context?token=${encodeURIComponent(preparedRawToken)}`,
+  ), env);
+  assert.equal(approvedContextResponse.status, 200);
+  const approvedContext = await approvedContextResponse.json();
+  assert.equal(approvedContext.submission.pendingApproval, false);
+  assert.equal(approvedContext.pendingCheckout.appointmentId, hold.appointment.id);
+  assert.equal(approvedContext.pendingCheckout.approvalState, "approved");
+  assert.equal(approvedContext.pendingCheckout.holdState, "active");
+  assert.equal(approvedContext.pendingCheckout.resumable, true);
+  assert.equal(approvedContext.pendingCheckout.checkoutUrl, "https://square.test/special");
+  const repeatedPreparation = await handleAdminTattooSpecialDeposit(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/deposit`,
+    {}, adminToken,
+  ), env, submitted.submissionId);
+  assert.equal(repeatedPreparation.status, 200, await repeatedPreparation.clone().text());
+  const repeatedPreparationPayload = await repeatedPreparation.json();
+  assert.equal(repeatedPreparationPayload.clientUrl, approval.clientUrl);
+  assert.equal(repeatedPreparationPayload.existing, true);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId).count, 2);
   const nonAnimeSimplification = await handleAdminTattooSpecialReview(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/review`,
     { outcome: "simplification_requested", note: "This option should remain Anime-only." },
@@ -2970,7 +3009,8 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.match(bookingPage, /Submit Request for Approval/);
   assert.match(bookingPage, /special-offering/);
-  const specialAppointment = database.prepare("SELECT hold_expires_at,start_at,end_at,approval_state,payment_due_at,square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id);
+  const specialAppointment = database.prepare("SELECT booking_token_id,hold_expires_at,start_at,end_at,approval_state,payment_due_at,square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id);
+  assert.notEqual(specialAppointment.booking_token_id, tokenRow.id);
   assert.equal(specialAppointment.approval_state, "approved");
   assert.equal(specialAppointment.payment_due_at, approval.paymentDueAt);
   assert.equal(specialAppointment.hold_expires_at, approval.paymentDueAt);
@@ -2988,6 +3028,8 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const approvalEmail = sent.find((message) => message.to === "primary@example.com" && /deposit required/i.test(message.subject));
   assert.ok(approvalEmail);
   assert.match(approvalEmail.html, /Pay deposit and confirm/i);
+  assert.match(approvalEmail.text, new RegExp(approval.clientUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(approvalEmail.text, /square\.test\/special/);
   assert.match(approvalEmail.html, /Change requested time/i);
   assert.match(approvalEmail.html, /booking\/reschedule\/\?appointment=/i);
   assert.match(approvalEmail.text, /Change requested time:/i);
@@ -3253,6 +3295,9 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
   const paymentDueAt = new Date(now + 20 * 60 * 60 * 1000).toISOString();
   const submissionId = "special-change-request-submission";
   const appointmentId = "special-change-request-appointment";
+  const clientRawToken = "special-change-client-page-token";
+  const clientTokenId = "special-change-client-page-access";
+  const clientBookingUrl = `/booking/?token=${clientRawToken}`;
   insertSubmissionFixture(database, {
     id: submissionId,
     type: "tattoo_special",
@@ -3260,7 +3305,23 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
     tattooStage: "ready_to_book",
     name: "Change Client",
     email: "change@example.test",
+    bookingUrl: clientBookingUrl,
   });
+  database.prepare(
+    `INSERT INTO booking_tokens (
+      id,token_hash,submission_id,allowed_booking_types_json,purpose,
+      expires_at,created_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,?)`
+  ).run(
+    clientTokenId,
+    await sha256HexForTest(clientRawToken),
+    submissionId,
+    JSON.stringify(["tattoo_special_palm_v2"]),
+    "tattoo",
+    paymentDueAt,
+    new Date().toISOString(),
+    new Date().toISOString(),
+  );
   database.prepare("UPDATE submissions SET payload_json=? WHERE id=?").run(JSON.stringify({
     special_offer_id: "special-palm",
     special_offer_version_id: "special-palm-v2",
@@ -3306,6 +3367,7 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
   insertAppointmentFixture(database, {
     id: appointmentId,
     submissionId,
+    bookingTokenId: clientTokenId,
     bookingTypeId: "tattoo_special_palm_v2",
     availabilityWindowId: "special-change-old-window",
     status: "deposit_pending",
@@ -3346,7 +3408,8 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
   assert.equal(resendResponse.status, 200, JSON.stringify(resendPayload));
   assert.equal(sent.length, 1);
   assert.match(sent[0].subject, /Tattoo Special was approved/i);
-  assert.match(sent[0].text, /square\.test\/special-change-old/);
+  assert.match(sent[0].text, /example\.test\/booking\/\?token=special-change-client-page-token/);
+  assert.doesNotMatch(sent[0].text, /square\.test\/special-change-old/);
   assert.match(sent[0].text, /Change requested time/i);
 
   const contextResponse = await handleRescheduleContext(jsonRequest("/api/booking/reschedule/context", {

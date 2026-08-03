@@ -840,6 +840,7 @@
     const pending = context?.pendingCheckout;
     pendingCheckoutPanel.classList.add("hidden");
     resumeCheckoutLink.classList.add("hidden");
+    resumeCheckoutLink.textContent = "Resume Square checkout";
     releaseCheckoutBtn.classList.add("hidden");
     if (!pending) return false;
     const expiresAt = pending.holdExpiresAt || pending.expiresAt || "";
@@ -855,7 +856,16 @@
       return true;
     }
     if (pending.approvalState === "approved" && context?.submission?.special) {
-      pendingCheckoutText.textContent = `Studio approved your requested time, ${formatDate(pending.startAt)}. The appointment is not booked until the Square deposit link sent by email is paid${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}.`;
+      pendingCheckoutText.textContent = active && pending.checkoutUrl
+        ? `Studio approved your requested time, ${formatDate(pending.startAt)}. Pay the deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""} to confirm the appointment.`
+        : active
+          ? `Studio approved your requested time, ${formatDate(pending.startAt)}. The deposit link is still being prepared; return here after the Studio confirms it is ready.`
+          : `The deposit window for your approved requested time has ended. Contact the Studio before attempting another booking.`;
+      if (active && pending.checkoutUrl) {
+        resumeCheckoutLink.href = pending.checkoutUrl;
+        resumeCheckoutLink.textContent = "Pay deposit and confirm";
+        resumeCheckoutLink.classList.remove("hidden");
+      }
       pendingCheckoutPanel.classList.remove("hidden");
       appEl.classList.add("hidden");
       return true;
