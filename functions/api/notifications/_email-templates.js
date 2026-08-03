@@ -260,7 +260,7 @@ export function buildTattooSpecialDepositRequestEmail(data) {
     headline: "Your held time is approved. Pay the deposit to book it.",
     greeting: `Hi ${data.clientName || "there"},`,
     intro: [
-      "Studio approved your Tattoo Special request. Your requested time is still held, but it is not booked yet.",
+      "Sai Solehman has approved your Tattoo Special request. Your requested time is still held, but it is not booked yet. Use the link below to confirm your appointment and pay your deposit. You can also change your requested time below if needed.",
     ],
     details: [
       { label: "Requested appointment", value: data.when },

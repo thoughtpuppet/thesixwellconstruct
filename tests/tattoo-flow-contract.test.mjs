@@ -4650,6 +4650,9 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   ];
   tattooSpecialVariants.forEach((key) => assert.equal(nodeVariants.get(key), "tattoo", `${key} should be independently editable`));
   const specialDepositPreview = renderClientEmailPreview("tattoo_special_deposit_requested", "default");
+  const specialDepositApprovalCopy = "Sai Solehman has approved your Tattoo Special request. Your requested time is still held, but it is not booked yet. Use the link below to confirm your appointment and pay your deposit. You can also change your requested time below if needed.";
+  assert.match(specialDepositPreview.html, new RegExp(specialDepositApprovalCopy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(specialDepositPreview.text, new RegExp(specialDepositApprovalCopy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(specialDepositPreview.html, /Change requested time/);
   assert.match(specialDepositPreview.html, /flow=special-request/);
   assert.match(specialDepositPreview.text, /without another Studio approval/i);
