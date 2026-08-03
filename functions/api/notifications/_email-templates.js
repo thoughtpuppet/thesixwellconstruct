@@ -313,7 +313,7 @@ export function buildTattooSpecialReviewEmail(data) {
     ],
     sections: data.studioNote ? [{
       id: "studio_note",
-      title: "Studio note",
+      title: declined ? "Why this request was declined" : "Studio note",
       paragraphs: [data.studioNote],
       editableParagraphs: false,
     }] : [],

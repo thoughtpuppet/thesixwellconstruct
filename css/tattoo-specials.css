@@ -116,7 +116,6 @@ main {
 }
 
 .specials-state h2,
-.specials-window h2,
 .specials-offers h2,
 .specials-form-intro h2,
 .specials-receipt h2 {
@@ -129,7 +128,7 @@ main {
 }
 
 .specials-state p,
-.specials-window p,
+.specials-window-copy,
 .specials-form-intro p,
 .specials-receipt p {
   max-width: 700px;
@@ -148,65 +147,16 @@ main {
 }
 
 .specials-campaign {
-  display: grid;
-  grid-template-columns: minmax(220px, 340px) minmax(300px, 500px);
-  align-items: start;
-  gap: 16px;
   width: 100%;
-  max-width: 856px;
 }
 
-.specials-artwork {
+.specials-window-copy {
   margin: 0;
-  padding: 8px;
-  border: 5px solid var(--special-faint);
 }
 
-.specials-artwork img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.specials-window {
-  padding: 24px;
-  border: 5px solid var(--special-faint);
-}
-
-.specials-window h2 {
-  font-size: clamp(24px, 2.4vw, 34px);
-}
-
-.specials-window dl {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 22px 0 0;
-}
-
-.specials-window dl div {
-  padding: 16px 0;
-  border-top: 5px solid var(--special-faint);
-}
-
-.specials-window dl div + div {
-  padding-left: 20px;
-  border-left: 5px solid var(--special-faint);
-}
-
-.specials-window dt {
-  color: var(--special-muted);
-  font-family: var(--special-sans);
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.specials-window dd {
-  margin: 8px 0 0;
-  font-family: var(--special-sans);
-  font-size: 22px;
-  font-weight: 900;
-  text-transform: uppercase;
+.specials-window-copy strong {
+  color: var(--special-accent);
+  font-weight: 700;
 }
 
 .specials-booking-cue {
@@ -403,7 +353,6 @@ main {
   }
 
   .specials-hero,
-  .specials-campaign,
   .specials-form-section {
     grid-template-columns: 1fr;
     gap: 24px;
@@ -427,29 +376,10 @@ main {
     padding: 22px;
   }
 
-  .specials-window {
-    padding: 22px;
-  }
-
-  .specials-artwork {
-    width: 100%;
-    max-width: 260px;
-    justify-self: center;
-  }
-
   .specials-booking-cue {
     min-height: 96px;
     padding-top: 12px;
     font-size: 15px;
-  }
-
-  .specials-window dl {
-    grid-template-columns: 1fr;
-  }
-
-  .specials-window dl div + div {
-    padding-left: 0;
-    border-left: 0;
   }
 
   .specials-footer,

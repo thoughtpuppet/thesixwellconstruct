@@ -789,9 +789,14 @@ export async function handleAdminTattooSpecialReview(request, env, submissionId)
     }
     const now = new Date().toISOString();
     const note = text(body.note, 3000);
+    const reason = text(body.reason, 3000);
+    if (outcome === "declined" && !reason) {
+      return failure("Explain why this Tattoo Special request is being declined.", 400);
+    }
     let approvedPrice = null;
     let checkout = null;
     let approvalDeliveries = [];
+    let reviewDelivery = null;
     if (outcome === "approved") {
       if (new Date(row.sales_closes_at).getTime() <= Date.now()) {
         return failure("The Tattoo Specials sales window has closed. No deposit link can be issued.", 409);
@@ -845,28 +850,31 @@ export async function handleAdminTattooSpecialReview(request, env, submissionId)
       ]);
     } else {
       const status = outcome === "declined" ? "declined" : "reviewing";
+      const clientNote = outcome === "declined" ? reason : note;
       const statements = [
         db.prepare("UPDATE tattoo_special_submission_terms SET review_outcome = ?, updated_at = ? WHERE submission_id = ?").bind(outcome, now, submissionId),
-        db.prepare("UPDATE submissions SET status = ?, tattoo_stage = 'review', internal_notes = ?, updated_at = ? WHERE id = ?").bind(status, note, now, submissionId),
-        db.prepare("INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at) VALUES (?, ?, ?, 'admin', ?, ?)").bind(crypto.randomUUID(), submissionId, `special_review_${outcome}`, note, now),
+        outcome === "declined"
+          ? db.prepare("UPDATE submissions SET status = ?, tattoo_stage = 'review', updated_at = ? WHERE id = ?").bind(status, now, submissionId)
+          : db.prepare("UPDATE submissions SET status = ?, tattoo_stage = 'review', internal_notes = ?, updated_at = ? WHERE id = ?").bind(status, note, now, submissionId),
+        db.prepare("INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at) VALUES (?, ?, ?, 'admin', ?, ?)").bind(crypto.randomUUID(), submissionId, `special_review_${outcome}`, clientNote, now),
       ];
       if (outcome === "declined") {
         statements.push(
           db.prepare(
             `UPDATE appointments SET status = 'cancelled', hold_state = 'released', approval_state = 'declined',
-             approval_decided_at = ?, cancelled_at = ?, cancellation_reason = 'Tattoo Special request declined', updated_at = ?
+             approval_decided_at = ?, cancelled_at = ?, cancellation_reason = ?, updated_at = ?
              WHERE submission_id = ? AND status IN ('pending_deposit','deposit_pending') AND hold_state = 'active'`
-          ).bind(now, now, now, submissionId),
+          ).bind(now, now, reason, now, submissionId),
           db.prepare("UPDATE booking_tokens SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE submission_id = ?")
             .bind(now, now, submissionId),
         );
       }
       await db.batch(statements);
-      await notifyTattooSpecialReview(env, {
+      reviewDelivery = await notifyTattooSpecialReview(env, {
         ...row,
         submissionId,
         outcome,
-        note,
+        note: clientNote,
       });
     }
     return json({
@@ -876,7 +884,7 @@ export async function handleAdminTattooSpecialReview(request, env, submissionId)
       checkoutUrl: checkout?.checkoutUrl || "",
       appointmentId: checkout?.appointment?.id || "",
       paymentDueAt: checkout?.paymentDueAt || "",
-      email: approvalDeliveries[0]?.value || null,
+      email: approvalDeliveries[0]?.value || reviewDelivery,
       text: approvalDeliveries[1]?.value || null,
     });
   } catch (error) {

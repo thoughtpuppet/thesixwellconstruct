@@ -1971,6 +1971,9 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.match(script, /Check back another time or <a href="\$\{escape\(payload\.normalInquiryUrl\)\}">submit a normal tattoo request<\/a>\./);
   assert.match(page, /id="specialsSubmit">Continue to Select Time Slot<\/button>/);
   assert.match(page, /class="specials-booking-cue" href="#specialsOffersSection"[\s\S]*?↓[\s\S]*?Book Your Appointment/);
+  assert.match(page, /<h2 id="offersTitle">Choose your Tattoo Special\.<\/h2>[\s\S]*?class="specials-window-copy"[\s\S]*?id="specialsDates"[\s\S]*?id="specialsDeposit"/);
+  assert.doesNotMatch(page, /specialsArtwork|specials-artwork/);
+  assert.doesNotMatch(script, /payload\.artwork|specialsArtwork/);
   assert.match(booking, /pendingSpecialApproval \? "Submit Request for Approval" : "Continue to Square"/);
   assert.doesNotMatch(script, /Direct booking|normal private booking link/);
   assert.doesNotMatch(script, /complexity approval|special-anime/);
@@ -2015,6 +2018,15 @@ test("Studio resends the active Tattoo Special deposit email instead of its cons
   assert.match(studio, /data-resend-template="tattoo_special_deposit_requested"[\s\S]*?Resend Deposit Link Email/);
   assert.match(studio, /templateKey === "tattoo_special_deposit_requested"[\s\S]*?Tattoo Special deposit email resent/);
   assert.match(studio, /catch \(error\)[\s\S]*?Email could not be resent/);
+});
+
+test("Studio requires and previews a client-facing reason before declining a Tattoo Special", () => {
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studio, /Reason shared with requester[\s\S]*?id="specialDeclineReason"/);
+  assert.match(studio, /Internal Notes remain private/);
+  assert.match(studio, /outcome === "declined" && !reason[\s\S]*?specialDeclineReason[\s\S]*?focus/);
+  assert.match(studio, /window\.confirm\(`Decline this Tattoo Special request and email this reason to the requester\?[\s\S]*?\$\{reason\}/);
+  assert.match(studio, /JSON\.stringify\(\{ outcome, approvedPriceCents:[\s\S]*?note, reason \}\)/);
 });
 
 test("Studio client preview opens synchronously and carries the Tattoo Special lifecycle", () => {
@@ -2210,6 +2222,40 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const adjacentHold = await adjacentHoldResponse.json();
   assert.equal(adjacentHoldResponse.status, 200, adjacentHold.detail || adjacentHold.error);
   assert.equal(adjacentHold.appointment.startAt, adjacentStart.toISOString());
+
+  const missingDeclineReason = await handleAdminTattooSpecialReview(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${competing.submissionId}/review`,
+    { outcome: "declined", note: "Private operator note." }, adminToken, "PATCH",
+  ), env, competing.submissionId);
+  assert.equal(missingDeclineReason.status, 400);
+  assert.match((await missingDeclineReason.json()).error, /explain why/i);
+
+  database.prepare("UPDATE submissions SET internal_notes=? WHERE id=?")
+    .run("Private operator note.", competing.submissionId);
+  const declineReason = "The requested composition exceeds the size and time included in this Tattoo Special.";
+  const declined = await handleAdminTattooSpecialReview(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${competing.submissionId}/review`,
+    { outcome: "declined", reason: declineReason }, adminToken, "PATCH",
+  ), env, competing.submissionId);
+  assert.equal(declined.status, 200);
+  assert.equal((await declined.json()).email?.ok, true);
+  const declinedSubmission = database.prepare("SELECT status,internal_notes FROM submissions WHERE id=?").get(competing.submissionId);
+  assert.equal(declinedSubmission.status, "declined");
+  assert.equal(declinedSubmission.internal_notes, "Private operator note.");
+  const declinedAppointment = database.prepare("SELECT status,hold_state,approval_state,cancellation_reason FROM appointments WHERE id=?").get(adjacentHold.appointment.id);
+  assert.deepEqual({ ...declinedAppointment }, {
+    status: "cancelled",
+    hold_state: "released",
+    approval_state: "declined",
+    cancellation_reason: declineReason,
+  });
+  assert.equal(database.prepare(
+    "SELECT note FROM submission_events WHERE submission_id=? AND event_type='special_review_declined' ORDER BY created_at DESC LIMIT 1",
+  ).get(competing.submissionId).note, declineReason);
+  const declineEmail = sent.find((message) => message.to === "competing@example.com" && /Tattoo Special review/i.test(message.subject));
+  assert.ok(declineEmail);
+  assert.match(declineEmail.html, /Why this request was declined/);
+  assert.match(declineEmail.text, new RegExp(declineReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
   const requestEmailVariants = database.prepare(
     "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? ORDER BY template_key"

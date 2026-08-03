@@ -4301,7 +4301,8 @@ ${meetingLines}
       </div>
       ${review && !["booked", "declined"].includes(submission.status) ? `<div class="tattoo-special-offer__grid">
         <label>${adjustablePrice ? "Exact approved price" : "Promotional price"} (dollars)<input id="specialApprovedPrice" type="number" min="${escapeHtml(Number(payload.quoted_price_cents || 0) / 100)}" step="1" value="${escapeHtml(price / 100)}" ${adjustablePrice ? "" : "readonly"}></label>
-        <label style="grid-column:span 2;">Studio note<textarea id="specialReviewNote" rows="3">${escapeHtml(submission.internalNotes || "")}</textarea></label>
+        <label style="grid-column:span 2;">Review note<textarea id="specialReviewNote" rows="3">${escapeHtml(submission.internalNotes || "")}</textarea><span class="contact">Used for approval or simplification. A simplification note is shared with the requester.</span></label>
+        <label style="grid-column:span 2;">Reason shared with requester<textarea id="specialDeclineReason" rows="3" placeholder="Explain why this request cannot be approved as a Tattoo Special."></textarea><span class="contact">Required only when declining. This exact reason is included in the decline email; Internal Notes remain private.</span></label>
       </div><div class="booking-actions">
         <button class="button" type="button" data-special-review-outcome="approved" data-submission-id="${escapeHtml(submission.id)}" ${heldAppointment?.approvalState === "pending" || heldAppointment?.approvalState === "approved" ? "" : "disabled"}>Approve &amp; Send Deposit Link</button>
         ${adjustablePrice ? `<button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Request Simplification</button>` : ""}
@@ -5660,17 +5661,24 @@ ${meetingLines}
       const outcome = specialReview.dataset.specialReviewOutcome;
       const approvedPriceDollars = Number(document.getElementById("specialApprovedPrice")?.value || 0);
       const note = document.getElementById("specialReviewNote")?.value.trim() || "";
+      const reason = document.getElementById("specialDeclineReason")?.value.trim() || "";
       if (outcome === "approved" && (!Number.isFinite(approvedPriceDollars) || approvedPriceDollars <= 0)) {
         setStatus("Enter the exact approved price");
         return;
       }
+      if (outcome === "declined" && !reason) {
+        setStatus("Explain why this Tattoo Special request is being declined");
+        document.getElementById("specialDeclineReason")?.focus();
+        return;
+      }
+      if (outcome === "declined" && !window.confirm(`Decline this Tattoo Special request and email this reason to the requester?\n\n${reason}`)) return;
       specialReview.disabled = true;
       setStatus(`Saving Tattoo Special review: ${outcome}`);
       try {
         const result = await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(specialReview.dataset.submissionId)}/review`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ outcome, approvedPriceCents: Math.round(approvedPriceDollars * 100), note }),
+          body: JSON.stringify({ outcome, approvedPriceCents: Math.round(approvedPriceDollars * 100), note, reason }),
         });
         await refreshActiveSubmissionDetail();
         if (outcome === "approved") {
@@ -5679,6 +5687,10 @@ ${meetingLines}
           setStatus(emailSent && textSent
             ? "Tattoo Special approved; deposit link sent by email and text"
             : `Tattoo Special approved; deposit link created. ${emailSent ? "Email sent" : "Email needs attention"}; ${textSent ? "text sent" : "text needs attention"}.`);
+        } else if (outcome === "declined") {
+          setStatus(result.email?.ok === true
+            ? "Tattoo Special declined; reason emailed to requester"
+            : "Tattoo Special declined; email delivery needs attention");
         } else {
           setStatus("Tattoo Special review saved");
         }
