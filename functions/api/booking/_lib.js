@@ -99,13 +99,13 @@ const DEFAULT_STUDIO_CONTACT_PHONE = "(770) 820-5800";
 const DEFAULT_CALENDAR_TIME_ZONE = "America/New_York";
 const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
   sectionHeading: "Your Session Plan",
-  oneSessionLabel: "One-session plan",
-  multipleSessionsLabel: "Multi-session plan",
+  oneSessionLabel: "Session Plan",
+  multipleSessionsLabel: "Session Plan",
   artistReviewLabel: "Plan in progress",
   fallbackNote: "Based on the current design, placement, and level of detail, this is the session format I recommend. We’ll continue to adjust around your comfort, skin response, and the natural pace of the work.",
   requiredPolicy: "This project is best completed across multiple sessions so the work can progress at a comfortable, considered pace.",
-  notAvailablePolicy: "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
-  clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
+  notAvailablePolicy: "This is my recommended session plan. If you have any questions, reach out to me directly: 7708205800",
+  clientChoicePolicy: "This is my recommended session plan. Choose the option that feels like the best fit. If you have any questions, reach out to me directly: 7708205800",
   artistReviewPolicy: "I’m still reviewing the best session format for this project. I’ll confirm the plan before scheduling.",
   studioPlanLabel: "Use the recommended plan",
   studioPlanDescription: "Schedule using the pacing outlined above.",
@@ -120,6 +120,12 @@ const DEFAULT_SESSION_ESTIMATE_COPY = Object.freeze({
   savedMessage: "Your preference is saved: {{preference}}. You can update it before booking.",
   acknowledgement: "I’ve reviewed the estimated session time and understand that the final timing may adjust as the work progresses.",
   confirmButtonLabel: "Continue to Scheduling",
+});
+const SUPERSEDED_SESSION_ESTIMATE_COPY = Object.freeze({
+  oneSessionLabel: "One-session plan",
+  multipleSessionsLabel: "Multi-session plan",
+  notAvailablePolicy: "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
+  clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
 });
 const LEGACY_SESSION_ESTIMATE_COPY = Object.freeze({
   sectionHeading: "Your Session Estimate",
@@ -575,7 +581,9 @@ function normalizeSessionEstimateCopy(value) {
   return Object.fromEntries(
     Object.entries(DEFAULT_SESSION_ESTIMATE_COPY).map(([key, fallback]) => [
       key,
-      asString(source[key]) && asString(source[key]) !== LEGACY_SESSION_ESTIMATE_COPY[key]
+      asString(source[key])
+        && asString(source[key]) !== LEGACY_SESSION_ESTIMATE_COPY[key]
+        && asString(source[key]) !== SUPERSEDED_SESSION_ESTIMATE_COPY[key]
         ? asString(source[key])
         : fallback,
     ]),

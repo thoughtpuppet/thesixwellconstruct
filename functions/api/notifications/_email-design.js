@@ -30,7 +30,7 @@ export const DEFAULT_EMAIL_DESIGN_PROFILE = Object.freeze({
     canvas: Object.freeze({ hex: "#0E0E0E", opacity: 1 }),
     panel: Object.freeze({ hex: "#151515", opacity: 1 }),
     title: Object.freeze({ hex: "#FBD19D", opacity: 1 }),
-    supporting: Object.freeze({ hex: "#FBD19D", opacity: 0.66 }),
+    supporting: Object.freeze({ hex: "#FBD19D", opacity: 0.85 }),
     descriptor: Object.freeze({ hex: "#FCB867", opacity: 0.3 }),
     signatureMark: Object.freeze({ mode: "node-accent" }),
   }),

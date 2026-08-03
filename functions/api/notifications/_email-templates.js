@@ -903,7 +903,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       sessionOptions: consultation
         ? "In-Person Consultation: 30 minutes. Reservation fee: $50."
         : tattooSpecial
-          ? "Palm Sized Tattoo — Standard: 120 minutes. Deposit: $50."
+          ? "Hand Sized Tattoo — Standard: 120 minutes. Deposit: $50."
           : "Half Day Session: 3 hours - Approx. 3 hours for medium approved projects or developed symbolic work. Deposit: $100.",
       approvedBudget: consultation ? "" : tattooSpecial ? "$200" : "$800-$1,200",
       depositText: consultation ? "$50" : tattooSpecial ? "$50" : "$100",
@@ -917,7 +917,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
     rendered = buildTattooSpecialDepositRequestEmail({
       clientName: SAMPLE.clientName,
       when: "Saturday, September 19, 2026 at 1:00 PM EDT - Saturday, September 19, 2026 at 3:00 PM EDT",
-      selection: "Palm Sized Tattoo — Standard",
+      selection: "Hand Sized Tattoo — Standard",
       approvedTotal: "$200",
       depositText: "$50",
       paymentDue: "Tuesday, August 4, 2026 at 2:30 PM EDT",
@@ -946,7 +946,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
         variant: mode,
         ...(mode === "tip" || mode === "tattoo_special_tip" ? { tipText: "$25", totalPaidText: tattooSpecial ? "$75" : "$125" } : {}),
         ...(tattooSpecial ? {
-          session: "Tattoo Special · Palm Sized Tattoo — Standard",
+          session: "Tattoo Special · Hand Sized Tattoo — Standard",
           feeText: "$50 received",
           billingPolicyText: "Tattoo Special approved total: $200. Deposit credit: $50. Remaining studio balance: $150. Duration: 120 minutes.",
         } : {}),
@@ -1029,7 +1029,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       clientName: SAMPLE.clientName,
       previousTime: "Thursday, June 11, 2026 at 2:00 PM EDT - Thursday, June 11, 2026 at 5:00 PM EDT",
       newTime: SAMPLE.when,
-      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : tattooSpecial ? "Tattoo Special · Palm Sized Tattoo — Standard" : SAMPLE.session,
+      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : tattooSpecial ? "Tattoo Special · Hand Sized Tattoo — Standard" : SAMPLE.session,
       confirmationUrl: SAMPLE.confirmationUrl,
       calendarUrl: SAMPLE.calendarUrl,
       locationUrl: studio ? "" : SAMPLE.locationParkingUrl,
@@ -1050,7 +1050,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       clientName: SAMPLE.clientName,
       occasion,
       scheduled: SAMPLE.when,
-      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : consultation || prerequisite ? "In-Person Consultation" : tattooSpecial ? "Tattoo Special · Palm Sized Tattoo — Standard" : SAMPLE.session,
+      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : consultation || prerequisite ? "In-Person Consultation" : tattooSpecial ? "Tattoo Special · Hand Sized Tattoo — Standard" : SAMPLE.session,
       policyText: studio
         ? "Per studio policy, deposits and payments are non-refundable. Cancellation is separate from the one-time reschedule option."
         : consultation || prerequisite || build
@@ -1096,7 +1096,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       brand: studio ? "the six.well construct" : "art.pill TATTOO HOUSE",
       clientName: SAMPLE.clientName,
       when: SAMPLE.when,
-      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : virtual ? "Virtual Consultation" : consultation ? "In-Person Consultation" : tattooSpecial ? "Tattoo Special · Palm Sized Tattoo — Standard" : SAMPLE.session,
+      session: studioVisit ? "Open Studio Visit" : studio ? "Studio Gathering" : build ? "In-Person Build Session" : virtual ? "Virtual Consultation" : consultation ? "In-Person Consultation" : tattooSpecial ? "Tattoo Special · Hand Sized Tattoo — Standard" : SAMPLE.session,
       zoomUrl: virtual ? SAMPLE.zoomUrl : "",
       calendarUrl: SAMPLE.calendarUrl,
       resources: studio || virtual ? [] : [

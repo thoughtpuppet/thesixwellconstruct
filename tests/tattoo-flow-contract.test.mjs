@@ -1940,11 +1940,14 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(publicPayload.state, "open");
   assert.equal(publicPayload.offers.length, 6);
   const scriptSpecial = publicPayload.offers.find((offer) => offer.id === "special-script");
+  const handSizedSpecial = publicPayload.offers.find((offer) => offer.id === "special-palm");
   assert.equal(scriptSpecial.variants.length, 2);
   assert.equal(scriptSpecial.durationMinutes, 90);
   assert.equal(scriptSpecial.maxWordCount, 21);
   assert.deepEqual(scriptSpecial.variants.map((variant) => variant.priceCents), [15000, 17000]);
   assert.equal(publicPayload.offers.some((offer) => offer.id === "special-anime"), false);
+  assert.equal(handSizedSpecial.title, "Hand Sized Tattoo");
+  assert.match(handSizedSpecial.description, /hand-sized tattoo/i);
   assert.deepEqual(
     publicPayload.offers.map((offer) => [offer.id, offer.mode]),
     [
@@ -1959,7 +1962,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
 
   const requestResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-palm",
-    variantId: "special-palm-v2-standard",
+    variantId: "special-palm-v3-standard",
     idempotencyKey: "special-review-palm-1",
     name: "Primary Person",
     email: "primary@example.com",
@@ -1968,7 +1971,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     policyAccepted: "yes",
     transactionalMessagesAccepted: "yes",
     placement: "Upper arm",
-    projectDetails: "A palm-sized symbolic composition.",
+    projectDetails: "A hand-sized symbolic composition.",
     // These values are intentionally hostile; the server must ignore them.
     priceCents: "1",
     depositCents: "1",
@@ -1984,7 +1987,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(sent.length, 0);
 
   const replayResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
-    offerId: "special-palm", variantId: "special-palm-v2-standard", idempotencyKey: "special-review-palm-1",
+    offerId: "special-palm", variantId: "special-palm-v3-standard", idempotencyKey: "special-review-palm-1",
     name: "Primary Person", email: "primary@example.com", phone: "4045550101",
     ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
     placement: "Upper arm", projectDetails: "Retry.",
@@ -2007,13 +2010,13 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId).count, 1);
   const tokenRow = database.prepare("SELECT * FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId);
   assert.equal(tokenRow.expires_at, closes);
-  assert.deepEqual(JSON.parse(tokenRow.allowed_booking_types_json), ["tattoo_special_palm_v2"]);
+  assert.deepEqual(JSON.parse(tokenRow.allowed_booking_types_json), ["tattoo_special_palm_v3"]);
   const rawToken = new URL(submitted.bookingUrl, "https://example.test").searchParams.get("token");
   const contextResponse = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`), env);
   assert.equal(contextResponse.status, 200);
   const context = await contextResponse.json();
   assert.equal(context.submission.pendingApproval, true);
-  assert.equal(context.submission.special.offerTitle, "Palm Sized Tattoo");
+  assert.equal(context.submission.special.offerTitle, "Hand Sized Tattoo");
   assert.equal(context.submission.special.quotedPriceCents, 20000);
   assert.equal(context.bookingTypes[0].durationMinutes, 120);
   assert.equal(context.bookingTypes[0].depositCents, 5000);
@@ -2024,7 +2027,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   );
   const appointmentEnd = new Date(appointmentStart.getTime() + 120 * 60 * 1000);
   insertAvailabilityWindow(database, {
-    id: "special-palm-window", bookingTypeId: "tattoo_special_palm_v2",
+    id: "special-palm-window", bookingTypeId: "tattoo_special_palm_v3",
     startAt: appointmentStart.toISOString(), endAt: appointmentEnd.toISOString(),
     capacity: 2,
     bufferBeforeMinutes: 30,
@@ -2032,7 +2035,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   });
   const holdResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: rawToken,
-    bookingTypeId: "tattoo_special_palm_v2",
+    bookingTypeId: "tattoo_special_palm_v3",
     availabilityWindowId: "special-palm-window",
   }), env);
   const hold = await holdResponse.json();
@@ -2047,17 +2050,17 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const overlappingStart = new Date(appointmentStart.getTime() + 30 * 60 * 1000);
   const overlappingEnd = new Date(overlappingStart.getTime() + 120 * 60 * 1000);
   insertAvailabilityWindow(database, {
-    id: "special-palm-overlapping-window", bookingTypeId: "tattoo_special_palm_v2",
+    id: "special-palm-overlapping-window", bookingTypeId: "tattoo_special_palm_v3",
     startAt: overlappingStart.toISOString(), endAt: overlappingEnd.toISOString(),
     capacity: 2,
     bufferBeforeMinutes: 30,
     bufferAfterMinutes: 30,
   });
   const competingResponse = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
-    offerId: "special-palm", variantId: "special-palm-v2-standard", idempotencyKey: "special-review-palm-overlap",
+    offerId: "special-palm", variantId: "special-palm-v3-standard", idempotencyKey: "special-review-palm-overlap",
     name: "Competing Client", email: "competing@example.com", phone: "4045550198",
     ageConfirmed: "yes", policyAccepted: "yes", transactionalMessagesAccepted: "yes",
-    placement: "Forearm", projectDetails: "A second palm-sized request.",
+    placement: "Forearm", projectDetails: "A second hand-sized request.",
   }), env);
   assert.equal(competingResponse.status, 201);
   const competing = await competingResponse.json();
@@ -2070,7 +2073,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(competingContext.availabilityWindows.some((item) => item.id === "special-palm-overlapping-window"), false);
   const competingHold = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: competingToken,
-    bookingTypeId: "tattoo_special_palm_v2",
+    bookingTypeId: "tattoo_special_palm_v3",
     availabilityWindowId: "special-palm-overlapping-window",
   }), env);
   const competingHoldPayload = await competingHold.json();
@@ -2080,7 +2083,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const adjacentStart = new Date(appointmentEnd.getTime() + 60 * 60 * 1000);
   const adjacentEnd = new Date(adjacentStart.getTime() + 120 * 60 * 1000);
   insertAvailabilityWindow(database, {
-    id: "special-palm-adjacent-window", bookingTypeId: "tattoo_special_palm_v2",
+    id: "special-palm-adjacent-window", bookingTypeId: "tattoo_special_palm_v3",
     startAt: adjacentStart.toISOString(), endAt: adjacentEnd.toISOString(),
     capacity: 2,
     bufferBeforeMinutes: 30,
@@ -2088,7 +2091,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   });
   const adjacentHoldResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: competingToken,
-    bookingTypeId: "tattoo_special_palm_v2",
+    bookingTypeId: "tattoo_special_palm_v3",
     availabilityWindowId: "special-palm-adjacent-window",
   }), env);
   const adjacentHold = await adjacentHoldResponse.json();
@@ -2109,7 +2112,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
 
   const prematureCheckout = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
     token: rawToken,
-    bookingTypeId: "tattoo_special_palm_v2",
+    bookingTypeId: "tattoo_special_palm_v3",
     availabilityWindowId: "special-palm-window",
   }), env);
   assert.equal(prematureCheckout.status, 409);
@@ -2256,7 +2259,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     }, adminToken, "PATCH",
   ), env, "special-palm");
   assert.equal(versionResponse.status, 200);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_special_offer_versions WHERE offer_id='special-palm'").get().count, 3);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM tattoo_special_offer_versions WHERE offer_id='special-palm'").get().count, 4);
   assert.equal(database.prepare("SELECT offer_version_id FROM tattoo_special_submission_terms WHERE submission_id=?").get(submitted.submissionId).offer_version_id, beforeVersion);
   assert.equal(database.prepare("SELECT deposit_cents FROM booking_types WHERE id='tattoo_special_palm_v2'").get().deposit_cents, 5000);
   assert.equal(database.prepare("SELECT booking_mode FROM tattoo_special_offer_versions WHERE id=(SELECT current_version_id FROM tattoo_special_offers WHERE id='special-palm')").get().booking_mode, "review");
@@ -2816,6 +2819,10 @@ test("Studio can create a direct private booking invite without a prior inquiry"
       settings: {
         sessionEstimateCopy: {
           sectionHeading: "Plan Your Tattoo Session",
+          oneSessionLabel: "One-session plan",
+          multipleSessionsLabel: "Multi-session plan",
+          notAvailablePolicy: "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
+          clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
           confirmButtonLabel: "Accept This Estimate",
         },
       },
@@ -2828,6 +2835,10 @@ test("Studio can create a direct private booking invite without a prior inquiry"
     "SELECT session_estimate_copy_json FROM tattoo_settings WHERE id = 'default'"
   ).get().session_estimate_copy_json);
   assert.equal(storedTemplate.sectionHeading, "Plan Your Tattoo Session");
+  assert.equal(storedTemplate.oneSessionLabel, "Session Plan");
+  assert.equal(storedTemplate.multipleSessionsLabel, "Session Plan");
+  assert.equal(storedTemplate.notAvailablePolicy, "This is my recommended session plan. If you have any questions, reach out to me directly: 7708205800");
+  assert.equal(storedTemplate.clientChoicePolicy, "This is my recommended session plan. Choose the option that feels like the best fit. If you have any questions, reach out to me directly: 7708205800");
   assert.equal(storedTemplate.confirmButtonLabel, "Accept This Estimate");
 
   const response = await handleAdminCreateDirectBookingInvite(adminJsonRequest(
@@ -2885,7 +2896,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(contextPayload.sessionEstimateCopy.confirmButtonLabel, "Accept This Estimate");
   assert.equal(
     contextPayload.sessionEstimateCopy.notAvailablePolicy,
-    "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
+    "This is my recommended session plan. If you have any questions, reach out to me directly: 7708205800",
   );
   assert.doesNotMatch(JSON.stringify(contextPayload), /offline conversation/i);
 
@@ -4492,10 +4503,21 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/policies\/"/, identity);
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/day-of\/"/, identity);
     assert.match(rendered.html, /href="https:\/\/thesixwellconstruct\.com\/tattoos\/location-parking\/"/, identity);
+    const secondaryUrls = [
+      "https://thesixwellconstruct.com/api/booking/calendar?appointment=demo-appointment",
+      "https://thesixwellconstruct.com/tattoos/policies/",
+      "https://thesixwellconstruct.com/tattoos/day-of/",
+      "https://thesixwellconstruct.com/tattoos/location-parking/",
+    ];
+    secondaryUrls.forEach((url) => {
+      const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      assert.equal((rendered.html.match(new RegExp(`href="${escaped}"`, "g")) || []).length, 1, `${identity} should render ${url} once`);
+    });
+    assert.match(rendered.html, /<a href="https:\/\/thesixwellconstruct\.com\/api\/booking\/calendar\?appointment=demo-appointment"[^>]*>Add to calendar<\/a>/, identity);
   }
 });
 
-test("client transactional emails use a table-owned canvas with Gmail inversion protection", () => {
+test("client transactional emails protect table backgrounds and reserve Gmail blending for white text", () => {
   clientEmailPreviewCatalog().forEach((entry) => {
     const rendered = renderClientEmailPreview(entry.templateKey, entry.variant);
     const presentationTables = rendered.html.match(/<table\b[^>]*role="presentation"[^>]*>/gi) || [];
@@ -4511,7 +4533,8 @@ test("client transactional emails use a table-owned canvas with Gmail inversion 
     assert.doesNotMatch(rendered.html, /<body[^>]*(?:bgcolor|background-color)/i, identity);
     assert.match(rendered.html, /u \+ \.email-body \.gmail-blend-screen\{[^}]*mix-blend-mode:screen/, identity);
     assert.match(rendered.html, /u \+ \.email-body \.gmail-blend-difference\{[^}]*mix-blend-mode:difference/, identity);
-    assert.ok(blendScreens.length > 0, `${identity} should wrap foreground content`);
+    assert.doesNotMatch(rendered.html, /border(?:-top|-bottom|-left|-right)?:5px solid #[0-9A-F]{6}/i, `${identity} should use protected rails instead of recolorable CSS borders`);
+    assert.equal(blendScreens.length, 0, `${identity} should leave non-white foreground roles unblended`);
     assert.equal(blendScreens.length, blendDifferences.length, `${identity} blend layers should stay paired`);
     assert.ok(presentationTables.length > 0, `${identity} should use presentation tables`);
     assert.ok(tableCells.length > 0, `${identity} should use table cells`);
@@ -4526,27 +4549,38 @@ test("client transactional emails use a table-owned canvas with Gmail inversion 
       assert.match(tag, /background-image:linear-gradient\((#[0-9A-F]{6}),\1\)!important/i, `${identity} cell should have a solid anti-inversion background image`);
     });
   });
+
+  const whiteProfile = defaultEmailDesignProfile();
+  whiteProfile.global.title = { hex: "#FFFFFF", opacity: 1 };
+  const whiteRendered = renderClientEmailPreview("appointment_confirmed", "tattoo", whiteProfile).html;
+  const whiteBlendScreens = whiteRendered.match(/class="gmail-blend-screen(?: gmail-blend-inline)?"/g) || [];
+  const whiteBlendDifferences = whiteRendered.match(/class="gmail-blend-difference"/g) || [];
+  assert.ok(whiteBlendScreens.length > 0, "an explicitly white title role should use Gmail blend protection");
+  assert.equal(whiteBlendScreens.length, whiteBlendDifferences.length, "white-text blend layers should stay paired");
+  assert.match(whiteRendered, /<h1[^>]*color:#FFFFFF[^>]*><span class="gmail-blend-screen">/);
 });
 
 test("client transactional emails use the shared title, supporting-copy, descriptor, and node-accent hierarchy", () => {
   const tattoo = renderClientEmailPreview("tattoo_special_review", "simplification_requested").html;
+  const tattooConfirmation = renderClientEmailPreview("appointment_confirmed", "tattoo").html;
   const art = renderClientEmailPreview("submission_received", "art_acquisition").html;
   const events = renderClientEmailPreview("studio_booking_confirmed", "studio_space").html;
   const studio = renderClientEmailPreview("crm_relationship_followup", "default").html;
 
   assert.match(tattoo, /<h1[^>]*color:#FBD19D/);
-  assert.match(tattoo, /<p[^>]*color:rgba\(251,209,157,0\.66\)/);
+  assert.match(tattoo, /<p[^>]*color:rgba\(251,209,157,0\.85\)/);
+  assert.match(tattooConfirmation, /<a[^>]*color:#090909!important[^>]*>\s*View confirmation\s*<\/a>/);
   assert.match(tattoo, /font-size:10px[^>]*color:rgba\(252,184,103,0\.30\)|color:rgba\(252,184,103,0\.30\)[^>]*font-size:10px/);
   assert.match(tattoo, /color:#FBD19D[^>]*font-size:12px[^>]*>art\.pill TATTOO HOUSE<\/span>/);
   assert.match(tattoo, /color:#9A2323[^>]*font-size:10px[^>]*>\[art\.pill TATTOO HOUSE\]<\/span>/);
-  assert.match(tattoo, /border-bottom:5px solid #6E0404/);
+  assert.match(tattoo, /<td height="5" bgcolor="#6E0404"[^>]*background-image:linear-gradient\(#6E0404,#6E0404\)!important/);
   assert.match(tattoo, /\.detail-label,\.detail-value\{display:block!important;box-sizing:border-box!important;width:100%!important\}/);
   assert.match(tattoo, /\.email-pad\{padding-left:20px!important;padding-right:20px!important;overflow-wrap:anywhere!important;word-break:break-word!important\}/);
   assert.match(tattoo, /class="detail-label"[^>]*style="box-sizing:border-box;/);
   assert.match(tattoo, /class="detail-value"[^>]*style="box-sizing:border-box;/);
-  assert.match(art, /border-bottom:5px solid #0039BD/);
-  assert.match(events, /border-bottom:5px solid #005D25/);
-  assert.match(studio, /border-bottom:5px solid #FCB467/);
+  assert.match(art, /<td height="5" bgcolor="#0039BD"[^>]*background-image:linear-gradient\(#0039BD,#0039BD\)!important/);
+  assert.match(events, /<td height="5" bgcolor="#005D25"[^>]*background-image:linear-gradient\(#005D25,#005D25\)!important/);
+  assert.match(studio, /<td height="5" bgcolor="#FCB467"[^>]*background-image:linear-gradient\(#FCB467,#FCB467\)!important/);
 });
 
 test("email design profiles validate fixed roles, inherit global values, and preserve code-owned node accents", () => {
@@ -4583,10 +4617,10 @@ test("email design profiles validate fixed roles, inherit global values, and pre
   clientEmailPreviewCatalog().forEach((entry) => {
     const rendered = renderClientEmailPreview(entry.templateKey, entry.variant, validation.profile);
     assert.ok(rendered?.html, `${entry.templateKey}:${entry.variant} should render with the profile`);
-    if (rendered.theme === "tattoo") assert.match(rendered.html, /border-bottom:5px solid #6E0404/);
-    if (rendered.theme === "construct_art") assert.match(rendered.html, /border-bottom:5px solid #0039BD/);
-    if (rendered.theme === "construct_event") assert.match(rendered.html, /border-bottom:5px solid #005D25/);
-    if (rendered.theme === "construct_studio") assert.match(rendered.html, /border-bottom:5px solid #FCB467/);
+    if (rendered.theme === "tattoo") assert.match(rendered.html, /<td height="5" bgcolor="#6E0404"[^>]*background-image:linear-gradient\(#6E0404,#6E0404\)!important/);
+    if (rendered.theme === "construct_art") assert.match(rendered.html, /<td height="5" bgcolor="#0039BD"[^>]*background-image:linear-gradient\(#0039BD,#0039BD\)!important/);
+    if (rendered.theme === "construct_event") assert.match(rendered.html, /<td height="5" bgcolor="#005D25"[^>]*background-image:linear-gradient\(#005D25,#005D25\)!important/);
+    if (rendered.theme === "construct_studio") assert.match(rendered.html, /<td height="5" bgcolor="#FCB467"[^>]*background-image:linear-gradient\(#FCB467,#FCB467\)!important/);
   });
 });
 
@@ -4602,8 +4636,8 @@ test("Tattoo Special lifecycle correspondence uses dedicated editable variants",
     id: "tattoo-special-lifecycle-email",
     submissionId: "tattoo-special-lifecycle-submission",
     submissionType: "tattoo_special",
-    bookingTypeId: "tattoo_special_palm_v1",
-    bookingTypeLabel: "Palm Sized Tattoo",
+    bookingTypeId: "tattoo_special_palm_v3",
+    bookingTypeLabel: "Hand Sized Tattoo",
     purpose: "tattoo",
     clientName: "Special Client",
     clientEmail: "special-client@example.test",
@@ -4611,7 +4645,7 @@ test("Tattoo Special lifecycle correspondence uses dedicated editable variants",
     endAt: "2026-08-08T18:00:00.000Z",
     depositCents: 5000,
     currency: "USD",
-    specialOfferTitle: "Palm Sized Tattoo",
+    specialOfferTitle: "Hand Sized Tattoo",
     specialVariantLabel: "Standard",
     specialApprovedPriceCents: 20000,
     specialDurationMinutes: 120,
@@ -4919,7 +4953,7 @@ test("Studio email design revisions save, preview one or four nodes, test, publi
   assert.match(globalPreview.previews.find((item) => item.node === "tattoo").html, /color:#112233/);
   assert.match(globalPreview.previews.find((item) => item.node === "tattoo").html, /color:#334455/);
   assert.match(globalPreview.previews.find((item) => item.node === "art").html, /color:#AABBCC/);
-  assert.match(globalPreview.previews.find((item) => item.node === "art").html, /border-bottom:5px solid #0039BD/);
+  assert.match(globalPreview.previews.find((item) => item.node === "art").html, /<td height="5" bgcolor="#0039BD"[^>]*background-image:linear-gradient\(#0039BD,#0039BD\)!important/);
 
   response = await handleAdminEmailDesign(new Request(`${base}/preview`, {
     method: "POST", headers, body: JSON.stringify({ profile, scope: "tattoo" }),

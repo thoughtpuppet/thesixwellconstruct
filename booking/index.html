@@ -288,13 +288,13 @@
   const EXTENDED_DAY_BOOKING_TYPE_ID = "tattoo_extended";
   const defaultSessionEstimateCopy = {
     sectionHeading: "Your Session Plan",
-    oneSessionLabel: "One-session plan",
-    multipleSessionsLabel: "Multi-session plan",
+    oneSessionLabel: "Session Plan",
+    multipleSessionsLabel: "Session Plan",
     artistReviewLabel: "Plan in progress",
     fallbackNote: "Based on the current design, placement, and level of detail, this is the session format I recommend. We’ll continue to adjust around your comfort, skin response, and the natural pace of the work.",
     requiredPolicy: "This project is best completed across multiple sessions so the work can progress at a comfortable, considered pace.",
-    notAvailablePolicy: "I’ve included my recommended pacing below. If you have any questions, reach out to me directly: 7708205800",
-    clientChoicePolicy: "I’ve included my recommended pacing below. Choose the option that feels like the best fit. If you have any questions reach out to me directly : 7708205800",
+    notAvailablePolicy: "This is my recommended session plan. If you have any questions, reach out to me directly: 7708205800",
+    clientChoicePolicy: "This is my recommended session plan. Choose the option that feels like the best fit. If you have any questions, reach out to me directly: 7708205800",
     artistReviewPolicy: "I’m still reviewing the best session format for this project. I’ll confirm the plan before scheduling.",
     studioPlanLabel: "Use the recommended plan",
     studioPlanDescription: "Schedule using the pacing outlined above.",
@@ -841,15 +841,16 @@
         : copy.artistReviewLabel;
     const sessions = sessionCountRange(plan.estimatedSessionsMin, plan.estimatedSessionsMax);
     const totalTime = totalTimeRange(plan.estimatedTotalMinutesMin, plan.estimatedTotalMinutesMax);
-    const estimate = [sessions, totalTime].filter(Boolean).join(" · ");
+    const estimate = [sessions, totalTime].filter(Boolean).join(" - ");
     const budgetLabel = approvedBudgetRange(plan);
     const fixed = ["required", "not_available"].includes(plan.splitPolicy);
     const flexible = plan.splitPolicy === "client_choice";
+    const fixedPlanDescription = estimate || copy.acceptRequiredDescription;
     const choices = flexible ? [
       ["studio_plan", copy.studioPlanLabel, copy.studioPlanDescription],
       ["one_longer_session", copy.oneLongerSessionLabel, copy.oneLongerSessionDescription],
       ["multiple_shorter_sessions", copy.multipleShorterSessionsLabel, copy.multipleShorterSessionsDescription],
-    ] : [["studio_plan", fixed ? copy.acceptRequiredLabel : copy.continuePlanLabel, fixed ? copy.acceptRequiredDescription : copy.continuePlanDescription]];
+    ] : [["studio_plan", fixed ? copy.acceptRequiredLabel : copy.continuePlanLabel, fixed ? fixedPlanDescription : copy.continuePlanDescription]];
     const policyCopy = plan.splitPolicy === "required"
       ? copy.requiredPolicy
       : plan.splitPolicy === "not_available"
@@ -861,8 +862,9 @@
       "{{preference}}",
       String(plan.clientPreference || "").replace(/_/g, " "),
     );
+    const savedStatus = fixed ? "Your session plan is confirmed." : savedMessage;
     sessionPlanPanel.innerHTML = `
-      <h2 class="session-plan-title">${escapeHtml(category)}${estimate ? ` · ${escapeHtml(estimate)}` : ""}</h2>
+      <h2 class="session-plan-title">${escapeHtml(category)}${estimate ? ` : ${escapeHtml(estimate)}` : ""}</h2>
       <p class="session-plan-copy">${sessionCopyHtml(plan.artistNote || copy.fallbackNote)}</p>
       <p class="session-plan-copy">${sessionCopyHtml(policyCopy)}</p>
       ${budgetLabel ? `
@@ -872,7 +874,7 @@
           <p class="session-plan-copy">This range covers the approved tattoo work before any optional Extended Day fee. Your tattoo deposit is applied to the final total. Changes to placement, scale, detail, or session planning may require a revised range before booking. One developed design direction is included after your deposit is paid. Additional concept sketches are $50 each, require artist approval, and must be paid before drawing begins.</p>
         </div>
       ` : ""}
-      ${planIsReady(plan) ? `<div class="status">${escapeHtml(savedMessage)}</div>` : ""}
+      ${planIsReady(plan) ? `<div class="status">${escapeHtml(savedStatus)}</div>` : ""}
       <div class="session-plan-options">${choices.map(([value,title,meta]) => `<button class="choice ${selectedPlanPreference === value ? "active" : ""}" type="button" data-plan-preference="${value}"><span><span class="choice-title">${escapeHtml(title)}</span><span class="choice-meta">${escapeHtml(meta)}</span></span></button>`).join("")}</div>
       <label class="form-check"><input class="form-check__input" id="sessionPlanAck" type="checkbox" ${planAcknowledged ? "checked" : ""}><span class="form-check__label">${escapeHtml(copy.acknowledgement)}</span></label>
       ${budgetLabel ? `<label class="form-check"><input class="form-check__input" id="budgetAck" type="checkbox" ${budgetAcknowledged ? "checked" : ""}><span class="form-check__label">I have reviewed and agree to the approved tattoo-work budget of ${escapeHtml(budgetLabel)} before any optional Extended Day fee. I understand that scope changes may require a revised budget before booking. My paid tattoo deposit includes one developed design direction. Artist-approved additional concept sketches are separate, non-refundable $50 fees that are not credited toward the tattoo total and must be paid before drawing begins.</span></label>` : ""}
@@ -887,7 +889,10 @@
     const windows = context.availabilityWindows || [];
     const special = context?.submission?.special;
     renderSessionPlan();
-    paceIntro.classList.toggle("hidden", context?.purpose !== "tattoo" || Boolean(special));
+    const canChoosePacing = context?.purpose === "tattoo"
+      && !special
+      && context?.sessionPlan?.splitPolicy === "client_choice";
+    paceIntro.classList.toggle("hidden", !canChoosePacing);
     sessionListEl.innerHTML = special && selectedType ? `
       <div class="choice active special-offering" aria-label="Chosen Tattoo Special">
         <span>
