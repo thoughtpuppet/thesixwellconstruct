@@ -1441,7 +1441,7 @@
     if (!feedback) return;
     feedback.dataset.state = state;
     feedback.textContent = state === "success"
-      ? `${message} Â· ${new Date().toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })}`
+      ? `${message.replace(/\.\s*$/, "")} at ${new Date().toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })}.`
       : message;
   }
 
@@ -4211,14 +4211,14 @@ ${meetingLines}
     if (plan.estimatedSessionsMin || plan.estimatedSessionsMax) {
       const minimum = plan.estimatedSessionsMin || plan.estimatedSessionsMax;
       const maximum = plan.estimatedSessionsMax || plan.estimatedSessionsMin;
-      parts.push(minimum === maximum ? `${minimum} session` : `${minimum}â€“${maximum} sessions`);
+      parts.push(minimum === maximum ? `${minimum} session` : `${minimum}-${maximum} sessions`);
     }
     if (plan.estimatedTotalMinutesMin || plan.estimatedTotalMinutesMax) {
       const minimum = plan.estimatedTotalMinutesMin || plan.estimatedTotalMinutesMax;
       const maximum = plan.estimatedTotalMinutesMax || plan.estimatedTotalMinutesMin;
-      parts.push(minimum === maximum ? `${minimum} total minutes` : `${minimum}â€“${maximum} total minutes`);
+      parts.push(minimum === maximum ? `${minimum} total minutes` : `${minimum}-${maximum} total minutes`);
     }
-    return parts.join(" Â· ");
+    return parts.join(" | ");
   }
 
   function sessionPlanEditorHtml(plan = {}, submission = null) {
@@ -4260,6 +4260,11 @@ ${meetingLines}
         </div>
         <div class="field"><label for="approvedBudgetMinDollars">Approved minimum (USD)</label><input id="approvedBudgetMinDollars" name="approvedBudgetMinDollars" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(approvedMinimumDollars)}" placeholder="e.g. 800"></div>
         <div class="field"><label for="approvedBudgetMaxDollars">Approved maximum (USD)</label><input id="approvedBudgetMaxDollars" name="approvedBudgetMaxDollars" type="number" min="1" step="1" inputmode="numeric" value="${escapeHtml(approvedMaximumDollars)}" placeholder="e.g. 1200"></div>
+        <label class="check wide" style="margin:0;">
+          <input id="includeAdditionalSketchDisclaimer" name="includeAdditionalSketchDisclaimer" type="checkbox" ${plan.includeAdditionalSketchDisclaimer ? "checked" : ""}>
+          <span class="check-label">Include the additional concept sketch disclaimer in the client's budget review</span>
+        </label>
+        <p class="contact wide">Use this only when alternate concept sketches may apply to the project. Saving this choice sends nothing.</p>
         <p class="contact wide">Both values are required before a tattoo booking link can be generated. Use the same value twice for an exact tattoo-work total. If the client selects Extended Day, the booking page adds the $200 fee, subtracts the $350 deposit credit, and shows the resulting balance. Consultation links do not require a tattoo budget.</p>
       </form>
       <p class="session-plan-client-state">Session-plan response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}<br>Budget response: ${escapeHtml(budgetResponse)}</p>
@@ -4296,6 +4301,7 @@ ${meetingLines}
       estimatedTotalMinutesMin: form.elements.estimatedTotalMinutesMin?.value || "",
       estimatedTotalMinutesMax: form.elements.estimatedTotalMinutesMax?.value || "",
       artistNote: form.elements.artistNote?.value || "",
+      includeAdditionalSketchDisclaimer: form.elements.includeAdditionalSketchDisclaimer?.checked === true,
       approvedBudgetMinDollars: form.elements.approvedBudgetMinDollars?.value || "",
       approvedBudgetMaxDollars: form.elements.approvedBudgetMaxDollars?.value || "",
     };

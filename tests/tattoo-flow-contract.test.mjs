@@ -609,9 +609,17 @@ test("Original-design tattoo paths disclose the additional-rendering drawing fee
   }
 
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
-  assert.equal(bookingPage.split(drawingFeeNotice).length - 1, 1, "booking approved-budget explanation");
+  assert.match(bookingPage, /const ADDITIONAL_SKETCH_DISCLAIMER = "Additional concept sketches are \$50 each, require artist approval, and must be paid before drawing begins\."/);
+  assert.match(bookingPage, /plan\?\.includeAdditionalSketchDisclaimer \? ADDITIONAL_SKETCH_DISCLAIMER : ""/);
+  assert.match(bookingPage, /Your tattoo deposit holds your appointment slot and is applied to the final total\./);
+  assert.match(bookingPage, /One developed design direction is included after your deposit is paid, if applicable\./);
+  assert.match(bookingPage, /pacing\.extended \? " before any optional Extended Day fee" : ""/);
   assert.match(bookingPage, /budgetLabel \? `<label class="form-check"><input class="form-check__input" id="budgetAck"/);
   assert.match(bookingPage, /Artist-approved additional concept sketches are separate, non-refundable \$50 fees that are not credited toward the tattoo total and must be paid before drawing begins/);
+
+  const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studio, /id="includeAdditionalSketchDisclaimer" name="includeAdditionalSketchDisclaimer" type="checkbox"/);
+  assert.match(studio, /includeAdditionalSketchDisclaimer: form\.elements\.includeAdditionalSketchDisclaimer\?\.checked === true/);
 
   const policies = readFileSync(join(ROOT, "tattoos", "policies", "index.html"), "utf8");
   assert.match(policies, /substantially different alternate concept/);
@@ -676,6 +684,8 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.match(source, /id="saveReviewNotesBtn"[^>]*>Save Internal Notes<\/button>/);
   assert.match(source, /id="sessionPlanSaveState" role="status" aria-live="polite"/);
   assert.match(source, /Saved: \$\{savedSessionPlanSummary\(savedPlan\)\}\. Booking choices were also saved\. Nothing was sent\./);
+  assert.match(source, /return parts\.join\(" \| "\);/);
+  assert.match(source, /\? `\$\{message\.replace\(\/\\\.\\s\*\$\/, ""\)\} at \$\{new Date\(\)\.toLocaleTimeString/);
   assert.match(source, /Booking choices saved\. No link was generated and nothing was sent\./);
   assert.match(source, /Internal notes saved\. Nothing was sent\./);
   assert.doesNotMatch(source, /id="planSessionCategory"/);
@@ -711,6 +721,7 @@ test("Studio session-plan saves persist booking choices without preparing access
       estimatedTotalMinutesMin: 180,
       estimatedTotalMinutesMax: 240,
       artistNote: "One reviewed session.",
+      includeAdditionalSketchDisclaimer: true,
       approvedBudgetMinCents: 80000,
       approvedBudgetMaxCents: 120000,
       approvedBudgetCurrency: "USD",
@@ -725,6 +736,7 @@ test("Studio session-plan saves persist booking choices without preparing access
   assert.equal(saved.status, 200, await saved.clone().text());
   const savedPlan = (await saved.json()).sessionPlan;
   assert.equal(savedPlan.bookingLinkPurpose, "tattoo");
+  assert.equal(savedPlan.includeAdditionalSketchDisclaimer, true);
   assert.deepEqual(savedPlan.allowedBookingTypes, ["tattoo_half"]);
   assert.equal(savedPlan.bookingLinkExpiresAt, expiresAt);
   assert.equal(savedPlan.bookingLinkRevokeExisting, false);
@@ -739,7 +751,12 @@ test("Studio session-plan saves persist booking choices without preparing access
     adminToken,
   ), env, submissionId);
   assert.equal(reloaded.status, 200);
-  assert.deepEqual((await reloaded.json()).sessionPlan.allowedBookingTypes, ["tattoo_half"]);
+  const reloadedPlan = (await reloaded.json()).sessionPlan;
+  assert.deepEqual(reloadedPlan.allowedBookingTypes, ["tattoo_half"]);
+  assert.equal(reloadedPlan.includeAdditionalSketchDisclaimer, true);
+  database.prepare(
+    "UPDATE tattoo_session_plans SET budget_acknowledged=1,budget_acknowledged_at=? WHERE submission_id=?",
+  ).run(new Date().toISOString(), submissionId);
 
   const flexible = await handleAdminTattooSessionPlan(adminJsonRequest(
     `/api/admin/booking/session-plans/${submissionId}`,
@@ -750,6 +767,7 @@ test("Studio session-plan saves persist booking choices without preparing access
       estimatedTotalMinutesMin: 180,
       estimatedTotalMinutesMax: 240,
       artistNote: "Choose one longer appointment or two shorter sessions.",
+      includeAdditionalSketchDisclaimer: false,
       approvedBudgetMinCents: 80000,
       approvedBudgetMaxCents: 120000,
       approvedBudgetCurrency: "USD",
@@ -763,6 +781,8 @@ test("Studio session-plan saves persist booking choices without preparing access
   assert.equal(flexiblePlan.splitPolicy, "client_choice");
   assert.equal(flexiblePlan.estimatedSessionsMin, 1);
   assert.equal(flexiblePlan.estimatedSessionsMax, 2);
+  assert.equal(flexiblePlan.includeAdditionalSketchDisclaimer, false);
+  assert.equal(flexiblePlan.budgetAcknowledged, false, "changing client-facing budget disclosures requires fresh agreement");
 });
 
 test("Extended Day client surfaces use the approved optional-session copy", () => {
@@ -1458,6 +1478,7 @@ test("all migrations apply with the tattoo lifecycle schema and managed defaults
     "approved_budget_currency",
     "budget_acknowledged",
     "budget_acknowledged_at",
+    "include_additional_sketch_disclaimer",
   ]) assert.ok(columns("tattoo_session_plans").has(name), `tattoo_session_plans.${name}`);
   assert.ok(columns("visual_symbols").has("build_guidance_json"));
   for (const name of [
@@ -2649,6 +2670,7 @@ test("Studio client preview opens synchronously and carries the Tattoo Special l
   assert.match(studio, /sessionPlan\?\.allowedBookingTypes/);
   assert.match(studio, /function clientPreviewContext[\s\S]*?allowedTypeIds[\s\S]*?special_offer_title[\s\S]*?pendingApproval[\s\S]*?pendingCheckout/);
   assert.match(booking, /function adminPreviewContext[\s\S]*?previewSource: payload\.previewSource[\s\S]*?pendingCheckout: payload\.pendingCheckout \|\| null/);
+  assert.match(booking, /<strong>Notes from the artist:<\/strong><br>\$\{sessionCopyHtml\(plan\.artistNote \|\| copy\.fallbackNote\)\}/);
   assert.match(booking, /if \(!renderPendingCheckout\(\)\) appEl\.classList\.remove\("hidden"\)/);
   assert.match(booking, /if \(previewMode\)[\s\S]*?client's Square checkout is not opened from Studio preview/);
   assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Square deposit link sent by email/);
@@ -4730,6 +4752,97 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
   });
 });
 
+test("session-plan preferences cannot exceed the appointment types approved for the booking link", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom()), env);
+  const submissionId = (await created.json()).submissionId;
+  const planResponse = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      splitPolicy: "client_choice",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 2,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 360,
+      artistNote: "Choose the approved pacing that works for you.",
+      approvedBudgetMinCents: 80000,
+      approvedBudgetMaxCents: 120000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(planResponse.status, 200, await planResponse.clone().text());
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(approved.status, 200, await approved.clone().text());
+
+  const halfTokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_half"],
+      revokeExisting: true,
+    },
+    adminToken,
+  ), env);
+  assert.equal(halfTokenResponse.status, 200, await halfTokenResponse.clone().text());
+  const halfToken = new URL((await halfTokenResponse.json()).token.bookingUrl).searchParams.get("token");
+
+  const blockedLonger = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: halfToken,
+    preference: "one_longer_session",
+    acknowledged: true,
+    budgetAcknowledged: true,
+  }), env);
+  assert.equal(blockedLonger.status, 409);
+  assert.match((await blockedLonger.json()).error, /does not include a longer-session option/i);
+
+  const allowedShorter = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: halfToken,
+    preference: "multiple_shorter_sessions",
+    acknowledged: true,
+    budgetAcknowledged: true,
+  }), env);
+  assert.equal(allowedShorter.status, 200, await allowedShorter.clone().text());
+
+  const fullTokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_full"],
+      revokeExisting: true,
+    },
+    adminToken,
+  ), env);
+  assert.equal(fullTokenResponse.status, 200, await fullTokenResponse.clone().text());
+  const fullToken = new URL((await fullTokenResponse.json()).token.bookingUrl).searchParams.get("token");
+
+  const blockedShorter = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: fullToken,
+    preference: "multiple_shorter_sessions",
+    acknowledged: true,
+    budgetAcknowledged: true,
+  }), env);
+  assert.equal(blockedShorter.status, 409);
+  assert.match((await blockedShorter.json()).error, /does not include a shorter-session option/i);
+
+  const allowedLonger = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: fullToken,
+    preference: "one_longer_session",
+    acknowledged: true,
+    budgetAcknowledged: true,
+  }), env);
+  assert.equal(allowedLonger.status, 200, await allowedLonger.clone().text());
+});
+
 test("private booking holds enforce the token and parent lifecycle inside the atomic insert", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
@@ -5547,6 +5660,17 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
     });
     assert.match(rendered.html, /<a href="https:\/\/thesixwellconstruct\.com\/api\/booking\/calendar\?appointment=demo-appointment"[^>]*>Add to calendar<\/a>/, identity);
   }
+});
+
+test("private booking pacing choices follow the Studio-approved appointment types", () => {
+  const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
+  assert.match(bookingPage, /function pacingOptionsForContext\(\)/);
+  assert.match(bookingPage, /bookingTypeIds\.has\("tattoo_full"\)/);
+  assert.match(bookingPage, /bookingTypeIds\.has\("tattoo_quarter"\)/);
+  assert.match(bookingPage, /pacing\.longer \? \[\["one_longer_session"/);
+  assert.match(bookingPage, /pacing\.shorter \? \[\["multiple_shorter_sessions"/);
+  assert.match(bookingPage, /if \(!flexible \|\| \(!pacing\.longer && !pacing\.shorter\)\)/);
+  assert.match(bookingPage, /Extended Day is optional and adds its fee only when you choose that session type\./);
 });
 
 test("Custom Inquiry configures project-aware questions and multi-file upload roles", () => {

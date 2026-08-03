@@ -7,6 +7,10 @@ README.md
 .gitignore
 .assetsignore
 tools/
+tests/
+.playwright-cli/
+**/.playwright-cli/
+**/*.log
 .hidden-pages/
 .git
 .git/
