@@ -215,6 +215,51 @@ async function loadOffers(db, includeInactive = false, campaignId = "") {
   }));
 }
 
+async function loadOfferMetrics(db) {
+  const rows = (await db.prepare(
+    `WITH per_submission AS (
+       SELECT t.offer_id,
+              t.submission_id,
+              MAX(CASE
+                WHEN dp.status = 'paid' OR a.status IN ('confirmed','completed') THEN 1
+                ELSE 0
+              END) AS booked,
+              MAX(CASE
+                WHEN a.status IN ('pending_deposit','deposit_pending') AND a.hold_state = 'active' THEN 1
+                ELSE 0
+              END) AS awaiting_deposit,
+              MAX(CASE
+                WHEN dp.status = 'paid'
+                  AND a.cancelled_at IS NOT NULL
+                  AND a.replaced_by_appointment_id IS NULL THEN 1
+                ELSE 0
+              END) AS cancelled
+       FROM tattoo_special_submission_terms t
+       LEFT JOIN appointments a ON a.submission_id = t.submission_id
+       LEFT JOIN deposit_payments dp ON dp.appointment_id = a.id
+       GROUP BY t.offer_id, t.submission_id
+     )
+     SELECT offer_id,
+            COUNT(*) AS requests,
+            SUM(CASE WHEN booked = 0 AND awaiting_deposit = 1 THEN 1 ELSE 0 END) AS awaiting_deposit,
+            SUM(booked) AS booked,
+            SUM(cancelled) AS cancelled
+     FROM per_submission
+     GROUP BY offer_id`
+  ).all()).results || [];
+  return new Map(rows.map((row) => {
+    const requests = Number(row.requests || 0);
+    const booked = Number(row.booked || 0);
+    return [row.offer_id, {
+      requests,
+      awaitingDeposit: Number(row.awaiting_deposit || 0),
+      booked,
+      cancelled: Number(row.cancelled || 0),
+      conversionPercent: requests ? Math.round((booked / requests) * 100) : 0,
+    }];
+  }));
+}
+
 function publicSettings(settings, state) {
   return {
     campaignId: settings?.id || "",
@@ -529,6 +574,8 @@ async function adminPayload(db) {
   const campaigns = await loadCampaigns(db, true);
   const publishedRow = await loadPublishedCampaign(db);
   const settings = publishedRow ? publicSettings(publishedRow, windowState(publishedRow)) : publicSettings(null, "closed");
+  const offers = await loadOffers(db, true);
+  const metricsByOffer = await loadOfferMetrics(db);
   const media = (await db.prepare(
     `SELECT id, source_url, storage_key, original_filename, mime_type, alt_text, public_title
      FROM media_assets
@@ -539,7 +586,16 @@ async function adminPayload(db) {
   return {
     settings,
     campaigns,
-    offers: await loadOffers(db, true),
+    offers: offers.map((offer) => ({
+      ...offer,
+      metrics: metricsByOffer.get(offer.id) || {
+        requests: 0,
+        awaitingDeposit: 0,
+        booked: 0,
+        cancelled: 0,
+        conversionPercent: 0,
+      },
+    })),
     media: media.map((row) => ({ id: row.id, url: mediaUrl(row), filename: row.original_filename, alt: row.alt_text, title: row.public_title })),
     readiness: {
       database: true,

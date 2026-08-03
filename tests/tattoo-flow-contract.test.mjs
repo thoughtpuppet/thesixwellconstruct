@@ -29,6 +29,7 @@ import {
   handleAdminCancelAppointment,
   handleAdminCompleteAppointment,
   handleAdminCreateAppointmentMeeting,
+  handleAdminDeleteAppointment,
   handleAdminCreateTattooRenderingRequest,
   handleAdminResendTattooRenderingRequest,
   handleAdminCancelTattooRenderingRequest,
@@ -668,8 +669,67 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.doesNotMatch(source, /<input type="checkbox" data-token-type[^>]* disabled>/);
   assert.match(source, /const lockSelection = submission\.type === "tattoo_special" \|\| purpose === "consultation";/);
   assert.match(source, /input\.disabled = !allowed \|\| lockSelection;/);
+  assert.doesNotMatch(source, /input\.checked = allowed;/);
   assert.match(source, /Choose at least one session type for this booking link\./);
+  assert.match(source, /Object\.assign\(values, bookingTokenDraftBody\(submissionId\)\);/);
+  assert.match(source, /id="saveBookingChoicesBtn"[^>]*>Save Booking Choices<\/button>/);
+  assert.match(source, /id="saveReviewNotesBtn"[^>]*>Save Internal Notes<\/button>/);
+  assert.doesNotMatch(source, /id="saveBtn"/);
   assert.match(source, /setStatus\(error\.message \|\| "The session plan could not be saved"\);/);
+});
+
+test("Studio session-plan saves persist booking choices without preparing access or sending", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const submissionId = "session-plan-booking-draft";
+  insertSubmissionFixture(database, {
+    id: submissionId,
+    type: "tattoo_inquiry",
+    status: "new",
+    tattooStage: "review",
+  });
+  const expiresAt = new Date(Date.now() + (14 * 24 * 60 * 60 * 1000)).toISOString();
+
+  const saved = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "One reviewed session.",
+      approvedBudgetMinCents: 80000,
+      approvedBudgetMaxCents: 120000,
+      approvedBudgetCurrency: "USD",
+      bookingLinkPurpose: "tattoo",
+      allowedBookingTypes: ["tattoo_half"],
+      bookingLinkExpiresAt: expiresAt,
+      bookingLinkRevokeExisting: false,
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(saved.status, 200, await saved.clone().text());
+  const savedPlan = (await saved.json()).sessionPlan;
+  assert.equal(savedPlan.bookingLinkPurpose, "tattoo");
+  assert.deepEqual(savedPlan.allowedBookingTypes, ["tattoo_half"]);
+  assert.equal(savedPlan.bookingLinkExpiresAt, expiresAt);
+  assert.equal(savedPlan.bookingLinkRevokeExisting, false);
+  assert.equal(database.prepare("SELECT status FROM submissions WHERE id = ?").get(submissionId).status, "reviewing");
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM booking_tokens WHERE submission_id = ?").get(submissionId).count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM notification_deliveries WHERE related_id = ?").get(submissionId).count, 0);
+
+  const reloaded = await handleAdminTattooSessionPlan(draftRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    "GET",
+    undefined,
+    adminToken,
+  ), env, submissionId);
+  assert.equal(reloaded.status, 200);
+  assert.deepEqual((await reloaded.json()).sessionPlan.allowedBookingTypes, ["tattoo_half"]);
 });
 
 test("Extended Day client surfaces use the approved optional-session copy", () => {
@@ -1119,6 +1179,169 @@ test("rescheduling moves rendering expiry and appointment cancellation invalidat
   });
   assert.equal(database.prepare("SELECT status FROM tattoo_rendering_requests WHERE id='render-lifecycle-request'").get().status, "cancelled");
   assert.equal(database.prepare("SELECT status FROM appointments WHERE id='render-lifecycle-appointment'").get().status, "cancelled");
+});
+
+test("Studio permanently deletes only unpaid or cancelled appointments and preserves paid history", async () => {
+  const database = migratedDatabase();
+  const adminToken = "permanent-appointment-delete-admin";
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const startAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(Date.now() + 73.5 * 60 * 60 * 1000).toISOString();
+
+  insertSubmissionFixture(database, {
+    id: "delete-pending-submission",
+    type: "tattoo_special",
+    status: "new",
+    tattooStage: "review",
+  });
+  database.prepare(
+    `UPDATE submissions SET payload_json=json_object(
+      'held_appointment_id','delete-pending',
+      'held_start_at',?,
+      'held_end_at',?,
+      'approval_hold_expires_at',?
+    ) WHERE id='delete-pending-submission'`
+  ).run(startAt, endAt, endAt);
+  insertAppointmentFixture(database, {
+    id: "delete-pending",
+    submissionId: "delete-pending-submission",
+    bookingTypeId: "tattoo_quarter",
+    status: "pending_deposit",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    holdExpiresAt: endAt,
+    holdState: "active",
+    approvalState: "pending",
+  });
+  insertPaymentFixture(database, {
+    id: "delete-pending-payment",
+    appointmentId: "delete-pending",
+    checkoutId: null,
+    orderId: null,
+  });
+
+  const pendingDelete = await handleAdminDeleteAppointment(
+    draftRequest("/api/admin/booking/appointments/delete-pending", "DELETE", undefined, adminToken),
+    env,
+    "delete-pending",
+  );
+  assert.equal(pendingDelete.status, 200, await pendingDelete.clone().text());
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE id='delete-pending'").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM deposit_payments WHERE appointment_id='delete-pending'").get().count, 0);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id='delete-pending'").get().count, 0);
+  assert.equal(
+    database.prepare("SELECT json_extract(payload_json,'$.held_appointment_id') held FROM submissions WHERE id='delete-pending-submission'").get().held,
+    null,
+  );
+
+  insertAppointmentFixture(database, {
+    id: "delete-confirmed",
+    bookingTypeId: "tattoo_quarter",
+    status: "confirmed",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+  });
+  const confirmedDelete = await handleAdminDeleteAppointment(
+    draftRequest("/api/admin/booking/appointments/delete-confirmed", "DELETE", undefined, adminToken),
+    env,
+    "delete-confirmed",
+  );
+  assert.equal(confirmedDelete.status, 409);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE id='delete-confirmed'").get().count, 1);
+
+  insertAppointmentFixture(database, {
+    id: "delete-paid-cancelled",
+    bookingTypeId: "tattoo_quarter",
+    status: "cancelled",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    holdState: "released",
+  });
+  insertPaymentFixture(database, {
+    id: "delete-paid-payment",
+    appointmentId: "delete-paid-cancelled",
+    checkoutId: "delete-paid-link",
+    orderId: "delete-paid-order",
+    status: "paid",
+  });
+  const paidDelete = await handleAdminDeleteAppointment(
+    draftRequest("/api/admin/booking/appointments/delete-paid-cancelled", "DELETE", undefined, adminToken),
+    env,
+    "delete-paid-cancelled",
+  );
+  assert.equal(paidDelete.status, 409);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE id='delete-paid-cancelled'").get().count, 1);
+
+  insertAppointmentFixture(database, {
+    id: "delete-unpaid-cancelled",
+    bookingTypeId: "tattoo_quarter",
+    status: "cancelled",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    holdState: "released",
+  });
+  const cancelledDelete = await handleAdminDeleteAppointment(
+    draftRequest("/api/admin/booking/appointments/delete-unpaid-cancelled", "DELETE", undefined, adminToken),
+    env,
+    "delete-unpaid-cancelled",
+  );
+  assert.equal(cancelledDelete.status, 200, await cancelledDelete.clone().text());
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE id='delete-unpaid-cancelled'").get().count, 0);
+});
+
+test("permanent appointment deletion reconciles and invalidates an unpaid Square checkout", async () => {
+  const database = migratedDatabase();
+  const adminToken = "permanent-appointment-square-admin";
+  const env = squareEnv(database, { SUBMISSIONS_ADMIN_TOKEN: adminToken });
+  const startAt = new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString();
+  const endAt = new Date(Date.now() + 97.5 * 60 * 60 * 1000).toISOString();
+  insertAppointmentFixture(database, {
+    id: "delete-square-cancelled",
+    bookingTypeId: "tattoo_quarter",
+    status: "cancelled",
+    purpose: "tattoo",
+    startAt,
+    endAt,
+    squareOrderId: "delete-square-order",
+    squarePaymentLinkId: "delete-square-link",
+    squareCheckoutUrl: "https://square.link/u/delete-square-link",
+    holdState: "released",
+  });
+  insertPaymentFixture(database, {
+    id: "delete-square-payment",
+    appointmentId: "delete-square-cancelled",
+    checkoutId: "delete-square-link",
+    orderId: "delete-square-order",
+    status: "cancelled",
+  });
+
+  const calls = [];
+  await withMockFetch(async (input, init = {}) => {
+    const target = String(input);
+    calls.push({ target, method: init.method || "GET" });
+    if (target.includes("/v2/orders/delete-square-order")) {
+      return jsonFetchResponse({
+        order: { state: "OPEN", net_amount_due_money: { amount: 5000, currency: "USD" } },
+      });
+    }
+    if (target.includes("/v2/online-checkout/payment-links/delete-square-link") && init.method === "DELETE") {
+      return new Response(null, { status: 200 });
+    }
+    throw new Error(`Unexpected Square request: ${target}`);
+  }, async () => {
+    const response = await handleAdminDeleteAppointment(
+      draftRequest("/api/admin/booking/appointments/delete-square-cancelled", "DELETE", undefined, adminToken),
+      env,
+      "delete-square-cancelled",
+    );
+    assert.equal(response.status, 200, await response.clone().text());
+  });
+  assert.deepEqual(calls.map((call) => call.method), ["GET", "DELETE"]);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointments WHERE id='delete-square-cancelled'").get().count, 0);
 });
 
 test("All tattoo project types require budget and canonical ranges remain accepted", async () => {
@@ -2089,6 +2312,199 @@ test("Studio creates campaigns and individual specials while the published campa
   assert.equal(terms.offer_id, special.id);
 });
 
+test("Studio Tattoo Specials metrics preserve lifetime conversion and separate genuine paid cancellations", async () => {
+  const database = migratedDatabase();
+  const token = "studio-special-metrics";
+  const env = { SUBMISSIONS_DB: new LocalD1(database), SUBMISSIONS_ADMIN_TOKEN: token };
+  const now = Date.now();
+  database.prepare("UPDATE tattoo_special_campaigns SET sales_opens_at=?,sales_closes_at=?,enabled=1 WHERE id='campaign-fka-2026'")
+    .run(new Date(now - 3600000).toISOString(), new Date(now + 86400000).toISOString());
+
+  const initial = await (await handleAdminTattooSpecials(
+    draftRequest("/api/admin/tattoo/specials", "GET", undefined, token), env,
+  )).json();
+  const initialOffer = initial.offers.find((offer) => offer.id === "special-palm");
+  assert.deepEqual(initialOffer.metrics, {
+    requests: 0,
+    awaitingDeposit: 0,
+    booked: 0,
+    cancelled: 0,
+    conversionPercent: 0,
+  });
+
+  async function createMetricRequest(key) {
+    const response = await handleCreateTattooSpecialSubmission(multipartRequest(
+      "/api/tattoo/specials/submissions",
+      {
+        offerId: "special-palm",
+        variantId: "special-palm-v3-standard",
+        idempotencyKey: `special-metric-${key}`,
+        name: `Metric Client ${key}`,
+        email: `metric-${key}@example.com`,
+        phone: "4045550199",
+        dob: "1990-01-01",
+        ageConfirmed: "yes",
+        policyAccepted: "yes",
+        transactionalMessagesAccepted: "yes",
+        placement: "Upper arm",
+        projectDetails: `Metric fixture ${key}.`,
+      },
+    ), env);
+    assert.equal(response.status, 201, await response.clone().text());
+    return (await response.json()).submissionId;
+  }
+
+  const requestOnlyId = await createMetricRequest("request-only");
+  const awaitingId = await createMetricRequest("awaiting");
+  const bookedId = await createMetricRequest("booked");
+  const cancelledId = await createMetricRequest("cancelled");
+  const rescheduledId = await createMetricRequest("rescheduled");
+  const expiredId = await createMetricRequest("expired");
+  const unpaidCancelledId = await createMetricRequest("unpaid-cancelled");
+  assert.ok(requestOnlyId);
+
+  const bookingTypeId = database.prepare(
+    "SELECT booking_type_id FROM tattoo_special_submission_terms WHERE submission_id=?",
+  ).get(awaitingId).booking_type_id;
+  const startAt = new Date(now + 48 * 60 * 60 * 1000);
+  function fixtureTime(offsetHours) {
+    const start = new Date(startAt.getTime() + offsetHours * 60 * 60 * 1000);
+    return { startAt: start.toISOString(), endAt: new Date(start.getTime() + 2 * 60 * 60 * 1000).toISOString() };
+  }
+  function addMetricAppointment(id, submissionId, offsetHours, values = {}) {
+    insertAppointmentFixture(database, {
+      id,
+      submissionId,
+      bookingTypeId,
+      purpose: "tattoo",
+      name: "Metric Client",
+      email: "metric@example.com",
+      ...fixtureTime(offsetHours),
+      ...values,
+    });
+  }
+
+  addMetricAppointment("metric-awaiting", awaitingId, 0, {
+    status: "pending_deposit",
+    holdState: "active",
+    holdExpiresAt: new Date(now + 3600000).toISOString(),
+    approvalState: "pending",
+  });
+
+  addMetricAppointment("metric-booked", bookedId, 3, {
+    status: "confirmed",
+    holdState: "converted",
+    approvalState: "approved",
+  });
+  insertPaymentFixture(database, {
+    id: "metric-payment-booked",
+    appointmentId: "metric-booked",
+    checkoutId: "metric-checkout-booked",
+    orderId: "metric-order-booked",
+    status: "paid",
+  });
+
+  addMetricAppointment("metric-cancelled", cancelledId, 6, {
+    status: "cancelled",
+    holdState: "released",
+    approvalState: "approved",
+  });
+  database.prepare("UPDATE appointments SET cancelled_at=? WHERE id='metric-cancelled'")
+    .run(new Date(now + 1000).toISOString());
+  insertPaymentFixture(database, {
+    id: "metric-payment-cancelled",
+    appointmentId: "metric-cancelled",
+    checkoutId: "metric-checkout-cancelled",
+    orderId: "metric-order-cancelled",
+    status: "paid",
+  });
+
+  addMetricAppointment("metric-rescheduled-old", rescheduledId, 9, {
+    status: "cancelled",
+    holdState: "released",
+    approvalState: "approved",
+  });
+  addMetricAppointment("metric-rescheduled-new", rescheduledId, 12, {
+    status: "confirmed",
+    holdState: "converted",
+    approvalState: "approved",
+    replacementForAppointmentId: "metric-rescheduled-old",
+  });
+  database.prepare(
+    "UPDATE appointments SET cancelled_at=?,replaced_by_appointment_id=? WHERE id='metric-rescheduled-old'",
+  ).run(new Date(now + 2000).toISOString(), "metric-rescheduled-new");
+  insertPaymentFixture(database, {
+    id: "metric-payment-rescheduled",
+    appointmentId: "metric-rescheduled-old",
+    checkoutId: "metric-checkout-rescheduled",
+    orderId: "metric-order-rescheduled",
+    status: "paid",
+  });
+
+  addMetricAppointment("metric-expired", expiredId, 15, {
+    status: "pending_deposit",
+    holdState: "expiry_attention",
+    holdExpiresAt: new Date(now - 3600000).toISOString(),
+    approvalState: "pending",
+  });
+  addMetricAppointment("metric-unpaid-cancelled", unpaidCancelledId, 18, {
+    status: "cancelled",
+    holdState: "released",
+    approvalState: "declined",
+  });
+  database.prepare("UPDATE appointments SET cancelled_at=? WHERE id='metric-unpaid-cancelled'")
+    .run(new Date(now + 3000).toISOString());
+
+  const measured = await (await handleAdminTattooSpecials(
+    draftRequest("/api/admin/tattoo/specials", "GET", undefined, token), env,
+  )).json();
+  assert.deepEqual(measured.offers.find((offer) => offer.id === "special-palm").metrics, {
+    requests: 7,
+    awaitingDeposit: 1,
+    booked: 3,
+    cancelled: 1,
+    conversionPercent: 43,
+  });
+
+  const versionResponse = await handleAdminTattooSpecialOffer(adminJsonRequest(
+    "/api/admin/tattoo/specials/offers/special-palm",
+    {
+      campaignId: initialOffer.campaignId,
+      title: initialOffer.title,
+      slug: initialOffer.slug,
+      description: initialOffer.description,
+      durationMinutes: initialOffer.durationMinutes,
+      depositCents: initialOffer.depositCents,
+      referenceRequirement: initialOffer.referenceRequirement,
+      participantCount: initialOffer.participantCount,
+      maxWordCount: initialOffer.maxWordCount,
+      active: true,
+      sortOrder: initialOffer.sortOrder,
+      variants: initialOffer.variants.map((variant) => ({
+        label: variant.label,
+        priceCents: variant.priceCents,
+        sortOrder: variant.sortOrder,
+      })),
+    },
+    token,
+    "PATCH",
+  ), env, "special-palm");
+  assert.equal(versionResponse.status, 200, await versionResponse.clone().text());
+  const versionedOffer = (await versionResponse.json()).offers.find((offer) => offer.id === "special-palm");
+  assert.equal(versionedOffer.versionNumber, initialOffer.versionNumber + 1);
+  assert.deepEqual(versionedOffer.metrics, measured.offers.find((offer) => offer.id === "special-palm").metrics);
+
+  const archivedResponse = await handleAdminTattooSpecialOffer(
+    draftRequest("/api/admin/tattoo/specials/offers/special-palm", "DELETE", undefined, token),
+    env,
+    "special-palm",
+  );
+  assert.equal(archivedResponse.status, 200);
+  const archivedOffer = (await archivedResponse.json()).offers.find((offer) => offer.id === "special-palm");
+  assert.ok(archivedOffer.archivedAt);
+  assert.deepEqual(archivedOffer.metrics, measured.offers.find((offer) => offer.id === "special-palm").metrics);
+});
+
 test("Tattoo index keeps the lower Specials block and reveals a matching brand-band action only while open", () => {
   const source = readFileSync(join(ROOT, "tattoos", "index.html"), "utf8");
   assert.match(source, /class="brand-band-link" id="tattooSpecialsBandCta" href="\/tattoos\/specials\/" hidden>View Current Specials<\/a>/);
@@ -2147,6 +2563,8 @@ test("Studio Tattoo Specials manager creates complete campaigns and campaign-own
   assert.match(studio, /Add an individual special[\s\S]*?data-tattoo-special-offer-form/);
   assert.match(studio, /Publish at \/tattoos\/specials\//);
   assert.match(studio, /name="campaignId" required/);
+  assert.match(studio, /class="tattoo-special-metrics"[\s\S]*?Requests[\s\S]*?Awaiting deposit[\s\S]*?Booked[\s\S]*?Cancelled[\s\S]*?Conversion/);
+  assert.match(studio, /Booked is a lifetime conversion count; Cancelled is included in Booked, and reschedules are not cancellations\./);
   assert.match(studio, /\/api\/admin\/tattoo\/specials\/campaigns/);
   assert.match(worker, /handleAdminTattooSpecialCampaign/);
   assert.match(worker, /tattooSpecialCampaignMatch/);
@@ -2174,6 +2592,10 @@ test("Studio saves a client-facing decline reason separately from the decision n
   assert.match(studio, /Client-facing decline reason[\s\S]*?id="decisionClientMessage"/);
   assert.match(studio, /Saving this reason sends nothing/);
   assert.match(studio, /data-decision-action="decline"/);
+  assert.match(studio, /id="decisionConfirmation" hidden/);
+  assert.match(studio, /data-confirm-decision="\$\{escapeHtml\(action\)\}"/);
+  assert.match(studio, /id="decisionActionState" role="status" aria-live="polite"/);
+  assert.match(studio, /if \(state\) state\.textContent = message;/);
   assert.match(studio, /data-send-decision-notification[\s\S]*?Send Decline Notification/);
   assert.match(studio, /Decline notifications require a saved client-facing reason/);
 });
@@ -6665,6 +7087,8 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(worker, /appointmentRescheduleMatch/);
   assert.match(worker, /handleAdminCancelAppointment/);
   assert.match(worker, /appointmentCancelMatch/);
+  assert.match(worker, /handleAdminDeleteAppointment/);
+  assert.match(worker, /appointmentDeleteMatch/);
   assert.match(worker, /renderingRequestMatch/);
   assert.match(worker, /reapExpiredTattooRenderingRequests/);
   assert.match(worker, /tattoos\/flash\/detail\/index\.html/);
@@ -6677,6 +7101,8 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /tab === "tattoo" \? "appointments"/);
   assert.match(submissionsStudio, /function renderAppointmentsManager\(\)/);
   assert.match(submissionsStudio, /data-cancel-appointment/);
+  assert.match(submissionsStudio, /data-delete-appointment/);
+  assert.match(submissionsStudio, /Permanently Delete Appointment/);
   assert.match(submissionsStudio, /Additional Renderings/);
   assert.match(submissionsStudio, /data-create-rendering-request/);
   assert.match(submissionsStudio, /data-copy-rendering-link/);

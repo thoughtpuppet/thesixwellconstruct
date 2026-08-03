@@ -386,6 +386,7 @@ function normalizeAppointment(row) {
     originalEndAt: row.original_end_at || "",
     cancelledAt: row.cancelled_at || "",
     cancellationReason: row.cancellation_reason || "",
+    canPermanentlyDelete: Boolean(row.can_permanently_delete),
     meeting: normalizeMeeting(row),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1054,6 +1055,12 @@ function normalizeTattooSessionPlan(row) {
     approvedBudgetCurrency: row.approved_budget_currency || "USD",
     budgetAcknowledged: Boolean(row.budget_acknowledged),
     budgetAcknowledgedAt: row.budget_acknowledged_at || "",
+    bookingLinkPurpose: row.booking_purpose || "",
+    allowedBookingTypes: parseJsonField(row.allowed_booking_types_json, []),
+    bookingLinkExpiresAt: row.booking_link_expires_at || "",
+    bookingLinkRevokeExisting: row.booking_link_revoke_existing === null || row.booking_link_revoke_existing === undefined
+      ? true
+      : Boolean(row.booking_link_revoke_existing),
     clientPreference: row.client_preference || "",
     clientAcknowledged: Boolean(row.client_acknowledged),
     clientInformedAt: row.client_informed_at || "",
@@ -3310,6 +3317,28 @@ async function selectAppointmentWithMeeting(db, appointmentId) {
               tst.approved_price_cents AS special_approved_price_cents,
               tst.advertised_price_cents AS special_advertised_price_cents,
               tst.duration_minutes AS special_duration_minutes,
+              CASE WHEN a.status IN ('pending_deposit','deposit_pending','cancelled','archived')
+                AND NOT EXISTS (
+                  SELECT 1 FROM deposit_payments protected_payment
+                  WHERE protected_payment.appointment_id = a.id
+                    AND (
+                      lower(protected_payment.status) IN ('paid','completed','settled','payment_attention')
+                      OR trim(COALESCE(protected_payment.provider_payment_id, '')) <> ''
+                    )
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM tattoo_rendering_requests protected_rendering
+                  WHERE protected_rendering.appointment_id = a.id
+                    AND (
+                      protected_rendering.status IN ('paid','payment_attention')
+                      OR trim(COALESCE(protected_rendering.square_payment_id, '')) <> ''
+                    )
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM archive_tattoo_session_refs archive_session
+                  WHERE archive_session.appointment_id = a.id
+                )
+                THEN 1 ELSE 0 END AS can_permanently_delete,
               am.provider AS meeting_provider,
               am.provider_meeting_id,
               am.join_url AS meeting_join_url,
@@ -5969,6 +5998,27 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       });
     }
     const artistNote = asString(body.artistNote).slice(0,5000);
+    const bookingLinkPurpose = hasOwn("bookingLinkPurpose")
+      ? asString(body.bookingLinkPurpose)
+      : (existing?.booking_purpose || "");
+    const allowedBookingTypes = hasOwn("allowedBookingTypes")
+      ? [...new Set((Array.isArray(body.allowedBookingTypes) ? body.allowedBookingTypes : []).map(asString).filter(Boolean))]
+      : parseJsonField(existing?.allowed_booking_types_json, []);
+    const bookingLinkExpiresAt = hasOwn("bookingLinkExpiresAt")
+      ? asString(body.bookingLinkExpiresAt)
+      : (existing?.booking_link_expires_at || "");
+    const bookingLinkRevokeExisting = hasOwn("bookingLinkRevokeExisting")
+      ? (body.bookingLinkRevokeExisting ? 1 : 0)
+      : (existing?.booking_link_revoke_existing ?? 1);
+    if (bookingLinkPurpose && !BOOKING_TOKEN_PURPOSES.has(bookingLinkPurpose)) {
+      return errorResponse("Choose a valid booking-link purpose.", 400);
+    }
+    if (bookingLinkPurpose && !bookingTypesMatchPurpose(bookingLinkPurpose, allowedBookingTypes)) {
+      return errorResponse("Choose at least one appointment type compatible with the booking-link purpose.", 400);
+    }
+    if (bookingLinkExpiresAt && (!Number.isFinite(Date.parse(bookingLinkExpiresAt)) || Date.parse(bookingLinkExpiresAt) <= Date.now())) {
+      return errorResponse("Booking-link expiration must be a future date and time.", 400);
+    }
     const planChanged = !existing
       || sessionCategory !== (existing.session_category || "artist_review")
       || splitPolicy !== (existing.split_policy || "artist_review")
@@ -5979,7 +6029,11 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       || artistNote !== (existing.artist_note || "")
       || budgetMinCents !== (existing.approved_budget_min_cents ?? null)
       || budgetMaxCents !== (existing.approved_budget_max_cents ?? null)
-      || budgetCurrency !== (existing.approved_budget_currency || "USD");
+      || budgetCurrency !== (existing.approved_budget_currency || "USD")
+      || bookingLinkPurpose !== (existing.booking_purpose || "")
+      || JSON.stringify(allowedBookingTypes) !== JSON.stringify(parseJsonField(existing.allowed_booking_types_json, []))
+      || bookingLinkExpiresAt !== (existing.booking_link_expires_at || "")
+      || bookingLinkRevokeExisting !== (existing.booking_link_revoke_existing ?? 1);
     if (
       planChanged
       && ["approved", "declined"].includes(submission.status)
@@ -6025,10 +6079,12 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
         estimated_total_minutes_min,estimated_total_minutes_max,split_policy,
         artist_note,session_category,approved_budget_min_cents,
         approved_budget_max_cents,approved_budget_currency,budget_acknowledged,
-        budget_acknowledged_at,client_preference,client_acknowledged,
+        budget_acknowledged_at,booking_purpose,allowed_booking_types_json,
+        booking_link_expires_at,booking_link_revoke_existing,
+        client_preference,client_acknowledged,
         client_informed_at,client_selected_at,created_at,updated_at
       )
-      SELECT ?,s.id,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
+      SELECT ?,s.id,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
       FROM submissions s
       WHERE s.id = ? AND COALESCE(s.tattoo_stage, 'review') NOT IN ('tattoo_scheduled','closed')
         AND NOT EXISTS (
@@ -6059,6 +6115,10 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
         approved_budget_currency=excluded.approved_budget_currency,
         budget_acknowledged=excluded.budget_acknowledged,
         budget_acknowledged_at=excluded.budget_acknowledged_at,
+        booking_purpose=excluded.booking_purpose,
+        allowed_booking_types_json=excluded.allowed_booking_types_json,
+        booking_link_expires_at=excluded.booking_link_expires_at,
+        booking_link_revoke_existing=excluded.booking_link_revoke_existing,
         client_preference=NULL,
         client_acknowledged=0,client_informed_at=NULL,client_selected_at=NULL,
         updated_at=excluded.updated_at`
@@ -6076,6 +6136,10 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       budgetCurrency,
       budgetAcknowledged,
       budgetAcknowledgedAt,
+      bookingLinkPurpose || null,
+      allowedBookingTypes.length ? JSON.stringify(allowedBookingTypes) : null,
+      bookingLinkExpiresAt || null,
+      bookingLinkRevokeExisting,
       existing?.created_at || now,
       now,
       submissionId,
@@ -8111,6 +8175,28 @@ export async function handleAdminListAppointments(request, env) {
       .prepare(
         `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type,
                 tst.offer_title AS special_offer_title, tst.variant_label AS special_variant_label,
+                CASE WHEN a.status IN ('pending_deposit','deposit_pending','cancelled','archived')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM deposit_payments protected_payment
+                    WHERE protected_payment.appointment_id = a.id
+                      AND (
+                        lower(protected_payment.status) IN ('paid','completed','settled','payment_attention')
+                        OR trim(COALESCE(protected_payment.provider_payment_id, '')) <> ''
+                      )
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM tattoo_rendering_requests protected_rendering
+                    WHERE protected_rendering.appointment_id = a.id
+                      AND (
+                        protected_rendering.status IN ('paid','payment_attention')
+                        OR trim(COALESCE(protected_rendering.square_payment_id, '')) <> ''
+                      )
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1 FROM archive_tattoo_session_refs archive_session
+                    WHERE archive_session.appointment_id = a.id
+                  )
+                  THEN 1 ELSE 0 END AS can_permanently_delete,
                 am.provider AS meeting_provider,
                 am.provider_meeting_id,
                 am.join_url AS meeting_join_url,
@@ -8392,6 +8478,217 @@ export async function handleAdminCreateAppointmentMeeting(request, env, appointm
     return json({ appointment: normalizeAppointment(updated), replaced: replacing });
   } catch (error) {
     return errorResponse("Unable to create Zoom meeting.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
+export async function handleAdminDeleteAppointment(request, env, appointmentId) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireBookingDb(env);
+    let row = await selectAppointmentWithMeeting(db, appointmentId);
+    if (!row) return errorResponse("Appointment not found.", 404);
+    if (!["pending_deposit", "deposit_pending", "cancelled", "archived"].includes(row.status)) {
+      return errorResponse("Confirmed or completed appointments cannot be permanently deleted. Cancel the appointment instead.", 409, {
+        code: "APPOINTMENT_DELETE_STATUS_PROTECTED",
+      });
+    }
+
+    const paymentRows = (await db.prepare(
+      `SELECT id, status, provider_checkout_id, provider_order_id, provider_payment_id
+       FROM deposit_payments WHERE appointment_id = ? ORDER BY created_at`
+    ).bind(appointmentId).all()).results || [];
+    const protectedPayment = paymentRows.find((payment) => (
+      ["paid", "completed", "settled", "payment_attention"].includes(asString(payment.status).toLowerCase())
+      || Boolean(asString(payment.provider_payment_id))
+    ));
+    if (protectedPayment) {
+      return errorResponse("Appointments with recorded payments cannot be permanently deleted.", 409, {
+        code: "APPOINTMENT_DELETE_PAYMENT_PROTECTED",
+      });
+    }
+
+    const renderingRows = (await db.prepare(
+      `SELECT id, status, square_order_id, square_payment_link_id, square_payment_id
+       FROM tattoo_rendering_requests WHERE appointment_id = ? ORDER BY created_at`
+    ).bind(appointmentId).all()).results || [];
+    const protectedRendering = renderingRows.find((rendering) => (
+      ["paid", "payment_attention"].includes(asString(rendering.status).toLowerCase())
+      || Boolean(asString(rendering.square_payment_id))
+    ));
+    if (protectedRendering) {
+      return errorResponse("Appointments with recorded rendering payments cannot be permanently deleted.", 409, {
+        code: "APPOINTMENT_DELETE_RENDERING_PROTECTED",
+      });
+    }
+
+    const archiveReference = await db.prepare(
+      "SELECT id FROM archive_tattoo_session_refs WHERE appointment_id = ? LIMIT 1"
+    ).bind(appointmentId).first();
+    if (archiveReference) {
+      return errorResponse("This appointment is linked to an Archive tattoo session and cannot be permanently deleted.", 409, {
+        code: "APPOINTMENT_DELETE_ARCHIVE_PROTECTED",
+      });
+    }
+
+    const checkoutPairs = paymentRows.map((payment) => ({
+      paymentId: payment.id,
+      orderId: asString(payment.provider_order_id),
+      linkId: asString(payment.provider_checkout_id),
+    }));
+    if (!checkoutPairs.length && (row.square_order_id || row.square_payment_link_id)) {
+      checkoutPairs.push({
+        paymentId: "",
+        orderId: asString(row.square_order_id),
+        linkId: asString(row.square_payment_link_id),
+      });
+    }
+    for (const checkout of checkoutPairs) {
+      if (!checkout.orderId && !checkout.linkId) continue;
+      if (!checkout.orderId || !checkout.linkId) {
+        return errorResponse("This appointment has an incomplete Square checkout record and cannot be safely deleted.", 409, {
+          code: "APPOINTMENT_DELETE_CHECKOUT_ATTENTION",
+        });
+      }
+      try {
+        const order = await fetchSquareOrderForReconciliation(env, checkout.orderId);
+        if (orderLooksPaid(order)) {
+          await db.prepare(
+            `UPDATE deposit_payments SET status = 'payment_attention', raw_json = ?, updated_at = ?
+             WHERE appointment_id = ? AND status <> 'paid'`
+          ).bind(JSON.stringify(order), new Date().toISOString(), appointmentId).run();
+          return errorResponse("Square reports that this checkout was paid. The appointment was preserved for Studio review.", 409, {
+            code: "APPOINTMENT_DELETE_SQUARE_PAID",
+          });
+        }
+        await invalidateSquarePaymentLink(env, checkout.linkId);
+      } catch (error) {
+        return errorResponse("The Square checkout could not be safely invalidated, so the appointment was preserved.", 409, {
+          code: "APPOINTMENT_DELETE_CHECKOUT_ATTENTION",
+          detail: error.message,
+        });
+      }
+    }
+
+    for (const rendering of renderingRows) {
+      const orderId = asString(rendering.square_order_id);
+      const linkId = asString(rendering.square_payment_link_id);
+      if (!orderId && !linkId) continue;
+      if (!orderId || !linkId) {
+        return errorResponse("An additional-rendering checkout is incomplete and prevents safe appointment deletion.", 409, {
+          code: "APPOINTMENT_DELETE_RENDERING_ATTENTION",
+        });
+      }
+      try {
+        const order = await fetchSquareOrderForReconciliation(env, orderId);
+        if (orderLooksPaid(order)) {
+          await db.prepare(
+            `UPDATE tattoo_rendering_requests
+             SET status = 'payment_attention', raw_json = ?, updated_at = ?
+             WHERE id = ? AND status <> 'paid'`
+          ).bind(JSON.stringify(order), new Date().toISOString(), rendering.id).run();
+          return errorResponse("Square reports that an additional-rendering checkout was paid. The appointment was preserved for Studio review.", 409, {
+            code: "APPOINTMENT_DELETE_RENDERING_PAID",
+          });
+        }
+        await invalidateSquarePaymentLink(env, linkId);
+      } catch (error) {
+        return errorResponse("An additional-rendering checkout could not be safely invalidated, so the appointment was preserved.", 409, {
+          code: "APPOINTMENT_DELETE_RENDERING_ATTENTION",
+          detail: error.message,
+        });
+      }
+    }
+
+    if (["pending_deposit", "deposit_pending"].includes(row.status)) {
+      const released = await releasePendingBookingHold(
+        db,
+        row,
+        "admin",
+        "Appointment released for permanent deletion by Studio",
+      );
+      if (!released) {
+        return errorResponse("The appointment changed before it could be deleted.", 409, {
+          code: "APPOINTMENT_DELETE_CHANGED",
+        });
+      }
+      row = await selectAppointmentWithMeeting(db, appointmentId) || row;
+    }
+
+    if (row.meeting_provider === "zoom") {
+      const meetingCleanup = await cleanupZoomMeetingForAppointment(db, env, appointmentId);
+      if (!meetingCleanup.cleaned) {
+        return errorResponse("The Zoom meeting could not be removed, so the appointment was preserved.", 409, {
+          code: "APPOINTMENT_DELETE_MEETING_ATTENTION",
+          detail: meetingCleanup.error || "Zoom cleanup needs attention.",
+        });
+      }
+    }
+
+    const statements = [];
+    if (row.submission_id) {
+      statements.push(db.prepare(
+        `UPDATE submissions
+         SET payload_json = json_remove(
+               payload_json,
+               '$.held_appointment_id',
+               '$.held_start_at',
+               '$.held_end_at',
+               '$.approval_hold_expires_at'
+             ),
+             updated_at = ?
+         WHERE id = ? AND json_valid(payload_json)
+           AND json_extract(payload_json, '$.held_appointment_id') = ?`
+      ).bind(new Date().toISOString(), row.submission_id, appointmentId));
+    }
+    statements.push(
+      db.prepare("DELETE FROM tattoo_rendering_requests WHERE appointment_id = ?")
+        .bind(appointmentId),
+    );
+    const paymentIds = paymentRows.map((payment) => payment.id).filter(Boolean);
+    if (paymentIds.length) {
+      statements.push(db.prepare(
+        `DELETE FROM crm_transactions
+         WHERE source_provider = 'local' AND source_type = 'deposit_payment'
+           AND source_id IN (${paymentIds.map(() => "?").join(",")})`
+      ).bind(...paymentIds));
+    }
+    statements.push(
+      db.prepare(
+        `DELETE FROM crm_interactions
+         WHERE source_provider = 'local' AND source_type = 'appointment' AND source_id = ?`
+      ).bind(appointmentId),
+    );
+    const appointmentDeleteIndex = statements.length;
+    statements.push(db.prepare(
+      `DELETE FROM appointments
+       WHERE id = ? AND status IN ('cancelled','archived')
+         AND NOT EXISTS (
+           SELECT 1 FROM deposit_payments protected_payment
+           WHERE protected_payment.appointment_id = appointments.id
+             AND (
+               lower(protected_payment.status) IN ('paid','completed','settled','payment_attention')
+               OR trim(COALESCE(protected_payment.provider_payment_id, '')) <> ''
+             )
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM archive_tattoo_session_refs archive_session
+           WHERE archive_session.appointment_id = appointments.id
+         )`
+    ).bind(appointmentId));
+
+    const results = await db.batch(statements);
+    if (Number(results?.[appointmentDeleteIndex]?.meta?.changes || 0) < 1) {
+      return errorResponse("The appointment changed or became protected before it could be deleted.", 409, {
+        code: "APPOINTMENT_DELETE_CHANGED",
+      });
+    }
+    return json({ ok: true, deletedId: appointmentId });
+  } catch (error) {
+    return errorResponse("Unable to permanently delete appointment.", 500, {
       detail: error.message,
     });
   }

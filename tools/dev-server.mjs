@@ -117,7 +117,9 @@ const checkRoutes = [
   ["/tattoos/inquire/", 200],
   ["/tattoos/inquire/custom/", 200],
   ["/tattoos/flash/claim/", 200],
-  ["/tattoos/build/", 200],
+  ["/tattoos/build/", 302],
+  ["/tattoos/build/in-person/", 302],
+  ["/tattoos/build/maze/", 302],
   ["/tattoos/special-projects/apply/", 200],
   ["/tattoos/policies/", 200],
   ["/tattoos/day-of/", 200],
@@ -153,7 +155,7 @@ const hiddenPublicPaths = new Set([
   "/music",
   "/writings",
 ]);
-const closedPublicPagePaths = ["/about", "/archive"];
+const closedPublicPagePaths = ["/about", "/archive", "/tattoos/build"];
 const hidePublicPagesExceptHome = false;
 const publicFrontDoorPaths = new Set(["/", "/index", "/index/", "/index.html"]);
 const publicEntryRoomAliasPaths = new Set(["/entry-room", "/entry-room/", "/entry-room/index.html"]);

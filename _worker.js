@@ -28,6 +28,7 @@ import {
   handleAdminCreateAppointmentMeeting,
   handleAdminCreateTattooRenderingRequest,
   handleAdminCancelAppointment,
+  handleAdminDeleteAppointment,
   handleAdminCompleteAppointment,
   handleAdminCreateBookingToken,
   handleAdminDeleteAvailability,
@@ -135,7 +136,7 @@ const HIDDEN_PUBLIC_PATHS = [
   "/music",
   "/writings"
 ];
-const CLOSED_PUBLIC_PAGE_PATHS = ["/about", "/archive"];
+const CLOSED_PUBLIC_PAGE_PATHS = ["/about", "/archive", "/tattoos/build"];
 
 const HIDE_PUBLIC_PAGES_EXCEPT_HOME = false;
 const PUBLIC_FRONT_DOOR_PATHS = new Set(["/", "/index", "/index/", "/index.html"]);
@@ -1014,6 +1015,12 @@ async function handleBookingApi(request, env) {
   if (appointmentCompleteMatch) {
     if (method !== "POST") return methodNotAllowed(method, ["POST"]);
     return handleAdminCompleteAppointment(request, env, decodeURIComponent(appointmentCompleteMatch[1]));
+  }
+
+  const appointmentDeleteMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)$/);
+  if (appointmentDeleteMatch) {
+    if (method !== "DELETE") return methodNotAllowed(method, ["DELETE"]);
+    return handleAdminDeleteAppointment(request, env, decodeURIComponent(appointmentDeleteMatch[1]));
   }
 
   const appointmentCancelMatch = pathname.match(/^\/api\/admin\/booking\/appointments\/([^/]+)\/cancel$/);
