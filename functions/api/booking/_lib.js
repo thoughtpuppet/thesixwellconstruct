@@ -79,7 +79,6 @@ const TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "flash_claim"
 const ORIGINAL_TATTOO_PROJECT_SUBMISSION_TYPES = new Set(["tattoo_inquiry", "build_brief", "build_your_own", "byo", "maze_design", "special_project", "tattoo_special"]);
 const TATTOO_RENDERING_FEE_CENTS = 5000;
 const TATTOO_RENDERING_CURRENCY = "USD";
-const SESSION_CATEGORIES = new Set(["artist_review", "one_session", "multiple_sessions"]);
 const SPLIT_POLICIES = new Set(["artist_review", "required", "client_choice", "not_available"]);
 const CLIENT_SESSION_PREFERENCES = new Set(["studio_plan", "one_longer_session", "multiple_shorter_sessions"]);
 
@@ -5952,12 +5951,13 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
     }
     const body = await readJsonBody(request);
     if (!body) return errorResponse("Expected JSON body.", 400);
-    const sessionCategory = asString(body.sessionCategory) || "artist_review";
     const splitPolicy = asString(body.splitPolicy) || "artist_review";
-    if (!SESSION_CATEGORIES.has(sessionCategory)) return errorResponse("Choose a valid session category.", 400);
     if (!SPLIT_POLICIES.has(splitPolicy)) return errorResponse("Choose a valid split policy.", 400);
-    if (splitPolicy === "required" && sessionCategory !== "multiple_sessions") return errorResponse("Required splitting must use the multiple-sessions category.", 400);
-    if (splitPolicy === "not_available" && sessionCategory !== "one_session") return errorResponse("Splitting unavailable must use the one-session category.", 400);
+    const sessionCategory = splitPolicy === "not_available"
+      ? "one_session"
+      : ["required", "client_choice"].includes(splitPolicy)
+        ? "multiple_sessions"
+        : "artist_review";
     const integer = (value) => value === "" || value === null || value === undefined ? null : Math.round(Number(value));
     const existing = await loadTattooSessionPlan(db, submissionId);
     let sessionsMin = integer(body.estimatedSessionsMin);
@@ -5965,7 +5965,11 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
     const minutesMin = integer(body.estimatedTotalMinutesMin);
     const minutesMax = integer(body.estimatedTotalMinutesMax);
     if (sessionCategory === "one_session") sessionsMin = sessionsMax = 1;
-    if (sessionCategory === "multiple_sessions" && (!sessionsMin || sessionsMin < 2)) return errorResponse("Multiple-session plans require a minimum of at least two sessions.", 400);
+    if (splitPolicy === "required" && (!sessionsMin || sessionsMin < 2)) return errorResponse("Required splitting needs a minimum of at least two sessions.", 400);
+    if (splitPolicy === "client_choice") {
+      sessionsMin = sessionsMin && sessionsMin > 0 ? sessionsMin : 1;
+      sessionsMax = sessionsMax && sessionsMax >= sessionsMin ? sessionsMax : Math.max(2, sessionsMin);
+    }
     if (sessionCategory !== "artist_review" && (!sessionsMax || sessionsMax < sessionsMin)) return errorResponse("Enter a valid maximum session count.", 400);
     if ([sessionsMin,sessionsMax,minutesMin,minutesMax].some((value) => value !== null && (!Number.isFinite(value) || value < 0))) return errorResponse("Session estimates must be non-negative whole numbers.", 400);
     if (minutesMin !== null && minutesMax !== null && minutesMin > minutesMax) return errorResponse("Minimum total time cannot exceed maximum total time.", 400);

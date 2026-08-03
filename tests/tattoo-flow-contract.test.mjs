@@ -678,9 +678,10 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.match(source, /Saved: \$\{savedSessionPlanSummary\(savedPlan\)\}\. Booking choices were also saved\. Nothing was sent\./);
   assert.match(source, /Booking choices saved\. No link was generated and nothing was sent\./);
   assert.match(source, /Internal notes saved\. Nothing was sent\./);
-  assert.match(source, /id="planSessionCategory" name="sessionCategory" data-select-menu-skip/);
+  assert.doesNotMatch(source, /id="planSessionCategory"/);
   assert.match(source, /id="planSplitPolicy" name="splitPolicy" data-select-menu-skip/);
-  assert.match(source, /sessionCategory: form\.elements\.sessionCategory\?\.value/);
+  assert.doesNotMatch(source, /sessionCategory: form\.elements\.sessionCategory/);
+  assert.match(source, /The system derives the internal session structure from this choice\./);
   assert.match(source, /Estimated total project time [^<]* minimum \(minutes\)/);
   assert.match(source, /Optional\. This is the estimated tattooing time for the entire project across every session\./);
   assert.doesNotMatch(source, /id="saveBtn"/);
@@ -739,6 +740,29 @@ test("Studio session-plan saves persist booking choices without preparing access
   ), env, submissionId);
   assert.equal(reloaded.status, 200);
   assert.deepEqual((await reloaded.json()).sessionPlan.allowedBookingTypes, ["tattoo_half"]);
+
+  const flexible = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      splitPolicy: "client_choice",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 2,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "Choose one longer appointment or two shorter sessions.",
+      approvedBudgetMinCents: 80000,
+      approvedBudgetMaxCents: 120000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(flexible.status, 200, await flexible.clone().text());
+  const flexiblePlan = (await flexible.json()).sessionPlan;
+  assert.equal(flexiblePlan.sessionCategory, "multiple_sessions", "category is derived internally");
+  assert.equal(flexiblePlan.splitPolicy, "client_choice");
+  assert.equal(flexiblePlan.estimatedSessionsMin, 1);
+  assert.equal(flexiblePlan.estimatedSessionsMax, 2);
 });
 
 test("Extended Day client surfaces use the approved optional-session copy", () => {
