@@ -674,8 +674,17 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.match(source, /Object\.assign\(values, bookingTokenDraftBody\(submissionId\)\);/);
   assert.match(source, /id="saveBookingChoicesBtn"[^>]*>Save Booking Choices<\/button>/);
   assert.match(source, /id="saveReviewNotesBtn"[^>]*>Save Internal Notes<\/button>/);
+  assert.match(source, /id="sessionPlanSaveState" role="status" aria-live="polite"/);
+  assert.match(source, /Saved: \$\{savedSessionPlanSummary\(savedPlan\)\}\. Booking choices were also saved\. Nothing was sent\./);
+  assert.match(source, /Booking choices saved\. No link was generated and nothing was sent\./);
+  assert.match(source, /Internal notes saved\. Nothing was sent\./);
+  assert.match(source, /id="planSessionCategory" name="sessionCategory" data-select-menu-skip/);
+  assert.match(source, /id="planSplitPolicy" name="splitPolicy" data-select-menu-skip/);
+  assert.match(source, /sessionCategory: form\.elements\.sessionCategory\?\.value/);
+  assert.match(source, /Estimated total project time [^<]* minimum \(minutes\)/);
+  assert.match(source, /Optional\. This is the estimated tattooing time for the entire project across every session\./);
   assert.doesNotMatch(source, /id="saveBtn"/);
-  assert.match(source, /setStatus\(error\.message \|\| "The session plan could not be saved"\);/);
+  assert.match(source, /const message = error\.message \|\| "The session plan could not be saved";[\s\S]*?setSaveFeedback\("sessionPlanSaveState", message, "error"\);/);
 });
 
 test("Studio session-plan saves persist booking choices without preparing access or sending", async () => {
@@ -2609,8 +2618,15 @@ test("Studio client preview opens synchronously and carries the Tattoo Special l
   assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
   assert.ok(handler.indexOf('window.open("about:blank", "_blank")') >= 0);
   assert.ok(handler.indexOf('window.open("about:blank", "_blank")') < handler.indexOf("await Promise.all"));
+  assert.ok(handler.indexOf("/api/booking/context?token=") < handler.indexOf("/api/admin/booking/availability-preview"));
+  assert.match(handler, /previewSource: "prepared_access"/);
+  assert.match(handler, /Saved draft client flow opened; no client access has been prepared yet/);
+  assert.match(studio, /sessionPlan\?\.bookingLinkPurpose \|\| defaultTokenPurpose\(submission\)/);
+  assert.match(studio, /sessionPlan\?\.allowedBookingTypes/);
   assert.match(studio, /function clientPreviewContext[\s\S]*?allowedTypeIds[\s\S]*?special_offer_title[\s\S]*?pendingApproval[\s\S]*?pendingCheckout/);
-  assert.match(booking, /function adminPreviewContext[\s\S]*?pendingCheckout: payload\.pendingCheckout \|\| null/);
+  assert.match(booking, /function adminPreviewContext[\s\S]*?previewSource: payload\.previewSource[\s\S]*?pendingCheckout: payload\.pendingCheckout \|\| null/);
+  assert.match(booking, /if \(!renderPendingCheckout\(\)\) appEl\.classList\.remove\("hidden"\)/);
+  assert.match(booking, /if \(previewMode\)[\s\S]*?client's Square checkout is not opened from Studio preview/);
   assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Square deposit link sent by email/);
 });
 

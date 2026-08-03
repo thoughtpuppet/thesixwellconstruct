@@ -417,6 +417,7 @@
     }
     if (!Array.isArray(payload.bookingTypes) || !Array.isArray(payload.availabilityWindows)) return null;
     return {
+      previewSource: payload.previewSource || "saved_draft",
       purpose: payload.purpose || "tattoo",
       client: payload.client || { name: "Preview Client", email: "", phone: "" },
       requiresClientDetails: Boolean(payload.requiresClientDetails),
@@ -427,6 +428,7 @@
       bookingTypes: payload.bookingTypes,
       availabilityWindows: payload.availabilityWindows,
       pendingCheckout: payload.pendingCheckout || null,
+      expiresAt: payload.expiresAt || "",
     };
   }
 
@@ -802,6 +804,10 @@
   releaseCheckoutBtn.addEventListener("click", async () => {
     const pending = context?.pendingCheckout;
     if (!pending?.appointmentId || !context?.client?.email) return;
+    if (previewMode) {
+      pendingCheckoutText.textContent = "Preview mode only. The client's release action is not available in Studio preview.";
+      return;
+    }
     if (!window.confirm("Release this checkout hold and choose another time? Square will be checked first, and a paid checkout cannot be released.")) return;
     releaseCheckoutBtn.disabled = true;
     pendingCheckoutText.textContent = "Checking Square and releasing the hold.";
@@ -822,6 +828,12 @@
       pendingCheckoutText.textContent = error.message;
       releaseCheckoutBtn.disabled = false;
     }
+  });
+
+  resumeCheckoutLink.addEventListener("click", (event) => {
+    if (!previewMode) return;
+    event.preventDefault();
+    pendingCheckoutText.textContent = "Preview mode only. The client's Square checkout is not opened from Studio preview.";
   });
 
   function renderSessionPlan() {
@@ -1003,9 +1015,11 @@
       initializePlanSelection();
       applyPurposeCopy();
       statusEl.classList.add("hidden");
-      appEl.classList.remove("hidden");
+      if (!renderPendingCheckout()) appEl.classList.remove("hidden");
       checkoutBtn.textContent = "Preview Checkout";
-      checkoutNote.textContent = "Preview mode only. Real clients continue to Square after selecting a time.";
+      checkoutNote.textContent = context.previewSource === "prepared_access"
+        ? "Preview mode only. This otherwise matches the currently prepared client access."
+        : "Preview mode only. This matches the saved draft choices; no client access has been prepared yet.";
       render();
       return;
     }

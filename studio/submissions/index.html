@@ -434,6 +434,9 @@
   .tattoo-settings-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(120px,.65fr) auto; gap:10px; align-items:end; border-top:3px solid var(--ring-faint); padding-top:10px; }
   .tattoo-settings-row.special { grid-template-columns:minmax(0,1fr) minmax(110px,.45fr) minmax(110px,.45fr); }
   .tattoo-specials-manager { display:grid; gap:22px; }
+  .save-feedback { min-height:1.5em; margin:7px 0 0; font-family:var(--sans); font-size:11px; color:var(--dim); }
+  .save-feedback[data-state="success"] { color:#4caf50; }
+  .save-feedback[data-state="error"] { color:var(--signal); }
   .tattoo-specials-settings { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; min-width:0; }
   .tattoo-specials-offers { display:grid; gap:16px; min-width:0; }
   .tattoo-specials-campaigns { display:grid; gap:16px; }
@@ -1431,6 +1434,15 @@
 
   function setStatus(message) {
     statusEl.textContent = message;
+  }
+
+  function setSaveFeedback(id, message, state = "") {
+    const feedback = document.getElementById(id);
+    if (!feedback) return;
+    feedback.dataset.state = state;
+    feedback.textContent = state === "success"
+      ? `${message} Â· ${new Date().toLocaleTimeString([], { hour:"numeric", minute:"2-digit" })}`
+      : message;
   }
 
   function submissionBookingTypeId(submission) {
@@ -4051,7 +4063,13 @@ ${meetingLines}
 
   function clientPreviewContext(submission, payload, sessionPlan = null, sessionEstimateCopy = null) {
     const clientName = submission.contactName || payloadValue(submission, "name") || "Preview Client";
-    const allowedTypeIds = new Set(defaultAllowedBookingTypes(submission));
+    const purpose = sessionPlan?.bookingLinkPurpose || defaultTokenPurpose(submission);
+    const savedAllowedTypes = Array.isArray(sessionPlan?.allowedBookingTypes)
+      ? sessionPlan.allowedBookingTypes.filter(Boolean)
+      : [];
+    const allowedTypeIds = new Set(savedAllowedTypes.length
+      ? savedAllowedTypes
+      : defaultAllowedBookingTypes(submission, purpose));
     const bookingTypes = (payload.bookingTypes || []).filter((type) => allowedTypeIds.has(type.id));
     const availabilityWindows = (payload.availabilityWindows || []).filter((windowItem) =>
       !windowItem.bookingTypeId || allowedTypeIds.has(windowItem.bookingTypeId)
@@ -4069,7 +4087,8 @@ ${meetingLines}
     const pendingAppointment = special ? latestAppointmentFor(submission.id) : null;
     return {
       createdAt: Date.now(),
-      purpose: defaultTokenPurpose(submission),
+      previewSource: "saved_draft",
+      purpose,
       client: {
         name: clientName,
         email: submission.contactEmail || "",
@@ -4173,7 +4192,7 @@ ${meetingLines}
     const canResendConfirmation = appointmentIsConfirmed(appointment);
     return `
       <div class="value" id="decisionCommunicationState">${["approved", "declined"].includes(submission.status) ? "Unsent" : "No recorded decision"}</div>
-      ${submission.status === "declined" ? `<label for="decisionClientMessage" style="margin-top:12px;">Client-facing decline reason</label><textarea id="decisionClientMessage" placeholder="Add the reviewed reason that may be sent to the client.">${escapeHtml(submission.decisionClientMessage || "")}</textarea><p class="contact">Saving this reason sends nothing.</p><div class="booking-actions" style="margin-top:10px;"><button class="button" id="saveDeclineReasonBtn" type="button">Save Decline Reason</button></div>` : ""}
+      ${submission.status === "declined" ? `<label for="decisionClientMessage" style="margin-top:12px;">Client-facing decline reason</label><textarea id="decisionClientMessage" placeholder="Add the reviewed reason that may be sent to the client.">${escapeHtml(submission.decisionClientMessage || "")}</textarea><p class="contact">Saving this reason sends nothing.</p><div class="booking-actions" style="margin-top:10px;"><button class="button" id="saveDeclineReasonBtn" type="button">Save Decline Reason</button></div><p class="save-feedback" id="declineReasonSaveState" role="status" aria-live="polite"></p>` : ""}
       <div class="booking-actions" style="margin-top:10px;">
         ${submission.status === "approved" && submission.type === "tattoo_special" && !specialPrepared ? `<button class="button" type="button" data-prepare-special-deposit="${escapeHtml(submission.id)}">Prepare Deposit Link</button>` : ""}
         ${canSendDecision ? `<button class="button" type="button" data-send-decision-notification="${escapeHtml(submission.id)}">${submission.status === "declined" ? "Send Decline Notification" : "Send Approval Notification"}</button>` : ""}
@@ -4185,6 +4204,21 @@ ${meetingLines}
 
   function sessionPlanOption(value, current, label) {
     return `<option value="${value}" ${value === current ? "selected" : ""}>${label}</option>`;
+  }
+
+  function savedSessionPlanSummary(plan = {}) {
+    const parts = [titleize(plan.sessionCategory || "artist_review"), titleize(plan.splitPolicy || "artist_review")];
+    if (plan.estimatedSessionsMin || plan.estimatedSessionsMax) {
+      const minimum = plan.estimatedSessionsMin || plan.estimatedSessionsMax;
+      const maximum = plan.estimatedSessionsMax || plan.estimatedSessionsMin;
+      parts.push(minimum === maximum ? `${minimum} session` : `${minimum}â€“${maximum} sessions`);
+    }
+    if (plan.estimatedTotalMinutesMin || plan.estimatedTotalMinutesMax) {
+      const minimum = plan.estimatedTotalMinutesMin || plan.estimatedTotalMinutesMax;
+      const maximum = plan.estimatedTotalMinutesMax || plan.estimatedTotalMinutesMin;
+      parts.push(minimum === maximum ? `${minimum} total minutes` : `${minimum}â€“${maximum} total minutes`);
+    }
+    return parts.join(" Â· ");
   }
 
   function sessionPlanEditorHtml(plan = {}, submission = null) {
@@ -4207,12 +4241,12 @@ ${meetingLines}
       <h3>Session Plan &amp; Pacing</h3>
       <p class="contact">${locked ? "Reopen review before changing decision-defining session-plan or budget fields." : "Set the structure the client will review before booking. Required plans cannot be overridden by client preference. Saving a revision clears any earlier client response so they must confirm the updated estimate."}</p>
       <form id="tattooSessionPlanForm" class="session-plan-grid" ${locked ? "inert" : ""}>
-        <div class="field"><label for="planSessionCategory">Session category</label><select id="planSessionCategory" name="sessionCategory">
+        <div class="field"><label for="planSessionCategory">Session category</label><select id="planSessionCategory" name="sessionCategory" data-select-menu-skip>
           ${sessionPlanOption("artist_review", plan.sessionCategory || "artist_review", "Artist review")}
           ${sessionPlanOption("one_session", plan.sessionCategory, "One session")}
           ${sessionPlanOption("multiple_sessions", plan.sessionCategory, "Multiple sessions")}
         </select></div>
-        <div class="field"><label for="planSplitPolicy">Splitting policy</label><select id="planSplitPolicy" name="splitPolicy">
+        <div class="field"><label for="planSplitPolicy">Splitting policy</label><select id="planSplitPolicy" name="splitPolicy" data-select-menu-skip>
           ${sessionPlanOption("artist_review", plan.splitPolicy || "artist_review", "Artist review")}
           ${sessionPlanOption("required", plan.splitPolicy, "Splitting required")}
           ${sessionPlanOption("client_choice", plan.splitPolicy, "Client choice after estimate")}
@@ -4220,8 +4254,9 @@ ${meetingLines}
         </select></div>
         <div class="field"><label for="planSessionsMin">Sessions minimum</label><input id="planSessionsMin" name="estimatedSessionsMin" type="number" min="1" step="1" value="${escapeHtml(plan.estimatedSessionsMin ?? "")}"></div>
         <div class="field"><label for="planSessionsMax">Sessions maximum</label><input id="planSessionsMax" name="estimatedSessionsMax" type="number" min="1" step="1" value="${escapeHtml(plan.estimatedSessionsMax ?? "")}"></div>
-        <div class="field"><label for="planMinutesMin">Total minutes minimum</label><input id="planMinutesMin" name="estimatedTotalMinutesMin" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMin ?? "")}"></div>
-        <div class="field"><label for="planMinutesMax">Total minutes maximum</label><input id="planMinutesMax" name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMax ?? "")}"></div>
+        <div class="field"><label for="planMinutesMin">Estimated total project time â€” minimum (minutes)</label><input id="planMinutesMin" name="estimatedTotalMinutesMin" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMin ?? "")}"></div>
+        <div class="field"><label for="planMinutesMax">Estimated total project time â€” maximum (minutes)</label><input id="planMinutesMax" name="estimatedTotalMinutesMax" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMax ?? "")}"></div>
+        <p class="contact wide">Optional. This is the estimated tattooing time for the entire project across every session. It is shown to the client as a time range; it does not control appointment types or calculate price.</p>
         <div class="field wide"><label for="planArtistNote">Client-facing session note</label><textarea id="planArtistNote" name="artistNote" placeholder="Explain the recommended pacing, breaks, or anything the client should know before scheduling.">${escapeHtml(plan.artistNote || "")}</textarea></div>
         <div class="field wide">
           <h3>Approved Tattoo-Work Budget</h3>
@@ -4233,6 +4268,7 @@ ${meetingLines}
       </form>
       <p class="session-plan-client-state">Session-plan response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}<br>Budget response: ${escapeHtml(budgetResponse)}</p>
       <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button" ${locked ? "disabled" : ""}>Save Session Plan</button></div>
+      <p class="save-feedback" id="sessionPlanSaveState" role="status" aria-live="polite"></p>
     `;
   }
 
@@ -4257,7 +4293,17 @@ ${meetingLines}
   async function saveTattooSessionPlan(submissionId, options = {}) {
     const form = document.getElementById("tattooSessionPlanForm");
     if (!form) return null;
-    const values = Object.fromEntries(new FormData(form));
+    const values = {
+      sessionCategory: form.elements.sessionCategory?.value || "artist_review",
+      splitPolicy: form.elements.splitPolicy?.value || "artist_review",
+      estimatedSessionsMin: form.elements.estimatedSessionsMin?.value || "",
+      estimatedSessionsMax: form.elements.estimatedSessionsMax?.value || "",
+      estimatedTotalMinutesMin: form.elements.estimatedTotalMinutesMin?.value || "",
+      estimatedTotalMinutesMax: form.elements.estimatedTotalMinutesMax?.value || "",
+      artistNote: form.elements.artistNote?.value || "",
+      approvedBudgetMinDollars: form.elements.approvedBudgetMinDollars?.value || "",
+      approvedBudgetMaxDollars: form.elements.approvedBudgetMaxDollars?.value || "",
+    };
     const minimumDollars = values.approvedBudgetMinDollars === "" ? null : Number(values.approvedBudgetMinDollars);
     const maximumDollars = values.approvedBudgetMaxDollars === "" ? null : Number(values.approvedBudgetMaxDollars);
     if (
@@ -4403,7 +4449,7 @@ ${meetingLines}
         </div>
         ${TATTOO_PROJECT_TYPES.has(submission.type) && ["new", "reviewing"].includes(submission.status) ? `<div class="booking-actions" style="margin-top:10px;">
           <button class="button" id="saveBookingChoicesBtn" type="button">Save Booking Choices</button>
-        </div>` : ""}
+        </div><p class="save-feedback" id="bookingChoicesSaveState" role="status" aria-live="polite"></p>` : ""}
       </div>
     `;
   }
@@ -4612,6 +4658,7 @@ ${meetingLines}
         <label for="internalNotes">Internal Notes</label>
         <textarea id="internalNotes">${escapeHtml(submission.internalNotes || "")}</textarea>
         <div class="booking-actions" style="margin-top:10px;"><button class="button" id="saveReviewNotesBtn" type="button">Save Internal Notes</button></div>
+        <p class="save-feedback" id="reviewNotesSaveState" role="status" aria-live="polite"></p>
       </div>
 
       <div class="detail-section">
@@ -6399,11 +6446,15 @@ ${meetingLines}
       const saveButton = event.target;
       saveButton.disabled = true;
       setStatus("Saving session plan");
+      setSaveFeedback("sessionPlanSaveState", "Saving session planâ€¦", "pending");
       try {
-        await saveTattooSessionPlan(activeId);
+        const savedPlan = await saveTattooSessionPlan(activeId);
         setStatus("Session plan saved");
+        setSaveFeedback("sessionPlanSaveState", `Saved: ${savedSessionPlanSummary(savedPlan)}. Booking choices were also saved. Nothing was sent.`, "success");
       } catch (error) {
-        setStatus(error.message || "The session plan could not be saved");
+        const message = error.message || "The session plan could not be saved";
+        setStatus(message);
+        setSaveFeedback("sessionPlanSaveState", message, "error");
         if (saveButton.isConnected) saveButton.disabled = false;
       }
       return;
@@ -6413,11 +6464,15 @@ ${meetingLines}
       const saveButton = event.target;
       saveButton.disabled = true;
       setStatus("Saving booking choices");
+      setSaveFeedback("bookingChoicesSaveState", "Saving booking choicesâ€¦", "pending");
       try {
         await saveTattooSessionPlan(activeId);
         setStatus("Booking choices saved; no link created and nothing sent");
+        setSaveFeedback("bookingChoicesSaveState", "Booking choices saved. No link was generated and nothing was sent.", "success");
       } catch (error) {
-        setStatus(error.message || "The booking choices could not be saved");
+        const message = error.message || "The booking choices could not be saved";
+        setStatus(message);
+        setSaveFeedback("bookingChoicesSaveState", message, "error");
       } finally {
         if (saveButton.isConnected) saveButton.disabled = false;
       }
@@ -6437,6 +6492,38 @@ ${meetingLines}
       previewWindow.document.body.textContent = "Building the real-data client previewâ€¦";
       setStatus("Building preview");
       try {
+        const preparedUrl = submission.bookingUrl || document.getElementById("bookingUrl")?.value || "";
+        let preparedToken = "";
+        try {
+          preparedToken = new URL(preparedUrl, window.location.origin).searchParams.get("token") || "";
+        } catch {}
+        if (preparedToken) {
+          const response = await fetch(`/api/booking/context?token=${encodeURIComponent(preparedToken)}`);
+          const exactContext = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const errorText = String(exactContext.error || "").toLowerCase();
+            const previewState = errorText.includes("expired")
+              ? "expired"
+              : errorText.includes("used") || errorText.includes("no longer active")
+                ? "used"
+                : errorText.includes("approval")
+                  ? "pending-approval"
+                  : "missing-token";
+            const expiredPreviewUrl = previewUrl();
+            expiredPreviewUrl.searchParams.set("state", previewState);
+            previewWindow.location.replace(expiredPreviewUrl.toString());
+            setStatus(exactContext.error || "The prepared client access is not active");
+            return;
+          }
+          localStorage.setItem(bookingPreviewKey, JSON.stringify({
+            ...exactContext,
+            createdAt: Date.now(),
+            previewSource: "prepared_access",
+          }));
+          previewWindow.location.replace(previewUrl().toString());
+          setStatus("Exact prepared client flow opened");
+          return;
+        }
         const [payload, planPayload, settingsPayload] = await Promise.all([
           api("/api/admin/booking/availability-preview"),
           TATTOO_PROJECT_TYPES.has(submission.type) ? api(`/api/admin/booking/session-plans/${encodeURIComponent(activeId)}`) : Promise.resolve({ sessionPlan:null }),
@@ -6449,7 +6536,7 @@ ${meetingLines}
           settingsPayload.settings?.sessionEstimateCopy || null,
         )));
         previewWindow.location.replace(previewUrl().toString());
-        setStatus("Real-data preview opened");
+        setStatus("Saved draft client flow opened; no client access has been prepared yet");
       } catch (error) {
         previewWindow.close();
         setStatus(error.message || "Client preview could not be built");
@@ -6835,12 +6922,15 @@ ${meetingLines}
     const submission = submissions.find((item) => item.id === activeId);
     if (!submission) return;
     const saveButton = event.target;
+    const savesDeclineReason = event.target.id === "saveDeclineReasonBtn";
+    const saveFeedbackId = savesDeclineReason ? "declineReasonSaveState" : "reviewNotesSaveState";
     const changes = {
       internalNotes: document.getElementById("internalNotes").value,
       ...(document.getElementById("decisionClientMessage") ? { decisionClientMessage: document.getElementById("decisionClientMessage").value } : {}),
     };
     saveButton.disabled = true;
     setStatus("Saving");
+    setSaveFeedback(saveFeedbackId, savesDeclineReason ? "Saving decline reasonâ€¦" : "Saving internal notesâ€¦", "pending");
     try {
       const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
         method: "PATCH",
@@ -6859,9 +6949,17 @@ ${meetingLines}
       }
       const statusPill = document.querySelector("[data-submission-status-pill]");
       if (statusPill) statusPill.textContent = `${titleize(enriched.type)} / ${enriched.status}`;
-      setStatus(event.target.id === "saveDeclineReasonBtn" ? "Decline reason saved; nothing sent" : "Internal notes saved");
+      const savedMessage = savesDeclineReason ? "Decline reason saved; nothing sent" : "Internal notes saved";
+      setStatus(savedMessage);
+      setSaveFeedback(
+        saveFeedbackId,
+        savesDeclineReason ? "Decline reason saved. Nothing was sent." : "Internal notes saved. Nothing was sent.",
+        "success",
+      );
     } catch (error) {
-      setStatus(error.message || "Changes could not be saved");
+      const message = error.message || "Changes could not be saved";
+      setStatus(message);
+      setSaveFeedback(saveFeedbackId, message, "error");
     } finally {
       if (saveButton.isConnected) saveButton.disabled = false;
     }
