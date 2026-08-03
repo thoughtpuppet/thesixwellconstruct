@@ -342,6 +342,8 @@
       sessionPlan: {
         sessionCategory: "multiple_sessions",
         splitPolicy: "client_choice",
+        presentLongerSessionOption: true,
+        presentShorterSessionsOption: true,
         estimatedSessionsMin: 2,
         estimatedSessionsMax: 3,
         estimatedTotalMinutesMin: 420,
@@ -727,9 +729,13 @@
 
   function pacingOptionsForContext() {
     const bookingTypeIds = new Set((context?.bookingTypes || []).map((type) => type.id));
+    const longerAvailable = bookingTypeIds.has("tattoo_full") || bookingTypeIds.has(EXTENDED_DAY_BOOKING_TYPE_ID);
+    const shorterAvailable = bookingTypeIds.has("tattoo_quarter") || bookingTypeIds.has("tattoo_half");
+    const longerSetting = context?.sessionPlan?.presentLongerSessionOption;
+    const shorterSetting = context?.sessionPlan?.presentShorterSessionsOption;
     return {
-      longer: bookingTypeIds.has("tattoo_full") || bookingTypeIds.has(EXTENDED_DAY_BOOKING_TYPE_ID),
-      shorter: bookingTypeIds.has("tattoo_quarter") || bookingTypeIds.has("tattoo_half"),
+      longer: longerAvailable && (longerSetting === null || longerSetting === undefined || longerSetting === true),
+      shorter: shorterAvailable && (shorterSetting === null || shorterSetting === undefined || shorterSetting === true),
       extended: bookingTypeIds.has(EXTENDED_DAY_BOOKING_TYPE_ID),
     };
   }

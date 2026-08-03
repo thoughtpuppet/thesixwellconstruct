@@ -421,6 +421,16 @@ function pacingOptionsForBookingTypeIds(bookingTypeIds) {
   };
 }
 
+function presentedPacingOptions(plan, bookingTypeIds) {
+  const available = pacingOptionsForBookingTypeIds(bookingTypeIds);
+  const longerSetting = plan?.present_longer_session_option;
+  const shorterSetting = plan?.present_shorter_sessions_option;
+  return {
+    longer: available.longer && (longerSetting === null || longerSetting === undefined || Boolean(longerSetting)),
+    shorter: available.shorter && (shorterSetting === null || shorterSetting === undefined || Boolean(shorterSetting)),
+  };
+}
+
 function isTattooSpecialBookingType(id) {
   return String(id || "").startsWith("tattoo_special_");
 }
@@ -1057,6 +1067,12 @@ function normalizeTattooSessionPlan(row) {
     estimatedTotalMinutesMin: row.estimated_total_minutes_min ?? null,
     estimatedTotalMinutesMax: row.estimated_total_minutes_max ?? null,
     artistNote: row.artist_note || "",
+    presentLongerSessionOption: row.present_longer_session_option === null || row.present_longer_session_option === undefined
+      ? null
+      : Boolean(row.present_longer_session_option),
+    presentShorterSessionsOption: row.present_shorter_sessions_option === null || row.present_shorter_sessions_option === undefined
+      ? null
+      : Boolean(row.present_shorter_sessions_option),
     includeAdditionalSketchDisclaimer: Boolean(row.include_additional_sketch_disclaimer),
     approvedBudgetMinCents: row.approved_budget_min_cents ?? null,
     approvedBudgetMaxCents: row.approved_budget_max_cents ?? null,
@@ -1411,7 +1427,7 @@ export async function handleSaveBookingSessionPlan(request, env) {
     }
     const preference = asString(body.preference);
     if (!CLIENT_SESSION_PREFERENCES.has(preference)) return errorResponse("Choose a valid session preference.", 400);
-    const pacingOptions = pacingOptionsForBookingTypeIds(context.allowedBookingTypes);
+    const pacingOptions = presentedPacingOptions(plan, context.allowedBookingTypes);
     if (preference === "one_longer_session" && !pacingOptions.longer) {
       return errorResponse("This booking link does not include a longer-session option.", 409);
     }
@@ -6019,6 +6035,28 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
     }
     const artistNote = asString(body.artistNote).slice(0,5000);
     if (
+      hasOwn("presentLongerSessionOption")
+      && typeof body.presentLongerSessionOption !== "boolean"
+    ) {
+      return errorResponse("The longer-session presentation choice must be true or false.", 400);
+    }
+    if (
+      hasOwn("presentShorterSessionsOption")
+      && typeof body.presentShorterSessionsOption !== "boolean"
+    ) {
+      return errorResponse("The shorter-sessions presentation choice must be true or false.", 400);
+    }
+    const presentLongerSessionOption = splitPolicy === "client_choice"
+      ? (hasOwn("presentLongerSessionOption")
+        ? (body.presentLongerSessionOption ? 1 : 0)
+        : (existing?.present_longer_session_option ?? null))
+      : 0;
+    const presentShorterSessionsOption = splitPolicy === "client_choice"
+      ? (hasOwn("presentShorterSessionsOption")
+        ? (body.presentShorterSessionsOption ? 1 : 0)
+        : (existing?.present_shorter_sessions_option ?? null))
+      : 0;
+    if (
       hasOwn("includeAdditionalSketchDisclaimer")
       && typeof body.includeAdditionalSketchDisclaimer !== "boolean"
     ) {
@@ -6060,6 +6098,8 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       || minutesMin !== (existing.estimated_total_minutes_min ?? null)
       || minutesMax !== (existing.estimated_total_minutes_max ?? null)
       || artistNote !== (existing.artist_note || "")
+      || presentLongerSessionOption !== (existing.present_longer_session_option ?? null)
+      || presentShorterSessionsOption !== (existing.present_shorter_sessions_option ?? null)
       || sketchDisclaimerChanged
       || budgetMinCents !== (existing.approved_budget_min_cents ?? null)
       || budgetMaxCents !== (existing.approved_budget_max_cents ?? null)
@@ -6112,14 +6152,15 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       `INSERT INTO tattoo_session_plans (
         id,submission_id,estimated_sessions_min,estimated_sessions_max,
         estimated_total_minutes_min,estimated_total_minutes_max,split_policy,
-        artist_note,include_additional_sketch_disclaimer,session_category,approved_budget_min_cents,
+        artist_note,present_longer_session_option,present_shorter_sessions_option,
+        include_additional_sketch_disclaimer,session_category,approved_budget_min_cents,
         approved_budget_max_cents,approved_budget_currency,budget_acknowledged,
         budget_acknowledged_at,booking_purpose,allowed_booking_types_json,
         booking_link_expires_at,booking_link_revoke_existing,
         client_preference,client_acknowledged,
         client_informed_at,client_selected_at,created_at,updated_at
       )
-      SELECT ?,s.id,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
+      SELECT ?,s.id,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,0,NULL,NULL,?,?
       FROM submissions s
       WHERE s.id = ? AND COALESCE(s.tattoo_stage, 'review') NOT IN ('tattoo_scheduled','closed')
         AND NOT EXISTS (
@@ -6144,6 +6185,8 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
         estimated_total_minutes_min=excluded.estimated_total_minutes_min,
         estimated_total_minutes_max=excluded.estimated_total_minutes_max,
         split_policy=excluded.split_policy,artist_note=excluded.artist_note,
+        present_longer_session_option=excluded.present_longer_session_option,
+        present_shorter_sessions_option=excluded.present_shorter_sessions_option,
         include_additional_sketch_disclaimer=excluded.include_additional_sketch_disclaimer,
         session_category=excluded.session_category,
         approved_budget_min_cents=excluded.approved_budget_min_cents,
@@ -6166,6 +6209,8 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       minutesMax,
       splitPolicy,
       artistNote,
+      presentLongerSessionOption,
+      presentShorterSessionsOption,
       includeAdditionalSketchDisclaimer,
       sessionCategory,
       budgetMinCents,

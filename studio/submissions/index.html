@@ -4232,6 +4232,21 @@ ${meetingLines}
     return parts.join(" | ");
   }
 
+  function sessionPlanPacingPresentation(plan = {}) {
+    const approvedTypes = Array.isArray(plan.allowedBookingTypes) && plan.allowedBookingTypes.length
+      ? new Set(plan.allowedBookingTypes)
+      : new Set(PRIVATE_BOOKING_TYPE_OPTIONS.map(([id]) => id));
+    const legacyFlexiblePlan = Boolean(plan.id && plan.splitPolicy === "client_choice");
+    return {
+      longer: plan.presentLongerSessionOption === null || plan.presentLongerSessionOption === undefined
+        ? legacyFlexiblePlan && (approvedTypes.has("tattoo_full") || approvedTypes.has("tattoo_extended"))
+        : plan.presentLongerSessionOption === true,
+      shorter: plan.presentShorterSessionsOption === null || plan.presentShorterSessionsOption === undefined
+        ? legacyFlexiblePlan && (approvedTypes.has("tattoo_quarter") || approvedTypes.has("tattoo_half"))
+        : plan.presentShorterSessionsOption === true,
+    };
+  }
+
   function sessionPlanEditorHtml(plan = {}, submission = null) {
     const locked = ["approved", "declined"].includes(submission?.status);
     const preference = plan.clientPreference ? titleize(plan.clientPreference) : "No client response yet";
@@ -4248,6 +4263,7 @@ ${meetingLines}
     const budgetResponse = plan.budgetAcknowledged
       ? `Agreed${plan.budgetAcknowledgedAt ? ` · ${formatDate(plan.budgetAcknowledgedAt)}` : ""}`
       : "Awaiting client agreement";
+    const pacingPresentation = sessionPlanPacingPresentation(plan);
     return `
       <h3>Session Plan &amp; Pacing</h3>
       <p class="contact">${locked ? "Reopen review before changing decision-defining session-plan or budget fields." : "Set the structure the client will review before booking. Required plans cannot be overridden by client preference. Saving a revision clears any earlier client response so they must confirm the updated estimate."}</p>
@@ -4258,7 +4274,21 @@ ${meetingLines}
           ${sessionPlanOption("client_choice", plan.splitPolicy, "Client choice after estimate")}
           ${sessionPlanOption("not_available", plan.splitPolicy, "Splitting unavailable")}
         </select></div>
-        <p class="contact wide">Choose whether the project must be split, cannot be split, or lets the client choose between one longer appointment and shorter sessions. The system derives the internal session structure from this choice.</p>
+        <p class="contact wide">Choose whether the project must be split, cannot be split, or may include optional pacing choices. The system derives the internal session structure from this choice.</p>
+        <div class="field wide">
+          <h3>Optional Pacing Choices Presented to the Client</h3>
+          <div class="booking-actions" style="align-items:flex-start;">
+            <label class="check" style="margin:0;min-width:240px;">
+              <input id="presentLongerSessionOption" name="presentLongerSessionOption" type="checkbox" ${pacingPresentation.longer ? "checked" : ""}>
+              <span class="check-label">Present "Ask about one longer session"</span>
+            </label>
+            <label class="check" style="margin:0;min-width:240px;">
+              <input id="presentShorterSessionsOption" name="presentShorterSessionsOption" type="checkbox" ${pacingPresentation.shorter ? "checked" : ""}>
+              <span class="check-label">Present "Ask about shorter sessions"</span>
+            </label>
+          </div>
+          <p class="contact">These prompts appear only with Client choice after estimate and only when the approved appointment types can support them. Leave both unchecked to show only the recommended plan.</p>
+        </div>
         <div class="field"><label for="planSessionsMin">Sessions minimum</label><input id="planSessionsMin" name="estimatedSessionsMin" type="number" min="1" step="1" value="${escapeHtml(plan.estimatedSessionsMin ?? "")}"></div>
         <div class="field"><label for="planSessionsMax">Sessions maximum</label><input id="planSessionsMax" name="estimatedSessionsMax" type="number" min="1" step="1" value="${escapeHtml(plan.estimatedSessionsMax ?? "")}"></div>
         <div class="field"><label for="planMinutesMin">Estimated total project time â€” minimum (minutes)</label><input id="planMinutesMin" name="estimatedTotalMinutesMin" type="number" min="0" step="15" value="${escapeHtml(plan.estimatedTotalMinutesMin ?? "")}"></div>
@@ -4312,6 +4342,8 @@ ${meetingLines}
       estimatedTotalMinutesMin: form.elements.estimatedTotalMinutesMin?.value || "",
       estimatedTotalMinutesMax: form.elements.estimatedTotalMinutesMax?.value || "",
       artistNote: form.elements.artistNote?.value || "",
+      presentLongerSessionOption: form.elements.presentLongerSessionOption?.checked === true,
+      presentShorterSessionsOption: form.elements.presentShorterSessionsOption?.checked === true,
       includeAdditionalSketchDisclaimer: form.elements.includeAdditionalSketchDisclaimer?.checked === true,
       approvedBudgetMinDollars: form.elements.approvedBudgetMinDollars?.value || "",
       approvedBudgetMaxDollars: form.elements.approvedBudgetMaxDollars?.value || "",

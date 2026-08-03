@@ -693,6 +693,11 @@ test("Studio approved booking links allow per-client tattoo appointment types", 
   assert.doesNotMatch(source, /id="planSessionCategory"/);
   assert.match(source, /id="planSplitPolicy" name="splitPolicy" data-select-menu-skip/);
   assert.doesNotMatch(source, /sessionCategory: form\.elements\.sessionCategory/);
+  assert.match(source, /id="presentLongerSessionOption" name="presentLongerSessionOption" type="checkbox"/);
+  assert.match(source, /id="presentShorterSessionsOption" name="presentShorterSessionsOption" type="checkbox"/);
+  assert.match(source, /Leave both unchecked to show only the recommended plan\./);
+  assert.match(source, /presentLongerSessionOption: form\.elements\.presentLongerSessionOption\?\.checked === true/);
+  assert.match(source, /presentShorterSessionsOption: form\.elements\.presentShorterSessionsOption\?\.checked === true/);
   assert.match(source, /The system derives the internal session structure from this choice\./);
   assert.match(source, /Estimated total project time [^<]* minimum \(minutes\)/);
   assert.match(source, /Optional\. This is the estimated tattooing time for the entire project across every session\./);
@@ -723,6 +728,8 @@ test("Studio session-plan saves persist booking choices without preparing access
       estimatedTotalMinutesMin: 180,
       estimatedTotalMinutesMax: 240,
       artistNote: "One reviewed session.",
+      presentLongerSessionOption: true,
+      presentShorterSessionsOption: true,
       includeAdditionalSketchDisclaimer: true,
       approvedBudgetMinCents: 80000,
       approvedBudgetMaxCents: 120000,
@@ -739,6 +746,8 @@ test("Studio session-plan saves persist booking choices without preparing access
   const savedPlan = (await saved.json()).sessionPlan;
   assert.equal(savedPlan.bookingLinkPurpose, "tattoo");
   assert.equal(savedPlan.includeAdditionalSketchDisclaimer, true);
+  assert.equal(savedPlan.presentLongerSessionOption, false, "non-flexible plans do not present a longer-session prompt");
+  assert.equal(savedPlan.presentShorterSessionsOption, false, "non-flexible plans do not present a shorter-sessions prompt");
   assert.deepEqual(savedPlan.allowedBookingTypes, ["tattoo_half"]);
   assert.equal(savedPlan.bookingLinkExpiresAt, expiresAt);
   assert.equal(savedPlan.bookingLinkRevokeExisting, false);
@@ -769,6 +778,8 @@ test("Studio session-plan saves persist booking choices without preparing access
       estimatedTotalMinutesMin: 180,
       estimatedTotalMinutesMax: 240,
       artistNote: "Choose one longer appointment or two shorter sessions.",
+      presentLongerSessionOption: true,
+      presentShorterSessionsOption: false,
       includeAdditionalSketchDisclaimer: false,
       approvedBudgetMinCents: 80000,
       approvedBudgetMaxCents: 120000,
@@ -783,6 +794,8 @@ test("Studio session-plan saves persist booking choices without preparing access
   assert.equal(flexiblePlan.splitPolicy, "client_choice");
   assert.equal(flexiblePlan.estimatedSessionsMin, 1);
   assert.equal(flexiblePlan.estimatedSessionsMax, 2);
+  assert.equal(flexiblePlan.presentLongerSessionOption, true);
+  assert.equal(flexiblePlan.presentShorterSessionsOption, false);
   assert.equal(flexiblePlan.includeAdditionalSketchDisclaimer, false);
   assert.equal(flexiblePlan.budgetAcknowledged, false, "changing client-facing budget disclosures requires fresh agreement");
 });
@@ -2643,6 +2656,15 @@ test("Studio prepares a Tattoo Special deposit link silently before explicit cli
   assert.match(studio, /Prepare the required booking or deposit link before sending approval/);
   assert.match(studio, /const specialClientUrl = submission\.type === "tattoo_special"[\s\S]*?Boolean\(appointment\.checkoutUrl \|\| appointment\.squareCheckoutUrl\)[\s\S]*?\? bookingUrl/);
   assert.match(studio, /if \(specialClientUrl\)[\s\S]*?pay the deposit to confirm your appointment here: \$\{specialClientUrl\}/);
+  assert.match(studio, /Prepared booking URL[\s\S]*?id="tokenStateInfo"[\s\S]*?renderBookingTokenControls\(submission\)/);
+  assert.match(studio, /Deposit link active/);
+  assert.match(studio, /Deposit link needs repair/);
+  assert.match(studio, /Deposit link expired/);
+  assert.match(studio, /data-reopen-special-deposit="\$\{escapeHtml\(submissionId\)\}"/);
+  assert.match(studio, /data-special-deposit-mode="\$\{checkoutStillOpen \? "repair" : "reopen"\}"/);
+  assert.match(studio, /mode === "repair"[\s\S]*?\/tattoo\/specials\/submissions\/[\s\S]*?\/deposit/);
+  assert.match(studio, /api\("\/api\/admin\/booking\/tokens"[\s\S]*?revokeExisting: true/);
+  assert.match(studio, /Deposit link reopened and copied; no email sent/);
 });
 
 test("Studio saves a client-facing decline reason separately from the decision notification", () => {
@@ -4817,7 +4839,7 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
   });
 });
 
-test("session-plan preferences cannot exceed the appointment types approved for the booking link", async () => {
+test("session-plan preferences require both Studio presentation and an approved appointment type", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
   const env = {
@@ -4836,6 +4858,8 @@ test("session-plan preferences cannot exceed the appointment types approved for 
       estimatedTotalMinutesMin: 180,
       estimatedTotalMinutesMax: 360,
       artistNote: "Choose the approved pacing that works for you.",
+      presentLongerSessionOption: true,
+      presentShorterSessionsOption: true,
       approvedBudgetMinCents: 80000,
       approvedBudgetMaxCents: 120000,
       approvedBudgetCurrency: "USD",
@@ -4906,6 +4930,76 @@ test("session-plan preferences cannot exceed the appointment types approved for 
     budgetAcknowledged: true,
   }), env);
   assert.equal(allowedLonger.status, 200, await allowedLonger.clone().text());
+});
+
+test("Studio can hide either optional pacing request even when its appointment type is approved", async () => {
+  const database = migratedDatabase();
+  const adminToken = "test-admin-token";
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+  const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom()), env);
+  const submissionId = (await created.json()).submissionId;
+  const planResponse = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      splitPolicy: "client_choice",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 2,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 360,
+      artistNote: "Use the recommended plan or ask about shorter sessions.",
+      presentLongerSessionOption: false,
+      presentShorterSessionsOption: true,
+      approvedBudgetMinCents: 80000,
+      approvedBudgetMaxCents: 120000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(planResponse.status, 200, await planResponse.clone().text());
+  assert.deepEqual(
+    {
+      longer: (await planResponse.clone().json()).sessionPlan.presentLongerSessionOption,
+      shorter: (await planResponse.json()).sessionPlan.presentShorterSessionsOption,
+    },
+    { longer: false, shorter: true },
+  );
+
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const tokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_half", "tattoo_full"],
+      revokeExisting: true,
+    },
+    adminToken,
+  ), env);
+  assert.equal(tokenResponse.status, 200, await tokenResponse.clone().text());
+  const rawToken = new URL((await tokenResponse.json()).token.bookingUrl).searchParams.get("token");
+
+  const blockedLonger = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: rawToken,
+    preference: "one_longer_session",
+    acknowledged: true,
+    budgetAcknowledged: true,
+  }), env);
+  assert.equal(blockedLonger.status, 409);
+  assert.match((await blockedLonger.json()).error, /does not include a longer-session option/i);
+
+  const allowedShorter = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
+    token: rawToken,
+    preference: "multiple_shorter_sessions",
+    acknowledged: true,
+    budgetAcknowledged: true,
+  }), env);
+  assert.equal(allowedShorter.status, 200, await allowedShorter.clone().text());
 });
 
 test("private booking holds enforce the token and parent lifecycle inside the atomic insert", async () => {
@@ -5730,8 +5824,11 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
 test("private booking pacing choices follow the Studio-approved appointment types", () => {
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
   assert.match(bookingPage, /function pacingOptionsForContext\(\)/);
-  assert.match(bookingPage, /bookingTypeIds\.has\("tattoo_full"\)/);
-  assert.match(bookingPage, /bookingTypeIds\.has\("tattoo_quarter"\)/);
+  assert.match(bookingPage, /const longerAvailable = bookingTypeIds\.has\("tattoo_full"\)/);
+  assert.match(bookingPage, /const shorterAvailable = bookingTypeIds\.has\("tattoo_quarter"\)/);
+  assert.match(bookingPage, /const longerSetting = context\?\.sessionPlan\?\.presentLongerSessionOption/);
+  assert.match(bookingPage, /longer: longerAvailable && \(longerSetting === null \|\| longerSetting === undefined \|\| longerSetting === true\)/);
+  assert.match(bookingPage, /shorter: shorterAvailable && \(shorterSetting === null \|\| shorterSetting === undefined \|\| shorterSetting === true\)/);
   assert.match(bookingPage, /pacing\.longer \? \[\["one_longer_session"/);
   assert.match(bookingPage, /pacing\.shorter \? \[\["multiple_shorter_sessions"/);
   assert.match(bookingPage, /if \(!flexible \|\| \(!pacing\.longer && !pacing\.shorter\)\)/);
