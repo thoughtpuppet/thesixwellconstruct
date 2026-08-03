@@ -1,6 +1,10 @@
 import {
+  notifyBookingLinkCreated,
   notifyAdminSubmissionReceived,
+  notifySubmissionDecision,
   notifySubmissionReceived,
+  notifyTattooSpecialDepositRequested,
+  notifyTattooSpecialReview,
 } from "../notifications/_lib.js";
 import { ingestCrmSourceRecord } from "../crm/ingest.js";
 import { captureMarketingConsent } from "../outreach/_lib.js";
@@ -45,6 +49,24 @@ const TATTOO_SUBMISSION_TYPES = new Set([
   "maze_design",
   "tattoo_special",
 ]);
+const TATTOO_INQUIRY_PROJECT_TYPES = new Set([
+  "new_work",
+  "cover_up",
+  "large_cover_up",
+  "rework",
+  "space_filler",
+]);
+const REWORK_INTERVENTIONS = new Set([
+  "refresh_color",
+  "repair_linework",
+  "redesign_part",
+  "extend_new_work",
+  "needs_assessment",
+]);
+const TATTOO_INQUIRY_FILE_ROLE_ALIASES = {
+  placement_photo: "placement_photos",
+  cover_up_photos: "existing_tattoo_photos",
+};
 
 const TATTOO_STAGES = new Set([
   "review",
@@ -77,7 +99,7 @@ const ALLOWED_UPLOAD_TYPES = new Set([
   "application/json",
 ]);
 const FILE_LIMITS_BY_TYPE = {
-  tattoo_inquiry: 6,
+  tattoo_inquiry: 12,
   flash_claim: 6,
   special_project: 6,
   build_brief: 6,
@@ -374,6 +396,142 @@ function normalizeTattooBudgetPayload(payload) {
   return payload;
 }
 
+function normalizedStringArray(value) {
+  const values = Array.isArray(value)
+    ? value
+    : value === null || value === undefined || value === ""
+      ? []
+      : [value];
+  return [...new Set(values.map(asString).filter(Boolean))];
+}
+
+function normalizeTattooInquiryPayload(payload) {
+  if (!payload || typeof payload !== "object") return payload;
+  const rawType = asString(payload.type || payload.form_type || "tattoo_inquiry")
+    .replace(/^standard_/, "")
+    .replace(/^new_/, "");
+  if (!["tattoo_inquiry", "tattoo_inquiry_form"].includes(rawType)) return payload;
+  if (payload.rework_interventions !== undefined || payload.project_type === "rework") {
+    payload.rework_interventions = normalizedStringArray(payload.rework_interventions);
+  }
+  return payload;
+}
+
+function normalizeTattooInquiryFileRoles(type, files) {
+  if (type !== "tattoo_inquiry") return files;
+  for (const file of files || []) {
+    file.fieldName = TATTOO_INQUIRY_FILE_ROLE_ALIASES[file.fieldName] || file.fieldName;
+  }
+  return files;
+}
+
+function requireProjectField(payload, field, message) {
+  return asString(payload[field]) ? null : { error: message, status: 400 };
+}
+
+function validateProjectChoice(payload, field, allowed, message) {
+  const value = asString(payload[field]);
+  if (!value) return null;
+  return allowed.has(value) ? null : { error: message, status: 400 };
+}
+
+function validateTattooInquiryProject(payload) {
+  const projectType = asString(payload.project_type);
+  if (!TATTOO_INQUIRY_PROJECT_TYPES.has(projectType)) {
+    return { error: "Choose a supported tattoo project type.", status: 400 };
+  }
+
+  if (["cover_up", "large_cover_up"].includes(projectType)) {
+    const required = [
+      ["cover_up_goal", "Cover-up goal is required."],
+      ["size_placement_flexibility", "Size and placement flexibility is required."],
+    ];
+    for (const [field, message] of required) {
+      const error = requireProjectField(payload, field, message);
+      if (error) return error;
+    }
+    const coverGoalError = validateProjectChoice(
+      payload,
+      "cover_up_goal",
+      new Set(["fully_hide", "transform", "incorporate", "unsure"]),
+      "Choose a supported cover-up goal.",
+    );
+    if (coverGoalError) return coverGoalError;
+    const flexibilityError = validateProjectChoice(
+      payload,
+      "size_placement_flexibility",
+      new Set(["flexible", "size_only", "placement_only", "limited", "unsure"]),
+      "Choose a supported size and placement flexibility option.",
+    );
+    if (flexibilityError) return flexibilityError;
+  }
+
+  if (projectType === "large_cover_up") {
+    const required = [
+      ["existing_tattoo_dimensions", "Existing tattoo dimensions are required for a large cover-up."],
+      ["open_to_larger_footprint", "Larger-footprint flexibility is required for a large cover-up."],
+      ["open_to_multiple_sessions", "Multiple-session flexibility is required for a large cover-up."],
+    ];
+    for (const [field, message] of required) {
+      const error = requireProjectField(payload, field, message);
+      if (error) return error;
+    }
+    for (const field of ["open_to_larger_footprint", "open_to_multiple_sessions"]) {
+      const choiceError = validateProjectChoice(
+        payload,
+        field,
+        new Set(["yes", "no", "discuss"]),
+        "Choose Yes, No, or Needs discussion for the large cover-up planning questions.",
+      );
+      if (choiceError) return choiceError;
+    }
+  }
+
+  if (projectType === "rework") {
+    const interventions = normalizedStringArray(payload.rework_interventions);
+    if (!interventions.length) {
+      return { error: "Choose at least one kind of rework or select Needs assessment.", status: 400 };
+    }
+    if (interventions.some((value) => !REWORK_INTERVENTIONS.has(value))) {
+      return { error: "Choose only supported rework options.", status: 400 };
+    }
+    const expansionError = requireProjectField(
+      payload,
+      "rework_expansion_flexibility",
+      "Rework expansion flexibility is required.",
+    );
+    if (expansionError) return expansionError;
+    const expansionChoiceError = validateProjectChoice(
+      payload,
+      "rework_expansion_flexibility",
+      new Set(["yes", "no", "unsure"]),
+      "Choose a supported rework expansion option.",
+    );
+    if (expansionChoiceError) return expansionChoiceError;
+  }
+
+  if (projectType === "space_filler") {
+    const required = [
+      ["gap_dimensions", "Gap dimensions are required for a space filler."],
+      ["surrounding_work", "Describe the tattoos surrounding the space filler."],
+      ["filler_relationship", "Choose how the filler should relate to the surrounding work."],
+    ];
+    for (const [field, message] of required) {
+      const error = requireProjectField(payload, field, message);
+      if (error) return error;
+    }
+    const relationshipError = validateProjectChoice(
+      payload,
+      "filler_relationship",
+      new Set(["standalone", "connect_blend", "unsure"]),
+      "Choose a supported space-filler relationship.",
+    );
+    if (relationshipError) return relationshipError;
+  }
+
+  return null;
+}
+
 function normalizeSubmission(payload, request) {
   const sourcePath = asOptionalString(payload.source_path || payload.sourcePath);
   const type = asString(payload.type || payload.form_type || "tattoo_inquiry")
@@ -475,6 +633,11 @@ function validateSubmission(submission, payload) {
     } else if (!asString(payload[field])) {
       return { error: message, status: 400 };
     }
+  }
+
+  if (submission.type === "tattoo_inquiry") {
+    const projectValidation = validateTattooInquiryProject(payload);
+    if (projectValidation) return projectValidation;
   }
 
   return null;
@@ -627,6 +790,9 @@ function normalizeRow(row) {
     id: row.id,
     type: row.type,
     status: row.status,
+    decisionRevision: Number(row.decision_revision || 0),
+    decidedAt: row.decided_at || "",
+    decisionClientMessage: row.decision_client_message || "",
     tattooStage: row.tattoo_stage || "",
     lifecycleReviewRequired: Boolean(row.lifecycle_review_required),
     lifecycleReviewNote: row.lifecycle_review_note || "",
@@ -736,19 +902,51 @@ function validateSubmissionFiles(type, files, env) {
   return null;
 }
 
-function validateLargeCoverUpPhotos(type, payload, files) {
-  if (type !== "tattoo_inquiry" || payload?.project_type !== "large_cover_up") return null;
-  const photos = files.filter((file) => file.fieldName === "cover_up_photos");
-  if (photos.length < 3) {
+function validateTattooInquiryFiles(type, payload, files) {
+  if (type !== "tattoo_inquiry") return null;
+  const imageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+  const referenceTypes = new Set([...imageTypes, "application/pdf"]);
+  const allowedRoles = new Set(["references", "placement_photos", "existing_tattoo_photos"]);
+
+  for (const file of files) {
+    if (!allowedRoles.has(file.fieldName)) {
+      return { error: "This custom inquiry contains an unsupported upload field.", status: 400 };
+    }
+    const contentType = String(file.contentType || "").toLowerCase();
+    const accepted = file.fieldName === "references" ? referenceTypes : imageTypes;
+    if (!accepted.has(contentType)) {
+      return {
+        error: file.fieldName === "references"
+          ? "Reference uploads must be PNG, JPG, WEBP, or PDF files."
+          : "Placement and existing-tattoo photographs must be PNG, JPG, or WEBP images.",
+        status: 415,
+      };
+    }
+  }
+
+  const existingCount = files.filter((file) => file.fieldName === "existing_tattoo_photos").length;
+  const placementCount = files.filter((file) => file.fieldName === "placement_photos").length;
+  const projectType = asString(payload?.project_type);
+  const requiredExisting = projectType === "large_cover_up"
+    ? 3
+    : ["cover_up", "rework"].includes(projectType)
+      ? 1
+      : 0;
+  const requiredPlacement = projectType === "space_filler" ? 2 : 0;
+
+  if (existingCount < requiredExisting) {
+    const label = projectType === "large_cover_up" ? "Large cover-up inquiries" : projectType === "rework" ? "Rework inquiries" : "Cover-up inquiries";
     return {
-      error: "Large cover-up inquiries require at least 3 photographs from 3 different angles.",
+      error: projectType === "large_cover_up"
+        ? "Large cover-up inquiries require at least 3 photographs of the existing tattoo from different angles."
+        : `${label} require at least 1 existing-tattoo photograph.`,
       status: 400,
     };
   }
-  if (photos.some((file) => !["image/png", "image/jpeg", "image/webp"].includes(String(file.contentType || "").toLowerCase()))) {
+  if (placementCount < requiredPlacement) {
     return {
-      error: "Large cover-up photographs must be PNG, JPG, or WEBP images.",
-      status: 415,
+      error: "Space-filler inquiries require at least 2 area photographs: one wide view and one close view.",
+      status: 400,
     };
   }
   return null;
@@ -979,8 +1177,10 @@ export async function handleCreateSubmission(request, env) {
   if (!body) return errorResponse("Expected JSON or form data.", 400);
   if (body.error) return errorResponse(body.error, body.status || 400);
   normalizeTattooBudgetPayload(body.payload);
+  normalizeTattooInquiryPayload(body.payload);
 
   const submission = normalizeSubmission(body.payload, request);
+  normalizeTattooInquiryFileRoles(submission.type, body.files);
   const validation = validateSubmission(submission, body.payload);
   if (validation?.spam) {
     return json({ ok: true, submissionId: null, spam: true });
@@ -1002,9 +1202,9 @@ export async function handleCreateSubmission(request, env) {
 
   const fileValidation = validateSubmissionFiles(submission.type, body.files, env);
   if (fileValidation) return errorResponse(fileValidation.error, fileValidation.status);
-  const coverUpPhotoValidation = validateLargeCoverUpPhotos(submission.type, body.payload, body.files);
-  if (coverUpPhotoValidation) {
-    return errorResponse(coverUpPhotoValidation.error, coverUpPhotoValidation.status);
+  const tattooInquiryFileValidation = validateTattooInquiryFiles(submission.type, body.payload, body.files);
+  if (tattooInquiryFileValidation) {
+    return errorResponse(tattooInquiryFileValidation.error, tattooInquiryFileValidation.status);
   }
 
   const idempotency = normalizeIdempotencyKey(request, body.payload);
@@ -1348,7 +1548,6 @@ export async function handleCreateSubmission(request, env) {
       email: submission.contact.email,
       phone: submission.contact.phone,
       emailOptIn: body.payload.newsletter_consent,
-      smsOptIn: body.payload.sms_marketing_consent,
       source: "submission_form",
       sourceId: id,
       formPath: submission.sourcePath || request.url,
@@ -1578,8 +1777,9 @@ export async function handleGetSubmission(request, env, id) {
 
     const notifications = await db
       .prepare(
-        `SELECT id, channel, template_key, recipient, subject, related_type, related_id,
-                status, error, sent_at, created_at
+        `SELECT id, channel, template_key, template_variant, template_revision,
+                recipient, subject, related_type, related_id,
+                idempotency_key, status, error, sent_at, created_at
          FROM notification_deliveries
          WHERE (related_type = 'submission' AND related_id = ?)
             OR (related_type = 'appointment' AND related_id IN (
@@ -1863,7 +2063,7 @@ export async function handleUpdateMazeArchiveSubmission(request, env, submission
   return json({ ok: true, mazeArchive: await loadMazeArchiveState(database, submissionId, parseJsonField(submission.payload_json, {})) });
 }
 
-export async function handleUpdateSubmission(request, env, id) {
+export async function handleUpdateSubmission(request, env, id, options = {}) {
   const authError = requireAdmin(request, env);
   if (authError) return authError;
 
@@ -1874,8 +2074,43 @@ export async function handleUpdateSubmission(request, env, id) {
     return errorResponse("Expected JSON body.", 400);
   }
 
-  const status = asOptionalString(body.status);
-  const requestedTattooStage = asOptionalString(body.tattooStage || body.tattoo_stage);
+  const decisionMode = options.mode === "decision";
+  const requestedStatus = asOptionalString(body.status);
+  const requestedTattooStageInput = asOptionalString(body.tattooStage || body.tattoo_stage);
+  const administrativeLifecycleUpdate = !decisionMode
+    && new Set(["archived", "cancelled"]).has(requestedStatus || "");
+  if (!decisionMode && (requestedStatus || requestedTattooStageInput) && !administrativeLifecycleUpdate) {
+    return errorResponse("Lifecycle decisions cannot be saved through the general submission update endpoint.", 409, {
+      code: "DECISION_ENDPOINT_REQUIRED",
+    });
+  }
+  if (!decisionMode) {
+    const workingKeys = new Set([
+      "internalNotes",
+      "lifecycleReviewRequired",
+      "lifecycleReviewNote",
+      "decisionClientMessage",
+      ...(administrativeLifecycleUpdate ? ["status", "tattooStage", "tattoo_stage"] : []),
+    ]);
+    const unsupported = Object.keys(body).filter((key) => !workingKeys.has(key));
+    if (unsupported.length) {
+      return errorResponse("The general update endpoint accepts saved Studio working fields only.", 400, {
+        code: "WORKING_FIELDS_ONLY",
+        fields: unsupported,
+      });
+    }
+  }
+  const action = decisionMode ? asString(body.action).toLowerCase() : "";
+  if (decisionMode && !new Set(["approve", "decline", "reopen"]).has(action)) {
+    return errorResponse("Decision action must be approve, decline, or reopen.", 400);
+  }
+  if (decisionMode && body.confirmed !== true) {
+    return errorResponse("Confirm that this decision is recorded without notifying the client.", 400, {
+      code: "DECISION_CONFIRMATION_REQUIRED",
+    });
+  }
+  let status = requestedStatus;
+  let requestedTattooStage = requestedTattooStageInput;
   const systemOwnedTattooStages = new Set([
     "consultation_scheduled",
     "consultation_complete",
@@ -1883,7 +2118,7 @@ export async function handleUpdateSubmission(request, env, id) {
     "tattoo_scheduled",
   ]);
 
-  if (status && !VALID_STATUSES.has(status)) {
+  if (requestedStatus && !VALID_STATUSES.has(requestedStatus)) {
     return errorResponse(`Unsupported status: ${status}.`, 400);
   }
   if (requestedTattooStage && !TATTOO_STAGES.has(requestedTattooStage)) {
@@ -1894,6 +2129,79 @@ export async function handleUpdateSubmission(request, env, id) {
     const db = requireSubmissionDb(env);
     const current = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
     if (!current) return errorResponse("Submission not found.", 404);
+
+    const reviewable = new Set([
+      "tattoo_inquiry",
+      "flash_claim",
+      "special_project",
+      "build_brief",
+      "maze_design",
+      "tattoo_special",
+      "art_acquisition",
+    ]).has(current.type);
+    if (decisionMode && !reviewable) {
+      return errorResponse("This entry uses a system-owned lifecycle and cannot be decided here.", 409, {
+        code: "SYSTEM_OWNED_LIFECYCLE",
+      });
+    }
+    if (decisionMode) {
+      if (action === "approve" && !["new", "reviewing"].includes(current.status)) {
+        return errorResponse("Only a New or Reviewing request can be approved.", 409);
+      }
+      if (action === "decline" && !["new", "reviewing"].includes(current.status)) {
+        return errorResponse("Only a New or Reviewing request can be declined.", 409);
+      }
+      if (action === "reopen" && !["approved", "declined"].includes(current.status)) {
+        return errorResponse("Only an Approved or Declined request can be reopened.", 409);
+      }
+      status = action === "approve" ? "approved" : action === "decline" ? "declined" : "reviewing";
+      requestedTattooStage = null;
+    } else {
+      const workingFields = [
+        "internalNotes",
+        "lifecycleReviewRequired",
+        "lifecycleReviewNote",
+        "decisionClientMessage",
+      ];
+      const hasSavedWork = workingFields.some((key) => Object.prototype.hasOwnProperty.call(body, key));
+      status = administrativeLifecycleUpdate
+        ? requestedStatus
+        : reviewable && current.status === "new" && hasSavedWork ? "reviewing" : null;
+      requestedTattooStage = administrativeLifecycleUpdate && isTattooSubmissionType(current.type) ? "closed" : null;
+      if (["approved", "declined"].includes(current.status)) {
+        const lockedFields = ["lifecycleReviewRequired", "lifecycleReviewNote"]
+          .filter((key) => Object.prototype.hasOwnProperty.call(body, key));
+        if (lockedFields.length) {
+          return errorResponse("Reopen the request before changing decision-defining review fields.", 409, {
+            code: "REOPEN_REVIEW_REQUIRED",
+          });
+        }
+      }
+    }
+
+    if (decisionMode && action === "reopen") {
+      const blocker = await db.prepare(
+        `SELECT 'booking_link' AS kind, id FROM booking_tokens
+         WHERE submission_id = ? AND revoked_at IS NULL AND used_at IS NULL AND expires_at > ?
+         UNION ALL
+         SELECT CASE
+           WHEN status = 'confirmed' THEN 'confirmed_appointment'
+           ELSE 'pending_checkout'
+         END AS kind, id FROM appointments
+         WHERE submission_id = ? AND (
+           status = 'confirmed'
+           OR (status IN ('pending_deposit','deposit_pending') AND hold_state IN ('active','expiry_attention'))
+         )
+         LIMIT 1`
+      ).bind(id, new Date().toISOString(), id).first();
+      if (blocker) {
+        return errorResponse("Clear active booking access, pending checkouts, held times, and confirmed appointments before reopening review.", 409, {
+          code: "ACTIVE_ACCESS_BLOCKS_REOPEN",
+          blockerType: blocker.kind,
+          blockerId: blocker.id,
+        });
+      }
+    }
 
     if (status === "booked" && current.status !== "booked") {
       return errorResponse("Booked status is set only after payment confirmation.", 409, {
@@ -1908,7 +2216,10 @@ export async function handleUpdateSubmission(request, env, id) {
 
     const changesLifecycle = (status && status !== current.status)
       || (requestedTattooStage && requestedTattooStage !== current.tattoo_stage);
-    if (changesLifecycle) {
+    const guardActiveAppointments = changesLifecycle
+      && !(decisionMode && ["approve", "decline"].includes(action) && current.type === "tattoo_special")
+      && !(current.status === "new" && status === "reviewing");
+    if (guardActiveAppointments) {
       const blockingAppointment = await db.prepare(
         `SELECT id, status, hold_state FROM appointments
          WHERE submission_id = ?
@@ -1936,10 +2247,69 @@ export async function handleUpdateSubmission(request, env, id) {
       return errorResponse("Tattoo stages apply only to tattoo project submissions.", 409);
     }
 
+    let specialDecision = null;
+    if (decisionMode && current.type === "tattoo_special") {
+      const terms = await db.prepare(
+        "SELECT * FROM tattoo_special_submission_terms WHERE submission_id = ?"
+      ).bind(id).first();
+      if (!terms) return errorResponse("Tattoo Special terms are missing.", 409);
+      if (terms.booking_mode !== "review") {
+        return errorResponse("This historical Tattoo Special uses a system-owned booking flow.", 409);
+      }
+      if (action === "approve") {
+        if (new Date(terms.sales_closes_at).getTime() <= Date.now()) {
+          return errorResponse("The Tattoo Specials sales window has closed.", 409);
+        }
+        const heldAppointment = await db.prepare(
+          `SELECT id FROM appointments
+           WHERE submission_id = ? AND status IN ('pending_deposit','deposit_pending')
+             AND hold_state = 'active' AND approval_state IN ('pending','approved')
+             AND hold_expires_at > ?
+           ORDER BY created_at DESC LIMIT 1`
+        ).bind(id, new Date().toISOString()).first();
+        if (!heldAppointment) {
+          return errorResponse("The client must select another available time before this Tattoo Special can be approved.", 409, {
+            code: "VALID_SPECIAL_HOLD_REQUIRED",
+          });
+        }
+        const advertised = Number(terms.advertised_price_cents || 0);
+        const approvedPrice = terms.offer_id === "special-anime"
+          ? Number(body.approvedPriceCents || advertised)
+          : advertised;
+        if (!Number.isInteger(approvedPrice) || approvedPrice < advertised) {
+          return errorResponse("The approved Tattoo Special price is invalid.", 400);
+        }
+        specialDecision = { terms, heldAppointment, approvedPrice };
+      } else {
+        specialDecision = { terms };
+      }
+    }
+
+    if (decisionMode && action === "approve" && isTattoo && current.type !== "tattoo_special") {
+      if (!submissionNeedsPrerequisiteConsultation(current)) {
+        const reviewedPlan = await db.prepare(
+          `SELECT session_category, split_policy, approved_budget_min_cents, approved_budget_max_cents
+           FROM tattoo_session_plans WHERE submission_id = ?`
+        ).bind(id).first();
+        const completePlan = reviewedPlan
+          && reviewedPlan.session_category !== "artist_review"
+          && reviewedPlan.split_policy !== "artist_review";
+        const completeBudget = Number(reviewedPlan?.approved_budget_min_cents || 0) > 0
+          && Number(reviewedPlan?.approved_budget_max_cents || 0) >= Number(reviewedPlan?.approved_budget_min_cents || 0);
+        if (!completePlan || !completeBudget) {
+          return errorResponse("Finish the reviewed session plan and approved project budget before approval.", 409, {
+            code: "REVIEWED_PLAN_AND_BUDGET_REQUIRED",
+          });
+        }
+      }
+    }
+
     const nextStatus = status || current.status;
     let nextTattooStage = current.tattoo_stage || (isTattoo ? "review" : null);
     if (isTattoo && nextStatus === "approved" && current.status !== "approved") {
-      if (submissionNeedsPrerequisiteConsultation(current)) {
+      if (current.type === "tattoo_special") {
+        nextTattooStage = "ready_to_book";
+      } else if (submissionNeedsPrerequisiteConsultation(current)) {
         nextTattooStage = "consultation_required";
       } else {
         const plan = await db.prepare(
@@ -1951,10 +2321,11 @@ export async function handleUpdateSubmission(request, env, id) {
       }
     }
     if (requestedTattooStage) nextTattooStage = requestedTattooStage;
+    if (isTattoo && decisionMode && action === "reopen") nextTattooStage = "review";
     if (isTattoo && ["declined", "cancelled", "archived"].includes(nextStatus)) {
       nextTattooStage = "closed";
     }
-    if (isTattoo && !canTransitionTattooStage(current.tattoo_stage || "review", nextTattooStage)) {
+    if (isTattoo && !(decisionMode && action === "reopen") && !canTransitionTattooStage(current.tattoo_stage || "review", nextTattooStage)) {
       return errorResponse(
         `Tattoo stage cannot move from ${current.tattoo_stage || "review"} to ${nextTattooStage}.`,
         409,
@@ -1979,18 +2350,23 @@ export async function handleUpdateSubmission(request, env, id) {
     const lifecycleReviewNote = hasOwn("lifecycleReviewNote")
       ? asString(body.lifecycleReviewNote).slice(0, 2000)
       : (lifecycleReviewRequired ? current.lifecycle_review_note || "" : "");
+    const decisionClientMessage = hasOwn("decisionClientMessage")
+      ? asString(body.decisionClientMessage).slice(0, 3000)
+      : current.decision_client_message || "";
     const now = new Date().toISOString();
     const statusChanged = nextStatus !== current.status;
     const stageChanged = nextTattooStage !== current.tattoo_stage;
-    const eventType = statusChanged ? "status_changed" : stageChanged ? "tattoo_stage_changed" : "updated";
+    const eventType = decisionMode
+      ? `decision_${action === "reopen" ? "reopened" : action === "approve" ? "approved" : "declined"}`
+      : statusChanged ? "status_changed" : stageChanged ? "tattoo_stage_changed" : "updated";
     const eventNote = [
       statusChanged ? `${current.status} -> ${nextStatus}` : "",
       stageChanged ? `${current.tattoo_stage || "(none)"} -> ${nextTattooStage}` : "",
     ].filter(Boolean).join("; ") || null;
 
     const updateStatement = db.prepare(
-        `UPDATE submissions
-         SET status = ?, tattoo_stage = ?, internal_notes = ?, booking_url = ?,
+         `UPDATE submissions
+         SET status = ?, tattoo_stage = ?, internal_notes = ?, booking_url = ?, decision_client_message = ?,
              lifecycle_review_required = ?, lifecycle_review_note = ?, updated_at = ?
          WHERE id = ? AND updated_at = ? AND status = ?
            AND COALESCE(tattoo_stage, '') = COALESCE(?, '')
@@ -2012,6 +2388,7 @@ export async function handleUpdateSubmission(request, env, id) {
         nextTattooStage,
         internalNotes,
         bookingUrl,
+        decisionClientMessage,
         lifecycleReviewRequired,
         lifecycleReviewNote,
         now,
@@ -2019,7 +2396,7 @@ export async function handleUpdateSubmission(request, env, id) {
         current.updated_at,
         current.status,
         current.tattoo_stage,
-        changesLifecycle ? 1 : 0,
+        guardActiveAppointments ? 1 : 0,
       );
     const eventStatement = db.prepare(
         `INSERT INTO submission_events (
@@ -2152,7 +2529,7 @@ export async function handleUpdateSubmission(request, env, id) {
         );
         const guardedUpdate = db.prepare(
           `UPDATE submissions
-           SET status=?,tattoo_stage=?,internal_notes=?,booking_url=?,payload_json=?,
+           SET status=?,tattoo_stage=?,internal_notes=?,booking_url=?,decision_client_message=?,payload_json=?,
                lifecycle_review_required=?,lifecycle_review_note=?,updated_at=?
            WHERE id=? AND updated_at=? AND status=?
              AND COALESCE(tattoo_stage,'')=COALESCE(?,'')
@@ -2176,6 +2553,7 @@ export async function handleUpdateSubmission(request, env, id) {
           nextTattooStage,
           internalNotes,
           bookingUrl,
+          decisionClientMessage,
           JSON.stringify(approvalPayload),
           lifecycleReviewRequired,
           lifecycleReviewNote,
@@ -2216,7 +2594,7 @@ export async function handleUpdateSubmission(request, env, id) {
         ).bind(id,now,flash.id,id,id,current.updated_at,current.status,current.tattoo_stage);
         const guardedUpdate = db.prepare(
           `UPDATE submissions
-           SET status = ?, tattoo_stage = ?, internal_notes = ?, booking_url = ?,
+           SET status = ?, tattoo_stage = ?, internal_notes = ?, booking_url = ?, decision_client_message = ?,
                lifecycle_review_required = ?, lifecycle_review_note = ?, updated_at = ?
            WHERE id = ? AND EXISTS (
              SELECT 1 FROM flash_items f WHERE f.id = ? AND f.reserved_submission_id = ?
@@ -2233,7 +2611,7 @@ export async function handleUpdateSubmission(request, env, id) {
                    )
                  )
              )`
-        ).bind(nextStatus,nextTattooStage,internalNotes,bookingUrl,lifecycleReviewRequired,lifecycleReviewNote,now,id,flash.id,id,current.updated_at,current.status,current.tattoo_stage);
+        ).bind(nextStatus,nextTattooStage,internalNotes,bookingUrl,decisionClientMessage,lifecycleReviewRequired,lifecycleReviewNote,now,id,flash.id,id,current.updated_at,current.status,current.tattoo_stage);
         statements = [reserveStatement, guardedUpdate, eventStatement];
         updateIndex = 1;
       }
@@ -2274,6 +2652,55 @@ export async function handleUpdateSubmission(request, env, id) {
       );
     }
 
+    if (specialDecision) {
+      if (action === "approve") {
+        statements.push(
+          db.prepare(
+            "UPDATE tattoo_special_submission_terms SET approved_price_cents = ?, review_outcome = 'approved', updated_at = ? WHERE submission_id = ?"
+          ).bind(specialDecision.approvedPrice, now, id),
+          db.prepare(
+            "UPDATE tattoo_session_plans SET approved_budget_min_cents = ?, approved_budget_max_cents = ?, updated_at = ? WHERE submission_id = ?"
+          ).bind(specialDecision.approvedPrice, specialDecision.approvedPrice, now, id),
+          db.prepare(
+            `UPDATE appointments SET approval_state = 'approved', approval_decided_at = COALESCE(approval_decided_at, ?), updated_at = ?
+             WHERE id = ? AND hold_state = 'active' AND approval_state IN ('pending','approved')`
+          ).bind(now, now, specialDecision.heldAppointment.id),
+          db.prepare(
+            "UPDATE submissions SET payload_json=json_set(payload_json,'$.approved_price_cents',?) WHERE id=? AND updated_at=?"
+          ).bind(specialDecision.approvedPrice, id, now),
+          db.prepare(
+            "UPDATE booking_tokens SET revoked_at=COALESCE(revoked_at,?),updated_at=? WHERE submission_id=?"
+          ).bind(now, now, id),
+        );
+      } else if (action === "decline") {
+        statements.push(
+          db.prepare("UPDATE tattoo_special_submission_terms SET review_outcome = 'declined', updated_at = ? WHERE submission_id = ?").bind(now, id),
+          db.prepare(
+            `UPDATE appointments SET status = 'cancelled', hold_state = 'released', approval_state = 'declined',
+             approval_decided_at = ?, cancelled_at = ?, cancellation_reason = ?, updated_at = ?
+             WHERE submission_id = ? AND status IN ('pending_deposit','deposit_pending') AND hold_state IN ('active','expiry_attention')`
+          ).bind(now, now, decisionClientMessage || "Studio declined request", now, id),
+          db.prepare("UPDATE booking_tokens SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE submission_id = ?")
+            .bind(now, now, id),
+        );
+      } else if (action === "reopen") {
+        statements.push(
+          db.prepare("UPDATE tattoo_special_submission_terms SET review_outcome = 'pending', updated_at = ? WHERE submission_id = ?").bind(now, id),
+        );
+      }
+    }
+
+    if (decisionMode) {
+      const storedDecisionMessage = action === "decline" ? decisionClientMessage : "";
+      statements.push(
+        db.prepare(
+          `UPDATE submissions
+           SET decision_revision = decision_revision + ?, decided_at = ?, decision_client_message = ?
+           WHERE id = ? AND updated_at = ?`
+        ).bind(action === "reopen" ? 0 : 1, action === "reopen" ? null : now, storedDecisionMessage, id, now),
+      );
+    }
+
     const results = await db.batch(statements);
     if (Number(results?.[updateIndex]?.meta?.changes || 0) < 1) {
       if (current.type === "flash_claim" && nextStatus === "approved") {
@@ -2291,6 +2718,130 @@ export async function handleUpdateSubmission(request, env, id) {
     return errorResponse("Unable to update submission.", 500, {
       detail: error.message,
     });
+  }
+}
+
+export async function handleSubmissionDecision(request, env, id) {
+  return handleUpdateSubmission(request, env, id, { mode: "decision" });
+}
+
+export async function handleSubmissionDecisionNotification(request, env, id) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+  const body = await readAdminJson(request);
+  if (!body) return errorResponse("Expected JSON body.", 400);
+  if (body.resend === true && body.confirmed !== true) {
+    return errorResponse("Confirm before resending a client notification.", 400, {
+      code: "RESEND_CONFIRMATION_REQUIRED",
+    });
+  }
+
+  try {
+    const db = requireSubmissionDb(env);
+    const submission = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
+    if (!submission) return errorResponse("Submission not found.", 404);
+    if (!submission.contact_email) return errorResponse("This submission has no client email.", 409, { code: "CLIENT_EMAIL_REQUIRED" });
+    const revision = Number(submission.decision_revision || 0);
+    const attemptKey = `decision_notification:${id}:${revision}:${crypto.randomUUID()}`;
+    const kind = asString(body.kind).toLowerCase();
+    let delivery;
+
+    if (kind === "simplification") {
+      if (submission.type !== "tattoo_special" || submission.status !== "reviewing") {
+        return errorResponse("A simplification request is not available for this submission.", 409);
+      }
+      const terms = await db.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id = ?").bind(id).first();
+      if (!terms || terms.review_outcome !== "simplification_requested") {
+        return errorResponse("Save a simplification request before sending it.", 409);
+      }
+      const message = asString(submission.decision_client_message).slice(0, 3000);
+      if (!message) return errorResponse("Add the reviewed client-facing simplification note before sending.", 409);
+      delivery = await notifyTattooSpecialReview(env, {
+        ...submission,
+        ...terms,
+        submissionId: id,
+        outcome: "simplification_requested",
+        note: message,
+      }, { idempotencyKey: attemptKey });
+    } else if (submission.status === "declined") {
+      const reason = asString(submission.decision_client_message).slice(0, 3000);
+      if (!reason) return errorResponse("Add and save a reviewed client-facing decline reason before sending.", 409, {
+        code: "DECLINE_REASON_REQUIRED",
+      });
+      delivery = await notifySubmissionDecision(env, submission, {
+        decision: "declined",
+        decisionRevision: revision,
+        message: reason,
+        idempotencyKey: attemptKey,
+      });
+    } else if (submission.status === "approved" && submission.type === "tattoo_special") {
+      const details = await db.prepare(
+        `SELECT a.id appointment_id,a.client_name,a.client_email,a.start_at,a.end_at,a.payment_due_at,a.square_checkout_url,
+                t.offer_title,t.variant_label,t.approved_price_cents,t.deposit_cents
+         FROM appointments a JOIN tattoo_special_submission_terms t ON t.submission_id=a.submission_id
+         WHERE a.submission_id=? AND a.square_checkout_url<>''
+         ORDER BY a.created_at DESC LIMIT 1`
+      ).bind(id).first();
+      if (!details?.square_checkout_url) {
+        return errorResponse("Prepare the Tattoo Special deposit link before sending approval.", 409, {
+          code: "DEPOSIT_LINK_REQUIRED",
+        });
+      }
+      delivery = await notifyTattooSpecialDepositRequested(env, request, {
+        appointmentId: details.appointment_id,
+        clientName: submission.contact_name,
+        clientEmail: submission.contact_email,
+        startAt: details.start_at,
+        endAt: details.end_at,
+        offerTitle: details.offer_title,
+        variantLabel: details.variant_label,
+        approvedPriceCents: details.approved_price_cents,
+        depositCents: details.deposit_cents,
+        currency: "USD",
+        paymentDueAt: details.payment_due_at,
+        checkoutUrl: details.square_checkout_url,
+      }, { idempotencyKey: attemptKey });
+    } else if (submission.status === "approved" && isTattooSubmissionType(submission.type)) {
+      const token = await db.prepare(
+        `SELECT * FROM booking_tokens
+         WHERE submission_id=? AND revoked_at IS NULL AND used_at IS NULL AND expires_at>?
+         ORDER BY created_at DESC LIMIT 1`
+      ).bind(id, new Date().toISOString()).first();
+      if (!token || !submission.booking_url) {
+        return errorResponse("Generate booking access before sending approval.", 409, {
+          code: "BOOKING_LINK_REQUIRED",
+        });
+      }
+      const plan = await db.prepare(
+        "SELECT approved_budget_min_cents,approved_budget_max_cents,approved_budget_currency FROM tattoo_session_plans WHERE submission_id=?"
+      ).bind(id).first();
+      delivery = await notifyBookingLinkCreated(env, request, submission, {
+        id: token.id,
+        bookingUrl: submission.booking_url,
+        expiresAt: token.expires_at,
+        allowedBookingTypes: parseJsonField(token.allowed_booking_types_json, []),
+        purpose: token.purpose,
+        approvedBudget: plan ? {
+          minimumCents: plan.approved_budget_min_cents,
+          maximumCents: plan.approved_budget_max_cents,
+          currency: plan.approved_budget_currency || "USD",
+        } : null,
+      }, { idempotencyKey: attemptKey });
+    } else if (submission.status === "approved") {
+      delivery = await notifySubmissionDecision(env, submission, {
+        decision: "approved",
+        decisionRevision: revision,
+        message: asString(submission.decision_client_message).slice(0, 3000),
+        idempotencyKey: attemptKey,
+      });
+    } else {
+      return errorResponse("Record an approval or decline before sending a decision notification.", 409);
+    }
+
+    const httpStatus = delivery?.ok ? 200 : 502;
+    return json({ ok: Boolean(delivery?.ok), delivery, decisionRevision: revision }, { status: httpStatus });
+  } catch (error) {
+    return errorResponse("Unable to send the decision notification.", 500, { detail: error.message });
   }
 }
 

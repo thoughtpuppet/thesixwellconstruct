@@ -459,43 +459,38 @@ test("People UI normalizes appointment lifecycle states and keeps empty activity
   assert.doesNotMatch(empty, /people-activity-card/);
 });
 
-test("outreach consent capture is separate, channel-specific, and replay-safe", async () => {
+test("outreach consent capture is email-only and replay-safe", async () => {
   const database = migratedDatabase();
   const runtime = env(database);
   const firstCapture = await captureMarketingConsent(runtime, {
     email: "updates@example.test",
     phone: "(404) 555-0123",
     emailOptIn: "yes",
-    smsOptIn: "yes",
     source: "submission_form",
     sourceId: "submission-consent-1",
     formPath: "/tattoos/inquire/custom/",
     occurredAt: "2026-07-18T14:00:00.000Z",
   });
   assert.equal(firstCapture.email.recorded, true);
-  assert.equal(firstCapture.sms.recorded, true);
+  assert.equal(firstCapture.sms, undefined);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_people").get().count, 0);
   assert.deepEqual(
     database.prepare("SELECT channel,status FROM crm_consent_events ORDER BY channel").all()
       .map((row) => ({ channel: row.channel, status: row.status })),
-    [
-      { channel: "email", status: "pending" },
-      { channel: "sms", status: "granted" },
-    ],
+    [{ channel: "email", status: "pending" }],
   );
 
   const replay = await captureMarketingConsent(runtime, {
     email: "updates@example.test",
     phone: "+1 404 555 0123",
     emailOptIn: true,
-    smsOptIn: true,
     source: "submission_form",
     sourceId: "submission-consent-1",
     formPath: "/tattoos/inquire/custom/",
   });
   assert.equal(replay.email.replayed, true);
-  assert.equal(replay.sms.replayed, true);
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_consent_events").get().count, 2);
+  assert.equal(replay.sms, undefined);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM crm_consent_events").get().count, 1);
 });
 
 test("audience preview requires consent, provider confirmation, valid contact, and no suppression", async () => {
@@ -529,14 +524,14 @@ test("audience preview requires consent, provider confirmation, valid contact, a
       requestId: "manual-sms-consent-1",
     },
   }));
-  assert.equal(result.response.status, 201, JSON.stringify(result.payload));
+  assert.equal(result.response.status, 400, JSON.stringify(result.payload));
+  assert.match(result.payload.error, /read-only/i);
 
   result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/audience/preview", {
     method: "POST",
     body: { channel: "sms" },
   }));
-  assert.equal(result.response.status, 200);
-  assert.equal(result.payload.eligibleCount, 1);
+  assert.equal(result.response.status, 400);
 
   result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/people/${person.id}/consents`, {
     method: "POST",
@@ -590,7 +585,7 @@ test("audience preview requires consent, provider confirmation, valid contact, a
   assert.equal(result.payload.exclusions.suppressed, 1);
 });
 
-test("reviewed campaigns stop when consent changes and person deletion preserves opt-out evidence", async () => {
+test("automated SMS remains unavailable while person deletion preserves legacy opt-out evidence", async () => {
   const database = migratedDatabase();
   const person = await createPerson(database, {
     displayName: "Deletion Outreach Customer",
@@ -608,40 +603,28 @@ test("reviewed campaigns stop when consent changes and person deletion preserves
       requestId: "delete-sms-consent",
     },
   }));
-  assert.equal(result.response.status, 201);
+  assert.equal(result.response.status, 400);
+  assert.match(result.payload.error, /read-only/i);
 
   result = await responseJson(await outreachApi(database, "/api/admin/crm/outreach/campaigns", {
     method: "POST",
     body: { name: "Consent drift", channel: "sms", bodyText: "A reviewed update." },
   }));
-  assert.equal(result.response.status, 201);
-  const campaignId = result.payload.campaign.id;
-  result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/campaigns/${campaignId}/review`, {
-    method: "POST",
-    body: {},
-  }));
-  assert.equal(result.payload.audience.eligibleCount, 1);
-  const audienceVersion = result.payload.campaign.audienceVersion;
+  assert.equal(result.response.status, 400);
 
   const now = "2026-07-18T16:05:00.000Z";
+  database.prepare(`
+    INSERT INTO crm_consent_events(
+      id,person_id,channel,purpose,status,normalized_value,source,provider,
+      provider_reference,occurred_at,created_at
+    ) VALUES('legacy-sms-consent',?,'sms','marketing','revoked',?,'legacy_import',
+      'twilio','legacy-sms-consent',?,?)
+  `).run(person.id, "+14045550177", now, now);
   database.prepare(`
     INSERT INTO crm_suppressions(
       id,person_id,identity_kind,normalized_value,reason,provider,active,created_at,updated_at
     ) VALUES('sms-suppression',?,'phone',?,'STOP','twilio',1,?,?)
   `).run(person.id, "+14045550177", now, now);
-  result = await responseJson(await outreachApi(database, `/api/admin/crm/outreach/campaigns/${campaignId}/schedule`, {
-    method: "POST",
-    body: { audienceVersion },
-    env: {
-      OUTREACH_SMS_CAMPAIGNS_ENABLED: "true",
-      TWILIO_ACCOUNT_SID: "AC_test",
-      TWILIO_AUTH_TOKEN: "secret",
-      TWILIO_MESSAGING_SERVICE_SID: "MG_test",
-    },
-  }));
-  assert.equal(result.response.status, 409);
-  assert.match(result.payload.error, /audience changed/i);
-
   result = await responseJson(await api(database, `/api/admin/crm/people/${person.id}`, {
     method: "DELETE",
     body: { confirmDisplayName: "Deletion Outreach Customer" },
@@ -1426,6 +1409,7 @@ test("event tickets, waitlists, and open-mic signups register the same person li
       body: {
         name: "Event Person",
         email: "event-person@example.test",
+        phone: "404-555-0195",
         seats: 1,
       },
     },
@@ -1439,6 +1423,7 @@ test("event tickets, waitlists, and open-mic signups register the same person li
       body: {
         performerName: "Event Person",
         performerEmail: "event-person@example.test",
+        performerPhone: "404-555-0195",
         actType: "poetry",
         pieceTitle: "Construct Poem",
       },

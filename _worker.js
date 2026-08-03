@@ -18,6 +18,8 @@ import {
   handleGetSubmissionFile,
   handleListSubmissions,
   handlePromoteMazeArchiveSubmission,
+  handleSubmissionDecision,
+  handleSubmissionDecisionNotification,
   handleUpdateMazeArchiveSubmission,
   handleUpdateSubmission,
 } from "./functions/api/submissions/_lib.js";
@@ -121,6 +123,7 @@ import {
 import {
   handleAdminTattooSpecialOffer,
   handleAdminTattooSpecialCampaign,
+  handleAdminTattooSpecialDeposit,
   handleAdminTattooSpecialReview,
   handleAdminTattooSpecials,
   handleCreateTattooSpecialSubmission,
@@ -749,6 +752,18 @@ async function handleSubmissionsApi(request, env) {
     return handleUpdateMazeArchiveSubmission(request, env, id);
   }
 
+  const decisionMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/decision$/);
+  if (decisionMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleSubmissionDecision(request, env, decodeURIComponent(decisionMatch[1]));
+  }
+
+  const decisionNotificationMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/decision-notification$/);
+  if (decisionNotificationMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleSubmissionDecisionNotification(request, env, decodeURIComponent(decisionNotificationMatch[1]));
+  }
+
   const match = pathname.match(/^\/api\/admin\/submissions\/([^/]+)$/);
   if (match) {
     const id = decodeURIComponent(match[1]);
@@ -1283,6 +1298,12 @@ export default {
     if (tattooSpecialReviewMatch) {
       if (request.method !== "PATCH") return methodNotAllowed(request.method, ["PATCH"]);
       return handleAdminTattooSpecialReview(request, env, decodeURIComponent(tattooSpecialReviewMatch[1]));
+    }
+
+    const tattooSpecialDepositMatch = url.pathname.match(/^\/api\/admin\/tattoo\/specials\/submissions\/([^/]+)\/deposit$/);
+    if (tattooSpecialDepositMatch) {
+      if (request.method !== "POST") return methodNotAllowed(request.method, ["POST"]);
+      return handleAdminTattooSpecialDeposit(request, env, decodeURIComponent(tattooSpecialDepositMatch[1]));
     }
 
     if (normalizePath(url.pathname) === "/studio/art-preview") {

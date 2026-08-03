@@ -10,6 +10,8 @@ import {
   handleDeleteSubmission,
   handleGetSubmission,
   handlePromoteMazeArchiveSubmission,
+  handleSubmissionDecision,
+  handleSubmissionDecisionNotification,
   handleUpdateMazeArchiveSubmission,
   handleUpdateSubmission,
 } from "../functions/api/submissions/_lib.js";
@@ -99,6 +101,7 @@ import {
 import {
   handleAdminTattooSpecialCampaign,
   handleAdminTattooSpecialOffer,
+  handleAdminTattooSpecialDeposit,
   handleAdminTattooSpecialReview,
   handleAdminTattooSpecials,
   handleCreateTattooSpecialSubmission,
@@ -249,7 +252,12 @@ function multipartRequest(path, payload, files = []) {
     ? { ...payload, phone: "404-555-0100" }
     : payload;
   for (const [key, value] of Object.entries(requestPayload)) {
-    if (value !== undefined && value !== null) form.append(key, String(value));
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) form.append(key, String(item));
+    } else {
+      form.append(key, String(value));
+    }
   }
   for (const file of files) {
     form.append(
@@ -501,7 +509,7 @@ function validCustom(overrides = {}) {
     email: "client@example.test",
     age_confirmed: "yes",
     dob: "1990-01-01",
-    project_type: "new_piece",
+    project_type: "new_work",
     previous_client: "no",
     placement: "Forearm",
     size: "4 inches",
@@ -511,6 +519,62 @@ function validCustom(overrides = {}) {
     review_consent: "yes",
     ...overrides,
   };
+}
+
+function decideSubmission(env, submissionId, token, action, fields = {}) {
+  return handleSubmissionDecision(adminJsonRequest(
+    `/api/admin/submissions/${submissionId}/decision`,
+    { action, confirmed: true, ...fields },
+    token,
+  ), env, submissionId);
+}
+
+function saveReviewedTattooPlan(env, submissionId, token, fields = {}) {
+  return handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 120,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "Reviewed for contract coverage.",
+      approvedBudgetMinCents: 30000,
+      approvedBudgetMaxCents: 60000,
+      approvedBudgetCurrency: "USD",
+      ...fields,
+    },
+    token,
+    "PATCH",
+  ), env, submissionId);
+}
+
+function validCustomForProject(projectType, overrides = {}) {
+  const fields = {
+    new_work: {},
+    cover_up: {
+      cover_up_goal: "transform",
+      size_placement_flexibility: "flexible",
+    },
+    large_cover_up: {
+      cover_up_goal: "transform",
+      size_placement_flexibility: "flexible",
+      existing_tattoo_dimensions: "8 x 12 inches",
+      open_to_larger_footprint: "yes",
+      open_to_multiple_sessions: "yes",
+    },
+    rework: {
+      rework_interventions: ["refresh_color", "repair_linework"],
+      rework_expansion_flexibility: "unsure",
+    },
+    space_filler: {
+      gap_dimensions: "2 x 4 inches",
+      surrounding_work: "Black and grey tattoos around the open area.",
+      filler_relationship: "connect_blend",
+    },
+  };
+  return validCustom({ project_type: projectType, ...(fields[projectType] || {}), ...overrides });
 }
 
 test("Tattoo project forms expose the same required total-budget ranges", () => {
@@ -596,6 +660,16 @@ test("public tattoo rates and session lengths keep their approved copy and peer 
   assert.match(source, /<ul class="session-list" id="tattooSessionList"[\s\S]*data-booking-type="tattoo_extended"[\s\S]*<\/ul>/);
   assert.doesNotMatch(source, /class="extended-day-policy"/);
   assert.match(source, /tattooSessionTypes = Array\.isArray\(payload\.bookingTypes\)/);
+});
+
+test("Studio approved booking links allow per-client tattoo appointment types", () => {
+  const source = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(source, /For an approved tattoo link, choose the appointment types this client may book\./);
+  assert.doesNotMatch(source, /<input type="checkbox" data-token-type[^>]* disabled>/);
+  assert.match(source, /const lockSelection = submission\.type === "tattoo_special" \|\| purpose === "consultation";/);
+  assert.match(source, /input\.disabled = !allowed \|\| lockSelection;/);
+  assert.match(source, /Choose at least one session type for this booking link\./);
+  assert.match(source, /setStatus\(error\.message \|\| "The session plan could not be saved"\);/);
 });
 
 test("Extended Day client surfaces use the approved optional-session copy", () => {
@@ -2038,8 +2112,8 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.match(script, /There are no special available at this time\./);
   assert.match(script, /Check back another time or <a href="\$\{escape\(payload\.normalInquiryUrl\)\}">submit a normal tattoo request<\/a>\./);
   assert.match(page, /id="specialsSubmit">Continue to Select Time Slot<\/button>/);
-  assert.match(page, />I agree to receive transactional email and text messages about this Tattoo Special request\.<\/span>/);
-  assert.match(page, />The studio stores this person’s details, but automated emails and texts go only to the primary participant\.<\/p>/);
+  assert.match(page, />I agree to receive transactional email about this Tattoo Special request\.<\/span>/);
+  assert.match(page, />The studio stores this person’s details, but automated email goes only to the primary participant\.<\/p>/);
   assert.doesNotMatch(page, /request, approval, deposit, and appointment|Message and data rates may apply|Reply STOP to opt out/i);
   assert.doesNotMatch(page, /specials-booking-cue|Book Your Appointment/);
   assert.doesNotMatch(script, /specialsCampaign|campaign\.hidden/);
@@ -2087,21 +2161,21 @@ test("Studio request details open an editable native text message to the submitt
   assert.match(studio, /textClientButton[\s\S]*?navigator\.clipboard\?\.writeText\(value\)[\s\S]*?body=\$\{encodeURIComponent\(value\)\}/);
 });
 
-test("Studio resends the active Tattoo Special deposit email instead of its consumed calendar token", () => {
+test("Studio prepares a Tattoo Special deposit link silently before explicit client email", () => {
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
-  assert.match(studio, /canResendSpecialDeposit[\s\S]*?appointment\?\.approvalState === "approved"[\s\S]*?pending_deposit/);
-  assert.match(studio, /data-resend-template="tattoo_special_deposit_requested"[\s\S]*?Resend Deposit Link Email/);
-  assert.match(studio, /templateKey === "tattoo_special_deposit_requested"[\s\S]*?Tattoo Special deposit email resent/);
-  assert.match(studio, /catch \(error\)[\s\S]*?Email could not be resent/);
+  assert.match(studio, /data-prepare-special-deposit[\s\S]*?Prepare Deposit Link/);
+  assert.match(studio, /\/tattoo\/specials\/submissions\/\$\{encodeURIComponent\(prepareSpecialDeposit\.dataset\.prepareSpecialDeposit\)\}\/deposit/);
+  assert.match(studio, /data-send-decision-notification[\s\S]*?Send Approval Notification/);
+  assert.match(studio, /Prepare the required booking or deposit link before sending approval/);
 });
 
-test("Studio requires and previews a client-facing reason before declining a Tattoo Special", () => {
+test("Studio saves a client-facing decline reason separately from the decision notification", () => {
   const studio = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
-  assert.match(studio, /Reason shared with requester[\s\S]*?id="specialDeclineReason"/);
-  assert.match(studio, /Internal Notes remain private/);
-  assert.match(studio, /outcome === "declined" && !reason[\s\S]*?specialDeclineReason[\s\S]*?focus/);
-  assert.match(studio, /window\.confirm\(`Decline this Tattoo Special request and email this reason to the requester\?[\s\S]*?\$\{reason\}/);
-  assert.match(studio, /JSON\.stringify\(\{ outcome, approvedPriceCents:[\s\S]*?note, reason \}\)/);
+  assert.match(studio, /Client-facing decline reason[\s\S]*?id="decisionClientMessage"/);
+  assert.match(studio, /Saving this reason sends nothing/);
+  assert.match(studio, /data-decision-action="decline"/);
+  assert.match(studio, /data-send-decision-notification[\s\S]*?Send Decline Notification/);
+  assert.match(studio, /Decline notifications require a saved client-facing reason/);
 });
 
 test("Studio client preview opens synchronously and carries the Tattoo Special lifecycle", () => {
@@ -2115,7 +2189,7 @@ test("Studio client preview opens synchronously and carries the Tattoo Special l
   assert.ok(handler.indexOf('window.open("about:blank", "_blank")') < handler.indexOf("await Promise.all"));
   assert.match(studio, /function clientPreviewContext[\s\S]*?allowedTypeIds[\s\S]*?special_offer_title[\s\S]*?pendingApproval[\s\S]*?pendingCheckout/);
   assert.match(booking, /function adminPreviewContext[\s\S]*?pendingCheckout: payload\.pendingCheckout \|\| null/);
-  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Square deposit link sent by email and text/);
+  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Square deposit link sent by email/);
 });
 
 test("Tattoo Specials require Studio approval and preserve server-side price, deposit, duration, and token cutoff", async () => {
@@ -2310,22 +2384,18 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(adjacentHoldResponse.status, 200, adjacentHold.detail || adjacentHold.error);
   assert.equal(adjacentHold.appointment.startAt, adjacentStart.toISOString());
 
-  const missingDeclineReason = await handleAdminTattooSpecialReview(adminJsonRequest(
-    `/api/admin/tattoo/specials/submissions/${competing.submissionId}/review`,
-    { outcome: "declined", note: "Private operator note." }, adminToken, "PATCH",
-  ), env, competing.submissionId);
-  assert.equal(missingDeclineReason.status, 400);
-  assert.match((await missingDeclineReason.json()).error, /explain why/i);
-
   database.prepare("UPDATE submissions SET internal_notes=? WHERE id=?")
     .run("Private operator note.", competing.submissionId);
   const declineReason = "The requested composition exceeds the size and time included in this Tattoo Special.";
-  const declined = await handleAdminTattooSpecialReview(adminJsonRequest(
-    `/api/admin/tattoo/specials/submissions/${competing.submissionId}/review`,
-    { outcome: "declined", reason: declineReason }, adminToken, "PATCH",
+  const savedDeclineReason = await handleUpdateSubmission(jsonPatchRequest(
+    `/api/admin/submissions/${competing.submissionId}`,
+    { decisionClientMessage: declineReason },
+    adminToken,
   ), env, competing.submissionId);
+  assert.equal(savedDeclineReason.status, 200, await savedDeclineReason.clone().text());
+  const declined = await decideSubmission(env, competing.submissionId, adminToken, "decline");
   assert.equal(declined.status, 200);
-  assert.equal((await declined.json()).email?.ok, true);
+  assert.equal(sent.some((message) => message.to === "competing@example.com" && /declined/i.test(message.subject)), false);
   const declinedSubmission = database.prepare("SELECT status,internal_notes FROM submissions WHERE id=?").get(competing.submissionId);
   assert.equal(declinedSubmission.status, "declined");
   assert.equal(declinedSubmission.internal_notes, "Private operator note.");
@@ -2336,10 +2406,16 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     approval_state: "declined",
     cancellation_reason: declineReason,
   });
-  assert.equal(database.prepare(
-    "SELECT note FROM submission_events WHERE submission_id=? AND event_type='special_review_declined' ORDER BY created_at DESC LIMIT 1",
-  ).get(competing.submissionId).note, declineReason);
-  const declineEmail = sent.find((message) => message.to === "competing@example.com" && /Tattoo Special review/i.test(message.subject));
+  assert.match(database.prepare(
+    "SELECT note FROM submission_events WHERE submission_id=? AND event_type='decision_declined' ORDER BY created_at DESC LIMIT 1",
+  ).get(competing.submissionId).note, /declined/);
+  const declineNotification = await handleSubmissionDecisionNotification(adminJsonRequest(
+    `/api/admin/submissions/${competing.submissionId}/decision-notification`,
+    { kind: "decline" },
+    adminToken,
+  ), env, competing.submissionId);
+  assert.equal(declineNotification.status, 200, await declineNotification.clone().text());
+  const declineEmail = sent.filter((message) => message.to === "competing@example.com").at(-1);
   assert.ok(declineEmail);
   assert.match(declineEmail.html, /Why this request was declined/);
   assert.match(declineEmail.text, new RegExp(declineReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -2370,34 +2446,31 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal((await prematureCheckout.json()).code, "SPECIAL_APPROVAL_REQUIRED");
 
   let squareRequestBody = null;
-  let smsRequestBody = "";
-  const approvalResponse = await withMockFetch(async (url, init) => {
+  const approvalLinkStartedAt = Date.now();
+  const approvalResponse = await decideSubmission(env, submitted.submissionId, adminToken, "approve", {
+    approvedPriceCents: 1,
+  });
+  assert.equal(approvalResponse.status, 200, await approvalResponse.clone().text());
+  assert.equal(sent.some((message) => message.to === "primary@example.com" && /deposit required/i.test(message.subject)), false);
+  const depositResponse = await withMockFetch(async (url, init) => {
     const target = String(url);
     if (target.endsWith("/v2/online-checkout/payment-links")) {
       squareRequestBody = JSON.parse(init.body);
       return jsonFetchResponse({ payment_link: { id: "special-palm-link", order_id: "special-palm-order", url: "https://square.test/special" } });
     }
-    if (target.includes("api.twilio.com")) {
-      smsRequestBody = String(init.body);
-      return jsonFetchResponse({ sid: "SMspecial" });
-    }
-    throw new Error(`Unexpected approval request: ${target}`);
-  }, () => handleAdminTattooSpecialReview(adminJsonRequest(
-    `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/review`,
-    { outcome: "approved", approvedPriceCents: 1, note: "Approved at the fixed promotional price." },
-    adminToken, "PATCH",
+    throw new Error(`Unexpected deposit request: ${target}`);
+  }, () => handleAdminTattooSpecialDeposit(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/deposit`,
+    {}, adminToken,
   ), env, submitted.submissionId));
-  assert.equal(approvalResponse.status, 200);
-  const approval = await approvalResponse.json();
-  assert.equal(approval.approvedPriceCents, 20000);
+  assert.equal(depositResponse.status, 200, await depositResponse.clone().text());
+  const approval = await depositResponse.json();
   assert.equal(approval.checkoutUrl, "https://square.test/special");
   assert.equal(approval.appointmentId, hold.appointment.id);
   assert.ok(new Date(approval.paymentDueAt).getTime() <= new Date(closes).getTime());
   assert.ok(new Date(approval.paymentDueAt).getTime() <= Date.now() + 24 * 60 * 60 * 1000);
+  assert.ok(new Date(approval.paymentDueAt).getTime() >= approvalLinkStartedAt + (23 * 60 + 59) * 60 * 1000);
   assert.deepEqual(squareRequestBody.order.line_items.map((item) => item.base_price_money.amount), [5000]);
-  const smsMessage = new URLSearchParams(smsRequestBody).get("Body");
-  assert.match(smsMessage, /Pay the \$50 deposit/);
-  assert.match(smsMessage, /https:\/\/square\.test\/special/);
   submission = database.prepare("SELECT * FROM submissions WHERE id=?").get(submitted.submissionId);
   assert.equal(submission.status, "approved");
   assert.equal(submission.tattoo_stage, "ready_to_book");
@@ -2416,12 +2489,18 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const specialAppointment = database.prepare("SELECT hold_expires_at,start_at,end_at,approval_state,payment_due_at,square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id);
   assert.equal(specialAppointment.approval_state, "approved");
   assert.equal(specialAppointment.payment_due_at, approval.paymentDueAt);
+  assert.equal(specialAppointment.hold_expires_at, approval.paymentDueAt);
   assert.equal(specialAppointment.square_checkout_url, "https://square.test/special");
   assert.equal(specialAppointment.start_at, appointmentStart.toISOString());
   assert.equal(specialAppointment.end_at, appointmentEnd.toISOString());
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key IN ('appointment_confirmed','admin_appointment_confirmed')",
   ).get(hold.appointment.id).count, 0);
+  const approvalNotification = await handleSubmissionDecisionNotification(adminJsonRequest(
+    `/api/admin/submissions/${submitted.submissionId}/decision-notification`,
+    { kind: "approval" }, adminToken,
+  ), env, submitted.submissionId);
+  assert.equal(approvalNotification.status, 200, await approvalNotification.clone().text());
   const approvalEmail = sent.find((message) => message.to === "primary@example.com" && /deposit required/i.test(message.subject));
   assert.ok(approvalEmail);
   assert.match(approvalEmail.html, /Pay deposit and confirm/i);
@@ -2430,11 +2509,11 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.match(approvalEmail.text, /Change requested time:/i);
   assert.match(approvalEmail.text, /flow=special-request/i);
   assert.match(approvalEmail.html, /booked only after Square confirms/i);
+  assert.match(approvalEmail.text, /expires after 24 hours or at the Tattoo Specials sales deadline, whichever comes first/i);
   assert.deepEqual(database.prepare(
     "SELECT channel,status FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_special_deposit_requested' ORDER BY channel",
   ).all(hold.appointment.id).map((row) => ({ ...row })), [
     { channel: "email", status: "sent" },
-    { channel: "sms", status: "sent" },
   ]);
 
   const webhookUrl = "https://example.test/api/square/webhook";
@@ -2595,17 +2674,19 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
     "submission_received",
   ]);
 
+  const decision = await decideSubmission(env, requestPayload.submissionId, adminToken, "approve", {
+    approvedPriceCents: 25000,
+  });
+  assert.equal(decision.status, 200, await decision.clone().text());
   const approved = await withMockFetch(async (url) => {
     assert.match(String(url), /\/v2\/online-checkout\/payment-links$/);
     return jsonFetchResponse({ payment_link: { id: "script-link", order_id: "script-order", url: "https://square.test/script" } });
-  }, () => handleAdminTattooSpecialReview(adminJsonRequest(
-    `/api/admin/tattoo/specials/submissions/${requestPayload.submissionId}/review`,
-    { outcome: "approved", approvedPriceCents: 25000, note: "Script and placement approved." },
-    adminToken, "PATCH",
+  }, () => handleAdminTattooSpecialDeposit(adminJsonRequest(
+    `/api/admin/tattoo/specials/submissions/${requestPayload.submissionId}/deposit`,
+    {}, adminToken,
   ), env, requestPayload.submissionId));
   assert.equal(approved.status, 200);
   const approval = await approved.json();
-  assert.equal(approval.approvedPriceCents, 17000);
   assert.equal(approval.checkoutUrl, "https://square.test/script");
   const storedTerms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(requestPayload.submissionId);
   assert.equal(storedTerms.advertised_price_cents, 17000);
@@ -2617,10 +2698,9 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
   assert.equal(savedPayload.approved_price_cents, 17000);
   assert.equal(savedPayload.script_text, "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one");
   assert.equal(savedPayload.max_word_count, 21);
-  const approvedDepositEmail = database.prepare(
-    "SELECT template_key,template_variant FROM notification_deliveries WHERE related_id=? AND channel='email' AND template_key='tattoo_special_deposit_requested'"
-  ).get(held.appointment.id);
-  assert.deepEqual({ ...approvedDepositEmail }, { template_key: "tattoo_special_deposit_requested", template_variant: "default" });
+  assert.equal(database.prepare(
+    "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=? AND template_key='tattoo_special_deposit_requested'"
+  ).get(held.appointment.id).count, 0);
 });
 
 test("Script Tattoo approval cannot issue a deposit link after the sales cutoff", async () => {
@@ -2660,10 +2740,9 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
   database.prepare("UPDATE tattoo_special_submission_terms SET sales_closes_at=? WHERE submission_id=?")
     .run(new Date(Date.now() - 1000).toISOString(), review.submissionId);
 
-  const approval = await handleAdminTattooSpecialReview(adminJsonRequest(
-    `/api/admin/tattoo/specials/submissions/${review.submissionId}/review`,
-    { outcome: "approved", approvedPriceCents: 15000 }, adminToken, "PATCH",
-  ), env, review.submissionId);
+  const approval = await decideSubmission(env, review.submissionId, adminToken, "approve", {
+    approvedPriceCents: 15000,
+  });
   assert.equal(approval.status, 409);
   assert.match((await approval.json()).error, /sales window has closed/i);
   assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(review.submissionId).count, 1);
@@ -3132,7 +3211,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(response.status, 200);
   const payload = await response.json();
   assert.equal(payload.delivery.skipped, true);
-  assert.equal(payload.delivery.reason, "not_requested");
+  assert.equal(payload.delivery.reason, "explicit_client_notification_required");
   assert.deepEqual(payload.token.allowedBookingTypes, ["tattoo_half"]);
 
   const submission = database.prepare(
@@ -3372,6 +3451,207 @@ test("Studio direct invites can route a client into prerequisite consultation", 
   );
 });
 
+test("project-aware custom inquiries validate conditional answers, upload counts, aliases, and limits", async () => {
+  const database = migratedDatabase();
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSION_FILES: new MemoryBucket(),
+    PUBLIC_SITE_URL: "https://example.test",
+  };
+
+  const unsupported = await handleCreateSubmission(
+    jsonRequest("/api/submissions", validCustom({ project_type: "portrait" })),
+    env,
+  );
+  assert.equal(unsupported.status, 400);
+  assert.match((await unsupported.json()).error, /supported tattoo project type/i);
+
+  const incompleteCoverUp = await handleCreateSubmission(
+    jsonRequest("/api/submissions", validCustom({ project_type: "cover_up" })),
+    env,
+  );
+  assert.equal(incompleteCoverUp.status, 400);
+  assert.match((await incompleteCoverUp.json()).error, /cover-up goal/i);
+
+  const legacyCoverUp = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustomForProject("cover_up", { email: "cover-up@example.test" }),
+    [{ fieldName: "cover_up_photos", fileName: "existing.jpg" }],
+  ), env);
+  assert.equal(legacyCoverUp.status, 200);
+  const legacyCoverUpId = (await legacyCoverUp.json()).submissionId;
+  const legacyFiles = JSON.parse(database.prepare("SELECT files_json FROM submissions WHERE id=?").get(legacyCoverUpId).files_json);
+  assert.deepEqual(legacyFiles.map((file) => file.fieldName), ["existing_tattoo_photos"]);
+
+  const missingReworkChoices = await handleCreateSubmission(
+    jsonRequest("/api/submissions", validCustomForProject("rework", {
+      email: "rework-missing@example.test",
+      rework_interventions: [],
+    })),
+    env,
+  );
+  assert.equal(missingReworkChoices.status, 400);
+  assert.match((await missingReworkChoices.json()).error, /at least one kind of rework/i);
+
+  const rework = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustomForProject("rework", { email: "rework@example.test" }),
+    [{ fieldName: "existing_tattoo_photos", fileName: "current.jpg" }],
+  ), env);
+  assert.equal(rework.status, 200);
+  const reworkId = (await rework.json()).submissionId;
+  const reworkPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(reworkId).payload_json);
+  assert.deepEqual(reworkPayload.rework_interventions, ["refresh_color", "repair_linework"]);
+
+  const oneSpacePhoto = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustomForProject("space_filler", { email: "space-one@example.test" }),
+    [{ fieldName: "placement_photos", fileName: "wide.jpg" }],
+  ), env);
+  assert.equal(oneSpacePhoto.status, 400);
+  assert.match((await oneSpacePhoto.json()).error, /at least 2 area photographs/i);
+
+  const twoSpacePhotos = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustomForProject("space_filler", { email: "space-two@example.test" }),
+    [
+      { fieldName: "placement_photos", fileName: "wide.jpg" },
+      { fieldName: "placement_photos", fileName: "close.jpg" },
+    ],
+  ), env);
+  assert.equal(twoSpacePhotos.status, 200);
+
+  const placementPdf = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustomForProject("new_work", { email: "placement-pdf@example.test" }),
+    [{ fieldName: "placement_photo", fileName: "placement.pdf", contentType: "application/pdf" }],
+  ), env);
+  assert.equal(placementPdf.status, 415);
+  assert.match((await placementPdf.json()).error, /placement and existing-tattoo photographs/i);
+
+  const twelveFiles = Array.from({ length: 12 }, (_, index) => ({
+    fieldName: index < 6 ? "references" : "placement_photos",
+    fileName: `photo-${index + 1}.jpg`,
+  }));
+  const acceptedTwelve = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustomForProject("new_work", { email: "twelve-files@example.test" }),
+    twelveFiles,
+  ), env);
+  assert.equal(acceptedTwelve.status, 200);
+
+  const rejectedThirteen = await handleCreateSubmission(multipartRequest(
+    "/api/submissions",
+    validCustomForProject("new_work", { email: "thirteen-files@example.test" }),
+    [...twelveFiles, { fieldName: "references", fileName: "photo-13.jpg" }],
+  ), env);
+  assert.equal(rejectedThirteen.status, 413);
+  assert.match((await rejectedThirteen.json()).error, /at most 12 uploaded files/i);
+});
+
+test("saved review work, decisions, access preparation, and client email remain separate", async () => {
+  const database = migratedDatabase();
+  const adminToken = "decision-workflow-admin";
+  const sent = [];
+  const env = {
+    SUBMISSIONS_DB: new LocalD1(database),
+    SUBMISSIONS_ADMIN_TOKEN: adminToken,
+    PUBLIC_SITE_URL: "https://example.test",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { messageId: crypto.randomUUID() };
+      },
+    },
+  };
+
+  const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom()), env);
+  assert.equal(created.status, 200);
+  const submissionId = (await created.json()).submissionId;
+  const initialDeliveryCount = database.prepare(
+    "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?"
+  ).get(submissionId).count;
+
+  const opened = await handleGetSubmission(draftRequest(
+    `/api/admin/submissions/${submissionId}`, "GET", undefined, adminToken,
+  ), env, submissionId);
+  assert.equal(opened.status, 200);
+  assert.equal(database.prepare("SELECT status FROM submissions WHERE id=?").get(submissionId).status, "new");
+
+  const saved = await handleUpdateSubmission(jsonPatchRequest(
+    `/api/admin/submissions/${submissionId}`,
+    { internalNotes: "Reviewed composition and references." },
+    adminToken,
+  ), env, submissionId);
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal(database.prepare("SELECT status FROM submissions WHERE id=?").get(submissionId).status, "reviewing");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?").get(submissionId).count, initialDeliveryCount);
+
+  const genericApproval = await handleUpdateSubmission(jsonPatchRequest(
+    `/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken,
+  ), env, submissionId);
+  assert.equal(genericApproval.status, 409);
+  assert.equal((await genericApproval.json()).code, "DECISION_ENDPOINT_REQUIRED");
+
+  const unconfirmed = await handleSubmissionDecision(adminJsonRequest(
+    `/api/admin/submissions/${submissionId}/decision`, { action: "approve" }, adminToken,
+  ), env, submissionId);
+  assert.equal(unconfirmed.status, 400);
+  assert.equal((await unconfirmed.json()).code, "DECISION_CONFIRMATION_REQUIRED");
+
+  const missingPlan = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(missingPlan.status, 409);
+  assert.equal((await missingPlan.json()).code, "REVIEWED_PLAN_AND_BUDGET_REQUIRED");
+  assert.equal((await saveReviewedTattooPlan(env, submissionId, adminToken)).status, 200);
+
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(approved.status, 200, await approved.clone().text());
+  assert.equal(database.prepare("SELECT status,decision_revision FROM submissions WHERE id=?").get(submissionId).decision_revision, 1);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?").get(submissionId).count, initialDeliveryCount);
+
+  const linkResponse = await handleAdminCreateBookingToken(adminJsonRequest(
+    "/api/admin/booking/tokens",
+    { submissionId, purpose: "tattoo", allowedBookingTypes: ["tattoo_quarter"], revokeExisting: true },
+    adminToken,
+  ), env);
+  assert.equal(linkResponse.status, 200, await linkResponse.clone().text());
+  assert.equal((await linkResponse.json()).delivery.reason, "explicit_client_notification_required");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?").get(submissionId).count, initialDeliveryCount);
+
+  const blockedReopen = await decideSubmission(env, submissionId, adminToken, "reopen");
+  assert.equal(blockedReopen.status, 409);
+  assert.equal((await blockedReopen.json()).code, "ACTIVE_ACCESS_BLOCKS_REOPEN");
+  assert.equal((await handleAdminRevokeSubmissionBookingTokens(adminJsonRequest(
+    "/api/admin/booking/tokens/revoke-submission", { submissionId }, adminToken,
+  ), env)).status, 200);
+  assert.equal((await decideSubmission(env, submissionId, adminToken, "reopen")).status, 200);
+  assert.equal((await decideSubmission(env, submissionId, adminToken, "decline")).status, 200);
+
+  const reason = "The current scope is not a fit for this booking cycle.";
+  assert.equal((await handleUpdateSubmission(jsonPatchRequest(
+    `/api/admin/submissions/${submissionId}`, { decisionClientMessage: reason }, adminToken,
+  ), env, submissionId)).status, 200);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?").get(submissionId).count, initialDeliveryCount);
+
+  const declineNotification = await handleSubmissionDecisionNotification(adminJsonRequest(
+    `/api/admin/submissions/${submissionId}/decision-notification`, { kind: "decline" }, adminToken,
+  ), env, submissionId);
+  assert.equal(declineNotification.status, 200, await declineNotification.clone().text());
+  assert.equal(database.prepare("SELECT status,decision_revision FROM submissions WHERE id=?").get(submissionId).decision_revision, 2);
+  assert.match(sent.at(-1).text, new RegExp(reason));
+
+  const unconfirmedResend = await handleSubmissionDecisionNotification(adminJsonRequest(
+    `/api/admin/submissions/${submissionId}/decision-notification`, { kind: "decline", resend: true }, adminToken,
+  ), env, submissionId);
+  assert.equal(unconfirmedResend.status, 400);
+  assert.equal((await unconfirmedResend.json()).code, "RESEND_CONFIRMATION_REQUIRED");
+  const confirmedResend = await handleSubmissionDecisionNotification(adminJsonRequest(
+    `/api/admin/submissions/${submissionId}/decision-notification`,
+    { kind: "decline", resend: true, confirmed: true }, adminToken,
+  ), env, submissionId);
+  assert.equal(confirmedResend.status, 200, await confirmedResend.clone().text());
+});
+
 test("large cover-ups require at least three angle photographs without automatically requiring consultation", async () => {
   const database = migratedDatabase();
   const adminToken = "test-admin-token";
@@ -3382,15 +3662,16 @@ test("large cover-ups require at least three angle photographs without automatic
     PUBLIC_SITE_URL: "https://example.test",
   };
 
-  const missing = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom({
-    project_type: "large_cover_up",
-  })), env);
+  const missing = await handleCreateSubmission(jsonRequest(
+    "/api/submissions",
+    validCustomForProject("large_cover_up"),
+  ), env);
   assert.equal(missing.status, 400);
   assert.match((await missing.json()).error, /at least 3 photographs/i);
 
   const twoPhotos = await handleCreateSubmission(multipartRequest(
     "/api/submissions",
-    validCustom({ project_type: "large_cover_up" }),
+    validCustomForProject("large_cover_up"),
     [
       { fieldName: "cover_up_photos", fileName: "angle-1.jpg" },
       { fieldName: "cover_up_photos", fileName: "angle-2.jpg" },
@@ -3401,7 +3682,7 @@ test("large cover-ups require at least three angle photographs without automatic
 
   const created = await handleCreateSubmission(multipartRequest(
     "/api/submissions",
-    validCustom({ project_type: "large_cover_up" }),
+    validCustomForProject("large_cover_up"),
     [
       { fieldName: "cover_up_photos", fileName: "angle-1.jpg" },
       { fieldName: "cover_up_photos", fileName: "angle-2.jpg" },
@@ -3413,13 +3694,12 @@ test("large cover-ups require at least three angle photographs without automatic
   const storedFiles = JSON.parse(
     database.prepare("SELECT files_json FROM submissions WHERE id = ?").get(submissionId).files_json,
   );
-  assert.equal(storedFiles.filter((file) => file.fieldName === "cover_up_photos").length, 3);
-  assert.equal(storedFiles.some((file) => file.fieldName === "placement_photo"), false);
+  assert.equal(storedFiles.filter((file) => file.fieldName === "existing_tattoo_photos").length, 3);
+  assert.equal(storedFiles.some((file) => file.fieldName === "placement_photos"), false);
 
   const additionalPhotos = await handleCreateSubmission(multipartRequest(
     "/api/submissions",
-    validCustom({
-      project_type: "large_cover_up",
+    validCustomForProject("large_cover_up", {
       email: "additional-photos@example.test",
     }),
     [
@@ -3431,15 +3711,13 @@ test("large cover-ups require at least three angle photographs without automatic
   ), env);
   assert.equal(additionalPhotos.status, 200);
 
-  const approved = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
-    env,
-    submissionId,
-  );
+  const reviewedPlan = await saveReviewedTattooPlan(env, submissionId, adminToken);
+  assert.equal(reviewedPlan.status, 200, await reviewedPlan.clone().text());
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
   assert.equal(approved.status, 200);
   const approvedRow = database.prepare("SELECT status, tattoo_stage FROM submissions WHERE id = ?").get(submissionId);
   assert.equal(approvedRow.status, "approved");
-  assert.equal(approvedRow.tattoo_stage, "review");
+  assert.equal(approvedRow.tattoo_stage, "ready_to_book");
 });
 
 test("explicit consultation requirements move through completion before tattoo access", async () => {
@@ -3457,11 +3735,7 @@ test("explicit consultation requirements move through completion before tattoo a
   assert.equal(created.status, 200);
   const submissionId = (await created.json()).submissionId;
 
-  const approved = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
-    env,
-    submissionId,
-  );
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
   assert.equal(approved.status, 200);
   const approvedRow = database.prepare("SELECT status, tattoo_stage FROM submissions WHERE id = ?").get(submissionId);
   assert.equal(approvedRow.status, "approved");
@@ -3559,7 +3833,7 @@ test("explicit consultation requirements move through completion before tattoo a
   assert.equal(tattooTokenResponse.status, 200);
   const tattooToken = (await tattooTokenResponse.json()).token;
   assert.equal(tattooToken.purpose, "tattoo");
-  assert.deepEqual(tattooToken.allowedBookingTypes, ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
+  assert.deepEqual(tattooToken.allowedBookingTypes, ["tattoo_quarter"]);
 });
 
 test("reviewed project budgets gate tattoo booking and require client agreement", async () => {
@@ -3600,29 +3874,9 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
   ), env, submissionId);
   assert.equal(planWithoutBudget.status, 200);
 
-  const approved = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
-    env,
-    submissionId,
-  );
-  assert.equal(approved.status, 200);
-  assert.equal(
-    database.prepare("SELECT tattoo_stage FROM submissions WHERE id = ?").get(submissionId).tattoo_stage,
-    "ready_to_book",
-  );
-
-  const missingBudgetToken = await handleAdminCreateBookingToken(adminJsonRequest(
-    "/api/admin/booking/tokens",
-    {
-      submissionId,
-      purpose: "tattoo",
-      allowedBookingTypes: ["tattoo_quarter"],
-      revokeExisting: true,
-    },
-    adminToken,
-  ), env);
-  assert.equal(missingBudgetToken.status, 409);
-  assert.equal((await missingBudgetToken.json()).code, "APPROVED_BUDGET_REQUIRED");
+  const missingBudgetApproval = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(missingBudgetApproval.status, 409);
+  assert.equal((await missingBudgetApproval.json()).code, "REVIEWED_PLAN_AND_BUDGET_REQUIRED");
 
   const reversedBudget = await handleAdminTattooSessionPlan(adminJsonRequest(
     `/api/admin/booking/session-plans/${submissionId}`,
@@ -3668,6 +3922,8 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     "$500â€“$800",
   );
 
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(approved.status, 200, await approved.clone().text());
   sent.length = 0;
   const firstTokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
     "/api/admin/booking/tokens",
@@ -3686,8 +3942,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     maximumCents: 120000,
     currency: "USD",
   });
-  assert.equal(sent.length, 1);
-  assert.match(sent[0].text, /Approved tattoo-work budget: \$800.+\$1,200/);
+  assert.equal(sent.length, 0, "booking-link preparation must be silent");
   const firstRawToken = new URL(firstToken.bookingUrl).searchParams.get("token");
 
   const firstContextResponse = await handleBookingContext(
@@ -3732,6 +3987,28 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     1,
   );
 
+  const unchangedActiveTokenPlan = await handleAdminTattooSessionPlan(adminJsonRequest(
+    `/api/admin/booking/session-plans/${submissionId}`,
+    {
+      sessionCategory: "one_session",
+      splitPolicy: "not_available",
+      estimatedSessionsMin: 1,
+      estimatedSessionsMax: 1,
+      estimatedTotalMinutesMin: 180,
+      estimatedTotalMinutesMax: 240,
+      artistNote: "One reviewed tattoo session.",
+      approvedBudgetMinCents: 80000,
+      approvedBudgetMaxCents: 120000,
+      approvedBudgetCurrency: "USD",
+    },
+    adminToken,
+    "PATCH",
+  ), env, submissionId);
+  assert.equal(unchangedActiveTokenPlan.status, 200);
+  const unchangedActiveTokenPayload = await unchangedActiveTokenPlan.json();
+  assert.equal(unchangedActiveTokenPayload.unchanged, true);
+  assert.equal(unchangedActiveTokenPayload.sessionPlan.budgetAcknowledged, true);
+
   const activeTokenRevision = await handleAdminTattooSessionPlan(adminJsonRequest(
     `/api/admin/booking/session-plans/${submissionId}`,
     {
@@ -3750,7 +4027,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     "PATCH",
   ), env, submissionId);
   assert.equal(activeTokenRevision.status, 409);
-  assert.equal((await activeTokenRevision.json()).code, "ACTIVE_BOOKING_BLOCKS_SESSION_PLAN_EDIT");
+  assert.equal((await activeTokenRevision.json()).code, "REOPEN_REVIEW_REQUIRED");
 
   const revoked = await handleAdminRevokeSubmissionBookingTokens(adminJsonRequest(
     "/api/admin/booking/tokens/revoke-submission",
@@ -3758,6 +4035,9 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     adminToken,
   ), env);
   assert.equal(revoked.status, 200);
+
+  const reopened = await decideSubmission(env, submissionId, adminToken, "reopen");
+  assert.equal(reopened.status, 200, await reopened.clone().text());
 
   const exactBudget = await handleAdminTattooSessionPlan(adminJsonRequest(
     `/api/admin/booking/session-plans/${submissionId}`,
@@ -3781,6 +4061,9 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
   assert.equal(exactPlan.budgetAcknowledged, false);
   assert.equal(exactPlan.budgetAcknowledgedAt, "");
 
+  const reapproved = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(reapproved.status, 200, await reapproved.clone().text());
+
   const secondTokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
     "/api/admin/booking/tokens",
     {
@@ -3793,8 +4076,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
   ), env);
   assert.equal(secondTokenResponse.status, 200);
   const secondToken = (await secondTokenResponse.json()).token;
-  assert.match(sent.at(-1).text, /Approved tattoo-work budget: \$1,250/);
-  assert.doesNotMatch(sent.at(-1).text, /\$1,250.+\$1,250/);
+  assert.equal(sent.length, 0, "regenerated booking access must remain silent");
   const secondRawToken = new URL(secondToken.bookingUrl).searchParams.get("token");
   const startAt = new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString();
   const endAt = new Date(new Date(startAt).getTime() + 90 * 60 * 1000).toISOString();
@@ -3845,12 +4127,6 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
 
   const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom()), env);
   const submissionId = (await created.json()).submissionId;
-  const approved = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
-    env,
-    submissionId,
-  );
-  assert.equal(approved.status, 200);
   const planResponse = await handleAdminTattooSessionPlan(adminJsonRequest(
     `/api/admin/booking/session-plans/${submissionId}`,
     {
@@ -3869,10 +4145,17 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
     "PATCH",
   ), env, submissionId);
   assert.equal(planResponse.status, 200);
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
+  assert.equal(approved.status, 200, await approved.clone().text());
 
   const tokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
     "/api/admin/booking/tokens",
-    { submissionId, purpose: "tattoo", allowedBookingTypes: ["tattoo_half"], revokeExisting: true },
+    {
+      submissionId,
+      purpose: "tattoo",
+      allowedBookingTypes: ["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"],
+      revokeExisting: true,
+    },
     adminToken,
   ), env);
   assert.equal(tokenResponse.status, 200);
@@ -3997,11 +4280,7 @@ test("private booking holds enforce the token and parent lifecycle inside the at
     consult_required: "yes",
   })), env);
   const submissionId = (await created.json()).submissionId;
-  const approved = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${submissionId}`, { status: "approved" }, adminToken),
-    env,
-    submissionId,
-  );
+  const approved = await decideSubmission(env, submissionId, adminToken, "approve");
   assert.equal(approved.status, 200);
 
   const tokenResponse = await handleAdminCreateBookingToken(adminJsonRequest(
@@ -4806,6 +5085,38 @@ test("paid tattoo confirmations include final-payment, grace-period, and all cli
     });
     assert.match(rendered.html, /<a href="https:\/\/thesixwellconstruct\.com\/api\/booking\/calendar\?appointment=demo-appointment"[^>]*>Add to calendar<\/a>/, identity);
   }
+});
+
+test("Custom Inquiry configures project-aware questions and multi-file upload roles", () => {
+  const formSource = readFileSync(join(ROOT, "tattoos", "inquire", "custom", "index.html"), "utf8");
+  const projectTypeIndex = formSource.indexOf('name="project_type"');
+  const firstNameIndex = formSource.indexOf('name="firstName"');
+  assert.ok(projectTypeIndex > -1 && projectTypeIndex < firstNameIndex, "project type appears before client details");
+  assert.match(formSource, /data-project-field="cover_up large_cover_up"/);
+  assert.match(formSource, /name="rework_interventions" value="refresh_color"/);
+  assert.match(formSource, /name="rework_interventions" value="repair_linework"/);
+  assert.match(formSource, /name="rework_interventions" value="redesign_part"/);
+  assert.match(formSource, /name="rework_interventions" value="extend_new_work"/);
+  assert.match(formSource, /name="rework_interventions" value="needs_assessment"/);
+  assert.match(formSource, /name="placement_photos"[^>]*multiple|multiple[^>]*name="placement_photos"/);
+  assert.match(formSource, /name="existing_tattoo_photos"[^>]*multiple|multiple[^>]*name="existing_tattoo_photos"/);
+  assert.match(formSource, /name="references"[^>]*multiple|multiple[^>]*name="references"/);
+  assert.match(formSource, /var maxFiles = 12;/);
+  assert.match(formSource, /control\.disabled = !active;/);
+  assert.doesNotMatch(formSource, /(?:existingPhotos|placementPhotos|references)\.value\s*=\s*""/);
+
+  const submissionsSource = readFileSync(join(ROOT, "functions", "api", "submissions", "_lib.js"), "utf8");
+  assert.match(submissionsSource, /tattoo_inquiry:\s*12/);
+  assert.match(submissionsSource, /placement_photo:\s*"placement_photos"/);
+  assert.match(submissionsSource, /cover_up_photos:\s*"existing_tattoo_photos"/);
+
+  const studioSource = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
+  assert.match(studioSource, /Rework Interventions/);
+  assert.match(studioSource, /Existing tattoo photograph/);
+
+  const notificationSource = readFileSync(join(ROOT, "functions", "api", "notifications", "_lib.js"), "utf8");
+  assert.match(notificationSource, /rework_interventions:\s*"Rework interventions"/);
+  assert.match(notificationSource, /refresh_color:\s*"Refresh or restore color"/);
 });
 
 test("paid tattoo confirmations render live remaining-balance breakdowns", async () => {
@@ -6076,19 +6387,13 @@ test("the first Flash approval reserves the managed design and a competing appro
     "$300-$600",
   );
 
-  const firstApproval = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${firstId}`, { status: "approved" }, adminToken),
-    env,
-    firstId,
-  );
+  assert.equal((await saveReviewedTattooPlan(env, firstId, adminToken)).status, 200);
+  assert.equal((await saveReviewedTattooPlan(env, secondId, adminToken)).status, 200);
+  const firstApproval = await decideSubmission(env, firstId, adminToken, "approve");
   assert.equal(firstApproval.status, 200);
   assert.equal(database.prepare("SELECT reserved_submission_id FROM flash_items WHERE id = ?").get(flash.id).reserved_submission_id, firstId);
 
-  const competingApproval = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${secondId}`, { status: "approved" }, adminToken),
-    env,
-    secondId,
-  );
+  const competingApproval = await decideSubmission(env, secondId, adminToken, "approve");
   assert.equal(competingApproval.status, 409);
   const conflict = await competingApproval.json();
   assert.equal(conflict.code, "FLASH_RESERVATION_CONFLICT");
@@ -6234,14 +6539,12 @@ test("managed sheet claims approve subsets atomically and place only approved de
     ],
   );
 
-  let response = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${firstId}`, {
-      status: "approved",
-      approved_sheet_design_ids: [designs[0].id],
-    }, adminToken),
-    env,
-    firstId,
-  );
+  assert.equal((await saveReviewedTattooPlan(env, firstId, adminToken)).status, 200);
+  assert.equal((await saveReviewedTattooPlan(env, secondId, adminToken)).status, 200);
+  assert.equal((await saveReviewedTattooPlan(env, conflictId, adminToken)).status, 200);
+  let response = await decideSubmission(env, firstId, adminToken, "approve", {
+    approved_sheet_design_ids: [designs[0].id],
+  });
   assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
   assert.deepEqual(
     database.prepare("SELECT code,state,reserved_submission_id FROM flash_sheet_designs WHERE flash_item_id=? ORDER BY sort_order").all(flash.id)
@@ -6259,32 +6562,20 @@ test("managed sheet claims approve subsets atomically and place only approved de
   const approvedPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(firstId).payload_json);
   assert.deepEqual(approvedPayload.approved_sheet_designs.map((design) => design.code), ["A"]);
 
-  response = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${firstId}`, { status: "declined" }, adminToken),
-    env,
-    firstId,
-  );
-  assert.equal(response.status, 200);
+  response = await decideSubmission(env, firstId, adminToken, "reopen");
+  assert.equal(response.status, 200, await response.clone().text());
+  response = await decideSubmission(env, firstId, adminToken, "decline");
+  assert.equal(response.status, 200, await response.clone().text());
   assert.equal(database.prepare("SELECT state FROM flash_sheet_designs WHERE id=?").get(designs[0].id).state, "available");
 
-  response = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${secondId}`, {
-      status: "approved",
-      approved_sheet_design_ids: [designs[1].id, designs[2].id],
-    }, adminToken),
-    env,
-    secondId,
-  );
+  response = await decideSubmission(env, secondId, adminToken, "approve", {
+    approved_sheet_design_ids: [designs[1].id, designs[2].id],
+  });
   assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
 
-  response = await handleUpdateSubmission(
-    jsonPatchRequest(`/api/admin/submissions/${conflictId}`, {
-      status: "approved",
-      approved_sheet_design_ids: [designs[0].id, designs[2].id],
-    }, adminToken),
-    env,
-    conflictId,
-  );
+  response = await decideSubmission(env, conflictId, adminToken, "approve", {
+    approved_sheet_design_ids: [designs[0].id, designs[2].id],
+  });
   assert.equal(response.status, 409);
   assert.equal(database.prepare("SELECT state FROM flash_sheet_designs WHERE id=?").get(designs[0].id).state, "available", "atomic conflict must not reserve the otherwise-free subset");
 
@@ -6392,7 +6683,9 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /data-resend-rendering-request/);
   assert.match(submissionsStudio, /data-cancel-rendering-request/);
   assert.match(submissionsStudio, /data-force-delete="1"/);
-  assert.match(submissionsStudio, /if \(nextStatus !== submission\.status\) changes\.status = nextStatus/);
+  assert.match(submissionsStudio, /data-decision-action="approve"/);
+  assert.match(submissionsStudio, /\/decision-notification/);
+  assert.match(worker, /handleSubmissionDecision/);
   assert.match(privateBookingPage, /id="clientDetailsSection"/);
   assert.match(privateBookingPage, /clientNameInput/);
   assert.match(privateBookingPage, /clientEmailInput/);

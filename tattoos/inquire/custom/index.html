@@ -57,6 +57,12 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   .radio-option { display:flex; align-items:center; gap:8px; }
   .radio-option input { width:16px; height:16px; accent-color:var(--signal); }
   .radio-option span { font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-mute); }
+  .project-context { grid-column:1 / -1; display:grid; gap:8px; padding:18px; border:5px solid var(--ring-faint); }
+  .project-context[hidden] { display:none; }
+  .project-context-title { font-family:var(--sans); font-size:11px; font-weight:900; letter-spacing:0.14em; line-height:1.4; text-transform:uppercase; color:var(--accent); }
+  .project-context-copy { color:var(--text-mute); font-size:13px; line-height:1.7; }
+  .project-checks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; padding:4px 0; }
+  .project-checks label.form-check { margin:0; }
   .submit-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
   .cta-primary { display:inline-flex; align-items:center; justify-content:center; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-mute); background:transparent; border:5px solid var(--ring-soft); min-height:50px; padding:0 26px; cursor:pointer; transition:background var(--t-fast), border-color var(--t-fast), color var(--t-fast); }
   .cta-primary:hover,.cta-primary:focus-visible { background:rgba(252,184,103,0.04); border-color:var(--accent); color:var(--accent); outline:none; }
@@ -65,7 +71,7 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
   footer.bottom a { color:var(--text-mute); transition:color var(--t-fast); }
   footer.bottom a:hover { color:var(--accent); }
   @media (max-width:980px) { .layout { grid-template-columns:1fr; gap:48px; } .guide-stack { grid-template-columns:1fr; } }
-  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .field textarea.project-description { min-height:180px!important; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
+  @media (max-width:640px) { header.top { padding:var(--s4) var(--s5); } main { padding:var(--s6) var(--s5); } .field textarea.project-description { min-height:180px!important; } .project-checks { grid-template-columns:1fr; } footer.bottom { flex-direction:column; gap:12px; align-items:flex-start; padding:40px var(--s5); } }
 @media (max-width: 700px) {
   header.top {
     position: sticky;
@@ -115,6 +121,22 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
           <input type="hidden" name="reference_route" value="">
           <input type="text" name="_gotcha" class="honeypot" tabindex="-1" autocomplete="off">
           <div class="field-grid">
+            <div class="field full">
+              <label for="project_type">Project type <span class="required-mark">*</span></label>
+              <select id="project_type" name="project_type" aria-describedby="projectTypeNote projectContextCopy" required>
+                <option value="">Select a project type</option>
+                <option value="new_work">New work</option>
+                <option value="cover_up">Cover-up</option>
+                <option value="large_cover_up">Large cover-up</option>
+                <option value="rework">Rework / recolor</option>
+                <option value="space_filler">Space filler</option>
+              </select>
+              <p class="field-note" id="projectTypeNote">Choose the closest fit. The project questions and required photographs will adjust to that kind of work.</p>
+            </div>
+            <div class="project-context" id="projectContext" hidden aria-live="polite">
+              <strong class="project-context-title" id="projectContextTitle"></strong>
+              <p class="project-context-copy" id="projectContextCopy"></p>
+            </div>
             <div class="field"><label for="firstName">First name <span class="required-mark">*</span></label><input id="firstName" name="firstName" autocomplete="given-name" required></div>
             <div class="field"><label for="lastName">Last name <span class="required-mark">*</span></label><input id="lastName" name="lastName" autocomplete="family-name" required></div>
             <div class="field"><label for="email">Email <span class="required-mark">*</span></label><input id="email" name="email" type="email" autocomplete="email" required></div>
@@ -132,20 +154,92 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
                 <label class="radio-option"><input type="radio" name="previous_client" value="no"><span>No</span></label>
               </div>
             </div>
-            <div class="field full">
-              <label for="project_type">Project type <span class="required-mark">*</span></label>
-              <select id="project_type" name="project_type" aria-describedby="largeCoverUpNote" required>
-                <option value="">Select a project type</option>
-                <option value="new_work">New work</option>
-                <option value="cover_up">Cover-up</option>
-                <option value="large_cover_up">Large cover-up</option>
-                <option value="rework">Rework / recolor</option>
-                <option value="space_filler">Space filler</option>
-              </select>
-              <p class="field-note" id="largeCoverUpNote">Large cover-up requests require at least 3 clear photographs of the existing tattoo from 3 different angles so the studio can understand the full area and work involved. These replace the separate placement photo. You may upload additional photographs.</p>
-            </div>
             <div class="field"><label for="placement">Placement <span class="required-mark">*</span></label><input id="placement" name="placement" required></div>
             <div class="field"><label for="size">Approx. size <span class="required-mark">*</span></label><input id="size" name="size" placeholder="Example: 4-6 in" required></div>
+            <div class="field full" id="desiredStyleField" data-project-field="new_work" hidden>
+              <label for="desired_style">Desired style or visual direction (optional)</label>
+              <input id="desired_style" name="desired_style" disabled>
+            </div>
+            <div class="field" id="coverUpGoalField" data-project-field="cover_up large_cover_up" hidden>
+              <label for="cover_up_goal">Cover-up goal <span class="required-mark">*</span></label>
+              <select id="cover_up_goal" name="cover_up_goal" disabled>
+                <option value="">Choose one</option>
+                <option value="fully_hide">Fully hide the existing tattoo</option>
+                <option value="transform">Transform the existing tattoo</option>
+                <option value="incorporate">Incorporate it into new work</option>
+                <option value="unsure">Unsure - needs assessment</option>
+              </select>
+            </div>
+            <div class="field" id="sizePlacementFlexibilityField" data-project-field="cover_up large_cover_up" hidden>
+              <label for="size_placement_flexibility">Size / placement flexibility <span class="required-mark">*</span></label>
+              <select id="size_placement_flexibility" name="size_placement_flexibility" disabled>
+                <option value="">Choose one</option>
+                <option value="flexible">Flexible on both</option>
+                <option value="size_only">Flexible on size</option>
+                <option value="placement_only">Flexible on placement</option>
+                <option value="limited">Limited flexibility</option>
+                <option value="unsure">Unsure - needs assessment</option>
+              </select>
+            </div>
+            <div class="field" id="existingTattooDimensionsField" data-project-field="large_cover_up" hidden>
+              <label for="existing_tattoo_dimensions">Existing tattoo dimensions <span class="required-mark">*</span></label>
+              <input id="existing_tattoo_dimensions" name="existing_tattoo_dimensions" placeholder="Example: 8 x 12 in" disabled>
+            </div>
+            <div class="field full" id="treatmentScarringContextField" data-project-field="large_cover_up" hidden>
+              <label for="treatment_scarring_context">Laser treatment or scarring context (optional)</label>
+              <textarea id="treatment_scarring_context" name="treatment_scarring_context" disabled></textarea>
+            </div>
+            <div class="field" id="largerFootprintField" data-project-field="large_cover_up" hidden>
+              <label for="open_to_larger_footprint">Open to a larger tattoo footprint? <span class="required-mark">*</span></label>
+              <select id="open_to_larger_footprint" name="open_to_larger_footprint" disabled>
+                <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="discuss">Needs discussion</option>
+              </select>
+            </div>
+            <div class="field" id="multipleSessionsField" data-project-field="large_cover_up" hidden>
+              <label for="open_to_multiple_sessions">Open to multiple sessions? <span class="required-mark">*</span></label>
+              <select id="open_to_multiple_sessions" name="open_to_multiple_sessions" disabled>
+                <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="discuss">Needs discussion</option>
+              </select>
+            </div>
+            <div class="field" id="existingTattooAgeField" data-project-field="rework" hidden>
+              <label for="existing_tattoo_age">Approximate age of the tattoo (optional)</label>
+              <input id="existing_tattoo_age" name="existing_tattoo_age" disabled>
+            </div>
+            <div class="field full" id="reworkInterventionsField" data-project-field="rework" hidden>
+              <label id="reworkInterventionsLabel">What kind of work are you considering? <span class="required-mark">*</span></label>
+              <div class="project-checks" id="reworkInterventions" role="group" aria-labelledby="reworkInterventionsLabel" aria-required="true">
+                <label class="form-check"><input class="form-check__input" type="checkbox" name="rework_interventions" value="refresh_color" disabled><span class="form-check__label">Refresh or restore color</span></label>
+                <label class="form-check"><input class="form-check__input" type="checkbox" name="rework_interventions" value="repair_linework" disabled><span class="form-check__label">Repair or strengthen linework</span></label>
+                <label class="form-check"><input class="form-check__input" type="checkbox" name="rework_interventions" value="redesign_part" disabled><span class="form-check__label">Redesign part of the existing tattoo</span></label>
+                <label class="form-check"><input class="form-check__input" type="checkbox" name="rework_interventions" value="extend_new_work" disabled><span class="form-check__label">Extend the tattoo into new work</span></label>
+                <label class="form-check"><input class="form-check__input" type="checkbox" name="rework_interventions" value="needs_assessment" disabled><span class="form-check__label">Needs assessment</span></label>
+              </div>
+              <p class="field-note">Choose every option that applies.</p>
+            </div>
+            <div class="field full" id="reworkConditionField" data-project-field="rework" hidden>
+              <label for="rework_tattoo_condition">Current condition (optional)</label>
+              <textarea id="rework_tattoo_condition" name="rework_tattoo_condition" placeholder="Describe fading, patchiness, linework, scarring, or anything else the studio should assess." disabled></textarea>
+            </div>
+            <div class="field" id="reworkExpansionField" data-project-field="rework" hidden>
+              <label for="rework_expansion_flexibility">Open to expanding the tattoo? <span class="required-mark">*</span></label>
+              <select id="rework_expansion_flexibility" name="rework_expansion_flexibility" disabled>
+                <option value="">Choose one</option><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Unsure - needs assessment</option>
+              </select>
+            </div>
+            <div class="field" id="gapDimensionsField" data-project-field="space_filler" hidden>
+              <label for="gap_dimensions">Approximate gap dimensions <span class="required-mark">*</span></label>
+              <input id="gap_dimensions" name="gap_dimensions" placeholder="Example: 2 x 4 in" disabled>
+            </div>
+            <div class="field full" id="surroundingWorkField" data-project-field="space_filler" hidden>
+              <label for="surrounding_work">Describe the surrounding tattoos <span class="required-mark">*</span></label>
+              <textarea id="surrounding_work" name="surrounding_work" placeholder="Include their style, color, and anything the filler should visually respond to." disabled></textarea>
+            </div>
+            <div class="field" id="fillerRelationshipField" data-project-field="space_filler" hidden>
+              <label for="filler_relationship">How should the filler relate to the surrounding work? <span class="required-mark">*</span></label>
+              <select id="filler_relationship" name="filler_relationship" disabled>
+                <option value="">Choose one</option><option value="standalone">Read as a standalone tattoo</option><option value="connect_blend">Connect or blend with surrounding work</option><option value="unsure">Unsure - needs assessment</option>
+              </select>
+            </div>
             <div class="field full">
               <label for="budget_range">What total project budget are you comfortable working within? <span class="required-mark">*</span></label>
               <select id="budget_range" name="budget_range" aria-describedby="budgetRangeHelp" required>
@@ -172,14 +266,22 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
             <div class="field"><label for="timeline">Timeline (optional)</label><input id="timeline" name="timeline"></div>
             <div class="field"><label for="requested_date">Requested date</label><input id="requested_date" name="requested_date" type="date"></div>
             <div class="field full"><label for="reference_links">Reference links (optional)</label><textarea id="reference_links" name="reference_links" placeholder="Paste links if your references already live online."></textarea></div>
-            <div class="field full" id="largeCoverUpPhotosField" hidden>
-              <label for="cover_up_photos">Large cover-up photographs <span class="required-mark">*</span></label>
-              <input id="cover_up_photos" name="cover_up_photos" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="largeCoverUpPhotosNote" multiple>
-              <p class="file-note" id="largeCoverUpPhotosNote">Upload at least 3 clear photographs of the existing tattoo from 3 different angles. Additional photographs are welcome. PNG, JPG, or WEBP.</p>
+            <div class="field full" id="existingTattooPhotosField" hidden>
+              <label for="existing_tattoo_photos" id="existingTattooPhotosLabel">Existing tattoo photographs <span class="required-mark">*</span></label>
+              <input id="existing_tattoo_photos" name="existing_tattoo_photos" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="existingTattooPhotosNote" multiple disabled>
+              <p class="file-note" id="existingTattooPhotosNote"></p>
             </div>
-            <div class="field full" id="placementPhotoField"><label for="placement_photo">Placement photo</label><input id="placement_photo" name="placement_photo" type="file" accept="image/png,image/jpeg,image/webp"><p class="file-note">Strongly recommended. A photo of the area where you want the tattoo helps with placement and scale; circle the desired location if possible.</p></div>
-            <div class="field full"><label for="references">Reference uploads</label><input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple><p class="file-note">Upload only helpful references. PNG, JPG, WEBP, or PDF.</p></div>
-            <div class="field full"><label for="message">Project description <span class="required-mark">*</span></label><textarea class="project-description" id="message" name="message" required></textarea></div>
+            <div class="field full" id="placementPhotosField">
+              <label for="placement_photos" id="placementPhotosLabel">Placement / body-area photographs (optional)</label>
+              <input id="placement_photos" name="placement_photos" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="placementPhotosNote" multiple>
+              <p class="file-note" id="placementPhotosNote">Multiple photographs are welcome. Show enough of the body area to understand placement and scale; circle the desired location if helpful.</p>
+            </div>
+            <div class="field full" id="referencesField">
+              <label for="references" id="referencesLabel">Concept and visual reference uploads (optional)</label>
+              <input id="references" name="references" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" aria-describedby="referencesNote" multiple>
+              <p class="file-note" id="referencesNote">Upload only helpful references. Multiple PNG, JPG, WEBP, or PDF files are accepted.</p>
+            </div>
+            <div class="field full"><label for="message" id="messageLabel">Project concept, subject, meaning, or mood <span class="required-mark">*</span></label><textarea class="project-description" id="message" name="message" required></textarea></div>
           </div>
           <label class="form-check"><input class="form-check__input" type="checkbox" name="age_confirmed" value="yes" required><span class="form-check__label">I confirm that I am 18 years of age or older. <span class="required-mark">*</span></span></label>
           <label class="form-check"><input class="form-check__input" type="checkbox" name="review_consent" value="yes" required><span class="form-check__label">I understand this is an inquiry and does not guarantee an appointment.</span></label>
@@ -240,42 +342,185 @@ main { position:relative; z-index:2; max-width:1440px; margin:0 auto; padding:va
       var form = document.getElementById("inquiryForm");
       if (!form) return;
       var projectType = document.getElementById("project_type");
-      var coverUpPhotosField = document.getElementById("largeCoverUpPhotosField");
-      var coverUpPhotos = document.getElementById("cover_up_photos");
-      var placementPhotoField = document.getElementById("placementPhotoField");
-      var placementPhoto = document.getElementById("placement_photo");
-      var coverUpPhotoMessage = "Upload at least 3 photographs of the existing tattoo from 3 different angles.";
-
-      function validateLargeCoverUpPhotos() {
-        if (!projectType || !coverUpPhotos || projectType.value !== "large_cover_up") {
-          if (coverUpPhotos) coverUpPhotos.setCustomValidity("");
-          return true;
+      var projectContext = document.getElementById("projectContext");
+      var projectContextTitle = document.getElementById("projectContextTitle");
+      var projectContextCopy = document.getElementById("projectContextCopy");
+      var existingPhotosField = document.getElementById("existingTattooPhotosField");
+      var existingPhotos = document.getElementById("existing_tattoo_photos");
+      var existingPhotosLabel = document.getElementById("existingTattooPhotosLabel");
+      var existingPhotosNote = document.getElementById("existingTattooPhotosNote");
+      var placementPhotosField = document.getElementById("placementPhotosField");
+      var placementPhotos = document.getElementById("placement_photos");
+      var placementPhotosLabel = document.getElementById("placementPhotosLabel");
+      var placementPhotosNote = document.getElementById("placementPhotosNote");
+      var references = document.getElementById("references");
+      var referencesLabel = document.getElementById("referencesLabel");
+      var referencesNote = document.getElementById("referencesNote");
+      var message = document.getElementById("message");
+      var messageLabel = document.getElementById("messageLabel");
+      var reworkChoices = Array.prototype.slice.call(form.querySelectorAll('input[name="rework_interventions"]'));
+      var projectFields = Array.prototype.slice.call(form.querySelectorAll("[data-project-field]"));
+      var maxFiles = 12;
+      var requiredMark = ' <span class="required-mark">*</span>';
+      var projectConfigs = {
+        new_work: {
+          title: "New work",
+          copy: "Share the concept, placement, scale, and visual direction for a new original tattoo.",
+          fields: ["desiredStyleField"],
+          requiredNames: [],
+          messageLabel: "Project concept, subject, meaning, or mood",
+          messagePlaceholder: "Describe the concept, imagery, meaning, atmosphere, and anything that should guide the original design.",
+          referencesLabel: "Concept and visual reference uploads (optional)",
+          referencesNote: "Upload only helpful visual references. Multiple PNG, JPG, WEBP, or PDF files are accepted.",
+          placementLabel: "Placement / body-area photographs (optional)",
+          placementNote: "Multiple photographs are welcome. Show enough of the body area to understand placement and scale; circle the desired location if helpful.",
+          placementMin: 0,
+          existingMin: 0
+        },
+        cover_up: {
+          title: "Cover-up",
+          copy: "Show the existing tattoo and explain whether it should be hidden, transformed, or incorporated.",
+          fields: ["coverUpGoalField", "sizePlacementFlexibilityField"],
+          requiredNames: ["cover_up_goal", "size_placement_flexibility"],
+          messageLabel: "What should be hidden, transformed, kept, or changed?",
+          messagePlaceholder: "Describe what is not working now, what may remain visible, and the direction you want the cover-up to take.",
+          referencesLabel: "Desired cover-up direction references (optional)",
+          referencesNote: "Upload references for the new direction, not photographs of the existing tattoo. Multiple PNG, JPG, WEBP, or PDF files are accepted.",
+          placementLabel: "Additional placement / body-area photographs (optional)",
+          placementNote: "Use these for wider body context beyond the required existing-tattoo photograph.",
+          placementMin: 0,
+          existingMin: 1,
+          existingLabel: "Existing tattoo photographs",
+          existingNote: "Upload at least 1 clear, well-lit photograph of the full existing tattoo. Additional angles and close details are welcome."
+        },
+        large_cover_up: {
+          title: "Large cover-up",
+          copy: "Document the complete existing tattoo from several angles so scale, skin, and the full working area can be reviewed.",
+          fields: ["coverUpGoalField", "sizePlacementFlexibilityField", "existingTattooDimensionsField", "treatmentScarringContextField", "largerFootprintField", "multipleSessionsField"],
+          requiredNames: ["cover_up_goal", "size_placement_flexibility", "existing_tattoo_dimensions", "open_to_larger_footprint", "open_to_multiple_sessions"],
+          messageLabel: "What should be hidden, transformed, kept, or changed?",
+          messagePlaceholder: "Describe the current tattoo, the outcome you want, and any constraints the studio should understand.",
+          referencesLabel: "Desired large cover-up direction references (optional)",
+          referencesNote: "Upload references for the new direction. Multiple PNG, JPG, WEBP, or PDF files are accepted.",
+          placementMin: 0,
+          hidePlacement: true,
+          existingMin: 3,
+          existingLabel: "Large cover-up photographs",
+          existingNote: "Upload at least 3 clear photographs of the existing tattoo from 3 different angles. These replace a separate placement-photo group; additional photographs are welcome."
+        },
+        rework: {
+          title: "Rework / recolor",
+          copy: "Identify every kind of intervention you are considering and show the tattoo clearly enough to assess what can remain.",
+          fields: ["existingTattooAgeField", "reworkInterventionsField", "reworkConditionField", "reworkExpansionField"],
+          requiredNames: ["rework_expansion_flexibility"],
+          messageLabel: "What should stay, and what should change?",
+          messagePlaceholder: "Describe the parts you want to preserve, repair, redesign, recolor, or extend.",
+          referencesLabel: "Rework / restoration references (optional)",
+          referencesNote: "Upload references for the intended direction. Multiple PNG, JPG, WEBP, or PDF files are accepted.",
+          placementLabel: "Expansion-area photographs (optional)",
+          placementNote: "If the rework may extend beyond the current tattoo, upload multiple views of the available surrounding area.",
+          placementMin: 0,
+          existingMin: 1,
+          existingLabel: "Current tattoo photographs",
+          existingNote: "Upload at least 1 clear, well-lit photograph of the current tattoo. Multiple angles and close details are welcome."
+        },
+        space_filler: {
+          title: "Space filler",
+          copy: "Show the gap both close-up and in the context of the surrounding tattoos.",
+          fields: ["gapDimensionsField", "surroundingWorkField", "fillerRelationshipField"],
+          requiredNames: ["gap_dimensions", "surrounding_work", "filler_relationship"],
+          messageLabel: "What should this gap become?",
+          messagePlaceholder: "Describe the imagery, mood, or function you want the filler to have.",
+          referencesLabel: "Filler and surrounding-style references (optional)",
+          referencesNote: "Upload references for the intended filler direction. Multiple PNG, JPG, WEBP, or PDF files are accepted.",
+          placementLabel: "Gap and surrounding-area photographs",
+          placementNote: "Upload at least 2 photographs: 1 wide view showing the surrounding tattoos and 1 close view showing the exact gap.",
+          placementMin: 2,
+          existingMin: 0
         }
-        var valid = coverUpPhotos.files && coverUpPhotos.files.length >= 3;
-        coverUpPhotos.setCustomValidity(valid ? "" : coverUpPhotoMessage);
-        return valid;
+      };
+
+      function setProjectField(field, active, requiredNames) {
+        field.hidden = !active;
+        Array.prototype.forEach.call(field.querySelectorAll("input,select,textarea"), function(control){
+          control.disabled = !active;
+          control.required = active && requiredNames.indexOf(control.name) !== -1;
+          if (!active && typeof control.setCustomValidity === "function") control.setCustomValidity("");
+        });
       }
 
-      function syncLargeCoverUpPhotos() {
-        if (!projectType || !coverUpPhotosField || !coverUpPhotos) return;
-        var required = projectType.value === "large_cover_up";
-        coverUpPhotosField.hidden = !required;
-        coverUpPhotos.required = required;
-        if (!required) coverUpPhotos.value = "";
-        if (placementPhotoField) placementPhotoField.hidden = required;
-        if (placementPhoto) {
-          placementPhoto.disabled = required;
-          if (required) placementPhoto.value = "";
+      function setFileGroup(field, input, active, minimum) {
+        field.hidden = !active;
+        input.disabled = !active;
+        input.required = active && minimum > 0;
+        input.dataset.minimumFiles = active ? String(minimum || 0) : "0";
+        if (!active) input.setCustomValidity("");
+      }
+
+      function validateProjectInputs() {
+        var config = projectConfigs[projectType.value];
+        var valid = true;
+        var firstReworkChoice = reworkChoices[0];
+        if (firstReworkChoice) {
+          var reworkValid = !config || projectType.value !== "rework" || reworkChoices.some(function(choice){ return choice.checked; });
+          firstReworkChoice.setCustomValidity(reworkValid ? "" : "Choose at least one kind of rework or select Needs assessment.");
+          valid = valid && reworkValid;
         }
-        validateLargeCoverUpPhotos();
+
+        [[existingPhotos, config ? config.existingMin : 0], [placementPhotos, config ? config.placementMin : 0]].forEach(function(pair){
+          var input = pair[0];
+          var minimum = Number(pair[1] || 0);
+          if (!input || input.disabled) return;
+          var count = input.files ? input.files.length : 0;
+          var groupValid = count >= minimum;
+          input.setCustomValidity(groupValid ? "" : "Upload at least " + minimum + " photograph" + (minimum === 1 ? "" : "s") + " for this project type.");
+          valid = valid && groupValid;
+        });
+
+        var totalFiles = Array.prototype.reduce.call(form.querySelectorAll('input[type="file"]:not(:disabled)'), function(total, input){
+          return total + (input.files ? input.files.length : 0);
+        }, 0);
+        references.setCustomValidity(totalFiles <= maxFiles ? "" : "This custom inquiry accepts at most 12 uploaded files total.");
+        return valid && totalFiles <= maxFiles;
       }
 
-      if (projectType && coverUpPhotos) {
-        projectType.addEventListener("change", syncLargeCoverUpPhotos);
-        coverUpPhotos.addEventListener("change", validateLargeCoverUpPhotos);
-        form.addEventListener("submit", validateLargeCoverUpPhotos, true);
-        syncLargeCoverUpPhotos();
+      function syncProjectType() {
+        var config = projectConfigs[projectType.value] || null;
+        projectContext.hidden = !config;
+        projectContextTitle.textContent = config ? config.title : "";
+        projectContextCopy.textContent = config ? config.copy : "";
+
+        projectFields.forEach(function(field){
+          var active = Boolean(config && config.fields.indexOf(field.id) !== -1);
+          setProjectField(field, active, config ? config.requiredNames : []);
+        });
+
+        messageLabel.innerHTML = (config ? config.messageLabel : "Project description") + requiredMark;
+        message.placeholder = config ? config.messagePlaceholder : "";
+        referencesLabel.textContent = config ? config.referencesLabel : "Reference uploads (optional)";
+        referencesNote.textContent = config ? config.referencesNote : "Upload only helpful references. Multiple PNG, JPG, WEBP, or PDF files are accepted.";
+
+        var showExisting = Boolean(config && config.existingMin > 0);
+        setFileGroup(existingPhotosField, existingPhotos, showExisting, config ? config.existingMin : 0);
+        if (showExisting) {
+          existingPhotosLabel.innerHTML = config.existingLabel + requiredMark;
+          existingPhotosNote.textContent = config.existingNote;
+        }
+
+        var showPlacement = !config || !config.hidePlacement;
+        setFileGroup(placementPhotosField, placementPhotos, showPlacement, config ? config.placementMin : 0);
+        if (showPlacement) {
+          placementPhotosLabel.innerHTML = (config ? config.placementLabel : "Placement / body-area photographs (optional)") + (config && config.placementMin ? requiredMark : "");
+          placementPhotosNote.textContent = config ? config.placementNote : "Multiple photographs are welcome. Show enough of the body area to understand placement and scale.";
+        }
+        validateProjectInputs();
       }
+
+      projectType.addEventListener("change", syncProjectType);
+      [existingPhotos, placementPhotos, references].forEach(function(input){ input.addEventListener("change", validateProjectInputs); });
+      reworkChoices.forEach(function(choice){ choice.addEventListener("change", validateProjectInputs); });
+      form.addEventListener("submit", validateProjectInputs, true);
+      syncProjectType();
 
       fetch("/api/tattoo/settings", { cache: "no-store", headers: { accept: "application/json" } })
         .then(function(response){ if (!response.ok) throw new Error(); return response.json(); })

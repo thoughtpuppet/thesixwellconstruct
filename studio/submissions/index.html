@@ -316,6 +316,8 @@
   .event-text { color:var(--muted); font-family:var(--sans); font-size:11px; }
   .file-list { display:grid; gap:6px; }
   .file-item { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 12px; border:5px solid var(--ring-faint); }
+  .file-copy { display:grid; gap:3px; min-width:0; }
+  .file-role { color:var(--dim); font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; }
   .file-name { color:var(--muted); font-family:var(--sans); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .file-badge { color:var(--dim); font-family:var(--sans); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; white-space:nowrap; }
   .file-badge.stored { color:#55BA5A; }
@@ -941,6 +943,38 @@
     return p.consult_required === "yes";
   }
 
+  const TATTOO_INQUIRY_VALUE_LABELS = {
+    new_work: "New work",
+    cover_up: "Cover-up",
+    large_cover_up: "Large cover-up",
+    rework: "Rework / recolor",
+    space_filler: "Space filler",
+    fully_hide: "Fully hide the existing tattoo",
+    transform: "Transform the existing tattoo",
+    incorporate: "Incorporate it into new work",
+    flexible: "Flexible on size and placement",
+    size_only: "Flexible on size",
+    placement_only: "Flexible on placement",
+    limited: "Limited flexibility",
+    refresh_color: "Refresh or restore color",
+    repair_linework: "Repair or strengthen linework",
+    redesign_part: "Redesign part of the existing tattoo",
+    extend_new_work: "Extend the tattoo into new work",
+    needs_assessment: "Needs assessment",
+    discuss: "Needs discussion",
+    connect_blend: "Connect or blend with surrounding work",
+    standalone: "Standalone tattoo",
+    unsure: "Unsure - needs assessment",
+  };
+
+  function tattooInquiryValue(submission, key) {
+    const value = submission.payload?.[key];
+    const values = Array.isArray(value) ? value : [value];
+    return values.filter((item) => item !== undefined && item !== null && item !== "")
+      .map((item) => TATTOO_INQUIRY_VALUE_LABELS[item] || item)
+      .join(", ");
+  }
+
   function statusOptionsFor(submission) {
     const managedLifecycle = TATTOO_PROJECT_TYPES.has(submission.type)
       || ["consultation", "build_session"].includes(submission.type);
@@ -1174,9 +1208,10 @@
       `);
     }
 
+    const ti = (key) => tattooInquiryValue(submission, key);
     return card("Tattoo Inquiry", `
       <div class="grid">
-        ${field("Project Type", p("project_type"))}
+        ${field("Project Type", ti("project_type"))}
         ${field("Date of Birth", p("dob"))}
         ${field("Previous Client", p("previous_client"))}
         ${field("Placement", p("placement"))}
@@ -1189,15 +1224,36 @@
         ${field("Review Consent", p("review_consent"))}
         ${field("Instagram", p("instagram"))}
         ${field("Source", submission.sourcePath || "")}
+        ${field("Desired Style / Direction", p("desired_style"))}
+        ${field("Cover-up Goal", ti("cover_up_goal"))}
+        ${field("Size / Placement Flexibility", ti("size_placement_flexibility"))}
+        ${field("Existing Tattoo Dimensions", p("existing_tattoo_dimensions"))}
+        ${field("Open to Larger Footprint", ti("open_to_larger_footprint"))}
+        ${field("Open to Multiple Sessions", ti("open_to_multiple_sessions"))}
+        ${field("Existing Tattoo Age", p("existing_tattoo_age"))}
+        ${field("Rework Interventions", ti("rework_interventions"))}
+        ${field("Open to Expanding Rework", ti("rework_expansion_flexibility"))}
+        ${field("Gap Dimensions", p("gap_dimensions"))}
+        ${field("Filler Relationship", ti("filler_relationship"))}
       </div>
-      <div class="field" style="margin-top:16px;"><label>Project or Flash Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>
-      <div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>
+      ${p("treatment_scarring_context") ? `<div class="field" style="margin-top:16px;"><label>Laser Treatment / Scarring Context</label><div class="value full">${escapeHtml(p("treatment_scarring_context"))}</div></div>` : ""}
+      ${p("rework_tattoo_condition") ? `<div class="field" style="margin-top:16px;"><label>Current Tattoo Condition</label><div class="value full">${escapeHtml(p("rework_tattoo_condition"))}</div></div>` : ""}
+      ${p("surrounding_work") ? `<div class="field" style="margin-top:16px;"><label>Surrounding Tattoos</label><div class="value full">${escapeHtml(p("surrounding_work"))}</div></div>` : ""}
+      ${p("project_title") ? `<div class="field" style="margin-top:16px;"><label>Project or Flash Title</label><div class="value">${escapeHtml(p("project_title"))}</div></div>` : ""}
+      ${p("reference_links") ? `<div class="field" style="margin-top:16px;"><label>Reference Links</label><div class="value full">${escapeHtml(p("reference_links"))}</div></div>` : ""}
       <div class="field" style="margin-top:16px;"><label>Project Description</label><div class="value full">${escapeHtml(p("message"))}</div></div>
     `);
   }
 
   function renderFiles(submission) {
     const files = submission.files || [];
+    const roleLabels = {
+      references: "Reference upload",
+      placement_photos: "Placement / body-area photograph",
+      placement_photo: "Placement / body-area photograph",
+      existing_tattoo_photos: "Existing tattoo photograph",
+      cover_up_photos: "Existing tattoo photograph",
+    };
     if (!files.length) return `<div class="field" style="margin-top:16px;"><label>Files</label><div class="value">None</div></div>`;
     return `
       <div class="field" style="margin-top:16px;">
@@ -1205,7 +1261,10 @@
         <div class="file-list">
           ${files.map((file) => `
             <div class="file-item">
-              <span class="file-name">${escapeHtml(file.fileName)}</span>
+              <span class="file-copy">
+                <span class="file-role">${escapeHtml(roleLabels[file.fieldName] || titleize(file.fieldName || "Upload"))}</span>
+                <span class="file-name">${escapeHtml(file.fileName)}</span>
+              </span>
               <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                 <span class="file-badge ${file.stored ? "stored" : ""}">${file.stored ? "stored" : "received only"}</span>
                 ${file.stored ? `<button class="button" type="button" style="min-height:32px;padding:0 10px;font-size:10px;" data-download-file="${escapeHtml(file.id)}" data-download-name="${escapeHtml(file.fileName)}" data-submission-id="${escapeHtml(submission.id)}">Download</button>` : ""}
@@ -1223,6 +1282,13 @@
     const relatedId = notification.related_id || notification.relatedId || "";
     const submissionId = relatedType === "submission" ? relatedId : fallbackSubmissionId;
     const appointmentId = relatedType === "appointment" ? relatedId : "";
+    const decisionTemplates = new Set(["booking_link_created", "tattoo_special_deposit_requested", "submission_approved", "submission_declined", "tattoo_special_review"]);
+    if (submissionId && decisionTemplates.has(template)) {
+      const kind = template === "submission_declined"
+        ? "decline"
+        : template === "tattoo_special_review" ? "simplification" : "approval";
+      return `data-send-decision-notification="${escapeHtml(submissionId)}" data-notification-kind="${kind}"`;
+    }
     return [
       `data-resend-template="${escapeHtml(template)}"`,
       `data-notification-id="${escapeHtml(notification.id || "")}"`,
@@ -1255,6 +1321,25 @@
       }
 
       const notifications = payload.notifications || [];
+      const decisionTemplates = new Set(["booking_link_created","tattoo_special_deposit_requested","submission_approved","submission_declined","tattoo_special_review"]);
+      const decisionStart = new Date(payload.submission?.decidedAt || payload.submission?.decided_at || 0).getTime();
+      const latestDecisionDelivery = notifications.find((item) => {
+        if (!decisionTemplates.has(item.template_key || item.templateKey)) return false;
+        return !decisionStart || new Date(item.created_at || item.createdAt || 0).getTime() >= decisionStart;
+      });
+      const communicationState = document.getElementById("decisionCommunicationState");
+      const decisionSendButton = document.querySelector("[data-send-decision-notification]");
+      if (communicationState && latestDecisionDelivery) {
+        communicationState.textContent = latestDecisionDelivery.status === "sent"
+          ? "Sent"
+          : ["failed", "skipped"].includes(latestDecisionDelivery.status) ? "Failed · Retry available" : "Unsent";
+      }
+      if (decisionSendButton && latestDecisionDelivery?.status === "sent") {
+        decisionSendButton.textContent = "Resend";
+        decisionSendButton.dataset.resend = "1";
+      } else if (decisionSendButton && ["failed", "skipped"].includes(latestDecisionDelivery?.status)) {
+        decisionSendButton.textContent = "Retry";
+      }
       if (notifContainer) {
         notifContainer.innerHTML = notifications.length ? `<div class="event-list">${notifications.map((n) => `
           <div class="event-item">
@@ -4067,24 +4152,21 @@ ${meetingLines}
 
   function renderCommunicationActions(submission) {
     const appointment = latestAppointmentFor(submission.id);
-    const canResendSpecialDeposit = submission.type === "tattoo_special"
-      && submission.status === "approved"
-      && appointment?.approvalState === "approved"
-      && ["pending_deposit", "deposit_pending"].includes(appointment.status);
-    const canResendBooking = submission.type !== "tattoo_special"
-      && !!submission.bookingUrl
-      && submission.status === "approved"
-      && !appointmentIsConfirmed(appointment);
+    const specialPrepared = submission.type === "tattoo_special" && Boolean(appointment?.checkoutUrl || appointment?.squareCheckoutUrl);
+    const tattooPrepared = ["tattoo_inquiry", "flash_claim"].includes(submission.type) && Boolean(submission.bookingUrl);
+    const nonBookingApproval = ["art_acquisition", "build_brief", "maze_design", "special_project"].includes(submission.type);
+    const canSendDecision = submission.status === "declined"
+      || (submission.status === "approved" && (nonBookingApproval || specialPrepared || tattooPrepared));
     const canResendConfirmation = appointmentIsConfirmed(appointment);
-    if (!canResendBooking && !canResendSpecialDeposit && !canResendConfirmation) {
-      return `<p class="contact" style="margin-top:8px;">No resend actions are available for the current status.</p>`;
-    }
     return `
+      <div class="value" id="decisionCommunicationState">${["approved", "declined"].includes(submission.status) ? "Unsent" : "No recorded decision"}</div>
+      ${submission.status === "declined" ? `<label for="decisionClientMessage" style="margin-top:12px;">Client-facing decline reason</label><textarea id="decisionClientMessage" placeholder="Add the reviewed reason that may be sent to the client.">${escapeHtml(submission.decisionClientMessage || "")}</textarea><p class="contact">Saving this reason sends nothing.</p>` : ""}
       <div class="booking-actions" style="margin-top:10px;">
-        ${canResendBooking ? `<button class="button" type="button" data-resend-template="booking_link_created" data-submission-id="${escapeHtml(submission.id)}">Resend Booking Link Email</button>` : ""}
-        ${canResendSpecialDeposit ? `<button class="button" type="button" data-resend-template="tattoo_special_deposit_requested" data-appointment-id="${escapeHtml(appointment.id)}" data-submission-id="${escapeHtml(submission.id)}">Resend Deposit Link Email</button>` : ""}
+        ${submission.status === "approved" && submission.type === "tattoo_special" && !specialPrepared ? `<button class="button" type="button" data-prepare-special-deposit="${escapeHtml(submission.id)}">Prepare Deposit Link</button>` : ""}
+        ${canSendDecision ? `<button class="button" type="button" data-send-decision-notification="${escapeHtml(submission.id)}">${submission.status === "declined" ? "Send Decline Notification" : "Send Approval Notification"}</button>` : ""}
         ${canResendConfirmation ? `<button class="button" type="button" data-resend-template="appointment_confirmed" data-appointment-id="${escapeHtml(appointment.id)}">Resend Confirmation Email</button>` : ""}
       </div>
+      ${submission.status === "approved" && !canSendDecision ? `<p class="contact" style="margin-top:8px;">Prepare the required booking or deposit link before sending approval.</p>` : ""}
     `;
   }
 
@@ -4093,6 +4175,7 @@ ${meetingLines}
   }
 
   function sessionPlanEditorHtml(plan = {}, submission = null) {
+    const locked = ["approved", "declined"].includes(submission?.status);
     const preference = plan.clientPreference ? titleize(plan.clientPreference) : "No client response yet";
     const responseTime = plan.clientSelectedAt ? ` · ${formatDate(plan.clientSelectedAt)}` : "";
     const submittedBudget = submission
@@ -4109,8 +4192,8 @@ ${meetingLines}
       : "Awaiting client agreement";
     return `
       <h3>Session Plan &amp; Pacing</h3>
-      <p class="contact">Set the structure the client will review before booking. Required plans cannot be overridden by client preference. Saving a revision clears any earlier client response so they must confirm the updated estimate.</p>
-      <form id="tattooSessionPlanForm" class="session-plan-grid">
+      <p class="contact">${locked ? "Reopen review before changing decision-defining session-plan or budget fields." : "Set the structure the client will review before booking. Required plans cannot be overridden by client preference. Saving a revision clears any earlier client response so they must confirm the updated estimate."}</p>
+      <form id="tattooSessionPlanForm" class="session-plan-grid" ${locked ? "inert" : ""}>
         <div class="field"><label for="planSessionCategory">Session category</label><select id="planSessionCategory" name="sessionCategory">
           ${sessionPlanOption("artist_review", plan.sessionCategory || "artist_review", "Artist review")}
           ${sessionPlanOption("one_session", plan.sessionCategory, "One session")}
@@ -4136,7 +4219,7 @@ ${meetingLines}
         <p class="contact wide">Both values are required before a tattoo booking link can be generated. Use the same value twice for an exact tattoo-work total. If the client selects Extended Day, the booking page adds the $200 fee, subtracts the $350 deposit credit, and shows the resulting balance. Consultation links do not require a tattoo budget.</p>
       </form>
       <p class="session-plan-client-state">Session-plan response: ${escapeHtml(preference)}${escapeHtml(responseTime)}${plan.clientAcknowledged ? " · acknowledged" : ""}<br>Budget response: ${escapeHtml(budgetResponse)}</p>
-      <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button">Save Session Plan</button></div>
+      <div class="booking-actions"><button class="button" id="saveSessionPlanBtn" type="button" ${locked ? "disabled" : ""}>Save Session Plan</button></div>
     `;
   }
 
@@ -4228,7 +4311,7 @@ ${meetingLines}
     return `
       <div class="field" style="margin-top:10px;" id="tokenOptions" data-default-token-types="${escapeHtml(sortedTypeList(defaults))}" data-default-token-purpose="${escapeHtml(purpose)}">
         <label>Booking Link Controls</label>
-        <div class="contact" style="margin-bottom:8px;">Purpose is lifecycle-bound: prerequisite consultation links expose only the in-person consultation. Every newly approved tattoo link automatically includes Quarter, Half, Full, and optional Extended Day so the client can choose one longer appointment or split the work across shorter sessions.</div>
+        <div class="contact" style="margin-bottom:8px;">Purpose is lifecycle-bound: prerequisite consultation links expose only the in-person consultation. For an approved tattoo link, choose the appointment types this client may book. At least one type must remain selected.</div>
         <div class="field" style="margin-bottom:10px;">
           <label for="tokenPurpose">Link purpose</label>
           <select id="tokenPurpose"><option value="consultation" ${purpose === "consultation" ? "selected" : ""}>Prerequisite consultation</option><option value="tattoo" ${purpose === "tattoo" ? "selected" : ""}>Tattoo appointment</option></select>
@@ -4236,7 +4319,7 @@ ${meetingLines}
         <div class="booking-actions" style="align-items:flex-start;">
           ${typeOptions.map(([value, label]) => `
             <label class="check" style="margin:0;min-width:190px;">
-              <input type="checkbox" data-token-type value="${escapeHtml(value)}"${defaults.includes(value) ? " checked" : ""} disabled>
+              <input type="checkbox" data-token-type value="${escapeHtml(value)}"${defaults.includes(value) ? " checked" : ""}>
               <span class="check-label">${escapeHtml(label)}</span>
             </label>
           `).join("")}
@@ -4305,15 +4388,13 @@ ${meetingLines}
         ${detailField("Special version", payload.special_offer_version_id || "")}
         ${detailField("Participants", participants.map((person) => `${person.name} · ${person.email} · ${person.phone}${person.dob ? ` · DOB ${person.dob}` : ""}`).join("\n"))}
       </div>
-      ${review && !["booked", "declined"].includes(submission.status) ? `<div class="tattoo-special-offer__grid">
+      ${review && ["new", "reviewing"].includes(submission.status) ? `<div class="tattoo-special-offer__grid">
         <label>${adjustablePrice ? "Exact approved price" : "Promotional price"} (dollars)<input id="specialApprovedPrice" type="number" min="${escapeHtml(Number(payload.quoted_price_cents || 0) / 100)}" step="1" value="${escapeHtml(price / 100)}" ${adjustablePrice ? "" : "readonly"}></label>
-        <label style="grid-column:span 2;">Review note<textarea id="specialReviewNote" rows="3">${escapeHtml(submission.internalNotes || "")}</textarea><span class="contact">Used for approval or simplification. A simplification note is shared with the requester.</span></label>
-        <label style="grid-column:span 2;">Reason shared with requester<textarea id="specialDeclineReason" rows="3" placeholder="Explain why this request cannot be approved as a Tattoo Special."></textarea><span class="contact">Required only when declining. This exact reason is included in the decline email; Internal Notes remain private.</span></label>
+        <label style="grid-column:span 2;">Review note<textarea id="specialReviewNote" rows="3">${escapeHtml(submission.internalNotes || "")}</textarea><span class="contact">Internal review work. A simplification note is saved separately before it can be emailed.</span></label>
       </div><div class="booking-actions">
-        <button class="button" type="button" data-special-review-outcome="approved" data-submission-id="${escapeHtml(submission.id)}" ${heldAppointment?.approvalState === "pending" || heldAppointment?.approvalState === "approved" ? "" : "disabled"}>Approve &amp; Send Deposit Link</button>
-        ${adjustablePrice ? `<button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Request Simplification</button>` : ""}
-        <button class="button danger-button" type="button" data-special-review-outcome="declined" data-submission-id="${escapeHtml(submission.id)}">Decline</button>
-      </div>` : `<p class="contact">${review ? "Review decision is recorded in the event history. Only the primary purchaser receives automated messages." : "This direct-booking special was server-approved at submission. Only the primary purchaser receives automated messages."}</p>`}
+        <button class="button" type="button" data-special-review-outcome="save" data-submission-id="${escapeHtml(submission.id)}">Save Review Details</button>
+        ${adjustablePrice ? `<button class="button" type="button" data-special-review-outcome="simplification_requested" data-submission-id="${escapeHtml(submission.id)}">Record Simplification Request</button><button class="button" type="button" data-send-simplification="${escapeHtml(submission.id)}">Send Simplification Email</button>` : ""}
+      </div>` : `<p class="contact">${review ? "The recorded decision is preserved in event history. Client email remains a separate explicit action." : "This historical direct-booking special uses its system-owned lifecycle."}</p>`}
     </section>`;
   }
 
@@ -4337,6 +4418,7 @@ ${meetingLines}
     const lifecycleReviewRequired = Boolean(submission.lifecycleReviewRequired ?? submission.lifecycle_review_required);
     const lifecycleReviewNote = submission.lifecycleReviewNote || submission.lifecycle_review_note || "";
     const isEvent = submission.type === "event_rsvp";
+    const isReviewable = new Set(["tattoo_inquiry","flash_claim","special_project","build_brief","maze_design","tattoo_special","art_acquisition","art_inquiry"]).has(submission.type);
     const eventTicketId = isEvent ? payloadValue(submission, "ticket_id") : "";
     const eventPaid = isEvent && submission.status === "booked";
     const eventBlock = isEvent ? `
@@ -4397,10 +4479,12 @@ ${meetingLines}
 
       <div class="actions">
         <div class="field">
-          <label for="detailStatus">Status</label>
-          <select id="detailStatus">
-            ${statusOptionsFor(submission).map((status) => `<option value="${status}" ${status === submission.status ? "selected" : ""}>${status.toUpperCase()}</option>`).join("")}
-          </select>
+          <label>Status</label>
+          <div class="value" id="detailStatus" data-status="${escapeHtml(submission.status)}">${escapeHtml(titleize(submission.status))}</div>
+          ${isReviewable ? `<div class="booking-actions" style="margin-top:10px;">
+            ${["new","reviewing"].includes(submission.status) ? `<button class="button" type="button" data-decision-action="approve">Approve</button><button class="button danger-button" type="button" data-decision-action="decline">Decline</button>` : ""}
+            ${["approved","declined"].includes(submission.status) ? `<button class="button" type="button" data-decision-action="reopen">Reopen Review</button>` : ""}
+          </div><p class="contact">Decision actions record Studio state only. No client notification is sent.</p>` : `<p class="contact">This lifecycle is advanced by its appointment, payment, event, or direct-booking workflow.</p>`}
           ${TATTOO_PROJECT_TYPES.has(submission.type) ? `<label style="margin-top:10px;">Tattoo lifecycle stage</label><div class="value">${escapeHtml(titleize(tattooStage || "review"))}</div><p class="contact">Lifecycle stages advance only through review, paid booking, consultation completion, and finalized session-plan actions.</p>` : ""}
         </div>
         <div class="field">
@@ -4411,11 +4495,11 @@ ${meetingLines}
             </p>
             <input id="bookingUrl" type="hidden" value="${escapeHtml(submission.bookingUrl || "")}">
           ` : `
-            <label for="bookingUrl">Booking URL</label>
-            <input id="bookingUrl" value="${escapeHtml(submission.bookingUrl || "")}">
+            <label for="bookingUrl">Prepared booking URL</label>
+            <input id="bookingUrl" value="${escapeHtml(submission.bookingUrl || "")}" readonly>
             <div class="booking-actions">
               <button class="button" id="previewBookingBtn" type="button">Preview Client Flow</button>
-              <button class="button" id="generateBookingBtn" type="button">${submission.bookingUrl ? "Regenerate Link" : "Generate Link"}</button>
+              ${submission.status === "approved" && TATTOO_PROJECT_TYPES.has(submission.type) && submission.type !== "tattoo_special" ? `<button class="button" id="generateBookingBtn" type="button">${submission.bookingUrl ? "Regenerate Booking Link" : "Generate Booking Link"}</button>` : ""}
               <button class="button" id="copyBookingBtn" type="button">Copy</button>
               <button class="button" id="revokeBookingBtn" type="button">Revoke</button>
             </div>
@@ -4474,9 +4558,10 @@ ${meetingLines}
         const compatible = submission.type === "tattoo_special"
           ? new Set([submission.payload?.booking_type_id])
           : purpose === "consultation" ? new Set(["consult_in_person"]) : new Set(["tattoo_quarter", "tattoo_half", "tattoo_full", "tattoo_extended"]);
+        const lockSelection = submission.type === "tattoo_special" || purpose === "consultation";
         document.querySelectorAll("[data-token-type]").forEach((input) => {
           const allowed = compatible.has(input.value);
-          input.disabled = true;
+          input.disabled = !allowed || lockSelection;
           input.checked = allowed;
         });
       };
@@ -5667,39 +5752,22 @@ ${meetingLines}
       const outcome = specialReview.dataset.specialReviewOutcome;
       const approvedPriceDollars = Number(document.getElementById("specialApprovedPrice")?.value || 0);
       const note = document.getElementById("specialReviewNote")?.value.trim() || "";
-      const reason = document.getElementById("specialDeclineReason")?.value.trim() || "";
-      if (outcome === "approved" && (!Number.isFinite(approvedPriceDollars) || approvedPriceDollars <= 0)) {
+      if (!Number.isFinite(approvedPriceDollars) || approvedPriceDollars <= 0) {
         setStatus("Enter the exact approved price");
         return;
       }
-      if (outcome === "declined" && !reason) {
-        setStatus("Explain why this Tattoo Special request is being declined");
-        document.getElementById("specialDeclineReason")?.focus();
-        return;
-      }
-      if (outcome === "declined" && !window.confirm(`Decline this Tattoo Special request and email this reason to the requester?\n\n${reason}`)) return;
       specialReview.disabled = true;
       setStatus(`Saving Tattoo Special review: ${outcome}`);
       try {
         const result = await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(specialReview.dataset.submissionId)}/review`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ outcome, approvedPriceCents: Math.round(approvedPriceDollars * 100), note, reason }),
+          body: JSON.stringify({ outcome, approvedPriceCents: Math.round(approvedPriceDollars * 100), note }),
         });
         await refreshActiveSubmissionDetail();
-        if (outcome === "approved") {
-          const emailSent = result.email?.ok === true;
-          const textSent = result.text?.ok === true;
-          setStatus(emailSent && textSent
-            ? "Tattoo Special approved; deposit link sent by email and text"
-            : `Tattoo Special approved; deposit link created. ${emailSent ? "Email sent" : "Email needs attention"}; ${textSent ? "text sent" : "text needs attention"}.`);
-        } else if (outcome === "declined") {
-          setStatus(result.email?.ok === true
-            ? "Tattoo Special declined; reason emailed to requester"
-            : "Tattoo Special declined; email delivery needs attention");
-        } else {
-          setStatus("Tattoo Special review saved");
-        }
+        setStatus(outcome === "simplification_requested"
+          ? "Simplification request recorded; no email sent"
+          : "Tattoo Special review details saved; no email sent");
       } catch (error) {
         setStatus(error.message || "Tattoo Special review could not be saved");
         if (specialReview.isConnected) specialReview.disabled = false;
@@ -6233,10 +6301,17 @@ ${meetingLines}
     }
 
     if (event.target.id === "saveSessionPlanBtn" && activeId) {
+      const saveButton = event.target;
+      saveButton.disabled = true;
       setStatus("Saving session plan");
-      await saveTattooSessionPlan(activeId);
-      await loadAndRender();
-      setStatus("Session plan saved");
+      try {
+        await saveTattooSessionPlan(activeId);
+        await loadAndRender();
+        setStatus("Session plan saved");
+      } catch (error) {
+        setStatus(error.message || "The session plan could not be saved");
+        if (saveButton.isConnected) saveButton.disabled = false;
+      }
       return;
     }
 
@@ -6273,46 +6348,107 @@ ${meetingLines}
       return;
     }
 
-    if (event.target.id === "generateBookingBtn" && activeId) {
+    const decisionButton = event.target.closest("[data-decision-action]");
+    if (decisionButton && activeId) {
       const submission = submissions.find((item) => item.id === activeId);
-      const tokenPurpose = document.getElementById("tokenPurpose")?.value || defaultTokenPurpose(submission);
-      if (tokenPurpose === "tattoo" && TATTOO_PROJECT_TYPES.has(submission?.type)) {
-        setStatus("Saving final session plan and approved budget");
+      const action = decisionButton.dataset.decisionAction;
+      const label = action === "reopen" ? "reopen this request for review" : `${action} this request`;
+      if (!window.confirm(`Confirm you want to ${label}.\n\nThis records the Studio decision only. No client notification will be sent.`)) return;
+      const body = {
+        action,
+        confirmed: true,
+        internalNotes: document.getElementById("internalNotes")?.value || submission?.internalNotes || "",
+      };
+      if (action === "approve") {
         try {
-          await saveTattooSessionPlan(activeId, {
-            requireReviewedBudget: submission?.sourcePath !== "/studio/direct-booking-invite",
-          });
-        } catch (error) {
-          setStatus(error.message || "The final session plan and approved budget could not be saved");
-          return;
-        }
-      }
-      const currentSelectStatus = document.getElementById("detailStatus")?.value;
-      if (submission?.status !== "approved" && currentSelectStatus !== "approved") {
-        setStatus("Setting status to approved first");
-        document.getElementById("detailStatus").value = "approved";
-      }
-      if (submission?.status !== "approved") {
-        setStatus("Saving as approved");
-        let approvedIds;
-        try {
-          approvedIds = approvedSheetDesignIds(submission, "approved");
+          const approvedIds = approvedSheetDesignIds(submission, "approved");
+          if (approvedIds) body.approved_sheet_design_ids = approvedIds;
         } catch (error) {
           setStatus(error.message);
           return;
         }
-        const saved = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
-          method: "PATCH",
+        if (submission?.type === "tattoo_special") {
+          body.approvedPriceCents = Math.round(Number(document.getElementById("specialApprovedPrice")?.value || 0) * 100);
+        }
+      }
+      decisionButton.disabled = true;
+      try {
+        setStatus(`Recording ${action}; no notification will be sent`);
+        await api(`/api/admin/submissions/${encodeURIComponent(activeId)}/decision`, {
+          method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            status: "approved",
-            bookingUrl: document.getElementById("bookingUrl")?.value || submission?.bookingUrl || "",
-            internalNotes: document.getElementById("internalNotes")?.value || submission?.internalNotes || "",
-            ...(approvedIds ? { approved_sheet_design_ids: approvedIds } : {}),
-          }),
+          body: JSON.stringify(body),
         });
-        const index = submissions.findIndex((s) => s.id === activeId);
-        if (index >= 0) submissions[index] = { ...saved.submission, sheetDesignSelections: submission.sheetDesignSelections || submission.sheet_design_selections || [] };
+        await loadAndRender();
+        setStatus(`${action === "reopen" ? "Review reopened" : titleize(action)} recorded; no client notification sent`);
+      } catch (error) {
+        setStatus(error.message || "Decision could not be recorded");
+        if (decisionButton.isConnected) decisionButton.disabled = false;
+      }
+      return;
+    }
+
+    const prepareSpecialDeposit = event.target.closest("[data-prepare-special-deposit]");
+    if (prepareSpecialDeposit) {
+      prepareSpecialDeposit.disabled = true;
+      try {
+        setStatus("Preparing Tattoo Special deposit link; no email will be sent");
+        await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(prepareSpecialDeposit.dataset.prepareSpecialDeposit)}/deposit`, {
+          method: "POST",
+        });
+        await loadAndRender();
+        setStatus("Deposit link prepared; no email sent");
+      } catch (error) {
+        setStatus(error.message || "Deposit link could not be prepared");
+        if (prepareSpecialDeposit.isConnected) prepareSpecialDeposit.disabled = false;
+      }
+      return;
+    }
+
+    const sendSimplification = event.target.closest("[data-send-simplification]");
+    const sendDecision = event.target.closest("[data-send-decision-notification]");
+    if (sendSimplification || sendDecision) {
+      const submissionId = (sendSimplification || sendDecision).dataset.sendSimplification
+        || (sendSimplification || sendDecision).dataset.sendDecisionNotification;
+      const button = sendSimplification || sendDecision;
+      const resend = button.dataset.resend === "1";
+      const activeSubmission = submissions.find((item) => item.id === submissionId);
+      const declineReason = document.getElementById("decisionClientMessage")?.value.trim() || activeSubmission?.decisionClientMessage || "";
+      if (activeSubmission?.status === "declined" && !declineReason) {
+        setStatus("Decline notifications require a saved client-facing reason");
+        document.getElementById("decisionClientMessage")?.focus();
+        return;
+      }
+      if (resend && !window.confirm("Resend this client notification? A new delivery attempt will be recorded.")) return;
+      button.disabled = true;
+      try {
+        setStatus(resend ? "Resending client notification" : "Sending client notification");
+        await api(`/api/admin/submissions/${encodeURIComponent(submissionId)}/decision-notification`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: sendSimplification ? "simplification" : "decision", resend, confirmed: resend }),
+        });
+        await renderEventHistory(submissionId);
+        button.textContent = "Resend";
+        button.dataset.resend = "1";
+        const state = document.getElementById("decisionCommunicationState");
+        if (state) state.textContent = "Sent";
+        setStatus("Client notification sent");
+      } catch (error) {
+        const state = document.getElementById("decisionCommunicationState");
+        if (state) state.textContent = "Failed · Retry available";
+        button.textContent = "Retry";
+        button.disabled = false;
+        setStatus(error.message || "Client notification failed; decision remains recorded");
+      }
+      return;
+    }
+
+    if (event.target.id === "generateBookingBtn" && activeId) {
+      const submission = submissions.find((item) => item.id === activeId);
+      if (submission?.status !== "approved") {
+        setStatus("Approve the request before generating booking access");
+        return;
       }
       setStatus("Generating link");
       let tokenBody;
@@ -6340,14 +6476,7 @@ ${meetingLines}
       }
       await navigator.clipboard?.writeText(payload.token.bookingUrl || tokenPath).catch(() => {});
       await loadAndRender();
-      const delivery = payload.delivery || payload.notificationDelivery || payload.notification || null;
-      setStatus(delivery && !delivery.ok
-        ? `Booking link generated and copied; email failed${delivery.error ? ` (${delivery.error})` : ""}`
-        : delivery?.skipped
-          ? "Booking link generated and copied; email was already delivered"
-          : delivery?.ok
-            ? "Booking link emailed and copied"
-            : "Booking link generated and copied; verify delivery in Notifications");
+      setStatus("Booking link generated and copied; no email sent");
       return;
     }
 
@@ -6358,7 +6487,7 @@ ${meetingLines}
         textAssist.value = textReminderCopy({
           ...submission,
           bookingUrl: document.getElementById("bookingUrl")?.value || submission.bookingUrl,
-          status: document.getElementById("detailStatus")?.value || submission.status,
+          status: submission.status,
         });
       }
       setStatus("Text refreshed");
@@ -6403,15 +6532,6 @@ ${meetingLines}
         body: JSON.stringify({ submissionId: activeId }),
       });
       document.getElementById("bookingUrl").value = "";
-      await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          status: document.getElementById("detailStatus").value,
-          bookingUrl: "",
-          internalNotes: document.getElementById("internalNotes").value,
-        }),
-      });
       await loadAndRender();
       setStatus("Links revoked");
       return;
@@ -6428,7 +6548,6 @@ ${meetingLines}
         body: JSON.stringify({
           status: "archived",
           tattooStage: TATTOO_PROJECT_TYPES.has(submission?.type) ? "closed" : undefined,
-          bookingUrl: submission?.bookingUrl || "",
           internalNotes: document.getElementById("internalNotes")?.value || submission?.internalNotes || "",
         }),
       });
@@ -6572,19 +6691,10 @@ ${meetingLines}
     const submission = submissions.find((item) => item.id === activeId);
     if (!submission) return;
     const saveButton = event.target;
-    const nextStatus = document.getElementById("detailStatus").value;
     const changes = {
-      bookingUrl: document.getElementById("bookingUrl").value,
       internalNotes: document.getElementById("internalNotes").value,
+      ...(document.getElementById("decisionClientMessage") ? { decisionClientMessage: document.getElementById("decisionClientMessage").value } : {}),
     };
-    if (nextStatus !== submission.status) changes.status = nextStatus;
-    try {
-      const approvedIds = approvedSheetDesignIds(submission, nextStatus);
-      if (approvedIds) changes.approved_sheet_design_ids = approvedIds;
-    } catch (error) {
-      setStatus(error.message);
-      return;
-    }
     saveButton.disabled = true;
     setStatus("Saving");
     try {

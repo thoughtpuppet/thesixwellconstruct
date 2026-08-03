@@ -1669,7 +1669,6 @@
           <label>Channel
             <select name="channel" required>
               <option value="email">Email newsletter</option>
-              <option value="sms">SMS marketing</option>
             </select>
           </label>
           <label>Consent source
@@ -1701,7 +1700,6 @@
           <label>Channel
             <select name="channel" required>
               <option value="email">Email</option>
-              <option value="sms">Text message</option>
             </select>
           </label>
           <label>Complete follow-up after accepted send
@@ -1837,7 +1835,7 @@
 
       <section data-admin-section-title="Newsletter consent">
         <h3>Communication consent</h3>
-        <p class="people-section-copy">Email newsletter and SMS marketing consent are separate. Preferred contact and an address or number never count as permission.</p>
+        <p class="people-section-copy">Email newsletter consent is separate from ordinary contact details. Historical text-message consent remains visible as a read-only legacy record.</p>
         ${suppressionRecords(suppressions)}
         ${subscriptionRecords(subscriptions)}
         ${consentEventRecords(consentEvents)}
@@ -2142,9 +2140,7 @@
     if (consentForm) {
       const syncConsentContact = () => {
         const field = consentForm.elements.value;
-        field.value = consentForm.elements.channel.value === "sms"
-          ? field.dataset.phone || ""
-          : field.dataset.email || "";
+        field.value = field.dataset.email || "";
       };
       consentForm.elements.channel.addEventListener("change", syncConsentContact);
       consentForm.addEventListener("submit", async (event) => {
@@ -2416,7 +2412,6 @@
       <div class="people-actions">
         ${["draft", "reviewed"].includes(status) ? `<button class="button" type="button" data-review-campaign>Preview final audience</button>` : ""}
         ${status === "reviewed" && channel === "email" ? `<button class="button" type="button" data-prepare-campaign data-audience-version="${attr(version)}">Prepare in Beehiiv</button>` : ""}
-        ${status === "reviewed" && channel === "sms" ? `<input type="datetime-local" data-campaign-schedule aria-label="SMS schedule"><button class="button" type="button" data-schedule-campaign data-audience-version="${attr(version)}">Schedule SMS</button>` : ""}
       </div>
       <div class="people-helper" data-campaign-result role="status" aria-live="polite"></div>
     </article>`;
@@ -2427,7 +2422,6 @@
     const providers = objectFrom(statusPayload, "providers");
     const counts = objectFrom(statusPayload, "counts");
     const beehiiv = objectFrom(providers, "beehiiv");
-    const twilio = objectFrom(providers, "twilio");
     return `
       <div class="people-page-head">
         <div class="people-section-head">
@@ -2444,8 +2438,6 @@
         <div class="people-integration-grid">
           ${outreachFeatureCard("Beehiiv newsletter", truthy(first(features, "emailCampaigns")) && truthy(first(beehiiv, "configured")), `Double opt-in · ${first(beehiiv, "publicationId") || "publication not configured"}`)}
           ${outreachFeatureCard("Individual email", truthy(first(features, "individualEmail")), "Relationship follow-ups only; promotional email stays in Beehiiv.")}
-          ${outreachFeatureCard("Individual SMS", truthy(first(features, "individualSms")) && truthy(first(twilio, "configured")), "Dedicated Twilio Messaging Service with consent recheck.")}
-          ${outreachFeatureCard("SMS campaigns", truthy(first(features, "smsCampaigns")) && truthy(first(twilio, "configured")), "Scheduled batches run through the Worker cron.")}
         </div>
         <p class="people-helper">${Number(first(counts, "consentEvents") || 0)} consent events · ${Number(first(counts, "communications") || 0)} communications · ${Number(first(counts, "queuedMessages") || 0)} queued</p>
       </section>
@@ -2455,7 +2447,7 @@
         <form class="people-form" data-campaign-form>
           <div class="people-form-grid">
             <label>Name<input name="name" required maxlength="200" placeholder="July collectors update"></label>
-            <label>Channel<select name="channel"><option value="email">Beehiiv email</option><option value="sms">Twilio SMS</option></select></label>
+            <input type="hidden" name="channel" value="email">
             <label class="people-wide" data-campaign-subject>Subject<input name="subject" maxlength="300"></label>
             <label class="people-wide">Message<textarea name="bodyText" required maxlength="5000"></textarea></label>
             <label>Tier<select name="tier"><option value="">All tiers</option><option value="1">Tier I</option><option value="2">Tier II</option><option value="3">Tier III</option></select></label>
@@ -2495,9 +2487,8 @@
     ui.detail.querySelector("[data-refresh-outreach]")?.addEventListener("click", () => renderOutreach());
     const campaignForm = ui.detail.querySelector("[data-campaign-form]");
     const syncCampaignChannel = () => {
-      campaignForm.querySelector("[data-campaign-subject]").hidden = campaignForm.elements.channel.value !== "email";
+      campaignForm.querySelector("[data-campaign-subject]").hidden = false;
     };
-    campaignForm.elements.channel.addEventListener("change", syncCampaignChannel);
     syncCampaignChannel();
     campaignForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -2537,8 +2528,7 @@
       const output = card.querySelector("[data-campaign-result]");
       const review = event.target.closest("[data-review-campaign]");
       const prepare = event.target.closest("[data-prepare-campaign]");
-      const schedule = event.target.closest("[data-schedule-campaign]");
-      if (!review && !prepare && !schedule) return;
+      if (!review && !prepare) return;
       event.target.disabled = true;
       output.textContent = review ? "Re-evaluating consent and exclusions…" : "Submitting reviewed audience…";
       try {
@@ -2553,17 +2543,6 @@
             body: { audienceVersion: prepare.dataset.audienceVersion },
           });
           output.textContent = `Prepared Beehiiv segment ${payload.beehiiv.segmentId}. Compose and send inside Beehiiv.`;
-          await renderOutreach();
-        } else {
-          const local = card.querySelector("[data-campaign-schedule]").value;
-          const payload = await api(`/outreach/campaigns/${encodeURIComponent(campaignId)}/schedule`, {
-            method: "POST",
-            body: {
-              audienceVersion: schedule.dataset.audienceVersion,
-              scheduledAt: local ? localDateTimeToIso(local) : new Date().toISOString(),
-            },
-          });
-          output.textContent = `SMS campaign ${payload.campaign.status}.`;
           await renderOutreach();
         }
       } catch (error) {

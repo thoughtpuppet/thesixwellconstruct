@@ -749,7 +749,7 @@
       ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
       : special
         ? pendingSpecialApproval
-          ? `Nothing is charged now. If Studio approves the request, the ${money(special.depositCents || 0)} deposit link will be sent by email and text and will expire after 24 hours or at the Specials sales deadline, whichever comes first.`
+          ? `Nothing is charged now. If Studio approves the request, the ${money(special.depositCents || 0)} deposit link can be sent by email and will expire after 24 hours or at the Specials sales deadline, whichever comes first.`
           : `${money(special.depositCents || 0)} is collected now and credited toward the ${money(special.quotedPriceCents || 0)} Tattoo Special total. The deposit is non-refundable.`
       : "The tattoo deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.";
     const badge = document.querySelector(".badge");
@@ -775,7 +775,7 @@
       return true;
     }
     if (pending.approvalState === "approved" && context?.submission?.special) {
-      pendingCheckoutText.textContent = `Studio approved your requested time, ${formatDate(pending.startAt)}. The appointment is not booked until the Square deposit link sent by email and text is paid${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}.`;
+      pendingCheckoutText.textContent = `Studio approved your requested time, ${formatDate(pending.startAt)}. The appointment is not booked until the Square deposit link sent by email is paid${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}.`;
       pendingCheckoutPanel.classList.remove("hidden");
       appEl.classList.add("hidden");
       return true;

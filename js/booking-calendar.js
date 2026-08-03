@@ -73,7 +73,6 @@
     wrap.innerHTML = `
       <p class="form-check-group__heading">Optional updates</p>
       <label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="newsletter_consent" value="yes"><span class="form-check__label">Yes, send me The Six.Well newsletter by email. This is optional and I can unsubscribe at any time.</span></label>
-      ${form.querySelector('[name="phone"]') ? '<label class="form-check form-check--construct"><input class="form-check__input" type="checkbox" name="sms_marketing_consent" value="yes"><span class="form-check__label">Yes, send me occasional Six.Well marketing texts. Message frequency varies; message and data rates may apply. Reply STOP to opt out or HELP for help.</span></label>' : ""}
       <a class="form-check-group__manage" href="/preferences/">Manage communication preferences</a>
     `;
     const submit = form.querySelector('[type="submit"]');

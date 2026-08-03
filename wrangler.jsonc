@@ -65,9 +65,7 @@
     "OUTREACH_CONSENT_SYNC_ENABLED": "false",
     "OUTREACH_PREFERENCES_ENABLED": "false",
     "OUTREACH_INDIVIDUAL_EMAIL_ENABLED": "false",
-    "OUTREACH_INDIVIDUAL_SMS_ENABLED": "false",
-    "OUTREACH_EMAIL_CAMPAIGNS_ENABLED": "false",
-    "OUTREACH_SMS_CAMPAIGNS_ENABLED": "false"
+    "OUTREACH_EMAIL_CAMPAIGNS_ENABLED": "false"
   },
   "compatibility_flags": [
     "nodejs_compat"

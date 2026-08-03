@@ -14,17 +14,11 @@ BEEHIIV_PUBLICATION_IDS=replace-with-one-or-more-comma-separated-publication-ids
 BEEHIIV_OUTREACH_PUBLICATION_ID=replace-with-your-outreach-publication-id
 BEEHIIV_OUTREACH_LIST_ID=replace-with-your-outreach-list-id
 BEEHIIV_WEBHOOK_TOKEN=replace-with-a-long-random-webhook-token
-TWILIO_ACCOUNT_SID=replace-with-your-twilio-account-sid
-TWILIO_AUTH_TOKEN=replace-with-your-twilio-auth-token
-TWILIO_MESSAGING_SERVICE_SID=replace-with-your-dedicated-messaging-service-sid
-TWILIO_WEBHOOK_BASE_URL=https://thesixwellconstruct.com
 # Keep all delivery flags false through schema rollout and owner-only testing.
 OUTREACH_CONSENT_SYNC_ENABLED=false
 OUTREACH_PREFERENCES_ENABLED=false
 OUTREACH_INDIVIDUAL_EMAIL_ENABLED=false
-OUTREACH_INDIVIDUAL_SMS_ENABLED=false
 OUTREACH_EMAIL_CAMPAIGNS_ENABLED=false
-OUTREACH_SMS_CAMPAIGNS_ENABLED=false
 SUBMISSIONS_ADMIN_TOKEN=replace-with-a-long-private-token
 # Studio site analytics reads the existing Cloudflare Web Analytics RUM data
 # and the custom swc_site_analytics Analytics Engine dataset with one narrowly

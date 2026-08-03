@@ -327,6 +327,38 @@ export function buildTattooSpecialReviewEmail(data) {
   });
 }
 
+export function buildSubmissionDecisionEmail(data) {
+  const approved = data.decision === "approved";
+  const art = data.variant === "art_acquisition";
+  const label = data.label || (art ? "art inquiry" : "project request");
+  return renderClientEmail({
+    templateKey: approved ? "submission_approved" : "submission_declined",
+    templateVariant: data.variant || "custom",
+    variables: { client_name: data.clientName || "there", request_label: label },
+    theme: art ? "construct_art" : "tattoo",
+    subject: data.subject || (approved ? `Your ${label} was approved` : `An update on your ${label}`),
+    preheader: approved
+      ? "The Studio has approved your request and will coordinate the next step with you."
+      : "The Studio has completed its review of your request.",
+    classification: approved ? "REQUEST APPROVED" : "REQUEST REVIEW COMPLETE",
+    headline: approved ? `Your ${label} is approved.` : `The Studio completed its review of your ${label}.`,
+    greeting: `Hi ${data.clientName || "there"},`,
+    intro: [approved
+      ? "The Studio has approved this request. No appointment or payment is created by this message."
+      : "The Studio is not able to approve this request in its current form."],
+    sections: data.message ? [{
+      id: "studio_message",
+      title: approved ? "Studio message" : "Why this request was declined",
+      paragraphs: [data.message],
+      editableParagraphs: false,
+    }] : [],
+    notice: approved
+      ? ["Reply to this email if you need to clarify the next step."]
+      : ["Reply to this email if you have a question about the reviewed reason."],
+    signature: art ? constructSignature() : tattooSignature(true),
+  });
+}
+
 const APPOINTMENT_CONFIRMATION_PROFILES = Object.freeze({
   tattoo: {
     theme: "tattoo",
@@ -721,6 +753,14 @@ const PREVIEW_CATALOG = Object.freeze([
   { templateKey: "booking_link_created", variant: "consultation", label: "Prerequisite consultation link", brand: "tattoo", stage: "booking" },
   { templateKey: "tattoo_special_review", variant: "simplification_requested", label: "Tattoo Special simplification requested", brand: "tattoo", stage: "specials" },
   { templateKey: "tattoo_special_review", variant: "declined", label: "Tattoo Special declined", brand: "tattoo", stage: "specials" },
+  { templateKey: "submission_approved", variant: "art_acquisition", label: "Art inquiry approved", brand: "art", stage: "decision" },
+  { templateKey: "submission_declined", variant: "custom", label: "Custom Tattoo declined", brand: "tattoo", stage: "decision" },
+  { templateKey: "submission_declined", variant: "flash", label: "Flash declined", brand: "tattoo", stage: "decision" },
+  { templateKey: "submission_declined", variant: "build", label: "Build declined", brand: "tattoo", stage: "decision" },
+  { templateKey: "submission_declined", variant: "maze", label: "Maze declined", brand: "tattoo", stage: "decision" },
+  { templateKey: "submission_declined", variant: "special", label: "Special Project declined", brand: "tattoo", stage: "decision" },
+  { templateKey: "submission_declined", variant: "tattoo_special", label: "Tattoo Special declined", brand: "tattoo", stage: "decision" },
+  { templateKey: "submission_declined", variant: "art_acquisition", label: "Art inquiry declined", brand: "art", stage: "decision" },
   { templateKey: "tattoo_rendering_payment_requested", variant: "default", label: "Additional concept sketch payment request", brand: "tattoo", stage: "appointment" },
   { templateKey: "tattoo_rendering_payment_confirmed", variant: "default", label: "Additional concept sketch payment confirmation", brand: "tattoo", stage: "appointment" },
   { templateKey: "appointment_confirmed", variant: "tattoo", label: "Tattoo appointment confirmed", brand: "tattoo", stage: "appointment" },
@@ -870,7 +910,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       build: ["Build Your Own submission", "The studio will review your symbols, composition, placement, scale, and budget.", "If the project is a fit, the Studio will send the appropriate next step."],
       maze: ["Maze Studio submission", "The studio will review the generated maze, placement, scale, and project notes.", "If the project is a fit, the Studio will send the appropriate next step."],
       special: ["special project application", "The studio will review the application, scope, placement, references, budget, and timing.", "If the project is a fit, the Studio will contact you with the next step."],
-      tattoo_special: ["request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked yet. If approved, you will receive an email and text with a Square link to pay the deposit for the held time."],
+      tattoo_special: ["request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked yet. If approved, the Studio may send an email with a Square link to pay the deposit for the held time."],
       consultation: ["consultation request", "Your selected consultation time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       build_session: ["Build session request", "Your selected Build session time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       art_acquisition: ["art acquisition inquiry", "The Art studio will review the work, availability, budget, and questions you shared.", "The studio will reply with availability, acquisition details, or the next step."],
@@ -950,6 +990,16 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       depositText: "$50",
       durationText: "120 minutes",
       studioNote: mode === "simplification_requested" ? "Please remove the background and keep the portrait as the central direction." : "",
+    });
+  } else if (key === "submission_approved" || key === "submission_declined") {
+    rendered = buildSubmissionDecisionEmail({
+      decision: key === "submission_approved" ? "approved" : "declined",
+      variant: mode || "custom",
+      clientName: SAMPLE.clientName,
+      label: mode === "art_acquisition" ? "art inquiry" : mode === "tattoo_special" ? "Tattoo Special request" : "project request",
+      message: key === "submission_declined"
+        ? "The requested scope is not a fit for the current Studio offering."
+        : "The Studio will follow up with the next coordination step.",
     });
   } else if (key === "appointment_confirmed") {
     const tattooSpecial = mode === "tattoo_special" || mode === "tattoo_special_tip";

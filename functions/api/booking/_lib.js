@@ -5,7 +5,6 @@ import {
   notifyAppointmentConfirmed,
   notifyAppointmentRescheduled,
   notifyAdminSubmissionReceived,
-  notifyBookingLinkCreated,
   notifySubmissionReceived,
   notifyTattooRenderingPaymentConfirmed,
   notifyTattooRenderingPaymentRequested,
@@ -2404,7 +2403,6 @@ async function handlePublicSessionCheckoutForTypes(request, env, allowedTypeIds,
       email: result.appointment.clientEmail,
       phone: result.appointment.clientPhone,
       emailOptIn: body.newsletter_consent,
-      smsOptIn: body.sms_marketing_consent,
       source: "website_booking",
       sourceId: result.appointment.id,
       formPath: new URL(request.url).pathname,
@@ -2796,7 +2794,6 @@ export async function handlePublicStudioCheckout(request, env) {
       email: result.appointment.clientEmail,
       phone: result.appointment.clientPhone,
       emailOptIn: body.newsletter_consent,
-      smsOptIn: body.sms_marketing_consent,
       source: "website_booking",
       sourceId: result.appointment.id,
       formPath: new URL(request.url).pathname,
@@ -5916,7 +5913,9 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
   if (authError) return authError;
   try {
     const db = requireBookingDb(env);
-    const submission = await db.prepare("SELECT id,type,status,tattoo_stage FROM submissions WHERE id = ?").bind(submissionId).first();
+    const submission = await db.prepare(
+      "SELECT id,type,status,tattoo_stage,lifecycle_review_required FROM submissions WHERE id = ?"
+    ).bind(submissionId).first();
     if (!submission) return errorResponse("Submission not found.", 404);
     if (!TATTOO_PROJECT_SUBMISSION_TYPES.has(submission.type)) return errorResponse("Session planning applies only to tattoo project submissions.", 409);
     if (request.method === "GET") {
@@ -5968,6 +5967,51 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       return errorResponse("Enter a valid approved project budget with a maximum greater than or equal to the minimum.", 400, {
         code: "INVALID_APPROVED_BUDGET",
       });
+    }
+    const artistNote = asString(body.artistNote).slice(0,5000);
+    const planChanged = !existing
+      || sessionCategory !== (existing.session_category || "artist_review")
+      || splitPolicy !== (existing.split_policy || "artist_review")
+      || sessionsMin !== (existing.estimated_sessions_min ?? null)
+      || sessionsMax !== (existing.estimated_sessions_max ?? null)
+      || minutesMin !== (existing.estimated_total_minutes_min ?? null)
+      || minutesMax !== (existing.estimated_total_minutes_max ?? null)
+      || artistNote !== (existing.artist_note || "")
+      || budgetMinCents !== (existing.approved_budget_min_cents ?? null)
+      || budgetMaxCents !== (existing.approved_budget_max_cents ?? null)
+      || budgetCurrency !== (existing.approved_budget_currency || "USD");
+    if (
+      planChanged
+      && ["approved", "declined"].includes(submission.status)
+      && Number(submission.lifecycle_review_required || 0) !== 1
+      && submission.tattoo_stage !== "consultation_complete"
+    ) {
+      return errorResponse("Reopen review before changing the reviewed session plan or approved budget.", 409, {
+        code: "REOPEN_REVIEW_REQUIRED",
+      });
+    }
+    if (!planChanged) {
+      const bookingBlock = await db.prepare(
+        `SELECT 1 AS blocked
+         WHERE EXISTS (
+           SELECT 1 FROM booking_tokens active_token
+           WHERE active_token.submission_id = ? AND active_token.purpose = 'tattoo'
+             AND active_token.revoked_at IS NULL AND active_token.used_at IS NULL
+         ) OR EXISTS (
+           SELECT 1 FROM appointments active_appointment
+           WHERE active_appointment.submission_id = ? AND active_appointment.purpose = 'tattoo'
+             AND (
+               active_appointment.status = 'confirmed'
+               OR (
+                 active_appointment.status IN ('pending_deposit','deposit_pending')
+                 AND active_appointment.hold_state IN ('active','expiry_attention')
+               )
+             )
+         )`
+      ).bind(submissionId, submissionId).first();
+      if (bookingBlock) {
+        return json({ ok: true, unchanged: true, sessionPlan: normalizeTattooSessionPlan(existing) });
+      }
     }
     const budgetChanged = budgetMinCents !== (existing?.approved_budget_min_cents ?? null)
       || budgetMaxCents !== (existing?.approved_budget_max_cents ?? null)
@@ -6025,7 +6069,7 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
       minutesMin,
       minutesMax,
       splitPolicy,
-      asString(body.artistNote).slice(0,5000),
+      artistNote,
       sessionCategory,
       budgetMinCents,
       budgetMaxCents,
@@ -6057,24 +6101,44 @@ export async function handleAdminTattooSessionPlan(request, env, submissionId) {
         now,
       ).run();
     }
-    if (submission.status === "approved" && ["review", "consultation_complete"].includes(submission.tattoo_stage)) {
+    if (submission.status === "new") {
       await db.batch([
         db.prepare(
           `UPDATE submissions
-           SET tattoo_stage = 'ready_to_book', updated_at = ?
-           WHERE id = ? AND status = 'approved' AND tattoo_stage = ?`
-        ).bind(now, submissionId, submission.tattoo_stage),
+           SET status = 'reviewing', updated_at = ?
+           WHERE id = ? AND status = 'new'`
+        ).bind(now, submissionId),
         db.prepare(
           `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
-           SELECT ?, id, 'tattoo_stage_changed', 'admin', ?, ? FROM submissions
-           WHERE id = ? AND tattoo_stage = 'ready_to_book' AND updated_at = ?`
+           SELECT ?, id, 'review_started', 'admin', ?, ? FROM submissions
+           WHERE id = ? AND status = 'reviewing' AND updated_at = ?`
         ).bind(
           crypto.randomUUID(),
-          `${submission.tattoo_stage} -> ready_to_book`,
+          "First saved Studio session-plan work changed New to Reviewing.",
           now,
           submissionId,
           now,
         ),
+      ]);
+    }
+    if (
+      submission.status === "approved"
+      && submission.tattoo_stage === "consultation_complete"
+      && sessionCategory !== "artist_review"
+      && splitPolicy !== "artist_review"
+      && budgetMinCents !== null
+      && budgetMaxCents !== null
+    ) {
+      await db.batch([
+        db.prepare(
+          `UPDATE submissions SET tattoo_stage='ready_to_book',updated_at=?
+           WHERE id=? AND status='approved' AND tattoo_stage='consultation_complete'`
+        ).bind(now, submissionId),
+        db.prepare(
+          `INSERT INTO submission_events (id,submission_id,event_type,actor,note,created_at)
+           SELECT ?,id,'tattoo_stage_changed','system','consultation_complete -> ready_to_book',?
+           FROM submissions WHERE id=? AND tattoo_stage='ready_to_book' AND updated_at=?`
+        ).bind(crypto.randomUUID(), now, submissionId, now),
       ]);
     }
     return json({ ok: true, sessionPlan: normalizeTattooSessionPlan(await loadTattooSessionPlan(db, submissionId)) });
@@ -6625,17 +6689,12 @@ export async function handleAdminCreateBookingToken(request, env) {
       return errorResponse("Booking link expiration must be a valid future timestamp.", 400);
     }
     const expiresAt = new Date(expiresAtMs).toISOString();
-    const standardApprovedTattooOffer = purpose === "tattoo"
-      && submission.type !== "tattoo_special"
-      && submission.source_path !== "/studio/direct-booking-invite";
     const hasSuppliedBookingTypes = body.allowedBookingTypes !== undefined;
     if (hasSuppliedBookingTypes && !Array.isArray(body.allowedBookingTypes)) {
       return errorResponse("Allowed booking types must be a non-empty list.", 400);
     }
     const allowed = specialTerms
       ? [specialTerms.booking_type_id]
-      : standardApprovedTattooOffer
-      ? [...SCHEDULE_CATEGORY_BOOKING_TYPE_IDS.tattooing]
       : hasSuppliedBookingTypes
         ? body.allowedBookingTypes.map(asString).filter(Boolean)
         : purpose === "consultation"
@@ -6758,23 +6817,7 @@ export async function handleAdminCreateBookingToken(request, env) {
       return errorResponse("Submission lifecycle changed before booking access could be created.", 409);
     }
 
-    const delivery = body.sendEmail === false
-      ? { ok: false, skipped: true, reason: "not_requested" }
-      : await notifyBookingLinkCreated(env, request, submission, {
-          id,
-          bookingUrl: bookingUrl.toString(),
-          path: bookingUrl.pathname + bookingUrl.search,
-          expiresAt,
-          allowedBookingTypes: allowed,
-          purpose,
-          approvedBudget: reviewedBudgetIsComplete(reviewedSessionPlan)
-            ? {
-                minimumCents: reviewedSessionPlan.approved_budget_min_cents,
-                maximumCents: reviewedSessionPlan.approved_budget_max_cents,
-                currency: reviewedSessionPlan.approved_budget_currency || "USD",
-              }
-            : null,
-        });
+    const delivery = { ok: false, skipped: true, reason: "explicit_client_notification_required" };
 
     return json({
       ok: true,
@@ -7024,6 +7067,9 @@ export async function handleAdminRevokeSubmissionBookingTokens(request, env) {
            )`
       )
       .bind(now, now, submissionId)
+      .run();
+    await db.prepare("UPDATE submissions SET booking_url='',updated_at=? WHERE id=?")
+      .bind(now, submissionId)
       .run();
     const racedHold = await db.prepare(
       `SELECT a.* FROM appointments a

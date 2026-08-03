@@ -16,17 +16,10 @@ import {
 export const NEWSLETTER_DISCLOSURE_VERSION = "newsletter-2026-07-18";
 export const NEWSLETTER_DISCLOSURE =
   "Email me about new work, appointment openings, events, and releases. Unsubscribe anytime.";
-export const SMS_DISCLOSURE_VERSION = "sms-marketing-2026-07-18";
-export const SMS_DISCLOSURE =
-  "Text me about openings, events, and releases. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.";
-
-const CHANNELS = new Set(["email", "sms"]);
-const PURPOSE_BY_CHANNEL = Object.freeze({ email: "newsletter", sms: "marketing" });
+const CHANNELS = new Set(["email"]);
+const PURPOSE_BY_CHANNEL = Object.freeze({ email: "newsletter" });
 const CONSENT_STATUSES = new Set(["pending", "granted", "revoked"]);
 const CAMPAIGN_STATUSES = new Set(["draft", "reviewed", "prepared", "scheduled", "sending", "sent", "cancelled", "failed"]);
-const SMS_OPT_OUT_WORDS = new Set(["stop", "stopall", "unsubscribe", "cancel", "end", "revoke", "quit"]);
-const SMS_OPT_IN_WORDS = new Set(["start", "unstop", "yes"]);
-const SMS_HELP_WORDS = new Set(["help", "info"]);
 const MAX_AUDIENCE = 10_000;
 const QUEUE_BATCH_SIZE = 25;
 
@@ -52,17 +45,8 @@ function normalizeEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
-function normalizePhone(value) {
-  const source = asString(value, 80);
-  if (!source) return "";
-  const digits = source.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length >= 7 && digits.length <= 15) return `+${digits}`;
-  return "";
-}
-
 function normalizeContact(channel, value) {
-  return channel === "email" ? normalizeEmail(value) : normalizePhone(value);
+  return channel === "email" ? normalizeEmail(value) : "";
 }
 
 function purposeForChannel(channel) {
@@ -72,11 +56,11 @@ function purposeForChannel(channel) {
 function disclosureForChannel(channel) {
   return channel === "email"
     ? { version: NEWSLETTER_DISCLOSURE_VERSION, text: NEWSLETTER_DISCLOSURE }
-    : { version: SMS_DISCLOSURE_VERSION, text: SMS_DISCLOSURE };
+    : { version: "legacy", text: "Legacy channel consent is read-only." };
 }
 
 function providerForChannel(channel) {
-  return channel === "email" ? "beehiiv" : "twilio";
+  return channel === "email" ? "beehiiv" : "legacy";
 }
 
 function canonicalSource(value) {
@@ -90,15 +74,6 @@ function response405(...allowed) {
   });
 }
 
-function xml(body = "") {
-  return new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, {
-    status: 200,
-    headers: {
-      "content-type": "application/xml; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
-}
 
 async function sha256(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value)));
@@ -454,121 +429,7 @@ export async function captureMarketingConsent(env, input = {}) {
       };
     }
   }
-  if (bool(input.smsOptIn || input.smsMarketingConsent || input.sms_marketing_consent)) {
-    const phone = normalizePhone(input.phone);
-    if (phone) {
-      const recorded = await recordConsentEvent(database, {
-        personId: input.personId || null,
-        channel: "sms",
-        value: phone,
-        status: "granted",
-        source,
-        sourceDetail: asString(input.sourceDetail || input.sourceLabel, 300),
-        formPath,
-        provider: "website",
-        providerReference: sourceId ? `${source}:${sourceId}:sms` : null,
-        occurredAt,
-        evidence: {
-          requestId: asString(input.requestId, 300),
-          disclosureAccepted: true,
-        },
-      });
-      outcomes.sms = { recorded: true, replayed: recorded.replayed };
-    }
-  }
   return outcomes;
-}
-
-function twilioConfigured(env) {
-  return Boolean(
-    asString(env.TWILIO_ACCOUNT_SID, 200)
-    && asString(env.TWILIO_AUTH_TOKEN, 500)
-    && asString(env.TWILIO_MESSAGING_SERVICE_SID, 200),
-  );
-}
-
-function twilioCallbackUrl(env, kind) {
-  const base = asString(env.PUBLIC_SITE_URL, 500) || "https://thesixwellconstruct.com";
-  return new URL(`/api/outreach/webhooks/twilio/${kind}`, base).toString();
-}
-
-async function sendTwilioMessage(env, { to, body }) {
-  if (!twilioConfigured(env)) throw new Error("Twilio messaging is not configured.");
-  const accountSid = asString(env.TWILIO_ACCOUNT_SID, 200);
-  const authToken = asString(env.TWILIO_AUTH_TOKEN, 500);
-  const messagingServiceSid = asString(env.TWILIO_MESSAGING_SERVICE_SID, 200);
-  const params = new URLSearchParams({
-    To: to,
-    MessagingServiceSid: messagingServiceSid,
-    Body: body,
-    StatusCallback: twilioCallbackUrl(env, "status"),
-  });
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
-        accept: "application/json",
-      },
-      body: params.toString(),
-    },
-  );
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = asString(payload.message || payload.error_message, 1000);
-    const error = new Error(`Twilio request failed (${response.status})${detail ? `: ${detail}` : "."}`);
-    error.code = asString(payload.code, 80);
-    error.status = response.status;
-    throw error;
-  }
-  return payload;
-}
-
-function bytesFromBase64(value) {
-  try {
-    const decoded = atob(value);
-    return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
-  } catch {
-    return new Uint8Array();
-  }
-}
-
-function constantTimeEqual(left, right) {
-  const a = left instanceof Uint8Array ? left : new Uint8Array(left || []);
-  const b = right instanceof Uint8Array ? right : new Uint8Array(right || []);
-  if (a.length !== b.length || !a.length) return false;
-  let difference = 0;
-  for (let index = 0; index < a.length; index += 1) difference |= a[index] ^ b[index];
-  return difference === 0;
-}
-
-async function twilioSignature(url, params, authToken) {
-  const sorted = [...params.entries()].sort(([left], [right]) => left.localeCompare(right));
-  const canonical = `${url}${sorted.map(([key, value]) => `${key}${value}`).join("")}`;
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(authToken),
-    { name: "HMAC", hash: "SHA-1" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(canonical));
-  return new Uint8Array(signature);
-}
-
-async function verifyTwilioRequest(request, env, params) {
-  const supplied = bytesFromBase64(request.headers.get("x-twilio-signature") || "");
-  const authToken = asString(env.TWILIO_AUTH_TOKEN, 500);
-  if (!authToken || !supplied.length) return false;
-  const requestUrl = new URL(request.url);
-  const configuredBase = asString(env.TWILIO_WEBHOOK_BASE_URL, 500);
-  const validationUrl = configuredBase
-    ? `${configuredBase.replace(/\/+$/, "")}${requestUrl.pathname}${requestUrl.search}`
-    : request.url;
-  const expected = await twilioSignature(validationUrl, params, authToken);
-  return constantTimeEqual(expected, supplied);
 }
 
 async function recordWebhookEvent(database, provider, providerEventId, eventType, rawPayload) {
@@ -856,9 +717,7 @@ async function handleOutreachStatus(env, database) {
     features: {
       consentSync: featureEnabled(env, "OUTREACH_CONSENT_SYNC_ENABLED"),
       individualEmail: featureEnabled(env, "OUTREACH_INDIVIDUAL_EMAIL_ENABLED"),
-      individualSms: featureEnabled(env, "OUTREACH_INDIVIDUAL_SMS_ENABLED"),
       emailCampaigns: featureEnabled(env, "OUTREACH_EMAIL_CAMPAIGNS_ENABLED"),
-      smsCampaigns: featureEnabled(env, "OUTREACH_SMS_CAMPAIGNS_ENABLED"),
       publicPreferences: featureEnabled(env, "OUTREACH_PREFERENCES_ENABLED"),
     },
     providers: {
@@ -866,10 +725,6 @@ async function handleOutreachStatus(env, database) {
         configured: beehiivConfigured(env),
         publicationId: beehiivPublicationId(env),
         doubleOptIn: true,
-      },
-      twilio: {
-        configured: twilioConfigured(env),
-        dedicatedMessagingService: Boolean(asString(env.TWILIO_MESSAGING_SERVICE_SID, 200)),
       },
     },
     counts: {
@@ -891,7 +746,7 @@ async function handleManualConsent(request, env, database, personId) {
   if (parsed.error) return parsed.error;
   const body = parsed.body;
   const channel = asString(body.channel, 20).toLowerCase();
-  if (!CHANNELS.has(channel)) return failure("Consent channel must be email or SMS.", 400);
+  if (!CHANNELS.has(channel)) return failure("Only email newsletter consent can be recorded. Historical text-message consent is read-only.", 400);
   const sourceMethod = asString(body.sourceMethod || body.source, 40).toLowerCase();
   if (!["in_person", "phone", "paper", "provider"].includes(sourceMethod)) {
     return failure("Consent source must be in person, phone, paper, or provider.", 400);
@@ -899,13 +754,13 @@ async function handleManualConsent(request, env, database, personId) {
   if (!bool(body.confirmed)) {
     return failure("Confirm that the customer explicitly agreed to this channel.", 400);
   }
-  const kind = channel === "sms" ? "phone" : "email";
+  const kind = "email";
   const contact = normalizeContact(channel, body.value) || (await database.prepare(`
     SELECT normalized_value FROM crm_identities
     WHERE person_id=? AND kind=? AND active=1
     ORDER BY is_primary DESC,is_verified DESC,created_at LIMIT 1
   `).bind(person.id, kind).first())?.normalized_value;
-  if (!contact) return failure(channel === "email" ? "This person needs a valid email." : "This person needs a valid phone number.", 400);
+  if (!contact) return failure("This person needs a valid email.", 400);
   const occurredAt = asString(body.consentAt, 80);
   if (!occurredAt || Number.isNaN(new Date(occurredAt).getTime())) {
     return failure("Consent date is required.", 400);
@@ -971,7 +826,7 @@ async function handleCreateCampaign(request, database) {
   if (parsed.error) return parsed.error;
   const body = parsed.body;
   const channel = asString(body.channel, 20).toLowerCase();
-  if (!CHANNELS.has(channel)) return failure("Campaign channel must be email or SMS.", 400);
+  if (!CHANNELS.has(channel)) return failure("Only email campaigns are supported.", 400);
   const name = asString(body.name, 200);
   if (!name) return failure("Campaign name is required.", 400);
   const subject = asString(body.subject, 300);
@@ -1145,67 +1000,6 @@ async function handlePrepareBeehiivCampaign(request, env, database, campaignId) 
   }
 }
 
-function smsCampaignBody(bodyText) {
-  const source = asString(bodyText, 1400);
-  const prefix = /^six\.?well\b/i.test(source) ? "" : "Six.Well: ";
-  const optOut = /reply\s+stop/i.test(source) ? "" : " Reply STOP to unsubscribe.";
-  return `${prefix}${source}${optOut}`.slice(0, 1600);
-}
-
-async function handleScheduleSmsCampaign(request, env, database, campaignId) {
-  const campaign = await campaignById(database, campaignId);
-  if (!campaign) return failure("Campaign not found.", 404);
-  if (campaign.channel !== "sms") return failure("Only SMS campaigns can be scheduled here.", 400);
-  if (!featureEnabled(env, "OUTREACH_SMS_CAMPAIGNS_ENABLED")) {
-    return failure("SMS campaigns are disabled until Twilio registration and rollout are approved.", 503);
-  }
-  if (!twilioConfigured(env)) return failure("Twilio is not configured.", 503);
-  const parsed = await readObject(request);
-  if (parsed.error) return parsed.error;
-  const reviewed = await currentReviewedAudience(database, campaign, asString(parsed.body.audienceVersion, 200));
-  if (reviewed.error) return reviewed.error;
-  if (!reviewed.audience.eligibleCount) return failure("This campaign has no eligible recipients.", 409);
-  const scheduledAtValue = asString(parsed.body.scheduledAt, 80);
-  const scheduledAt = scheduledAtValue ? new Date(scheduledAtValue).toISOString() : nowIso();
-  if (Number.isNaN(new Date(scheduledAt).getTime())) return failure("Scheduled time is invalid.", 400);
-  const now = nowIso();
-  const statements = [
-    database.prepare(`
-      UPDATE crm_outreach_campaigns
-      SET status='scheduled',scheduled_at=?,error='',updated_at=?
-      WHERE id=?
-    `).bind(scheduledAt, now, campaignId),
-  ];
-  for (const recipient of reviewed.audience.eligible) {
-    const communicationId = id("crm-communication");
-    const idempotencyKey = `campaign:${campaignId}:${recipient.normalizedValue}`;
-    statements.push(database.prepare(`
-      INSERT OR IGNORE INTO crm_communications(
-        id,person_id,campaign_id,channel,purpose,direction,provider,
-        normalized_destination,body_text,status,idempotency_key,scheduled_at,
-        created_at,updated_at
-      ) VALUES(?,?,?,'sms','marketing','outbound','twilio',?,?,'scheduled',?,?,?,?)
-    `).bind(
-      communicationId,
-      recipient.personId,
-      campaignId,
-      recipient.normalizedValue,
-      smsCampaignBody(campaign.body_text),
-      idempotencyKey,
-      scheduledAt,
-      now,
-      now,
-    ));
-    statements.push(database.prepare(`
-      UPDATE crm_outreach_recipients
-      SET status='queued',scheduled_at=?,updated_at=?
-      WHERE campaign_id=? AND normalized_value=? AND status='eligible'
-    `).bind(scheduledAt, now, campaignId, recipient.normalizedValue));
-  }
-  await database.batch(statements);
-  return json({ campaign: campaignView(await campaignById(database, campaignId)) });
-}
-
 async function followupEligibility(database, personId, channel) {
   if (!CHANNELS.has(channel)) return { eligible: false, reason: "invalid_channel" };
   const person = await database.prepare(`
@@ -1217,14 +1011,14 @@ async function followupEligibility(database, personId, channel) {
   if (person.preferred_contact_method === "none") {
     return { eligible: false, reason: "do_not_contact", person };
   }
-  const kind = channel === "email" ? "email" : "phone";
+  const kind = "email";
   const identity = await database.prepare(`
     SELECT * FROM crm_identities
     WHERE person_id=? AND kind=? AND active=1
     ORDER BY is_primary DESC,is_verified DESC,created_at LIMIT 1
   `).bind(personId, kind).first();
   const destination = normalizeContact(channel, identity?.normalized_value || identity?.value);
-  if (!destination) return { eligible: false, reason: channel === "email" ? "missing_email" : "missing_phone", person };
+  if (!destination) return { eligible: false, reason: "missing_email", person };
   const suppression = await activeSuppression(database, channel, destination);
   if (suppression) return { eligible: false, reason: "suppressed", person, destination };
   const interaction = await database.prepare(`
@@ -1233,19 +1027,6 @@ async function followupEligibility(database, personId, channel) {
     ORDER BY occurred_at DESC,created_at DESC LIMIT 1
   `).bind(personId).first();
   if (!interaction) return { eligible: false, reason: "no_customer_interaction", person, destination };
-  if (channel === "sms") {
-    const consent = await latestConsent(database, "sms", destination);
-    if (consent?.status !== "granted") {
-      return {
-        eligible: false,
-        reason: consent?.status === "revoked" ? "unsubscribed" : "no_consent",
-        person,
-        destination,
-        consent,
-      };
-    }
-    return { eligible: true, person, destination, consent };
-  }
   return { eligible: true, person, destination };
 }
 
@@ -1262,14 +1043,7 @@ async function campaignRecipientEligibility(database, communication) {
   if (await activeSuppression(database, communication.channel, destination)) {
     return { eligible: false, reason: "suppressed" };
   }
-  const consent = await latestConsent(database, communication.channel, destination);
-  if (communication.channel === "sms" && consent?.status !== "granted") {
-    return {
-      eligible: false,
-      reason: consent?.status === "revoked" ? "unsubscribed" : "no_consent",
-    };
-  }
-  return { eligible: true, person, destination, consent };
+  return { eligible: true, person, destination };
 }
 
 async function handleFollowupPreview(request, database) {
@@ -1354,68 +1128,35 @@ async function sendCommunication(env, database, communication) {
     });
     return { ok: false, skipped: true, reason };
   }
-  if (communication.channel === "email") {
-    if (!featureEnabled(env, "OUTREACH_INDIVIDUAL_EMAIL_ENABLED")) {
-      return updateCommunicationResult(database, communication, {
-        ok: false,
-        error: "Individual outreach email is disabled.",
-      });
-    }
-    const result = await sendCrmFollowupEmail(env, {
-      to: communication.normalized_destination,
-      subject: communication.subject,
-      preheader: communication.preheader,
-      emailTheme: communication.email_theme,
-      text: communication.body_text,
-      personId: communication.person_id,
-      communicationId: communication.id,
-      idempotencyKey: communication.idempotency_key,
-    });
-    await updateCommunicationResult(database, communication, {
-      ok: Boolean(result?.ok),
-      error: result?.error || "",
-      providerMessageId: result?.response?.messageId || result?.response?.id || "",
-    });
-    return result;
-  }
-  const isCampaign = Boolean(communication.campaign_id);
-  const feature = isCampaign ? "OUTREACH_SMS_CAMPAIGNS_ENABLED" : "OUTREACH_INDIVIDUAL_SMS_ENABLED";
-  if (!featureEnabled(env, feature)) {
+  if (communication.channel !== "email") {
     return updateCommunicationResult(database, communication, {
       ok: false,
-      error: isCampaign ? "SMS campaigns are disabled." : "Individual SMS outreach is disabled.",
+      error: "Automated text-message outreach has been removed. Historical records are read-only.",
     });
   }
-  try {
-    const message = await sendTwilioMessage(env, {
-      to: communication.normalized_destination,
-      body: isCampaign ? smsCampaignBody(communication.body_text) : communication.body_text,
-    });
-    await updateCommunicationResult(database, communication, {
-      ok: true,
-      providerMessageId: message.sid,
-    });
-    return { ok: true, response: message };
-  } catch (error) {
-    const suppressed = ["21610", "21614"].includes(asString(error.code, 80));
-    if (suppressed) {
-      await upsertSuppression(database, {
-        personId: communication.person_id,
-        channel: "sms",
-        normalizedValue: communication.normalized_destination,
-        provider: "twilio",
-        sourceId: asString(error.code, 80),
-        active: true,
-        reason: "Twilio rejected this destination as opted out or invalid",
-      });
-    }
+  if (!featureEnabled(env, "OUTREACH_INDIVIDUAL_EMAIL_ENABLED")) {
     await updateCommunicationResult(database, communication, {
       ok: false,
-      suppressed,
-      error: error.message,
+      error: "Individual outreach email is disabled.",
     });
-    return { ok: false, error: error.message, code: error.code || "" };
+    return { ok: false, error: "Individual outreach email is disabled." };
   }
+  const result = await sendCrmFollowupEmail(env, {
+    to: communication.normalized_destination,
+    subject: communication.subject,
+    preheader: communication.preheader,
+    emailTheme: communication.email_theme,
+    text: communication.body_text,
+    personId: communication.person_id,
+    communicationId: communication.id,
+    idempotencyKey: communication.idempotency_key,
+  });
+  await updateCommunicationResult(database, communication, {
+    ok: Boolean(result?.ok),
+    error: result?.error || "",
+    providerMessageId: result?.response?.messageId || result?.response?.id || "",
+  });
+  return result;
 }
 
 async function handleSendFollowup(request, env, database) {
@@ -1427,7 +1168,7 @@ async function handleSendFollowup(request, env, database) {
   const subject = asString(body.subject, 300);
   const preheader = asString(body.preheader, 300);
   const emailTheme = asString(body.emailTheme, 40) === "tattoo" ? "tattoo" : "construct_studio";
-  const message = asString(body.bodyText || body.body || body.message, channel === "sms" ? 1600 : 10_000);
+  const message = asString(body.bodyText || body.body || body.message, 10_000);
   const followupId = asString(body.followupId, 200) || null;
   const requestId = asString(body.requestId, 300);
   if (!personId || !CHANNELS.has(channel) || !message || !requestId) {
@@ -1439,7 +1180,7 @@ async function handleSendFollowup(request, env, database) {
     SELECT * FROM crm_communications WHERE idempotency_key=?
   `).bind(idempotencyKey).first();
   if (existing) {
-    const expectedBody = channel === "sms" ? smsCampaignBody(message) : message;
+    const expectedBody = message;
     if (
       existing.subject !== subject
       || existing.body_text !== expectedBody
@@ -1485,9 +1226,9 @@ async function handleSendFollowup(request, env, database) {
     providerForChannel(channel),
     eligibility.destination,
     subject,
-    channel === "email" ? preheader : "",
-    channel === "email" ? emailTheme : "construct_studio",
-    channel === "sms" ? smsCampaignBody(message) : message,
+    preheader,
+    emailTheme,
+    message,
     scheduledAt && new Date(scheduledAt).getTime() > Date.now() ? "scheduled" : "queued",
     idempotencyKey,
     scheduledAt,
@@ -1560,29 +1301,6 @@ export async function processDueOutreach(env) {
       if (result?.ok) accepted += 1;
       else failed += 1;
     }
-    const campaigns = await database.prepare(`
-      SELECT id FROM crm_outreach_campaigns
-      WHERE channel='sms' AND status IN ('scheduled','sending')
-    `).all();
-    for (const campaign of campaigns.results || []) {
-      const remaining = await database.prepare(`
-        SELECT COUNT(*) count FROM crm_communications
-        WHERE campaign_id=? AND status IN ('draft','scheduled','queued')
-      `).bind(campaign.id).first();
-      const anyAccepted = await database.prepare(`
-        SELECT COUNT(*) count FROM crm_communications
-        WHERE campaign_id=? AND status IN ('accepted','delivered')
-      `).bind(campaign.id).first();
-      const status = Number(remaining?.count || 0) > 0
-        ? "sending"
-        : Number(anyAccepted?.count || 0) > 0 ? "sent" : "failed";
-      await database.prepare(`
-        UPDATE crm_outreach_campaigns
-        SET status=?,completed_at=CASE WHEN ? IN ('sent','failed') THEN COALESCE(completed_at,?) ELSE completed_at END,
-            updated_at=?
-        WHERE id=?
-      `).bind(status, status, nowIso(), nowIso(), campaign.id).run();
-    }
     return { ok: true, processed, accepted, failed };
   } finally {
     await releaseOutreachLease(database, "outreach-send", owner);
@@ -1613,12 +1331,9 @@ async function handlePreferenceRequest(request, env, database) {
   const parsed = await readObject(request);
   if (parsed.error) return parsed.error;
   const email = normalizeEmail(parsed.body.email);
-  const phone = normalizePhone(parsed.body.phone);
-  if ((email ? 1 : 0) + (phone ? 1 : 0) !== 1) {
-    return failure("Provide one valid email address or phone number.", 400);
-  }
-  const contactKind = email ? "email" : "phone";
-  const normalizedValue = email || phone;
+  if (!email) return failure("Provide one valid email address.", 400);
+  const contactKind = "email";
+  const normalizedValue = email;
   const rawToken = randomToken();
   const tokenId = id("crm-preference-token");
   const now = nowIso();
@@ -1630,22 +1345,12 @@ async function handlePreferenceRequest(request, env, database) {
   `).bind(tokenId, contactKind, normalizedValue, await sha256(rawToken), expiresAt, now).run();
   const url = new URL("/preferences/", asString(env.PUBLIC_SITE_URL, 500) || request.url);
   url.searchParams.set("token", rawToken);
-  let delivery;
-  if (contactKind === "email") {
-    delivery = await sendCommunicationPreferencesLink(env, {
-      to: normalizedValue,
-      url: url.toString(),
-      tokenId,
-      idempotencyKey: `crm_communication_preferences:${tokenId}`,
-    });
-  } else if (featureEnabled(env, "OUTREACH_INDIVIDUAL_SMS_ENABLED") && twilioConfigured(env)) {
-    delivery = await sendTwilioMessage(env, {
-      to: normalizedValue,
-      body: `Six.Well: manage your communication preferences: ${url.toString()}`,
-    }).then((response) => ({ ok: true, response })).catch((error) => ({ ok: false, error: error.message }));
-  } else {
-    delivery = { ok: false, skipped: true, error: "SMS preference links are not enabled yet." };
-  }
+  const delivery = await sendCommunicationPreferencesLink(env, {
+    to: normalizedValue,
+    url: url.toString(),
+    tokenId,
+    idempotencyKey: `crm_communication_preferences:${tokenId}`,
+  });
   if (!delivery?.ok) {
     await database.prepare("DELETE FROM crm_preference_tokens WHERE id=?").bind(tokenId).run();
     return failure("Unable to send the secure preferences link.", 503, { detail: delivery?.error || "" });
@@ -1699,7 +1404,10 @@ async function handlePreferenceUpdate(request, env, database) {
   const rawToken = asString(parsed.body.token, 200);
   const token = await preferenceTokenRecord(database, rawToken);
   if (!token) return failure("This preferences link is invalid or expired.", 404);
-  const channel = token.contact_kind === "email" ? "email" : "sms";
+  if (token.contact_kind !== "email") {
+    return failure("Automated text-message preferences are retained as read-only legacy history.", 409);
+  }
+  const channel = "email";
   const optedIn = bool(parsed.body.optedIn);
   if (optedIn && !bool(parsed.body.confirmed)) {
     return failure("Confirm the communication disclosure to opt in.", 400);
@@ -1805,120 +1513,15 @@ async function handleBeehiivWebhook(request, env, database) {
 }
 
 async function constantSecretEqual(expected, supplied) {
-  const left = new TextEncoder().encode(String(expected));
-  const right = new TextEncoder().encode(String(supplied));
-  return constantTimeEqual(left, right);
-}
-
-function twilioDeliveryStatus(status) {
-  const normalized = asString(status, 80).toLowerCase();
-  if (["delivered", "read"].includes(normalized)) return "delivered";
-  if (["failed", "undelivered"].includes(normalized)) return "failed";
-  if (["canceled"].includes(normalized)) return "cancelled";
-  return "accepted";
-}
-
-async function handleTwilioInbound(request, env, database) {
-  const raw = await request.text();
-  const params = new URLSearchParams(raw);
-  if (!await verifyTwilioRequest(request, env, params)) return failure("Invalid Twilio signature.", 401);
-  const messageSid = asString(params.get("MessageSid") || params.get("SmsSid"), 300);
-  const replay = await recordWebhookEvent(database, "twilio", `inbound:${messageSid}`, "message.inbound", raw);
-  if (replay.replayed) return xml();
-  const from = normalizePhone(params.get("From"));
-  const body = asString(params.get("Body"), 1600);
-  const keyword = body.trim().toLowerCase();
-  const optOutType = asString(params.get("OptOutType"), 80).toUpperCase();
-  const person = await findPersonByContact(database, "sms", from);
-  if (from && (optOutType === "STOP" || SMS_OPT_OUT_WORDS.has(keyword))) {
-    await recordConsentEvent(database, {
-      personId: person?.id || null,
-      channel: "sms",
-      value: from,
-      status: "revoked",
-      source: "twilio_stop",
-      provider: "twilio",
-      providerReference: `inbound:${messageSid}:stop`,
-      occurredAt: nowIso(),
-      evidence: { optOutType, keyword },
-    });
-  } else if (from && (optOutType === "START" || SMS_OPT_IN_WORDS.has(keyword))) {
-    await recordConsentEvent(database, {
-      personId: person?.id || null,
-      channel: "sms",
-      value: from,
-      status: "granted",
-      source: "twilio_start",
-      provider: "twilio",
-      providerReference: `inbound:${messageSid}:start`,
-      occurredAt: nowIso(),
-      evidence: { optOutType, keyword },
-    });
-  }
-  if (from) {
-    await database.prepare(`
-      INSERT OR IGNORE INTO crm_communications(
-        id,person_id,channel,purpose,direction,provider,normalized_destination,
-        body_text,status,provider_message_id,idempotency_key,created_at,updated_at
-      ) VALUES(?,?,'sms','relationship','inbound','twilio',?,?,'received',?,?,?,?)
-    `).bind(
-      id("crm-communication"),
-      person?.id || null,
-      from,
-      body,
-      messageSid,
-      `twilio:inbound:${messageSid}`,
-      nowIso(),
-      nowIso(),
-    ).run();
-  }
-  if (SMS_HELP_WORDS.has(keyword) && !optOutType) {
-    return xml("<Message>Six.Well: reply STOP to unsubscribe. For studio help, contact saisolehman@artpilltattoohouse.com.</Message>");
-  }
-  return xml();
-}
-
-async function handleTwilioStatus(request, env, database) {
-  const raw = await request.text();
-  const params = new URLSearchParams(raw);
-  if (!await verifyTwilioRequest(request, env, params)) return failure("Invalid Twilio signature.", 401);
-  const messageSid = asString(params.get("MessageSid") || params.get("SmsSid"), 300);
-  const providerStatus = asString(params.get("MessageStatus") || params.get("SmsStatus"), 80);
-  const eventKey = `status:${messageSid}:${providerStatus}`;
-  const replay = await recordWebhookEvent(database, "twilio", eventKey, "message.status", raw);
-  if (replay.replayed) return xml();
-  const status = twilioDeliveryStatus(providerStatus);
-  const error = [params.get("ErrorCode"), params.get("ErrorMessage")].filter(Boolean).join(": ");
-  const now = nowIso();
-  const communication = await database.prepare(`
-    SELECT * FROM crm_communications
-    WHERE provider='twilio' AND provider_message_id=? LIMIT 1
-  `).bind(messageSid).first();
-  if (communication) {
-    await database.prepare(`
-      UPDATE crm_communications
-      SET status=?,error=?,delivered_at=CASE WHEN ?='delivered' THEN ? ELSE delivered_at END,
-          updated_at=?
-      WHERE id=?
-    `).bind(status, asString(error, 2000), status, now, now, communication.id).run();
-    if (communication.campaign_id) {
-      await database.prepare(`
-        UPDATE crm_outreach_recipients
-        SET status=?,error=?,delivered_at=CASE WHEN ?='delivered' THEN ? ELSE delivered_at END,
-            updated_at=?
-        WHERE campaign_id=? AND normalized_value=?
-      `).bind(
-        status,
-        asString(error, 2000),
-        status,
-        now,
-        now,
-        communication.campaign_id,
-        communication.normalized_destination,
-      ).run();
-    }
-  }
-  return xml();
+  const [left, right] = await Promise.all([
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(expected))),
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(supplied))),
+  ]);
+  const a = new Uint8Array(left);
+  const b = new Uint8Array(right);
+  let difference = 0;
+  for (let index = 0; index < a.length; index += 1) difference |= a[index] ^ b[index];
+  return difference === 0;
 }
 
 export async function handlePublicOutreachApi(request, env) {
@@ -1939,14 +1542,6 @@ export async function handlePublicOutreachApi(request, env) {
     if (url.pathname === "/api/outreach/webhooks/beehiiv") {
       if (method !== "POST") return response405("POST");
       return handleBeehiivWebhook(request, env, database);
-    }
-    if (url.pathname === "/api/outreach/webhooks/twilio/inbound") {
-      if (method !== "POST") return response405("POST");
-      return handleTwilioInbound(request, env, database);
-    }
-    if (url.pathname === "/api/outreach/webhooks/twilio/status") {
-      if (method !== "POST") return response405("POST");
-      return handleTwilioStatus(request, env, database);
     }
     return failure("Unknown outreach route.", 404);
   } catch (error) {
@@ -2006,10 +1601,6 @@ export async function handleAdminOutreachApi(request, env) {
       if (route[2] === "prepare") {
         if (method !== "POST") return response405("POST");
         return handlePrepareBeehiivCampaign(request, env, database, campaignId);
-      }
-      if (route[2] === "schedule") {
-        if (method !== "POST") return response405("POST");
-        return handleScheduleSmsCampaign(request, env, database, campaignId);
       }
     }
     return failure("Unknown outreach route.", 404);

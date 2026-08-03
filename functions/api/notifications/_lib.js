@@ -12,6 +12,7 @@ import {
   buildCommunicationPreferencesEmail,
   buildCrmFollowupEmail,
   buildSubmissionReceivedEmail,
+  buildSubmissionDecisionEmail,
   buildTattooBriefReadyEmail,
   buildTattooDraftResumeEmail,
   buildTattooRenderingPaymentConfirmedEmail,
@@ -618,6 +619,51 @@ export async function notifyTattooSpecialReview(env, review = {}, options = {}) 
   });
 }
 
+export async function notifySubmissionDecision(env, submission = {}, options = {}) {
+  const decision = asString(options.decision || submission.status);
+  if (!new Set(["approved", "declined"]).has(decision)) {
+    return { ok: false, skipped: true, error: "Only approved or declined decisions can be sent." };
+  }
+  const to = asString(submission.contact_email || submission.contactEmail);
+  if (!to) return { ok: false, skipped: true, error: "The submission has no client email." };
+  const type = normalizedSubmissionType(submission.type);
+  const variant = ({
+    tattoo_inquiry: "custom",
+    flash_claim: "flash",
+    build_brief: "build",
+    maze_design: "maze",
+    special_project: "special",
+    tattoo_special: "tattoo_special",
+    art_acquisition: "art_acquisition",
+  })[type] || "custom";
+  const label = ({
+    tattoo_inquiry: "custom tattoo request",
+    flash_claim: "Flash request",
+    build_brief: "Build request",
+    maze_design: "Maze request",
+    special_project: "Special Project request",
+    tattoo_special: "Tattoo Special request",
+    art_acquisition: "art inquiry",
+  })[type] || "project request";
+  const message = buildSubmissionDecisionEmail({
+    decision,
+    variant,
+    label,
+    clientName: submission.contact_name || submission.contactName,
+    message: options.message || submission.decision_client_message || submission.decisionClientMessage || "",
+  });
+  return sendTransactionalEmail(env, {
+    to,
+    ...(type === "art_acquisition" ? eventsEmailIdentity(env) : {}),
+    ...message,
+    templateKey: decision === "approved" ? "submission_approved" : "submission_declined",
+    templateVariant: variant,
+    relatedType: "submission",
+    relatedId: asString(submission.id),
+    idempotencyKey: options.idempotencyKey || `submission_${decision}:${asString(submission.id)}:${Number(options.decisionRevision || submission.decision_revision || submission.decisionRevision || 0)}`,
+  });
+}
+
 export async function sendCommunicationPreferencesLink(env, message = {}) {
   const to = asString(message.to);
   const url = asString(message.url);
@@ -909,7 +955,7 @@ const SUBMISSION_RECEIPTS = {
     label: "request",
     subject: "Tattoo Special request received",
     expectation: "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.",
-    next: "No appointment is booked yet. If approved, you will receive an email and text with a Square link to pay the deposit for the held time.",
+    next: "No appointment is booked yet. If approved, the Studio may send an email with a Square link to pay the deposit for the held time.",
   },
   consultation: {
     label: "consultation reservation",
@@ -959,12 +1005,60 @@ async function tattooReceiptSettings(env) {
   }
 }
 
+const SUBMISSION_DETAIL_LABELS = {
+  project_type: "Project type",
+  desired_style: "Desired style / direction",
+  cover_up_goal: "Cover-up goal",
+  size_placement_flexibility: "Size / placement flexibility",
+  existing_tattoo_dimensions: "Existing tattoo dimensions",
+  treatment_scarring_context: "Laser treatment / scarring context",
+  open_to_larger_footprint: "Open to larger footprint",
+  open_to_multiple_sessions: "Open to multiple sessions",
+  existing_tattoo_age: "Existing tattoo age",
+  rework_interventions: "Rework interventions",
+  rework_tattoo_condition: "Current tattoo condition",
+  rework_expansion_flexibility: "Open to expanding rework",
+  gap_dimensions: "Gap dimensions",
+  surrounding_work: "Surrounding tattoos",
+  filler_relationship: "Filler relationship",
+};
+
+const SUBMISSION_DETAIL_VALUES = {
+  new_work: "New work",
+  cover_up: "Cover-up",
+  large_cover_up: "Large cover-up",
+  rework: "Rework / recolor",
+  space_filler: "Space filler",
+  fully_hide: "Fully hide the existing tattoo",
+  transform: "Transform the existing tattoo",
+  incorporate: "Incorporate it into new work",
+  flexible: "Flexible on size and placement",
+  size_only: "Flexible on size",
+  placement_only: "Flexible on placement",
+  limited: "Limited flexibility",
+  refresh_color: "Refresh or restore color",
+  repair_linework: "Repair or strengthen linework",
+  redesign_part: "Redesign part of the existing tattoo",
+  extend_new_work: "Extend the tattoo into new work",
+  needs_assessment: "Needs assessment",
+  discuss: "Needs discussion",
+  connect_blend: "Connect or blend with surrounding work",
+  standalone: "Standalone tattoo",
+  unsure: "Unsure - needs assessment",
+};
+
 function labelFromKey(key) {
+  if (SUBMISSION_DETAIL_LABELS[key]) return SUBMISSION_DETAIL_LABELS[key];
   return String(key || "")
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function readableSubmissionDetailValue(value) {
+  if (Array.isArray(value)) return value.map(readableSubmissionDetailValue);
+  return SUBMISSION_DETAIL_VALUES[value] || value;
 }
 
 function valueSummary(value) {
@@ -1002,9 +1096,24 @@ function submissionDetailLines(submission) {
   if (!payload.budget_range && payload.claim_bid) payload.budget_range = payload.claim_bid;
   const fieldsByType = {
     tattoo_inquiry: [
+      "project_type",
       "placement",
       "size",
       "budget_range",
+      "desired_style",
+      "cover_up_goal",
+      "size_placement_flexibility",
+      "existing_tattoo_dimensions",
+      "treatment_scarring_context",
+      "open_to_larger_footprint",
+      "open_to_multiple_sessions",
+      "existing_tattoo_age",
+      "rework_interventions",
+      "rework_tattoo_condition",
+      "rework_expansion_flexibility",
+      "gap_dimensions",
+      "surrounding_work",
+      "filler_relationship",
       "timeline",
       "message",
       "instagram",
@@ -1071,7 +1180,7 @@ function submissionDetailLines(submission) {
   };
   const preferredFields = fieldsByType[submission.type] || Object.keys(payload);
   const lines = preferredFields
-    .map((key) => compactLine(labelFromKey(key), payload[key]))
+    .map((key) => compactLine(labelFromKey(key), readableSubmissionDetailValue(payload[key])))
     .filter(Boolean);
   if (submission.type === "flash_claim") {
     lines.push(
