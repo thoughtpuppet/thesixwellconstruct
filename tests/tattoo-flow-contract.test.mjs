@@ -2674,10 +2674,12 @@ test("Studio client preview opens synchronously and carries the Tattoo Special l
   assert.match(studio, /sessionPlan\?\.allowedBookingTypes/);
   assert.match(studio, /function clientPreviewContext[\s\S]*?allowedTypeIds[\s\S]*?special_offer_title[\s\S]*?pendingApproval[\s\S]*?pendingCheckout/);
   assert.match(booking, /function adminPreviewContext[\s\S]*?previewSource: payload\.previewSource[\s\S]*?pendingCheckout: payload\.pendingCheckout \|\| null/);
+  assert.match(booking, /id="walkInSection"[\s\S]*?walkInSection\.classList\.toggle\("hidden", Boolean\(special\)\)/);
   assert.match(booking, /<strong>Notes from the artist:<\/strong><br>\$\{sessionCopyHtml\(plan\.artistNote \|\| copy\.fallbackNote\)\}/);
   assert.match(booking, /if \(!renderPendingCheckout\(\)\) appEl\.classList\.remove\("hidden"\)/);
   assert.match(booking, /if \(previewMode\)[\s\S]*?client's Square checkout is not opened from Studio preview/);
-  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Pay deposit and confirm[\s\S]*?resumeCheckoutLink\.classList\.remove\("hidden"\)/);
+  assert.match(booking, /pending\.approvalState === "approved"[\s\S]*?Confirm requested date and pay deposit[\s\S]*?resumeCheckoutLink\.classList\.remove\("hidden"\)/);
+  assert.match(booking, /changeRequestedDateLink\.href = `\/booking\/reschedule\/\?appointment=\$\{encodeURIComponent\(pending\.appointmentId\)\}&flow=special-request`/);
 });
 
 test("Tattoo Specials require Studio approval and preserve server-side price, deposit, duration, and token cutoff", async () => {

@@ -133,7 +133,7 @@
   <div class="badge"><span class="badge-dot"></span>Private Booking</div>
   <p class="local-edit-note" data-live-edit-ignore="true">Preview editing is local only. Use the toolbar at bottom right, then export the changes for source-file updates.</p>
 
-  <section class="section">
+  <section class="section" id="walkInSection">
     <p class="section-label">Walk-In Windows</p>
     <div id="walkInCards"></div>
   </section>
@@ -143,6 +143,7 @@
     <span id="pendingCheckoutText"></span>
     <div class="pending-checkout-actions">
       <a id="resumeCheckoutLink" class="pending-checkout-link hidden" href="#">Resume Square checkout</a>
+      <a id="changeRequestedDateLink" class="pending-checkout-link hidden" href="#">Change requested date</a>
       <button id="releaseCheckoutBtn" class="pending-checkout-button hidden" type="button">Release hold and choose again</button>
     </div>
   </div>
@@ -230,9 +231,11 @@
   const editMode = params.get("edit") === "1";
   const bookingPreviewKey = "swc_booking_admin_preview";
   const statusEl = document.getElementById("status");
+  const walkInSection = document.getElementById("walkInSection");
   const pendingCheckoutPanel = document.getElementById("pendingCheckoutPanel");
   const pendingCheckoutText = document.getElementById("pendingCheckoutText");
   const resumeCheckoutLink = document.getElementById("resumeCheckoutLink");
+  const changeRequestedDateLink = document.getElementById("changeRequestedDateLink");
   const releaseCheckoutBtn = document.getElementById("releaseCheckoutBtn");
   const appEl = document.getElementById("bookingApp");
   const clientDetailsSection = document.getElementById("clientDetailsSection");
@@ -841,6 +844,7 @@
     pendingCheckoutPanel.classList.add("hidden");
     resumeCheckoutLink.classList.add("hidden");
     resumeCheckoutLink.textContent = "Resume Square checkout";
+    changeRequestedDateLink.classList.add("hidden");
     releaseCheckoutBtn.classList.add("hidden");
     if (!pending) return false;
     const expiresAt = pending.holdExpiresAt || pending.expiresAt || "";
@@ -857,14 +861,18 @@
     }
     if (pending.approvalState === "approved" && context?.submission?.special) {
       pendingCheckoutText.textContent = active && pending.checkoutUrl
-        ? `Studio approved your requested time, ${formatDate(pending.startAt)}. Pay the deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""} to confirm the appointment.`
+        ? `Studio approved your requested time, ${formatDate(pending.startAt)}. Confirm it with the deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}, or choose a different date.`
         : active
           ? `Studio approved your requested time, ${formatDate(pending.startAt)}. The deposit link is still being prepared; return here after the Studio confirms it is ready.`
           : `The deposit window for your approved requested time has ended. Contact the Studio before attempting another booking.`;
       if (active && pending.checkoutUrl) {
         resumeCheckoutLink.href = pending.checkoutUrl;
-        resumeCheckoutLink.textContent = "Pay deposit and confirm";
+        resumeCheckoutLink.textContent = "Confirm requested date and pay deposit";
         resumeCheckoutLink.classList.remove("hidden");
+      }
+      if (pending.appointmentId) {
+        changeRequestedDateLink.href = `/booking/reschedule/?appointment=${encodeURIComponent(pending.appointmentId)}&flow=special-request`;
+        changeRequestedDateLink.classList.remove("hidden");
       }
       pendingCheckoutPanel.classList.remove("hidden");
       appEl.classList.add("hidden");
@@ -922,6 +930,12 @@
     if (!previewMode) return;
     event.preventDefault();
     pendingCheckoutText.textContent = "Preview mode only. The client's Square checkout is not opened from Studio preview.";
+  });
+
+  changeRequestedDateLink.addEventListener("click", (event) => {
+    if (!previewMode) return;
+    event.preventDefault();
+    pendingCheckoutText.textContent = "Preview mode only. The client's date-change flow is not opened from Studio preview.";
   });
 
   function renderSessionPlan() {
@@ -989,6 +1003,7 @@
     const types = context.bookingTypes || [];
     const windows = context.availabilityWindows || [];
     const special = context?.submission?.special;
+    walkInSection.classList.toggle("hidden", Boolean(special));
     renderSessionPlan();
     renderPaceIntro();
     sessionListEl.innerHTML = special && selectedType ? `
