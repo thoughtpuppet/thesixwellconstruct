@@ -824,7 +824,7 @@
       ? "Project review has linked you to a required in-person planning consultation. Choose a time and pay the consultation reservation fee. This does not book the tattoo; tattoo access follows only after the consultation is completed and the studio saves the final session plan."
       : special
         ? pendingSpecialApproval
-          ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select an available time to hold it while Studio reviews your request. No appointment is booked and no deposit is due until approval.`
+          ? `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Select the time you would like Studio to review. This records your request but does not reserve the appointment.`
           : `${special.offerTitle}${special.variantLabel ? ` — ${special.variantLabel}` : ""}. Your approved total is ${money(special.quotedPriceCents || 0)} for ${minutesLabel(special.durationMinutes || 0)}. The ${money(special.depositCents || 0)} deposit is credited toward that total; the remaining balance is ${money(Math.max(0, (special.quotedPriceCents || 0) - (special.depositCents || 0)))}.`
       : "Your project and final session plan are ready for tattoo scheduling. Select a session, complete the tattoo deposit through Square, and return here for confirmation.";
     sessionSectionLabel.textContent = consultation
@@ -833,12 +833,12 @@
         ? "Your Tattoo Special & Deposit"
         : "Session & Deposit";
     depositKey.textContent = consultation ? "Reservation Fee" : pendingSpecialApproval ? "Deposit after approval" : "Deposit";
-    checkoutBtn.textContent = pendingSpecialApproval ? "Submit Request for Approval" : "Continue to Square";
+    checkoutBtn.textContent = pendingSpecialApproval ? "Submit Requested Time" : "Continue to Square";
     checkoutNote.textContent = consultation
       ? "This non-refundable reservation fee schedules only the prerequisite consultation. It is not a tattoo deposit."
       : special
         ? pendingSpecialApproval
-          ? `Nothing is charged now. If Studio approves the request, the ${money(special.depositCents || 0)} deposit link can be sent by email and will expire after 24 hours or at the Specials sales deadline, whichever comes first.`
+          ? `Nothing is charged and the time is not reserved. If Studio approves the request, you can confirm an available appointment by paying the ${money(special.depositCents || 0)} deposit.`
           : `${money(special.depositCents || 0)} is collected now and credited toward the ${money(special.quotedPriceCents || 0)} Tattoo Special total. The deposit is non-refundable.`
       : "The tattoo deposit is applied toward the appointment total. Optional tips are itemized separately on the Square receipt.";
     const badge = document.querySelector(".badge");
@@ -850,6 +850,7 @@
     pendingCheckoutPanel.classList.add("hidden");
     resumeCheckoutLink.classList.add("hidden");
     resumeCheckoutLink.textContent = "Resume Square checkout";
+    delete resumeCheckoutLink.dataset.startDeposit;
     changeRequestedDateLink.classList.add("hidden");
     releaseCheckoutBtn.classList.add("hidden");
     if (!pending) return false;
@@ -859,8 +860,7 @@
     const active = activeState && Number.isFinite(expiresMs) && expiresMs > Date.now();
     const service = context?.purpose === "consultation" ? "consultation" : "tattoo appointment";
     if (pending.approvalState === "pending") {
-      pendingCheckoutText.textContent = `Your requested time, ${formatDate(pending.startAt || pending.heldStartAt)}, is held for Studio review. Your request-received email confirms that no appointment is booked and no deposit is due until approval.`;
-      releaseCheckoutBtn.classList.remove("hidden");
+      pendingCheckoutText.textContent = `Your requested time, ${formatDate(pending.startAt || pending.heldStartAt)}, has been sent to Studio for review. It is not reserved, no appointment is booked, and no deposit is due unless the request is approved.`;
       pendingCheckoutPanel.classList.remove("hidden");
       appEl.classList.add("hidden");
       return true;
@@ -870,12 +870,17 @@
       const designLabel = [special.offerTitle, special.variantLabel].filter(Boolean).join(" - ") || "Tattoo Special";
       const requestedAppointment = `${designLabel} appointment for ${formatDate(pending.startAt)}`;
       const depositLabel = money(special.depositCents || 0);
-      pendingCheckoutText.textContent = active && pending.checkoutUrl
-        ? `Your requested ${requestedAppointment} has been approved. Confirm it by paying the ${depositLabel} deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}, or choose a different date.`
-        : active
-          ? `Your requested ${requestedAppointment} has been approved. The ${depositLabel} deposit link is still being prepared; return here after the Studio confirms it is ready.`
-          : `Your requested ${requestedAppointment} was approved, but its deposit window has ended. Contact the Studio before attempting another booking.`;
-      if (active && pending.checkoutUrl) {
+      const requestedOnly = pending.status === "requested" && !pending.holdState;
+      const paymentOpen = !pending.paymentDueAt || new Date(pending.paymentDueAt).getTime() > Date.now();
+      pendingCheckoutText.textContent = paymentOpen
+        ? `You requested ${requestedAppointment}. Studio approved the request. Confirm the appointment by paying the ${depositLabel} deposit${pending.paymentDueAt ? ` by ${formatDate(pending.paymentDueAt)}` : ""}. Availability will be checked before Square opens; the requested time is not reserved until payment succeeds.`
+        : `Your requested ${requestedAppointment} was approved, but its deposit window has ended. Contact the Studio before attempting another booking.`;
+      if (paymentOpen && requestedOnly) {
+        resumeCheckoutLink.href = "#";
+        resumeCheckoutLink.dataset.startDeposit = "1";
+        resumeCheckoutLink.textContent = "Confirm and pay deposit";
+        resumeCheckoutLink.classList.remove("hidden");
+      } else if (active && pending.checkoutUrl) {
         resumeCheckoutLink.href = pending.checkoutUrl;
         resumeCheckoutLink.textContent = "Confirm and pay deposit";
         resumeCheckoutLink.classList.remove("hidden");
@@ -936,10 +941,38 @@
     }
   });
 
-  resumeCheckoutLink.addEventListener("click", (event) => {
-    if (!previewMode) return;
+  resumeCheckoutLink.addEventListener("click", async (event) => {
+    if (previewMode) {
+      event.preventDefault();
+      pendingCheckoutText.textContent = "Preview mode only. The client's Square checkout is not opened from Studio preview.";
+      return;
+    }
+    if (resumeCheckoutLink.dataset.startDeposit !== "1") return;
     event.preventDefault();
-    pendingCheckoutText.textContent = "Preview mode only. The client's Square checkout is not opened from Studio preview.";
+    const pending = context?.pendingCheckout;
+    if (!pending?.availabilityWindowId || !context?.bookingTypes?.[0]?.id) return;
+    resumeCheckoutLink.classList.add("hidden");
+    pendingCheckoutText.textContent = "Checking availability and preparing the secure Square deposit checkout.";
+    try {
+      const response = await fetch("/api/booking/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          token,
+          bookingTypeId: context.bookingTypes[0].id,
+          availabilityWindowId: pending.availabilityWindowId,
+          tipCents: 0,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.checkoutUrl) {
+        throw new Error(payload.error || "That requested time is no longer available. Choose another date.");
+      }
+      window.location.href = payload.checkoutUrl;
+    } catch (error) {
+      pendingCheckoutText.textContent = `${error.message} No charge was made.`;
+      resumeCheckoutLink.classList.remove("hidden");
+    }
   });
 
   changeRequestedDateLink.addEventListener("click", (event) => {
@@ -1089,7 +1122,7 @@
     totalValue.textContent = pendingSpecialApproval ? "$0" : selectedType ? money(Number(selectedType.depositCents || 0) + selectedTipCents, selectedType.currency || "USD") : "-";
     checkoutNote.textContent = context?.submission?.special
       ? pendingSpecialApproval
-        ? `This time is held for approval only. No appointment is booked and no payment link is created yet.`
+        ? `This records a requested time for approval. It does not reserve the appointment, book anything, or create a payment link.`
         : `${selectedType.depositLabel} is collected through Square and credited toward the ${money(context.submission.special.quotedPriceCents || 0)} Tattoo Special total. Remaining balance: ${money(Math.max(0, (context.submission.special.quotedPriceCents || 0) - Number(selectedType.depositCents || 0)))}.`
       : selectedType?.id === EXTENDED_DAY_BOOKING_TYPE_ID
       ? `Square collects only the ${selectedType.depositLabel} deposit${selectedTipCents ? " and your optional tip" : ""} today. The $200 Extended Day fee is included in the final studio balance, and the deposit is credited toward your final total.`
@@ -1296,7 +1329,7 @@
     }
     checkoutBtn.disabled = true;
     const pendingSpecialApproval = Boolean(context?.submission?.pendingApproval);
-    checkoutNote.textContent = pendingSpecialApproval ? "Holding your selected time and sending your request." : "Preparing your Square deposit checkout.";
+    checkoutNote.textContent = pendingSpecialApproval ? "Recording your requested time for Studio review." : "Preparing your Square deposit checkout.";
     const response = await fetch(pendingSpecialApproval ? "/api/booking/hold" : "/api/booking/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1313,13 +1346,15 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      checkoutNote.textContent = payload.error || (pendingSpecialApproval ? "Unable to hold this time for approval." : "Unable to prepare deposit checkout.");
+      checkoutNote.textContent = payload.error || (pendingSpecialApproval ? "Unable to record this requested time." : "Unable to prepare deposit checkout.");
       checkoutBtn.disabled = false;
       return;
     }
     if (pendingSpecialApproval) {
       context.pendingCheckout = {
         appointmentId: payload.appointment.id,
+        availabilityWindowId: payload.appointment.availabilityWindowId,
+        status: payload.appointment.status,
         holdExpiresAt: payload.appointment.holdExpiresAt,
         holdState: payload.appointment.holdState,
         approvalState: payload.appointment.approvalState,

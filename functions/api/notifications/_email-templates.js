@@ -62,7 +62,7 @@ export function buildSubmissionReceivedEmail(data) {
     greeting: `Hi ${data.clientName || "there"},`,
     details: [
       { label: "Submission reference", value: data.submissionId },
-      data.heldWhen ? { label: "Requested time (held)", value: data.heldWhen } : null,
+      data.requestedWhen ? { label: "Requested time (not reserved)", value: data.requestedWhen } : null,
     ],
     primaryAction: data.briefUrl ? {
       label: data.briefLabel || "Download submitted brief",
@@ -183,7 +183,7 @@ export function buildBookingLinkEmail(data) {
       consultation
         ? "The consultation fee is non-refundable and is not a tattoo deposit. Paying schedules only the prerequisite consultation; the tattoo remains unbooked until consultation completion, a final session plan, and a separate tattoo booking link."
         : tattooSpecial
-          ? "This link is private to your Tattoo Special. Selecting a time creates only a temporary hold. Your appointment is confirmed only after Square reports the deposit as paid. The deposit is non-refundable and is credited toward the fixed approved total. The selected special, duration, price, and participant count recorded with the request remain attached to the booking."
+          ? "This link is private to your Tattoo Special. Selecting a requested time does not reserve it. After approval, availability is checked again when deposit checkout begins, and the appointment is confirmed only after Square reports the deposit as paid. The deposit is non-refundable and is credited toward the fixed approved total."
           : "This link is private to your project. Tattoo deposits are non-refundable and go toward the final cost of the scheduled tattoo. Personalized aftercare instructions are provided at the appointment.",
       "If the available times do not work, reply to this email and the studio can help.",
     ],
@@ -258,12 +258,12 @@ export function buildTattooSpecialDepositRequestEmail(data) {
     variables: { client_name: data.clientName || "there" },
     theme: "tattoo",
     subject: data.subject || "Your Tattoo Special was approved — deposit required",
-    preheader: "Pay the deposit before the deadline to confirm your held appointment time.",
+    preheader: "Confirm an available appointment by paying the deposit before the deadline.",
     classification: "TATTOO SPECIAL APPROVED",
-    headline: "Your held time is approved. Pay the deposit to book it.",
+    headline: "Your request is approved. Pay the deposit to confirm an available time.",
     greeting: `Hi ${data.clientName || "there"},`,
     intro: [
-      "Sai Solehman has approved your Tattoo Special request. Your requested time is still held, but it is not booked yet. Use the link below to confirm your appointment and pay your deposit. You can also change your requested time below if needed.",
+      "Sai Solehman has approved your Tattoo Special request. Your requested time is not reserved yet. Use the private page below to check availability, confirm the appointment, and pay your deposit. You can also change your requested time if needed.",
     ],
     details: [
       { label: "Requested appointment", value: data.when },
@@ -272,14 +272,14 @@ export function buildTattooSpecialDepositRequestEmail(data) {
       { label: "Deposit due", value: data.depositText },
       { label: "Pay by", value: data.paymentDue },
     ],
-    primaryAction: { label: "Pay deposit and confirm", href: data.checkoutUrl },
+    primaryAction: { label: "Confirm and pay deposit", href: data.checkoutUrl },
     secondaryActions: data.changeTimeUrl ? [
       { id: "change_requested_time", label: "Change requested time", href: data.changeTimeUrl },
     ] : [],
     notice: [
       "The appointment becomes booked only after Square confirms the deposit payment.",
-      "If you change the requested time, the original Square link is replaced. An available new time can be selected and paid immediately without another Studio approval.",
-      "The payment link expires after 24 hours or at the Tattoo Specials sales deadline, whichever comes first. If it expires unpaid, the held time is released.",
+      "Availability is checked immediately before Square checkout is created. If that time is no longer available, no charge is made and you can request another time without another Studio approval.",
+      "The private deposit page expires after 24 hours or at the Tattoo Specials sales deadline, whichever comes first.",
       "The deposit is non-refundable and is credited toward the approved Tattoo Special total.",
     ],
     signature: tattooSignature(true),
@@ -910,7 +910,7 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       build: ["Build Your Own submission", "The studio will review your symbols, composition, placement, scale, and budget.", "If the project is a fit, the Studio will send the appropriate next step."],
       maze: ["Maze Studio submission", "The studio will review the generated maze, placement, scale, and project notes.", "If the project is a fit, the Studio will send the appropriate next step."],
       special: ["special project application", "The studio will review the application, scope, placement, references, budget, and timing.", "If the project is a fit, the Studio will contact you with the next step."],
-      tattoo_special: ["request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked yet. If approved, the Studio may send an email with a Square link to pay the deposit for the held time."],
+      tattoo_special: ["request", "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.", "No appointment is booked or reserved yet. If approved, the Studio may send a private page where availability is checked before deposit checkout begins."],
       consultation: ["consultation request", "Your selected consultation time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       build_session: ["Build session request", "Your selected Build session time remains pending until checkout is completed.", "Complete checkout from the Square link you opened to keep the selected time."],
       art_acquisition: ["art acquisition inquiry", "The Art studio will review the work, availability, budget, and questions you shared.", "The studio will reply with availability, acquisition details, or the next step."],
@@ -932,12 +932,12 @@ export function renderClientEmailPreview(templateKey, variant = "", designProfil
       clientName: SAMPLE.clientName,
       label: profile[0],
       submissionId: "demo-submission-014",
-      heldWhen: mode === "tattoo_special" ? "Saturday, September 19, 2026 at 1:00 PM EDT - Saturday, September 19, 2026 at 3:00 PM EDT" : "",
+      requestedWhen: mode === "tattoo_special" ? "Saturday, September 19, 2026 at 1:00 PM EDT - Saturday, September 19, 2026 at 3:00 PM EDT" : "",
       requestedSheetDesigns: flash ? ["A is Moth - placement: Forearm - scale: 4 in"] : [],
       expectation: profile[1],
       next: profile[2],
       reviewLine: mode === "tattoo_special"
-        ? "This is a request and a temporary hold, not a booked appointment. The appointment is confirmed only after Studio approval and successful deposit payment."
+        ? "This is a requested time, not a hold or booked appointment. Availability is checked again when deposit checkout begins, and the appointment is confirmed only after successful payment."
         : ["consultation", "build_session"].includes(mode) ? "Complete checkout to keep the selected time." : "Most project submissions are reviewed within 5-7 business days.",
       supportEmail: SAMPLE.supportEmail,
       supportPhone: SAMPLE.supportPhone,

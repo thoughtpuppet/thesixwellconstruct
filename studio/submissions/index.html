@@ -1416,6 +1416,7 @@
       if (submission?.type === "tattoo_special" && submission.status === "approved") {
         const checkoutDeadline = appointment?.paymentDueAt || appointment?.holdExpiresAt || "";
         const checkoutDeadlineMs = checkoutDeadline ? new Date(checkoutDeadline).getTime() : NaN;
+        const requestedOnly = appointment?.status === "requested" && !appointment?.holdState;
         const checkoutStillOpen = appointmentIsPending(appointment)
           && appointment?.holdState === "active"
           && (!Number.isFinite(checkoutDeadlineMs) || checkoutDeadlineMs > Date.now())
@@ -1427,10 +1428,12 @@
         });
         if (active) {
           const activeUntil = checkoutStillOpen ? checkoutDeadline : active.expiresAt;
-          const detail = checkoutStillOpen
+          const detail = requestedOnly
+            ? `Client deposit access is active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}. The requested time is not reserved; availability is checked when the client starts payment.`
+            : checkoutStillOpen
             ? `Square checkout and client access are active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}.`
             : `Client access is active${activeUntil ? ` until ${formatDate(activeUntil)}` : ""}; the client can choose a new available time before paying.`;
-          container.innerHTML = `<strong>Deposit link active</strong><br>${escapeHtml(detail)}`;
+          container.innerHTML = `<strong>${requestedOnly ? "Client deposit page active" : "Deposit link active"}</strong><br>${escapeHtml(detail)}`;
           container.style.color = "var(--accent)";
           return;
         }
@@ -4393,7 +4396,7 @@ ${meetingLines}
 
   function renderCommunicationActions(submission) {
     const appointment = latestAppointmentFor(submission.id);
-    const specialPrepared = submission.type === "tattoo_special" && Boolean(appointment?.checkoutUrl || appointment?.squareCheckoutUrl);
+    const specialPrepared = submission.type === "tattoo_special" && Boolean(submission.bookingUrl);
     const tattooPrepared = ["tattoo_inquiry", "flash_claim"].includes(submission.type) && Boolean(submission.bookingUrl);
     const nonBookingApproval = ["art_acquisition", "build_brief", "maze_design", "special_project"].includes(submission.type);
     const canSendDecision = submission.status === "declined"
@@ -4751,7 +4754,7 @@ ${meetingLines}
         ${detailField("Duration", `${Number(payload.duration_minutes || 0)} minutes`)}
         ${detailField("Booking flow", review ? "Studio approval required" : "Historical direct booking")}
         ${detailField("Requested time", heldAppointment?.startAt ? `${formatDate(heldAppointment.startAt)}${heldAppointment.endAt ? `\nEnds: ${formatDate(heldAppointment.endAt)}` : ""}` : "No time selected yet")}
-        ${detailField("Appointment state", heldAppointment?.approvalState === "approved" ? "Approved — awaiting deposit" : heldAppointment?.approvalState === "pending" ? "Held for approval" : heldAppointment?.status || "Request only")}
+        ${detailField("Appointment state", heldAppointment?.status === "requested" && heldAppointment?.approvalState === "approved" ? "Approved request — time not reserved" : heldAppointment?.status === "requested" ? "Requested — time not reserved" : heldAppointment?.approvalState === "approved" ? "Approved — awaiting deposit" : heldAppointment?.approvalState === "pending" ? "Awaiting approval" : heldAppointment?.status || "Request only")}
         ${detailField("Special version", payload.special_offer_version_id || "")}
         ${detailField("Participants", participants.map((person) => `${person.name} · ${person.email} · ${person.phone}${person.dob ? ` · DOB ${person.dob}` : ""}`).join("\n"))}
       </div>
@@ -7037,12 +7040,12 @@ ${meetingLines}
     if (prepareSpecialDeposit) {
       prepareSpecialDeposit.disabled = true;
       try {
-        setStatus("Preparing Tattoo Special deposit link; no email will be sent");
+        setStatus("Preparing Tattoo Special client deposit page; no time is reserved and no email will be sent");
         await api(`/api/admin/tattoo/specials/submissions/${encodeURIComponent(prepareSpecialDeposit.dataset.prepareSpecialDeposit)}/deposit`, {
           method: "POST",
         });
         await loadAndRender();
-        setStatus("Deposit link prepared; no email sent");
+        setStatus("Client deposit page prepared; no time reserved and no email sent");
       } catch (error) {
         setStatus(error.message || "Deposit link could not be prepared");
         if (prepareSpecialDeposit.isConnected) prepareSpecialDeposit.disabled = false;

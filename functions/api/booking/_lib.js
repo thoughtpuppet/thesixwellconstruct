@@ -1343,8 +1343,10 @@ export async function handleBookingContext(request, env) {
     const pendingRow = await db.prepare(
       `SELECT * FROM appointments
        WHERE booking_token_id = ?
-         AND status IN ('pending_deposit','deposit_pending')
-         AND hold_state IN ('active','expiry_attention')
+         AND (
+           (status='requested' AND hold_state IS NULL)
+           OR (status IN ('pending_deposit','deposit_pending') AND hold_state IN ('active','expiry_attention'))
+         )
        ORDER BY created_at DESC LIMIT 1`
     ).bind(context.token.id).first();
     const pendingAppointment = pendingRow ? normalizeAppointment(pendingRow) : null;
@@ -1393,6 +1395,8 @@ export async function handleBookingContext(request, env) {
       availabilityWindows: windows,
       pendingCheckout: pendingAppointment ? {
         appointmentId: pendingAppointment.id,
+        availabilityWindowId: pendingAppointment.availabilityWindowId,
+        status: pendingAppointment.status,
         startAt: pendingAppointment.startAt,
         endAt: pendingAppointment.endAt,
         checkoutUrl: pendingResumable ? pendingAppointment.squareCheckoutUrl : "",
@@ -1960,7 +1964,9 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
     holdExpiresAt: tokenContext.pendingSpecialApproval
       ? approvalHoldExpiry(tokenContext.token.expires_at)
       : holdExpiryFromNow(tokenContext.token.submission_type === "tattoo_special" ? tokenContext.token.expires_at : ""),
-    approvalState: tokenContext.pendingSpecialApproval ? "pending" : "not_required",
+    approvalState: tokenContext.token.submission_type === "tattoo_special"
+      ? (tokenContext.pendingSpecialApproval ? "pending" : "approved")
+      : "not_required",
     now,
     eventMetadata: { tokenPurpose: tokenContext.purpose },
   });
@@ -1970,6 +1976,69 @@ async function createPendingAppointment(db, tokenContext, bookingTypeId, windowI
   const normalizedAppointment = normalizeAppointment(appointment);
   await mirrorAppointmentToCrm(db, normalizedAppointment);
   return { appointment: normalizedAppointment, bookingType: normalizeBookingType(bookingType) };
+}
+
+async function createTattooSpecialTimeRequest(db, tokenContext, bookingTypeId, windowId) {
+  const now = new Date().toISOString();
+  const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
+    .bind(bookingTypeId)
+    .first();
+  if (!bookingType || !isTattooSpecialBookingType(bookingType.id)) {
+    return { error: "That Tattoo Special appointment type is unavailable." };
+  }
+  if (!(tokenContext.allowedBookingTypes || []).includes(bookingType.id)) {
+    return { error: "This request does not include that Tattoo Special appointment type." };
+  }
+  const existing = await db.prepare(
+    `SELECT * FROM appointments
+     WHERE booking_token_id=? AND status='requested' AND approval_state IN ('pending','approved')
+     ORDER BY created_at DESC LIMIT 1`
+  ).bind(tokenContext.token.id).first();
+  if (existing) {
+    return { appointment: normalizeAppointment(existing), bookingType: normalizeBookingType(bookingType), existing: true };
+  }
+  const availability = await ensureAvailable(db, windowId, bookingType.id);
+  if (availability.error) return availability;
+  const appointmentId = crypto.randomUUID();
+  const results = await db.batch([
+    db.prepare(
+      `INSERT INTO appointments (
+        id,submission_id,booking_token_id,booking_type_id,availability_window_id,
+        status,purpose,client_name,client_email,client_phone,start_at,end_at,
+        deposit_cents,tip_cents,currency,hold_expires_at,hold_state,approval_state,
+        created_at,updated_at
+      ) VALUES (?,?,?,?,?,'requested','tattoo',?,?,?,?,?,?,0,?,NULL,NULL,'pending',?,?)`
+    ).bind(
+      appointmentId,
+      tokenContext.token.submission_id,
+      tokenContext.token.id,
+      bookingType.id,
+      availability.window.id,
+      tokenContext.token.contact_name,
+      tokenContext.token.contact_email,
+      tokenContext.token.contact_phone || null,
+      availability.window.start_at,
+      availability.window.end_at,
+      Number(bookingType.deposit_cents || 0),
+      bookingType.currency || "USD",
+      now,
+      now,
+    ),
+    db.prepare(
+      `INSERT INTO appointment_events (id,appointment_id,event_type,actor,note,metadata_json,created_at)
+       VALUES (?,?,'special_time_requested','client',?,? ,?)`
+    ).bind(
+      crypto.randomUUID(),
+      appointmentId,
+      `${availability.window.start_at} - ${availability.window.end_at}`,
+      JSON.stringify({ capacityReserved: false, tokenPurpose: tokenContext.purpose }),
+      now,
+    ),
+  ]);
+  if (Number(results?.[0]?.meta?.changes || 0) < 1) return { error: "Unable to record that requested time." };
+  const appointment = normalizeAppointment(await selectAppointmentWithMeeting(db, appointmentId));
+  await mirrorAppointmentToCrm(db, appointment);
+  return { appointment, bookingType: normalizeBookingType(bookingType) };
 }
 
 async function publicConsultationBookingTypes(
@@ -2910,14 +2979,21 @@ export async function handleCreateBookingHold(request, env) {
     if (clientClaim.error) return errorResponse(clientClaim.error, clientClaim.status);
     context = clientClaim.context;
 
-    const result = await createPendingAppointment(
-      db,
-      context,
-      asString(body.bookingTypeId),
-      asString(body.availabilityWindowId),
-      0,
-      body.extendedDayAcknowledged === true
-    );
+    const result = context.pendingSpecialApproval
+      ? await createTattooSpecialTimeRequest(
+          db,
+          context,
+          asString(body.bookingTypeId),
+          asString(body.availabilityWindowId),
+        )
+      : await createPendingAppointment(
+          db,
+          context,
+          asString(body.bookingTypeId),
+          asString(body.availabilityWindowId),
+          0,
+          body.extendedDayAcknowledged === true
+        );
     if (result.error) return errorResponse(result.error, result.code ? 409 : 400, {
       ...(result.code ? { code: result.code } : {}),
       ...(result.appointment ? { appointment: result.appointment } : {}),
@@ -2927,27 +3003,26 @@ export async function handleCreateBookingHold(request, env) {
       await db.batch([
         db.prepare(
           `UPDATE submissions
-           SET payload_json = json_set(payload_json,
-                 '$.held_appointment_id', ?,
-                 '$.held_start_at', ?,
-                 '$.held_end_at', ?,
-                 '$.approval_hold_expires_at', ?),
+           SET payload_json = json_set(
+                 json_remove(payload_json,'$.held_appointment_id','$.held_start_at','$.held_end_at','$.approval_hold_expires_at'),
+                 '$.requested_appointment_id', ?,
+                 '$.requested_start_at', ?,
+                 '$.requested_end_at', ?),
                updated_at = ?
            WHERE id = ? AND type = 'tattoo_special' AND status = 'new' AND tattoo_stage = 'review'`
         ).bind(
           result.appointment.id,
           result.appointment.startAt,
           result.appointment.endAt,
-          result.appointment.holdExpiresAt,
           now,
           context.token.submission_id,
         ),
         db.prepare(
           `INSERT INTO submission_events (id, submission_id, event_type, actor, note, created_at)
-           SELECT ?, id, 'special_time_held', 'client', ?, ? FROM submissions
+           SELECT ?, id, 'special_time_requested', 'client', ?, ? FROM submissions
            WHERE id = ? AND NOT EXISTS (
              SELECT 1 FROM submission_events existing
-             WHERE existing.submission_id = submissions.id AND existing.event_type = 'special_time_held'
+             WHERE existing.submission_id = submissions.id AND existing.event_type = 'special_time_requested'
            )`
         ).bind(
           crypto.randomUUID(),
@@ -3697,7 +3772,7 @@ async function fetchSquareOrder(env, orderId) {
   return payload.order || null;
 }
 
-export async function createApprovedTattooSpecialDepositCheckout(request, env, submissionId) {
+export async function prepareApprovedTattooSpecialRequest(request, env, submissionId) {
   const db = requireBookingDb(env);
   const row = await db.prepare(
     `SELECT a.*, bt.label AS booking_type_label, s.type AS submission_type,
@@ -3709,20 +3784,15 @@ export async function createApprovedTattooSpecialDepositCheckout(request, env, s
      JOIN booking_types bt ON bt.id = a.booking_type_id
      WHERE a.submission_id = ? AND s.type = 'tattoo_special'
        AND s.status = 'approved' AND s.tattoo_stage = 'ready_to_book'
-       AND a.status IN ('pending_deposit','deposit_pending')
-       AND a.hold_state = 'active'
-       AND a.approval_state IN ('pending','approved')
+       AND a.status = 'requested' AND a.hold_state IS NULL
+       AND a.approval_state = 'approved'
      ORDER BY a.created_at DESC LIMIT 1`
   ).bind(submissionId).first();
-  if (!row) throw new Error("The client must select an available time before this Tattoo Special can be approved.");
-  if (new Date(row.hold_expires_at).getTime() <= Date.now()) {
-    throw new Error("The requested time is no longer held. Ask the client to select another time.");
-  }
-  if (row.square_checkout_url && row.square_payment_link_id) {
+  if (!row) throw new Error("The client must request a time before Tattoo Special deposit access can be prepared.");
+  if (row.payment_due_at && new Date(row.payment_due_at).getTime() > Date.now()) {
     return {
       appointment: normalizeAppointment(row),
-      checkoutUrl: row.square_checkout_url,
-      paymentDueAt: row.payment_due_at || row.hold_expires_at,
+      paymentDueAt: row.payment_due_at,
       existing: true,
     };
   }
@@ -3736,28 +3806,12 @@ export async function createApprovedTattooSpecialDepositCheckout(request, env, s
   const now = new Date().toISOString();
   await db.prepare(
     `UPDATE appointments
-     SET approval_state = 'approved', approval_decided_at = COALESCE(approval_decided_at, ?),
-         payment_due_at = ?, hold_expires_at = ?, updated_at = ?
-     WHERE id = ? AND hold_state = 'active' AND approval_state IN ('pending','approved')`
-  ).bind(now, paymentDueAt, paymentDueAt, now, row.id).run();
-
-  const appointmentRow = await selectAppointmentWithMeeting(db, row.id);
-  const appointment = normalizeAppointment(appointmentRow || row);
-  const bookingType = await db.prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
-    .bind(appointment.bookingTypeId)
-    .first();
-  if (!bookingType) throw new Error("The Tattoo Special booking type is unavailable.");
-
-  const paymentLink = await createSquarePaymentLink(request, env, appointment, bookingType);
-  const saved = await savePendingPaymentLink(db, appointment, paymentLink);
-  if (!saved) {
-    await invalidateUnsavedPaymentLink(env, paymentLink);
-    throw new Error("The approval hold expired before the deposit link could be created.");
-  }
+     SET payment_due_at = ?, updated_at = ?
+     WHERE id = ? AND status='requested' AND hold_state IS NULL AND approval_state='approved'`
+  ).bind(paymentDueAt, now, row.id).run();
   const updated = await selectAppointmentWithMeeting(db, row.id);
   return {
-    appointment: normalizeAppointment(updated || appointmentRow || row),
-    checkoutUrl: paymentLink.url,
+    appointment: normalizeAppointment(updated || row),
     paymentDueAt,
     existing: false,
   };
@@ -4940,12 +4994,14 @@ function appointmentCanReschedule(appointment) {
 }
 
 function appointmentCanChangeApprovedSpecialTime(appointment) {
-  return appointment.isTattooSpecial
-    && ["pending_deposit", "deposit_pending"].includes(appointment.status)
-    && appointment.approvalState === "approved"
+  if (!appointment.isTattooSpecial || appointment.approvalState !== "approved") return false;
+  const paymentDeadline = new Date(appointment.paymentDueAt || appointment.holdExpiresAt).getTime();
+  const requestedOnly = appointment.status === "requested" && !appointment.holdState;
+  const legacyCheckout = ["pending_deposit", "deposit_pending"].includes(appointment.status)
     && appointment.holdState === "active"
-    && new Date(appointment.holdExpiresAt).getTime() > Date.now()
-    && new Date(appointment.paymentDueAt || appointment.holdExpiresAt).getTime() > Date.now()
+    && new Date(appointment.holdExpiresAt).getTime() > Date.now();
+  return (requestedOnly || legacyCheckout)
+    && paymentDeadline > Date.now()
     && new Date(appointment.startAt).getTime() > Date.now();
 }
 
@@ -5323,8 +5379,82 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
   }
   const availability = await ensureAvailable(db, availabilityWindowId, original.bookingTypeId, original.id);
   if (availability.error) return { error: availability.error, status: 409 };
-  const dayGuard = await bookingDayGuardForWindow(db, availability.window.id);
-  if (!dayGuard) return { error: "That appointment time is unavailable.", status: 409 };
+  if (original.status === "requested" && !original.holdState) {
+    const clientAccess = await db.prepare("SELECT booking_url FROM submissions WHERE id = ? AND type = 'tattoo_special'")
+      .bind(original.submissionId)
+      .first();
+    if (availability.window.id === original.availabilityWindowId) {
+      return {
+        appointment: original,
+        clientUrl: clientAccess?.booking_url || "",
+        requestedOnly: true,
+        unchanged: true,
+      };
+    }
+    const now = new Date().toISOString();
+    const results = await db.batch([
+      db.prepare(
+        `UPDATE appointments
+         SET availability_window_id = ?, start_at = ?, end_at = ?,
+             original_start_at = COALESCE(original_start_at, start_at),
+             original_end_at = COALESCE(original_end_at, end_at), updated_at = ?
+         WHERE id = ? AND status = 'requested' AND hold_state IS NULL
+           AND approval_state = 'approved' AND payment_due_at > ?`
+      ).bind(
+        availability.window.id,
+        availability.window.start_at,
+        availability.window.end_at,
+        now,
+        original.id,
+        now,
+      ),
+      db.prepare(
+        `UPDATE submissions
+         SET payload_json = json_set(
+               json_remove(payload_json,'$.held_appointment_id','$.held_start_at','$.held_end_at','$.approval_hold_expires_at'),
+               '$.requested_appointment_id', ?, '$.requested_start_at', ?, '$.requested_end_at', ?),
+             updated_at = ?
+         WHERE id = ? AND type = 'tattoo_special'
+           AND EXISTS (SELECT 1 FROM appointments a WHERE a.id = ? AND a.updated_at = ?)`
+      ).bind(
+        original.id,
+        availability.window.start_at,
+        availability.window.end_at,
+        now,
+        original.submissionId,
+        original.id,
+        now,
+      ),
+      db.prepare(
+        `INSERT INTO appointment_events (id, appointment_id, event_type, actor, note, metadata_json, created_at)
+         SELECT ?, id, 'special_requested_time_changed', 'client', ?, ?, ?
+         FROM appointments WHERE id = ? AND updated_at = ?`
+      ).bind(
+        crypto.randomUUID(),
+        `${original.startAt} - ${original.endAt} -> ${availability.window.start_at} - ${availability.window.end_at}`,
+        JSON.stringify({
+          fromStartAt: original.startAt,
+          fromEndAt: original.endAt,
+          toStartAt: availability.window.start_at,
+          toEndAt: availability.window.end_at,
+          capacityReserved: false,
+        }),
+        now,
+        original.id,
+        now,
+      ),
+    ]);
+    if (Number(results?.[0]?.meta?.changes || 0) < 1) {
+      return { error: "The requested time could not be changed. Reopen the client link and try again.", status: 409 };
+    }
+    return {
+      appointment: normalizeAppointment(await selectAppointmentWithMeeting(db, original.id)),
+      clientUrl: clientAccess?.booking_url || "",
+      requestedOnly: true,
+      previousStartAt: original.startAt,
+      previousEndAt: original.endAt,
+    };
+  }
   if (availability.window.id === original.availabilityWindowId && original.squareCheckoutUrl) {
     return {
       appointment: original,
@@ -5368,73 +5498,28 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
   }
 
   const now = new Date().toISOString();
+  const clientAccess = await db.prepare("SELECT booking_url FROM submissions WHERE id = ? AND type = 'tattoo_special'")
+    .bind(original.submissionId)
+    .first();
   const results = await db.batch([
     db.prepare(
       `UPDATE appointments
        SET availability_window_id = ?, start_at = ?, end_at = ?,
            original_start_at = COALESCE(original_start_at, start_at),
            original_end_at = COALESCE(original_end_at, end_at),
-           status = 'pending_deposit', square_order_id = NULL,
-           square_payment_link_id = NULL, square_checkout_url = NULL, updated_at = ?
+           status = 'requested', square_order_id = NULL,
+           square_payment_link_id = NULL, square_checkout_url = NULL,
+           hold_state = NULL, hold_expires_at = NULL, hold_reconciled_at = ?, updated_at = ?
        WHERE id = ? AND status IN ('pending_deposit','deposit_pending')
-         AND approval_state = 'approved' AND hold_state = 'active' AND hold_expires_at > ?
-         AND EXISTS (
-           SELECT 1 FROM availability_windows aw
-           WHERE aw.id = ? AND aw.active = 1 AND aw.is_blackout = 0
-             AND (aw.booking_type_id IS NULL OR aw.booking_type_id = appointments.booking_type_id)
-             AND aw.start_at > ?
-             AND (
-               SELECT COUNT(*) FROM appointments day_appointment
-               WHERE day_appointment.id <> appointments.id
-                 AND day_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-                 AND day_appointment.start_at >= ? AND day_appointment.start_at < ?
-             ) < ?
-             AND NOT EXISTS (
-               SELECT 1 FROM availability_windows blackout
-               WHERE blackout.active = 1 AND blackout.is_blackout = 1
-                 AND unixepoch(blackout.start_at) - COALESCE(blackout.buffer_before_minutes, 0) * 60
-                   < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
-                 AND unixepoch(blackout.end_at) + COALESCE(blackout.buffer_after_minutes, 0) * 60
-                   > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
-             )
-             AND (
-               SELECT COUNT(*) FROM appointments overlap_appointment
-               LEFT JOIN availability_windows overlap_window
-                 ON overlap_window.id = overlap_appointment.availability_window_id
-               WHERE overlap_appointment.id <> appointments.id
-                 AND overlap_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-                 AND unixepoch(overlap_appointment.start_at) - COALESCE(overlap_window.buffer_before_minutes, 0) * 60
-                   < unixepoch(aw.end_at) + COALESCE(aw.buffer_after_minutes, 0) * 60
-                 AND unixepoch(overlap_appointment.end_at) + COALESCE(overlap_window.buffer_after_minutes, 0) * 60
-                   > unixepoch(aw.start_at) - COALESCE(aw.buffer_before_minutes, 0) * 60
-             ) < CASE
-               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
-                 OR appointments.booking_type_id LIKE 'tattoo_special_%'
-               THEN 1 ELSE aw.capacity
-             END
-             AND (
-               SELECT COUNT(*) FROM appointments exact_appointment
-               WHERE exact_appointment.id <> appointments.id
-                 AND exact_appointment.availability_window_id = aw.id
-                 AND exact_appointment.status IN ('pending_deposit','deposit_pending','confirmed')
-             ) < CASE
-               WHEN appointments.booking_type_id IN ('tattoo_quarter','tattoo_half','tattoo_full','tattoo_extended')
-                 OR appointments.booking_type_id LIKE 'tattoo_special_%'
-               THEN 1 ELSE aw.capacity
-             END
-         )`
+         AND approval_state = 'approved' AND hold_state = 'active' AND hold_expires_at > ?`
     ).bind(
       availability.window.id,
       availability.window.start_at,
       availability.window.end_at,
       now,
+      now,
       original.id,
       now,
-      availability.window.id,
-      now,
-      dayGuard.startAt,
-      dayGuard.endAt,
-      dayGuard.maxBookingsPerDay,
     ),
     db.prepare(
       `UPDATE deposit_payments SET status = 'cancelled', updated_at = ?
@@ -5443,10 +5528,13 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
     ).bind(now, original.id, original.id, now),
     db.prepare(
       `UPDATE submissions
-       SET payload_json = json_set(payload_json, '$.held_start_at', ?, '$.held_end_at', ?), updated_at = ?
+       SET payload_json = json_set(
+             json_remove(payload_json,'$.held_appointment_id','$.held_start_at','$.held_end_at','$.approval_hold_expires_at'),
+             '$.requested_appointment_id', ?, '$.requested_start_at', ?, '$.requested_end_at', ?),
+           updated_at = ?
        WHERE id = ? AND type = 'tattoo_special'
          AND EXISTS (SELECT 1 FROM appointments a WHERE a.id = ? AND a.updated_at = ?)`
-    ).bind(availability.window.start_at, availability.window.end_at, now, original.submissionId, original.id, now),
+    ).bind(original.id, availability.window.start_at, availability.window.end_at, now, original.submissionId, original.id, now),
     db.prepare(
       `INSERT INTO appointment_events (id, appointment_id, event_type, actor, note, metadata_json, created_at)
        SELECT ?, id, 'special_requested_time_changed', 'client', ?, ?, ?
@@ -5459,7 +5547,8 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
         fromEndAt: original.endAt,
         toStartAt: availability.window.start_at,
         toEndAt: availability.window.end_at,
-        beforeDeposit: true,
+        capacityReserved: false,
+        priorCheckoutReleased: true,
       }),
       now,
       original.id,
@@ -5467,33 +5556,12 @@ async function changeApprovedTattooSpecialRequestedTime(request, env, db, appoin
     ),
   ]);
   if (Number(results?.[0]?.meta?.changes || 0) < 1) {
-    return { error: "The new requested time became unavailable before the change completed.", status: 409 };
-  }
-
-  const bookingTypeRow = await db.prepare("SELECT * FROM booking_types WHERE id = ? AND active = 1")
-    .bind(original.bookingTypeId)
-    .first();
-  if (!bookingTypeRow) return { error: "This Tattoo Special appointment type is no longer available.", status: 409 };
-  const movedRow = await selectAppointmentWithMeeting(db, original.id);
-  const moved = normalizeAppointment(movedRow);
-  let paymentLink;
-  try {
-    paymentLink = await createSquarePaymentLink(request, env, moved, normalizeBookingType(bookingTypeRow), {
-      idempotencyKey: `${moved.id}:requested-time:${crypto.randomUUID()}`,
-    });
-  } catch (error) {
-    await db.prepare("UPDATE appointments SET status = 'deposit_pending', updated_at = ? WHERE id = ?")
-      .bind(new Date().toISOString(), moved.id)
-      .run();
-    return { error: "The requested time changed, but the replacement deposit link is not ready. Reopen the email link to try again.", status: 503, detail: error.message };
-  }
-  if (!await savePendingPaymentLink(db, moved, paymentLink)) {
-    await invalidateUnsavedPaymentLink(env, paymentLink);
-    return { error: "The replacement deposit hold expired before checkout was created.", status: 409 };
+    return { error: "The requested time could not be changed. Reopen the client link and try again.", status: 409 };
   }
   return {
-    appointment: normalizeAppointment(await selectAppointmentWithMeeting(db, moved.id)),
-    checkoutUrl: paymentLink.url,
+    appointment: normalizeAppointment(await selectAppointmentWithMeeting(db, original.id)),
+    clientUrl: clientAccess?.booking_url || "",
+    requestedOnly: true,
     previousStartAt: original.startAt,
     previousEndAt: original.endAt,
   };
@@ -5526,7 +5594,9 @@ export async function handleRescheduleAppointment(request, env) {
         ok: true,
         mode: "special_request_changed",
         appointment: changed.appointment,
-        checkoutUrl: changed.checkoutUrl,
+        checkoutUrl: changed.checkoutUrl || "",
+        clientUrl: changed.clientUrl || "",
+        requestedOnly: Boolean(changed.requestedOnly),
         previousStartAt: changed.previousStartAt || "",
         previousEndAt: changed.previousEndAt || "",
         unchanged: Boolean(changed.unchanged),

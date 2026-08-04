@@ -2374,16 +2374,15 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
         if (new Date(terms.sales_closes_at).getTime() <= Date.now()) {
           return errorResponse("The Tattoo Specials sales window has closed.", 409);
         }
-        const heldAppointment = await db.prepare(
+        const requestedAppointment = await db.prepare(
           `SELECT id FROM appointments
-           WHERE submission_id = ? AND status IN ('pending_deposit','deposit_pending')
-             AND hold_state = 'active' AND approval_state IN ('pending','approved')
-             AND hold_expires_at > ?
+           WHERE submission_id = ? AND status = 'requested'
+             AND hold_state IS NULL AND approval_state IN ('pending','approved')
            ORDER BY created_at DESC LIMIT 1`
-        ).bind(id, new Date().toISOString()).first();
-        if (!heldAppointment) {
-          return errorResponse("The client must select another available time before this Tattoo Special can be approved.", 409, {
-            code: "VALID_SPECIAL_HOLD_REQUIRED",
+        ).bind(id).first();
+        if (!requestedAppointment) {
+          return errorResponse("The client must request a time before this Tattoo Special can be approved.", 409, {
+            code: "VALID_SPECIAL_TIME_REQUEST_REQUIRED",
           });
         }
         const advertised = Number(terms.advertised_price_cents || 0);
@@ -2393,7 +2392,7 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
         if (!Number.isInteger(approvedPrice) || approvedPrice < advertised) {
           return errorResponse("The approved Tattoo Special price is invalid.", 400);
         }
-        specialDecision = { terms, heldAppointment, approvedPrice };
+        specialDecision = { terms, requestedAppointment, approvedPrice };
       } else {
         specialDecision = { terms };
       }
@@ -2777,8 +2776,8 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
           ).bind(specialDecision.approvedPrice, specialDecision.approvedPrice, now, id),
           db.prepare(
             `UPDATE appointments SET approval_state = 'approved', approval_decided_at = COALESCE(approval_decided_at, ?), updated_at = ?
-             WHERE id = ? AND hold_state = 'active' AND approval_state IN ('pending','approved')`
-          ).bind(now, now, specialDecision.heldAppointment.id),
+             WHERE id = ? AND status='requested' AND hold_state IS NULL AND approval_state IN ('pending','approved')`
+          ).bind(now, now, specialDecision.requestedAppointment.id),
           db.prepare(
             "UPDATE submissions SET payload_json=json_set(payload_json,'$.approved_price_cents',?) WHERE id=? AND updated_at=?"
           ).bind(specialDecision.approvedPrice, id, now),
@@ -2789,7 +2788,10 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
           db.prepare(
             `UPDATE appointments SET status = 'cancelled', hold_state = 'released', approval_state = 'declined',
              approval_decided_at = ?, cancelled_at = ?, cancellation_reason = ?, updated_at = ?
-             WHERE submission_id = ? AND status IN ('pending_deposit','deposit_pending') AND hold_state IN ('active','expiry_attention')`
+             WHERE submission_id = ? AND (
+               (status='requested' AND hold_state IS NULL)
+               OR (status IN ('pending_deposit','deposit_pending') AND hold_state IN ('active','expiry_attention'))
+             )`
           ).bind(now, now, decisionClientMessage || "Studio declined request", now, id),
           db.prepare("UPDATE booking_tokens SET revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE submission_id = ?")
             .bind(now, now, id),
@@ -2887,13 +2889,14 @@ export async function handleSubmissionDecisionNotification(request, env, id) {
       });
     } else if (submission.status === "approved" && submission.type === "tattoo_special") {
       const details = await db.prepare(
-        `SELECT a.id appointment_id,a.client_name,a.client_email,a.start_at,a.end_at,a.payment_due_at,a.square_checkout_url,
+        `SELECT a.id appointment_id,a.client_name,a.client_email,a.start_at,a.end_at,a.payment_due_at,
                 t.offer_title,t.variant_label,t.approved_price_cents,t.deposit_cents
          FROM appointments a JOIN tattoo_special_submission_terms t ON t.submission_id=a.submission_id
-         WHERE a.submission_id=? AND a.square_checkout_url<>''
+         WHERE a.submission_id=? AND a.status='requested' AND a.hold_state IS NULL
+           AND a.approval_state='approved' AND a.payment_due_at>?
          ORDER BY a.created_at DESC LIMIT 1`
-      ).bind(id).first();
-      if (!details?.square_checkout_url) {
+      ).bind(id, new Date().toISOString()).first();
+      if (!details) {
         return errorResponse("Prepare the Tattoo Special deposit link before sending approval.", 409, {
           code: "DEPOSIT_LINK_REQUIRED",
         });

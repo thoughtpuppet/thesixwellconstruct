@@ -955,7 +955,7 @@ const SUBMISSION_RECEIPTS = {
     label: "request",
     subject: "Tattoo Special request received",
     expectation: "Your selected Tattoo Special and requested appointment time have been recorded for Studio approval.",
-    next: "No appointment is booked yet. If approved, the Studio may send an email with a Square link to pay the deposit for the held time.",
+    next: "No appointment is booked or reserved yet. If approved, the Studio may send a private page where current availability is checked before deposit checkout begins.",
   },
   consultation: {
     label: "consultation reservation",
@@ -1272,7 +1272,7 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     ? { reviewTimeMessage: DEFAULT_REVIEW_TIME_MESSAGE, supportEmail: constructIdentity.replyTo, supportPhone: env.STUDIO_CONTACT_PHONE || "(770) 820-5800" }
     : await tattooReceiptSettings(env);
   const reviewLine = type === "tattoo_special"
-    ? "This is a request and a temporary hold, not a booked appointment. The appointment is confirmed only after Studio approval and successful deposit payment."
+    ? "This is a requested time, not a hold or booked appointment. If Studio approves it, availability is checked again when you begin deposit payment, and the appointment is confirmed only after successful payment."
     : ["consultation", "build_session"].includes(type)
       ? "Complete checkout from the Square link you opened to keep the selected time."
       : settings.reviewTimeMessage;
@@ -1290,8 +1290,8 @@ export async function notifySubmissionReceived(env, submission, options = {}) {
     clientName: normalized.contactName,
     label: profile.label,
     submissionId: normalized.id,
-    heldWhen: normalized.payload?.held_start_at
-      ? `${formatDate(normalized.payload.held_start_at)}${normalized.payload?.held_end_at ? ` - ${formatDate(normalized.payload.held_end_at)}` : ""}`
+    requestedWhen: normalized.payload?.requested_start_at
+      ? `${formatDate(normalized.payload.requested_start_at)}${normalized.payload?.requested_end_at ? ` - ${formatDate(normalized.payload.requested_end_at)}` : ""}`
       : "",
     requestedSheetDesigns: requestedSheetDesigns.slice(1),
     expectation: profile.expectation,
@@ -2447,18 +2447,17 @@ export async function handleAdminResendNotification(request, env) {
       const now = new Date().toISOString();
       if (
         specialAppointment.approval_state !== "approved"
-        || !["pending_deposit", "deposit_pending"].includes(specialAppointment.status)
-        || specialAppointment.hold_state !== "active"
+        || specialAppointment.status !== "requested"
+        || specialAppointment.hold_state !== null
       ) {
         return errorResponse("Only an approved Tattoo Special awaiting its deposit can receive this email.", 409);
       }
       if (
-        !specialAppointment.square_checkout_url
-        || specialAppointment.hold_expires_at <= now
-        || (specialAppointment.payment_due_at && specialAppointment.payment_due_at <= now)
+        !specialAppointment.payment_due_at
+        || specialAppointment.payment_due_at <= now
         || specialAppointment.sales_closes_at <= now
       ) {
-        return errorResponse("This Tattoo Special deposit link is no longer active. Review the held time before sending a new link.", 409);
+        return errorResponse("This Tattoo Special deposit link is no longer active. Prepare new client access before resending it.", 409);
       }
       const clientAccess = specialAppointment.submission_booking_url
         ? await activeTokenForBookingUrl(

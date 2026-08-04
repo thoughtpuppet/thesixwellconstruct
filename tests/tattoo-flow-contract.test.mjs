@@ -2670,7 +2670,7 @@ test("Tattoo index keeps the lower Specials block and reveals a matching brand-b
   assert.match(source, /if \(payload\.state !== "open"\) return;[\s\S]*?if \(cta\) cta\.hidden = false;[\s\S]*?if \(bandCta\) bandCta\.hidden = false;/);
 });
 
-test("Tattoo Specials public copy matches the held-time approval lifecycle", () => {
+test("Tattoo Specials public copy matches the requested-time approval lifecycle", () => {
   const page = readFileSync(join(ROOT, "tattoos", "specials", "index.html"), "utf8");
   const script = readFileSync(join(ROOT, "js", "tattoo-specials.js"), "utf8");
   const booking = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
@@ -2679,6 +2679,9 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.doesNotMatch(page, /<dt>Campaign<\/dt>/i);
   assert.doesNotMatch(script, /Studio approval required/);
   assert.match(script, /appointment is booked only after payment/i);
+  assert.match(booking, /does not reserve the appointment/i);
+  assert.match(booking, /Confirm and pay deposit/);
+  assert.match(reschedule, /requested time does not reserve it/i);
   assert.match(page, /id="scriptTextField" hidden[\s\S]*?name="scriptText"/);
   assert.match(script, /selectedOffer\?\.maxWordCount[\s\S]*?words maximum/);
   assert.doesNotMatch(script, /special-card__meta/);
@@ -2697,12 +2700,12 @@ test("Tattoo Specials public copy matches the held-time approval lifecycle", () 
   assert.match(page, /<h2 id="offersTitle">Choose your Tattoo Special\.<\/h2>[\s\S]*?class="specials-window-copy"[\s\S]*?id="specialsDates"[\s\S]*?id="specialsDeposit"/);
   assert.doesNotMatch(page, /specialsArtwork|specials-artwork/);
   assert.doesNotMatch(script, /payload\.artwork|specialsArtwork/);
-  assert.match(booking, /pendingSpecialApproval \? "Submit Request for Approval" : "Continue to Square"/);
+  assert.match(booking, /pendingSpecialApproval \? "Submit Requested Time" : "Continue to Square"/);
   assert.doesNotMatch(script, /Direct booking|normal private booking link/);
   assert.doesNotMatch(script, /complexity approval|special-anime/);
   assert.match(reschedule, /flow.*special-request/);
-  assert.match(reschedule, /No additional Studio approval is required/);
-  assert.match(reschedule, /payload\.mode === 'special_request_changed'[\s\S]*?location\.assign\(payload\.checkoutUrl\)/);
+  assert.match(reschedule, /new time is not reserved until your deposit is paid/);
+  assert.match(reschedule, /payload\.mode === 'special_request_changed'[\s\S]*?location\.assign\(payload\.clientUrl\)/);
 });
 
 test("Studio Tattoo Special requests show the client tattoo description", () => {
@@ -2930,7 +2933,9 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(hold.appointment.approvalState, "pending");
   assert.equal(hold.appointment.startAt, appointmentStart.toISOString());
   assert.equal(hold.appointment.endAt, appointmentEnd.toISOString());
-  assert.ok(new Date(hold.appointment.holdExpiresAt).getTime() <= new Date(closes).getTime());
+  assert.equal(hold.appointment.status, "requested");
+  assert.equal(hold.appointment.holdExpiresAt, "");
+  assert.equal(hold.appointment.holdState, "");
   assert.equal(database.prepare("SELECT square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id).square_checkout_url, null);
 
   const overlappingStart = new Date(appointmentStart.getTime() + 30 * 60 * 1000);
@@ -2957,33 +2962,17 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   ), env);
   assert.equal(competingContextResponse.status, 200);
   const competingContext = await competingContextResponse.json();
-  assert.equal(competingContext.availabilityWindows.some((item) => item.id === "special-palm-overlapping-window"), false);
+  assert.equal(competingContext.availabilityWindows.some((item) => item.id === "special-palm-overlapping-window"), true);
   const competingHold = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
     token: competingToken,
     bookingTypeId: "tattoo_special_palm_v3",
     availabilityWindowId: "special-palm-overlapping-window",
   }), env);
   const competingHoldPayload = await competingHold.json();
-  assert.equal(competingHold.status, 400, JSON.stringify(competingHoldPayload));
-  assert.match(competingHoldPayload.error, /overlaps another booking/i);
-
-  const adjacentStart = new Date(appointmentEnd.getTime() + 60 * 60 * 1000);
-  const adjacentEnd = new Date(adjacentStart.getTime() + 120 * 60 * 1000);
-  insertAvailabilityWindow(database, {
-    id: "special-palm-adjacent-window", bookingTypeId: "tattoo_special_palm_v3",
-    startAt: adjacentStart.toISOString(), endAt: adjacentEnd.toISOString(),
-    capacity: 2,
-    bufferBeforeMinutes: 30,
-    bufferAfterMinutes: 30,
-  });
-  const adjacentHoldResponse = await handleCreateBookingHold(jsonRequest("/api/booking/hold", {
-    token: competingToken,
-    bookingTypeId: "tattoo_special_palm_v3",
-    availabilityWindowId: "special-palm-adjacent-window",
-  }), env);
-  const adjacentHold = await adjacentHoldResponse.json();
-  assert.equal(adjacentHoldResponse.status, 200, adjacentHold.detail || adjacentHold.error);
-  assert.equal(adjacentHold.appointment.startAt, adjacentStart.toISOString());
+  assert.equal(competingHold.status, 200, JSON.stringify(competingHoldPayload));
+  assert.equal(competingHoldPayload.appointment.status, "requested");
+  assert.equal(competingHoldPayload.appointment.holdState, "");
+  const adjacentHold = competingHoldPayload;
 
   database.prepare("UPDATE submissions SET internal_notes=? WHERE id=?")
     .run("Private operator note.", competing.submissionId);
@@ -3035,7 +3024,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.match(requestEmail.text, /Your request has been received\./);
   assert.doesNotMatch(requestEmail.html, /Your Tattoo Special request has been received\./);
   assert.doesNotMatch(requestEmail.text, /Your Tattoo Special request has been received\./);
-  assert.match(requestEmail.html, /Requested time \(held\)/i);
+  assert.match(requestEmail.html, /Requested time \(not reserved\)/i);
   assert.match(requestEmail.html, /no appointment is booked/i);
 
   const prematureCheckout = await handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
@@ -3046,7 +3035,6 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(prematureCheckout.status, 409);
   assert.equal((await prematureCheckout.json()).code, "SPECIAL_APPROVAL_REQUIRED");
 
-  let squareRequestBody = null;
   const approvalLinkStartedAt = Date.now();
   const approvalResponse = await decideSubmission(env, submitted.submissionId, adminToken, "approve", {
     approvedPriceCents: 1,
@@ -3061,27 +3049,19 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const approvedBeforePreparationPayload = await approvedBeforePreparation.json();
   assert.equal(approvedBeforePreparationPayload.submission.pendingApproval, false);
   assert.equal(approvedBeforePreparationPayload.pendingCheckout.checkoutUrl, "");
-  const depositResponse = await withMockFetch(async (url, init) => {
-    const target = String(url);
-    if (target.endsWith("/v2/online-checkout/payment-links")) {
-      squareRequestBody = JSON.parse(init.body);
-      return jsonFetchResponse({ payment_link: { id: "special-palm-link", order_id: "special-palm-order", url: "https://square.test/special" } });
-    }
-    throw new Error(`Unexpected deposit request: ${target}`);
-  }, () => handleAdminTattooSpecialDeposit(adminJsonRequest(
+  const depositResponse = await handleAdminTattooSpecialDeposit(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/deposit`,
     {}, adminToken,
-  ), env, submitted.submissionId));
+  ), env, submitted.submissionId);
   assert.equal(depositResponse.status, 200, await depositResponse.clone().text());
   const approval = await depositResponse.json();
-  assert.equal(approval.checkoutUrl, "https://square.test/special");
+  assert.equal(approval.checkoutUrl, "");
   assert.match(approval.clientUrl, /^https:\/\/example\.test\/booking\/\?token=/);
   assert.notEqual(approval.clientUrl, new URL(submitted.bookingUrl, "https://example.test").toString());
   assert.equal(approval.appointmentId, hold.appointment.id);
   assert.ok(new Date(approval.paymentDueAt).getTime() <= new Date(closes).getTime());
   assert.ok(new Date(approval.paymentDueAt).getTime() <= Date.now() + 24 * 60 * 60 * 1000);
   assert.ok(new Date(approval.paymentDueAt).getTime() >= approvalLinkStartedAt + (23 * 60 + 59) * 60 * 1000);
-  assert.deepEqual(squareRequestBody.order.line_items.map((item) => item.base_price_money.amount), [5000]);
   submission = database.prepare("SELECT * FROM submissions WHERE id=?").get(submitted.submissionId);
   assert.equal(submission.status, "approved");
   assert.equal(submission.tattoo_stage, "ready_to_book");
@@ -3101,9 +3081,10 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(approvedContext.submission.pendingApproval, false);
   assert.equal(approvedContext.pendingCheckout.appointmentId, hold.appointment.id);
   assert.equal(approvedContext.pendingCheckout.approvalState, "approved");
-  assert.equal(approvedContext.pendingCheckout.holdState, "active");
-  assert.equal(approvedContext.pendingCheckout.resumable, true);
-  assert.equal(approvedContext.pendingCheckout.checkoutUrl, "https://square.test/special");
+  assert.equal(approvedContext.pendingCheckout.status, "requested");
+  assert.equal(approvedContext.pendingCheckout.holdState, "");
+  assert.equal(approvedContext.pendingCheckout.resumable, false);
+  assert.equal(approvedContext.pendingCheckout.checkoutUrl, "");
   const repeatedPreparation = await handleAdminTattooSpecialDeposit(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${submitted.submissionId}/deposit`,
     {}, adminToken,
@@ -3120,14 +3101,14 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   ), env, submitted.submissionId);
   assert.equal(nonAnimeSimplification.status, 409);
   const bookingPage = readFileSync(join(ROOT, "booking", "index.html"), "utf8");
-  assert.match(bookingPage, /Submit Request for Approval/);
+  assert.match(bookingPage, /Submit Requested Time/);
   assert.match(bookingPage, /special-offering/);
   const specialAppointment = database.prepare("SELECT booking_token_id,hold_expires_at,start_at,end_at,approval_state,payment_due_at,square_checkout_url FROM appointments WHERE id=?").get(hold.appointment.id);
   assert.notEqual(specialAppointment.booking_token_id, tokenRow.id);
   assert.equal(specialAppointment.approval_state, "approved");
   assert.equal(specialAppointment.payment_due_at, approval.paymentDueAt);
-  assert.equal(specialAppointment.hold_expires_at, approval.paymentDueAt);
-  assert.equal(specialAppointment.square_checkout_url, "https://square.test/special");
+  assert.equal(specialAppointment.hold_expires_at, null);
+  assert.equal(specialAppointment.square_checkout_url, null);
   assert.equal(specialAppointment.start_at, appointmentStart.toISOString());
   assert.equal(specialAppointment.end_at, appointmentEnd.toISOString());
   assert.equal(database.prepare(
@@ -3140,7 +3121,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(approvalNotification.status, 200, await approvalNotification.clone().text());
   const approvalEmail = sent.find((message) => message.to === "primary@example.com" && /deposit required/i.test(message.subject));
   assert.ok(approvalEmail);
-  assert.match(approvalEmail.html, /Pay deposit and confirm/i);
+  assert.match(approvalEmail.html, /Confirm and pay deposit/i);
   assert.match(approvalEmail.text, new RegExp(approval.clientUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(approvalEmail.text, /square\.test\/special/);
   assert.match(approvalEmail.html, /Change requested time/i);
@@ -3154,6 +3135,29 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   ).all(hold.appointment.id).map((row) => ({ ...row })), [
     { channel: "email", status: "sent" },
   ]);
+
+  let squareRequestBody = null;
+  const checkoutResponse = await withMockFetch(async (url, init) => {
+    const target = String(url);
+    if (target.endsWith("/v2/online-checkout/payment-links")) {
+      squareRequestBody = JSON.parse(init.body);
+      return jsonFetchResponse({ payment_link: { id: "special-palm-link", order_id: "special-palm-order", url: "https://square.test/special" } });
+    }
+    throw new Error(`Unexpected checkout request: ${target}`);
+  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: preparedRawToken,
+    bookingTypeId: "tattoo_special_palm_v3",
+    availabilityWindowId: "special-palm-window",
+    tipCents: 0,
+  }), env));
+  const checkout = await checkoutResponse.json();
+  assert.equal(checkoutResponse.status, 200, checkout.detail || checkout.error);
+  assert.equal(checkout.checkoutUrl, "https://square.test/special");
+  assert.deepEqual(squareRequestBody.order.line_items.map((item) => item.base_price_money.amount), [5000]);
+  const checkoutAppointment = database.prepare("SELECT * FROM appointments WHERE id=?").get(checkout.appointmentId);
+  assert.notEqual(checkout.appointmentId, hold.appointment.id);
+  assert.equal(checkoutAppointment.hold_state, "active");
+  assert.equal(checkoutAppointment.approval_state, "approved");
 
   const webhookUrl = "https://example.test/api/square/webhook";
   const signatureKey = "specials-webhook-signature";
@@ -3176,8 +3180,8 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(webhookResponse.status, 200, webhookPayload.error);
   assert.equal(webhookPayload.attention, true);
   assert.match(webhookPayload.reason, /manual refund review/i);
-  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(hold.appointment.id).status, "payment_attention");
-  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='tattoo_special_late_payment_attention'").get(hold.appointment.id).count, 1);
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(checkout.appointmentId).status, "payment_attention");
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='tattoo_special_late_payment_attention'").get(checkout.appointmentId).count, 1);
 
   const onePersonTwoSmall = await handleCreateTattooSpecialSubmission(multipartRequest("/api/tattoo/specials/submissions", {
     offerId: "special-two-small",
@@ -3317,16 +3321,14 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
     approvedPriceCents: 25000,
   });
   assert.equal(decision.status, 200, await decision.clone().text());
-  const approved = await withMockFetch(async (url) => {
-    assert.match(String(url), /\/v2\/online-checkout\/payment-links$/);
-    return jsonFetchResponse({ payment_link: { id: "script-link", order_id: "script-order", url: "https://square.test/script" } });
-  }, () => handleAdminTattooSpecialDeposit(adminJsonRequest(
+  const approved = await handleAdminTattooSpecialDeposit(adminJsonRequest(
     `/api/admin/tattoo/specials/submissions/${requestPayload.submissionId}/deposit`,
     {}, adminToken,
-  ), env, requestPayload.submissionId));
+  ), env, requestPayload.submissionId);
   assert.equal(approved.status, 200);
   const approval = await approved.json();
-  assert.equal(approval.checkoutUrl, "https://square.test/script");
+  assert.equal(approval.checkoutUrl, "");
+  assert.match(approval.clientUrl, /\/booking\/\?token=/);
   const storedTerms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(requestPayload.submissionId);
   assert.equal(storedTerms.advertised_price_cents, 17000);
   assert.equal(storedTerms.approved_price_cents, 17000);
@@ -3395,7 +3397,7 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
   assert.equal(sent.some((message) => /needs simplification/i.test(message.subject || "")), false);
 });
 
-test("approved Tattoo Special clients can replace the requested time and pay without another approval", async () => {
+test("approved Tattoo Special clients can change the requested time without creating checkout", async () => {
   const database = migratedDatabase();
   const db = new LocalD1(database);
   const sent = [];
@@ -3447,9 +3449,9 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
     duration_minutes: 120,
     booking_mode: "review",
     booking_type_id: "tattoo_special_palm_v2",
-    held_appointment_id: appointmentId,
-    held_start_at: oldStart,
-    held_end_at: oldEnd,
+    requested_appointment_id: appointmentId,
+    requested_start_at: oldStart,
+    requested_end_at: oldEnd,
   }), submissionId);
   const createdAt = new Date().toISOString();
   database.prepare(
@@ -3483,25 +3485,16 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
     bookingTokenId: clientTokenId,
     bookingTypeId: "tattoo_special_palm_v2",
     availabilityWindowId: "special-change-old-window",
-    status: "deposit_pending",
+    status: "requested",
     purpose: "tattoo",
     name: "Change Client",
     email: "change@example.test",
     startAt: oldStart,
     endAt: oldEnd,
-    squareOrderId: "special-change-old-order",
-    squarePaymentLinkId: "special-change-old-link",
-    squareCheckoutUrl: "https://square.test/special-change-old",
-    holdExpiresAt: paymentDueAt,
-    holdState: "active",
+    holdExpiresAt: null,
+    holdState: null,
     approvalState: "approved",
     paymentDueAt,
-  });
-  insertPaymentFixture(database, {
-    id: "special-change-old-payment",
-    appointmentId,
-    checkoutId: "special-change-old-link",
-    orderId: "special-change-old-order",
   });
   const env = {
     SUBMISSIONS_DB: db,
@@ -3536,64 +3529,95 @@ test("approved Tattoo Special clients can replace the requested time and pay wit
   assert.equal(context.requiresReplacementPayment, false);
   assert.equal(context.availabilityWindows.some((windowItem) => windowItem.id === "special-change-new-window"), true);
 
-  let invalidatedOldLink = false;
-  let newSquareBody = null;
-  const changedResponse = await withMockFetch(async (url, init = {}) => {
-    const target = String(url);
-    const method = init.method || "GET";
-    if (method === "GET" && target.endsWith("/v2/orders/special-change-old-order")) {
-      return jsonFetchResponse({ order: { id: "special-change-old-order", state: "OPEN" } });
-    }
-    if (method === "DELETE" && target.endsWith("/v2/online-checkout/payment-links/special-change-old-link")) {
-      invalidatedOldLink = true;
-      return new Response(null, { status: 200 });
-    }
-    if (method === "POST" && target.endsWith("/v2/online-checkout/payment-links")) {
-      newSquareBody = JSON.parse(init.body);
-      return jsonFetchResponse({ payment_link: {
-        id: "special-change-new-link",
-        order_id: "special-change-new-order",
-        url: "https://square.test/special-change-new",
-      } });
-    }
-    throw new Error(`Unexpected time-change request: ${method} ${target}`);
-  }, () => handleRescheduleAppointment(jsonRequest("/api/booking/reschedule", {
+  const changedResponse = await handleRescheduleAppointment(jsonRequest("/api/booking/reschedule", {
     appointmentId,
     email: "change@example.test",
     availabilityWindowId: "special-change-new-window",
-  }), env));
+  }), env);
   assert.equal(changedResponse.status, 200);
   const changed = await changedResponse.json();
   assert.equal(changed.mode, "special_request_changed");
-  assert.equal(changed.checkoutUrl, "https://square.test/special-change-new");
+  assert.equal(changed.checkoutUrl, "");
+  assert.equal(changed.clientUrl, clientBookingUrl);
+  assert.equal(changed.requestedOnly, true);
   assert.equal(changed.appointment.startAt, newStart);
   assert.equal(changed.appointment.approvalState, "approved");
-  assert.equal(invalidatedOldLink, true);
-  assert.notEqual(newSquareBody.idempotency_key, appointmentId);
 
   const appointment = database.prepare(
     "SELECT * FROM appointments WHERE id=?",
   ).get(appointmentId);
   assert.equal(appointment.start_at, newStart);
   assert.equal(appointment.end_at, newEnd);
-  assert.equal(appointment.status, "deposit_pending");
+  assert.equal(appointment.status, "requested");
   assert.equal(appointment.approval_state, "approved");
   assert.equal(appointment.reschedule_count, 0);
-  assert.equal(appointment.square_payment_link_id, "special-change-new-link");
-  assert.equal(appointment.square_checkout_url, "https://square.test/special-change-new");
+  assert.equal(appointment.hold_state, null);
+  assert.equal(appointment.square_payment_link_id, null);
+  assert.equal(appointment.square_checkout_url, null);
   assert.equal(database.prepare("SELECT status FROM submissions WHERE id=?").get(submissionId).status, "approved");
   const submissionPayload = JSON.parse(database.prepare("SELECT payload_json FROM submissions WHERE id=?").get(submissionId).payload_json);
-  assert.equal(submissionPayload.held_start_at, newStart);
-  assert.equal(submissionPayload.held_end_at, newEnd);
-  assert.deepEqual(database.prepare(
-    "SELECT provider_checkout_id,status FROM deposit_payments WHERE appointment_id=? ORDER BY created_at,provider_checkout_id",
-  ).all(appointmentId).map((row) => ({ ...row })), [
-    { provider_checkout_id: "special-change-old-link", status: "cancelled" },
-    { provider_checkout_id: "special-change-new-link", status: "pending" },
-  ]);
+  assert.equal(submissionPayload.requested_start_at, newStart);
+  assert.equal(submissionPayload.requested_end_at, newEnd);
+  assert.equal(database.prepare("SELECT COUNT(*) count FROM deposit_payments WHERE appointment_id=?").get(appointmentId).count, 0);
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM appointment_events WHERE appointment_id=? AND event_type='special_requested_time_changed'",
   ).get(appointmentId).count, 1);
+
+  const laterStart = new Date(now + 18 * 24 * 60 * 60 * 1000).toISOString();
+  const laterEnd = new Date(new Date(laterStart).getTime() + 120 * 60 * 1000).toISOString();
+  insertAvailabilityWindow(database, {
+    id: "special-change-later-window",
+    bookingTypeId: "tattoo_special_palm_v2",
+    startAt: laterStart,
+    endAt: laterEnd,
+  });
+  const checkoutResponse = await withMockFetch(async (url) => {
+    assert.match(String(url), /\/v2\/online-checkout\/payment-links$/);
+    return jsonFetchResponse({ payment_link: {
+      id: "special-change-checkout-link",
+      order_id: "special-change-checkout-order",
+      url: "https://square.test/special-change-checkout",
+    } });
+  }, () => handleCreateBookingCheckout(jsonRequest("/api/booking/checkout", {
+    token: clientRawToken,
+    bookingTypeId: "tattoo_special_palm_v2",
+    availabilityWindowId: "special-change-new-window",
+    tipCents: 0,
+  }), env));
+  const checkout = await checkoutResponse.json();
+  assert.equal(checkoutResponse.status, 200, checkout.detail || checkout.error);
+  assert.equal(checkout.checkoutUrl, "https://square.test/special-change-checkout");
+
+  let checkoutInvalidated = false;
+  let replacementCheckoutCreated = false;
+  const releasedResponse = await withMockFetch(async (url, init = {}) => {
+    const target = String(url);
+    const method = init.method || "GET";
+    if (method === "GET" && target.endsWith("/v2/orders/special-change-checkout-order")) {
+      return jsonFetchResponse({ order: { id: "special-change-checkout-order", state: "OPEN" } });
+    }
+    if (method === "DELETE" && target.endsWith("/v2/online-checkout/payment-links/special-change-checkout-link")) {
+      checkoutInvalidated = true;
+      return new Response(null, { status: 200 });
+    }
+    if (method === "POST") replacementCheckoutCreated = true;
+    throw new Error(`Unexpected released-checkout request: ${method} ${target}`);
+  }, () => handleRescheduleAppointment(jsonRequest("/api/booking/reschedule", {
+    appointmentId: checkout.appointmentId,
+    email: "change@example.test",
+    availabilityWindowId: "special-change-later-window",
+  }), env));
+  const released = await releasedResponse.json();
+  assert.equal(releasedResponse.status, 200, released.error || released.detail);
+  assert.equal(released.clientUrl, clientBookingUrl);
+  assert.equal(released.requestedOnly, true);
+  assert.equal(checkoutInvalidated, true);
+  assert.equal(replacementCheckoutCreated, false);
+  const releasedAppointment = database.prepare("SELECT * FROM appointments WHERE id=?").get(checkout.appointmentId);
+  assert.equal(releasedAppointment.status, "requested");
+  assert.equal(releasedAppointment.hold_state, null);
+  assert.equal(releasedAppointment.square_checkout_url, null);
+  assert.equal(database.prepare("SELECT status FROM deposit_payments WHERE appointment_id=?").get(checkout.appointmentId).status, "cancelled");
 });
 
 test("Maze Archive consent is explicit, separately scoped, versioned, and idempotent", async () => {
@@ -5970,12 +5994,13 @@ test("client transactional email catalog renders exact HTML and plain-text varia
   ];
   tattooSpecialVariants.forEach((key) => assert.equal(nodeVariants.get(key), "tattoo", `${key} should be independently editable`));
   const specialDepositPreview = renderClientEmailPreview("tattoo_special_deposit_requested", "default");
-  const specialDepositApprovalCopy = "Sai Solehman has approved your Tattoo Special request. Your requested time is still held, but it is not booked yet. Use the link below to confirm your appointment and pay your deposit. You can also change your requested time below if needed.";
+  const specialDepositApprovalCopy = "Sai Solehman has approved your Tattoo Special request. Your requested time is not reserved yet. Use the private page below to check availability, confirm the appointment, and pay your deposit. You can also change your requested time if needed.";
   assert.match(specialDepositPreview.html, new RegExp(specialDepositApprovalCopy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(specialDepositPreview.text, new RegExp(specialDepositApprovalCopy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(specialDepositPreview.html, /Change requested time/);
   assert.match(specialDepositPreview.html, /flow=special-request/);
   assert.match(specialDepositPreview.text, /without another Studio approval/i);
+  assert.match(specialDepositPreview.text, /Availability is checked immediately before Square checkout is created/i);
   const specialReceiptPreview = renderClientEmailPreview("submission_received", "tattoo_special");
   assert.match(specialReceiptPreview.subject, /Tattoo Special request received$/);
   assert.match(specialReceiptPreview.html, /Your request has been received\./);
@@ -6895,8 +6920,8 @@ test("published Tattoo Special request copy stays independent from Special Proje
     payload_json: JSON.stringify({
       booking_mode: "review",
       offer_id: "special-anime",
-      held_start_at: "2026-08-15T17:00:00.000Z",
-      held_end_at: "2026-08-15T19:00:00.000Z",
+      requested_start_at: "2026-08-15T17:00:00.000Z",
+      requested_end_at: "2026-08-15T19:00:00.000Z",
     }),
   });
   await notifySubmissionReceived(env, {
@@ -6907,7 +6932,7 @@ test("published Tattoo Special request copy stays independent from Special Proje
     payload_json: JSON.stringify({}),
   });
   assert.match(sent[0].html, /request is now in the dedicated Studio review queue/);
-  assert.match(sent[0].html, /Requested time \(held\)/i);
+  assert.match(sent[0].html, /Requested time \(not reserved\)/i);
   assert.doesNotMatch(sent[1].html, /dedicated Studio review queue/);
   assert.match(sent[1].html, /special project application has been received/i);
 });

@@ -105,7 +105,7 @@
     if (requestedSpecialFlow) {
       document.title = 'Change requested time - Art.Pill Tattoo House';
       document.getElementById('pageTitle').textContent = 'Change your requested time.';
-      document.getElementById('pageDescriptor').textContent = 'Confirm the email used for your Tattoo Special request. Choose another available time, then pay the deposit immediately. No additional Studio approval is required.';
+      document.getElementById('pageDescriptor').textContent = 'Confirm the email used for your Tattoo Special request, then choose another time for the approved request. The new time is not reserved until your deposit is paid.';
       elements.backToConfirmation.href = '/tattoos/specials/';
       elements.backToConfirmation.textContent = '← Back to specials';
       document.getElementById('authHeading').textContent = 'Find your approved request';
@@ -152,8 +152,8 @@
         ...(specialRequestChange ? [] : [['Reschedules used', `${Number(appointment.rescheduleCount || 0)} of 1`]])
       ].map(([key,value]) => `<div class="detail-row"><span class="detail-key">${escapeHtml(key)}</span><span class="detail-value">${escapeHtml(value)}</span></div>`).join('');
       if (specialRequestChange) {
-        elements.policyPanel.innerHTML = '<span class="policy-label">Approved Tattoo Special</span><strong>Choose another available time and pay the deposit.</strong><p>Your Tattoo Special and price are already approved. Selecting a new time replaces the original hold and Square link, then takes you directly to deposit payment. The appointment is booked only after Square confirms payment.</p>';
-        elements.rescheduleButton.textContent = 'Continue to deposit payment';
+        elements.policyPanel.innerHTML = '<span class="policy-label">Approved Tattoo Special</span><strong>Change the requested time.</strong><p>Your Tattoo Special and price are already approved. Saving another requested time does not reserve it or create a Square checkout. Return to the approval page and choose Confirm and pay deposit when you are ready; availability is checked again at that moment.</p>';
+        elements.rescheduleButton.textContent = 'Save requested time';
       } else if (payload.requiresReplacementPayment) {
         elements.policyPanel.innerHTML = `<span class="policy-label">Under ${Number(payload.noticeHours || 48)} hours</span><strong>A new same-type payment is required.</strong><p>Your original appointment stays confirmed while you choose a new time and complete checkout. It is replaced only after the new payment succeeds.${extended ? ' Square collects the Extended Day deposit only; the $200 fee remains due with the remaining balance at the start of your appointment, before tattooing begins.' : ''}</p>`;
         elements.rescheduleButton.textContent = `Continue to ${payload.bookingType?.depositLabel || 'new'} checkout`;
@@ -393,15 +393,19 @@
       if (!context || !selectedWindow) { showError(elements.rescheduleError,'Choose an available date and time.'); return; }
       elements.rescheduleButton.disabled = true;
       elements.selectionStatus.textContent = context.mode === 'special_request_change'
-        ? 'Replacing the requested time and preparing deposit payment...'
+        ? 'Updating the requested time...'
         : context.requiresReplacementPayment ? 'Preparing same-type replacement checkout...' : 'Moving your booking...';
       try {
         const response = await fetch('/api/booking/reschedule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({appointmentId,email:verifiedEmail,availabilityWindowId:selectedWindow.id})});
         const payload = await response.json().catch(()=>({}));
         if (!response.ok) throw new Error(payload.error || 'Unable to reschedule this booking.');
         if (payload.mode === 'special_request_changed') {
-          if (!payload.checkoutUrl) throw new Error('The new time is held, but deposit checkout is not ready. Reopen the approval email link to try again.');
-          location.assign(payload.checkoutUrl);
+          if (payload.clientUrl) {
+            location.assign(payload.clientUrl);
+            return;
+          }
+          elements.selectionStatus.textContent = 'Requested time updated. It is not reserved until the deposit is paid.';
+          elements.rescheduleButton.disabled = false;
           return;
         }
         if (payload.mode === 'replacement_checkout') {

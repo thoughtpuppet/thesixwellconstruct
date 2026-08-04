@@ -13,7 +13,8 @@ test("private booking presents contextual copy as body text and names the approv
   assert.doesNotMatch(source, /class="lead hero-descriptor" id="bookingLead"/);
   assert.match(source, /const designLabel = \[special\.offerTitle, special\.variantLabel\]\.filter\(Boolean\)\.join/);
   assert.match(source, /const requestedAppointment = `\$\{designLabel\} appointment for \$\{formatDate\(pending\.startAt\)\}`/);
-  assert.match(source, /Your requested \$\{requestedAppointment\} has been approved\. Confirm it by paying the \$\{depositLabel\} deposit/);
+  assert.match(source, /You requested \$\{requestedAppointment\}\. Studio approved the request\. Confirm the appointment by paying the \$\{depositLabel\} deposit/);
+  assert.match(source, /the requested time is not reserved until payment succeeds/);
   assert.match(source, /pending\.paymentDueAt \? ` by \$\{formatDate\(pending\.paymentDueAt\)\}`/);
   assert.doesNotMatch(source, /Studio approved your requested time/);
 });
