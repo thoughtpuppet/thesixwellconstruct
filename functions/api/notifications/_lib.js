@@ -29,6 +29,7 @@ import { renderEmailContent, validateEmailContent } from "./_email-content.js";
 import { CLIENT_EMAIL_THEMES, renderClientEmail } from "./_email-renderer.js";
 import { defaultEmailDesignProfile, validateEmailDesignProfile } from "./_email-design.js";
 import { tattooPricingSummary } from "../booking/_pricing.js";
+import { bookingTokenFromUrl } from "../booking-links.js";
 import {
   emailDesignHistory,
   emailDesignRevision,
@@ -1932,12 +1933,7 @@ async function sha256Hex(value) {
 }
 
 async function activeTokenForBookingUrl(db, submissionId, bookingUrl) {
-  let rawToken = "";
-  try {
-    rawToken = new URL(bookingUrl, "https://booking.invalid").searchParams.get("token") || "";
-  } catch {
-    return null;
-  }
+  const rawToken = bookingTokenFromUrl(bookingUrl);
   if (!rawToken) return null;
   const tokenHash = await sha256Hex(rawToken);
   return db

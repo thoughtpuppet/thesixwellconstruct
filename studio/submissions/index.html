@@ -151,11 +151,14 @@
   .danger-button:hover:not(:disabled) { border-color:var(--signal); color:var(--signal); background:rgba(110,4,4,0.12); }
   .submission { width:100%; text-align:left; border:0; border-bottom:5px solid var(--ring-faint); background:transparent; color:var(--text); padding:16px; display:grid; gap:8px; }
   .submission:hover,.submission.active { background:rgba(252,184,103,0.045); }
-  .submission-top { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+  .submission-top { display:flex; justify-content:space-between; gap:12px; align-items:center; }
   .name { font-family:var(--sans); font-size:13px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; }
   .date,.meta,.empty { color:var(--dim); font-family:var(--sans); font-size:11px; letter-spacing:0.08em; text-transform:uppercase; }
+  .submission-state-meta { color:var(--muted); font-family:var(--sans); font-size:10px; letter-spacing:0.08em; line-height:1.5; text-transform:uppercase; }
   .pill { color:var(--ring); border:5px solid var(--ring-soft); padding:5px 12px; font-family:var(--sans); font-size:10px; letter-spacing:0.12em; text-transform:uppercase; white-space:nowrap; }
   .detail-head { display:grid; gap:12px; padding-bottom:22px; border-bottom:5px solid var(--ring-faint); margin-bottom:22px; }
+  .detail-context-row { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .detail-context { color:var(--dim); font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; line-height:1.5; text-transform:uppercase; }
   .review-card { border:5px solid var(--ring-faint); padding:16px; margin-bottom:22px; }
   .review-card-header { font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.16em; text-transform:uppercase; color:var(--accent); margin-bottom:16px; padding-bottom:10px; border-bottom:3px solid var(--ring-faint); }
   h2 { margin:0; font-family:var(--sans); font-size:clamp(42px,7vw,72px); line-height:0.9; letter-spacing:0; color:var(--signal); }
@@ -298,16 +301,14 @@
   .token-card { width:min(520px,100%); border:1px solid var(--line-strong); padding:24px; background:var(--panel); display:grid; gap:14px; }
   .token-card h2 { font-size:22px; }
   .hidden { display:none; }
-  .next-action { display:inline-block; padding:3px 8px; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; border:3px solid; }
-  .submission-progress { display:flex; flex-wrap:wrap; gap:6px; }
-  .na-needs-review { border-color:rgba(252,184,103,0.5); color:var(--accent); }
-  .na-no-link { border-color:rgba(85,186,90,0.5); color:#55BA5A; }
-  .na-link-sent { border-color:rgba(85,186,90,0.72); color:#55BA5A; }
-  .na-deposit-pending { border-color:rgba(252,184,103,0.72); color:var(--accent); }
-  .na-booked { border-color:rgba(110,4,4,0.72); color:var(--signal); }
-  .na-email-warn { border-color:rgba(236,94,38,0.72); color:#EC5E26; }
-  .na-declined { border-color:rgba(255,231,202,0.22); color:var(--dim); }
-  .na-archived { border-color:rgba(255,231,202,0.16); color:var(--dim); }
+  .request-badge-slot { display:inline-flex; max-width:100%; }
+  .request-badge { display:inline-block; max-width:100%; padding:3px 8px; border:3px solid; font-family:var(--sans); font-size:9px; font-weight:800; letter-spacing:0.12em; line-height:1.35; text-align:center; text-transform:uppercase; overflow-wrap:anywhere; }
+  .request-badge.tone-new,.request-badge.tone-waiting { border-color:color-mix(in srgb,var(--studio-status-info) 66%,transparent); color:var(--studio-status-info); }
+  .request-badge.tone-needs-review { border-color:color-mix(in srgb,var(--studio-status-warning) 60%,transparent); color:var(--studio-status-warning); }
+  .request-badge.tone-review { border-color:color-mix(in srgb,var(--studio-text) 42%,transparent); color:var(--studio-text); }
+  .request-badge.tone-action,.request-badge.tone-success { border-color:color-mix(in srgb,var(--studio-status-success) 66%,transparent); color:var(--studio-status-success); }
+  .request-badge.tone-error { border-color:color-mix(in srgb,var(--studio-status-error) 72%,transparent); color:var(--studio-status-error); }
+  .request-badge.tone-terminal { border-color:color-mix(in srgb,var(--studio-dim) 52%,transparent); color:var(--studio-dim); }
   .detail-section { border-top:5px solid var(--ring-faint); margin-top:22px; }
   .detail-section-toggle { width:100%; min-height:48px; border:0; background:transparent; color:var(--dim); padding:0; display:flex; align-items:center; justify-content:space-between; gap:12px; font-family:var(--sans); font-size:10px; font-weight:800; letter-spacing:0.14em; text-transform:uppercase; text-align:left; cursor:pointer; }
   .detail-section-toggle:hover { color:var(--text); }
@@ -554,6 +555,7 @@
 <script src="/studio/resumable-media-upload.js?v=1"></script>
 <script src="/studio/portfolio-batch-organizer.js?v=1"></script>
 <script src="/js/manual-text-assist.js?v=1"></script>
+<script src="/studio/request-badge-state.js?v=1"></script>
 <script>
 (function(){
   const tokenKey = "swc_submissions_admin_token";
@@ -939,40 +941,33 @@
   }
   window.StudioEnhanceControls = enhanceControls;
 
-  function nextActionBadge(submission) {
-    const s = submission.status;
-    const stage = submission.tattooStage || submission.tattoo_stage || "";
-    const hasUrl = !!(submission.bookingUrl);
-    if (s === "cancelled") return `<span class="next-action na-declined">Cancelled</span>`;
-    if (stage === "consultation_required") return `<span class="next-action na-no-link">Consultation Required</span>`;
-    if (stage === "consultation_scheduled") return `<span class="next-action na-link-sent">Consultation Scheduled</span>`;
-    if (stage === "consultation_complete") return `<span class="next-action na-needs-review">Plan Needed</span>`;
-    if (stage === "ready_to_book") return `<span class="next-action na-no-link">Ready for Tattoo Link</span>`;
-    if (stage === "tattoo_scheduled") return `<span class="next-action na-booked">Tattoo Scheduled</span>`;
-    if (s === "declined") return `<span class="next-action na-declined">Declined</span>`;
-    if (s === "archived") return `<span class="next-action na-archived">Archived</span>`;
-    if (s === "booked") return `<span class="next-action na-booked">Booked</span>`;
-    if (s === "approved" && hasUrl) return `<span class="next-action na-link-sent">Booking Link Ready</span>`;
-    if (s === "approved" && !hasUrl) return `<span class="next-action na-no-link">Approved — No Link</span>`;
-    if (s === "reviewing") return `<span class="next-action na-needs-review">In Review</span>`;
-    return `<span class="next-action na-needs-review">Needs Review</span>`;
+  function requestBadgeMarkup(submission) {
+    const badge = window.StudioRequestBadgeState?.resolve(submission);
+    return badge
+      ? `<span class="request-badge tone-${escapeHtml(badge.tone)}">${escapeHtml(badge.label)}</span>`
+      : "";
   }
 
-  function submissionProgressBadges(submission) {
-    const badges = [];
-    if (submission.clientNotificationStatus === "sent") {
-      badges.push('<span class="next-action na-link-sent">Notification sent</span>');
-    } else if (submission.clientNotificationStatus === "failed") {
-      badges.push('<span class="next-action na-email-warn">Notification failed</span>');
-    }
-    if (submission.depositPaymentStatus === "paid") {
-      badges.push('<span class="next-action na-no-link">Deposit paid</span>');
-    } else if (submission.depositPaymentStatus === "paid_attention") {
-      badges.push('<span class="next-action na-email-warn">Deposit paid - attention needed</span>');
-    } else if (submission.depositPaymentStatus === "pending") {
-      badges.push('<span class="next-action na-deposit-pending">Deposit pending</span>');
-    }
-    return badges.length ? `<span class="submission-progress">${badges.join("")}</span>` : "";
+  function submissionStateMeta(submission) {
+    const items = [titleize(submission.status || "")];
+    const stage = submission.tattooStage || submission.tattoo_stage || "";
+    if (stage) items.push(titleize(stage));
+    if (submission.clientNotificationStatus === "sent") items.push("Notification sent");
+    else if (submission.clientNotificationStatus === "pending") items.push("Notification sending");
+    else if (submission.clientNotificationStatus === "failed") items.push("Notification failed");
+    if (submission.depositPaymentStatus === "paid") items.push("Deposit paid");
+    else if (submission.depositPaymentStatus === "paid_attention") items.push("Payment needs review");
+    else if (submission.depositPaymentStatus === "pending") items.push("Deposit pending");
+    return items.filter(Boolean).map(escapeHtml).join(" &middot; ");
+  }
+
+  function updateRequestStateDisplays(submission) {
+    document.querySelectorAll("[data-request-badge]").forEach((container) => {
+      if (container.dataset.requestBadge === submission.id) container.innerHTML = requestBadgeMarkup(submission);
+    });
+    document.querySelectorAll("[data-request-state-meta]").forEach((container) => {
+      if (container.dataset.requestStateMeta === submission.id) container.innerHTML = submissionStateMeta(submission);
+    });
   }
 
   function communicationStateLabel(submission) {
@@ -1630,6 +1625,24 @@
     return "tattoo";
   }
 
+  async function markSubmissionOpened(submission) {
+    if (!submission || submission.openedAt) return submission;
+    submission.openedAt = new Date().toISOString();
+    updateRequestStateDisplays(submission);
+    try {
+      const payload = await api(`/api/admin/submissions/${encodeURIComponent(submission.id)}/open`, {
+        method: "POST",
+      });
+      if (payload.submission) Object.assign(submission, payload.submission);
+      updateRequestStateDisplays(submission);
+      return submission;
+    } catch (error) {
+      submission.openedAt = "";
+      updateRequestStateDisplays(submission);
+      throw error;
+    }
+  }
+
   function goToSubmission(id) {
     const sub = submissions.find((s) => s.id === id);
     if (!sub) return;
@@ -1639,6 +1652,9 @@
     activeAppointmentId = "";
     selectedEventSlug = activeTab === "events" ? (sub.payload?.event_slug || "") : "";
     renderActiveTab();
+    markSubmissionOpened(sub).catch((error) => {
+      setStatus(error.message || "Request could not be marked opened");
+    });
   }
 
   function openStudioAppointment(id) {
@@ -3500,6 +3516,14 @@
     return appointments.filter((a) => !["cancelled", "archived"].includes(a.status));
   }
 
+  function activeScopedAppointments() {
+    return scopedAppointments().filter((appointment) => !["cancelled", "archived"].includes(appointment.status));
+  }
+
+  function cancelledScopedAppointments() {
+    return scopedAppointments().filter((appointment) => ["cancelled", "archived"].includes(appointment.status));
+  }
+
   function isStudioAppointment(appointment) {
     return isArtVisitAppointment(appointment) || isStudioSpaceAppointment(appointment);
   }
@@ -3927,14 +3951,11 @@
       <button class="submission ${submission.id === activeId ? "active" : ""}" type="button" data-id="${submission.id}">
         <span class="submission-top">
           <span class="name">${escapeHtml(displayName)}</span>
-          <span class="pill">${escapeHtml(submission.status)}</span>
+          <span class="request-badge-slot" data-request-badge="${escapeHtml(submission.id)}">${requestBadgeMarkup(submission)}</span>
         </span>
-        <span class="meta">${escapeHtml(titleize(displayType))} / ${escapeHtml(submission.contactEmail || "")}${submission.tattooStage ? ` / ${escapeHtml(titleize(submission.tattooStage))}` : ""}</span>
-        <span data-submission-progress="${escapeHtml(submission.id)}">${submissionProgressBadges(submission)}</span>
-        <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
-          ${nextActionBadge(submission)}
-        </span>
+        <span class="meta">${escapeHtml(titleize(displayType))} / ${escapeHtml(submission.contactEmail || "")}</span>
+        <span class="submission-state-meta" data-request-state-meta="${escapeHtml(submission.id)}">${submissionStateMeta(submission)}</span>
+        <span class="date">${escapeHtml(formatDate(submission.createdAt))}</span>
       </button>
     `}).join("");
   }
@@ -4349,6 +4370,9 @@ ${meetingLines}
     } else if (templateKey === "opening_sixwell") {
       openingKey = templateKey;
       if (!["Events", "Studio"].includes(manualTextTemplates[bodyKey]?.group)) bodyKey = "studio_received";
+    } else if (templateKey === "closing_tattoo") {
+      openingKey = "opening_tattoo";
+      if (!["Tattoo"].includes(manualTextTemplates[bodyKey]?.group)) bodyKey = "tattoo_inquiry_received";
     } else {
       bodyKey = templateKey;
       openingKey = ["Events", "Studio"].includes(template?.group) ? "opening_sixwell" : "opening_tattoo";
@@ -4585,7 +4609,8 @@ ${meetingLines}
         detailStatus.textContent = "Reviewing";
       }
       const statusPill = document.querySelector("[data-submission-status-pill]");
-      if (statusPill) statusPill.textContent = `${titleize(submission.type)} / reviewing`;
+      if (statusPill) statusPill.textContent = `${titleize(submission.type)} · Reviewing`;
+      updateRequestStateDisplays(submission);
     }
     const mount = document.getElementById("tattooSessionPlanEditor");
     if (mount) {
@@ -4806,14 +4831,9 @@ ${meetingLines}
           ` : "";
     detailEl.innerHTML = `
       <div class="detail-head">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span class="pill" data-submission-status-pill>${escapeHtml(submissionTypeLabel)} / ${escapeHtml(submission.status)}</span>
-          ${tattooStage ? `<span class="pill">Stage: ${escapeHtml(titleize(tattooStage))}</span>` : ""}
-          ${latestAppointment?.purpose ? `<span class="pill">Purpose: ${escapeHtml(titleize(latestAppointment.purpose))}</span>` : ""}
-          ${lifecycleReviewRequired ? `<span class="pill" style="color:#EC5E26;border-color:rgba(236,94,38,.72);">Historic Review Required</span>` : ""}
-          ${nextActionBadge(submission)}
-          <span id="submissionProgressBadges" data-submission-progress="${escapeHtml(submission.id)}">${submissionProgressBadges(submission)}</span>
-          ${requiresInPersonConsult(submission) ? `<span class="pill" style="color:#FCB867;border-color:rgba(252,184,103,0.5);">IN-PERSON CONSULT REQUIRED</span>` : ""}
+        <div class="detail-context-row">
+          <span class="detail-context" data-submission-status-pill>${escapeHtml(submissionTypeLabel)} &middot; ${escapeHtml(titleize(submission.status))}</span>
+          <span class="request-badge-slot" data-request-badge="${escapeHtml(submission.id)}">${requestBadgeMarkup(submission)}</span>
         </div>
         <h2>${escapeHtml(submission.contactName || "Unnamed")}</h2>
         <p class="contact">
@@ -5269,7 +5289,7 @@ ${meetingLines}
 
   function dayStatsFromAppointments() {
     const stats = new Map();
-    for (const a of scopedAppointments()) {
+    for (const a of activeScopedAppointments()) {
       if (!a.startAt) continue;
       const key = dayKey(a.startAt);
       const hours = a.endAt ? Math.max(0, (new Date(a.endAt) - new Date(a.startAt)) / 3600000) : 0;
@@ -5325,7 +5345,7 @@ ${meetingLines}
     const countEl = document.getElementById("apptDayCount");
     if (!panel) return;
 
-    const scoped = scopedAppointments();
+    const scoped = activeScopedAppointments();
     const filtered = dayFilter
       ? scoped.filter((a) => dayKey(a.startAt) === dayFilter)
       : [...scoped].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
@@ -5362,6 +5382,41 @@ ${meetingLines}
           ${a.isTattooSpecial ? `<span class="pill">Tattoo Special · ${escapeHtml(a.specialOfferTitle || "Tattoo Special")}</span>` : ""}
           <span class="appt-meta">${escapeHtml(titleize(a.bookingTypeId || "session"))}${deposit ? ` · ${deposit} deposit` : ""}${a.status ? ` · ${a.status}` : ""}</span>
           <div class="booking-actions" style="margin-top:6px;">${manageButton}${submissionButton}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderCancelledAppointmentHistory() {
+    const panel = document.getElementById("cancelledAppointmentHistory");
+    const countEl = document.getElementById("cancelledAppointmentHistoryCount");
+    if (!panel) return;
+    const cancelled = [...cancelledScopedAppointments()].sort((a, b) => (
+      new Date(b.cancelledAt || b.updatedAt || b.startAt || 0)
+      - new Date(a.cancelledAt || a.updatedAt || a.startAt || 0)
+    ));
+    if (countEl) countEl.textContent = `${cancelled.length} record${cancelled.length === 1 ? "" : "s"}`;
+    if (!cancelled.length) {
+      panel.innerHTML = '<p class="empty" style="font-family:var(--sans);font-size:11px;">No cancelled appointments.</p>';
+      return;
+    }
+    panel.innerHTML = cancelled.map((appointment) => {
+      const related = appointmentRelatedSubmission(appointment);
+      const historyState = appointment.canPermanentlyDelete
+        ? "Eligible for permanent deletion"
+        : "Protected history retained";
+      return `
+        <div class="appt-item">
+          <div class="appt-item-top">
+            <span class="appt-name">${escapeHtml(appointment.clientName || "Unnamed")}</span>
+            <span class="pill">${escapeHtml(titleize(appointment.status || "cancelled"))}</span>
+          </div>
+          ${appointment.isTattooSpecial ? `<span class="pill">Tattoo Special &middot; ${escapeHtml(appointment.specialOfferTitle || "Tattoo Special")}</span>` : ""}
+          <span class="appt-meta">${escapeHtml(formatDate(appointment.startAt))} &middot; ${escapeHtml(appointmentTypeLabel(appointment))} &middot; ${escapeHtml(historyState)}</span>
+          <div class="booking-actions" style="margin-top:6px;">
+            <button class="button" type="button" data-manage-appointment="${escapeHtml(appointment.id)}">Manage Appointment</button>
+            ${related ? `<button class="button" type="button" data-open-submission="${escapeHtml(related.id)}">Open Submission</button>` : ""}
+          </div>
         </div>
       `;
     }).join("");
@@ -5537,7 +5592,7 @@ ${meetingLines}
     const payload = await api(availabilityApi("/api/admin/booking/availability-preview"));
     const bookedDays = payload.bookedDays || [];
     const dayStats = dayStatsFromAppointments();
-    const visibleAppointments = scopedAppointments();
+    const visibleAppointments = activeScopedAppointments();
     const monthKeys = [...new Set([
       ...bookedDays.map((item) => String(item.date || "").slice(0, 7)).filter(Boolean),
       ...visibleAppointments.map((a) => monthKey(a.startAt)).filter(Boolean),
@@ -5608,13 +5663,24 @@ ${meetingLines}
         <div class="detail-head">
           <span class="pill">Tattoo Booking / Appointments</span>
           <h2>Tattoo Appointments</h2>
-          <p class="contact">Tattoo sessions, consultations, and in-person build sessions appear here. Select a day to focus its appointments.</p>
+          <p class="contact">Active tattoo sessions, consultations, and in-person build sessions appear on the calendar. Cancelled records remain available in history below.</p>
         </div>
         ${appointmentCalendarMarkup()}
+        <section class="review-card" style="margin-top:16px;">
+          <div class="portfolio-head">
+            <div>
+              <div class="review-card-header">Cancelled History</div>
+              <p class="contact" style="margin:6px 0 0;">Cancelled appointments no longer affect active calendar counts or booked hours. Payment and audit history remain protected.</p>
+            </div>
+            <span class="pill" id="cancelledAppointmentHistoryCount">0 records</span>
+          </div>
+          <div id="cancelledAppointmentHistory" class="appt-day-list"></div>
+        </section>
       </div>
     `;
     enhanceControls(detailEl);
     await loadAvailabilityPreview();
+    renderCancelledAppointmentHistory();
   }
 
   async function renderAvailabilityManager() {
@@ -6045,20 +6111,23 @@ ${meetingLines}
       const payload = await api("/api/admin/submissions?limit=100");
       const latestById = new Map((payload.submissions || []).map((submission) => [submission.id, submission]));
       const progressFields = [
+        "status",
+        "tattooStage",
+        "bookingUrl",
+        "openedAt",
         "clientNotificationStatus",
         "clientNotificationSentAt",
+        "clientLinkNotificationStatus",
         "depositPaymentStatus",
         "depositPaidAt",
+        "clientAccessStatus",
       ];
       submissions.forEach((submission) => {
         const latest = latestById.get(submission.id);
         if (!latest) return;
         progressFields.forEach((field) => { submission[field] = latest[field]; });
       });
-      document.querySelectorAll("[data-submission-progress]").forEach((container) => {
-        const submission = submissions.find((item) => item.id === container.dataset.submissionProgress);
-        if (submission) container.innerHTML = submissionProgressBadges(submission);
-      });
+      submissions.forEach(updateRequestStateDisplays);
       const activeSubmission = submissions.find((item) => item.id === activeId);
       const communicationState = document.getElementById("decisionCommunicationState");
       if (activeSubmission && communicationState) communicationState.textContent = communicationStateLabel(activeSubmission);
@@ -6121,6 +6190,11 @@ ${meetingLines}
     if (submission) {
       renderList();
       renderDetail(submission);
+      try {
+        await markSubmissionOpened(submission);
+      } catch (error) {
+        setStatus(error.message || "Request could not be marked opened");
+      }
       try {
         const payload = await api(`/api/admin/submissions/${encodeURIComponent(activeId)}`);
         if (activeId !== button.dataset.id || !payload.submission) return;

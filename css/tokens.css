@@ -418,6 +418,7 @@
   --studio-ring-faint: rgba(109, 61, 21, 0.18);
   --studio-ghost: rgba(252, 180, 103, 0.14);
   --studio-status-success: #6FAE7C;
+  --studio-status-info: #79B8D1;
   --studio-status-warning: var(--color-accent);
   --studio-status-error: #CC8F72;
   --studio-type-title-size: 18px;

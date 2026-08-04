@@ -63,6 +63,7 @@ function analyticsSqlDate(value) {
 export function normalizeAnalyticsPath(value) {
   let pathname = "/";
   try { pathname = new URL(String(value || "/"), "https://analytics.invalid").pathname; } catch {}
+  if (/^\/b\/[A-Za-z0-9_-]{12}\/?$/.test(pathname)) pathname = "/booking/";
   pathname = pathname.replace(/\/{2,}/g, "/");
   pathname = pathname.replace(/\/index\.html$/i, "/");
   if (pathname !== "/" && !/\.[a-z0-9]{1,8}$/i.test(pathname)) pathname = `${pathname.replace(/\/+$/, "")}/`;

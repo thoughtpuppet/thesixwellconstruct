@@ -3,6 +3,7 @@
   const DEFAULT_TEMPLATES = [
     { key:"opening_tattoo", label:"Tattoo opening", group:"Opening", allowedTokens:["greeting","first_name"], body:"{{greeting}} {{first_name}}, this is Sai Solehman of art.pill TATTOO HOUSE." },
     { key:"opening_sixwell", label:"Six.Well opening", group:"Opening", allowedTokens:["greeting","first_name"], body:"{{greeting}} {{first_name}}, this is the six.well construct." },
+    { key:"closing_tattoo", label:"Tattoo sign-off", group:"Closing", allowedTokens:[], body:"Thank you for trusting me with your tattoo. If any questions come up, feel free to reach out." },
     { key:"event_confirmed", label:"Event confirmed", group:"Events", allowedTokens:["event_title"], body:"Your spot for {{event_title}} is confirmed and paid. See you there — reply here if anything changes." },
     { key:"event_received", label:"Event RSVP received", group:"Events", allowedTokens:["event_title"], body:"We saw your RSVP for {{event_title}}. Your seat is held once Square payment clears — reply here if you need a hand." },
     { key:"studio_confirmed", label:"Studio booking confirmed", group:"Studio", allowedTokens:["booking_label"], body:"Your {{booking_label}} is confirmed. Keep an eye on your email for arrival details, and reply here if anything changes." },
@@ -11,7 +12,7 @@
     { key:"tattoo_special_approved", label:"Tattoo Special approved", group:"Tattoo", allowedTokens:["booking_url"], body:"Your Tattoo Special request has been approved. Review your approved request and pay the deposit to confirm your appointment here: {{booking_url}}" },
     { key:"tattoo_consultation_required", label:"Consultation required", group:"Tattoo", allowedTokens:["booking_url"], body:"Your project needs an in-person consultation before tattoo booking. You can choose a consultation time and place the deposit here: {{booking_url}}" },
     { key:"tattoo_booking_approved", label:"Tattoo approved for booking", group:"Tattoo", allowedTokens:["approved_budget_sentence","booking_url"], body:"Your project has been approved for booking. {{approved_budget_sentence}} Review and agree to the session estimate and budget, choose your appointment, and place the deposit here: {{booking_url}}" },
-    { key:"tattoo_inquiry_received", label:"Tattoo inquiry received", group:"Tattoo", allowedTokens:[], body:"We received your inquiry and will review the project details before sending booking access. Thank you." },
+    { key:"tattoo_inquiry_received", label:"Tattoo inquiry received", group:"Tattoo", allowedTokens:[], body:"We received your inquiry and will review the project details before sending booking access." },
   ];
 
   function greetingForDate(value, timezone = TIMEZONE) {
@@ -66,7 +67,8 @@
   function compose(templates, openingKey, bodyKey, values = {}) {
     const opening = templates[openingKey]?.body || "";
     const body = templates[bodyKey]?.body || "";
-    return renderTemplate(`${opening} ${body}`, values);
+    const closing = openingKey === "opening_tattoo" ? (templates.closing_tattoo?.body || "") : "";
+    return renderTemplate(`${opening} ${body} ${closing}`, values);
   }
 
   root.ManualTextAssist = { TIMEZONE, DEFAULT_TEMPLATES, greetingForDate, renderTemplate, templateSelection, compose };

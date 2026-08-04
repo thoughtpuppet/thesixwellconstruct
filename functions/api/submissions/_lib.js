@@ -21,6 +21,7 @@ import {
   loadBriefDocument,
   presentBriefDocument,
 } from "../brief-documents/_lib.js";
+import { bookingTokenFromUrl } from "../booking-links.js";
 
 const VALID_STATUSES = new Set([
   "new",
@@ -259,21 +260,20 @@ function absoluteClientUrl(env, request, pathOrUrl) {
 }
 
 async function activeBookingAccessForUrl(db, submissionId, bookingUrl) {
-  let token = "";
-  try {
-    token = new URL(bookingUrl, "https://booking.invalid").searchParams.get("token") || "";
-  } catch {
-    return null;
-  }
+  const token = bookingTokenFromUrl(bookingUrl);
   if (!token) return null;
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  const tokenHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const tokenHash = await sha256Hex(token);
   return db.prepare(
     `SELECT * FROM booking_tokens
      WHERE submission_id=? AND token_hash=? AND revoked_at IS NULL AND used_at IS NULL
        AND (expires_at IS NULL OR expires_at>?)
      LIMIT 1`
   ).bind(submissionId, tokenHash, new Date().toISOString()).first();
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function submissionNeedsPrerequisiteConsultation(rowOrPayload) {
@@ -802,12 +802,19 @@ const CLIENT_DECISION_NOTIFICATION_TEMPLATES = new Set([
   "tattoo_special_review",
 ]);
 
+const CLIENT_LINK_NOTIFICATION_TEMPLATES = new Set([
+  "booking_link_created",
+  "tattoo_special_deposit_requested",
+]);
+
 function emptySubmissionProgress() {
   return {
     clientNotificationStatus: "unsent",
     clientNotificationSentAt: "",
+    clientLinkNotificationStatus: "unsent",
     depositPaymentStatus: "none",
     depositPaidAt: "",
+    clientAccessStatus: "none",
   };
 }
 
@@ -830,20 +837,55 @@ async function loadSubmissionProgress(database, submissionRows = []) {
      ORDER BY nd.created_at DESC`
   ).bind(...ids, ...ids).all()).results || [];
 
+  const accessCandidates = (await Promise.all(rows.map(async (row) => {
+    const rawToken = bookingTokenFromUrl(row.booking_url || "");
+    return rawToken ? { submissionId: row.id, tokenHash: await sha256Hex(rawToken) } : null;
+  }))).filter(Boolean);
+  const activeAccessBySubmission = new Map();
+  if (accessCandidates.length) {
+    const accessPlaceholders = accessCandidates.map(() => "(?, ?)").join(",");
+    const accessBindings = accessCandidates.flatMap(({ submissionId, tokenHash }) => [submissionId, tokenHash]);
+    const activeAccessRows = (await database.prepare(
+      `SELECT id,submission_id,created_at
+       FROM booking_tokens
+       WHERE (submission_id,token_hash) IN (${accessPlaceholders})
+         AND revoked_at IS NULL
+         AND used_at IS NULL
+         AND (expires_at IS NULL OR expires_at > ?)`
+    ).bind(...accessBindings, new Date().toISOString()).all()).results || [];
+    for (const access of activeAccessRows) {
+      activeAccessBySubmission.set(access.submission_id, access);
+      progress.get(access.submission_id).clientAccessStatus = "active";
+    }
+  }
+
+  const currentNotificationSeen = new Set();
+  const currentLinkNotificationSeen = new Set();
+  const deliveryStatus = (status) => status === "sent"
+    ? "sent"
+    : ["failed", "skipped"].includes(status) ? "failed" : "pending";
+
   for (const delivery of notificationRows) {
     const submissionId = delivery.submission_id;
     const state = progress.get(submissionId);
-    if (!state || !CLIENT_DECISION_NOTIFICATION_TEMPLATES.has(delivery.template_key)) continue;
+    if (!state) continue;
     const revision = revisions.get(submissionId) || 0;
     const attemptPrefix = `decision_notification:${submissionId}:${revision}:`;
-    if (!String(delivery.idempotency_key || "").startsWith(attemptPrefix)) continue;
-    if (delivery.status === "sent") {
-      state.clientNotificationStatus = "sent";
-      if (!state.clientNotificationSentAt) state.clientNotificationSentAt = delivery.sent_at || delivery.created_at || "";
-    } else if (state.clientNotificationStatus !== "sent" && ["failed", "skipped"].includes(delivery.status)) {
-      state.clientNotificationStatus = "failed";
-    } else if (state.clientNotificationStatus === "unsent") {
-      state.clientNotificationStatus = "pending";
+    const isCurrentDecision = CLIENT_DECISION_NOTIFICATION_TEMPLATES.has(delivery.template_key)
+      && String(delivery.idempotency_key || "").startsWith(attemptPrefix);
+    const activeAccess = activeAccessBySubmission.get(submissionId);
+    const isCurrentLink = CLIENT_LINK_NOTIFICATION_TEMPLATES.has(delivery.template_key)
+      && activeAccess
+      && String(delivery.created_at || "") >= String(activeAccess.created_at || "");
+
+    if ((isCurrentDecision || isCurrentLink) && !currentNotificationSeen.has(submissionId)) {
+      state.clientNotificationStatus = deliveryStatus(delivery.status);
+      if (delivery.status === "sent") state.clientNotificationSentAt = delivery.sent_at || delivery.created_at || "";
+      currentNotificationSeen.add(submissionId);
+    }
+    if (isCurrentLink && !currentLinkNotificationSeen.has(submissionId)) {
+      state.clientLinkNotificationStatus = deliveryStatus(delivery.status);
+      currentLinkNotificationSeen.add(submissionId);
     }
   }
 
@@ -909,10 +951,13 @@ function normalizeRow(row) {
     files: parseJsonField(row.files_json, []),
     internalNotes: row.internal_notes || "",
     bookingUrl: row.booking_url || "",
+    openedAt: row.opened_at || "",
     clientNotificationStatus: row.clientNotificationStatus || row.client_notification_status || "unsent",
     clientNotificationSentAt: row.clientNotificationSentAt || row.client_notification_sent_at || "",
+    clientLinkNotificationStatus: row.clientLinkNotificationStatus || row.client_link_notification_status || "unsent",
     depositPaymentStatus: row.depositPaymentStatus || row.deposit_payment_status || "none",
     depositPaidAt: row.depositPaidAt || row.deposit_paid_at || "",
+    clientAccessStatus: row.clientAccessStatus || row.client_access_status || "none",
     flashReservation,
     flashConflict,
     flash_conflict: flashConflict,
@@ -2023,6 +2068,31 @@ export async function handleGetSubmission(request, env, id) {
   }
 }
 
+export async function handleOpenSubmission(request, env, id) {
+  const authError = requireAdmin(request, env);
+  if (authError) return authError;
+
+  try {
+    const db = requireSubmissionDb(env);
+    const now = new Date().toISOString();
+    await db.prepare(
+      `UPDATE submissions
+       SET opened_at = COALESCE(opened_at, ?)
+       WHERE id = ?`
+    ).bind(now, id).run();
+    const row = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
+    if (!row) return errorResponse("Submission not found.", 404);
+    const progressBySubmission = await loadSubmissionProgress(db, [row]);
+    return json({
+      submission: normalizeRow({ ...row, ...(progressBySubmission.get(row.id) || {}) }),
+    });
+  } catch (error) {
+    return errorResponse("Unable to mark submission opened.", 500, {
+      detail: error.message,
+    });
+  }
+}
+
 async function readAdminJson(request) {
   try {
     const body = await request.json();
@@ -2826,7 +2896,10 @@ export async function handleUpdateSubmission(request, env, id, options = {}) {
 
     const updated = await db.prepare("SELECT * FROM submissions WHERE id = ?").bind(id).first();
     await mirrorSubmissionToCrm(db, updated);
-    return json({ submission: normalizeRow(updated) });
+    const progressBySubmission = await loadSubmissionProgress(db, [updated]);
+    return json({
+      submission: normalizeRow({ ...updated, ...(progressBySubmission.get(updated.id) || {}) }),
+    });
   } catch (error) {
     return errorResponse("Unable to update submission.", 500, {
       detail: error.message,

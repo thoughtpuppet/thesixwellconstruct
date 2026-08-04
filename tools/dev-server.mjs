@@ -12,6 +12,7 @@ import {
 import { renderEmailContent } from "../functions/api/notifications/_email-content.js";
 import { defaultEmailDesignProfile, validateEmailDesignProfile } from "../functions/api/notifications/_email-design.js";
 import { CLIENT_EMAIL_THEMES } from "../functions/api/notifications/_email-renderer.js";
+import { shortBookingTokenFromPath } from "../functions/api/booking-links.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -317,6 +318,8 @@ function safePath(urlPath) {
   const decoded = requestPathname(urlPath);
   const localOnlyFile = localOnlyRoutes.get(decoded);
   if (localOnlyFile) return path.resolve(root, localOnlyFile);
+
+  if (shortBookingTokenFromPath(decoded)) return path.resolve(root, "booking", "index.html");
 
   if (isFrontDoorRoute(decoded)) return path.resolve(root, "index.html");
   if (isHomeRoute(decoded)) return path.resolve(root, "home", "index.html");

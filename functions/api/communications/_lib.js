@@ -16,6 +16,13 @@ export const MANUAL_TEXT_TEMPLATE_DEFINITIONS = [
     defaultBody: "{{greeting}} {{first_name}}, this is the six.well construct.",
   },
   {
+    key: "closing_tattoo",
+    label: "Tattoo sign-off",
+    group: "Closing",
+    allowedTokens: [],
+    defaultBody: "Thank you for trusting me with your tattoo. If any questions come up, feel free to reach out.",
+  },
+  {
     key: "event_confirmed",
     label: "Event confirmed",
     group: "Events",
@@ -76,7 +83,7 @@ export const MANUAL_TEXT_TEMPLATE_DEFINITIONS = [
     label: "Tattoo inquiry received",
     group: "Tattoo",
     allowedTokens: [],
-    defaultBody: "We received your inquiry and will review the project details before sending booking access. Thank you.",
+    defaultBody: "We received your inquiry and will review the project details before sending booking access.",
   },
 ];
 

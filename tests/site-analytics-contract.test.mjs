@@ -19,6 +19,7 @@ const ROOT = process.cwd();
 
 test("analytics paths discard query data and normalize public routes", () => {
   assert.equal(normalizeAnalyticsPath("https://example.com/booking/index.html?token=secret&ref=abc"), "/booking/");
+  assert.equal(normalizeAnalyticsPath("https://example.com/b/Ab3dE7xQ9wK2"), "/booking/");
   assert.equal(normalizeAnalyticsPath("/archive//events?search=private"), "/archive/events/");
   assert.equal(analyticsContentGroup("/tattoos/portfolio/?gclid=private"), "tattoos");
 });

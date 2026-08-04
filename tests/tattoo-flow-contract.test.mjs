@@ -111,6 +111,7 @@ import {
   handlePublicTattooSpecials,
 } from "../functions/api/tattoo-specials/_lib.js";
 import { handleAdminManualTextTemplates } from "../functions/api/communications/_lib.js";
+import { bookingTokenFromUrl } from "../functions/api/booking-links.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const TATTOO_BUDGET_RANGES = [
@@ -614,6 +615,7 @@ test("Studio submission progress reports current client notification delivery an
   assert.equal(listed.status, 200);
   const listedSubmission = (await listed.json()).submissions.find((item) => item.id === "progress-request");
   assert.equal(listedSubmission.clientNotificationStatus, "failed");
+  assert.equal(listedSubmission.clientLinkNotificationStatus, "unsent");
   assert.equal(listedSubmission.depositPaymentStatus, "paid");
   assert.ok(listedSubmission.depositPaidAt);
 
@@ -632,13 +634,15 @@ test("Studio submission progress reports current client notification delivery an
   assert.equal(detailed.status, 200);
   const detailSubmission = (await detailed.json()).submission;
   assert.equal(detailSubmission.clientNotificationStatus, "sent");
+  assert.equal(detailSubmission.clientLinkNotificationStatus, "unsent");
   assert.equal(detailSubmission.clientNotificationSentAt, "2026-08-03T16:10:00.000Z");
   assert.equal(detailSubmission.depositPaymentStatus, "paid");
 
   const studioSource = readFileSync(join(ROOT, "studio", "submissions", "index.html"), "utf8");
-  assert.match(studioSource, /Notification sent<\/span>/);
-  assert.match(studioSource, /Deposit paid<\/span>/);
-  assert.match(studioSource, /Booking Link Ready<\/span>/);
+  assert.match(studioSource, /items\.push\("Notification sent"\)/);
+  assert.match(studioSource, /items\.push\("Deposit paid"\)/);
+  assert.match(studioSource, /requestBadgeMarkup\(submission\)/);
+  assert.doesNotMatch(studioSource, /nextActionBadge|submissionProgressBadges/);
   assert.match(studioSource, /window\.setInterval\(refreshSubmissionProgress, 30000\)/);
 });
 
@@ -2868,7 +2872,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(requestResponse.status, 201);
   const submitted = await requestResponse.json();
   assert.equal(submitted.reviewRequired, true);
-  assert.match(submitted.bookingUrl, /^\/booking\/\?token=/);
+  assert.match(submitted.bookingUrl, /^\/b\/[A-Za-z0-9_-]{12}$/);
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?",
   ).get(submitted.submissionId).count, 0);
@@ -2900,7 +2904,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   const tokenRow = database.prepare("SELECT * FROM booking_tokens WHERE submission_id=?").get(submitted.submissionId);
   assert.equal(tokenRow.expires_at, closes);
   assert.deepEqual(JSON.parse(tokenRow.allowed_booking_types_json), ["tattoo_special_palm_v3"]);
-  const rawToken = new URL(submitted.bookingUrl, "https://example.test").searchParams.get("token");
+  const rawToken = bookingTokenFromUrl(submitted.bookingUrl);
   const contextResponse = await handleBookingContext(new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`), env);
   assert.equal(contextResponse.status, 200);
   const context = await contextResponse.json();
@@ -2956,7 +2960,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   }), env);
   assert.equal(competingResponse.status, 201);
   const competing = await competingResponse.json();
-  const competingToken = new URL(competing.bookingUrl, "https://example.test").searchParams.get("token");
+  const competingToken = bookingTokenFromUrl(competing.bookingUrl);
   const competingContextResponse = await handleBookingContext(new Request(
     `https://example.test/api/booking/context?token=${encodeURIComponent(competingToken)}`,
   ), env);
@@ -3056,7 +3060,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
   assert.equal(depositResponse.status, 200, await depositResponse.clone().text());
   const approval = await depositResponse.json();
   assert.equal(approval.checkoutUrl, "");
-  assert.match(approval.clientUrl, /^https:\/\/example\.test\/booking\/\?token=/);
+  assert.match(approval.clientUrl, /^https:\/\/example\.test\/b\/[A-Za-z0-9_-]{12}$/);
   assert.notEqual(approval.clientUrl, new URL(submitted.bookingUrl, "https://example.test").toString());
   assert.equal(approval.appointmentId, hold.appointment.id);
   assert.ok(new Date(approval.paymentDueAt).getTime() <= new Date(closes).getTime());
@@ -3072,7 +3076,7 @@ test("Tattoo Specials require Studio approval and preserve server-side price, de
     `https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`,
   ), env);
   assert.equal(replacedContext.status, 403);
-  const preparedRawToken = new URL(approval.clientUrl).searchParams.get("token");
+  const preparedRawToken = bookingTokenFromUrl(approval.clientUrl);
   const approvedContextResponse = await handleBookingContext(new Request(
     `https://example.test/api/booking/context?token=${encodeURIComponent(preparedRawToken)}`,
   ), env);
@@ -3289,13 +3293,13 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
   assert.equal(received.status, 201);
   const requestPayload = await received.json();
   assert.equal(requestPayload.reviewRequired, true);
-  assert.match(requestPayload.bookingUrl, /^\/booking\/\?token=/);
+  assert.match(requestPayload.bookingUrl, /^\/b\/[A-Za-z0-9_-]{12}$/);
   assert.equal(database.prepare("SELECT status FROM submissions WHERE id=?").get(requestPayload.submissionId).status, "new");
   assert.equal(database.prepare("SELECT COUNT(*) count FROM booking_tokens WHERE submission_id=?").get(requestPayload.submissionId).count, 1);
   assert.equal(database.prepare(
     "SELECT COUNT(*) count FROM notification_deliveries WHERE related_id=?",
   ).get(requestPayload.submissionId).count, 0);
-  const rawToken = new URL(requestPayload.bookingUrl, "https://example.test").searchParams.get("token");
+  const rawToken = bookingTokenFromUrl(requestPayload.bookingUrl);
   const start = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 90 * 60 * 1000);
   insertAvailabilityWindow(database, {
@@ -3328,7 +3332,7 @@ test("Script Tattoo enforces twenty-one words and preserves its fixed approved p
   assert.equal(approved.status, 200);
   const approval = await approved.json();
   assert.equal(approval.checkoutUrl, "");
-  assert.match(approval.clientUrl, /\/booking\/\?token=/);
+  assert.match(approval.clientUrl, /\/b\/[A-Za-z0-9_-]{12}$/);
   const storedTerms = database.prepare("SELECT * FROM tattoo_special_submission_terms WHERE submission_id=?").get(requestPayload.submissionId);
   assert.equal(storedTerms.advertised_price_cents, 17000);
   assert.equal(storedTerms.approved_price_cents, 17000);
@@ -3363,7 +3367,7 @@ test("Script Tattoo approval cannot issue a deposit link after the sales cutoff"
   }), env);
   const review = await received.json();
   assert.equal(received.status, 201);
-  const rawToken = new URL(review.bookingUrl, "https://example.test").searchParams.get("token");
+  const rawToken = bookingTokenFromUrl(review.bookingUrl);
   const start = new Date(Date.now() + 11 * 24 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 90 * 60 * 1000);
   insertAvailabilityWindow(database, {
@@ -3861,23 +3865,27 @@ test("manual text templates require Studio auth, persist valid copy, and reject 
   }), env);
   assert.equal(initialResponse.status, 200);
   const initial = await initialResponse.json();
-  assert.equal(initial.templates.length, 11);
+  assert.equal(initial.templates.length, 12);
   assert.equal(
     initial.templates.find((template) => template.key === "opening_tattoo").body,
     "{{greeting}} {{first_name}}, this is Sai Solehman of art.pill TATTOO HOUSE.",
   );
+  assert.equal(
+    initial.templates.find((template) => template.key === "closing_tattoo").body,
+    "Thank you for trusting me with your tattoo. If any questions come up, feel free to reach out.",
+  );
 
   const savedResponse = await handleAdminManualTextTemplates(adminJsonRequest(
     "/api/admin/communications/text-templates",
-    { templateKey: "tattoo_inquiry_received", body: "Thank you for sharing your project with me." },
+    { templateKey: "closing_tattoo", body: "Thank you for trusting me with this piece. Reach out anytime." },
     adminToken,
     "PATCH",
   ), env);
   assert.equal(savedResponse.status, 200);
-  assert.equal((await savedResponse.json()).template.body, "Thank you for sharing your project with me.");
+  assert.equal((await savedResponse.json()).template.body, "Thank you for trusting me with this piece. Reach out anytime.");
   assert.equal(
-    database.prepare("SELECT body_text FROM manual_text_templates WHERE template_key=?").get("tattoo_inquiry_received").body_text,
-    "Thank you for sharing your project with me.",
+    database.prepare("SELECT body_text FROM manual_text_templates WHERE template_key=?").get("closing_tattoo").body_text,
+    "Thank you for trusting me with this piece. Reach out anytime.",
   );
 
   const unknownVariable = await handleAdminManualTextTemplates(adminJsonRequest(
@@ -3941,8 +3949,20 @@ test("manual text assist uses New York greeting boundaries and composes the name
       greeting: "Good afternoon",
       first_name: "Avery",
     }),
-    "Good afternoon Avery, this is Sai Solehman of art.pill TATTOO HOUSE. We received your inquiry and will review the project details before sending booking access. Thank you.",
+    "Good afternoon Avery, this is Sai Solehman of art.pill TATTOO HOUSE. We received your inquiry and will review the project details before sending booking access. Thank you for trusting me with your tattoo. If any questions come up, feel free to reach out.",
   );
+  for (const [, openingKey, bodyKey] of selectionCases.filter(([, key]) => key === "opening_tattoo")) {
+    assert.match(
+      assist.compose(templates, openingKey, bodyKey, {
+        greeting: "Good afternoon",
+        first_name: "Avery",
+        booking_url: "https://example.test/book",
+        approved_budget_sentence: "Your approved project budget is $500.",
+      }),
+      /Thank you for trusting me with your tattoo\. If any questions come up, feel free to reach out\.$/,
+      bodyKey,
+    );
+  }
   assert.doesNotMatch(
     assist.compose(templates, "opening_sixwell", "studio_received", {
       greeting: "Good morning",
@@ -3950,6 +3970,14 @@ test("manual text assist uses New York greeting boundaries and composes the name
       booking_label: "Open Studio Visit",
     }),
     /art\.pill TATTOO HOUSE/,
+  );
+  assert.doesNotMatch(
+    assist.compose(templates, "opening_sixwell", "studio_received", {
+      greeting: "Good morning",
+      first_name: "Avery",
+      booking_label: "Open Studio Visit",
+    }),
+    /Thank you for trusting me with your tattoo/,
   );
 });
 
@@ -4028,7 +4056,7 @@ test("Studio can create a direct private booking invite without a prior inquiry"
   assert.equal(plan.artist_note, "The composition is planned for a Half Day Session (4 hours).");
   assert.doesNotMatch(plan.artist_note, /offline conversation/i);
 
-  const rawToken = new URL(payload.token.bookingUrl).searchParams.get("token");
+  const rawToken = bookingTokenFromUrl(payload.token.bookingUrl);
   const context = await handleBookingContext(
     new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(rawToken)}`),
     env,
@@ -4733,7 +4761,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
     currency: "USD",
   });
   assert.equal(sent.length, 0, "booking-link preparation must be silent");
-  const firstRawToken = new URL(firstToken.bookingUrl).searchParams.get("token");
+  const firstRawToken = bookingTokenFromUrl(firstToken.bookingUrl);
 
   const firstContextResponse = await handleBookingContext(
     new Request(`https://example.test/api/booking/context?token=${encodeURIComponent(firstRawToken)}`),
@@ -4867,7 +4895,7 @@ test("reviewed project budgets gate tattoo booking and require client agreement"
   assert.equal(secondTokenResponse.status, 200);
   const secondToken = (await secondTokenResponse.json()).token;
   assert.equal(sent.length, 0, "regenerated booking access must remain silent");
-  const secondRawToken = new URL(secondToken.bookingUrl).searchParams.get("token");
+  const secondRawToken = bookingTokenFromUrl(secondToken.bookingUrl);
   const startAt = new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString();
   const endAt = new Date(new Date(startAt).getTime() + 90 * 60 * 1000).toISOString();
   insertAvailabilityWindow(database, {
@@ -4956,7 +4984,7 @@ test("Extended Day is optional, has no billing minimum, remains acknowledged, an
     "tattoo_full",
     "tattoo_extended",
   ]);
-  const rawToken = new URL(issuedToken.bookingUrl).searchParams.get("token");
+  const rawToken = bookingTokenFromUrl(issuedToken.bookingUrl);
   const agreement = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
     token: rawToken,
     preference: "one_longer_session",
@@ -5101,7 +5129,7 @@ test("session-plan preferences require both Studio presentation and an approved 
     adminToken,
   ), env);
   assert.equal(halfTokenResponse.status, 200, await halfTokenResponse.clone().text());
-  const halfToken = new URL((await halfTokenResponse.json()).token.bookingUrl).searchParams.get("token");
+  const halfToken = bookingTokenFromUrl((await halfTokenResponse.json()).token.bookingUrl);
 
   const blockedLonger = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
     token: halfToken,
@@ -5131,7 +5159,7 @@ test("session-plan preferences require both Studio presentation and an approved 
     adminToken,
   ), env);
   assert.equal(fullTokenResponse.status, 200, await fullTokenResponse.clone().text());
-  const fullToken = new URL((await fullTokenResponse.json()).token.bookingUrl).searchParams.get("token");
+  const fullToken = bookingTokenFromUrl((await fullTokenResponse.json()).token.bookingUrl);
 
   const blockedShorter = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
     token: fullToken,
@@ -5201,7 +5229,7 @@ test("Studio can hide either optional pacing request even when its appointment t
     adminToken,
   ), env);
   assert.equal(tokenResponse.status, 200, await tokenResponse.clone().text());
-  const rawToken = new URL((await tokenResponse.json()).token.bookingUrl).searchParams.get("token");
+  const rawToken = bookingTokenFromUrl((await tokenResponse.json()).token.bookingUrl);
 
   const blockedLonger = await handleSaveBookingSessionPlan(jsonRequest("/api/booking/session-plan", {
     token: rawToken,
@@ -5248,7 +5276,7 @@ test("private booking holds enforce the token and parent lifecycle inside the at
   ), env);
   assert.equal(tokenResponse.status, 200);
   const token = (await tokenResponse.json()).token;
-  const rawToken = new URL(token.bookingUrl).searchParams.get("token");
+  const rawToken = bookingTokenFromUrl(token.bookingUrl);
 
   const start = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
   const end = new Date(Date.now() + 72.5 * 60 * 60 * 1000).toISOString();
@@ -7657,6 +7685,15 @@ test("Worker routes expose neutral public sessions, lifecycle actions, settings,
   assert.match(submissionsStudio, /request no longer available/);
   assert.match(submissionsStudio, /function openAppointment\(id\)/);
   assert.match(submissionsStudio, /appointment && !appointmentRelatedSubmission\(appointment\)[\s\S]*?openAppointment\(appointment\.id\)/);
+  assert.match(submissionsStudio, /function activeScopedAppointments\(\)[\s\S]*?!\["cancelled", "archived"\]\.includes\(appointment\.status\)/);
+  assert.match(submissionsStudio, /function cancelledScopedAppointments\(\)[\s\S]*?\["cancelled", "archived"\]\.includes\(appointment\.status\)/);
+  assert.match(submissionsStudio, /function dayStatsFromAppointments\(\)[\s\S]*?activeScopedAppointments\(\)/);
+  assert.match(submissionsStudio, /function renderDayAppointments\(dayFilter\)[\s\S]*?const scoped = activeScopedAppointments\(\)/);
+  assert.match(submissionsStudio, /function renderCancelledAppointmentHistory\(\)/);
+  assert.match(submissionsStudio, /Cancelled History/);
+  assert.match(submissionsStudio, /Cancelled appointments no longer affect active calendar counts or booked hours\. Payment and audit history remain protected\./);
+  assert.match(submissionsStudio, /id="cancelledAppointmentHistory"/);
+  assert.match(submissionsStudio, /Protected history retained/);
   assert.match(submissionsStudio, /Additional Renderings/);
   assert.match(submissionsStudio, /data-create-rendering-request/);
   assert.match(submissionsStudio, /data-copy-rendering-link/);
@@ -7899,7 +7936,7 @@ test("booking-link resend resolves the exact active token encoded in the stored 
   const created = await handleCreateSubmission(jsonRequest("/api/submissions", validCustom()), env);
   const submissionId = (await created.json()).submissionId;
   sent.length = 0;
-  const consultationRawToken = "consultation-token-from-stored-url";
+  const consultationRawToken = "Ab3dE7xQ9wK2";
   const newerTattooRawToken = "newer-parallel-tattoo-token";
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
@@ -7907,7 +7944,7 @@ test("booking-link resend resolves the exact active token encoded in the stored 
     `UPDATE submissions
      SET status = 'approved', tattoo_stage = 'consultation_required', booking_url = ?, updated_at = ?
      WHERE id = ?`,
-  ).run(`/booking/?token=${consultationRawToken}`, now.toISOString(), submissionId);
+  ).run(`/b/${consultationRawToken}`, now.toISOString(), submissionId);
   database.prepare(
     `INSERT INTO booking_tokens (
       id, token_hash, submission_id, allowed_booking_types_json, purpose,

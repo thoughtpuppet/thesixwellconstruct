@@ -84,6 +84,12 @@
     var items = [{ label: 'Construct', url: '/home/' }];
     if (medium) items.push({ label: medium.label, url: medium.url });
 
+    var currentLabel = document.body.getAttribute('data-construct-breadcrumb-current') || '';
+    if (currentLabel) {
+      items.push({ label: currentLabel, url: '' });
+      return items;
+    }
+
     var mediumRoot = medium ? medium.url.replace(/^\/|\/$/g, '') : '';
     var startIndex = mediumRoot ? mediumRoot.split('/').length : 0;
     parts.slice(startIndex).forEach(function(part, index, rest) {

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
 <title>Private Booking - the six.well construct</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -114,7 +115,7 @@
 <link rel="stylesheet" href="/css/tattoos.css">
 <link rel="stylesheet" href="/css/forms.css">
 </head>
-<body class="tattoo-flow" data-venture="tattooing">
+<body class="tattoo-flow" data-venture="tattooing" data-construct-breadcrumb-current="Private Booking">
 <script>
 (function(){
   var o = document.createElement("div");
@@ -226,7 +227,8 @@
 <script>
 (function(){
   const params = new URLSearchParams(window.location.search);
-  const token = params.get("token") || "";
+  const shortTokenMatch = window.location.pathname.match(/^\/b\/([A-Za-z0-9_-]{12})\/?$/);
+  const token = params.get("token") || shortTokenMatch?.[1] || "";
   const previewMode = params.get("preview") === "1";
   const editMode = params.get("edit") === "1";
   const bookingPreviewKey = "swc_booking_admin_preview";

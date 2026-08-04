@@ -17,6 +17,7 @@ import {
   handleGetSubmission,
   handleGetSubmissionFile,
   handleListSubmissions,
+  handleOpenSubmission,
   handlePromoteMazeArchiveSubmission,
   handleSubmissionDecision,
   handleSubmissionDecisionNotification,
@@ -80,6 +81,7 @@ import {
   handleSquareWebhook,
   handleStudioSquareWebhook,
 } from "./functions/api/booking/_lib.js";
+import { shortBookingTokenFromPath } from "./functions/api/booking-links.js";
 import {
   handleEventsApi,
   handleAdminEventsApi,
@@ -766,6 +768,12 @@ async function handleSubmissionsApi(request, env) {
     return handleSubmissionDecisionNotification(request, env, decodeURIComponent(decisionNotificationMatch[1]));
   }
 
+  const openMatch = pathname.match(/^\/api\/admin\/submissions\/([^/]+)\/open$/);
+  if (openMatch) {
+    if (method !== "POST") return methodNotAllowed(method, ["POST"]);
+    return handleOpenSubmission(request, env, decodeURIComponent(openMatch[1]));
+  }
+
   const match = pathname.match(/^\/api\/admin\/submissions\/([^/]+)$/);
   if (match) {
     const id = decodeURIComponent(match[1]);
@@ -1093,6 +1101,17 @@ export default {
 
     if (isClosedPublicPagePath(url.pathname)) {
       return redirectToNotFoundPage(request);
+    }
+
+    if (shortBookingTokenFromPath(url.pathname)) {
+      if (
+        isClosedPublicPagePath("/booking/") ||
+        isHiddenPublicPath("/booking/") ||
+        isHiddenByHomeOnlyMode("/booking/")
+      ) {
+        return redirectToNotFoundPage(request);
+      }
+      return servePublicAsset(request, env, "/booking/index.html");
     }
 
     if (url.pathname === "/explore" || url.pathname === "/explore/" || url.pathname === "/explore/index.html") {

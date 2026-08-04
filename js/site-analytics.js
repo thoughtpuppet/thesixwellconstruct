@@ -23,6 +23,7 @@
   function normalizePath(value) {
     var pathname = "/";
     try { pathname = new URL(String(value || "/"), location.origin).pathname; } catch (_) {}
+    if (/^\/b\/[A-Za-z0-9_-]{12}\/?$/.test(pathname)) pathname = "/booking/";
     pathname = pathname.replace(/\/{2,}/g, "/").replace(/\/index\.html$/i, "/");
     if (pathname !== "/" && !/\.[a-z0-9]{1,8}$/i.test(pathname)) pathname = pathname.replace(/\/+$/, "") + "/";
     return pathname.slice(0, 300) || "/";

@@ -1,4 +1,9 @@
 import { prepareApprovedTattooSpecialRequest } from "../booking/_lib.js";
+import {
+  bookingTokenFromUrl,
+  bookingUrlForToken,
+  createBookingRawToken,
+} from "../booking-links.js";
 
 const SPECIAL_TYPE = "tattoo_special";
 const SPECIAL_BOOKING_PREFIX = "tattoo_special_";
@@ -347,12 +352,6 @@ async function saveFiles(env, submissionId, files) {
   return saved;
 }
 
-function rawToken() {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
 async function sha256(value) {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -360,11 +359,10 @@ async function sha256(value) {
 }
 
 async function createBookingAccess(db, request, submissionId, terms, closesAt) {
-  const token = rawToken();
+  const token = createBookingRawToken();
   const tokenId = crypto.randomUUID();
   const now = new Date().toISOString();
-  const bookingUrl = new URL("/booking/", new URL(request.url).origin);
-  bookingUrl.searchParams.set("token", token);
+  const bookingUrl = bookingUrlForToken(new URL(request.url).origin, token);
   await db.batch([
     db.prepare(
       `INSERT INTO booking_tokens
@@ -389,7 +387,7 @@ function absoluteClientBookingUrl(request, env, pathOrUrl) {
 async function activePreparedAccess(db, submissionId, appointmentId, bookingUrl) {
   let token = "";
   try {
-    token = new URL(bookingUrl, "https://booking.invalid").searchParams.get("token") || "";
+    token = bookingTokenFromUrl(bookingUrl);
   } catch {
     return null;
   }
@@ -434,10 +432,9 @@ async function prepareTattooSpecialClientAccess(db, request, env, submission, pr
     throw new Error("The Tattoo Special deposit access window has closed.");
   }
   const expiresAt = new Date(expiryMs).toISOString();
-  const token = rawToken();
+  const token = createBookingRawToken();
   const tokenId = crypto.randomUUID();
-  const bookingUrl = new URL("/booking/", env.PUBLIC_SITE_URL || new URL(request.url).origin);
-  bookingUrl.searchParams.set("token", token);
+  const bookingUrl = bookingUrlForToken(env.PUBLIC_SITE_URL || new URL(request.url).origin, token);
   const path = bookingUrl.pathname + bookingUrl.search;
   const statements = [
     db.prepare(

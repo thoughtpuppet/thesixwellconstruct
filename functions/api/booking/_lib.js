@@ -15,6 +15,7 @@ import {
   reviewedTattooBudgetIsComplete as reviewedBudgetIsComplete,
   tattooPricingSummary as pricingSummaryForAppointment,
 } from "./_pricing.js";
+import { bookingUrlForToken, createBookingRawToken } from "../booking-links.js";
 
 const BOOKING_STATUSES = new Set([
   "pending_deposit",
@@ -993,18 +994,6 @@ function buildCancelledAppointmentIcs(appointment) {
     "",
   ];
   return lines.join("\r\n");
-}
-
-function base64Url(bytes) {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function createRawToken() {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return base64Url(bytes);
 }
 
 async function sha256Hex(value) {
@@ -6901,7 +6890,7 @@ export async function handleAdminCreateBookingToken(request, env) {
       }
     }
 
-    const rawToken = createRawToken();
+    const rawToken = createBookingRawToken();
     const tokenHash = await sha256Hex(rawToken);
     const now = new Date().toISOString();
     const requestedExpiry = asOptionalString(body.expiresAt);
@@ -6942,8 +6931,7 @@ export async function handleAdminCreateBookingToken(request, env) {
     }
 
     const id = crypto.randomUUID();
-    const bookingUrl = new URL("/booking/", baseUrlFromRequest(request));
-    bookingUrl.searchParams.set("token", rawToken);
+    const bookingUrl = bookingUrlForToken(baseUrlFromRequest(request), rawToken);
     const statements = [];
     if (body.revokeExisting !== false) {
       statements.push(db.prepare(
